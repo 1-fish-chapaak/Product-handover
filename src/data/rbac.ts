@@ -66,7 +66,7 @@ export type PermissionKey =
   // Controls (new)
   | 'ctrl_view' | 'ctrl_create' | 'ctrl_edit' | 'ctrl_delete' | 'ctrl_link' | 'ctrl_export' | 'ctrl_share'
   // RACM (existing + new linking/unmap/archive)
-  | 'racm_view' | 'racm_edit' | 'racm_generate'
+  | 'racm_view' | 'racm_edit' | 'racm_generate' | 'racm_share'
   | 'racm_link_risk' | 'racm_link_control' | 'racm_link_workflow' | 'racm_unmap' | 'racm_archive'
   // Risk register (new)
   | 'risk_view' | 'risk_create' | 'risk_edit' | 'risk_archive' | 'risk_delete' | 'risk_share'
@@ -138,6 +138,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     { key: 'racm_view',     name: 'View',     desc: 'View RACM matrices' },
     { key: 'racm_edit',     name: 'Edit',     desc: 'Edit and rename RACM rows' },
     { key: 'racm_generate', name: 'Generate', desc: 'Generate a RACM' },
+    { key: 'racm_share',    name: 'Share',    desc: 'Share a RACM with users and teams' },
     { key: 'racm_link_risk',     name: 'Link Risk',     desc: 'Map a risk to a RACM' },
     { key: 'racm_link_control',  name: 'Link Control',  desc: 'Map a control to a risk in RACM' },
     { key: 'racm_link_workflow', name: 'Link Workflow', desc: 'Map a workflow to a control in RACM' },
@@ -216,7 +217,7 @@ const AUDITOR_KEYS: PermissionKey[] = [
   'wf_run', 'wf_output', 'wf_create',
   'eng_create', 'eng_edit', 'eng_assign', 'eng_share',
   'ctrl_edit', 'ctrl_link', 'ctrl_export',
-  'racm_edit', 'racm_link_risk', 'racm_link_control', 'racm_link_workflow', 'racm_unmap', 'racm_archive',
+  'racm_edit', 'racm_share', 'racm_link_risk', 'racm_link_control', 'racm_link_workflow', 'racm_unmap', 'racm_archive',
   'bp_edit', 'sop_archive',
   'exc_classify', 'exc_triage',
   'rp_edit', 'rp_comment',
@@ -248,7 +249,7 @@ const ENABLER_KEYS: PermissionKey[] = [
   'ds_upload', 'ds_connect', 'ds_rename',
   'eng_create', 'eng_edit', 'eng_assign', 'eng_share',
   'ctrl_create', 'ctrl_edit', 'ctrl_link', 'ctrl_export', 'ctrl_share',
-  'racm_edit', 'racm_generate', 'racm_link_risk', 'racm_link_control', 'racm_link_workflow', 'racm_unmap', 'racm_archive',
+  'racm_edit', 'racm_generate', 'racm_share', 'racm_link_risk', 'racm_link_control', 'racm_link_workflow', 'racm_unmap', 'racm_archive',
   'risk_create', 'risk_edit', 'risk_archive', 'risk_share',
   'exc_classify', 'exc_triage', 'exc_resolve',
   'plan_edit',

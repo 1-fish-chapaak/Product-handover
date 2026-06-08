@@ -92,15 +92,21 @@ function OwnerBadge() {
       primary action lives on its body's controls row, the way KH does it. ── */
 interface SectionDef { id: SectionId; label: string; icon: typeof Users; count?: number; }
 function SectionTabs({ sections, current, onSelect }: { sections: SectionDef[]; current: SectionId; onSelect: (id: SectionId) => void }) {
+  const prefersReduced = useReducedMotion();
   return (
     <div className="flex gap-6">
       {sections.map(s => {
         const Icon = s.icon;
         const isActive = current === s.id;
         return (
-          <button
+          // The brand underline springs between tabs (shared layoutId), and the
+          // label gives a subtle press on click — the same motion language as
+          // the Users/Teams segmented toggle.
+          <motion.button
             key={s.id}
             onClick={() => onSelect(s.id)}
+            whileTap={prefersReduced ? undefined : { scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
             className={`pb-3 text-[0.8125rem] font-semibold relative transition-colors cursor-pointer whitespace-nowrap ${
               isActive ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700'
             }`}
@@ -118,10 +124,10 @@ function SectionTabs({ sections, current, onSelect }: { sections: SectionDef[]; 
               <motion.div
                 layoutId="admin-tab-underline"
                 className="absolute bottom-0 left-0 right-0 h-[3px] bg-brand-600 rounded-full"
-                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 32 }}
               />
             )}
-          </button>
+          </motion.button>
         );
       })}
     </div>
@@ -341,7 +347,7 @@ function UserManageModal({ user, onClose, onManageRole }: { user: AdminUser; onC
     if (isLastAdmin) { addToast({ message: 'There must be at least one active administrator', type: 'error' }); setConfirmDelete(false); return; }
     if (soleMemberTeams.length > 0) {
       const names = soleMemberTeams.map(t => `"${t.name}"`).join(', ');
-      addToast({ message: `Can't remove — ${user.name} is the only member of ${soleMemberTeams.length === 1 ? 'team' : 'teams'} ${names}. A team must keep an owner — add another member or delete the team first.`, type: 'error' });
+      addToast({ message: `Can't remove — ${user.name} is the only user in ${soleMemberTeams.length === 1 ? 'team' : 'teams'} ${names}. A team must keep an owner — add another user or delete the team first.`, type: 'error' });
       setConfirmDelete(false); return;
     }
     // Honour the picker's ownership choices only now that removal is actually
@@ -773,7 +779,7 @@ function CreateTeamModal({ onClose }: { onClose: () => void }) {
     const finalOwner = ownerName;
     submitting.current = true;
     addTeam(trimmed, members, finalOwner);
-    logEvent({ action: 'Create', description: `Created team "${trimmed}" with ${members.length} member${members.length !== 1 ? 's' : ''}${finalOwner ? `, owner ${finalOwner}` : ''}`, module: 'Admin', entity: 'Team' });
+    logEvent({ action: 'Create', description: `Created team "${trimmed}" with ${members.length} user${members.length !== 1 ? 's' : ''}${finalOwner ? `, owner ${finalOwner}` : ''}`, module: 'Admin', entity: 'Team' });
     onClose();
     addToast({ message: 'Team created', type: 'success' });
   };
@@ -784,7 +790,7 @@ function CreateTeamModal({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       footer={
         <>
-          <span className="mr-auto text-[0.75rem] text-ink-500 tabular-nums">{selected.size} member{selected.size !== 1 ? 's' : ''} selected</span>
+          <span className="mr-auto text-[0.75rem] text-ink-500 tabular-nums">{selected.size} user{selected.size !== 1 ? 's' : ''} selected</span>
           <button className={BTN_CANCEL} onClick={onClose}>Cancel</button>
           <button className={`${BTN_PRIMARY} disabled:opacity-40 disabled:cursor-not-allowed`} onClick={create} disabled={!teamName.trim()}>Create Team</button>
         </>
@@ -808,7 +814,7 @@ function CreateTeamModal({ onClose }: { onClose: () => void }) {
               <AdminSelect
                 value={effectiveOwnerEmail}
                 onChange={setOwnerEmail}
-                placeholder={selected.size ? 'Select owner' : 'Add a member first'}
+                placeholder={selected.size ? 'Select owner' : 'Add a user first'}
                 options={selectedUsers.map(u => ({ value: u.email, label: u.name, hint: u.roleId === 'role-admin' ? 'Admin' : undefined }))}
                 ariaLabel="Change team owner"
               />
@@ -818,11 +824,11 @@ function CreateTeamModal({ onClose }: { onClose: () => void }) {
 
         <section>
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em]">Members</h3>
+            <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em]">Users</h3>
             <span className="text-[0.6875rem] text-ink-400 tabular-nums">{selected.size} selected</span>
           </div>
 
-          <MemberSearch value={memberSearch} onChange={setMemberSearch} placeholder="Search members..." />
+          <MemberSearch value={memberSearch} onChange={setMemberSearch} placeholder="Search users..." />
 
           <div className="mt-3 border border-canvas-border rounded-xl overflow-hidden max-h-[300px] overflow-y-auto">
             {filtered.map((m, i) => {
@@ -882,7 +888,7 @@ function EditTeamModal({ team, onClose }: { team: AdminTeam; onClose: () => void
     // A team must keep at least one member (and therefore an owner) — block
     // unchecking the last one.
     if (members.has(name) && members.size === 1) {
-      addToast({ message: 'A team must have at least one member', type: 'error' });
+      addToast({ message: 'A team must have at least one user', type: 'error' });
       return;
     }
     setMembers(prev => {
@@ -904,7 +910,7 @@ function EditTeamModal({ team, onClose }: { team: AdminTeam; onClose: () => void
     // (single source). Rename first so the cascade lands before the membership diff.
     updateTeam(team.id, { name: trimmed, owner: finalOwner });
     setTeamMembership(trimmed, [...members]);
-    logEvent({ action: 'Update', description: `Updated team "${trimmed}" (${members.size} members${finalOwner ? `, owner ${finalOwner}` : ''})`, module: 'Admin', entity: 'Team' });
+    logEvent({ action: 'Update', description: `Updated team "${trimmed}" (${members.size} users${finalOwner ? `, owner ${finalOwner}` : ''})`, module: 'Admin', entity: 'Team' });
     onClose();
     addToast({ message: 'Team updated', type: 'success' });
   };
@@ -960,11 +966,11 @@ function EditTeamModal({ team, onClose }: { team: AdminTeam; onClose: () => void
           {/* Members */}
           <section>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em]">Members</h3>
+              <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em]">Users</h3>
               <span className="text-[0.6875rem] text-ink-400 tabular-nums">{members.size} selected</span>
             </div>
 
-            <MemberSearch value={memberSearch} onChange={setMemberSearch} placeholder="Search members..." />
+            <MemberSearch value={memberSearch} onChange={setMemberSearch} placeholder="Search users..." />
 
             <div className="mt-3 border border-canvas-border rounded-xl overflow-hidden max-h-[280px] overflow-y-auto">
               {filtered.map((name, i) => {
@@ -990,7 +996,7 @@ function EditTeamModal({ team, onClose }: { team: AdminTeam; onClose: () => void
       <ConfirmationModal
         open={confirmDelete}
         title="Delete team?"
-        description={<>This will delete <span className="font-semibold">{team.name}</span> and unassign its members. This action cannot be undone.</>}
+        description={<>This will delete <span className="font-semibold">{team.name}</span> and unassign its users. This action cannot be undone.</>}
         confirmLabel="Delete Team"
         tone="destructive"
         onConfirm={remove}
@@ -1237,7 +1243,7 @@ function PeopleSection({ onManageRole, onInvite }: { onManageRole: (roleId: stri
     const orphaned = teams.filter(t => t.members.length > 0 && t.members.every(m => selectedNames.has(m)));
     if (orphaned.length > 0) {
       const names = orphaned.map(t => `"${t.name}"`).join(', ');
-      addToast({ message: `Can't remove — this would leave ${orphaned.length === 1 ? 'team' : 'teams'} ${names} with no members. A team must keep an owner.`, type: 'error' });
+      addToast({ message: `Can't remove — this would leave ${orphaned.length === 1 ? 'team' : 'teams'} ${names} with no users. A team must keep an owner.`, type: 'error' });
       setConfirmBulkRemove(false); return;
     }
     const n = selectedCount;
@@ -1689,14 +1695,14 @@ function TeamsSection({ onCreateTeam }: { onCreateTeam: () => void }) {
       ) : <span className="text-[0.75rem] text-ink-400">Unassigned</span>,
     },
     {
-      key: 'count', label: 'Members', sortable: true, width: '12%',
+      key: 'count', label: 'Users', sortable: true, width: '12%',
       render: (t) => <span className={`text-[0.8125rem] tabular-nums ${t.count === 0 ? 'text-ink-400' : 'font-medium text-ink-800'}`}>{t.count}</span>,
     },
     {
       key: 'avatars', label: '', sortable: false,
       render: (t) => (
         t.members.length === 0
-          ? <span className="text-[0.75rem] text-ink-400">No members yet</span>
+          ? <span className="text-[0.75rem] text-ink-400">No users yet</span>
           : (
             <div className="flex items-center -space-x-2">
               {t.members.slice(0, 5).map((m, i) => (
@@ -1786,7 +1792,7 @@ function TeamsSection({ onCreateTeam }: { onCreateTeam: () => void }) {
             icon={Users}
             size="compact"
             title={hasFilter ? 'No teams match your filters' : 'No teams yet'}
-            body={hasFilter ? 'Try a different search, or clear the active filters.' : 'Create a team to group members for shared access.'}
+            body={hasFilter ? 'Try a different search, or clear the active filters.' : 'Create a team to group users for shared access.'}
             action={hasFilter
               ? <button className={BTN_CTA_OUTLINE} onClick={clearFilters}>Clear filters</button>
               : <button className={BTN_CTA_PRIMARY} onClick={onCreateTeam}><Plus size={14} />Create Team</button>}
@@ -1801,7 +1807,7 @@ function TeamsSection({ onCreateTeam }: { onCreateTeam: () => void }) {
       <ConfirmationModal
         open={confirmBulkRemove}
         title={`Delete ${selectedCount} team${selectedCount !== 1 ? 's' : ''}?`}
-        description={<>This will delete the {selectedCount} selected team{selectedCount !== 1 ? 's' : ''} and unassign their members. This action cannot be undone.</>}
+        description={<>This will delete the {selectedCount} selected team{selectedCount !== 1 ? 's' : ''} and unassign their users. This action cannot be undone.</>}
         confirmLabel="Delete Teams"
         tone="destructive"
         onConfirm={bulkRemove}
@@ -2014,29 +2020,42 @@ function AuditLogSection() {
 /* A single segmented control (white active pill on a light track, icon + label
    + count) that toggles the Members tab between the People and Teams screens.
    The screens themselves are unchanged; this only picks which one renders. */
-function MembersSwitch({ view, onSelect, counts }: { view: MembersView; onSelect: (v: MembersView) => void; counts: { people: number; teams: number } }) {
-  const tabs: { id: MembersView; label: string; icon: typeof User; count: number }[] = [
-    { id: 'people', label: 'People', icon: User, count: counts.people },
-    { id: 'teams', label: 'Teams', icon: Users, count: counts.teams },
+function MembersSwitch({ view, onSelect }: { view: MembersView; onSelect: (v: MembersView) => void }) {
+  // Counts intentionally omitted — each view's KPI band already leads with the
+  // total (Total Users / Total Teams), so repeating them here would duplicate.
+  const prefersReduced = useReducedMotion();
+  const tabs: { id: MembersView; label: string; icon: typeof User }[] = [
+    { id: 'people', label: 'Users', icon: User },
+    { id: 'teams', label: 'Teams', icon: Users },
   ];
   return (
-    <div className="inline-flex items-center gap-1 p-1 rounded-lg border border-canvas-border bg-canvas">
+    // Canonical sliding-white-pill segmented control: the active pill springs
+    // between tabs via a shared layoutId (matches the View/Edit toggle).
+    <div className="inline-flex items-center gap-1 p-1 rounded-lg border border-canvas-border/60 bg-canvas-elevated/40">
       {tabs.map(t => {
         const on = view === t.id;
         const Icon = t.icon;
         return (
-          <button
+          <motion.button
             key={t.id}
             onClick={() => onSelect(t.id)}
             aria-pressed={on}
-            className={`inline-flex items-center gap-2 px-3.5 h-8 rounded-md text-[0.8125rem] font-medium transition-colors cursor-pointer ${
-              on ? 'bg-canvas-elevated text-brand-700 shadow-[0_1px_2px_rgb(15_8_30_/_0.08)] border border-canvas-border' : 'text-ink-500 hover:text-ink-800'
+            whileTap={prefersReduced ? undefined : { scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            className={`relative inline-flex items-center gap-2 px-3.5 h-8 rounded-md text-[0.8125rem] font-medium transition-colors cursor-pointer ${
+              on ? 'text-brand-700' : 'text-ink-500 hover:text-ink-800'
             }`}
           >
-            <Icon size={14} className={on ? 'text-brand-600' : 'text-ink-400'} />
-            {t.label}
-            <span className={`tabular-nums text-[0.75rem] font-semibold ${on ? 'text-brand-600' : 'text-ink-400'}`}>{t.count}</span>
-          </button>
+            {on && (
+              <motion.span
+                layoutId="members-switch-active"
+                transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
+                className="absolute inset-0 rounded-md bg-canvas-elevated border border-canvas-border shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)]"
+              />
+            )}
+            <Icon size={14} className={`relative z-10 transition-colors ${on ? 'text-brand-600' : 'text-ink-400'}`} />
+            <span className="relative z-10">{t.label}</span>
+          </motion.button>
         );
       })}
     </div>
@@ -2053,7 +2072,6 @@ export default function AdminView({ activeTab }: Props) {
   const initialSection: SectionId = activeTab === 'logs' ? 'logs' : activeTab === 'roles' ? 'roles' : 'members';
   const initialMembersView: MembersView = activeTab === 'teams' ? 'teams' : 'people';
 
-  const { users, teams } = useAdminData();
   const prefersReduced = useReducedMotion();
 
   const [section, setSection] = useState<SectionId>(initialSection);
@@ -2078,7 +2096,7 @@ export default function AdminView({ activeTab }: Props) {
   };
 
   const sections: SectionDef[] = [
-    { id: 'members', label: 'Members', icon: Users },
+    { id: 'members', label: 'Users & Teams', icon: Users },
     { id: 'roles', label: 'Roles & Permissions', icon: Shield },
     { id: 'logs', label: 'Audit Log', icon: ScrollText },
   ];
@@ -2146,7 +2164,7 @@ export default function AdminView({ activeTab }: Props) {
             transition={{ duration: prefersReduced ? 0 : 0.18, ease: [0.4, 0, 0.2, 1] }}
           >
             <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
-              <MembersSwitch view={membersView} onSelect={setMembersView} counts={{ people: users.length, teams: teams.length }} />
+              <MembersSwitch view={membersView} onSelect={setMembersView} />
               {membersView === 'people'
                 ? <button className={BTN_CTA_PRIMARY} onClick={() => setInviteOpen(true)}><UserPlus size={14} />Invite User</button>
                 : <button className={BTN_CTA_PRIMARY} onClick={() => setCreateTeamOpen(true)}><Plus size={14} />Create Team</button>}

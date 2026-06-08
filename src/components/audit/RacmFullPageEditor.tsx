@@ -13,9 +13,10 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowLeft, Search, Filter, Plus, Download, Upload, Columns3, Layers,
-  X, ChevronRight, ChevronDown, Save, Lock,
+  X, ChevronRight, ChevronDown, Save, Lock, Share2,
   AlertTriangle, Star, Trash2, Check,
 } from 'lucide-react';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
 import {
   PROCUREMENT_RACM_ROWS, PROCUREMENT_RACM_COLUMNS, COLUMN_GROUP_LABELS, COLUMN_GROUP_ORDER,
   groupRowsBySubProcess, deriveRiskRatingClass, deriveControlTypeClass, deriveControlNatureClass,
@@ -64,6 +65,7 @@ function isKeyControl(controlId: string): boolean {
 type GroupByMode = 'none' | 'subProcess' | 'processArea' | 'riskRating';
 
 export default function RacmFullPageEditor({ onBack, racmName, racmId, processLabel }: Props) {
+  const { openShare } = useShare();
   // ─── State ───────────────────────────────────────────────────────────
   const [rows, setRows] = useState<ProcurementRacmRow[]>(() =>
     PROCUREMENT_RACM_ROWS.map(r => ({ ...r, isKey: isKeyControl(r.controlId) })));
@@ -261,6 +263,12 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <Gated permission="racm_share">
+          <button onClick={(e) => openShare({ type: 'racm', id: racmId ?? 'racm', anchor: rectFromEvent(e) })}
+            className="px-2.5 py-1.5 rounded-lg border border-border text-[0.6875rem] font-medium text-text-secondary hover:text-primary hover:border-primary/30 cursor-pointer transition-colors flex items-center gap-1.5">
+            <Share2 size={11} />Share
+          </button>
+          </Gated>
           <button onClick={() => fileInputRef.current?.click()}
             className="px-2.5 py-1.5 rounded-lg border border-border text-[0.6875rem] font-medium text-text-secondary hover:bg-surface-2 cursor-pointer transition-colors flex items-center gap-1.5">
             <Upload size={11} />Import

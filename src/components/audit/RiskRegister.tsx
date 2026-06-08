@@ -4,28 +4,32 @@ import {
   Plus, Search, X, ChevronRight, ChevronLeft, AlertTriangle,
   CheckCircle2, Clock, Archive, Edit3, Eye, ArrowLeft,
   ArrowRight, FileText, HelpCircle, Shield, Workflow as WorkflowIcon, Grid3x3,
-  Play, Trash2, ArchiveRestore, Share2,
+  Play, Trash2, Star, Link2, Share2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
-import ColumnFilter from '../shared/ColumnFilter';
-import { Pill, type Tone } from '../shared/StatusBadge';
-import ConfirmationModal from '../shared/ConfirmationModal';
 import { useCan } from '../../context/CurrentUserContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
-import { useAuditLog } from '../../context/AdminDataContext';
+import ColumnFilter from '../shared/ColumnFilter';
+import ConfirmationModal from '../shared/ConfirmationModal';
 import { Button } from '../shared/Button';
+import { KpiTile } from '../shared/KpiTile';
 import ListLoadError from '../shared/ListLoadError';
 import { LinkControlPickerDrawer } from './RacmListTable';
-import { getRiskRelationships } from '../../data/processHubJoins';
+import CreateControlDrawer from '../governance/CreateControlDrawer';
+import { addCreatedControl, useCreatedControls } from '../../data/createdControlsStore';
+import { useRiskControlLinks, addRiskControlLinks } from '../../data/riskControlLinksStore';
+import { getRiskRelationships, getControlRelationships } from '../../data/processHubJoins';
+import { BUSINESS_PROCESSES } from '../../data/mockData';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type RiskLifecycleStatus = 'Draft' | 'Active' | 'Under Review' | 'Archived';
 type RiskPriority = 'Critical' | 'High' | 'Medium' | 'Low';
 type RiskCategory = 'Financial' | 'Operational' | 'Compliance' | 'IT' | 'Fraud' | 'Reporting' | 'Other';
-// Status filter options surfaced in the Status dropdown. The first four map to
-// RiskEntry.status directly; the last two are derived presets.
-const STATUS_FILTER_OPTIONS = ['Draft', 'Active', 'Under Review', 'Archived', 'High Priority', 'Unreviewed'];
+// Slim "Status" dropdown options. The four lifecycle statuses (Draft / Active /
+// Under Review / Archived) are now driven by the clickable KPI tiles, so the
+// dropdown keeps only the two derived presets.
+const STATUS_FILTER_OPTIONS = ['High Priority', 'Unreviewed'];
 
 export interface RiskEntry {
   id: string;
@@ -67,11 +71,11 @@ const PRIORITIES: RiskPriority[] = ['Critical', 'High', 'Medium', 'Low'];
 
 // ─── Style maps ─────────────────────────────────────────────────────────────
 
-const STATUS_TONE: Record<RiskLifecycleStatus, Tone> = {
-  Draft: 'draft',
-  Active: 'compliant',
-  'Under Review': 'high',
-  Archived: 'draft',
+const STATUS_STYLES: Record<RiskLifecycleStatus, string> = {
+  Draft: 'bg-paper-100 text-ink-600',
+  Active: 'bg-compliant-50 text-compliant-700',
+  'Under Review': 'bg-high-50 text-high-700',
+  Archived: 'bg-paper-100 text-ink-400',
 };
 
 const PRIORITY_STYLES: Record<RiskPriority, string> = {
@@ -99,10 +103,13 @@ interface DrawerProps {
   onClose: () => void;
   onSave: (risk: RiskEntry) => void;
   defaultProcess?: string;
+  /** 'drawer' (default, right-side) or 'modal' (centered — e.g. stacked over the Link Risk modal) */
+  presentation?: 'drawer' | 'modal';
 }
 
-export function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProps) {
+export function RiskDrawer({ risk, onClose, onSave, defaultProcess, presentation = 'drawer' }: DrawerProps) {
   const isEdit = !!risk;
+  const isModal = presentation === 'modal';
   // Capture initial values once so dirty-tracking is stable across re-renders
   const [initial] = useState({
     name: risk?.name || '',
@@ -179,10 +186,16 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProp
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={requestClose} />
-      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
+        className={`fixed inset-0 ${isModal ? 'z-[60]' : 'z-50'} bg-ink-900/20 backdrop-blur-sm`} onClick={requestClose} />
+      <motion.aside
+        initial={isModal ? { opacity: 0 } : { x: '100%' }}
+        animate={isModal ? { opacity: 1 } : { x: 0 }}
+        exit={isModal ? { opacity: 0 } : { x: '100%' }}
+        transition={isModal ? { duration: 0.16 } : { type: 'spring', damping: 30, stiffness: 300 }}
+        role={isModal ? 'dialog' : undefined} aria-label={isModal ? (isEdit ? 'Edit Risk' : 'Create Risk') : undefined}
+        className={isModal
+          ? 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-[480px] max-h-[calc(100vh-2rem)] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden'
+          : 'fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col'}>
 
         {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
@@ -270,7 +283,7 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProp
         {/* Footer */}
         <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
           <Button variant="outline" size="md" onClick={requestClose}>Cancel</Button>
-          <Button variant="primary" size="md" onClick={() => { if (isValid) onSave(buildRisk(risk?.status ?? 'Active')); }} disabled={!isValid}>
+          <Button variant="primary" size="md" onClick={() => { if (isValid) onSave(buildRisk('Active')); }} disabled={!isValid}>
             Save
           </Button>
         </div>
@@ -279,211 +292,190 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess }: DrawerProp
   );
 }
 
-// ─── Risk Detail Drawer ─────────────────────────────────────────────────────
+// (Risk detail side sheet retired — editing now lives on the full detail page.)
 
-function RiskDetailDrawer({ risk, onClose, onUpdate }: { risk: RiskEntry; onClose: () => void; onUpdate: (r: RiskEntry) => void }) {
-  const [editing, setEditing] = useState(false);
-
-  const fields = [
-    { label: 'Risk ID', value: risk.id },
-    { label: 'Business Process', value: risk.businessProcess },
-    { label: 'Sub-process', value: risk.subProcess || '—' },
-    { label: 'Category', value: risk.category },
-    { label: 'Priority', value: risk.priority },
-    { label: 'Owner', value: risk.owner || '—' },
-    { label: 'Reviewer', value: risk.reviewer || '—' },
-    { label: 'Created', value: risk.createdAt },
-    { label: 'Last Reviewed', value: risk.lastReviewed },
-  ];
-
-  return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-        className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
-      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
-
-        <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="font-display text-[18px] font-semibold text-ink-900">{risk.name}</h2>
-              <Pill tone={STATUS_TONE[risk.status]}>{risk.status}</Pill>
-            </div>
-            <p className="text-[12px] text-ink-500 mt-0.5 font-mono">{risk.id}</p>
-          </div>
-          <button type="button" aria-label="Close" title="Close" onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* Description */}
-          <div>
-            <h3 className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Description</h3>
-            <p className="text-[13px] text-text leading-relaxed">{risk.description}</p>
-          </div>
-
-          {/* Fields */}
-          <div>
-            <h3 className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Details</h3>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-              {fields.map(f => (
-                <div key={f.label}>
-                  <span className="text-[10px] text-ink-400 uppercase block">{f.label}</span>
-                  <span className={`text-[13px] mt-0.5 block ${f.label === 'Priority' ? PRIORITY_STYLES[risk.priority] : 'text-text'}`}>{f.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-        </div>
-
-        <footer className="shrink-0 px-6 py-4 border-t border-canvas-border">
-          <Button variant="outline" size="md" onClick={onClose} className="w-full">Close</Button>
-        </footer>
-
-        {/* Edit drawer (nested) */}
-        <AnimatePresence>
-          {editing && (
-            <RiskDrawer risk={risk} onClose={() => setEditing(false)} onSave={(updated) => { onUpdate(updated); setEditing(false); }} />
-          )}
-        </AnimatePresence>
-      </motion.aside>
-    </>
-  );
-}
-
-// ─── Detail Page (spike C) ──────────────────────────────────────────────────
-function RiskDetailPage({ risk, onEdit }: { risk: RiskEntry; onBack: () => void; onEdit: () => void }) {
+// ─── Risk detail page — full page, stacked sections (Control-detail data format) ─
+function RiskDetailPage({
+  risk,
+  controls,
+  onBack,
+  onEdit,
+}: {
+  risk: RiskEntry;
+  controls: { id: string; name: string; desc: string; isKey: boolean }[];
+  onBack: () => void;
+  onEdit: () => void;
+}) {
   const { can } = useCan();
+  const { openShare } = useShare();
   const rels = getRiskRelationships(risk.id, risk.businessProcess);
-  const fields = [
-    { label: 'Risk ID', value: risk.id, mono: true },
-    { label: 'Business Process', value: risk.businessProcess },
+  const keyCount = controls.filter(c => c.isKey).length;
+
+  // Business Process / Category / Priority / Status are surfaced as header badges &
+  // pills now (like the control detail page), so the grid keeps the remaining facts.
+  const fields: { label: string; value: string }[] = [
     { label: 'Sub-process', value: risk.subProcess || '—' },
-    { label: 'Category', value: risk.category },
-    { label: 'Priority', value: risk.priority, priority: true },
     { label: 'Owner', value: risk.owner || '—' },
     { label: 'Reviewer', value: risk.reviewer || '—' },
-    { label: 'Status', value: risk.status },
     { label: 'Created', value: risk.createdAt },
     { label: 'Last Reviewed', value: risk.lastReviewed },
   ];
 
   return (
-    <div className="space-y-5">
-      <div className="bg-white border border-canvas-border rounded-[12px] p-6">
+    <div>
+      {/* Back + Edit row — keeps the header card clean, like the control detail page */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-brand-700 font-medium cursor-pointer transition-colors">
+          <ArrowLeft size={14} /> Back to risks
+        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {can('risk_share') && (
+            <Button variant="outline" size="sm" shape="lg" onClick={(e) => { e.stopPropagation(); openShare({ type: 'risk', id: risk.id, anchor: rectFromEvent(e) }); }} leftIcon={<Share2 size={13} />}>
+              Share
+            </Button>
+          )}
+          <Button variant="primary" size="sm" shape="lg" onClick={onEdit} leftIcon={<Edit3 size={13} />}>
+            Edit risk
+          </Button>
+        </div>
+      </div>
+
+      {/* Header card — matches the control detail page header */}
+      <div className="bg-white border border-canvas-border rounded-[12px] p-6 mb-6">
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <Pill tone={STATUS_TONE[risk.status]}>{risk.status}</Pill>
               <span className="font-mono text-[11px] text-ink-500">{risk.id}</span>
+              <span className={`px-2 h-5 rounded-full text-[10px] font-semibold inline-flex items-center ${
+                risk.priority === 'Critical' ? 'bg-risk-50 text-risk-700'
+                  : risk.priority === 'High' ? 'bg-high-50 text-high-700'
+                  : risk.priority === 'Medium' ? 'bg-mitigated-50 text-mitigated-700'
+                  : 'bg-compliant-50 text-compliant-700'
+              }`}>{risk.priority}</span>
             </div>
             <h1 className="font-display text-[26px] font-[420] tracking-tight text-ink-900 leading-[1.2]">{risk.name}</h1>
           </div>
-          {can('risk_edit') && <Button
-            variant="primary"
-            size="sm"
-            shape="lg"
-            onClick={onEdit}
-            leftIcon={<Edit3 size={13} />}
-            className="shrink-0"
-          >
-            Edit risk
-          </Button>}
+          {/* Status + Business Process + Category pills */}
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            <span className={`px-2.5 h-7 rounded-full text-[11px] font-semibold inline-flex items-center gap-1.5 ${STATUS_STYLES[risk.status]}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
+              {risk.status}
+            </span>
+            <span className="px-2.5 h-7 rounded-full text-[11px] font-semibold border border-border-light bg-surface-2 text-text-secondary inline-flex items-center">
+              {risk.businessProcess}
+            </span>
+            <span className="px-2.5 h-7 rounded-full text-[11px] font-semibold border border-border-light bg-white text-text-muted inline-flex items-center">
+              {risk.category}
+            </span>
+          </div>
         </div>
 
         <p className="text-[13px] text-text leading-relaxed mb-5 max-w-3xl">{risk.description}</p>
 
-        <div className="grid grid-cols-5 gap-x-6 gap-y-4 pt-4 border-t border-canvas-border/70">
+        <div className="grid grid-cols-3 gap-x-6 gap-y-4 pt-4 border-t border-canvas-border/70">
           {fields.map(f => (
             <div key={f.label}>
               <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-0.5">{f.label}</span>
-              <span className={`text-[13px] block ${f.mono ? 'font-mono text-ink-700' : f.priority ? PRIORITY_STYLES[risk.priority] : 'text-text'}`}>{f.value}</span>
+              <span className="text-[13px] block text-text">{f.value}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="space-y-4">
-        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <Shield size={13} className="text-ink-500" />
-              Mapped Controls
-            </h2>
-            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.controls.length}</span>
+      {/* Stacked sections */}
+      <div className="space-y-6">
+
+        {/* Mapped controls */}
+        <div className="glass-card rounded-xl p-5">
+          <div className="flex items-baseline justify-between mb-4">
+            <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider inline-flex items-center gap-1.5">
+              <Shield size={13} className="text-ink-400" /> Mapped Controls
+              {keyCount > 0 && <span className="font-medium normal-case tracking-normal text-ink-400">· {keyCount} key</span>}
+            </h3>
+            <span className="text-[0.75rem] font-mono text-ink-400 tabular-nums">{controls.length}</span>
           </div>
-          {rels.controls.length === 0 ? (
-            <p className="text-[12px] text-ink-400 italic">No controls mapped yet.</p>
+          {controls.length === 0 ? (
+            <div className="text-[0.75rem] text-high-700 italic inline-flex items-center gap-1.5">
+              <AlertTriangle size={12} className="text-high-700 shrink-0" /> No controls mapped to this risk yet.
+            </div>
           ) : (
-            <ul className="space-y-2">
-              {rels.controls.map(c => (
-                <li key={c.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-                  <div className="flex items-start gap-2.5">
-                    <span className="font-mono text-[10px] text-ink-400 tabular-nums shrink-0 mt-0.5">{c.id}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug">{c.name}</span>
-                        {c.isKey && <span className="px-1.5 h-4 rounded-[4px] text-[0.625rem] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
-                      </div>
-                      <span className="text-[11px] text-ink-500 leading-snug">{c.desc}</span>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-canvas-border">
+                    <th className="py-2 pr-4 text-[10px] font-semibold text-ink-400 uppercase tracking-wider">Control</th>
+                    <th className="py-2 pr-4 text-[10px] font-semibold text-ink-400 uppercase tracking-wider w-[88px]">Key</th>
+                    <th className="py-2 pr-4 text-[10px] font-semibold text-ink-400 uppercase tracking-wider">Description</th>
+                    <th className="py-2 text-[10px] font-semibold text-ink-400 uppercase tracking-wider">Linked Workflows</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {controls.map(c => (
+                    <tr key={c.id} className="border-b border-canvas-border/60 last:border-0 align-top">
+                      <td className="py-3 pr-4">
+                        <div className="font-mono text-[10.5px] font-semibold text-brand-700">{c.id}</div>
+                        <div className="text-[12.5px] font-semibold text-ink-800 leading-snug">{c.name}</div>
+                      </td>
+                      <td className="py-3 pr-4 whitespace-nowrap">
+                        {c.isKey ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 h-5 rounded text-[0.625rem] font-bold bg-mitigated-50 text-mitigated-700">
+                            <Star size={10} className="fill-amber-400 text-amber-500 shrink-0" aria-label="Key control" /> Key
+                          </span>
+                        ) : (
+                          <span className="text-ink-300">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 pr-4 text-[12.5px] text-ink-600 leading-snug">{c.desc}</td>
+                      <td className="py-3 align-top">
+                        {(() => {
+                          const wfs = getControlRelationships(c.id).workflows;
+                          if (wfs.length === 0) return <span className="text-ink-300">—</span>;
+                          return (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {wfs.map(w => (
+                                <span key={w.id} title={`${w.name} · ${w.runs} runs`}
+                                  className="inline-flex items-center gap-1 pl-1.5 pr-2 h-[22px] rounded-md bg-brand-50 border border-brand-100 text-[10.5px] font-semibold text-brand-700">
+                                  <WorkflowIcon size={10} className="shrink-0" />
+                                  <span className="truncate max-w-[170px]">{w.name}</span>
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
-        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <WorkflowIcon size={13} className="text-ink-500" />
-              Linked Workflows
-            </h2>
-            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.workflows.length}</span>
-          </div>
-          {rels.workflows.length === 0 ? (
-            <p className="text-[12px] text-ink-400 italic">No workflows linked.</p>
-          ) : (
-            <ul className="space-y-2">
-              {rels.workflows.map(w => (
-                <li key={w.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
-                    <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{w.runs} runs</span>
-                  </div>
-                  <span className="text-[11px] text-ink-500 leading-snug">{w.desc}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="bg-white border border-canvas-border rounded-[12px] p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <Grid3x3 size={13} className="text-ink-500" />
-              Found in RACMs
-            </h2>
-            <span className="text-[12px] font-mono text-ink-400 tabular-nums">{rels.racms.length}</span>
+        {/* Found in RACMs */}
+        <div className="glass-card rounded-xl p-5">
+          <div className="flex items-baseline justify-between mb-4">
+            <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider inline-flex items-center gap-1.5">
+              <Grid3x3 size={13} className="text-ink-400" /> Found in RACMs
+            </h3>
+            <span className="text-[0.75rem] font-mono text-ink-400 tabular-nums">{rels.racms.length}</span>
           </div>
           {rels.racms.length === 0 ? (
-            <p className="text-[12px] text-ink-400 italic">Not part of any RACM.</p>
+            <p className="text-[0.75rem] text-ink-400 italic">Not part of any RACM yet.</p>
           ) : (
-            <ul className="space-y-2">
+            <div className="space-y-2">
               {rels.racms.map(r => (
-                <li key={r.id} className="rounded-[8px] border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{r.name}</span>
-                    <span className="text-[10px] font-mono text-ink-400 tabular-nums shrink-0">{r.fw}</span>
+                <div key={r.id} className="flex items-center gap-4 px-4 py-3 rounded-lg border border-canvas-border bg-white">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[0.8125rem] font-medium text-ink-800 block truncate">{r.name}</span>
+                    <span className="text-[0.6875rem] text-ink-400">Owner: {r.owner}</span>
                   </div>
-                  <span className="text-[11px] text-ink-500 leading-snug">Owner: {r.owner}</span>
-                </li>
+                  <span className="text-[0.6875rem] text-ink-400 shrink-0">{r.fw}</span>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </div>
+
       </div>
     </div>
   );
@@ -502,12 +494,13 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const { addToast } = useToast();
   const { can } = useCan();
   const { openShare } = useShare();
-  const logEvent = useAuditLog();
   const [risks, setRisks] = useState<RiskEntry[]>(SEED_RISKS);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  // Lifecycle-status filter driven by the clickable KPI tiles (single-select;
+  // null = show all). Kept separate from the slim High Priority / Unreviewed dropdown.
+  const [activeStatusTile, setActiveStatusTile] = useState<RiskLifecycleStatus | null>(null);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
-  const [detailRisk, setDetailRisk] = useState<RiskEntry | null>(null);
   const [detailRiskId, setDetailRiskId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     return new URLSearchParams(window.location.search).get('risk');
@@ -547,12 +540,15 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(false);
-  // Inline card expansion — chevron opens a Description / Sub-process / Owner / Created panel.
-  const [expandedRiskId, setExpandedRiskId] = useState<string | null>(null);
-  const [editingRiskCard, setEditingRiskCard] = useState<RiskEntry | null>(null);
   const [linkControlRisk, setLinkControlRisk] = useState<RiskEntry | null>(null);
+  // When true, the Create Control wizard swaps in over the Link Control picker.
+  const [createControlFromLink, setCreateControlFromLink] = useState(false);
+  // Created controls (carry mappedRisks) + existing controls linked via the picker —
+  // both feed each risk card's "Mapped controls" list (see controlsForRisk).
+  const createdControls = useCreatedControls();
+  const riskControlLinks = useRiskControlLinks();
   const [selectedRiskIds, setSelectedRiskIds] = useState<string[]>([]);
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [archivedRiskIds, setArchivedRiskIds] = useState<string[]>([]);
   const [subProcessFilter, setSubProcessFilter] = useState<string[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
@@ -576,30 +572,26 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
 
   // Apply process filter first (for embedded mode)
   const embedded = !!processFilter;
-  const baseRisks = processFilter ? risks.filter(r => r.businessProcess === processFilter) : risks;
-  const archivedCount = baseRisks.filter(r => r.status === 'Archived').length;
-  const viewingArchived = statusFilter.includes('Archived');
+  const baseRisks = (processFilter ? risks.filter(r => r.businessProcess === processFilter) : risks)
+    .filter(r => !archivedRiskIds.includes(r.id));
 
   // Derived KPIs
   const totalRisks = baseRisks.length;
   const activeCount = baseRisks.filter(r => r.status === 'Active').length;
+  const underReviewCount = baseRisks.filter(r => r.status === 'Under Review').length;
+  const draftCount = baseRisks.filter(r => r.status === 'Draft').length;
   const filteredRisks = useMemo(() => {
     let result = baseRisks;
 
-    // Archived risks are retired from the active list — only surface them when the
-    // user explicitly filters to "Archived" (via the Status filter or the chip).
-    if (!statusFilter.includes('Archived')) {
-      result = result.filter(r => r.status !== 'Archived');
+    // Lifecycle status — single-select via the KPI tiles (null = show all).
+    if (activeStatusTile) {
+      result = result.filter(r => r.status === activeStatusTile);
     }
 
-    // Status filter — multi-select; a risk matches if ANY selected status applies.
+    // Slim "Status" dropdown — the two derived presets (multi-select).
     if (statusFilter.length > 0) {
       result = result.filter(r => statusFilter.some(s => {
         switch (s) {
-          case 'Draft': return r.status === 'Draft';
-          case 'Active': return r.status === 'Active';
-          case 'Under Review': return r.status === 'Under Review';
-          case 'Archived': return r.status === 'Archived';
           case 'High Priority': return r.priority === 'Critical' || r.priority === 'High';
           case 'Unreviewed': return r.lastReviewed === '—';
           default: return false;
@@ -623,7 +615,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     if (priorityFilter.length > 0) result = result.filter(r => priorityFilter.includes(r.priority));
 
     return result;
-  }, [baseRisks, statusFilter, searchQuery, subProcessFilter, categoryFilter, priorityFilter]);
+  }, [baseRisks, activeStatusTile, statusFilter, searchQuery, subProcessFilter, categoryFilter, priorityFilter]);
 
   const subProcessOptions = useMemo(() => Array.from(new Set(baseRisks.map(r => r.subProcess))).sort(), [baseRisks]);
   const categoryOptions = useMemo(() => Array.from(new Set(baseRisks.map(r => r.category))).sort(), [baseRisks]);
@@ -633,57 +625,71 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     return order.filter(p => set.has(p as RiskPriority));
   }, [baseRisks]);
 
+  // Single source of truth for "is any filter on" + a reset that clears every
+  // filter (the KPI tile, the slim Status dropdown, the other dropdowns, search).
+  const hasActiveFilters = !!activeStatusTile || statusFilter.length > 0 || subProcessFilter.length > 0 || categoryFilter.length > 0 || priorityFilter.length > 0 || searchQuery.length > 0;
+  const clearAllFilters = () => {
+    setActiveStatusTile(null);
+    setStatusFilter([]);
+    setSubProcessFilter([]);
+    setCategoryFilter([]);
+    setPriorityFilter([]);
+    setSearchQuery('');
+  };
+
+  // A risk's mapped controls from every source: seed relationships, controls
+  // created-and-linked via the wizard (carry mappedRisks), and existing controls
+  // linked via the picker. Deduped by id (case-insensitive).
+  const controlsForRisk = (r: RiskEntry) => {
+    const seed = getRiskRelationships(r.id, r.businessProcess).controls
+      .map(c => ({ id: c.id, name: c.name, desc: c.desc, isKey: c.isKey }));
+    const created = createdControls
+      .filter(c => c.mappedRisks.includes(r.id))
+      .map(c => ({ id: c.id, name: c.name, desc: c.description, isKey: c.classification === 'Key' }));
+    const linked = (riskControlLinks[r.id] ?? [])
+      .map(c => ({ id: c.id, name: c.name, desc: c.description, isKey: c.isKey }));
+    const seen = new Set<string>();
+    const out: { id: string; name: string; desc: string; isKey: boolean }[] = [];
+    for (const c of [...seed, ...created, ...linked]) {
+      const key = c.id.toUpperCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(c);
+    }
+    return out;
+  };
+
   const handleSaveRisk = (risk: RiskEntry) => {
     const exists = risks.find(r => r.id === risk.id);
     if (exists) {
       setRisks(prev => prev.map(r => r.id === risk.id ? risk : r));
       addToast({ message: `Risk "${risk.name}" updated`, type: 'success' });
-      logEvent({ action: 'Update', description: `Updated risk "${risk.name}" (${risk.id})`, module: 'Risk Register', entity: 'Risk' });
     } else {
       setRisks(prev => [risk, ...prev]);
       addToast({ message: `Risk "${risk.name}" created as ${risk.status}`, type: 'success' });
-      logEvent({ action: 'Create', description: `Created risk "${risk.name}" (${risk.id})`, module: 'Risk Register', entity: 'Risk' });
     }
     setShowCreateDrawer(false);
-    setDetailRisk(null);
   };
 
   const handleUpdateRisk = (updated: RiskEntry) => {
     setRisks(prev => prev.map(r => r.id === updated.id ? updated : r));
-    setDetailRisk(updated);
-    logEvent({ action: 'Update', description: `Updated risk "${updated.name}" (${updated.id})`, module: 'Risk Register', entity: 'Risk' });
+    // Editing happens on the full detail page; Save updates it in place + toasts.
+    addToast({ message: `Risk "${updated.name}" updated`, type: 'success' });
   };
 
-  // Archive = soft retire. The risk keeps its record and moves to the Archived
-  // view (Status → Archived), where it can be restored or permanently deleted.
+  // Single-row archive replaces the old sticky bulk bar.
   const handleArchiveOne = (id: string) => {
-    const target = risks.find(r => r.id === id);
-    setRisks(prev => prev.map(r => r.id === id ? { ...r, status: 'Archived' } : r));
+    setArchivedRiskIds(prev => prev.includes(id) ? prev : [...prev, id]);
     setSelectedRiskIds(prev => prev.filter(s => s !== id));
-    addToast({ message: `Risk archived — find it under Status → Archived`, type: 'success' });
-    logEvent({ action: 'Update', description: `Archived risk "${target?.name ?? id}" (${id})`, module: 'Risk Register', entity: 'Risk' });
-  };
-  // Restore brings an archived risk back to the active list.
-  const handleRestoreOne = (id: string) => {
-    const target = risks.find(r => r.id === id);
-    setRisks(prev => prev.map(r => r.id === id ? { ...r, status: 'Active' } : r));
-    setSelectedRiskIds(prev => prev.filter(s => s !== id));
-    addToast({ message: `Risk restored to Active`, type: 'success' });
-    logEvent({ action: 'Update', description: `Restored risk "${target?.name ?? id}" (${id}) to Active`, module: 'Risk Register', entity: 'Risk' });
-  };
-  // Permanent delete — only reachable from the Archived view, admin-gated,
-  // and confirmed via the destructive ConfirmationModal.
-  const handleDeleteOne = (id: string) => {
-    const target = risks.find(r => r.id === id);
-    setRisks(prev => prev.filter(r => r.id !== id));
-    setSelectedRiskIds(prev => prev.filter(s => s !== id));
-    if (detailRiskId === id) setDetailRiskId(null);
-    setPendingDeleteId(null);
-    addToast({ message: `Risk permanently deleted`, type: 'success' });
-    logEvent({ action: 'Delete', description: `Permanently deleted risk "${target?.name ?? id}" (${id})`, module: 'Risk Register', entity: 'Risk' });
+    addToast({ message: `Risk archived`, type: 'success' });
   };
   // Delete-risk confirmation (the trash action on a risk card).
   const [confirmDeleteRisk, setConfirmDeleteRisk] = useState<{ id: string; name: string } | null>(null);
+  const handleDeleteOne = (id: string) => {
+    setArchivedRiskIds(prev => prev.includes(id) ? prev : [...prev, id]);
+    setSelectedRiskIds(prev => prev.filter(s => s !== id));
+    addToast({ message: `Risk deleted`, type: 'success' });
+  };
   const handleCancelOne = (id: string) => {
     setSelectedRiskIds(prev => prev.filter(s => s !== id));
   };
@@ -725,13 +731,24 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         <div className={embedded ? 'space-y-5' : 'relative z-10 max-w-[1200px] mx-auto px-6 py-6 space-y-5'}>
           <RiskDetailPage
             risk={detailRiskFromUrl}
-            onBack={() => setDetailRiskId(null)}
+            controls={controlsForRisk(detailRiskFromUrl)}
+            onBack={() => {
+              // Inside the Process Hub already → just close the detail (back to the embedded Risks list).
+              if (embedded) { setDetailRiskId(null); return; }
+              // Opened standalone (new tab) → land on this risk's process in the Process Hub, Risks tab.
+              const bp = BUSINESS_PROCESSES.find(b => b.abbr === detailRiskFromUrl.businessProcess);
+              const params = bp
+                ? new URLSearchParams({ view: 'bp-detail', bp: bp.id, section: 'risks' })
+                : new URLSearchParams({ view: 'business-processes' });
+              window.location.assign(`${window.location.origin}${window.location.pathname}?${params.toString()}`);
+            }}
             onEdit={() => setEditingRisk(detailRiskFromUrl)}
           />
           <AnimatePresence>
             {editingRisk && (
               <RiskDrawer
                 risk={editingRisk}
+                presentation="modal"
                 onClose={() => setEditingRisk(null)}
                 onSave={(updated) => { handleUpdateRisk(updated); setEditingRisk(null); }}
               />
@@ -751,6 +768,16 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   return (
     <div className={embedded ? '' : 'relative h-full overflow-y-auto'}>
       <div className={embedded ? 'space-y-5' : 'relative z-10 max-w-[1200px] mx-auto px-6 py-6 space-y-5'}>
+        {/* KPI strip (4 tiles) — Process Hub risk tab only; mirrors the Controls tab's strip.
+            Each tile is a single-select lifecycle-status filter; Total clears. */}
+        {embedded && (
+          <div className="grid grid-cols-4 gap-3">
+            <KpiTile label="Total Risks"  value={String(totalRisks)}       index={0} onClick={() => setActiveStatusTile(null)} />
+            <KpiTile label="Active"       value={String(activeCount)}      index={1} valueClassName="text-compliant-700" onClick={() => setActiveStatusTile(p => p === 'Active' ? null : 'Active')} selected={activeStatusTile === 'Active'} />
+            <KpiTile label="Under Review" value={String(underReviewCount)} index={2} valueClassName="text-mitigated-700" onClick={() => setActiveStatusTile(p => p === 'Under Review' ? null : 'Under Review')} selected={activeStatusTile === 'Under Review'} />
+            <KpiTile label="Draft"        value={String(draftCount)}       index={3} onClick={() => setActiveStatusTile(p => p === 'Draft' ? null : 'Draft')} selected={activeStatusTile === 'Draft'} />
+          </div>
+        )}
         {/* Toolbar — when embedded inside Process Hub, the create button lives in the
             Process Hub header. Standalone Risk Register keeps its own title + CTA. */}
         {!embedded && (
@@ -759,12 +786,10 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
               <h1 className="font-display text-[18px] font-semibold text-ink-900">Risk Register</h1>
               <p className="text-[13px] text-text-muted mt-1">Maintain the master list of business and audit risks across processes.</p>
             </div>
-            {can('risk_create') && (
-              <Button variant="primary" size="sm" shape="lg" onClick={() => setShowCreateDrawer(true)}
-                leftIcon={<Plus size={13} />} className="shrink-0">
-                Create Risk
-              </Button>
-            )}
+            <Button variant="primary" size="sm" shape="lg" onClick={() => setShowCreateDrawer(true)}
+              leftIcon={<Plus size={13} />} className="shrink-0">
+              Create Risk
+            </Button>
           </div>
         )}
 
@@ -786,7 +811,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             </div>
             <h3 className="text-[15px] font-display text-ink-800 mb-1">No risks yet</h3>
             <p className="text-[13px] text-ink-600 mb-5 max-w-[320px]">Track risks for this process and link them to controls.</p>
-            {can('risk_create') && <Button variant="primary" size="md" onClick={() => setShowCreateDrawer(true)}>Create Risk</Button>}
+            <Button variant="primary" size="md" onClick={() => setShowCreateDrawer(true)}>Create Risk</Button>
           </div>
         ) : (
         <>
@@ -800,40 +825,18 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
               className="pl-9 pr-3 py-2 rounded-[8px] border border-border bg-white text-[12px] w-[260px] placeholder:text-ink-400 outline-none focus:border-primary/40 transition-all" />
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
-            {(statusFilter.length || subProcessFilter.length || categoryFilter.length || priorityFilter.length || searchQuery.length) > 0 && (
+            {hasActiveFilters && (
               <button
                 type="button"
-                onClick={() => {
-                  setStatusFilter([]);
-                  setSubProcessFilter([]);
-                  setCategoryFilter([]);
-                  setPriorityFilter([]);
-                  setSearchQuery('');
-                }}
+                onClick={clearAllFilters}
                 className="mr-1 text-[12px] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
               >
                 Clear all
               </button>
             )}
-            {archivedCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setStatusFilter(viewingArchived ? [] : ['Archived'])}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-[8px] text-[12px] font-medium border transition-colors cursor-pointer ${
-                  viewingArchived
-                    ? 'bg-ink-800 text-white border-ink-800'
-                    : 'bg-white text-ink-600 border-border hover:bg-paper-50'
-                }`}
-                title={viewingArchived ? 'Back to active risks' : 'View archived risks'}
-              >
-                <Archive size={12} />
-                {viewingArchived ? 'Viewing archived' : `Archived (${archivedCount})`}
-              </button>
-            )}
-            <ColumnFilter variant="button" label="Status" options={STATUS_FILTER_OPTIONS} value={statusFilter} onChange={setStatusFilter} align="end" />
+            <ColumnFilter variant="button" label="Severity" options={priorityOptions} value={priorityFilter} onChange={setPriorityFilter} align="end" />
             <ColumnFilter variant="button" label="Sub-process" options={subProcessOptions} value={subProcessFilter} onChange={setSubProcessFilter} align="end" />
             <ColumnFilter variant="button" label="Category" options={categoryOptions} value={categoryFilter} onChange={setCategoryFilter} align="end" />
-            <ColumnFilter variant="button" label="Priority" options={priorityOptions} value={priorityFilter} onChange={setPriorityFilter} align="end" />
             {embedded && (
               <Button variant="primary" size="sm" shape="lg" onClick={() => setShowCreateDrawer(true)}
                 leftIcon={<Plus size={13} />} className="shrink-0">
@@ -879,10 +882,10 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
           ) : filteredRisks.length === 0 ? (
             <div className="px-6 py-10 text-center text-[12px] text-text-muted rounded-xl border border-border-light bg-white">
               No risks match your search or filters.
-              {(subProcessFilter.length || categoryFilter.length || priorityFilter.length) > 0 && (
+              {hasActiveFilters && (
                 <button
                   type="button"
-                  onClick={() => { setSubProcessFilter([]); setCategoryFilter([]); setPriorityFilter([]); }}
+                  onClick={clearAllFilters}
                   className="ml-2 text-brand-700 hover:text-brand-600 cursor-pointer font-medium"
                 >
                   Clear filters
@@ -891,10 +894,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             </div>
           ) : filteredRisks.map((risk, i) => {
             const isChecked = selectedRiskIds.includes(risk.id);
-            const isExpanded = expandedRiskId === risk.id;
-            const rels = getRiskRelationships(risk.id, risk.businessProcess);
-            const controlCount = rels.controls.length;
-            const keyControlCount = rels.controls.filter(c => c.isKey).length;
+            const cardControls = controlsForRisk(risk);
             return (
               <motion.div
                 key={risk.id}
@@ -905,206 +905,84 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                   isChecked ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border-light'
                 }`}
               >
-                <div className="grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 items-start">
-                {/* Open column — chevron toggles the detail panel (matches the RACM card). */}
-                <div className="flex items-center pt-0.5">
-                  <button
-                    type="button"
-                    aria-label={isExpanded ? `Collapse ${risk.id}` : `Expand ${risk.id}`}
-                    aria-expanded={isExpanded}
-                    onClick={() => setExpandedRiskId(prev => prev === risk.id ? null : risk.id)}
-                    className="p-0.5 rounded text-ink-400 hover:text-brand-600 cursor-pointer transition-colors"
-                  >
-                    <ChevronRight size={14} aria-hidden="true" className={`shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
-                  </button>
-                </div>
-
-                {/* Risk column — title + status pill + id + tag pills.
-                    Description / sub-process / owner / created intentionally live
-                    only in the expanded panel to avoid duplicating them here. */}
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-[0.9375rem] font-semibold text-text leading-snug">
-                      <span className="font-mono text-[12px] font-semibold text-brand-700 mr-2">{risk.id}</span>
-                      {risk.name}
-                    </h3>
-                    <Pill tone={STATUS_TONE[risk.status]}>{risk.status}</Pill>
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
-                      {risk.businessProcess}
-                    </span>
-                    <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-white text-text-muted border border-border-light">
-                      {risk.category}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Priority column */}
-                <div className="flex flex-col items-start gap-1.5">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold border border-border-light bg-white ${PRIORITY_STYLES[risk.priority]}`}>
-                    {risk.priority}
-                  </span>
-                </div>
-
-                {/* Coverage column — controls mapped */}
-                <div className="flex flex-col gap-1.5 min-w-0">
-                  {controlCount === 0 ? (
-                    <div className="text-[11px] text-high-700 italic inline-flex items-center gap-1">
-                      <AlertTriangle size={11} className="text-high-700" /> Not mapped
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-baseline gap-2 min-w-0">
-                        <span className="text-[15px] font-bold tabular-nums leading-none text-text">{controlCount}</span>
-                        <span className="text-[11px] text-text-secondary">
-                          control{controlCount !== 1 ? 's' : ''} mapped
+                <div className="px-6 py-5">
+                  {/* Risk identity + row actions */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-[0.9375rem] font-semibold leading-snug">
+                          <span className="font-mono text-[12px] font-semibold text-brand-700 mr-2">{risk.id}</span>
+                          <button type="button"
+                            onClick={() => {
+                              const params = new URLSearchParams({ view: 'audit-risk-register', risk: risk.id });
+                              window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank', 'noopener');
+                            }}
+                            title="Open detail in a new tab"
+                            className="text-left text-text hover:text-brand-700 hover:underline underline-offset-2 transition-colors cursor-pointer">
+                            {risk.name}
+                          </button>
+                        </h3>
+                        <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold ${STATUS_STYLES[risk.status]}`}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
+                          {risk.status}
+                        </span>
+                        <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
+                          {risk.businessProcess}
+                        </span>
+                        <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-white text-text-muted border border-border-light">
+                          {risk.category}
+                        </span>
+                        <span className={`inline-flex items-center px-2.5 h-5 rounded-md text-[11px] font-semibold border border-border-light bg-white ${PRIORITY_STYLES[risk.priority]}`}>
+                          {risk.priority}
                         </span>
                       </div>
-                      {keyControlCount > 0 && (
-                        <div className="text-[11px] text-text-muted">
-                          <span className="font-semibold text-text">{keyControlCount}</span> key
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* Actions column */}
-                <div onClick={e => e.stopPropagation()} className="flex items-start justify-end gap-1">
-                  {isChecked ? (
-                    <>
-                      <button type="button"
-                        onClick={() => handleCancelOne(risk.id)}
-                        title="Cancel selection"
-                        className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer">
-                        <X size={14} />
-                      </button>
-                    </>
-                  ) : risk.status === 'Archived' ? (
-                    // Archived row — restore, or permanently delete (admin-gated).
-                    <>
-                      {can('risk_edit') && (
-                      <button
-                        type="button"
-                        onClick={() => setEditingRiskCard(risk)}
-                        title="Edit risk"
-                        className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                      >
-                        <Edit3 size={14} />
-                      </button>
-                      )}
-                      {can('risk_archive') && (
-                        <button
-                          type="button"
-                          onClick={() => handleRestoreOne(risk.id)}
-                          title="Restore to active"
-                          className="p-1.5 rounded-md text-text-muted hover:text-compliant-700 hover:bg-compliant-50 transition-colors cursor-pointer"
-                        >
-                          <ArchiveRestore size={14} />
-                        </button>
-                      )}
-                      {can('risk_delete') && (
-                        <button
-                          type="button"
-                          onClick={() => setPendingDeleteId(risk.id)}
-                          title="Delete permanently"
-                          className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    // Active row — open, link control, archive (soft retire), or delete.
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setDetailRiskId(risk.id)}
-                        title="Open risk"
-                        className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                      >
-                        <Play size={14} />
-                      </button>
-                      {can('risk_share') && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); openShare({ type: 'risk', id: risk.id, anchor: rectFromEvent(e) }); }}
-                        title="Share risk"
-                        className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                      >
-                        <Share2 size={14} />
-                      </button>
-                      )}
-                      {can('ctrl_link') && (
-                      <button
-                        type="button"
-                        onClick={() => setLinkControlRisk(risk)}
-                        title="Link control"
-                        className="p-1.5 rounded-md text-text-muted hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
-                      >
-                        <Shield size={14} />
-                      </button>
-                      )}
-                      {can('risk_archive') && (
-                        <button
-                          type="button"
-                          onClick={() => handleArchiveOne(risk.id)}
-                          title="Archive"
-                          className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer"
-                        >
-                          <Archive size={14} />
-                        </button>
-                      )}
-                      {can('risk_delete') && (
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDeleteRisk({ id: risk.id, name: risk.name })}
-                          title="Delete risk"
-                          className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-                </div>
-
-                {/* Expanded detail panel — Description + Sub-process / Owner / Created */}
-                <AnimatePresence initial={false}>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-                      className="overflow-hidden border-t border-canvas-border bg-canvas/40"
-                    >
-                      <div className="px-6 py-5 pl-[68px]">
-                        <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Description</span>
-                        <p className="text-[13px] text-text leading-relaxed max-w-3xl">{risk.description || '—'}</p>
-
-                        <div className="flex items-start justify-between gap-6 mt-5">
-                          <div>
-                            <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Sub-process</span>
-                            <span className="text-[13px] text-text block">{risk.subProcess || '—'}</span>
+                      <p className="text-[13px] text-text leading-relaxed mt-3 max-w-3xl">{risk.description || '—'}</p>
+                    </div>
+                    {/* Top-right: control tags moved up (before the actions, like the workflow card),
+                        then row actions — Link control placed like the RACM card's Link risk button. */}
+                    <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-1.5 shrink-0 flex-wrap max-w-[60%]">
+                      {cardControls.map(ctrl => (
+                        <span key={ctrl.id}
+                          className="inline-flex items-center gap-1 px-2 h-[26px] rounded-md bg-brand-50 border border-brand-100 text-brand-700 text-[11px] font-mono font-semibold">
+                          {ctrl.isKey && <Star size={11} className="fill-amber-400 text-amber-500 shrink-0" aria-label="Key control" />}
+                          {ctrl.id}
+                        </span>
+                      ))}
+                      {isChecked ? (
+                        <>
+                          <button type="button" onClick={() => handleArchiveOne(risk.id)} title="Archive"
+                            className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer">
+                            <Archive size={14} />
+                          </button>
+                          <button type="button" onClick={() => handleCancelOne(risk.id)} title="Cancel selection"
+                            className="p-1.5 rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer">
+                            <X size={14} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="relative group/lcontrol">
+                            <button type="button" onClick={() => setLinkControlRisk(risk)} aria-label="Link control"
+                              className="shrink-0 inline-flex items-center gap-1 px-2 h-[26px] rounded-md border border-dashed border-border-light bg-white text-[11px] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer">
+                              <Link2 size={12} className="shrink-0" /> Control
+                            </button>
+                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[6px] bg-ink-800 text-paper-0 text-[11px] font-medium whitespace-nowrap opacity-0 group-hover/lcontrol:opacity-100 pointer-events-none transition-opacity z-50">Link control</span>
                           </div>
-                          <div className="flex items-start gap-12">
-                            <div>
-                              <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Owner</span>
-                              <span className="text-[13px] text-text block">{risk.owner || '—'}</span>
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-ink-400 uppercase block tracking-wider mb-1.5">Created</span>
-                              <span className="text-[13px] text-text block tabular-nums">{risk.createdAt}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                          {can('risk_share') && (
+                            <button type="button" onClick={(e) => { e.stopPropagation(); openShare({ type: 'risk', id: risk.id, anchor: rectFromEvent(e) }); }} title="Share risk"
+                              className="p-1.5 rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer">
+                              <Share2 size={14} />
+                            </button>
+                          )}
+                          <button type="button" onClick={() => setConfirmDeleteRisk({ id: risk.id, name: risk.name })} title="Delete risk"
+                            className="p-1.5 rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </motion.div>
             );
           })}
@@ -1113,60 +991,45 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         )}
       </div>
 
-      {/* Create Drawer */}
+      {/* Create modal */}
       <AnimatePresence>
         {showCreateDrawer && (
-          <RiskDrawer risk={null} onClose={() => setShowCreateDrawer(false)} onSave={handleSaveRisk} defaultProcess={processFilter} />
+          <RiskDrawer risk={null} presentation="modal" onClose={() => setShowCreateDrawer(false)} onSave={handleSaveRisk} defaultProcess={processFilter} />
         )}
       </AnimatePresence>
 
-      {/* Detail Drawer */}
-      <AnimatePresence>
-        {detailRisk && !showCreateDrawer && (
-          <RiskDetailDrawer risk={detailRisk} onClose={() => setDetailRisk(null)} onUpdate={handleUpdateRisk} />
-        )}
-      </AnimatePresence>
 
-      {/* Permanent-delete confirmation (archived rows) */}
-      <ConfirmationModal
-        open={pendingDeleteId !== null}
-        title="Delete this risk permanently?"
-        description={
-          <>
-            {risks.find(r => r.id === pendingDeleteId)?.name
-              ? <><span className="font-semibold text-ink-700">{risks.find(r => r.id === pendingDeleteId)?.name}</span> will be removed for good. </>
-              : null}
-            This can't be undone. Archived risks are normally kept for the audit trail — only delete if it was created in error.
-          </>
-        }
-        confirmLabel="Delete permanently"
-        cancelLabel="Cancel"
-        tone="destructive"
-        onConfirm={() => { if (pendingDeleteId) handleDeleteOne(pendingDeleteId); }}
-        onClose={() => setPendingDeleteId(null)}
-      />
-
-      {/* Edit Risk side sheet (opened from a card's edit button) */}
+      {/* Link Control picker (opened from a card's Link Control action) — modal */}
       <AnimatePresence>
-        {editingRiskCard && (
-          <RiskDrawer
-            risk={editingRiskCard}
-            onClose={() => setEditingRiskCard(null)}
-            onSave={(updated) => { handleUpdateRisk(updated); setEditingRiskCard(null); }}
+        {linkControlRisk && !createControlFromLink && (
+          <LinkControlPickerDrawer
+            riskName={linkControlRisk.name}
+            alreadyLinkedIds={controlsForRisk(linkControlRisk).map(c => c.id.toUpperCase())}
+            onClose={() => setLinkControlRisk(null)}
+            onCreateControl={() => setCreateControlFromLink(true)}
+            onApply={(controls) => {
+              addRiskControlLinks(linkControlRisk.id, controls);
+              addToast({ message: `Linked ${controls.length} control${controls.length !== 1 ? 's' : ''} to ${linkControlRisk.name}.`, type: 'success' });
+              setLinkControlRisk(null);
+            }}
           />
         )}
       </AnimatePresence>
 
-      {/* Link Control sidesheet (opened from a card's Link Control action) */}
+      {/* Create Control wizard — swaps in over the picker (modal). Cancel returns to
+          the picker; saving creates the control, links it to this risk, and closes. */}
       <AnimatePresence>
-        {linkControlRisk && (
-          <LinkControlPickerDrawer
-            riskName={linkControlRisk.name}
-            alreadyLinkedIds={[]}
-            onClose={() => setLinkControlRisk(null)}
-            onCreateControl={() => addToast({ message: 'Open the Control Library to create a new control.', type: 'info' })}
-            onApply={(controls) => {
-              addToast({ message: `Linked ${controls.length} control${controls.length !== 1 ? 's' : ''} to ${linkControlRisk.name}.`, type: 'success' });
+        {linkControlRisk && createControlFromLink && (
+          <CreateControlDrawer
+            presentation="modal"
+            defaultProcess={linkControlRisk.businessProcess}
+            defaultRiskIds={[linkControlRisk.id]}
+            defaultRisk={linkControlRisk.name}
+            onClose={() => setCreateControlFromLink(false)}
+            onSave={(data) => {
+              addCreatedControl(data);
+              addToast({ message: `Created "${data.name}" and linked it to ${linkControlRisk.name}.`, type: 'success' });
+              setCreateControlFromLink(false);
               setLinkControlRisk(null);
             }}
           />
