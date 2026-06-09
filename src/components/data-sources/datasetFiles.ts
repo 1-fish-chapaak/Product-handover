@@ -47,8 +47,8 @@ export const DATASET_FILES: Record<string, DatasetFile[]> = {
     { id: 'fa-01-2', name: 'AI_Fare_Audit_Q4_2025.xlsx', format: 'XLSX', sizeBytes: 4.0 * MB, uploadedAt: '2026-04-23', rows: 22104, status: 'processed' },
   ],
   'f-02': [
-    { id: 'fa-02-1', name: 'PWC_Status_Report_Apr.pdf',  format: 'PDF',  sizeBytes: 1.2 * MB, uploadedAt: '2026-04-23', pages: 32, status: 'processed' },
-    { id: 'fa-02-2', name: 'PWC_Findings_Annex.pdf',     format: 'PDF',  sizeBytes: 0.9 * MB, uploadedAt: '2026-04-23', pages: 18, status: 'processing' },
+    { id: 'fa-02-1', name: 'PwC_Status_Report_Apr.pdf',  format: 'PDF',  sizeBytes: 1.2 * MB, uploadedAt: '2026-04-23', pages: 32, status: 'processed' },
+    { id: 'fa-02-2', name: 'PwC_Findings_Annex.pdf',     format: 'PDF',  sizeBytes: 0.9 * MB, uploadedAt: '2026-04-23', pages: 18, status: 'processing' },
   ],
   'f-03': [
     { id: 'fa-03-1', name: 'emaar_extraction_master.csv', format: 'CSV', sizeBytes: 4.8 * MB, uploadedAt: '2026-04-20', rows: 119240, status: 'processed' },
@@ -189,6 +189,9 @@ function openIdb(): Promise<IDBDatabase> {
     req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
+    // Without this, a blocked open (another tab holding an older version) would
+    // never settle — the promise, and any preview awaiting it, would hang.
+    req.onblocked = () => reject(new Error('IndexedDB open blocked'));
   });
 }
 
@@ -237,11 +240,18 @@ export function getFileBlob(fileId: string): { url: string; mime: string } | und
 export async function loadFileBlob(fileId: string): Promise<{ url: string; mime: string } | undefined> {
   const mem = FILE_BLOBS.get(fileId);
   if (mem) return mem;
-  const file = await idbGet(fileId);
-  if (!file) return undefined;
-  const entry = { url: URL.createObjectURL(file), mime: file.type };
-  FILE_BLOBS.set(fileId, entry);
-  return entry;
+  try {
+    const file = await idbGet(fileId);
+    if (!file) return undefined;
+    // createObjectURL throws on a corrupt/non-Blob entry — guard it so the
+    // caller resolves to "no bytes" (and renders the mock preview) instead of
+    // the rejection bubbling up and pinning the preview's loading skeleton.
+    const entry = { url: URL.createObjectURL(file), mime: file.type };
+    FILE_BLOBS.set(fileId, entry);
+    return entry;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Lazily import pdf.js with the worker configured. Shared by page-count and
@@ -256,9 +266,18 @@ export async function getPdfjs() {
   return pdfjs;
 }
 
-/** Real page count for a PDF File via pdf.js. Returns null on failure so the
- *  caller can fall back to the byte-size estimate. pdf.js is imported lazily. */
+// Deep content parsing (pdf.js / SheetJS) needs the whole file in memory and
+// runs synchronously. Above this size we skip the parse — loading + parsing a
+// large file (let alone a batch of them in parallel on "Add") spikes memory and
+// blocks the main thread, which can hang or crash the tab. Callers fall back to
+// the size-based estimate. It is NOT an upload size limit; the file still adds.
+const DEEP_PARSE_MAX_BYTES = 30 * 1024 * 1024; // 30 MB
+
+/** Real page count for a PDF File via pdf.js. Returns null on failure (or when
+ *  the file is too large to parse inline) so the caller can fall back to the
+ *  byte-size estimate. pdf.js is imported lazily. */
 export async function countPdfPages(file: File): Promise<number | null> {
+  if (file.size > DEEP_PARSE_MAX_BYTES) return null;
   try {
     const pdfjs = await getPdfjs();
     const buf = await file.arrayBuffer();
@@ -275,6 +294,7 @@ export async function countPdfPages(file: File): Promise<number | null> {
  *  with SheetJS. Returns null if it can't be read — callers then fall back to
  *  the byte-size estimate. Lets uploads show a true row count, not a guess. */
 export async function countSheetRows(file: File): Promise<number | null> {
+  if (file.size > DEEP_PARSE_MAX_BYTES) return null;
   try {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
@@ -297,19 +317,19 @@ export async function countSheetRows(file: File): Promise<number | null> {
 // The only file types the Knowledge Hub accepts. Single source of truth shared
 // by BOTH upload entry points (the Add-source picker and a source's detail-view
 // "Add files to this folder") so the restriction can't drift between them.
-export const KH_ALLOWED_EXTS = ['.pdf', '.csv', '.xlsx'] as const;
+export const KH_ALLOWED_EXTS = ['.pdf', '.csv', '.xls', '.xlsx', '.ods', '.pptx', '.jpg', '.jpeg', '.png'] as const;
+// Human-readable label for the supported formats, shown in the picker hint and
+// the "unsupported type" toast. Kept here so both copies stay in sync with the
+// gate above (note: .jpeg shares the JPG label).
+export const KH_ALLOWED_LABEL = 'PDF · CSV · XLS · XLSX · ODS · PPTX · JPG · PNG';
+// `accept` attribute string for the native file/folder inputs.
+export const KH_ALLOWED_ACCEPT = KH_ALLOWED_EXTS.join(',');
 export function isAllowedKnowledgeFile(name: string): boolean {
   const lower = name.toLowerCase();
   return KH_ALLOWED_EXTS.some(ext => lower.endsWith(ext));
 }
 
 export type UploadValidation = { ok: true } | { ok: false; reason: string };
-
-// Deep content parsing (pdf.js / SheetJS) needs the whole file in memory.
-// Above this size we skip the parse and accept the file rather than risk an
-// out-of-memory read error blocking a legitimate big upload — it is NOT a size
-// limit (the file still uploads), just a cap on how much we validate in-browser.
-const DEEP_VALIDATE_MAX_BYTES = 30 * 1024 * 1024; // 30 MB
 
 export async function validateUploadFile(file: File): Promise<UploadValidation> {
   // Empty files carry nothing to index — the only size gate we keep.
@@ -329,18 +349,37 @@ export async function validateUploadFile(file: File): Promise<UploadValidation> 
     return { ok: true };
   }
 
-  // Big PDF/XLSX: skip the in-browser parse and let them through.
-  if (file.size > DEEP_VALIDATE_MAX_BYTES) return { ok: true };
-
-  let buf: ArrayBuffer;
-  try {
-    buf = await file.arrayBuffer();
-  } catch {
-    // Read failed (e.g. memory pressure) — accept rather than reject.
+  // XLSX: sniff the header instead of parsing the whole workbook. A full
+  // SheetJS parse loads the entire file into memory AND runs synchronously on
+  // the main thread — validating several files at once then freezes the UI (and
+  // the upload progress bars). The first bytes classify it without a parse:
+  //   "PK\x03\x04"       → ZIP-based OOXML → a real .xlsx
+  //   "\xD0\xCF\x11\xE0" → OLE/CFB container → legacy .xls or an encrypted
+  //                         OOXML wrapper → treat as locked/unsupported
+  if (ext === 'xlsx') {
+    try {
+      const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+      const isZip = head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04;
+      const isOle = head[0] === 0xd0 && head[1] === 0xcf && head[2] === 0x11 && head[3] === 0xe0;
+      if (isOle) return { ok: false, reason: 'Password-protected — unlock it first' };
+      if (!isZip) return { ok: false, reason: 'File appears corrupted' };
+    } catch {
+      // Couldn't read the head — don't block it; the backend will validate.
+    }
     return { ok: true };
   }
 
+  // Big PDF: skip the in-browser parse and let it through.
+  if (file.size > DEEP_PARSE_MAX_BYTES) return { ok: true };
+
   if (ext === 'pdf') {
+    let buf: ArrayBuffer;
+    try {
+      buf = await file.arrayBuffer();
+    } catch {
+      // Read failed (e.g. memory pressure) — accept rather than reject.
+      return { ok: true };
+    }
     try {
       const pdfjs = await getPdfjs();
       const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
@@ -348,15 +387,6 @@ export async function validateUploadFile(file: File): Promise<UploadValidation> 
     } catch (e) {
       const name = (e as { name?: string } | null | undefined)?.name;
       if (name === 'PasswordException') return { ok: false, reason: 'Password-protected — unlock it first' };
-      return { ok: false, reason: 'File appears corrupted' };
-    }
-  } else if (ext === 'xlsx') {
-    try {
-      const wb = XLSX.read(buf, { type: 'array' });
-      if (!wb.SheetNames.length) return { ok: false, reason: 'File appears corrupted' };
-    } catch (e) {
-      const msg = String((e as Error | undefined)?.message ?? '').toLowerCase();
-      if (msg.includes('password') || msg.includes('encrypt')) return { ok: false, reason: 'Password-protected — unlock it first' };
       return { ok: false, reason: 'File appears corrupted' };
     }
   }
@@ -396,7 +426,7 @@ function parseSubtypeBytes(subtype: string): number | null {
 function formatFromName(name: string): FileFormat {
   const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
   if (ext === 'csv') return 'CSV';
-  if (ext === 'xlsx' || ext === 'xls') return 'XLSX';
+  if (ext === 'xlsx' || ext === 'xls' || ext === 'ods') return 'XLSX';
   return 'PDF'; // pdf and anything else preview as PDF
 }
 

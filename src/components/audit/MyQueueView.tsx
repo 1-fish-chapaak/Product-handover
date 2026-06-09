@@ -12,6 +12,7 @@ import {
   CalendarRange, Tag, BellOff, Wand2, Check, X,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import Gated from '../shared/Gated';
 import { ENGAGEMENTS, PROCESS_COLORS } from '../../data/engagements';
 import {
   ENGAGEMENT_EXCEPTIONS,
@@ -272,6 +273,7 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
               Quick Classify
             </span>
           </div>
+          <Gated permission="exc_classify" mode="disable" title="You don't have permission to classify exceptions">
           {CLASSIFY_TEMPLATES.map(t => {
             const Icon = t.icon;
             return (
@@ -289,6 +291,7 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
               </button>
             );
           })}
+          </Gated>
         </div>
 
         {visible.length === 0 ? (
@@ -449,9 +452,15 @@ function QueueRow({
 
       {/* Inline quick actions */}
       <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-        <RowButton icon={Tag} label="Classify" onClick={() => onAction('Classification panel opened')} />
-        <RowButton icon={UserPlus} label="Reassign" onClick={() => onAction('Reassign drawer opened')} />
-        <RowButton icon={BellOff} label="Snooze" onClick={() => onAction('Snoozed for 24h')} />
+        <Gated permission="exc_classify" mode="disable" title="You don't have permission to classify exceptions">
+          <RowButton icon={Tag} label="Classify" onClick={() => onAction('Classification panel opened')} />
+        </Gated>
+        <Gated permission="exc_assign" mode="disable" title="You don't have permission to reassign exceptions">
+          <RowButton icon={UserPlus} label="Reassign" onClick={() => onAction('Reassign drawer opened')} />
+        </Gated>
+        <Gated permission="exc_resolve" mode="disable" title="You don't have permission to snooze exceptions">
+          <RowButton icon={BellOff} label="Snooze" onClick={() => onAction('Snoozed for 24h')} />
+        </Gated>
         <button
           onClick={(e) => { e.stopPropagation(); onOpen(); }}
           className="inline-flex items-center gap-1 px-2.5 h-7 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.6875rem] font-semibold transition-colors cursor-pointer"

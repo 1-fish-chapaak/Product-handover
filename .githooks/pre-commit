@@ -27,4 +27,18 @@ if ! npm run build --silent; then
 fi
 
 echo "✓ pre-commit: build passed"
+
+# Design-system drift: the editorial-grc skill must stay in lockstep with
+# src/index.css. Skips silently if the skill isn't installed on this machine.
+if [[ "${SKIP_DESIGN_CHECK:-0}" != "1" ]]; then
+  echo "pre-commit: checking design-system sync…"
+  if ! npm run check:design --silent; then
+    echo
+    echo "✗ pre-commit: editorial-grc skill is out of sync with src/index.css."
+    echo "  Fix: npm run sync:design   (then commit the skill changes too)"
+    echo "  (To bypass for one commit: SKIP_DESIGN_CHECK=1 git commit …)"
+    exit 1
+  fi
+fi
+
 exit 0

@@ -12,6 +12,7 @@ import { AnimatePresence, motion, Reorder, useDragControls } from 'motion/react'
 import { ArrowLeft, Download, History, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2, GripVertical, Edit3, StickyNote } from 'lucide-react';
 import FloatingLines from '../shared/FloatingLines';
 import { useToast, type ToastType } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
 import EmptyState from '../shared/EmptyState';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { KpiCountUp } from '../shared/KpiTile';
@@ -86,6 +87,7 @@ export function BulkAuditVariantView({
   onShare?: () => void;
 }) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const [workflows, setWorkflows] = useState<WorkflowResult[]>(report.workflowResults ?? []);
   const [pendingDelete, setPendingDelete] = useState<WorkflowResult | null>(null);
 
@@ -195,6 +197,7 @@ export function BulkAuditVariantView({
     setContentsDraft('');
   };
   const handleSaveContentsRename = () => {
+    if (!can('rp_edit')) { handleCancelContentsRename(); return; }
     const id = contentsEditingId;
     const newTitle = contentsDraft.trim();
     if (!id || !newTitle) {

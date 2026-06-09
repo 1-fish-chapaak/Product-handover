@@ -9,6 +9,8 @@ export interface ProcurementRacmRow {
   riskId: string;
   /** Control ID */
   controlId: string;
+  /** Key control — user-set tag, independent of risk rating/severity */
+  isKey?: boolean;
   /** Process Area */
   processArea: string;
   /** Sub-Process */

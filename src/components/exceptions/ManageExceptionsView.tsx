@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft,
@@ -20,6 +20,9 @@ import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, ACTION_HUB_SUMMARY, type GrcException
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
 import { QUERY_TABLES } from '../../data/queryGraphs';
 import type { ExceptionRole } from '../../hooks/useAppState';
+import { useCan } from '../../context/CurrentUserContext';
+import Gated from '../shared/Gated';
+import { useAuditLog } from '../../context/AdminDataContext';
 import {
   ReviewClassificationDrawer,
   ReviewCaseDrawer,
@@ -323,6 +326,15 @@ function RoleToggle({ role, setRole }: { role: ExceptionRole; setRole: (r: Excep
 }
 
 export default function ManageExceptionsView({ role, setRole, onBack, embedded = false, exceptions: propsExceptions, onExceptionsChange, contextLabel, onBulkAssign }: ManageExceptionsViewProps) {
+  // Unify with RBAC: the active role's permissions decide the exception persona.
+  // Risk Owner roles resolve exceptions; everyone else operates as the auditor.
+  const { can } = useCan();
+  useEffect(() => {
+    const derived: ExceptionRole = can('exc_resolve') ? 'risk-owner' : 'auditor';
+    if (derived !== role) setRole(derived);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [can]);
+
   const [activeNav, setActiveNav] = useState<'exceptions' | 'action-hub' | 'workflow'>('exceptions');
   const [atrModalOpen, setAtrModalOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -334,6 +346,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
   const [activeSheetId, setActiveSheetId] = useState<string>('all');
   const [activityDrawerOpen, setActivityDrawerOpen] = useState(false);
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [bulkClassifyOpen, setBulkClassifyOpen] = useState(false);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [bulkRequestDueOpen, setBulkRequestDueOpen] = useState(false);
@@ -566,6 +579,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   <span className="text-[12px] text-ink-500 tabular-nums">· {ACTION_HUB_SUMMARY.reportHealthPct}%</span>
                 </div>
                 <div className="h-5 w-px bg-canvas-border" aria-hidden="true" />
+                <Gated permission="exc_resolve" mode="disable" title="You don't have permission to generate an ATR">
                 <button
                   onClick={() => setAtrModalOpen(true)}
                   className="h-9 px-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer transition-colors"
@@ -573,6 +587,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   <FileText size={14} />
                   Generate ATR
                 </button>
+                </Gated>
               </div>
             )}
           </div>
@@ -726,8 +741,8 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 <div className="flex items-center gap-1.5">
                   {/* Assignment & Approval Workflow — additive bulk action (both personas). */}
                   <WorkflowAssignButton selectedIds={[...selected]} />
-                  {/* Risk owner role: Bulk Classify only. */}
-                  {role === 'risk-owner' && selected.size > 0 && (
+                  {/* Bulk Classify — permission-gated. */}
+                  {can('exc_classify') && selected.size > 0 && (
                     <button
                       onClick={() => setBulkClassifyOpen(true)}
                       title={`Bulk classify ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
@@ -740,8 +755,8 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                       </span>
                     </button>
                   )}
-                  {/* Auditor role: Bulk Assign only. */}
-                  {role !== 'risk-owner' && selected.size > 0 && (
+                  {/* Bulk Assign — permission-gated. */}
+                  {can('exc_assign') && selected.size > 0 && (
                     <button
                       onClick={() => setBulkAssignOpen(true)}
                       title={`Bulk assign ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
@@ -779,6 +794,20 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                       Review Date Changes
                       <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
                         {bulkReviewEligible.length}
+                      </span>
+                    </button>
+                  )}
+                  {/* Triage — permission-gated, available to any reviewing role. */}
+                  {can('exc_triage') && selected.size > 0 && (
+                    <button
+                      onClick={() => { logEvent({ action: 'Update', description: `Triaged ${selected.size} exception${selected.size === 1 ? '' : 's'}`, module: 'Exceptions', entity: 'Exception' }); addToast({ message: `Triaged ${selected.size} case${selected.size === 1 ? '' : 's'}.`, type: 'success' }); }}
+                      title={`Triage ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
+                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-ink-700 bg-white border-border hover:bg-surface-2 cursor-pointer transition-colors"
+                    >
+                      <FlaskConical size={13} />
+                      Triage
+                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-ink-900/10 rounded-full tabular-nums">
+                        {selected.size}
                       </span>
                     </button>
                   )}
@@ -976,6 +1005,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               setNextActionableNum(n => n + 1);
               setSelected(new Set());
               setBulkClassifyOpen(false);
+              logEvent({ action: 'Update', description: `Classified ${payload.caseIds.length} exception${payload.caseIds.length === 1 ? '' : 's'} as ${payload.classification}`, module: 'Exceptions', entity: 'Exception' });
             }}
           />
         )}
@@ -1117,6 +1147,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 type: 'success',
                 message: `${payload.caseIds.length} case${payload.caseIds.length === 1 ? '' : 's'} assigned to ${assigneeLabel}`,
               });
+              logEvent({ action: 'Update', description: `Assigned ${payload.caseIds.length} exception${payload.caseIds.length === 1 ? '' : 's'} to ${assigneeNames}`, module: 'Exceptions', entity: 'Exception' });
               // Only clear the selection set when the bulk drawer was the one
               // that opened — single-row assigns don't touch the selection.
               if (!singleAssignCase) setSelected(new Set());

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { X, Tag, ChevronDown, Check, Link as LinkIcon, Paperclip, User, ChevronDown as CaretDown, Pencil, Trash2 } from 'lucide-react';
+import Gated from '../shared/Gated';
 import {
   ACTION_HUB_TIMELINE,
   type GrcException,
@@ -464,6 +465,7 @@ export default function BulkClassifyModal({
           >
             Cancel
           </button>
+          <Gated permission="exc_classify" mode="disable" title="You don't have permission to classify exceptions">
           <button
             onClick={() => {
               if (!canApply) return;
@@ -486,6 +488,7 @@ export default function BulkClassifyModal({
           >
             Apply to {selectedCases.length} case{selectedCases.length === 1 ? '' : 's'}
           </button>
+          </Gated>
         </footer>
       </motion.aside>
     </>

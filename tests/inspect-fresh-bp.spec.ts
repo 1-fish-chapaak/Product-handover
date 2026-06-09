@@ -1,4 +1,4 @@
-import { test, type Page } from '@playwright/test';
+import { test, type Page } from './_helpers';
 
 async function clearStorage(page: Page) {
   await page.addInitScript(() => {

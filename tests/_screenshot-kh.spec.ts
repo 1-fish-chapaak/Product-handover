@@ -1,4 +1,4 @@
-import { test, type Page } from '@playwright/test';
+import { test, type Page } from './_helpers';
 
 // One-off screenshot capture so I can actually SEE the Knowledge Hub
 // render. Not part of the regular suite — run on demand.

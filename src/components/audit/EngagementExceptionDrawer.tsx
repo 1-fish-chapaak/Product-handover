@@ -17,6 +17,7 @@ import {
   Check,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import Gated from '../shared/Gated';
 import type {
   EngagementException,
   Classification,
@@ -444,6 +445,7 @@ export default function EngagementExceptionDrawer({
 
         {/* ─── Footer (sticky) ─── */}
         <footer className="shrink-0 border-t border-canvas-border bg-canvas-elevated px-6 py-3.5 flex items-center gap-2">
+          <Gated permission="exc_resolve" mode="disable" title="You don't have permission to resolve exceptions">
           <button
             type="button"
             onClick={() => closeWith(`${exception.ref} approved`, 'success')}
@@ -452,6 +454,8 @@ export default function EngagementExceptionDrawer({
             <Check size={13} />
             Approve
           </button>
+          </Gated>
+          <Gated permission="exc_resolve" mode="disable" title="You don't have permission to resolve exceptions">
           <button
             type="button"
             onClick={() => closeWith(`${exception.ref} rejected`, 'error')}
@@ -459,6 +463,8 @@ export default function EngagementExceptionDrawer({
           >
             Reject
           </button>
+          </Gated>
+          <Gated permission="exc_assign" mode="disable" title="You don't have permission to reassign exceptions">
           <button
             type="button"
             onClick={() => closeWith(`${exception.ref} reassigned`, 'info')}
@@ -466,6 +472,8 @@ export default function EngagementExceptionDrawer({
           >
             Reassign
           </button>
+          </Gated>
+          <Gated permission="exc_resolve" mode="disable" title="You don't have permission to close exceptions">
           <button
             type="button"
             onClick={() => closeWith(`${exception.ref} closed`, 'success')}
@@ -475,6 +483,7 @@ export default function EngagementExceptionDrawer({
           >
             Close case
           </button>
+          </Gated>
         </footer>
       </motion.aside>
     </>

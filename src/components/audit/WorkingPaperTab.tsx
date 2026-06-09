@@ -5,6 +5,7 @@ import {
   XCircle, AlertTriangle, Clock, User, X, BookText,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import Gated from '../shared/Gated';
 import type { Engagement } from '../../data/engagements';
 import { racmRowsForProcess, type RACMRow } from '../../data/racm';
 import { CURRENT_USER, PEOPLE } from '../../data/grc-domain';
@@ -164,6 +165,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
             Export as PDF
           </button>
           {!reviewSubmitted && (
+            <Gated permission="eng_edit" mode="disable" title="You don't have permission to submit for review">
             <button
               onClick={() => addToast({ message: allTested ? 'Engagement submitted for review' : 'Cannot submit — some controls not tested', type: allTested ? 'success' : 'error' })}
               disabled={!allTested}
@@ -177,8 +179,10 @@ export default function WorkingPaperTab({ engagement }: Props) {
               <Send size={13} />
               Submit for review
             </button>
+            </Gated>
           )}
           {reviewSubmitted && engagement.status !== 'Closed' && (
+            <Gated permission="eng_close" mode="disable" title="You don't have permission to sign off">
             <button
               onClick={() => addToast({ message: 'Engagement signed off', type: 'success' })}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-compliant hover:bg-compliant-700 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
@@ -186,6 +190,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
               <ShieldCheck size={13} />
               Sign off
             </button>
+            </Gated>
           )}
         </div>
       </div>

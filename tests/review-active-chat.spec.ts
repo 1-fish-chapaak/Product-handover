@@ -3,7 +3,7 @@
  * Captures: sidebar collapsed/expanded, active chat with thinking, active chat with rich result.
  * Run: PLAYWRIGHT_BASE_URL=http://localhost:5173 npx playwright test tests/review-active-chat.spec.ts --project=chromium
  */
-import { test, type Page } from '@playwright/test';
+import { test, type Page } from './_helpers';
 
 const BASE = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173';
 const OUT = 'tests/__screenshots__/review';

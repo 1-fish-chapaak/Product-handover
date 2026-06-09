@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { DATA_SOURCES } from '../../data/mockData';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
+import Gated from '../shared/Gated';
 import { useBulkRunProgress } from '../shared/BulkRunProgress';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
 import { LIBRARY_WORKFLOWS, type LibraryWorkflow } from './WorkflowLibraryView';
@@ -257,11 +259,13 @@ export function Checkbox({
   indeterminate,
   onChange,
   ariaLabel,
+  disabled = false,
 }: {
   checked: boolean;
   indeterminate?: boolean;
   onChange: () => void;
   ariaLabel: string;
+  disabled?: boolean;
 }) {
   const showMark = checked || indeterminate;
   return (
@@ -270,9 +274,12 @@ export function Checkbox({
       role="checkbox"
       aria-checked={indeterminate ? 'mixed' : checked}
       aria-label={ariaLabel}
-      onClick={e => { e.stopPropagation(); onChange(); }}
-      className={`w-4 h-4 rounded border flex items-center justify-center transition-colors cursor-pointer ${
-        showMark ? 'bg-primary border-primary' : 'bg-white border-border hover:border-primary/60'
+      disabled={disabled}
+      onClick={e => { e.stopPropagation(); if (!disabled) onChange(); }}
+      className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+        disabled
+          ? 'bg-surface-2 border-border-light cursor-not-allowed opacity-50'
+          : `cursor-pointer ${showMark ? 'bg-primary border-primary' : 'bg-white border-border hover:border-primary/60'}`
       }`}
     >
       {checked && !indeterminate && <Check size={12} className="text-white" strokeWidth={3} />}
@@ -332,6 +339,7 @@ export function BulkExecuteModal({
   defaultAuditDescription?: string;
 }) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const { startBulkRun } = useBulkRunProgress();
   const [modalDeselected, setModalDeselected] = useState<Set<string>>(new Set());
   // Workflows added via the in-modal catalog search (on top of the pre-selected set).
@@ -392,7 +400,7 @@ export function BulkExecuteModal({
     if (!q) return [];
     const have = new Set(combinedSelected.map(w => w.id));
     return LIBRARY_WORKFLOWS
-      .filter(w => !have.has(w.id) && (w.name.toLowerCase().includes(q) || w.businessProcess.toLowerCase().includes(q) || w.controlId.toLowerCase().includes(q)))
+      .filter(w => !w.singleRunOnly && !have.has(w.id) && (w.name.toLowerCase().includes(q) || w.businessProcess.toLowerCase().includes(q) || w.controlId.toLowerCase().includes(q)))
       .slice(0, 8);
   }, [addSearch, combinedSelected]);
 
@@ -458,6 +466,7 @@ export function BulkExecuteModal({
   };
 
   const handleStep3Execute = () => {
+    if (!can('wf_run')) { addToast({ type: 'error', message: 'You do not have permission to run workflows.' }); return; }
     const activeRunWorkflows = reviewWorkflows
       .filter(rw =>
         rw.status === 'mapped' ||
@@ -482,6 +491,7 @@ export function BulkExecuteModal({
   const handleFileDrop = (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     setIsDragging(false);
+    if (!can('ds_upload')) return;
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
       setUploadedFiles(prev => [...prev, ...makeUploaded(files)]);
@@ -490,6 +500,7 @@ export function BulkExecuteModal({
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!can('ds_upload')) { e.target.value = ''; return; }
     const files = e.target.files ? Array.from(e.target.files) : [];
     if (files.length > 0) {
       setUploadedFiles(prev => [...prev, ...makeUploaded(files)]);
@@ -2187,6 +2198,7 @@ function Step3ReviewExecute({
           Back
         </button>
         <div className="flex items-center gap-2">
+          <Gated permission="wf_run" mode="disable" title="You don't have permission to run workflows">
           <button
             type="button"
             onClick={onExecute}
@@ -2198,6 +2210,7 @@ function Step3ReviewExecute({
             Execute Bulk Run
             <ArrowRight size={14} />
           </button>
+          </Gated>
         </div>
       </div>
     </>

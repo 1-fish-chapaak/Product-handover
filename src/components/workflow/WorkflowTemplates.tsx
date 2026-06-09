@@ -9,6 +9,8 @@ import {
 import { WORKFLOWS } from '../../data/mockData';
 import { StatusBadge, TypeBadge } from '../shared/StatusBadge';
 import BorderGlow from '../shared/BorderGlow';
+import Gated from '../shared/Gated';
+import { useCan } from '../../context/CurrentUserContext';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
 
@@ -60,6 +62,7 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
   const avgScore = 82;
 
   const { addToast } = useToast();
+  const { can } = useCan();
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedWfs, setSelectedWfs] = useState<Set<string>>(new Set());
   const [bulkSearch, setBulkSearch] = useState('');
@@ -79,6 +82,7 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
   };
 
   const handleBulkRun = () => {
+    if (!can('wf_run')) { addToast({ message: 'You do not have permission to run workflows.', type: 'error' }); return; }
     setBulkRunning(true);
     addToast({ message: `Running ${selectedWfs.size} workflows...`, type: 'success' });
     setTimeout(() => {
@@ -110,6 +114,7 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
                 className="pl-9 pr-4 py-2 rounded-lg border border-border bg-white text-[0.8125rem] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 w-56 transition-all"
               />
             </div>
+            <Gated permission="wf_run" mode="disable" title="You don't have permission to run workflows">
             <button
               onClick={() => { setBulkMode(p => !p); setSelectedWfs(new Set()); setBulkSearch(''); }}
               className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-[0.8125rem] font-medium transition-all cursor-pointer ${
@@ -119,7 +124,9 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
               <Play size={14} />
               {bulkMode ? 'Cancel Bulk Run' : 'Bulk Run'}
             </button>
+            </Gated>
             <div className="relative">
+              <Gated permission="wf_create" mode="disable" title="You don't have permission to create workflows">
               <button
                 onClick={() => setShowBuildDropdown(p => !p)}
                 className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
@@ -128,6 +135,7 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
                 Build New
                 <ChevronDown size={12} className={`transition-transform ${showBuildDropdown ? 'rotate-180' : ''}`} />
               </button>
+              </Gated>
               <AnimatePresence>
                 {showBuildDropdown && (
                   <>
@@ -448,30 +456,38 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
 
                 {/* Card Actions */}
                 <div className="mt-3 flex items-center gap-2 pt-3 border-t border-border-light">
+                  <Gated permission="wf_run" mode="disable" title="You don't have permission to run workflows">
                   <button
                     onClick={(e) => { e.stopPropagation(); onRunWorkflow?.(wf.id); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-[0.75rem] font-semibold hover:bg-primary/20 transition-colors cursor-pointer"
                   >
                     <Play size={11} /> Run
                   </button>
+                  </Gated>
+                  <Gated permission="wf_update_delete" mode="disable" title="You don't have permission to edit workflows">
                   <button
                     onClick={(e) => { e.stopPropagation(); onBuildNew(); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-lg text-[0.75rem] font-medium transition-colors cursor-pointer"
                   >
                     <Edit3 size={11} /> Edit
                   </button>
+                  </Gated>
+                  <Gated permission="wf_create" mode="disable" title="You don't have permission to create workflows">
                   <button
                     onClick={(e) => { e.stopPropagation(); addToast({ message: `"${wf.name}" duplicated`, type: 'success' }); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-lg text-[0.75rem] font-medium transition-colors cursor-pointer"
                   >
                     <Copy size={11} /> Duplicate
                   </button>
+                  </Gated>
+                  <Gated permission="wf_update_delete" mode="disable" title="You don't have permission to delete workflows">
                   <button
                     onClick={(e) => { e.stopPropagation(); addToast({ message: `"${wf.name}" deleted`, type: 'info' }); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-text-muted hover:text-risk-700 hover:bg-risk-50 rounded-lg text-[0.75rem] font-medium transition-colors cursor-pointer ml-auto"
                   >
                     <Trash2 size={11} /> Delete
                   </button>
+                  </Gated>
                 </div>
 
                 {/* Insight - show on first two */}

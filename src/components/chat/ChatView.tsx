@@ -31,6 +31,8 @@ import ClarificationCard from './ClarificationCard';
 import DataPickerModal, { type AttachmentSelection } from './DataPickerModal';
 import { AddToDashboardModal } from './AddToDashboardModal';
 import { AddToReportModal } from './AddToReportModal';
+import Gated from '../shared/Gated';
+import { useCan } from '../../context/CurrentUserContext';
 import {
   SectionHeader as WidgetSectionHeader,
   KpiPreviewRow,
@@ -2846,6 +2848,7 @@ ${transcriptHtml}
 
 export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext }: ChatViewProps) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const prefersReducedMotion = useReducedMotion();
   // Workflow-build seed handoff. Non-empty string = the chat starts in
   // workflow mode and auto-pushes the prompt as a user message (kicking
@@ -3026,16 +3029,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // Dismissible state for the workflow-mode banner. Lock persists; banner
   // is just the one-time post-save notice the user can clear.
   const [lockedBannerDismissed, setLockedBannerDismissed] = useState(false);
-  // Captured tolerance/threshold config from the pre-modal clarification —
-  // drives the modal's prefilled name + description so the user sees their
-  // choices reflected before they commit to the workflow.
-  const saveWorkflowConfigRef = useRef<{ amount: string; date: string; threshold: string }>({
-    amount: '', date: '', threshold: '',
-  });
-  // Save-as-workflow pre-modal clarification — captures whether the saved
-  // workflow is exception-style (severity rules) or a KPI tracker
-  // (attention thresholds + cadence). Drives the configurable keys that
-  // pre-populate the Save modal's Configuration section.
+  // Save-as-workflow pre-modal clarification — captures the five answers
+  // (risk, population/period, frequency, output, configuration) that seed the
+  // Save modal's name, description, and Configuration section. `kind` is
+  // retained for the ref shape but the unified flow always uses 'exception'.
   const saveWorkflowAnswersRef = useRef<{
     kind: 'exception' | 'kpi';
     pairs: { question: string; answer: string }[];
@@ -3514,20 +3511,12 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }, 80);
 
     if (flow.purpose === 'save-workflow') {
-      // Stash full answers for the new save-workflow clarification so the
-      // modal's Configuration section can pre-populate from them.
+      // Stash the five clarification answers (risk, population, frequency,
+      // output, configuration) so the modal can seed its name / description /
+      // Configuration section from them.
       saveWorkflowAnswersRef.current = {
         kind: saveWorkflowAnswersRef.current.kind,
         pairs: consolidated,
-      };
-      // Stash answers so the Save-as-Workflow modal's prefilled name/description
-      // echo them. Defaults match the question's "(current)" option.
-      const findAnswer = (kw: string) =>
-        consolidated.find(c => c.question.toLowerCase().includes(kw))?.answer ?? '';
-      saveWorkflowConfigRef.current = {
-        amount: findAnswer('amount') || '±₹1,000',
-        date: findAnswer('date') || '±3 days',
-        threshold: findAnswer('threshold') || '≥90%',
       };
       schedule(() => setShowSaveAsWfModal(true), 360);
       return;
@@ -3761,11 +3750,13 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
 
   const handleAuditAction = (action: 'workflow' | 'report' | 'dashboard', msgId?: string) => {
     if (action === 'dashboard') {
+      if (!can('db_add')) return; // chat is open to all roles — guard the write
       setActiveAddMsgId(msgId || null);
       setShowDashboardModal(true);
       return;
     }
     if (action === 'report') {
+      if (!can('rp_edit')) return; // chat is open to all roles — guard the write
       setActiveAddMsgId(msgId || null);
       setShowReportModal(true);
       return;
@@ -3873,89 +3864,71 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
   // of running an audit. The captured answers seed the modal's
   // Configuration section.
   const openSaveAsWorkflowModal = () => {
-    // Heuristic: scan the most recent user message for exception-style
-    // wording. If nothing matches, default to KPI tracker. Either set is
-    // 4 questions, so the card always reads the same shape.
-    const lastUserText = [...messages].reverse().find(m => m.role === 'user')?.text?.toLowerCase() || '';
-    const exceptionKeywords = ['duplicate', 'exception', 'anomal', 'outlier', 'fraud', 'mismatch', 'flag', 'irregular', 'missing'];
-    const kpiKeywords = ['kpi', 'metric', 'trend', 'rate', 'ratio', 'percentage', 'monitor', 'track'];
-    const isException = exceptionKeywords.some(k => lastUserText.includes(k));
-    const isKpi = !isException && kpiKeywords.some(k => lastUserText.includes(k));
-    const kind: 'exception' | 'kpi' = isKpi ? 'kpi' : 'exception';
+    // Five single-question clarifications captured inline before the modal
+    // opens, so the saved workflow ships as a governed control rather than a
+    // bare saved query: the risk it detects (+ assertion), the population /
+    // period it runs over, its cadence, the output each run renders (KPIs are
+    // part of the output), and which config stays adjustable vs locked. The
+    // existing clarification machinery auto-submits once the last answer
+    // lands; submitClarification (purpose 'save-workflow') then opens the
+    // modal, and the captured answers seed its name / description / config.
+    saveWorkflowAnswersRef.current = { kind: 'exception', pairs: [] };
 
-    // Reset; will be filled by submitClarification when the user submits.
-    saveWorkflowAnswersRef.current = { kind, pairs: [] };
-
-    const exceptionQuestions = [
+    const questions = [
       {
-        question: 'Which scenarios should this workflow flag as exceptions?',
+        // 1 — Risk & assertion: why the control exists.
+        question: 'What risk should this workflow detect?',
         options: [
-          'Same vendor + same amount within tolerance window',
-          'Same PO referenced more than once',
-          'Amount or date matches across two invoices',
-          'All of the above',
+          'Duplicate / overpayment to vendors — Occurrence & Accuracy',
+          'Fictitious or unauthorized vendor — Validity',
+          'Off-contract / unapproved spend — Validity',
+          'Price or quantity variance vs PO — Accuracy',
         ],
       },
       {
-        question: 'When should a row turn red (highest severity)?',
+        // 2 — Population & period: over what data each run executes.
+        question: 'What population and period should each run cover?',
         options: [
-          'Match ≥ 95% and amount ≥ ₹1,00,000',
-          'Match ≥ 90% (any amount)',
-          'Same vendor + exact amount + within 3 days',
-          'I’ll define this later',
+          'Full population (100%), since last run — by invoice & posting date',
+          'Full population (100%), current month',
+          'Full population (100%), current quarter',
+          'Monetary-unit sample, current quarter',
         ],
       },
       {
-        question: 'When should a row turn yellow (needs review)?',
+        // 3 — Frequency: how often it runs.
+        question: 'How often should this workflow run?',
         options: [
-          'Match 80–94%',
-          'Match 70–89% or unusual amount band',
-          'Cross-checks failed but match score is mid-range',
-          'Skip yellow — only red and green',
+          'Monthly, 2 days after period close',
+          'Continuous — on every new invoice batch',
+          'Weekly',
+          'Quarterly',
         ],
       },
       {
-        question: 'What happens to rows below your yellow threshold?',
+        // 4 — Output: what each run renders (KPIs are part of the output).
+        question: 'What should each run output?',
         options: [
-          'Auto-resolve as green (no action)',
-          'Show but de-prioritise',
-          'Hide from the exception list',
-          'Send to a low-priority queue',
+          'KPIs + Exception Register + trend chart',
+          'KPIs + Exception Register only',
+          'KPIs + summary-by-vendor table',
+          'Full pack — KPIs, register, reconciliation, aging & trend',
+        ],
+      },
+      {
+        // 5 — Configuration: which params stay adjustable vs locked.
+        question: 'Which values stay adjustable each run? Others lock behind re-certification.',
+        options: [
+          'Period, entity & recipients — tolerances & materiality locked',
+          'All detection thresholds adjustable',
+          'Everything locked — fixed control',
+          'Set a materiality floor first',
         ],
       },
     ];
-
-    const kpiQuestions = [
-      {
-        question: 'Which KPI should this workflow track?',
-        options: [
-          'Duplicates found (count)',
-          'Total flagged amount (₹)',
-          'Avg confidence score (%)',
-          'Vendors flagged (count)',
-        ],
-      },
-      {
-        question: 'What % change vs last run counts as needs attention?',
-        options: ['±5%', '±10%', '±20%', 'Any change'],
-      },
-      {
-        question: 'How often should this KPI refresh?',
-        options: ['Hourly', 'Daily', 'Weekly', 'On data change'],
-      },
-      {
-        question: 'Who should be notified when attention is needed?',
-        options: ['Me only', 'My team', 'Process owner', 'No one — just log it'],
-      },
-    ];
-
-    const questions = kind === 'kpi' ? kpiQuestions : exceptionQuestions;
-    const intro = kind === 'kpi'
-      ? 'Before I save this as a KPI tracker, help me lock in the alerting rules.'
-      : 'Before I save this as a workflow, help me define what counts as an exception.';
 
     const data: ClarificationData = {
-      intro,
+      intro: 'Before I save this as a reusable control, let’s lock in five essentials — I’ve pre-filled my best guess from the analysis we just ran.',
       questions,
       answers: {},
       status: 'open',
@@ -3967,10 +3940,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
       role: 'assistant',
       text: '',
       thinking: [
-        kind === 'kpi'
-          ? 'Detected KPI-tracker intent from the query'
-          : 'Detected exception/anomaly intent from the query',
-        'Drafting 4 clarifications so the saved workflow carries explicit rules',
+        'Preparing to save this query as a governed workflow',
+        'Drafting 5 clarifications — risk, population, cadence, output, configuration',
       ],
       timestamp: new Date(),
       richType: 'clarification',
@@ -5144,6 +5115,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <Gated permission="db_add" mode="disable" title="You don't have permission to add to dashboards">
                 <button
                   onClick={() => {
                     const mockFields = ['Date', 'Region', 'Category', 'Vendor Name', 'Invoice Amount (₹)', 'Status', 'Department', 'Quantity'];
@@ -5154,6 +5126,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   <BarChart3 size={12} />
                   Add to Dashboard
                 </button>
+                </Gated>
                 <button
                   onClick={onDismissPendingDashboard}
                   className="p-1 rounded-md text-brand-400 hover:text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"
@@ -5617,6 +5590,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Gated permission="db_add" mode="disable" title="You don't have permission to add to dashboards">
               <Button
                 variant="primary"
                 size="sm"
@@ -5628,6 +5602,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               >
                 Add to Dashboard
               </Button>
+              </Gated>
               <Button
                 variant="ghost"
                 size="sm"
@@ -5785,6 +5760,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             const isOpen = openDropdown === dropKey;
                             return (
                               <div className="relative">
+                                <Gated permission="db_add" mode="disable" title="You don't have permission to add to dashboards">
                                 <Button
                                   variant="outline"
                                   size="md"
@@ -5799,6 +5775,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                       : `In ${dashLinks.length} dashboards`
                                     : 'Add to dashboard'}
                                 </Button>
+                                </Gated>
                                 {isOpen && (
                                   <>
                                     <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
@@ -5837,6 +5814,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             const isOpen = openDropdown === dropKey;
                             return (
                               <div className="relative">
+                                <Gated permission="rp_edit" mode="disable" title="You don't have permission to add to reports">
                                 <Button
                                   variant="outline"
                                   size="md"
@@ -5851,6 +5829,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                       : `In ${rptLinks.length} reports`
                                     : 'Add to report'}
                                 </Button>
+                                </Gated>
                                 {isOpen && (
                                   <>
                                     <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
@@ -6877,53 +6856,52 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           so the prefilled name + description echo what the user just chose. */}
       <AnimatePresence>
         {showSaveAsWfModal && (() => {
-          const cfg = saveWorkflowConfigRef.current;
-          const dateShort = (cfg.date || '±3 days').replace(/\s*\(current\)\s*/i, '').trim();
-          const amountShort = (cfg.amount || '±₹1,000').replace(/\s*\(current\)\s*/i, '').trim();
-          const thresholdShort = (cfg.threshold || '≥90%').replace(/\s*\(current\)\s*/i, '').trim();
-          const defaultName = `Duplicate Invoice Detection: Q1 ${dateShort}`;
-          const defaultDescription = `Detects duplicate invoices in Q1 2026 with same vendor, ${amountShort} amount tolerance, and ${dateShort} date tolerance at ${thresholdShort} match threshold.`;
-          // Seed the LLM-detected configurable keys from the pre-modal
-          // clarification answers (exception scenarios + severity, or KPI
-          // metric + attention cadence). Falls back to legacy tolerance keys
-          // when no clarification answers were captured — e.g. the modal
-          // was opened directly from a deep-link or a test harness.
-          const amountDigits = (cfg.amount || '').replace(/[^\d]/g, '');
+          // Seed the modal's name / description / configurable keys from the
+          // five save-workflow clarification answers (risk, population/period,
+          // frequency, output, configuration). Each answer becomes a
+          // configurable key; name + description summarise the control. Falls
+          // back to legacy tolerance keys when no clarification answers were
+          // captured — e.g. the modal was opened from a deep-link or test
+          // harness.
           const clarif = saveWorkflowAnswersRef.current;
           const findAns = (kw: string): string =>
             clarif.pairs.find(p => p.question.toLowerCase().includes(kw.toLowerCase()))?.answer ?? '';
 
-          type ConfigEntry = { key: string; type: 'float' | 'int' | 'str' | 'list_str' | 'bool'; value: string };
-          let defaultConfigurables: ConfigEntry[] = [];
+          const riskAns = findAns('risk should this');
+          const popAns = findAns('population and period');
+          const freqAns = findAns('how often');
+          const outputAns = findAns('each run output');
+          const configAns = findAns('stay adjustable');
 
-          if (clarif.kind === 'kpi' && clarif.pairs.length > 0) {
-            const kpiName = findAns('which kpi');
-            const attentionAns = findAns('% change') || findAns('attention');
-            const attentionPct = (attentionAns.match(/\d+/)?.[0]) || '10';
-            const refresh = findAns('how often') || findAns('refresh');
-            const notify = findAns('notified');
-            defaultConfigurables = [
-              ...(kpiName ? [{ key: 'kpi_metric', type: 'str' as const, value: kpiName }] : []),
-              { key: 'attention_change_pct', type: 'float' as const, value: attentionPct },
-              ...(refresh ? [{ key: 'refresh_frequency', type: 'str' as const, value: refresh }] : []),
-              ...(notify ? [{ key: 'notify_audience', type: 'str' as const, value: notify }] : []),
-            ];
-          } else if (clarif.kind === 'exception' && clarif.pairs.length > 0) {
-            const scenarios = findAns('flagged as exceptions') || findAns('scenarios');
-            const redRule = findAns('turn red');
-            const yellowRule = findAns('turn yellow');
-            const belowYellow = findAns('below your yellow') || findAns('below');
-            defaultConfigurables = [
-              ...(scenarios ? [{ key: 'exception_scenarios', type: 'str' as const, value: scenarios }] : []),
-              ...(redRule ? [{ key: 'severity_red_rule', type: 'str' as const, value: redRule }] : []),
-              ...(yellowRule ? [{ key: 'severity_yellow_rule', type: 'str' as const, value: yellowRule }] : []),
-              ...(belowYellow ? [{ key: 'below_yellow_action', type: 'str' as const, value: belowYellow }] : []),
-            ];
-          }
+          // Risk text reads "<label> — <assertion>"; the label seeds a clean
+          // workflow name, the full answer seeds the description + a config key.
+          const riskShort = (riskAns.split('—')[0] || '').trim();
+          const defaultName =
+            /duplicate/i.test(riskAns) ? 'Duplicate Vendor Payment Detection'
+            : /fictitious|unauthor/i.test(riskAns) ? 'Unauthorized Vendor Detection'
+            : /off-contract/i.test(riskAns) ? 'Off-Contract Spend Detection'
+            : /variance/i.test(riskAns) ? 'PO Price/Quantity Variance Detection'
+            : 'Audit Workflow';
+          const defaultDescription = [
+            `Detects ${(riskShort || 'duplicate / overpayment to vendors').toLowerCase()}`,
+            popAns ? ` over ${popAns.toLowerCase()}` : '',
+            freqAns ? `. Runs ${freqAns.toLowerCase()}` : '',
+            outputAns ? `; outputs ${outputAns.toLowerCase()}` : '',
+            '.',
+          ].join('');
+
+          type ConfigEntry = { key: string; type: 'float' | 'int' | 'str' | 'list_str' | 'bool'; value: string };
+          let defaultConfigurables: ConfigEntry[] = [
+            ...(riskAns ? [{ key: 'control_risk', type: 'str' as const, value: riskAns }] : []),
+            ...(popAns ? [{ key: 'population_period', type: 'str' as const, value: popAns }] : []),
+            ...(freqAns ? [{ key: 'run_frequency', type: 'str' as const, value: freqAns }] : []),
+            ...(outputAns ? [{ key: 'output_artifacts', type: 'str' as const, value: outputAns }] : []),
+            ...(configAns ? [{ key: 'adjustable_config', type: 'str' as const, value: configAns }] : []),
+          ];
 
           if (defaultConfigurables.length === 0) {
             defaultConfigurables = [
-              { key: 'threshold_amount', type: 'float', value: amountDigits || '100000' },
+              { key: 'threshold_amount', type: 'float', value: '100000' },
               { key: 'quarter_match_keys', type: 'list_str', value: '1, q1, quarter1, qtr1' },
               { key: 'summary_top_n', type: 'int', value: '3' },
             ];

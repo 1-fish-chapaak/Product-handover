@@ -10,7 +10,7 @@
  * RACM table, and a per-row detail drawer. The SOP can be previewed in a side panel.
  */
 
-import { useMemo, useRef, useState, type JSX } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ChevronRight, ChevronDown, Download, Upload, Filter, FileText, Layers,
@@ -19,6 +19,9 @@ import {
   Loader2, FileStack, FileUp,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import Gated from '../shared/Gated';
+import { Button } from '../shared/Button';
+import ListPlaceholder from '../shared/ListPlaceholder';
 import type { Engagement } from '../../data/engagements';
 import {
   racmRowsForProcess,
@@ -163,6 +166,13 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [extracting, setExtracting] = useState<string | null>(null);
+  // Holds the in-flight extraction timer so Cancel can abort it cleanly.
+  const extractTimer = useRef<number | null>(null);
+  const cancelExtraction = () => {
+    if (extractTimer.current != null) { window.clearTimeout(extractTimer.current); extractTimer.current = null; }
+    setExtracting(null);
+    addToast({ type: 'info', message: 'Extraction cancelled. No RACM was created.' });
+  };
 
   const racmFileRef = useRef<HTMLInputElement | null>(null);
   const sopFileRef = useRef<HTMLInputElement | null>(null);
@@ -204,7 +214,7 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
       const rows = generateRacmForProcess(engagement.process);
       setUploadedRows(rows);
       const areas = new Set(rows.map(r => r.subProcess)).size;
-      addToast({ type: 'success', message: `Imported \`${file.name}\` — ${rows.length} rows · ${areas} RACM${areas === 1 ? '' : 's'}` });
+      addToast({ type: 'success', message: `Imported \`${file.name}\`: ${rows.length} rows · ${areas} RACM${areas === 1 ? '' : 's'}` });
     }
     e.target.value = '';
   };
@@ -217,7 +227,8 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
     e.target.value = '';
     setExtracting(filename);
     // Simulate the SOP → RACM extraction pipeline.
-    window.setTimeout(() => {
+    extractTimer.current = window.setTimeout(() => {
+      extractTimer.current = null;
       const sop: SopDoc = { name: filename, version: 'v1.0', uploadedAgo: 'just now', sections: SOP_SECTIONS, extracted: true };
       if (target === 'new') {
         const area = areaFromFilename(filename);
@@ -264,7 +275,7 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
         />
         {hiddenInputs}
         <AnimatePresence>{sopPreview && <SopPreviewDrawer entry={sopPreview} onClose={() => setSopPreview(null)} />}</AnimatePresence>
-        <AnimatePresence>{extracting && <ExtractionOverlay filename={extracting} />}</AnimatePresence>
+        <AnimatePresence>{extracting && <ExtractionOverlay filename={extracting} onCancel={cancelExtraction} />}</AnimatePresence>
       </>
     );
   }
@@ -285,7 +296,7 @@ export default function RACMTab({ engagement, onOpenFullEditor }: Props): JSX.El
       {hiddenInputs}
       <AnimatePresence>{newOpen && <NewRacmModal onClose={() => setNewOpen(false)} onUploadRacm={triggerRacmUpload} onUploadSop={() => triggerSopUpload('new')} />}</AnimatePresence>
       <AnimatePresence>{sopPreview && <SopPreviewDrawer entry={sopPreview} onClose={() => setSopPreview(null)} />}</AnimatePresence>
-      <AnimatePresence>{extracting && <ExtractionOverlay filename={extracting} />}</AnimatePresence>
+      <AnimatePresence>{extracting && <ExtractionOverlay filename={extracting} onCancel={cancelExtraction} />}</AnimatePresence>
     </>
   );
 }
@@ -316,8 +327,8 @@ function RacmLibraryList({
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2 rounded-lg bg-brand-50 shrink-0"><FileStack size={16} className="text-brand-600" /></div>
           <div className="min-w-0">
-            <div className="text-[14.5px] font-semibold text-text leading-tight">RACM Library</div>
-            <div className="text-[11px] text-text-muted mt-0.5">
+            <div className="text-[0.90625rem] font-semibold text-text leading-tight">RACM Library</div>
+            <div className="text-[0.6875rem] text-text-muted mt-0.5">
               {process} · {framework}
               <span className="text-border mx-1.5">·</span>
               {totals.racms} RACM{totals.racms === 1 ? '' : 's'}
@@ -327,12 +338,14 @@ function RacmLibraryList({
           </div>
         </div>
         <div className="flex items-center gap-2 ml-auto">
+          <Gated permission="racm_generate" mode="disable" title="You don't have permission to create a RACM">
           <button
             onClick={onNew}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[12.5px] font-semibold transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[0.78125rem] font-semibold transition-colors cursor-pointer"
           >
             <Plus size={14} /> New RACM
           </button>
+          </Gated>
         </div>
       </div>
 
@@ -350,12 +363,14 @@ function RacmLibraryList({
             />
           ))}
           {/* Inline start hint at the bottom of an existing list */}
+          <Gated permission="racm_generate" mode="disable" title="You don't have permission to create a RACM">
           <button
             onClick={onNew}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-border-light text-[12.5px] font-medium text-text-muted hover:text-primary hover:border-primary/40 hover:bg-primary-xlight/30 transition-colors cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-border-light text-[0.78125rem] font-medium text-text-muted hover:text-primary hover:border-primary/40 hover:bg-primary-xlight/30 transition-colors cursor-pointer"
           >
-            <Plus size={14} /> Start a new RACM — upload a RACM or an SOP to extract from
+            <Plus size={14} /> Start a new RACM: upload a RACM or an SOP to extract from
           </button>
+          </Gated>
         </div>
       )}
     </div>
@@ -364,27 +379,29 @@ function RacmLibraryList({
 
 function RacmOnboarding({ onUploadRacm, onUploadSop }: { onUploadRacm: () => void; onUploadSop: () => void }): JSX.Element {
   return (
-    <div className="glass-card rounded-xl p-8">
-      <div className="text-center mb-6">
-        <div className="p-3 rounded-2xl bg-brand-50 inline-flex mb-3"><FileStack size={26} className="text-brand-600" /></div>
-        <h3 className="text-[15px] font-semibold text-text mb-1">Start your RACM library</h3>
-        <p className="text-[12.5px] text-text-muted max-w-md mx-auto leading-relaxed">
-          Begin with an existing matrix, or upload an SOP and let IRA extract the risks, controls, and attributes for you.
-        </p>
-      </div>
-      <div className="grid grid-cols-2 gap-3 max-w-2xl mx-auto">
-        <button onClick={onUploadRacm} className="group text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
-          <div className="p-2 rounded-lg bg-evidence-50 inline-flex mb-3"><Upload size={16} className="text-evidence-700" /></div>
-          <div className="text-[13.5px] font-semibold text-text mb-1">Upload a RACM</div>
-          <div className="text-[11.5px] text-text-muted leading-relaxed">Import an existing matrix (.xlsx). Risks, controls, and attributes load straight in.</div>
-        </button>
-        <button onClick={onUploadSop} className="group text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
-          <div className="p-2 rounded-lg bg-brand-50 inline-flex mb-3"><Sparkles size={16} className="text-brand-600" /></div>
-          <div className="text-[13.5px] font-semibold text-text mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-text-muted">→</span> extract</div>
-          <div className="text-[11.5px] text-text-muted leading-relaxed">Upload a procedure doc (.pdf/.docx). IRA reads it and drafts the RACM for you.</div>
-        </button>
-      </div>
-    </div>
+    <ListPlaceholder
+      icon={FileStack}
+      title="Start your RACM library"
+      body="Begin with an existing matrix, or upload an SOP and let IRA extract the risks, controls, and attributes for you."
+      action={
+        <div className="grid grid-cols-2 gap-3 max-w-2xl mx-auto text-left">
+          <Gated permission="racm_edit" mode="disable" title="You don't have permission to upload a RACM">
+          <button onClick={onUploadRacm} className="group text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
+            <div className="p-2 rounded-lg bg-evidence-50 inline-flex mb-3"><Upload size={16} className="text-evidence-700" /></div>
+            <div className="text-[0.84375rem] font-semibold text-text mb-1">Upload a RACM</div>
+            <div className="text-[0.71875rem] text-text-muted leading-relaxed">Import an existing matrix (.xlsx). Risks, controls, and attributes load straight in.</div>
+          </button>
+          </Gated>
+          <Gated permission="racm_generate" mode="disable" title="You don't have permission to extract a RACM">
+          <button onClick={onUploadSop} className="group text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
+            <div className="p-2 rounded-lg bg-brand-50 inline-flex mb-3"><Sparkles size={16} className="text-brand-600" /></div>
+            <div className="text-[0.84375rem] font-semibold text-text mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-text-muted">→</span> extract</div>
+            <div className="text-[0.71875rem] text-text-muted leading-relaxed">Upload a procedure doc (.pdf/.docx). IRA reads it and drafts the RACM for you.</div>
+          </button>
+          </Gated>
+        </div>
+      }
+    />
   );
 }
 
@@ -403,12 +420,12 @@ function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
       {/* Identity + counts */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={onOpen} className="text-[14px] font-semibold text-text hover:text-primary transition-colors cursor-pointer text-left">
+          <button onClick={onOpen} className="text-[0.875rem] font-semibold text-text hover:text-primary transition-colors cursor-pointer text-left">
             {entry.name}
           </button>
-          <span className={`inline-flex items-center px-1.5 h-4 rounded text-[9.5px] font-bold uppercase tracking-wider border ${badge.cls}`}>{badge.label}</span>
+          <span className={`inline-flex items-center px-1.5 h-4 rounded text-[0.59375rem] font-bold uppercase tracking-wider border ${badge.cls}`}>{badge.label}</span>
         </div>
-        <div className="text-[11px] text-text-muted mt-1 tabular-nums">
+        <div className="text-[0.6875rem] text-text-muted mt-1 tabular-nums">
           {s.risks} risk{s.risks === 1 ? '' : 's'}
           <span className="text-border mx-1.5">·</span>
           {s.controls} control{s.controls === 1 ? '' : 's'}
@@ -429,14 +446,15 @@ function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
         >
           <div className="p-1.5 rounded-md bg-brand-50 shrink-0"><FileText size={14} className="text-brand-600" /></div>
           <div className="min-w-0">
-            <div className="text-[9.5px] uppercase tracking-wider font-bold text-text-muted leading-none mb-0.5">SOP · {entry.sop.version}</div>
-            <div className="text-[12px] font-medium text-text truncate leading-tight">{entry.sop.name}</div>
+            <div className="text-[0.59375rem] uppercase tracking-wider font-bold text-text-muted leading-none mb-0.5">SOP · {entry.sop.version}</div>
+            <div className="text-[0.75rem] font-medium text-text truncate leading-tight">{entry.sop.name}</div>
           </div>
-          <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-text-muted group-hover:text-primary shrink-0">
+          <span className="inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-text-muted group-hover:text-primary shrink-0">
             <Eye size={13} /> View
           </span>
         </button>
       ) : (
+        <Gated permission="racm_generate" mode="disable" title="You don't have permission to extract a RACM">
         <button
           onClick={onUploadSop}
           title="Upload an SOP and extract the RACM from it"
@@ -444,16 +462,17 @@ function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
         >
           <div className="p-1.5 rounded-md bg-mitigated-50 shrink-0"><Sparkles size={14} className="text-mitigated-700" /></div>
           <div className="min-w-0">
-            <div className="text-[9.5px] uppercase tracking-wider font-bold text-mitigated-700 leading-none mb-0.5">No SOP</div>
-            <div className="text-[12px] font-medium text-mitigated-700 truncate leading-tight">Upload SOP → extract</div>
+            <div className="text-[0.59375rem] uppercase tracking-wider font-bold text-mitigated-700 leading-none mb-0.5">No SOP</div>
+            <div className="text-[0.75rem] font-medium text-mitigated-700 truncate leading-tight">Upload SOP → extract</div>
           </div>
         </button>
+        </Gated>
       )}
 
       <button
         onClick={onOpen}
         title="Open in the full-page RACM editor"
-        className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[12.5px] font-semibold transition-colors cursor-pointer"
+        className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[0.78125rem] font-semibold transition-colors cursor-pointer"
       >
         Open in editor <ArrowUpRight size={14} />
       </button>
@@ -487,7 +506,7 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
   return (
     <div className="space-y-4">
       {/* Back */}
-      <button onClick={onBack} className="flex items-center gap-1.5 text-[12.5px] font-semibold text-text-muted hover:text-primary transition-colors cursor-pointer">
+      <button onClick={onBack} className="flex items-center gap-1.5 text-[0.78125rem] font-semibold text-text-muted hover:text-primary transition-colors cursor-pointer">
         <ArrowLeft size={14} /> Back to RACM Library
       </button>
 
@@ -496,8 +515,8 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2 rounded-lg bg-brand-50 shrink-0"><BookOpen size={16} className="text-brand-600" /></div>
           <div className="min-w-0">
-            <div className="text-[14.5px] font-semibold text-text leading-tight">{entry.name}</div>
-            <div className="text-[11px] text-text-muted mt-0.5">{entry.subProcess} · {framework}</div>
+            <div className="text-[0.90625rem] font-semibold text-text leading-tight">{entry.name}</div>
+            <div className="text-[0.6875rem] text-text-muted mt-0.5">{entry.subProcess} · {framework}</div>
           </div>
         </div>
 
@@ -506,7 +525,7 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
           {entry.sop ? (
             <button
               onClick={onViewSop}
-              className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-surface-2 hover:bg-primary-xlight/50 border border-border-light hover:border-primary/30 text-[11.5px] text-text-secondary hover:text-primary transition-colors cursor-pointer max-w-[260px]"
+              className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-surface-2 hover:bg-primary-xlight/50 border border-border-light hover:border-primary/30 text-[0.71875rem] text-text-secondary hover:text-primary transition-colors cursor-pointer max-w-[260px]"
               title="Preview SOP"
             >
               <FileText size={12} className="shrink-0" />
@@ -516,7 +535,7 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
           ) : (
             <button
               onClick={onUploadSop}
-              className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg border border-dashed border-mitigated-300 text-[11.5px] font-medium text-mitigated-700 hover:bg-mitigated-50 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg border border-dashed border-mitigated-300 text-[0.71875rem] font-medium text-mitigated-700 hover:bg-mitigated-50 transition-colors cursor-pointer"
             >
               <Sparkles size={12} /> Upload SOP → extract
             </button>
@@ -525,21 +544,25 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
 
         <div className="flex items-center gap-2 ml-auto">
           {onOpenFullEditor && (
-            <button onClick={onOpenFullEditor} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[12px] font-semibold transition-colors cursor-pointer" title="Open the full-page editor">
+            <Gated permission="racm_edit" mode="disable" title="You don't have permission to edit a RACM">
+            <button onClick={onOpenFullEditor} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer" title="Open the full-page editor">
               <ArrowUpRight size={12} /> Open in editor
             </button>
+            </Gated>
           )}
-          <button onClick={() => addToast({ message: `Downloading ${entry.name} as XLSX…`, type: 'info' })} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-light bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[12px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer">
+          <Gated permission="ctrl_export" mode="disable" title="You don't have permission to export">
+          <button onClick={() => addToast({ message: `Downloading ${entry.name} as XLSX…`, type: 'info' })} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-light bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer">
             <Download size={12} /> Download
           </button>
+          </Gated>
           <button
             onClick={() => setKeyOnly(v => !v)}
             aria-pressed={keyOnly}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer ${keyOnly ? 'bg-brand-50 border-brand-100/70 text-brand-600 hover:bg-brand-50/80' : 'bg-white border-border-light text-text-secondary hover:bg-primary-xlight/40 hover:border-primary/30 hover:text-primary'}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[0.75rem] font-semibold transition-colors cursor-pointer ${keyOnly ? 'bg-brand-50 border-brand-100/70 text-brand-600 hover:bg-brand-50/80' : 'bg-white border-border-light text-text-secondary hover:bg-primary-xlight/40 hover:border-primary/30 hover:text-primary'}`}
             title="Filter to key controls only"
           >
             <Filter size={12} /> Key controls only
-            {keyOnly && <span className="ml-1 px-1.5 h-4 rounded-full text-[9.5px] font-bold bg-brand-600 text-white inline-flex items-center tabular-nums">{stats.keyControls}</span>}
+            {keyOnly && <span className="ml-1 px-1.5 h-4 rounded-full text-[0.59375rem] font-bold bg-brand-600 text-white inline-flex items-center tabular-nums">{stats.keyControls}</span>}
           </button>
         </div>
       </div>
@@ -555,11 +578,11 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
 
       {/* Table */}
       {filteredRows.length === 0 ? (
-        <div className="glass-card rounded-xl p-10 text-center">
-          <Filter size={22} className="text-text-muted mx-auto mb-2" />
-          <p className="text-[13px] font-semibold text-text mb-1">No key controls in this RACM</p>
-          <p className="text-[12px] text-text-muted">Turn off the “Key controls only” filter to see all rows.</p>
-        </div>
+        <ListPlaceholder
+          icon={Filter}
+          title="No key controls in this RACM"
+          body="Turn off the “Key controls only” filter to see all rows."
+        />
       ) : (
         <div className="space-y-3">
           {groups.map(group => {
@@ -573,8 +596,8 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
                   <div className="p-1.5 rounded-lg bg-brand-50 shrink-0"><Layers size={13} className="text-brand-600" /></div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[13.5px] font-semibold text-text">{group.subProcess}</span>
-                      <span className="text-[11px] text-text-muted">
+                      <span className="text-[0.84375rem] font-semibold text-text">{group.subProcess}</span>
+                      <span className="text-[0.6875rem] text-text-muted">
                         {groupRisks} risk{groupRisks === 1 ? '' : 's'}
                         <span className="text-border mx-1.5">·</span>
                         {groupControls} control{groupControls === 1 ? '' : 's'}
@@ -611,25 +634,25 @@ function NewRacmModal({ onClose, onUploadRacm, onUploadSop }: { onClose: () => v
       <motion.div
         initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.98 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-[560px] bg-white rounded-2xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-[560px] bg-white rounded-xl shadow-2xl overflow-hidden"
       >
         <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-border-light">
           <div>
-            <h2 className="text-[16px] font-bold text-text">New RACM</h2>
-            <p className="text-[12.5px] text-text-secondary mt-0.5">Start from an existing matrix, or extract one from an SOP.</p>
+            <h2 className="text-[1rem] font-bold text-text">Create RACM</h2>
+            <p className="text-[0.78125rem] text-text-secondary mt-0.5">Start from an existing matrix, or extract one from an SOP.</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
         </div>
         <div className="p-6 grid grid-cols-2 gap-3">
           <button onClick={onUploadRacm} className="text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
             <div className="p-2 rounded-lg bg-evidence-50 inline-flex mb-3"><FileUp size={16} className="text-evidence-700" /></div>
-            <div className="text-[13.5px] font-semibold text-text mb-1">Upload a RACM</div>
-            <div className="text-[11.5px] text-text-muted leading-relaxed">Import an existing matrix (.xlsx / .csv).</div>
+            <div className="text-[0.84375rem] font-semibold text-text mb-1">Upload a RACM</div>
+            <div className="text-[0.71875rem] text-text-muted leading-relaxed">Import an existing matrix (.xlsx / .csv).</div>
           </button>
           <button onClick={onUploadSop} className="text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
             <div className="p-2 rounded-lg bg-brand-50 inline-flex mb-3"><Sparkles size={16} className="text-brand-600" /></div>
-            <div className="text-[13.5px] font-semibold text-text mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-text-muted">→</span> extract</div>
-            <div className="text-[11.5px] text-text-muted leading-relaxed">IRA reads a procedure (.pdf/.docx) and drafts the RACM.</div>
+            <div className="text-[0.84375rem] font-semibold text-text mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-text-muted">→</span> extract</div>
+            <div className="text-[0.71875rem] text-text-muted leading-relaxed">IRA reads a procedure (.pdf/.docx) and drafts the RACM.</div>
           </button>
         </div>
       </motion.div>
@@ -654,31 +677,31 @@ function SopPreviewDrawer({ entry, onClose }: { entry: RacmEntry; onClose: () =>
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1.5">
               <div className="p-1.5 rounded-lg bg-brand-50"><BookOpen size={14} className="text-brand-600" /></div>
-              <span className="text-[10.5px] font-bold uppercase tracking-wider text-text-muted">SOP · {entry.subProcess}</span>
+              <span className="text-[0.65625rem] font-bold uppercase tracking-wider text-text-muted">SOP · {entry.subProcess}</span>
             </div>
-            <h2 className="font-display text-[17px] font-semibold text-ink-900 leading-snug truncate">{sop?.name ?? 'No SOP linked'}</h2>
-            {sop && <div className="text-[11px] text-text-muted mt-0.5">{sop.version} · uploaded {sop.uploadedAgo}</div>}
+            <h2 className="text-[1rem] font-bold text-ink-900 leading-snug truncate">{sop?.name ?? 'No SOP linked'}</h2>
+            {sop && <div className="text-[0.6875rem] text-text-muted mt-0.5">{sop.version} · uploaded {sop.uploadedAgo}</div>}
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0"><X size={16} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* Extracted summary */}
           <div className="rounded-xl border border-brand-100/70 bg-brand-50/30 p-4">
-            <div className="flex items-center gap-1.5 mb-2"><Sparkles size={12} className="text-brand-600" /><span className="text-[10.5px] uppercase tracking-wider font-bold text-brand-700">Extracted from this SOP</span></div>
-            <p className="text-[12.5px] text-text leading-relaxed">
+            <div className="flex items-center gap-1.5 mb-2"><Sparkles size={12} className="text-brand-600" /><span className="text-[0.65625rem] uppercase tracking-wider font-bold text-brand-700">Extracted from this SOP</span></div>
+            <p className="text-[0.78125rem] text-text leading-relaxed">
               <span className="font-semibold tabular-nums">{stats.controls}</span> controls · <span className="font-semibold tabular-nums">{stats.risks}</span> risks · <span className="font-semibold tabular-nums">{stats.attributes}</span> attributes were mapped into the <span className="font-semibold">{entry.name}</span>.
             </p>
           </div>
 
           {/* Section outline */}
           <section>
-            <h3 className="text-[12px] font-bold uppercase tracking-wider text-text-muted mb-2">Document outline</h3>
+            <h3 className="text-[0.75rem] font-bold uppercase tracking-wider text-text-muted mb-2">Document outline</h3>
             <ol className="space-y-1.5">
               {(sop?.sections ?? SOP_SECTIONS).map((sec, i) => (
                 <li key={sec} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border-light bg-white">
-                  <span className="w-5 h-5 rounded-md bg-surface-2 text-text-secondary text-[11px] font-bold inline-flex items-center justify-center tabular-nums shrink-0">{i + 1}</span>
-                  <span className="text-[12.5px] text-text">{sec}</span>
+                  <span className="w-5 h-5 rounded-md bg-surface-2 text-text-secondary text-[0.6875rem] font-bold inline-flex items-center justify-center tabular-nums shrink-0">{i + 1}</span>
+                  <span className="text-[0.78125rem] text-text">{sec}</span>
                 </li>
               ))}
             </ol>
@@ -687,25 +710,25 @@ function SopPreviewDrawer({ entry, onClose }: { entry: RacmEntry; onClose: () =>
           {/* Extracted controls */}
           <section>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Extracted controls</h3>
-              <span className="text-[11px] text-text-muted">{entry.rows.length} rows</span>
+              <h3 className="text-[0.75rem] font-bold uppercase tracking-wider text-text-muted">Extracted controls</h3>
+              <span className="text-[0.6875rem] text-text-muted">{entry.rows.length} rows</span>
             </div>
             <div className="space-y-1.5">
               {entry.rows.map(r => (
                 <div key={r.id} className="flex items-start gap-3 px-3 py-2 rounded-lg border border-border-light bg-white">
-                  <span className="text-[10.5px] font-mono font-semibold text-brand-600 bg-brand-50 border border-brand-100/70 rounded px-1.5 py-0.5 shrink-0 mt-0.5">{r.controlId}</span>
-                  <p className="text-[12px] text-text leading-snug">{r.controlDescription}</p>
+                  <span className="text-[0.65625rem] font-mono font-semibold text-brand-600 bg-brand-50 border border-brand-100/70 rounded px-1.5 py-0.5 shrink-0 mt-0.5">{r.controlId}</span>
+                  <p className="text-[0.75rem] text-text leading-snug">{r.controlDescription}</p>
                 </div>
               ))}
             </div>
           </section>
         </div>
 
-        <footer className="shrink-0 px-6 py-3 border-t border-canvas-border bg-canvas flex items-center justify-between gap-2">
-          <button onClick={() => addToast({ message: `Downloading ${sop?.name ?? 'SOP'}…`, type: 'info' })} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-canvas-border text-[12.5px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">
-            <Download size={12} /> Download SOP
-          </button>
-          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[12.5px] font-semibold transition-colors cursor-pointer">Close</button>
+        <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-between gap-2">
+          <Button variant="outline" size="sm" leftIcon={<Download size={12} />} onClick={() => addToast({ message: `Downloading ${sop?.name ?? 'SOP'}…`, type: 'info' })}>
+            Download SOP
+          </Button>
+          <Button variant="primary" size="sm" onClick={onClose}>Close</Button>
         </footer>
       </motion.aside>
     </>
@@ -714,20 +737,26 @@ function SopPreviewDrawer({ entry, onClose }: { entry: RacmEntry; onClose: () =>
 
 // ─── Extraction overlay ───────────────────────────────────────────────────────
 
-function ExtractionOverlay({ filename }: { filename: string }): JSX.Element {
+function ExtractionOverlay({ filename, onCancel }: { filename: string; onCancel?: () => void }): JSX.Element {
   const steps = ['Parsing the SOP document', 'Identifying risks & control points', 'Mapping controls to risks', 'Drafting attributes & test procedures'];
+  // Reassure (don't alarm) if extraction runs long, and always offer an escape.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setSlow(true), 8000);
+    return () => window.clearTimeout(t);
+  }, []);
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
       <motion.div className="absolute inset-0 bg-ink-900/50 backdrop-blur-[3px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
       <motion.div
         initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
-        transition={{ duration: 0.18 }} className="relative w-full max-w-[440px] bg-white rounded-2xl shadow-2xl p-6"
+        transition={{ duration: 0.18 }} className="relative w-full max-w-[440px] bg-white rounded-xl shadow-2xl p-6"
       >
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2.5 rounded-xl bg-brand-50"><Loader2 size={20} className="text-brand-600 animate-spin" /></div>
           <div className="min-w-0">
-            <div className="text-[14px] font-bold text-text">Extracting RACM from SOP</div>
-            <div className="text-[11.5px] text-text-muted truncate flex items-center gap-1"><FileText size={11} />{filename}</div>
+            <div className="text-[1rem] font-bold text-ink-900">Extracting RACM from SOP</div>
+            <div className="text-[0.71875rem] text-text-muted truncate flex items-center gap-1"><FileText size={11} />{filename}</div>
           </div>
         </div>
         <div className="space-y-2">
@@ -737,7 +766,7 @@ function ExtractionOverlay({ filename }: { filename: string }): JSX.Element {
               initial={{ opacity: 0.4 }}
               animate={{ opacity: 1 }}
               transition={{ delay: i * 0.32, duration: 0.3 }}
-              className="flex items-center gap-2.5 text-[12px] text-text-secondary"
+              className="flex items-center gap-2.5 text-[0.75rem] text-text-secondary"
             >
               <span className="w-4 h-4 rounded-full bg-brand-50 border border-brand-100 inline-flex items-center justify-center shrink-0">
                 <Sparkles size={9} className="text-brand-600" />
@@ -749,6 +778,14 @@ function ExtractionOverlay({ filename }: { filename: string }): JSX.Element {
         <div className="mt-5 h-1.5 rounded-full bg-surface-2 overflow-hidden">
           <motion.div className="h-full bg-brand-500 rounded-full" initial={{ width: '6%' }} animate={{ width: '92%' }} transition={{ duration: 1.5, ease: 'easeInOut' }} />
         </div>
+        {slow && (
+          <p className="mt-3 text-[0.6875rem] text-text-muted text-center">Still working. This is taking longer than usual…</p>
+        )}
+        {onCancel && (
+          <div className="mt-4 flex justify-center">
+            <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+          </div>
+        )}
       </motion.div>
     </div>
   );
@@ -768,14 +805,14 @@ function StatTile({
     <div className="rounded-xl border border-border-light bg-white px-3 py-2.5">
       <div className="flex items-center gap-1.5 mb-1">
         {icon}
-        <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">
+        <span className="text-[0.625rem] font-bold text-text-muted uppercase tracking-wider">
           {label}
         </span>
       </div>
-      <div className="text-[22px] font-bold text-text leading-none tabular-nums">
+      <div className="text-[1.375rem] font-bold text-text leading-none tabular-nums">
         {value}
       </div>
-      <div className="text-[10.5px] text-text-muted mt-1">{sub}</div>
+      <div className="text-[0.65625rem] text-text-muted mt-1">{sub}</div>
     </div>
   );
 }
@@ -794,10 +831,10 @@ function RACMTable({
   onOpenDetail: (row: RACMRow) => void;
 }) {
   return (
-    <div className="text-[12px]">
+    <div className="text-[0.75rem]">
       {/* Column header */}
       <div
-        className="grid items-center gap-3 px-4 py-2 bg-surface-2/40 border-b border-border-light text-[10px] uppercase tracking-wider font-semibold text-text-muted/80"
+        className="grid items-center gap-3 px-4 py-2 bg-surface-2/40 border-b border-border-light text-[0.625rem] uppercase tracking-wider font-semibold text-text-muted/80"
         style={{ gridTemplateColumns: '22% 28% 10% 9% 9% 10% 5% 76px' }}
       >
         <div>Risk</div>
@@ -824,11 +861,11 @@ function RACMTable({
                 <div className="min-w-0">
                   <button
                     onClick={onIdClick}
-                    className="text-[10.5px] font-mono font-semibold text-brand-600 hover:text-brand-700 hover:underline tabular-nums cursor-pointer"
+                    className="text-[0.65625rem] font-mono font-semibold text-brand-600 hover:text-brand-700 hover:underline tabular-nums cursor-pointer"
                   >
                     {row.riskId}
                   </button>
-                  <p className="text-[12px] text-text mt-1 leading-snug line-clamp-3">
+                  <p className="text-[0.75rem] text-text mt-1 leading-snug line-clamp-3">
                     {row.riskDescription}
                   </p>
                 </div>
@@ -837,37 +874,37 @@ function RACMTable({
                 <div className="min-w-0">
                   <button
                     onClick={onIdClick}
-                    className="text-[10.5px] font-mono font-semibold text-brand-600 hover:text-brand-700 hover:underline tabular-nums cursor-pointer"
+                    className="text-[0.65625rem] font-mono font-semibold text-brand-600 hover:text-brand-700 hover:underline tabular-nums cursor-pointer"
                   >
                     {row.controlId}
                   </button>
-                  <p className="text-[12px] text-text mt-1 leading-snug line-clamp-3">
+                  <p className="text-[0.75rem] text-text mt-1 leading-snug line-clamp-3">
                     {row.controlDescription}
                   </p>
                 </div>
 
                 {/* Assertion */}
                 <div className="min-w-0">
-                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold bg-surface-2 text-text-secondary border border-border-light">
+                  <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.65625rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
                     {row.assertion}
                   </span>
                 </div>
 
                 {/* Frequency */}
-                <div className="text-[11.5px] text-text-secondary">
+                <div className="text-[0.71875rem] text-text-secondary">
                   {row.frequency}
                 </div>
 
                 {/* Type */}
                 <div>
-                  <span className={`inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold border ${TYPE_CLS[row.controlType]}`}>
+                  <span className={`inline-flex items-center px-2 h-5 rounded-md text-[0.65625rem] font-semibold border ${TYPE_CLS[row.controlType]}`}>
                     {row.controlType}
                   </span>
                 </div>
 
                 {/* Automation */}
                 <div>
-                  <span className={`inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold border ${AUTOMATION_CLS[row.automation]}`}>
+                  <span className={`inline-flex items-center px-2 h-5 rounded-md text-[0.65625rem] font-semibold border ${AUTOMATION_CLS[row.automation]}`}>
                     {row.automation}
                   </span>
                 </div>
@@ -877,12 +914,12 @@ function RACMTable({
                   {row.isKey ? (
                     <span
                       title="Key control"
-                      className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mitigated-50 text-mitigated-700 text-[10px] font-bold border border-mitigated-100/70"
+                      className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mitigated-50 text-mitigated-700 text-[0.625rem] font-bold border border-mitigated-100/70"
                     >
                       K
                     </span>
                   ) : (
-                    <span className="text-text-muted text-[11px]">—</span>
+                    <span className="text-text-muted text-[0.6875rem]">—</span>
                   )}
                 </div>
 
@@ -936,7 +973,7 @@ function AttributesList({ attributes }: { attributes: ControlAttribute[] }) {
   return (
     <div className="px-4 pb-4 pt-1 bg-surface-2/30">
       <div className="border-l-2 border-brand-100 pl-4 ml-7 space-y-2.5">
-        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+        <div className="flex items-center gap-1.5 text-[0.625rem] font-bold uppercase tracking-wider text-text-muted">
           <ListTree size={11} className="text-brand-600" />
           Attributes & test procedures
           <span className="ml-0.5 text-text-muted/80 normal-case tracking-normal font-medium">
@@ -949,14 +986,14 @@ function AttributesList({ attributes }: { attributes: ControlAttribute[] }) {
               key={attr.id}
               className="grid grid-cols-[88px_1fr] gap-3 items-start"
             >
-              <span className="text-[10.5px] font-mono font-semibold text-brand-600 bg-brand-50 border border-brand-100/70 rounded px-1.5 py-0.5 tabular-nums leading-tight inline-flex items-center justify-center text-center">
+              <span className="text-[0.65625rem] font-mono font-semibold text-brand-600 bg-brand-50 border border-brand-100/70 rounded px-1.5 py-0.5 tabular-nums leading-tight inline-flex items-center justify-center text-center">
                 {attrCode(attr.id)}
               </span>
               <div className="min-w-0">
-                <p className="text-[12px] text-text leading-snug">
+                <p className="text-[0.75rem] text-text leading-snug">
                   {attr.description}
                 </p>
-                <p className="text-[11px] italic text-text-muted mt-1 leading-snug">
+                <p className="text-[0.6875rem] italic text-text-muted mt-1 leading-snug">
                   {attr.testProcedure}
                 </p>
               </div>
@@ -1009,18 +1046,18 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1.5">
               <div className="p-1.5 rounded-lg bg-brand-50"><Library size={14} className="text-brand-600" /></div>
-              <span className="text-[10.5px] font-bold uppercase tracking-wider text-text-muted">RACM row · {row.subProcess}</span>
+              <span className="text-[0.65625rem] font-bold uppercase tracking-wider text-text-muted">RACM row · {row.subProcess}</span>
               {row.isKey && (
-                <span className="inline-flex items-center px-1.5 h-4 rounded text-[9.5px] font-bold bg-mitigated-50 text-mitigated-700 border border-mitigated-100/70">KEY</span>
+                <span className="inline-flex items-center px-1.5 h-4 rounded text-[0.59375rem] font-bold bg-mitigated-50 text-mitigated-700 border border-mitigated-100/70">KEY</span>
               )}
             </div>
-            <h2 className="font-display text-[18px] font-semibold text-ink-900 leading-snug">
+            <h2 className="text-[1rem] font-bold text-ink-900 leading-snug">
               <span className="font-mono text-brand-600">{row.riskId}</span>
               <span className="text-text-muted mx-2">→</span>
               <span className="font-mono text-brand-600">{row.controlId}</span>
             </h2>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0">
+          <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0">
             <X size={16} />
           </button>
         </header>
@@ -1032,23 +1069,23 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
             <div className="rounded-xl border border-risk-100/60 bg-risk-50/30 p-4">
               <div className="flex items-center gap-1.5 mb-2">
                 <AlertTriangle size={12} className="text-risk-700" />
-                <span className="text-[10.5px] uppercase tracking-wider font-bold text-risk-700">Risk</span>
+                <span className="text-[0.65625rem] uppercase tracking-wider font-bold text-risk-700">Risk</span>
               </div>
-              <div className="font-mono text-[11px] text-text-secondary mb-1.5">{row.riskId}</div>
-              <p className="text-[12.5px] text-text leading-relaxed">{row.riskDescription}</p>
+              <div className="font-mono text-[0.6875rem] text-text-secondary mb-1.5">{row.riskId}</div>
+              <p className="text-[0.78125rem] text-text leading-relaxed">{row.riskDescription}</p>
             </div>
             <div className="rounded-xl border border-compliant-100/60 bg-compliant-50/30 p-4">
               <div className="flex items-center gap-1.5 mb-2">
                 <Shield size={12} className="text-compliant-700" />
-                <span className="text-[10.5px] uppercase tracking-wider font-bold text-compliant-700">Control</span>
+                <span className="text-[0.65625rem] uppercase tracking-wider font-bold text-compliant-700">Control</span>
               </div>
-              <div className="font-mono text-[11px] text-text-secondary mb-1.5">{row.controlId}</div>
-              <p className="text-[12.5px] text-text leading-relaxed">{row.controlDescription}</p>
+              <div className="font-mono text-[0.6875rem] text-text-secondary mb-1.5">{row.controlId}</div>
+              <p className="text-[0.78125rem] text-text leading-relaxed">{row.controlDescription}</p>
             </div>
           </div>
 
           {/* Metadata chips */}
-          <div className="flex items-center gap-2 flex-wrap text-[11px]">
+          <div className="flex items-center gap-2 flex-wrap text-[0.6875rem]">
             <Pill label="Assertion" value={row.assertion} />
             <Pill label="Frequency" value={row.frequency} />
             <Pill label="Type" value={row.controlType} />
@@ -1058,26 +1095,26 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
           {/* Attributes */}
           <section>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Attributes · sub-controls</h3>
-              <span className="text-[11px] text-text-muted">{row.attributes.length} · {totalEvidence} evidence types required</span>
+              <h3 className="text-[0.75rem] font-bold uppercase tracking-wider text-text-muted">Attributes · sub-controls</h3>
+              <span className="text-[0.6875rem] text-text-muted">{row.attributes.length} · {totalEvidence} evidence types required</span>
             </div>
             <div className="space-y-2.5">
               {row.attributes.map(a => (
                 <div key={a.id} className="rounded-lg border border-border-light p-3 bg-white">
                   <div className="flex items-center gap-2 mb-1.5">
-                    <span className="px-1.5 h-4 rounded text-[10px] font-bold bg-brand-50 text-brand-700 font-mono">{attrCode(a.id)}</span>
-                    <span className="text-[12.5px] font-semibold text-text">{a.description}</span>
+                    <span className="px-1.5 h-4 rounded text-[0.625rem] font-bold bg-brand-50 text-brand-700 font-mono">{attrCode(a.id)}</span>
+                    <span className="text-[0.78125rem] font-semibold text-text">{a.description}</span>
                   </div>
-                  <p className="text-[11.5px] italic text-text-muted mb-2">{a.testProcedure}</p>
+                  <p className="text-[0.71875rem] italic text-text-muted mb-2">{a.testProcedure}</p>
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Required evidence:</span>
+                    <span className="text-[0.625rem] font-bold uppercase tracking-wider text-text-muted">Required evidence:</span>
                     {a.requiredEvidence.map(ev => (
-                      <span key={ev} className="inline-flex items-center gap-1 px-1.5 h-4 rounded text-[10px] font-medium bg-surface-2 text-text-secondary border border-border-light">
+                      <span key={ev} className="inline-flex items-center gap-1 px-1.5 h-4 rounded text-[0.625rem] font-medium bg-surface-2 text-text-secondary border border-border-light">
                         <FileText size={9} />{ev}
                       </span>
                     ))}
                   </div>
-                  <div className="text-[10.5px] text-text-muted mt-1.5">
+                  <div className="text-[0.65625rem] text-text-muted mt-1.5">
                     Population: <span className="font-medium tabular-nums">{a.populationSize.toLocaleString()}</span> · Default sample: <span className="font-medium tabular-nums">{a.defaultSampleSize}</span>
                   </div>
                 </div>
@@ -1088,10 +1125,10 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
           {/* Linked workflows */}
           <section>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Linked workflows</h3>
+              <h3 className="text-[0.75rem] font-bold uppercase tracking-wider text-text-muted">Linked workflows</h3>
               <button
                 onClick={() => addToast({ message: 'Manage workflow links in the Controls tab', type: 'info' })}
-                className="text-[11px] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1"
+                className="text-[0.6875rem] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1"
               >
                 Manage in Controls <ArrowUpRight size={10} />
               </button>
@@ -1101,14 +1138,14 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
                 <div key={wf.code} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border-light">
                   <Workflow size={13} className="text-brand-600 shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-[12.5px] font-medium text-text truncate">{wf.name}</div>
-                    <div className="text-[10.5px] text-text-muted font-mono">{wf.code}</div>
+                    <div className="text-[0.78125rem] font-medium text-text truncate">{wf.name}</div>
+                    <div className="text-[0.65625rem] text-text-muted font-mono">{wf.code}</div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="w-16 h-1.5 bg-surface-3 rounded-full overflow-hidden">
-                      <div className={`h-full ${wf.confidence >= 85 ? 'bg-compliant' : wf.confidence >= 65 ? 'bg-mitigated-500' : 'bg-text-muted'}`} style={{ width: `${wf.confidence}%` }} />
+                      <div className={`h-full ${wf.confidence >= 85 ? 'bg-compliant' : wf.confidence >= 65 ? 'bg-mitigated' : 'bg-text-muted'}`} style={{ width: `${wf.confidence}%` }} />
                     </div>
-                    <span className="text-[10.5px] font-bold text-text tabular-nums w-8 text-right">{wf.confidence}%</span>
+                    <span className="text-[0.65625rem] font-bold text-text tabular-nums w-8 text-right">{wf.confidence}%</span>
                   </div>
                 </div>
               ))}
@@ -1118,22 +1155,22 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
           {/* Test history */}
           <section>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-[12px] font-bold uppercase tracking-wider text-text-muted">Test history</h3>
-              <span className="text-[11px] text-text-muted">last 3 periods</span>
+              <h3 className="text-[0.75rem] font-bold uppercase tracking-wider text-text-muted">Test history</h3>
+              <span className="text-[0.6875rem] text-text-muted">last 3 periods</span>
             </div>
             <div className="space-y-1.5">
               {testHistory.map(h => (
                 <div key={h.period} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border-light">
                   <Calendar size={12} className="text-text-muted shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-[12.5px] font-medium text-text">{h.period}</div>
-                    <div className="text-[10.5px] text-text-muted flex items-center gap-1.5">
+                    <div className="text-[0.78125rem] font-medium text-text">{h.period}</div>
+                    <div className="text-[0.65625rem] text-text-muted flex items-center gap-1.5">
                       <User size={9} />{h.tester}
                       <span className="text-border">·</span>
                       <span>{h.date}</span>
                     </div>
                   </div>
-                  <span className={`inline-flex items-center gap-1 px-2 h-5 rounded text-[10px] font-bold ${
+                  <span className={`inline-flex items-center gap-1 px-2 h-5 rounded text-[0.625rem] font-bold ${
                     h.conclusion === 'Effective' ? 'bg-compliant-50 text-compliant-700'
                     : h.conclusion === 'Deficient' ? 'bg-risk-50 text-risk-700'
                     : 'bg-mitigated-50 text-mitigated-700'
@@ -1148,17 +1185,18 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
         </div>
 
         {/* Footer */}
-        <footer className="shrink-0 px-6 py-3 border-t border-canvas-border bg-canvas flex items-center justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-canvas-border text-[12.5px] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">
+        <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas flex items-center justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onClose}>
             Close
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<Eye size={12} />}
             onClick={() => addToast({ message: 'Opening test workspace in Controls tab…', type: 'info' })}
-            className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[12.5px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
           >
-            <Eye size={12} />
             Open in Controls
-          </button>
+          </Button>
         </footer>
       </motion.aside>
     </>
@@ -1168,8 +1206,8 @@ function RACMDetailDrawer({ row, onClose }: { row: RACMRow; onClose: () => void 
 function Pill({ label, value }: { label: string; value: string }) {
   return (
     <div className="inline-flex items-center gap-1.5 px-2 h-6 rounded-md bg-surface-2 text-text-secondary border border-border-light">
-      <span className="text-[10px] uppercase tracking-wider font-bold text-text-muted">{label}</span>
-      <span className="text-[11px] font-semibold text-text">{value}</span>
+      <span className="text-[0.625rem] uppercase tracking-wider font-bold text-text-muted">{label}</span>
+      <span className="text-[0.6875rem] font-semibold text-text">{value}</span>
     </div>
   );
 }

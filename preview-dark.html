@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DESIGN.md — Editorial GRC · Preview (Dark)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300..900&family=Inter:wght@300..700&family=JetBrains+Mono:wght@400..700&family=Instrument+Serif:ital@0;1&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    /* ──────────────────────────────────────────────────────────
+       TOKENS (DARK)
+       ────────────────────────────────────────────────────────── */
+    :root {
+      /* Brand — unchanged */
+      --brand-50:  #F7F0FF;
+      --brand-100: #EDDEFE;
+      --brand-200: #DCBBFD;
+      --brand-300: #C393FA;
+      --brand-400: #A366F0;
+      --brand-500: #8838DE;
+      --brand-600: #6A12CD;
+      --brand-700: #550FA5;
+      --brand-800: #3B0B72;
+      --brand-900: #26064A;
+
+      /* Paper & Ink — inverted roles */
+      --canvas:    #12081E;             /* body background */
+      --surface-1: #1B0F2E;             /* card resting */
+      --surface-2: #251638;             /* card hover */
+      --surface-3: #2F1D44;             /* popover */
+      --border-1:  #2F1D44;             /* subtle divider */
+      --border-2:  #3D2857;             /* stronger border */
+      --border-3:  #533B70;             /* hover/active */
+
+      --ink-900:   #F1EDE3;             /* primary ink */
+      --ink-800:   #D9D2C4;
+      --ink-700:   #B3A99A;
+      --ink-600:   #8F8476;
+      --ink-500:   #6B6154;
+      --ink-400:   #534A3E;
+      --ink-300:   #3C342B;
+
+      /* Paper aliases kept for reuse */
+      --paper-0:   var(--surface-1);
+      --paper-50:  var(--canvas);
+      --paper-100: var(--surface-2);
+      --paper-200: var(--border-2);
+      --paper-300: var(--border-3);
+
+      /* Semantic — dark mode */
+      --risk:       #F97066;
+      --risk-50:    rgba(249,112,102,0.12);
+      --risk-100:   rgba(249,112,102,0.22);
+      --high:       #FB923C;
+      --high-50:    rgba(251,146,60,0.12);
+      --high-100:   rgba(251,146,60,0.22);
+      --mitigated:  #FBBF24;
+      --mitigated-50: rgba(251,191,36,0.12);
+      --mitigated-100:rgba(251,191,36,0.22);
+      --compliant:  #4ADE80;
+      --compliant-50: rgba(74,222,128,0.12);
+      --compliant-100:rgba(74,222,128,0.22);
+      --evidence:   #38BDF8;
+      --evidence-50: rgba(56,189,248,0.12);
+      --evidence-100:rgba(56,189,248,0.22);
+      --info:       #A366F0;
+      --info-50:    rgba(163,102,240,0.14);
+      --info-100:   rgba(163,102,240,0.28);
+      --draft:      #9A8FAE;
+      --draft-50:   rgba(154,143,174,0.12);
+      --draft-100:  rgba(154,143,174,0.22);
+
+      /* Shadow */
+      --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.4);
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.03);
+      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55), 0 4px 12px rgba(0, 0, 0, 0.4);
+      --shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.6), 0 12px 24px rgba(0, 0, 0, 0.45);
+      --glow-brand: 0 0 0 4px rgba(163, 102, 240, 0.32);
+
+      /* Radius */
+      --r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px; --r-2xl: 20px;
+
+      /* Motion */
+      --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+      --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+      /* Faces */
+      --font-display: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       BASE
+       ────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background:
+        radial-gradient(ellipse 60% 40% at 15% 0%, rgba(106, 18, 205, 0.22), transparent 60%),
+        radial-gradient(ellipse 50% 30% at 85% 100%, rgba(136, 56, 222, 0.14), transparent 60%),
+        var(--canvas);
+      color: var(--ink-800);
+      font-family: var(--font-sans);
+      font-size:0.9375rem;
+      line-height: 1.6;
+      font-feature-settings: "cv08", "cv11", "ss01";
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
+      min-height: 100vh;
+    }
+    ::selection { background: rgba(163, 102, 240, 0.35); color: var(--ink-900); }
+
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 64px 32px 128px; }
+    .hero { padding: 96px 0 48px; border-bottom: 1px solid var(--border-1); margin-bottom: 64px; }
+    .hero .kicker {
+      font-size:0.75rem; font-weight: 560; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--brand-300);
+    }
+    .hero h1 {
+      font-family: var(--font-display);
+      font-weight: 320;
+      font-size:4.5rem;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      color: var(--ink-900);
+      margin: 16px 0 24px;
+    }
+    .hero p {
+      font-size:1.1875rem;
+      line-height: 1.55;
+      color: var(--ink-700);
+      max-width: 66ch;
+    }
+    .hero .link-row {
+      margin-top: 32px;
+      display: flex; gap: 16px; align-items: center;
+      font-size:0.8125rem; color: var(--ink-600);
+    }
+    .hero .link-row a { color: var(--brand-300); text-decoration: none; border-bottom: 1px solid rgba(195,147,250,0.3); }
+    .hero .link-row a:hover { color: var(--brand-200); border-bottom-color: var(--brand-300); }
+
+    .section { margin: 96px 0 0; }
+    .section:first-of-type { margin-top: 0; }
+    .section > .label {
+      font-size:0.75rem; font-weight: 560; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--brand-300); margin-bottom: 8px;
+    }
+    .section > h2 {
+      font-family: var(--font-display);
+      font-weight: 380;
+      font-size:2.75rem;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      color: var(--ink-900);
+      margin: 0 0 24px;
+    }
+    .section > .intro {
+      font-size:1.0625rem;
+      line-height: 1.6;
+      color: var(--ink-700);
+      max-width: 66ch;
+      margin-bottom: 48px;
+    }
+    /* "Used in:" — maps each component to the product surfaces that use it. */
+    .used-in {
+      font-family: var(--font-mono);
+      font-size:0.75rem;
+      line-height: 1.5;
+      color: var(--ink-600);
+      margin: -12px 0 24px;
+    }
+    .used-in b { color: var(--brand-300); font-weight: 500; }
+
+    .grid { display: grid; gap: 16px; }
+    .grid-2 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .grid-4 { grid-template-columns: repeat(4, 1fr); }
+    .grid-6 { grid-template-columns: repeat(6, 1fr); }
+    .grid-12 { grid-template-columns: repeat(12, 1fr); gap: 24px; }
+    @media (max-width: 880px) {
+      .grid-4, .grid-6, .grid-12 { grid-template-columns: repeat(2, 1fr); }
+      .hero h1 { font-size:3.5rem; }
+      .section > h2 { font-size:2.25rem; }
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       SWATCHES
+       ────────────────────────────────────────────────────────── */
+    .swatch {
+      border-radius: var(--r-md);
+      border: 1px solid var(--border-1);
+      overflow: hidden;
+      background: var(--surface-1);
+    }
+    .swatch .chip { height: 72px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .swatch .meta { padding: 10px 12px; }
+    .swatch .name { font-size:0.8125rem; font-weight: 560; color: var(--ink-800); font-family: var(--font-mono); }
+    .swatch .hex { font-size:0.75rem; color: var(--ink-600); font-family: var(--font-mono); margin-top: 2px; }
+
+    /* ──────────────────────────────────────────────────────────
+       TYPE SCALE
+       ────────────────────────────────────────────────────────── */
+    .type-row {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 32px;
+      padding: 24px 0;
+      border-bottom: 1px solid var(--border-1);
+      align-items: baseline;
+    }
+    .type-row .tag {
+      font-family: var(--font-mono);
+      font-size:0.75rem;
+      color: var(--ink-600);
+      padding-top: 8px;
+    }
+    .type-row .sample { color: var(--ink-900); }
+    .t-display-2xl { font-family: var(--font-display); font-weight: 300; font-size:4.5rem; line-height: 1.05; letter-spacing: -0.03em; }
+    .t-display-xl  { font-family: var(--font-display); font-weight: 340; font-size:3.5rem; line-height: 1.07; letter-spacing: -0.025em; }
+    .t-display-lg  { font-family: var(--font-display); font-weight: 380; font-size:2.75rem; line-height: 1.1;  letter-spacing: -0.02em; }
+    .t-display-md  { font-family: var(--font-display); font-weight: 420; font-size:2.25rem; line-height: 1.15; letter-spacing: -0.015em; }
+    .t-display-sm  { font-family: var(--font-display); font-weight: 460; font-size:1.75rem; line-height: 1.2;  letter-spacing: -0.01em; }
+    .t-heading-xl  { font-weight: 600; font-size:1.5rem; line-height: 1.25; letter-spacing: -0.005em; }
+    .t-heading-lg  { font-weight: 600; font-size:1.25rem; line-height: 1.3; }
+    .t-heading-md  { font-weight: 600; font-size:1.0625rem; line-height: 1.4; }
+    .t-heading-sm  { font-weight: 620; font-size:0.9375rem; line-height: 1.45; letter-spacing: 0.005em; }
+    .t-body-lg     { font-weight: 400; font-size:1.0625rem; line-height: 1.65; }
+    .t-body        { font-weight: 400; font-size:0.9375rem; line-height: 1.6; }
+    .t-body-sm     { font-weight: 440; font-size:0.8125rem; line-height: 1.55; }
+    .t-label       { font-weight: 560; font-size:0.75rem; line-height: 1.3; letter-spacing: 0.02em; text-transform: uppercase; color: var(--ink-600); }
+    .t-code        { font-family: var(--font-mono); font-weight: 420; font-size:0.8125rem; }
+    .t-numeric     { font-weight: 520; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+    /* ──────────────────────────────────────────────────────────
+       COMPONENTS
+       ────────────────────────────────────────────────────────── */
+    .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      height: 40px; padding: 0 16px; border-radius: var(--r-md);
+      font: 600 0.9375rem/1 var(--font-sans); letter-spacing: 0.005em;
+      border: 1px solid transparent; cursor: pointer;
+      transition: background 150ms var(--ease-standard), transform 75ms var(--ease-standard), box-shadow 150ms var(--ease-standard);
+    }
+    .btn-primary { background: var(--brand-600); color: #FFFFFF; }
+    .btn-primary:hover { background: var(--brand-500); }
+    .btn-primary:active { background: var(--brand-800); transform: translateY(0.5px); }
+    .btn-secondary { background: var(--surface-1); color: var(--ink-900); border-color: var(--border-2); }
+    .btn-secondary:hover { border-color: var(--border-3); background: var(--surface-2); }
+    .btn-ghost { background: transparent; color: var(--ink-800); }
+    .btn-ghost:hover { background: rgba(163, 102, 240, 0.1); color: var(--brand-200); }
+    .btn-destructive { background: var(--risk); color: #2A0A08; }
+    .btn-link { background: transparent; color: var(--brand-300); height: auto; padding: 0; }
+    .btn-link:hover { color: var(--brand-200); text-decoration: underline; }
+    .btn:focus-visible { outline: none; box-shadow: var(--glow-brand); }
+
+    .input {
+      height: 40px; padding: 0 12px; border-radius: var(--r-md);
+      border: 1px solid var(--border-2); background: var(--surface-1);
+      font: 400 0.9375rem/1 var(--font-sans); color: var(--ink-900);
+      width: 280px; transition: border-color 150ms var(--ease-standard), box-shadow 150ms var(--ease-standard);
+    }
+    .input::placeholder { color: var(--ink-500); }
+    .input:hover { border-color: var(--border-3); }
+    .input:focus { outline: none; border-color: var(--brand-400); }
+
+    .card {
+      background: var(--surface-1);
+      border: 1px solid var(--border-1);
+      border-radius: var(--r-lg);
+      padding: 24px;
+      transition: border-color 150ms var(--ease-standard), box-shadow 150ms var(--ease-standard);
+    }
+    .card.interactive:hover { border-color: var(--border-3); box-shadow: var(--shadow-sm); cursor: pointer; }
+    .card.elevated { border: none; background: var(--surface-2); box-shadow: var(--shadow-md); }
+    .card.muted { background: var(--surface-2); border: none; }
+    .card.feature { background: rgba(106, 18, 205, 0.18); border-color: rgba(163, 102, 240, 0.35); }
+
+    /* Shipped StatusBadge: flat tinted bg + base-tone text on dark, NO border, NO icon. */
+    .pill {
+      display: inline-flex; align-items: center;
+      height: 24px; padding: 0 10px; border-radius: 999px;
+      font: 560 0.75rem/1 var(--font-sans); letter-spacing: 0.02em; text-transform: uppercase;
+    }
+    .pill .glyph { display: none; }
+    .pill-risk { background: var(--risk-50); color: var(--risk); }
+    .pill-high { background: var(--high-50); color: var(--high); }
+    .pill-mit  { background: var(--mitigated-50); color: var(--mitigated); }
+    .pill-comp { background: var(--compliant-50); color: var(--compliant); }
+    .pill-info { background: var(--info-50); color: var(--info); }
+    .pill-ev   { background: var(--evidence-50); color: var(--evidence); }
+    .pill-draft{ background: var(--draft-50); color: var(--draft); }
+
+    .shadow-demo { padding: 24px; background: var(--surface-1); border-radius: var(--r-lg); text-align: center; font-family: var(--font-mono); font-size:0.75rem; color: var(--ink-700); border: 1px solid rgba(255,255,255,0.02); }
+    .s-xs { box-shadow: var(--shadow-xs); }
+    .s-sm { box-shadow: var(--shadow-sm); }
+    .s-md { box-shadow: var(--shadow-md); }
+    .s-lg { box-shadow: var(--shadow-lg); }
+    .s-xl { box-shadow: var(--shadow-xl); }
+
+    .radius-demo {
+      height: 80px; background: rgba(163, 102, 240, 0.2);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono); font-size:0.75rem; color: var(--brand-200);
+    }
+
+    .space-row { display: flex; align-items: flex-end; gap: 16px; height: 160px; padding: 24px; background: var(--surface-1); border-radius: var(--r-md); border: 1px solid var(--border-1); }
+    .space-unit { background: var(--brand-400); width: 32px; position: relative; }
+    .space-unit::after {
+      content: attr(data-label);
+      position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%);
+      font-family: var(--font-mono); font-size:0.6875rem; color: var(--ink-600); white-space: nowrap;
+    }
+
+    /* AI Response */
+    .ai-response {
+      position: relative;
+      border-radius: var(--r-xl);
+      padding: 24px 28px;
+      /* Shipped doctrine: flat surface, single 2-stop gradient border, no tint, no shadow. */
+      background: linear-gradient(var(--surface-1), var(--surface-1)) padding-box,
+                  linear-gradient(135deg, rgba(163, 102, 240, 0.32), rgba(232, 121, 249, 0.28)) border-box;
+      border: 1px solid transparent;
+      box-shadow: none;
+    }
+    .ai-meta {
+      display: flex; align-items: center; gap: 12px;
+      font-size:0.8125rem; color: var(--ink-600); margin-bottom: 16px;
+    }
+    .ai-meta .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand-300); animation: pulse 1.4s var(--ease-spring) infinite; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.5; } 50% { transform: scale(1.4); opacity: 1; } }
+    .ai-body { font-size:1.0625rem; line-height: 1.65; color: var(--ink-800); max-width: 66ch; }
+    .ai-body p { margin: 0 0 14px; }
+    .ai-citation {
+      display: inline-block;
+      padding: 1px 7px;
+      font: 460 0.75rem/1.5 var(--font-mono);
+      color: var(--brand-200);
+      background: rgba(106, 18, 205, 0.25);
+      border-radius: 4px;
+      margin: 0 2px;
+    }
+    .ai-tools {
+      margin-top: 20px;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border-1);
+      border-radius: var(--r-md);
+      padding: 12px 16px;
+      font: 460 0.75rem/1.7 var(--font-mono);
+      color: var(--ink-700);
+    }
+    .ai-tools .tool-head { color: var(--ink-600); margin-bottom: 4px; }
+    .ai-cursor {
+      display: inline-block;
+      width: 2px; height: 18px; vertical-align: -3px;
+      background: var(--brand-300);
+      margin-left: 2px;
+      animation: blink 1.2s steps(2, end) infinite;
+    }
+    @keyframes blink { 0%, 50% { opacity: 1 } 50.01%, 100% { opacity: 0 } }
+
+    /* Dash card */
+    .dash-card {
+      background: var(--surface-1);
+      border: 1px solid var(--border-1);
+      border-radius: var(--r-lg);
+      padding: 28px 32px;
+    }
+    .dash-card .kicker { font-size:0.6875rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brand-300); font-weight: 560; }
+    .dash-card .metric {
+      font-family: var(--font-display);
+      font-weight: 300;
+      font-size:4rem;
+      line-height: 1;
+      letter-spacing: -0.03em;
+      color: var(--ink-900);
+      margin-top: 12px;
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    .dash-card .metric .denom { font-size:1.125rem; color: var(--ink-600); font-weight: 400; letter-spacing: 0; }
+    .dash-card .trend {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 8px; font-size:0.8125rem; font-weight: 520; color: var(--compliant);
+      font-variant-numeric: tabular-nums;
+    }
+    .dash-card .bar {
+      height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; margin-top: 24px;
+    }
+    .dash-card .bar .fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--brand-500), var(--brand-300));
+      width: 78%;
+    }
+    .dash-card .breakdown { margin-top: 20px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .dash-card .breakdown .cell { display: flex; flex-direction: column; gap: 4px; }
+    .dash-card .breakdown .num {
+      font-variant-numeric: tabular-nums; font-weight: 600; font-size:1.25rem; color: var(--ink-900);
+    }
+    .dash-card .breakdown .lbl {
+      font-size:0.6875rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-600); font-weight: 560;
+    }
+
+    /* Report */
+    .report {
+      background: var(--surface-1);
+      border: 1px solid var(--border-1);
+      border-radius: var(--r-lg);
+      padding: 56px 64px 48px;
+    }
+    .report .report-kicker {
+      font-size:0.75rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brand-300); font-weight: 560;
+    }
+    .report h2 {
+      font-family: var(--font-display);
+      font-weight: 340;
+      font-size:2.75rem;
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+      color: var(--ink-900);
+      margin: 14px 0 28px;
+      max-width: 18ch;
+    }
+    .report p {
+      font-size:1.0625rem;
+      line-height: 1.7;
+      color: var(--ink-800);
+      max-width: 66ch;
+      margin: 0 0 16px;
+    }
+    .report .dropcap::first-letter {
+      font-family: var(--font-display);
+      font-weight: 300;
+      font-size:4.75rem;
+      line-height: 0.9;
+      float: left;
+      margin: 6px 10px 0 -2px;
+      color: var(--brand-300);
+    }
+    .report .eyebrow {
+      margin-top: 36px;
+      font-size:0.8125rem; color: var(--ink-600);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .report .eyebrow .divider { flex: 1; height: 1px; background: var(--border-2); }
+
+    /* Table */
+    .table-wrap { border: 1px solid var(--border-1); border-radius: var(--r-lg); overflow: hidden; background: var(--surface-1); }
+    table.data { width: 100%; border-collapse: collapse; font-size:0.8125rem; }
+    table.data thead th {
+      background: var(--surface-2);
+      color: var(--ink-700);
+      font-weight: 560; font-size:0.6875rem; letter-spacing: 0.14em; text-transform: uppercase;
+      text-align: left; padding: 12px 16px;
+      border-bottom: 1px solid var(--border-1);
+    }
+    table.data tbody td { padding: 12px 16px; border-bottom: 1px solid var(--border-1); color: var(--ink-800); vertical-align: middle; }
+    table.data tbody tr:last-child td { border-bottom: none; }
+    table.data tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
+    table.data tbody tr.selected { background: rgba(106, 18, 205, 0.18); box-shadow: inset 2px 0 0 var(--brand-400); }
+    table.data .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 520; }
+    table.data .mono { font-family: var(--font-mono); font-size:0.75rem; color: var(--ink-600); }
+
+    .foot {
+      margin-top: 128px; padding-top: 32px;
+      border-top: 1px solid var(--border-1);
+      font-size:0.8125rem; color: var(--ink-600);
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+    }
+    .foot a { color: var(--brand-300); text-decoration: none; }
+    .foot a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <header class="hero">
+      <div class="kicker">DESIGN.md · Editorial GRC · Dark</div>
+      <h1>A design system for<br/>governance, risk,<br/>and compliance.</h1>
+      <p>
+        Dark mode without the tech-startup glow. Warm inks on a plum-tinted
+        canvas, with ambient brand haze lifting the surface. Everything the
+        light system does — serif display, calm density, purple signature —
+        translated honestly, never mirrored.
+      </p>
+      <div class="link-row">
+        <span>Open <a href="./DESIGN.md">DESIGN.md</a></span>
+        <span>·</span>
+        <span>Switch to <a href="./preview.html">light mode</a></span>
+      </div>
+    </header>
+
+    <!-- BRAND SCALE -->
+    <section class="section">
+      <div class="label">01 · Color</div>
+      <h2>Brand scale</h2>
+      <p class="intro">Same ten stops. In dark mode the hero shifts to <code class="t-code">brand-300</code>/<code class="t-code">brand-400</code> for text and <code class="t-code">brand-500</code>/<code class="t-code">brand-600</code> for fills.</p>
+      <div class="grid grid-6">
+        <div class="swatch"><div class="chip" style="background: var(--brand-50)"></div><div class="meta"><div class="name">brand-50</div><div class="hex">#F7F0FF</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-100)"></div><div class="meta"><div class="name">brand-100</div><div class="hex">#EDDEFE</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-200)"></div><div class="meta"><div class="name">brand-200</div><div class="hex">#DCBBFD</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-300)"></div><div class="meta"><div class="name">brand-300 ★</div><div class="hex">#C393FA</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-400)"></div><div class="meta"><div class="name">brand-400 ★</div><div class="hex">#A366F0</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-500)"></div><div class="meta"><div class="name">brand-500</div><div class="hex">#8838DE</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-600)"></div><div class="meta"><div class="name">brand-600</div><div class="hex">#6A12CD</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-700)"></div><div class="meta"><div class="name">brand-700</div><div class="hex">#550FA5</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-800)"></div><div class="meta"><div class="name">brand-800</div><div class="hex">#3B0B72</div></div></div>
+        <div class="swatch" style="outline: 2px solid rgba(163,102,240,0.35); outline-offset: 2px;"><div class="chip" style="background: var(--brand-900)"></div><div class="meta"><div class="name">brand-900 ★</div><div class="hex">#26064A</div></div></div>
+      </div>
+    </section>
+
+    <!-- SURFACES -->
+    <section class="section">
+      <div class="label">02 · Surfaces</div>
+      <h2>Canvas &amp; ink</h2>
+      <p class="intro">Canvas is <code class="t-code">#12081E</code> — near-black with plum tint. Surfaces lift with brand-tinted grays, never pure gray. Ink stays warm so reports read like pages, not terminals.</p>
+      <div class="grid grid-4">
+        <div class="swatch"><div class="chip" style="background: var(--canvas)"></div><div class="meta"><div class="name">canvas ★</div><div class="hex">#12081E</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--surface-1)"></div><div class="meta"><div class="name">surface-1</div><div class="hex">#1B0F2E</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--surface-2)"></div><div class="meta"><div class="name">surface-2</div><div class="hex">#251638</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--surface-3)"></div><div class="meta"><div class="name">surface-3</div><div class="hex">#2F1D44</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-300)"></div><div class="meta"><div class="name">ink-300</div><div class="hex">#3C342B</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-500)"></div><div class="meta"><div class="name">ink-500</div><div class="hex">#6B6154</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-700)"></div><div class="meta"><div class="name">ink-700</div><div class="hex">#B3A99A</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-900)"></div><div class="meta"><div class="name">ink-900 ★</div><div class="hex">#F1EDE3</div></div></div>
+      </div>
+    </section>
+
+    <!-- SEMANTIC -->
+    <section class="section">
+      <div class="label">03 · Semantic</div>
+      <h2>GRC severity scale</h2>
+      <p class="intro">Lighter, brighter dark-mode variants. The same colorblind-safe separation. Pills render on tinted backgrounds of the same hue — never on surface gray.</p>
+      <div class="grid grid-6">
+        <div class="swatch"><div class="chip" style="background: var(--risk)"></div><div class="meta"><div class="name">risk</div><div class="hex">#F97066 · Critical</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--high)"></div><div class="meta"><div class="name">high</div><div class="hex">#FB923C · High</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--mitigated)"></div><div class="meta"><div class="name">mitigated</div><div class="hex">#FBBF24 · Medium</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--compliant)"></div><div class="meta"><div class="name">compliant</div><div class="hex">#4ADE80 · Low</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--evidence)"></div><div class="meta"><div class="name">evidence</div><div class="hex">#38BDF8 · Sources</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--info)"></div><div class="meta"><div class="name">info</div><div class="hex">#A366F0 · Info</div></div></div>
+      </div>
+    </section>
+
+    <!-- TYPOGRAPHY -->
+    <section class="section">
+      <div class="label">04 · Typography</div>
+      <h2>Scale &amp; faces</h2>
+      <p class="intro">Serif display weight drops one notch in dark mode — heavier strokes muddy on dark. Body stays Inter 400. Mono stays JetBrains.</p>
+
+      <!-- 4-base type scale (rem) -->
+      <table style="border-collapse:collapse; width:100%; max-width:560px; margin:0 0 40px; font-size:0.8125rem; font-variant-numeric:tabular-nums;">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid var(--border-2);">
+            <th style="padding:8px 12px 8px 0; font-weight:560;">Token</th>
+            <th style="padding:8px 12px; font-weight:560;">rem</th>
+            <th style="padding:8px 12px; font-weight:560;">Step</th>
+            <th style="padding:8px 12px; font-weight:560;">Role</th>
+            <th style="padding:8px 0 8px 12px; font-weight:560;">Font · wt</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid var(--border-1);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-xs</td><td style="padding:8px 12px;">0.75rem</td><td style="padding:8px 12px; color:var(--ink-500);">×3</td><td style="padding:8px 12px;">Caption / meta / mono</td><td style="padding:8px 0 8px 12px;">Inter / JetBrains · 400</td></tr>
+          <tr style="border-bottom:1px solid var(--border-1);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-base</td><td style="padding:8px 12px;">1rem</td><td style="padding:8px 12px; color:var(--ink-500);">×4</td><td style="padding:8px 12px;">Body</td><td style="padding:8px 0 8px 12px;">Inter · 400</td></tr>
+          <tr style="border-bottom:1px solid var(--border-1);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-lg</td><td style="padding:8px 12px;">1.25rem</td><td style="padding:8px 12px; color:var(--ink-500);">×5</td><td style="padding:8px 12px;">Large body / subhead</td><td style="padding:8px 0 8px 12px;">Inter · 500</td></tr>
+          <tr style="border-bottom:1px solid var(--border-1);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-xl</td><td style="padding:8px 12px;">1.5rem</td><td style="padding:8px 12px; color:var(--ink-500);">×6</td><td style="padding:8px 12px;">Heading</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 500</td></tr>
+          <tr style="border-bottom:1px solid var(--border-1);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-2xl</td><td style="padding:8px 12px;">1.75rem</td><td style="padding:8px 12px; color:var(--ink-500);">×7</td><td style="padding:8px 12px;">KPI / large heading</td><td style="padding:8px 0 8px 12px;">Inter · 700</td></tr>
+          <tr style="border-bottom:1px solid var(--border-1);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-3xl</td><td style="padding:8px 12px;">2rem</td><td style="padding:8px 12px; color:var(--ink-500);">×8</td><td style="padding:8px 12px;">Display — small</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 480</td></tr>
+          <tr style="border-bottom:1px solid var(--border-1);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-4xl</td><td style="padding:8px 12px;">2.25rem</td><td style="padding:8px 12px; color:var(--ink-500);">×9</td><td style="padding:8px 12px;">Display</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 460</td></tr>
+          <tr style="border-bottom:1px solid var(--border-1);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-5xl</td><td style="padding:8px 12px;">2.5rem</td><td style="padding:8px 12px; color:var(--ink-500);">×10</td><td style="padding:8px 12px;">Display</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 440</td></tr>
+          <tr style="border-bottom:1px solid var(--border-1);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-6xl</td><td style="padding:8px 12px;">2.75rem</td><td style="padding:8px 12px; color:var(--ink-500);">×11</td><td style="padding:8px 12px;">Display — large</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 420</td></tr>
+          <tr style="border-bottom:1px solid var(--border-1);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-7xl</td><td style="padding:8px 12px;">3rem</td><td style="padding:8px 12px; color:var(--ink-500);">×12</td><td style="padding:8px 12px;">Display — large</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 400</td></tr>
+          <tr><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">display</td><td style="padding:8px 12px;">3.5rem</td><td style="padding:8px 12px; color:var(--ink-500);">×14</td><td style="padding:8px 12px;">Hero — once / page</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 420</td></tr>
+        </tbody>
+      </table>
+
+      <div class="type-row"><div class="tag">display-2xl</div><div class="sample t-display-2xl">Assessment</div></div>
+      <div class="type-row"><div class="tag">display-xl</div><div class="sample t-display-xl">Operational Risk</div></div>
+      <div class="type-row"><div class="tag">display-lg</div><div class="sample t-display-lg">Control Coverage</div></div>
+      <div class="type-row"><div class="tag">display-md</div><div class="sample t-display-md">Findings &amp; Remediations</div></div>
+      <div class="type-row"><div class="tag">display-sm</div><div class="sample t-display-sm">Delete this audit?</div></div>
+      <div class="type-row"><div class="tag">heading-xl</div><div class="sample t-heading-xl">Quarterly review dashboard</div></div>
+      <div class="type-row"><div class="tag">body-lg</div><div class="sample t-body-lg">A comprehensive review of control effectiveness across business units, with findings prioritized by impact and remediation velocity.</div></div>
+      <div class="type-row"><div class="tag">body</div><div class="sample t-body">Default UI copy — interface descriptions, form helper text, list items, tooltip prose.</div></div>
+      <div class="type-row"><div class="tag">code</div><div class="sample t-code" style="color: var(--brand-300)">audit_trail_q1_2026.json · evt_8c3f2b · confidence 0.94</div></div>
+      <div class="type-row"><div class="tag">numeric</div><div class="sample t-numeric" style="font-size:2.25rem;">  12,481,306.44  </div></div>
+    </section>
+
+    <!-- SPACING -->
+    <section class="section">
+      <div class="label">05 · Layout</div>
+      <h2>Spacing grid</h2>
+      <div class="space-row">
+        <div class="space-unit" style="height: 4px"  data-label="4"></div>
+        <div class="space-unit" style="height: 8px"  data-label="8"></div>
+        <div class="space-unit" style="height: 12px" data-label="12"></div>
+        <div class="space-unit" style="height: 16px" data-label="16"></div>
+        <div class="space-unit" style="height: 24px" data-label="24"></div>
+        <div class="space-unit" style="height: 32px" data-label="32"></div>
+        <div class="space-unit" style="height: 48px" data-label="48"></div>
+        <div class="space-unit" style="height: 64px" data-label="64"></div>
+        <div class="space-unit" style="height: 96px" data-label="96"></div>
+        <div class="space-unit" style="height: 128px" data-label="128"></div>
+      </div>
+    </section>
+
+    <!-- RADIUS -->
+    <section class="section">
+      <div class="label">06 · Radius</div>
+      <h2>Radii</h2>
+      <div class="grid grid-6">
+        <div class="radius-demo" style="border-radius: var(--r-xs)">xs · 4</div>
+        <div class="radius-demo" style="border-radius: var(--r-sm)">sm · 6</div>
+        <div class="radius-demo" style="border-radius: var(--r-md)">md · 8</div>
+        <div class="radius-demo" style="border-radius: var(--r-lg)">lg · 12</div>
+        <div class="radius-demo" style="border-radius: var(--r-xl)">xl · 16</div>
+        <div class="radius-demo" style="border-radius: 999px">full</div>
+      </div>
+    </section>
+
+    <!-- ELEVATION -->
+    <section class="section">
+      <div class="label">07 · Depth</div>
+      <h2>Elevation</h2>
+      <div class="grid grid-4" style="gap: 32px;">
+        <div class="shadow-demo s-xs">shadow-xs</div>
+        <div class="shadow-demo s-sm">shadow-sm</div>
+        <div class="shadow-demo s-md">shadow-md</div>
+        <div class="shadow-demo s-lg">shadow-lg</div>
+        <div class="shadow-demo s-xl">shadow-xl</div>
+        <div class="shadow-demo" style="box-shadow: var(--glow-brand)">glow-brand</div>
+      </div>
+    </section>
+
+    <!-- BUTTONS -->
+    <section class="section">
+      <div class="label">08 · Primitives</div>
+      <h2>Buttons</h2>
+      <p class="used-in"><b>Used in:</b> every surface — Ask IRA composer send, Dashboard widget actions, RACM toolbars, Report export, modal footers.</p>
+      <div class="row">
+        <button class="btn btn-primary">Save assessment</button>
+        <button class="btn btn-secondary">Cancel</button>
+        <button class="btn btn-ghost">Details</button>
+        <button class="btn btn-destructive">Delete audit</button>
+        <button class="btn btn-link">View all risks →</button>
+      </div>
+    </section>
+
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Input</h2>
+      <p class="used-in"><b>Used in:</b> Knowledge Hub search, RACM / Control Library filters, form fields across Engagements &amp; Admin. (The Ask IRA composer uses border-tone focus, not the ring.)</p>
+      <div class="row">
+        <input class="input" placeholder="Search risks…" />
+        <input class="input" value="IT-GEN-04" style="width: 180px;" />
+      </div>
+    </section>
+
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Severity pills</h2>
+      <p class="used-in"><b>Used in:</b> Risk Register rows, Findings (Execution), Control Library status, chat Sources type pills. Spelled-out labels, no RAG ramp.</p>
+      <div class="row">
+        <span class="pill pill-risk"><span class="glyph">●</span> Critical</span>
+        <span class="pill pill-high"><span class="glyph">▲</span> High</span>
+        <span class="pill pill-mit"><span class="glyph">◆</span> Medium</span>
+        <span class="pill pill-comp"><span class="glyph">■</span> Low</span>
+        <span class="pill pill-ev"><span class="glyph">◧</span> Evidence</span>
+        <span class="pill pill-info"><span class="glyph">○</span> Informational</span>
+        <span class="pill pill-draft"><span class="glyph">▢</span> Draft</span>
+      </div>
+    </section>
+
+    <!-- DASH -->
+    <section class="section">
+      <div class="label">09 · Signature</div>
+      <h2>Enterprise risk score</h2>
+      <p class="intro">Surface lifts out of the canvas with a plum-tinted gray — not a pure black card. Serif numeral, purple progress, warm secondary copy.</p>
+      <p class="used-in"><b>Used in:</b> Dashboard (<code>DashboardView</code>) — KPI tiles + the <code>ConfigurableChart</code> graph (Line / Area / Bar / Pie / Table / KPI) on a react-grid-layout canvas.</p>
+      <div class="grid grid-12">
+        <div class="dash-card" style="grid-column: span 7;">
+          <div class="kicker">Enterprise Risk · Q1 2026</div>
+          <div class="metric">78 <span class="denom">/ 100</span></div>
+          <div class="trend">↑ 12% this quarter</div>
+          <div class="bar"><div class="fill"></div></div>
+          <div class="breakdown">
+            <div class="cell"><span class="num">4</span><span class="lbl">Critical</span></div>
+            <div class="cell"><span class="num">12</span><span class="lbl">High</span></div>
+            <div class="cell"><span class="num">23</span><span class="lbl">Medium</span></div>
+            <div class="cell"><span class="num">47</span><span class="lbl">Low</span></div>
+          </div>
+        </div>
+        <div class="dash-card" style="grid-column: span 5; display: flex; flex-direction: column; gap: 20px;">
+          <div>
+            <div class="kicker">Audit timeline</div>
+            <div class="t-heading-lg" style="margin-top: 8px; color: var(--ink-900)">Q1 closes in 14 days</div>
+            <p class="t-body-sm" style="color: var(--ink-700); margin: 8px 0 0;">
+              Fieldwork complete for SOX IT General Controls. Three
+              remediations pending sign-off from Cristina.
+            </p>
+          </div>
+          <div class="row">
+            <span class="pill pill-comp"><span class="glyph">■</span> On track</span>
+            <span class="pill pill-ev"><span class="glyph">◧</span> 4 sources</span>
+          </div>
+          <button class="btn btn-link" style="align-self: flex-start;">Open audit plan →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- AI -->
+    <section class="section">
+      <h2>AI response</h2>
+      <p class="intro">In dark mode the gradient border is more visible — let it sing. Citations shift to <code class="t-code">brand-200</code> on <code class="t-code">brand-900/25</code> tint.</p>
+      <p class="used-in"><b>Used in:</b> Ask IRA chat (<code>ChatView</code>) — the answer surface inside the 52.5rem thread; prose capped at 66ch. Produced by the flat 20px <code>ai-border</code> composer.</p>
+      <div class="ai-response">
+        <div class="ai-meta">
+          <span class="dot"></span>
+          Answered in 1.2s · 4 sources · model: risk-analyst-4
+        </div>
+        <div class="ai-body">
+          <p>
+            Three SOX IT General Controls failed in Q1 2026:
+            <span class="ai-citation">IT-GEN-04</span>
+            (privileged access review — evidence stale by 47 days),
+            <span class="ai-citation">IT-GEN-07</span>
+            (change management — two emergency changes lack retrospective
+            approval), and
+            <span class="ai-citation">IT-GEN-11</span>
+            (backup restoration — last test was 94 days ago against a
+            90-day SLA).
+          </p>
+          <p>
+            Remediation is straightforward for IT-GEN-04 and IT-GEN-11
+            (run the review, run the test). IT-GEN-07 requires a policy
+            decision — should emergency changes be permitted without
+            retrospective approval in narrow incident windows?<span class="ai-cursor"></span>
+          </p>
+        </div>
+        <div class="ai-tools">
+          <div class="tool-head">// tool calls</div>
+          <div>retrieve(control_ids=["IT-GEN-*"], quarter="Q1-2026")  →  47 controls</div>
+          <div>filter(status="failed")                               →  3 matches</div>
+          <div>rank(by="remediation_effort", order="asc")            →  ok</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TABLE -->
+    <section class="section">
+      <h2>Data table</h2>
+      <p class="intro">Selected rows lift with a <code class="t-code">brand-600</code> tint + left border. Zebra off by default — the hover alone carries the row.</p>
+      <p class="used-in"><b>Used in:</b> RACM &amp; Control Library (Governance), Risk Register, Findings / Control Testing (Execution), and the Dashboard Table widget.</p>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th style="width: 64px;">#</th>
+              <th>Risk</th>
+              <th>Owner</th>
+              <th>Severity</th>
+              <th class="num">Exposure</th>
+              <th>Due</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="selected">
+              <td class="mono">R-142</td>
+              <td>Access review overdue — privileged accounts</td>
+              <td>J. Mendoza</td>
+              <td><span class="pill pill-risk"><span class="glyph">●</span> Critical</span></td>
+              <td class="num">$ 2,400,000</td>
+              <td>Apr 28</td>
+            </tr>
+            <tr>
+              <td class="mono">R-141</td>
+              <td>Vendor SOC 2 Type II unreceived</td>
+              <td>M. Lee</td>
+              <td><span class="pill pill-high"><span class="glyph">▲</span> High</span></td>
+              <td class="num">$ 870,000</td>
+              <td>May 10</td>
+            </tr>
+            <tr>
+              <td class="mono">R-140</td>
+              <td>DR runbook untested this quarter</td>
+              <td>K. Ray</td>
+              <td><span class="pill pill-mit"><span class="glyph">◆</span> Medium</span></td>
+              <td class="num">$ 410,000</td>
+              <td>Jun 02</td>
+            </tr>
+            <tr>
+              <td class="mono">R-139</td>
+              <td>Annual penetration test scoping pending</td>
+              <td>A. Park</td>
+              <td><span class="pill pill-high"><span class="glyph">▲</span> High</span></td>
+              <td class="num">$ 1,120,000</td>
+              <td>Apr 22</td>
+            </tr>
+            <tr>
+              <td class="mono">R-138</td>
+              <td>Policy training attestation — Q1</td>
+              <td>Cristina R.</td>
+              <td><span class="pill pill-comp"><span class="glyph">■</span> Low</span></td>
+              <td class="num">$ 84,000</td>
+              <td>Apr 30</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- REPORT -->
+    <section class="section">
+      <h2>Report reader</h2>
+      <p class="intro">Editorial long-form, dark. Drop-cap in <code class="t-code">brand-300</code>, body ink warm enough to read at page-length, 66-character column preserved.</p>
+      <p class="used-in"><b>Used in:</b> Report (<code>ReportsView</code>) + report reader — the only surfaces on warm paper (<code>paper-50/100</code>), ~960px column.</p>
+      <div class="report">
+        <div class="report-kicker">Q1 2026 · Operational Risk Assessment</div>
+        <h2>Three controls failed the quarter — none of them fatal.</h2>
+        <p class="dropcap">
+          Across fourteen business units and 312 tested controls, operational
+          risk closed Q1 2026 at a score of 78, up from 66 in Q4 2025. The
+          improvement is meaningful but uneven: IT General Controls and
+          Third-Party Risk both advanced materially, while Change
+          Management regressed slightly on the back of two emergency
+          deployments in late March.
+        </p>
+        <p>
+          The three failed controls are routine remediations, not structural
+          breakdowns. Privileged access reviews (IT-GEN-04) slipped by
+          forty-seven days while the access governance team absorbed an
+          unplanned head-count change. Backup restoration testing
+          (IT-GEN-11) fell four days past SLA, a symptom of the annual
+          calendar rather than of a testing failure. Change management
+          (IT-GEN-07) is the only finding that warrants policy attention.
+        </p>
+        <div class="eyebrow">
+          <span>Published Apr 2, 2026 · 12 min read</span>
+          <span class="divider"></span>
+          <span>By the Risk &amp; Compliance desk</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───── SURFACE: ADMINISTRATION ───── -->
+    <section class="section">
+      <div class="label">Surface · Access Console</div>
+      <h2>Administration</h2>
+      <p class="intro">Crisp-flat, not editorial-floating: hairline cards, flat fills, <code>h-10</code> spine actions. People · Teams · Roles · Audit Log, each on one skeleton — KPI band → toolbar (search left · CTA right) → SmartTable. Invite → role assignment only; no impersonation surface.</p>
+      <p class="used-in"><b>Used in:</b> <code>admin/AdminView</code>, <code>RolesWorkspace</code>; classes in <code>adminTokens.ts</code>, widgets in <code>AdminPrimitives.tsx</code>. See DESIGN.md §7.11.</p>
+
+      <!-- KPI band (AdminKpiRow): one active filter tile + one 'attention' tile -->
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;">
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid var(--brand-700); background:rgba(136,56,222,0.12); box-shadow:inset 0 -2px 0 0 var(--brand-500);">
+          <div style="display:flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:6px; background:var(--brand-600); color:#fff; font-size:0.75rem;">◧</div>
+          <div style="display:flex; align-items:baseline; gap:6px; min-width:0;"><span style="font-size:1.125rem; font-weight:700; color:var(--brand-300); font-variant-numeric:tabular-nums;">128</span><span style="font-size:0.75rem; color:var(--ink-500);">People</span></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid var(--paper-200); background:var(--paper-0);">
+          <div style="display:flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:6px; background:rgba(163,102,240,0.15); color:var(--brand-300); font-size:0.75rem;">◩</div>
+          <div style="display:flex; align-items:baseline; gap:6px;"><span style="font-size:1.125rem; font-weight:700; color:var(--ink-900); font-variant-numeric:tabular-nums;">14</span><span style="font-size:0.75rem; color:var(--ink-500);">Teams</span></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid var(--paper-200); background:var(--paper-0);">
+          <div style="display:flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:6px; background:rgba(163,102,240,0.15); color:var(--brand-300); font-size:0.75rem;">◈</div>
+          <div style="display:flex; align-items:baseline; gap:6px;"><span style="font-size:1.125rem; font-weight:700; color:var(--ink-900); font-variant-numeric:tabular-nums;">9</span><span style="font-size:0.75rem; color:var(--ink-500);">Roles</span></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid rgba(251,191,36,0.25); background:var(--mitigated-50);">
+          <div style="display:flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:6px; background:rgba(251,191,36,0.18); color:var(--mitigated); font-size:0.75rem;">!</div>
+          <div style="display:flex; align-items:baseline; gap:6px;"><span style="font-size:1.125rem; font-weight:700; color:var(--mitigated); font-variant-numeric:tabular-nums;">3</span><span style="font-size:0.75rem; color:var(--mitigated);">No team</span></div>
+        </div>
+      </div>
+
+      <!-- toolbar: search left · flat h-10 CTA right -->
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px;">
+        <input class="input" placeholder="Search people…" style="max-width:280px;" />
+        <button class="btn btn-primary">+ Invite people</button>
+      </div>
+
+      <!-- People table — monochrome InitialsAvatar + semantic status pills + row action -->
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr><th>Member</th><th>Email</th><th>Role</th><th>Status</th><th class="num"></th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span style="display:inline-flex; align-items:center; gap:10px;"><span style="display:inline-flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:9999px; background:rgba(163,102,240,0.18); color:var(--brand-300); font-size:0.6875rem; font-weight:600; box-shadow:inset 0 0 0 1px rgba(163,102,240,0.25);">JM</span> J. Mendoza</span></td>
+              <td class="mono">j.mendoza@acme.co</td><td>Audit Lead</td>
+              <td><span class="pill pill-comp"><span class="glyph">■</span> Active</span></td>
+              <td class="num"><button class="btn btn-secondary" style="height:28px; padding:0 10px; font-size:0.75rem;">Edit</button></td>
+            </tr>
+            <tr>
+              <td><span style="display:inline-flex; align-items:center; gap:10px;"><span style="display:inline-flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:9999px; background:rgba(163,102,240,0.18); color:var(--brand-300); font-size:0.6875rem; font-weight:600; box-shadow:inset 0 0 0 1px rgba(163,102,240,0.25);">ML</span> M. Lee</span></td>
+              <td class="mono">m.lee@acme.co</td><td>Reviewer</td>
+              <td><span class="pill pill-info"><span class="glyph">○</span> Invited</span></td>
+              <td class="num"><button class="btn btn-secondary" style="height:28px; padding:0 10px; font-size:0.75rem;">Edit</button></td>
+            </tr>
+            <tr>
+              <td><span style="display:inline-flex; align-items:center; gap:10px;"><span style="display:inline-flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:9999px; background:rgba(163,102,240,0.18); color:var(--brand-300); font-size:0.6875rem; font-weight:600; box-shadow:inset 0 0 0 1px rgba(163,102,240,0.25);">KR</span> K. Ray</span></td>
+              <td class="mono">k.ray@acme.co</td><td>Contributor</td>
+              <td><span class="pill pill-high"><span class="glyph">▲</span> Suspended</span></td>
+              <td class="num"><button class="btn btn-secondary" style="height:28px; padding:0 10px; font-size:0.75rem;">Edit</button></td>
+            </tr>
+            <tr>
+              <td><span style="display:inline-flex; align-items:center; gap:10px;"><span style="display:inline-flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:9999px; background:rgba(163,102,240,0.18); color:var(--brand-300); font-size:0.6875rem; font-weight:600; box-shadow:inset 0 0 0 1px rgba(163,102,240,0.25);">AP</span> A. Park</span></td>
+              <td class="mono">a.park@acme.co</td><td>Viewer</td>
+              <td><span class="pill pill-draft"><span class="glyph">▢</span> Inactive</span></td>
+              <td class="num"><button class="btn btn-secondary" style="height:28px; padding:0 10px; font-size:0.75rem;">Edit</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="used-in" style="margin-top:12px;"><b>Rules in play:</b> avatar is monochrome (brand-tinted on the dark surface) — never per-person colour; status is a noun, so each pill wears its own semantic tone, not a brand fill; the dark canvas is the theme, the sidebar stays the anchor.</p>
+    </section>
+
+    <!-- ───── SURFACE: AUTH — WORKSPACE CHOOSER ───── -->
+    <section class="section">
+      <div class="label">Surface · Entry gate</div>
+      <h2>Auth — Workspace chooser</h2>
+      <p class="intro">The one sanctioned second dark surface, mirroring the sidebar shell. No backend auth — pick a workspace and enter; the invited account's role drives all access. Approved cascade-reveal on mount (the chat follow-up chip spring).</p>
+      <p class="used-in"><b>Used in:</b> <code>auth/LoginView</code> + <code>BrandPanelFX</code>. See DESIGN.md §7.12.</p>
+      <div style="display:grid; grid-template-columns:44% 1fr; border-radius:16px; overflow:hidden; border:1px solid var(--paper-200); min-height:320px;">
+        <!-- dark brand panel -->
+        <div style="position:relative; background:var(--brand-900); color:#fff; padding:32px; overflow:hidden;">
+          <div style="position:absolute; top:-80px; right:-60px; width:260px; height:260px; border-radius:9999px; background:rgba(106,18,205,0.45); filter:blur(80px);"></div>
+          <div style="position:absolute; bottom:-70px; left:-50px; width:220px; height:220px; border-radius:9999px; background:rgba(136,56,222,0.30); filter:blur(80px);"></div>
+          <div style="position:relative; display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,var(--brand-500),var(--brand-400)); display:flex; align-items:center; justify-content:center;">✦</div>
+            <span style="font-size:0.875rem; font-weight:700; letter-spacing:-0.01em;">IRAME.AI</span>
+          </div>
+          <div style="position:relative; margin-top:56px;">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+              <span style="height:1px; width:40px; background:rgba(255,255,255,0.2);"></span>
+              <span style="font-size:0.6875rem; font-weight:600; letter-spacing:0.18em; text-transform:uppercase; color:rgba(255,255,255,0.45);">Auditify · Ask IRA</span>
+            </div>
+            <div style="font-family:'Source Serif 4',Georgia,serif; font-size:2.5rem; line-height:1.08; letter-spacing:-0.02em;">Audit smarter.<br>Not harder.</div>
+            <p style="margin-top:16px; max-width:34ch; font-size:0.875rem; line-height:1.6; color:rgba(255,255,255,0.55);">On-dark text uses white at fixed alphas — 0.55 dim, 0.45 muted, 0.06 fills — never opaque grey.</p>
+          </div>
+        </div>
+        <!-- workspace chooser -->
+        <div style="padding:32px; background:var(--paper-0); display:flex; flex-direction:column; justify-content:center; gap:10px;">
+          <div class="t-label" style="margin-bottom:6px;">Choose a workspace</div>
+          <div style="display:flex; align-items:center; gap:12px; padding:14px 16px; border-radius:12px; border:1px solid var(--brand-500); background:rgba(136,56,222,0.15);">
+            <span style="font-size:1.125rem; color:var(--brand-300);">▣</span>
+            <div style="flex:1;"><div style="font-size:0.875rem; font-weight:600; color:var(--ink-900);">Acme Corp — Internal Audit</div><div style="font-size:0.75rem; color:var(--ink-500);">128 members · 14 teams</div></div>
+            <span style="color:var(--brand-300);">✓</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; padding:14px 16px; border-radius:12px; border:1px solid var(--paper-200); background:var(--paper-0);">
+            <span style="font-size:1.125rem; color:var(--ink-400);">▣</span>
+            <div style="flex:1;"><div style="font-size:0.875rem; font-weight:600; color:var(--ink-800);">Acme Corp — Compliance</div><div style="font-size:0.75rem; color:var(--ink-500);">42 members · 5 teams</div></div>
+          </div>
+          <button class="btn btn-primary" style="align-self:flex-start; margin-top:8px;">Enter workspace →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOT ─────────────────────────────────────────────── -->
+    <footer class="foot">
+      <div>DESIGN.md — Editorial GRC · Dark preview · refined 2026-06-08</div>
+      <div>
+        <a href="./DESIGN.md">DESIGN.md</a> ·
+        <a href="./preview.html">Light preview</a> ·
+        <a href="./README.md">README</a>
+      </div>
+    </footer>
+
+  </div>
+</body>
+</html>

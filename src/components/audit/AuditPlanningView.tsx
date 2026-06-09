@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
 import EngagementSetupPanel from '../engagement/EngagementSetupPanel';
 import RacmMappingWorkspace from './RacmMappingWorkspace';
 import { computeRacmState, RACM_STATUS_STYLES, RACM_READINESS_STYLES, RACM_ACTION_STYLES, type RacmSummaryInput, type ComputedRacmState } from './racmStateEngine';
@@ -665,6 +666,7 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
 
 function RacmDashboard({ engagements, onGoToExecution }: { engagements: { sourceRacmVersionId: string }[]; onGoToExecution: () => void }) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const [showImportDrawer, setShowImportDrawer] = useState(false);
   const [importedRows, setImportedRows] = useState<ImportedRacmRow[]>([]);
   const [showMappingWorkspace, setShowMappingWorkspace] = useState(false);
@@ -735,14 +737,18 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
       <div className="flex items-center justify-between">
         <div className="text-[0.75rem] text-text-muted">{totalRacms} RACM{totalRacms !== 1 ? 's' : ''} across {new Set(racmList.map(r => r.process)).size} processes</div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowImportDrawer(true)}
-            className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-[0.75rem] font-medium text-text-secondary hover:bg-white transition-colors cursor-pointer">
-            <Upload size={13} />Import RACM
-          </button>
-          <button onClick={() => setShowCreateRacmModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 border border-primary/30 bg-primary/5 rounded-lg text-[0.75rem] font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer">
-            <Plus size={13} />Create RACM
-          </button>
+          {can('plan_edit') && (
+            <button onClick={() => setShowImportDrawer(true)}
+              className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-[0.75rem] font-medium text-text-secondary hover:bg-white transition-colors cursor-pointer">
+              <Upload size={13} />Import RACM
+            </button>
+          )}
+          {can('plan_edit') && (
+            <button onClick={() => setShowCreateRacmModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 border border-primary/30 bg-primary/5 rounded-lg text-[0.75rem] font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer">
+              <Plus size={13} />Create RACM
+            </button>
+          )}
         </div>
       </div>
 
@@ -918,6 +924,7 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
   onImport: () => void;
 }) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const computed = getRacmComputed(racm);
   const statusCls = RACM_STATUS_STYLES[computed.status];
 
@@ -1001,10 +1008,12 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
 
       {/* Action bar */}
       <div className="flex items-center gap-2">
-        <button onClick={() => setShowAddRisk(true)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer">
-          <Plus size={13} />Add Risk
-        </button>
+        {can('plan_edit') && (
+          <button onClick={() => setShowAddRisk(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer">
+            <Plus size={13} />Add Risk
+          </button>
+        )}
         <button onClick={handleImportRisks}
           className="flex items-center gap-1.5 px-4 py-2 border border-border rounded-lg text-[0.75rem] font-medium text-text-secondary hover:bg-white transition-colors cursor-pointer">
           <Upload size={13} />Import Risks from File

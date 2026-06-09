@@ -15,8 +15,10 @@ import {
   Shield,
 } from 'lucide-react';
 import SmartTable from '../shared/SmartTable';
+import { Pill, type Tone } from '../shared/StatusBadge';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
 
 interface Props {
   /* no external props needed */
@@ -46,6 +48,14 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> =
   Active: { bg: 'bg-success-bg', text: 'text-compliant-700', dot: 'bg-success' },
   'In Mapping': { bg: 'bg-warning-bg', text: 'text-mitigated-700', dot: 'bg-warning' },
   Draft: { bg: 'bg-gray-100', text: 'text-gray-600', dot: 'bg-gray-400' },
+};
+
+// Tone equivalents for the shared Pill primitive (DESIGN.md §7.10.4). STATUS_STYLES
+// above is retained for the KPI filter buttons (which keep a dot + count).
+const STATUS_TONE: Record<string, Tone> = {
+  Active: 'compliant',
+  'In Mapping': 'mitigated',
+  Draft: 'draft',
 };
 
 /* ─── Mock hierarchy data for Risks tab ─── */
@@ -226,6 +236,7 @@ function RiskHierarchy() {
 
 export default function RACMView({}: Props) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const filtered = MOCK_RACMS.filter(r => {
@@ -250,20 +261,24 @@ export default function RACMView({}: Props) {
             <p className="text-sm text-text-secondary mt-1">Manage RACMs across all business processes.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => addToast({ message: 'New RACM template created', type: 'info' })}
-              className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"
-            >
-              <Plus size={14} />
-              Create RACM
-            </button>
-            <button
-              onClick={() => addToast({ message: 'AI is analyzing your processes to generate a RACM...', type: 'info' })}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-primary-medium hover:from-primary-hover hover:to-primary text-white rounded-lg text-[0.8125rem] font-semibold transition-all cursor-pointer"
-            >
-              <Sparkles size={14} />
-              Generate with AI
-            </button>
+            {can('racm_edit') && (
+              <button
+                onClick={() => addToast({ message: 'New RACM template created', type: 'info' })}
+                className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"
+              >
+                <Plus size={14} />
+                Create RACM
+              </button>
+            )}
+            {can('racm_generate') && (
+              <button
+                onClick={() => addToast({ message: 'AI is analyzing your processes to generate a RACM...', type: 'info' })}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-primary-medium hover:from-primary-hover hover:to-primary text-white rounded-lg text-[0.8125rem] font-semibold transition-all cursor-pointer"
+              >
+                <Sparkles size={14} />
+                Generate with AI
+              </button>
+            )}
           </div>
         </div>
 
@@ -402,13 +417,7 @@ export default function RACMView({}: Props) {
               width: '110px',
               render: (item) => {
                 const racm = item as unknown as RACMRow;
-                const s = STATUS_STYLES[racm.status];
-                return (
-                  <span className={`inline-flex items-center gap-1.5 ${s.bg} ${s.text} px-2.5 py-0.5 rounded-full text-[0.75rem] font-semibold whitespace-nowrap`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                    {racm.status}
-                  </span>
-                );
+                return <Pill tone={STATUS_TONE[racm.status]}>{racm.status}</Pill>;
               },
             },
             {

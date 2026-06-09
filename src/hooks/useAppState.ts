@@ -34,7 +34,6 @@ export type View =
   | 'engagement-case-management'
   | 'my-queue'
   | 'closed-case-sampling'
-  | 'vendor-360'
   | 'engagement-compare'
   // Execution
   | 'audit-execution'
@@ -51,15 +50,12 @@ export type View =
   | 'ai-concierge-forensics'
   | 'ai-concierge-table-extractor'
   | 'ai-concierge-workflow-builder'
-  | 'findings'
   // System
   | 'configuration'
   | 'data-sources'
   | 'knowledge-hub'
   | 'admin-users'
   | 'admin-roles'
-  | 'admin-settings'
-  | 'admin-integrations'
   | 'admin-logs'
   // One-Click Audit
   | 'one-click-audit'
@@ -72,8 +68,8 @@ export type View =
   // Dev-only preview routes
   | 'dev-configurable-engagement-v3'
   // Platform
-  | 'platform-usage'
   | 'racm-full-editor'
+  | 'control-detail'
   // Engagement Config (under Programs)
   | 'engagement-config';
 
@@ -114,6 +110,9 @@ export interface AppState {
   selectedWorkflowId: string | null;
   /** Which tab WorkflowDetail should open on (e.g. 'runs' when drilled in from an engagement). */
   workflowDetailInitialTab: 'overview' | 'runs' | 'config';
+  /** Where the executor's Back button returns to. 'business-processes' when launched
+   *  from the Process Hub Workflows tab; null keeps the default (workflow-templates). */
+  workflowExecutorBackView: 'business-processes' | null;
   selectedBPId: string | null;
   /** Business processes created by the user in Process Hub (persisted across navigation). */
   userProcesses: UserProcess[];
@@ -124,7 +123,11 @@ export interface AppState {
   showEmailPreviewModal: boolean;
   showShareModal: boolean;
   showPowerBIWizard: boolean;
-  shareContext: { type: 'report' | 'dashboard' | 'workflow-output'; id: string } | null;
+  shareContext: { type: 'report' | 'dashboard' | 'workflow-output' | 'workspace' | 'process' | 'risk' | 'control' | 'engagement' | 'racm'; id: string } | null;
+  /** Bounding rect of the element that opened the share popover, so it can
+   *  anchor itself next to the trigger (Notion-style). Null → falls back to a
+   *  top-right viewport position. */
+  shareAnchor: { top: number; left: number; right: number; bottom: number; width: number; height: number } | null;
   emailPreviewRecipient: string | null;
   // Report builder
   reportBuilderContext: 'new' | 'action-report' | 'from-template' | null;
@@ -196,6 +199,9 @@ const getInitialView = (): View => {
   if (v === 'reports') return 'reports';
   if (v === 'manage-exceptions') return 'manage-exceptions';
   if (v === 'racm-full-editor') return 'racm-full-editor';
+  if (v === 'control-detail' && params.get('controlId')) return 'control-detail';
+  if (v === 'chat') return 'chat';
+  if (v === 'bp-detail' && params.get('bp')) return 'bp-detail';
   if (v === 'engagement-detail') return 'engagement-detail';
   if (v === 'workflow-executor') return 'workflow-executor';
   if (v === 'engagement-case-management' && params.get('eng')) return 'engagement-case-management';
@@ -215,6 +221,15 @@ const getInitialEngagementId = (): string | null => {
   return new URLSearchParams(window.location.search).get('eng');
 };
 
+// New-tab deep links into the Process Hub BP detail (e.g. a control's risk/RACM
+// opened in a new tab) carry ?view=bp-detail&bp=<id>; seed selectedBPId from it.
+const getInitialBPId = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('view') !== 'bp-detail') return null;
+  return params.get('bp');
+};
+
 const INITIAL_STATE: AppState = {
   view: getInitialView(),
   sidebarExpanded: false,
@@ -224,8 +239,9 @@ const INITIAL_STATE: AppState = {
   showArtifacts: false,
   showChatHistory: false,
   selectedWorkflowId: getInitialWorkflowId(),
-  workflowDetailInitialTab: 'overview',
-  selectedBPId: null,
+  workflowDetailInitialTab: 'runs',
+  workflowExecutorBackView: null,
+  selectedBPId: getInitialBPId(),
   userProcesses: [],
   selectedEngagementId: getInitialEngagementId(),
   selectedRiskId: null,
@@ -234,6 +250,7 @@ const INITIAL_STATE: AppState = {
   showShareModal: false,
   showPowerBIWizard: false,
   shareContext: null,
+  shareAnchor: null,
   emailPreviewRecipient: null,
   reportBuilderContext: null,
   workflowCanvasStage: 0,
@@ -310,7 +327,7 @@ export function useAppState() {
     setState(prev => ({ ...prev, showChatHistory: !prev.showChatHistory }));
   }, []);
 
-  const setSelectedWorkflow = useCallback((id: string | null, initialTab: AppState['workflowDetailInitialTab'] = 'overview') => {
+  const setSelectedWorkflow = useCallback((id: string | null, initialTab: AppState['workflowDetailInitialTab'] = 'runs') => {
     setState(prev => ({ ...prev, selectedWorkflowId: id, workflowDetailInitialTab: initialTab, view: id ? 'workflow-detail' : 'workflow-templates' }));
   }, []);
 
@@ -347,8 +364,8 @@ export function useAppState() {
     setState(prev => ({ ...prev, showEmailPreviewModal: show, emailPreviewRecipient: recipient ?? null }));
   }, []);
 
-  const setShowShareModal = useCallback((show: boolean, context?: AppState['shareContext']) => {
-    setState(prev => ({ ...prev, showShareModal: show, shareContext: context ?? null }));
+  const setShowShareModal = useCallback((show: boolean, context?: AppState['shareContext'], anchor?: AppState['shareAnchor']) => {
+    setState(prev => ({ ...prev, showShareModal: show, shareContext: context ?? null, shareAnchor: anchor ?? null }));
   }, []);
 
   const setShowPowerBIWizard = useCallback((show: boolean) => {
@@ -444,8 +461,8 @@ export function useAppState() {
     }));
   }, []);
 
-  const openWorkflowExecutor = useCallback((workflowId: string) => {
-    setState(prev => ({ ...prev, view: 'workflow-executor' as View, selectedWorkflowId: workflowId }));
+  const openWorkflowExecutor = useCallback((workflowId: string, backTo: AppState['workflowExecutorBackView'] = null) => {
+    setState(prev => ({ ...prev, view: 'workflow-executor' as View, selectedWorkflowId: workflowId, workflowExecutorBackView: backTo }));
   }, []);
 
   const openDashboard = useCallback((dashboardId: string, customFields?: string[]) => {

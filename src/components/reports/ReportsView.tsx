@@ -31,6 +31,8 @@ import { setAll, toggleIn } from '../chat/widgetPickerHelpers';
 import { StatusBadge } from '../shared/StatusBadge';
 import SmartTable from '../shared/SmartTable';
 import { useToast, type ToastType } from '../shared/Toast';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
+import { useCan } from '../../context/CurrentUserContext';
 import FloatingLines from '../shared/FloatingLines';
 import { KpiCountUp } from '../shared/KpiTile';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
@@ -558,6 +560,8 @@ function ChooseReportModal({
   onContinue: (report: typeof GENERATED_REPORTS[0]) => void;
   onAddNew: () => void;
 }) {
+  const { can } = useCan();
+  const canAddReport = can('rp_edit');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -636,12 +640,14 @@ function ChooseReportModal({
           </div>
 
           {/* Add New Report */}
-          <button
-            onClick={onAddNew}
-            className="w-full px-4 py-3 rounded-[8px] bg-primary/10 hover:bg-primary/15 text-primary text-[13px] font-semibold transition-colors cursor-pointer"
-          >
-            + Add New Report
-          </button>
+          {canAddReport && (
+            <button
+              onClick={onAddNew}
+              className="w-full px-4 py-3 rounded-[8px] bg-primary/10 hover:bg-primary/15 text-primary text-[13px] font-semibold transition-colors cursor-pointer"
+            >
+              + Add New Report
+            </button>
+          )}
         </div>
 
         {/* Footer */}
@@ -1609,6 +1615,7 @@ function ConfirmDialog({
 
 function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddComment, title }: { query: QueryShape; index: number; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void; title?: string }) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const safeQuery = query ?? { id: '', risk: '', severity: '', title: '', addedBy: '', kpis: [], summary: '', findings: [], observations: [], answer: '', chartData: [] } as QueryShape;
   const [menuOpen, setMenuOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
@@ -1670,7 +1677,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
             </div>
             <div className="flex items-center gap-4 shrink-0">
               <ManageExceptionsLaunchButton queryId={query.id} compact />
-              {(() => {
+              {can('rp_comment') && (() => {
                 const myComments = comments.filter(c => c.queryId === query.id).length;
                 return (
                   <button
@@ -1723,6 +1730,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                       <Download size={14} />
                       Download
                     </button>
+                    {can('rp_delete') && <>
                     <div className="my-1 border-t border-border-light" />
                     <button
                       onClick={() => { setMenuOpen(false); setShowDeleteConfirm(true); }}
@@ -1731,6 +1739,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                       <Trash2 size={14} />
                       Delete Query
                     </button>
+                    </>}
                   </div>
                 )}
               </div>
@@ -3835,6 +3844,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   onUpdateDescription?: (reportId: string, description: string) => void;
 }) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(initialTemplate ?? null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
@@ -4467,7 +4477,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                 </AnimatePresence>
               </div>
             )}
-            {onShare && (
+            {onShare && can('rp_share') && (
               <button onClick={onShare} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-[8px]">
                 <Share2 size={14} /> Share
               </button>
@@ -5238,6 +5248,8 @@ export default function ReportsView({
   onFocusReportConsumed,
 }: ReportsViewProps = {}) {
   const { addToast, updateToast } = useToast();
+  const { openShare } = useShare();
+  const { can } = useCan();
   const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports'>(() => {
     if (typeof window === 'undefined') return 'my-reports';
     const t = new URLSearchParams(window.location.search).get('tab');
@@ -5696,9 +5708,9 @@ export default function ReportsView({
               )},
               { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Share"><button onClick={() => onShare ? onShare(String(item.id)) : addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Delete"><button onClick={() => setReportToDelete({ id: String(item.id), name: String(item.name) })} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, String(item.name)); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: String(item.id), anchor: rectFromEvent(e) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
+                  <ActionTooltip label="Delete"><button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: String(item.id), name: String(item.name) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
                 </div>
               )},
             ]}
@@ -5792,7 +5804,7 @@ export default function ReportsView({
                       <h3 className="text-[16px] font-semibold leading-[1.3] tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2 min-w-0" title={r.name}>{r.name}</h3>
                       <div className="flex items-center gap-0.5 -mt-1.5 -mr-1.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                         <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                        <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); onShare ? onShare(r.id) : addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
+                        {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: r.id, anchor: rectFromEvent(e) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
                         <ActionTooltip label="Delete"><button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
                       </div>
                     </div>
@@ -5889,8 +5901,8 @@ export default function ReportsView({
               )},
               { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  <ActionTooltip label="Download"><button onClick={() => startReportDownload(addToast, updateToast, String(item.name))} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                  <ActionTooltip label="Share"><button onClick={() => addToast({ type: 'info', message: `Sharing ${item.name}...` })} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, String(item.name)); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: String(item.id), anchor: rectFromEvent(e) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
                 </div>
               )},
             ]}
@@ -5974,7 +5986,7 @@ export default function ReportsView({
                     <h3 className="text-[16px] font-semibold leading-[1.3] tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2 min-w-0" title={r.name}>{r.name}</h3>
                     <div className="flex items-center gap-0.5 -mt-1.5 -mr-1.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                       <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                      <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); addToast({ type: 'info', message: `Sharing ${r.name}...` }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>
+                      {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: r.id, anchor: rectFromEvent(e) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
                     </div>
                   </div>
                   <div className="mt-auto pt-3.5 border-t border-border-light/70 flex items-center justify-between gap-2">

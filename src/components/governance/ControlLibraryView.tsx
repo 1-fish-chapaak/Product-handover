@@ -10,14 +10,20 @@ import {
   AlertTriangle,
   Eye,
   Pencil,
+  Trash2,
   Workflow,
+  Share2,
 } from 'lucide-react';
 import SmartTable from '../shared/SmartTable';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { WORKFLOWS } from '../../data/mockData';
 import CreateControlDrawer, { type NewControlData } from './CreateControlDrawer';
+import { useCreatedControls } from '../../data/createdControlsStore';
 import ControlDetailView from './ControlDetailView';
+import { LinkWorkflowToControlDrawer, type ControlWorkflow } from '../audit/RacmMappingWorkspace';
 import {
   type ControlRow,
   BP_COLORS, AUTOMATION_STYLES, NATURE_STYLES, STATUS_STYLES,
@@ -50,9 +56,37 @@ interface ControlLibraryProps {
 
 export default function ControlLibraryView({ processFilter }: ControlLibraryProps) {
   const { addToast } = useToast();
+  const { can } = useCan();
+  const { openShare } = useShare();
 
   // Stateful controls list
   const [controls, setControls] = useState<ControlRow[]>(SEED_CONTROLS);
+
+  // Controls created via the wizard (e.g. a risk's Link Control → Create Control)
+  // are merged in — newest first — so they appear in the global library too.
+  const created = useCreatedControls();
+  const createdRows: ControlRow[] = created.map(c => {
+    const linkedWorkflows: string[] = [];
+    const linkedWorkflowIds: string[] = [];
+    if (c.workflowChoice === 'link' && c.linkedWorkflowId) {
+      const wf = WORKFLOWS.find(w => w.id === c.linkedWorkflowId);
+      if (wf) { linkedWorkflows.push(wf.name); linkedWorkflowIds.push(wf.id); }
+    }
+    return {
+      id: c.id, controlId: c.id,
+      name: c.name, description: c.description, objective: c.objective,
+      businessProcess: c.businessProcess as ControlRow['businessProcess'],
+      subProcess: c.subProcess,
+      classification: c.classification, nature: c.nature, automation: c.automation,
+      frequency: c.frequency, owner: c.owner,
+      assertions: c.assertions, mappedRisks: c.mappedRisks,
+      linkedWorkflows, linkedWorkflowIds,
+      usedInRACMs: 0,
+      status: (c.workflowChoice === 'link' && c.linkedWorkflowId) ? 'Active' : 'Draft',
+      createdAt: c.createdAt, updatedAt: c.createdAt,
+    };
+  });
+  const allControls = [...createdRows, ...controls];
 
   // Detail view state. On mount, honour a sessionStorage hand-off so
   // deep-links from elsewhere (e.g. the homepage Control Breaks chip) can
@@ -70,6 +104,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
 
   // Drawer state
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
+  const [linkWfControlId, setLinkWfControlId] = useState<string | null>(null);
 
   // Filters — lock BP filter when processFilter is provided
   const [bpFilter, setBpFilter] = useState<string>(processFilter || 'all');
@@ -78,7 +113,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
   const [workflowStatusFilter, setWorkflowStatusFilter] = useState<string>('all');
 
   // Selected control for detail view
-  const selectedControl = selectedControlId ? controls.find(c => c.id === selectedControlId) : null;
+  const selectedControl = selectedControlId ? allControls.find(c => c.id === selectedControlId) : null;
 
   // If detail view is open, render it
   if (selectedControl) {
@@ -94,7 +129,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
   }
 
   // Base controls (process-scoped when embedded)
-  const baseControls = processFilter ? controls.filter(c => c.businessProcess === processFilter) : controls;
+  const baseControls = processFilter ? allControls.filter(c => c.businessProcess === processFilter) : allControls;
 
   // Filtered data
   const filtered = baseControls.filter(c => {
@@ -150,7 +185,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
       controlId,
       name: data.name,
       description: data.description,
-      objective: '',
+      objective: data.objective,
       businessProcess: data.businessProcess as ControlRow['businessProcess'],
       subProcess: data.subProcess,
       classification: data.classification,
@@ -189,20 +224,24 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => addToast({ message: 'Control library exported as CSV', type: 'success' })}
-              className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"
-            >
-              <Download size={14} />
-              Export
-            </button>
-            <button
-              onClick={() => setShowCreateDrawer(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
-            >
-              <Plus size={14} />
-              Create Control
-            </button>
+            {can('ctrl_export') && (
+              <button
+                onClick={() => addToast({ message: 'Control library exported as CSV', type: 'success' })}
+                className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"
+              >
+                <Download size={14} />
+                Export
+              </button>
+            )}
+            {can('ctrl_create') && (
+              <button
+                onClick={() => setShowCreateDrawer(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
+              >
+                <Plus size={14} />
+                Create Control
+              </button>
+            )}
           </div>
         </div>
 
@@ -421,7 +460,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
             {
               key: 'actions',
               label: 'Action',
-              width: '120px',
+              width: '150px',
               sortable: false,
               align: 'center',
               render: (item) => {
@@ -435,27 +474,42 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                     >
                       <Eye size={13} />
                     </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); addToast({ message: `Editing ${ctrl.name}`, type: 'info' }); }}
-                      title="Edit Control"
-                      className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (ctrl.linkedWorkflows.length > 0) {
-                          addToast({ message: `${ctrl.linkedWorkflows.length} workflow(s) already linked to ${ctrl.controlId}`, type: 'info' });
-                        } else {
-                          addToast({ message: `Link a workflow to ${ctrl.controlId}`, type: 'info' });
-                        }
-                      }}
-                      title="Link Workflow"
-                      className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-primary transition-colors cursor-pointer"
-                    >
-                      <Workflow size={13} />
-                    </button>
+                    {can('ctrl_share') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openShare({ type: 'control', id: ctrl.id, anchor: rectFromEvent(e) }); }}
+                        title="Share Control"
+                        className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-primary transition-colors cursor-pointer"
+                      >
+                        <Share2 size={13} />
+                      </button>
+                    )}
+                    {can('ctrl_edit') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); addToast({ message: `Editing ${ctrl.name}`, type: 'info' }); }}
+                        title="Edit Control"
+                        className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                    )}
+                    {can('ctrl_link') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setLinkWfControlId(ctrl.id); }}
+                        title="Link Workflow"
+                        className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-primary transition-colors cursor-pointer"
+                      >
+                        <Workflow size={13} />
+                      </button>
+                    )}
+                    {can('ctrl_delete') && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); addToast({ message: `Deleted ${ctrl.name}`, type: 'success' }); }}
+                        title="Delete Control"
+                        className="p-1.5 rounded-md hover:bg-risk-50 text-text-muted hover:text-risk-700 transition-colors cursor-pointer"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
                 );
               },
@@ -529,6 +583,31 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
             defaultProcess={processFilter}
           />
         )}
+      </AnimatePresence>
+
+      {/* Link Workflow to Control — per-row action; links a workflow onto the control object */}
+      <AnimatePresence>
+        {linkWfControlId && (() => {
+          const ctrl = controls.find(c => c.id === linkWfControlId);
+          if (!ctrl) return null;
+          return (
+            <LinkWorkflowToControlDrawer
+              control={{ name: ctrl.name, description: ctrl.description, isKey: ctrl.classification === 'Key', workflows: [] }}
+              onClose={() => setLinkWfControlId(null)}
+              onLink={(wf: ControlWorkflow) => {
+                setControls(prev => prev.map(c => c.id === ctrl.id
+                  ? {
+                      ...c,
+                      linkedWorkflows: c.linkedWorkflows.includes(wf.name) ? c.linkedWorkflows : [...c.linkedWorkflows, wf.name],
+                      linkedWorkflowIds: c.linkedWorkflowIds.includes(wf.id) ? c.linkedWorkflowIds : [...c.linkedWorkflowIds, wf.id],
+                    }
+                  : c));
+                addToast({ message: `Linked "${wf.name}" to ${ctrl.controlId}`, type: 'success' });
+                setLinkWfControlId(null);
+              }}
+            />
+          );
+        })()}
       </AnimatePresence>
     </div>
   );
