@@ -6,8 +6,7 @@ import {
   AlertTriangle, Sparkles, Building2, Home, Calendar,
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
-  ClipboardCheck, FileText, Target, Layers, Bell,
-  Inbox, FlaskConical,
+  ClipboardCheck, Layers, Bell,
 } from 'lucide-react';
 import type { View } from '../../hooks/useAppState';
 import { useCurrentUser } from '../../context/CurrentUserContext';
