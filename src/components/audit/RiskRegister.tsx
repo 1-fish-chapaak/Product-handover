@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, type ComponentProps } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, Search, X, ChevronRight, ChevronLeft, AlertTriangle,
@@ -11,7 +11,19 @@ import { useCan } from '../../context/CurrentUserContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import ColumnFilter from '../shared/ColumnFilter';
 import ConfirmationModal from '../shared/ConfirmationModal';
-import { Button } from '../shared/Button';
+import { Button as BaseButton } from '../shared/Button';
+// Process Hub standardization: every button gets an 8px (rounded-lg) corner radius. Primary
+// CTAs additionally render flat (no shadow) + semibold and lock to a compact h-8 so all
+// primary buttons across the Process Hub tabs match the agreed standard.
+const Button = (props: ComponentProps<typeof BaseButton>) => {
+  const isPrimary = (props.variant ?? 'primary') === 'primary';
+  return (
+    <BaseButton
+      {...props}
+      className={['rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
+    />
+  );
+};
 import { KpiTile } from '../shared/KpiTile';
 import ListLoadError from '../shared/ListLoadError';
 import ListPlaceholder from '../shared/ListPlaceholder';
@@ -196,8 +208,8 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, presentation
         transition={isModal ? { duration: 0.16 } : { type: 'spring', damping: 30, stiffness: 300 }}
         role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit Risk' : 'Create Risk'}
         className={isModal
-          ? 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-[480px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden'
-          : 'fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col'}>
+          ? 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-[560px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden'
+          : 'fixed top-0 right-0 z-50 w-full max-w-[560px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col'}>
 
         {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
@@ -593,7 +605,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const [subProcessFilter, setSubProcessFilter] = useState<string[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
-  const selectAllRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const armSkeleton = setTimeout(() => setShowSkeleton(true), 150);
@@ -733,28 +744,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   };
   const handleCancelOne = (id: string) => {
     setSelectedRiskIds(prev => prev.filter(s => s !== id));
-  };
-
-  // Select-all helpers based on currently-visible filteredRisks
-  const visibleIds = filteredRisks.map(r => r.id);
-  const selectedVisibleCount = visibleIds.filter(id => selectedRiskIds.includes(id)).length;
-  const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
-  const someVisibleSelected = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length;
-
-  useEffect(() => {
-    if (selectAllRef.current) {
-      selectAllRef.current.indeterminate = someVisibleSelected;
-    }
-  }, [someVisibleSelected]);
-
-  const toggleSelectAll = () => {
-    if (allVisibleSelected) {
-      // Deselect all visible
-      setSelectedRiskIds(prev => prev.filter(id => !visibleIds.includes(id)));
-    } else {
-      // Select all visible (merge with existing selections from other filtered views)
-      setSelectedRiskIds(prev => Array.from(new Set([...prev, ...visibleIds])));
-    }
   };
 
   const toggleSelectRisk = (id: string) => {
@@ -911,14 +900,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   return (
     <div className={embedded ? '' : 'relative h-full overflow-y-auto'}>
       <div className={embedded ? 'space-y-5' : 'relative z-10 max-w-[1200px] mx-auto px-6 py-6 space-y-5'}>
-        {/* KPI strip (4 tiles) — shown in both embedded (Process Hub) and standalone modes.
-            Each tile is a single-select lifecycle-status filter; Total clears. */}
-        <div className="grid grid-cols-4 gap-3">
-          <KpiTile label="Total Risks"  value={String(totalRisks)}       index={0} onClick={() => setActiveStatusTile(null)} />
-          <KpiTile label="Active"       value={String(activeCount)}      index={1} valueClassName="text-compliant-700" onClick={() => setActiveStatusTile(p => p === 'Active' ? null : 'Active')} selected={activeStatusTile === 'Active'} />
-          <KpiTile label="Under Review" value={String(underReviewCount)} index={2} valueClassName="text-high-700" onClick={() => setActiveStatusTile(p => p === 'Under Review' ? null : 'Under Review')} selected={activeStatusTile === 'Under Review'} />
-          <KpiTile label="Draft"        value={String(draftCount)}       index={3} onClick={() => setActiveStatusTile(p => p === 'Draft' ? null : 'Draft')} selected={activeStatusTile === 'Draft'} />
-        </div>
         {/* Toolbar — when embedded inside Process Hub, the create button lives in the
             Process Hub header. Standalone Risk Register keeps its own title + CTA. */}
         {!embedded && (
@@ -985,29 +966,13 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
           </div>
         </div>
 
-        {/* Bulk-select strip — always visible so select-all is reachable from the start. */}
-        {!isLoading && filteredRisks.length > 0 && (
-          <div className="flex items-center gap-2 text-[0.6875rem] text-text-muted">
-            <input
-              ref={selectAllRef}
-              type="checkbox"
-              aria-label="Select all visible risks"
-              checked={allVisibleSelected}
-              onChange={toggleSelectAll}
-              className="w-3.5 h-3.5 rounded-xs border border-ink-300 cursor-pointer accent-brand-600"
-            />
-            <span>
-              {selectedVisibleCount} of {visibleIds.length} selected
-            </span>
-            <button
-              type="button"
-              onClick={() => setSelectedRiskIds([])}
-              className="ml-2 text-brand-700 hover:text-brand-600 font-medium cursor-pointer"
-            >
-              Clear selection
-            </button>
-          </div>
-        )}
+        {/* KPI strip (4 tiles) — single-select lifecycle-status filter; Total clears. */}
+        <div className="grid grid-cols-4 gap-3">
+          <KpiTile label="Total Risks"  value={String(totalRisks)}       index={0} onClick={() => setActiveStatusTile(null)} />
+          <KpiTile label="Active"       value={String(activeCount)}      index={1} valueClassName="text-compliant-700" onClick={() => setActiveStatusTile(p => p === 'Active' ? null : 'Active')} selected={activeStatusTile === 'Active'} />
+          <KpiTile label="Under Review" value={String(underReviewCount)} index={2} valueClassName="text-high-700" onClick={() => setActiveStatusTile(p => p === 'Under Review' ? null : 'Under Review')} selected={activeStatusTile === 'Under Review'} />
+          <KpiTile label="Draft"        value={String(draftCount)}       index={3} onClick={() => setActiveStatusTile(p => p === 'Draft' ? null : 'Draft')} selected={activeStatusTile === 'Draft'} />
+        </div>
 
         {/* Risk Cards — engagement-style list, one card per risk. Click anywhere to open detail. */}
         <div className="space-y-2 min-h-[calc(100vh-280px)]">

@@ -1622,7 +1622,7 @@ function NewRiskDrawer({ defaultProcess, onClose, onSave }: {
         className="fixed inset-0 z-50 bg-ink-900/40 backdrop-blur-[2px]" onClick={onClose} />
       <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
+        className="fixed top-0 right-0 z-50 w-full max-w-[560px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
           <div>
             <h2 className="text-[1rem] font-bold text-ink-900">Create Risk</h2>
@@ -1764,7 +1764,7 @@ function LinkControlDrawer({ alreadyLinkedIds, onClose, onLink }: {
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40" onClick={onClose} />
       <motion.aside initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-[480px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
+        className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
         role="dialog" aria-label="Link Control">
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-4">
@@ -1853,7 +1853,7 @@ function CreateControlMiniDrawer({ onClose, onCreate, defaultProcess }: {
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40" onClick={onClose} />
       <motion.aside initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-[480px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
+        className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
         role="dialog" aria-label="Create Control">
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-4">
@@ -1960,7 +1960,7 @@ export function LinkWorkflowToControlDrawer({ control, onClose, onLink }: {
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40" onClick={onClose} />
       <motion.aside initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-[500px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
+        className="fixed top-0 right-0 bottom-0 w-full max-w-[520px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
         role="dialog" aria-label="Link Workflow to Control">
 
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border">

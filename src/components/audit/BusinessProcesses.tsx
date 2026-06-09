@@ -33,7 +33,19 @@ import RiskRegister, { SEED_RISKS } from './RiskRegister';
 import ColumnFilter from '../shared/ColumnFilter';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import SopDocumentModal from './SopDocumentModal';
-import { Button } from '../shared/Button';
+import { Button as BaseButton } from '../shared/Button';
+// Process Hub standardization: every button gets an 8px (rounded-lg) corner radius. Primary
+// CTAs additionally render flat (no shadow) + semibold and lock to a compact h-8 so all
+// primary buttons across the Process Hub tabs match the agreed standard.
+const Button = (props: React.ComponentProps<typeof BaseButton>) => {
+  const isPrimary = (props.variant ?? 'primary') === 'primary';
+  return (
+    <BaseButton
+      {...props}
+      className={['rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
+    />
+  );
+};
 import ListPlaceholder from '../shared/ListPlaceholder';
 import ListLoadError from '../shared/ListLoadError';
 import FloatingLines from '../shared/FloatingLines';
@@ -790,7 +802,7 @@ function ExtractionReviewWorkspace({ sop, onBack, onAccept, onUpdateRisks, onUpd
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
               className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 backdrop-blur-[2px]" onClick={() => setShowConfirmModal(false)}>
               <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                transition={{ duration: 0.2 }} className="bg-white rounded-xl shadow-2xl border border-canvas-border w-full max-w-[480px]" onClick={e => e.stopPropagation()}>
+                transition={{ duration: 0.2 }} className="bg-white rounded-xl shadow-2xl border border-canvas-border w-full max-w-[560px]" onClick={e => e.stopPropagation()}>
 
                 {/* Header */}
                 <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between">
@@ -949,7 +961,7 @@ function UploadSOPModal({ bpAbbr, retrySopName, onClose, onUploadAndProcess, onS
         className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" onClick={requestClose} />
       <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.98 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-[480px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
+        className="relative w-full max-w-[560px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
 
         {/* Discard-changes confirm strip — only shows when user tried to close after editing */}
         {showDiscardConfirm && (
@@ -3173,17 +3185,6 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   return (
     <div className="space-y-5 -mt-4 pt-5">
 
-      {/* KPI strip (5 tiles) — each is a status filter for the list below. Total =
-          show all; Tested = Effective + In Test + Failed; click the highlighted tile
-          again to clear. Same count-up + spring + hover as the BP Overview KPIs. */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <KpiTile label="Total Controls" value={String(kpis.total)}     index={0} onClick={() => handleKpiClick('total')}     selected={statusKpi === 'total'} />
-        <KpiTile label="Tested"         value={String(kpis.tested)}    index={1} onClick={() => handleKpiClick('tested')}    selected={statusKpi === 'tested'} valueClassName="text-brand-700" />
-        <KpiTile label="Effective"      value={String(kpis.effective)} index={2} onClick={() => handleKpiClick('effective')} selected={statusKpi === 'effective'} valueClassName="text-compliant-700" />
-        <KpiTile label="Failed"         value={String(kpis.failed)}    index={3} onClick={() => handleKpiClick('failed')}    selected={statusKpi === 'failed'} valueClassName="text-risk-700" />
-        <KpiTile label="Pending"        value={String(kpis.pending)}   index={4} onClick={() => handleKpiClick('pending')}   selected={statusKpi === 'pending'} valueClassName="text-mitigated-700" />
-      </div>
-
       {/* Filter row — search on the left, CTA-pill filters + Clear all on the right. */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="relative shrink-0">
@@ -3215,6 +3216,17 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           </Button>
           )}
         </div>
+      </div>
+
+      {/* KPI strip (5 tiles) — each is a status filter for the list below. Total =
+          show all; Tested = Effective + In Test + Failed; click the highlighted tile
+          again to clear. Same count-up + spring + hover as the BP Overview KPIs. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <KpiTile label="Total Controls" value={String(kpis.total)}     index={0} onClick={() => handleKpiClick('total')}     selected={statusKpi === 'total'} />
+        <KpiTile label="Tested"         value={String(kpis.tested)}    index={1} onClick={() => handleKpiClick('tested')}    selected={statusKpi === 'tested'} valueClassName="text-brand-700" />
+        <KpiTile label="Effective"      value={String(kpis.effective)} index={2} onClick={() => handleKpiClick('effective')} selected={statusKpi === 'effective'} valueClassName="text-compliant-700" />
+        <KpiTile label="Failed"         value={String(kpis.failed)}    index={3} onClick={() => handleKpiClick('failed')}    selected={statusKpi === 'failed'} valueClassName="text-risk-700" />
+        <KpiTile label="Pending"        value={String(kpis.pending)}   index={4} onClick={() => handleKpiClick('pending')}   selected={statusKpi === 'pending'} valueClassName="text-mitigated-700" />
       </div>
 
       {/* Bulk-select strip — only renders once at least one card is ticked. */}
@@ -4167,7 +4179,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
             return (<>
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-ink-900/40 backdrop-blur-[2px]" onClick={requestClose} />
               <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
+                className="fixed top-0 right-0 z-50 w-full max-w-[560px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
                 {/* Discard-changes confirm strip */}
                 {showDiscardConfirm && (
                   <div className="p-3 bg-mitigated-50 border-b border-mitigated-200 flex items-center gap-3 text-[0.8125rem]">
@@ -4757,7 +4769,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]"
             onClick={() => setShowFreezeModal(false)}>
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-xl shadow-2xl border border-border-light w-[480px] overflow-hidden"
+              className="bg-white rounded-xl shadow-2xl border border-border-light w-[560px] overflow-hidden"
               onClick={e => e.stopPropagation()}>
               <div className="p-6">
                 {/* Header */}
@@ -5560,7 +5572,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
             aria-label={isOverview ? 'Overview' : `Switch to ${sectionMeta[key as SectionKey].title}`}
             aria-current={isActive ? 'page' : undefined}
             onClick={() => (isOverview ? closeDrilledSection() : switchDrilledSection(key as SectionKey))}
-            className={`group shrink-0 inline-flex items-center gap-2 px-1 pb-2.5 border-b-2 text-[0.8125rem] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 rounded-sm ${
+            className={`group shrink-0 inline-flex items-center gap-2 px-1 pb-2.5 border-b-2 text-[0.8125rem] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 ${
               isActive
                 ? 'border-brand-600 text-brand-700 font-semibold'
                 : 'border-transparent text-ink-500 font-medium hover:text-ink-800'

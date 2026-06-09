@@ -13,7 +13,19 @@ import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import Gated from '../shared/Gated';
 import { useAuditLog } from '../../context/AdminDataContext';
-import { Button } from '../shared/Button';
+import { Button as BaseButton } from '../shared/Button';
+// Process Hub standardization: every button gets an 8px (rounded-lg) corner radius. Primary
+// CTAs additionally render flat (no shadow) + semibold and lock to a compact h-8 so all
+// primary buttons across the Process Hub tabs match the agreed standard.
+const Button = (props: React.ComponentProps<typeof BaseButton>) => {
+  const isPrimary = (props.variant ?? 'primary') === 'primary';
+  return (
+    <BaseButton
+      {...props}
+      className={['rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
+    />
+  );
+};
 import ListLoadError from '../shared/ListLoadError';
 import ListPlaceholder from '../shared/ListPlaceholder';
 import ColumnFilter from '../shared/ColumnFilter';
@@ -2249,7 +2261,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                           type="button"
                           onClick={() => setLinkRiskTarget({ racmId: racm.id, bpAbbr: racm.process })}
                           aria-label="Link risk"
-                          className="shrink-0 inline-flex items-center gap-1 px-2 h-10 rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer"
+                          className="shrink-0 inline-flex items-center gap-1 px-2 h-10 whitespace-nowrap rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer"
                         >
                           <Link2 size={12} className="shrink-0" aria-hidden="true" />
                           Link risk
@@ -2333,6 +2345,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
         {linkRiskTarget && createRiskFromLink && (
           <RiskDrawer
             risk={null}
+            presentation="modal"
             defaultProcess={linkRiskTarget.bpAbbr}
             onClose={() => setCreateRiskFromLink(false)}
             onSave={() => setCreateRiskFromLink(false)}
@@ -2514,7 +2527,7 @@ function LinkRiskDrawer({ bpAbbr, alreadyLinkedIds, onClose, onCreateRisk, onLin
         className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
       <motion.aside initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.16 }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[480px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[560px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
         role="dialog" aria-label="Link Risk to RACM">
 
         {/* Header */}
@@ -2640,7 +2653,7 @@ export function LinkControlPickerDrawer({ riskName, alreadyLinkedIds, onClose, o
         className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
       <motion.aside initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.16 }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[480px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[520px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
         role="dialog" aria-label="Link Existing Control">
 
         {/* Header */}
@@ -2733,7 +2746,7 @@ function ConfirmUnmapModal({ ctlId, onCancel, onConfirm }: {
       className="fixed inset-0 z-[60] flex items-center justify-center bg-ink-900/40 backdrop-blur-[2px]" onClick={onCancel}>
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 16 }}
         role="dialog" aria-modal="true" aria-label="Remove control mapping?"
-        transition={{ duration: 0.18 }} className="bg-white rounded-xl shadow-xl border border-canvas-border w-full max-w-[400px] p-6" onClick={e => e.stopPropagation()}>
+        transition={{ duration: 0.18 }} className="bg-white rounded-xl shadow-xl border border-canvas-border w-full max-w-[560px] p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-2.5 mb-3">
           <div className="p-2 rounded-xl bg-risk-50"><AlertTriangle size={18} className="text-risk-700" aria-hidden="true" /></div>
           <h2 className="text-[1rem] font-bold text-ink-900">Remove control mapping?</h2>
@@ -2801,7 +2814,7 @@ export function WorkflowControlChooserDrawer({ riskName, controls, onPick, onClo
         className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
       <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[480px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col"
+        className="fixed top-0 right-0 z-50 w-full max-w-[560px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col"
         role="dialog" aria-label="Choose a control">
 
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
