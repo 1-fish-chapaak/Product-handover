@@ -34,17 +34,14 @@ function NavItem({ icon: Icon, label, active, expanded, onClick, badge, dot }: {
       onClick={onClick}
       title={!expanded ? label : undefined}
       className={`
-        flex items-center gap-2.5 rounded-lg transition-colors duration-150 relative cursor-pointer
+        flex items-center gap-2.5 rounded-[6px] transition-colors duration-150 relative cursor-pointer
         ${expanded ? 'w-full h-8 px-3.5' : 'w-8 h-8 mx-auto px-0 justify-center'}
         ${active
-          ? 'bg-sidebar-surface-active text-sidebar-accent font-semibold'
+          ? 'bg-brand-500/25 text-sidebar-accent font-semibold'
           : 'text-sidebar-text hover:bg-sidebar-surface-hover hover:text-sidebar-accent'
         }
       `}
     >
-      {active && (
-        <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-sidebar-accent rounded-r-lg" />
-      )}
       <span className="relative shrink-0 flex items-center justify-center">
         <Icon size={18} />
         {dot && !expanded && (
