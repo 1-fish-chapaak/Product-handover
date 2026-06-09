@@ -205,7 +205,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
               )}
             </div>
           )}
-          {headerExtra && <div className="flex items-center gap-2 flex-1 min-w-0">{headerExtra}</div>}
+          {headerExtra && <div className="flex items-center gap-2">{headerExtra}</div>}
           {paginated && !hideResultCount && (
             <div className="text-[12px] text-text-muted shrink-0">
               {sorted.length} result{sorted.length !== 1 ? 's' : ''}
