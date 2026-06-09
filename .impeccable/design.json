@@ -1,0 +1,262 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-18T00:00:00.000Z",
+  "title": "Design System: Auditify Chat",
+  "extensions": {
+    "colorMeta": {
+      "brand-600": {
+        "role": "primary",
+        "displayName": "Royal Audit Purple",
+        "canonical": "#6A12CD",
+        "tonalRamp": ["#26064A", "#3B0B72", "#550FA5", "#6A12CD", "#8838DE", "#A366F0", "#C393FA", "#DCBBFD"]
+      },
+      "brand-900": {
+        "role": "primary",
+        "displayName": "Sidebar Midnight",
+        "canonical": "#26064A",
+        "tonalRamp": ["#26064A", "#3B0B72", "#550FA5", "#6A12CD", "#8838DE", "#A366F0", "#C393FA"]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Paper Canvas",
+        "canonical": "#FCFAFD",
+        "tonalRamp": ["#0F0720", "#1F1433", "#332848", "#4A3D62", "#6B5D82", "#9A8FAE", "#C2B9CB", "#FCFAFD"]
+      },
+      "canvas-elevated": {
+        "role": "neutral",
+        "displayName": "Clean Sheet",
+        "canonical": "#FFFFFF",
+        "tonalRamp": ["#1F1433", "#332848", "#4A3D62", "#6B5D82", "#9A8FAE", "#C2B9CB", "#E5E7EB", "#FFFFFF"]
+      },
+      "canvas-border": {
+        "role": "neutral",
+        "displayName": "Hairline Grey",
+        "canonical": "#E5E7EB",
+        "tonalRamp": ["#1F1433", "#332848", "#4A3D62", "#6B5D82", "#9A8FAE", "#C2B9CB", "#E5E7EB", "#FCFAFD"]
+      },
+      "paper-100": {
+        "role": "neutral",
+        "displayName": "Workpaper Warm",
+        "canonical": "#F3EEE5",
+        "tonalRamp": ["#332848", "#4A3D62", "#6B5D82", "#9A8FAE", "#C2B9CB", "#D6CCB7", "#F3EEE5", "#FAF7F2"]
+      },
+      "ink-800": {
+        "role": "neutral",
+        "displayName": "Brief Ink",
+        "canonical": "#1F1433",
+        "tonalRamp": ["#0F0720", "#1F1433", "#332848", "#4A3D62", "#6B5D82", "#9A8FAE", "#C2B9CB", "#FCFAFD"]
+      },
+      "ink-500": {
+        "role": "neutral",
+        "displayName": "Margin Ink",
+        "canonical": "#6B5D82",
+        "tonalRamp": ["#0F0720", "#1F1433", "#332848", "#4A3D62", "#6B5D82", "#9A8FAE", "#C2B9CB", "#FCFAFD"]
+      },
+      "risk": {
+        "role": "secondary",
+        "displayName": "Editorial Risk Red",
+        "canonical": "#B42318",
+        "tonalRamp": ["#4D0D0A", "#6E1410", "#912018", "#B42318", "#D03A2C", "#E66B5E", "#F4A89F", "#FEF3F2"]
+      },
+      "high": {
+        "role": "secondary",
+        "displayName": "High-Severity Rust",
+        "canonical": "#C2410C",
+        "tonalRamp": ["#3F1404", "#601E06", "#9A3412", "#C2410C", "#E0571F", "#F08151", "#F8B89C", "#FFF7ED"]
+      },
+      "mitigated": {
+        "role": "secondary",
+        "displayName": "Mitigated Ochre",
+        "canonical": "#B45309",
+        "tonalRamp": ["#3D1B02", "#5C2A05", "#92400E", "#B45309", "#D6740E", "#E59A4B", "#F5C892", "#FFFBEB"]
+      },
+      "compliant": {
+        "role": "secondary",
+        "displayName": "Compliant Forest",
+        "canonical": "#15803D",
+        "tonalRamp": ["#062611", "#0B3E1E", "#166534", "#15803D", "#22A957", "#56C780", "#9CE0B5", "#F0FDF4"]
+      },
+      "evidence": {
+        "role": "tertiary",
+        "displayName": "Evidence Blue",
+        "canonical": "#0369A1",
+        "tonalRamp": ["#04243A", "#075985", "#0284C7", "#0369A1", "#0EA5E9", "#38BDF8", "#7DD3FC", "#F0F9FF"]
+      },
+      "draft": {
+        "role": "secondary",
+        "displayName": "Draft Stone",
+        "canonical": "#6B5D82",
+        "tonalRamp": ["#0F0720", "#1F1433", "#332848", "#4A3D62", "#6B5D82", "#9A8FAE", "#C2B9CB", "#F4F2F7"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Hero only — empty Auditify Chat home (hello / Audit smarter. Not harder.). Once per page max."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section openers, chat thread titles, workspace tile titles. Source Serif 4 at weight 500."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card and dialog titles. Inter 600."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Chat messages, AI responses, body copy. Inter 400 at 15px / line-height 1.65. AI responses capped at 66ch."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Dense labels, timestamps, secondary chrome. Inter 500 at 13px. Uses the --text-meta token."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Citation chips, code, IDs, evidence excerpts, file paths, version numbers. JetBrains Mono."
+      }
+    },
+    "shadows": [
+      { "name": "hairline-rest", "value": "0 1px 2px rgba(15, 8, 30, 0.04)", "purpose": "Almost-imperceptible rest shadow on the AI input border and a handful of elevated surfaces." },
+      { "name": "lifted-hover", "value": "0 8px 24px rgba(15, 8, 30, 0.04)", "purpose": "Hover state on large lifted surfaces. Diffuse, never crisp." },
+      { "name": "focus-glow", "value": "0 12px 32px rgba(106, 18, 205, 0.10), 0 0 0 4px rgba(106, 18, 205, 0.10)", "purpose": "AI input focus-within. Combines a brand-tinted lift with the global 4px ring at lighter alpha." },
+      { "name": "focus-ring", "value": "0 0 0 4px rgba(106, 18, 205, 0.24)", "purpose": "Global focus-visible signature applied to every focusable element. The single most consistent visual signature in the product." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0.2, 0, 0, 1)", "purpose": "Default exponential ease-out for state changes. 150–200ms duration." },
+      { "name": "duration-quick", "value": "150ms", "purpose": "Button hover, color shifts, small state changes." },
+      { "name": "duration-standard", "value": "200ms", "purpose": "Card hover, border tints, component-reveal." },
+      { "name": "duration-slow", "value": "300ms", "purpose": "Panel transitions, workspace mount." },
+      { "name": "component-reveal", "value": "200ms cubic-bezier(0.2, 0, 0, 1)", "purpose": "Component mount: opacity 0 → 1 plus translateY 6px → 0. Used on new workspace tiles." },
+      { "name": "ai-pulse", "value": "1800ms cubic-bezier(0.34, 1.56, 0.64, 1) infinite", "purpose": "AI thinking dots (3 brand-400 dots, 200/400ms stagger). The one curve with slight overshoot — kept because it reads as breath, not bounce." },
+      { "name": "ai-caret-blink", "value": "1200ms steps(1) infinite", "purpose": "Streaming caret. Square blink (steps(1)), not sine." },
+      { "name": "shimmer", "value": "1500ms ease-in-out infinite", "purpose": "Skeleton loading shimmer." },
+      { "name": "status-breathe", "value": "2000ms ease-in-out infinite", "purpose": "Status indicator dot (online / live / running). Honors prefers-reduced-motion." },
+      { "name": "reduced-motion-fallback", "value": "0.01ms", "purpose": "Global override under @media (prefers-reduced-motion: reduce). All animations and transitions collapse to instant." }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Solid brand-600. Single most important action in any context.",
+      "html": "<button class=\"ds-btn-primary\">Run audit query</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 14px; background: #6A12CD; color: #FFFFFF; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 14px; font-weight: 600; line-height: 1; border: none; border-radius: 12px; cursor: pointer; box-shadow: 0 1px 2px rgba(38, 6, 74, 0.1); transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1), box-shadow 150ms cubic-bezier(0.2, 0, 0, 1), transform 100ms cubic-bezier(0.2, 0, 0, 1); } .ds-btn-primary:hover { background: #8838DE; box-shadow: 0 4px 8px rgba(38, 6, 74, 0.15); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24); } .ds-btn-primary:active { transform: scale(0.98); background: #3B0B72; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Everyday button on light surfaces. Quiet companion to primary.",
+      "html": "<button class=\"ds-btn-outline\">Save as workflow</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 14px; background: #FFFFFF; color: #6B5D82; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 14px; font-weight: 500; border: 1px solid #E5E7EB; border-radius: 12px; cursor: pointer; transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1), border-color 150ms cubic-bezier(0.2, 0, 0, 1), color 150ms cubic-bezier(0.2, 0, 0, 1); } .ds-btn-outline:hover { background: #F7F0FF; color: #1F1433; border-color: #DCBBFD; } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Toolbar / chrome action. Disappears at rest, fills to brand-50 on hover.",
+      "html": "<button class=\"ds-btn-ghost\" aria-label=\"Edit message\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/><path d=\"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z\"/></svg><span>Edit</span></button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 10px; background: transparent; color: #9A8FAE; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 500; border: none; border-radius: 8px; cursor: pointer; transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1), color 150ms cubic-bezier(0.2, 0, 0, 1); } .ds-btn-ghost:hover { background: #F7F0FF; color: #1F1433; } .ds-btn-ghost:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24); }"
+    },
+    {
+      "name": "Citation Chip",
+      "kind": "chip",
+      "refersTo": "chip-citation",
+      "description": "Inline citation reference. Mono font on brand-50 surface — signals 'verifiable atom.'",
+      "html": "<a href=\"#\" class=\"ds-chip-citation\">[3]</a>",
+      "css": ".ds-chip-citation { display: inline-block; padding: 2px 6px; background: #F7F0FF; color: #550FA5; font-family: JetBrains Mono, ui-monospace, SF Mono, monospace; font-size: 12px; font-weight: 400; line-height: 1.5; border-radius: 9999px; text-decoration: none; transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1); } .ds-chip-citation:hover { background: #EDDEFE; text-decoration: underline; text-underline-offset: 2px; } .ds-chip-citation:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24); }"
+    },
+    {
+      "name": "Default Card",
+      "kind": "card",
+      "refersTo": "card-default",
+      "description": "Flat surface with 1px border. Hover tints the border to brand-200. No shadow at rest.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">Q3 Vendor Concentration</div><p class=\"ds-card-body\">Top 5 vendors represent 62% of total spend across 2,340 invoices.</p></div>",
+      "css": ".ds-card { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; transition: border-color 200ms cubic-bezier(0.2, 0, 0, 1); } .ds-card:hover { border-color: #DCBBFD; } .ds-card-title { font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 16px; font-weight: 600; line-height: 1.35; color: #1F1433; margin: 0 0 6px 0; } .ds-card-body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 14px; font-weight: 400; line-height: 1.5; color: #6B5D82; margin: 0; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "AI Response Surface",
+      "kind": "custom",
+      "refersTo": "ai-response",
+      "description": "The signature surface. Gradient-bordered prose card, 66ch max, with mono meta line above. Sets in Inter, not serif.",
+      "html": "<div class=\"ds-ai-response\"><div class=\"ds-ai-meta\">Plan generated at 14:22 · gpt-4o · 1.2s</div><p class=\"ds-ai-body\">Top 5 vendors represent 62% of total spend. The largest, Acme Logistics, accounts for 18% across <a href=\"#\" class=\"ds-citation\">[1]</a> 412 invoices over the period.</p></div>",
+      "css": ".ds-ai-response { position: relative; background: #FFFFFF; border: 1px solid; border-image: linear-gradient(135deg, rgba(106,18,205,0.24), rgba(168,85,247,0.24)) 1; border-radius: 16px; padding: 24px 28px; max-width: 66ch; } .ds-ai-meta { font-family: JetBrains Mono, ui-monospace, SF Mono, monospace; font-size: 12px; line-height: 1.5; color: #6B5D82; margin: 0 0 8px 0; } .ds-ai-body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 17px; line-height: 1.65; color: #1F1433; margin: 0; font-variant-numeric: tabular-nums; } .ds-citation { display: inline-block; padding: 2px 6px; margin: 0 2px; background: #F7F0FF; color: #550FA5; font-family: JetBrains Mono, ui-monospace, SF Mono, monospace; font-size: 12px; border-radius: 9999px; text-decoration: none; }"
+    },
+    {
+      "name": "AI Input (Composer)",
+      "kind": "input",
+      "refersTo": "input-default",
+      "description": "Chat composer. Hovering surface with the only quad-signal focus state in the product.",
+      "html": "<div class=\"ds-ai-input\"><input type=\"text\" placeholder=\"Ask about your evidence or describe a workflow…\" /><button class=\"ds-ai-submit\" aria-label=\"Submit\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"7\" y1=\"17\" x2=\"17\" y2=\"7\"/><polyline points=\"7 7 17 7 17 17\"/></svg></button></div>",
+      "css": ".ds-ai-input { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 24px; box-shadow: 0 1px 2px rgba(15, 8, 30, 0.04), 0 8px 24px rgba(15, 8, 30, 0.04); transition: border-color 180ms ease, box-shadow 180ms ease; } .ds-ai-input:focus-within { border-color: #C393FA; box-shadow: 0 1px 2px rgba(15, 8, 30, 0.04), 0 12px 32px rgba(106, 18, 205, 0.10), 0 0 0 4px rgba(106, 18, 205, 0.10); } .ds-ai-input input { flex: 1; min-width: 0; height: 36px; padding: 0 4px; background: transparent; border: none; outline: none; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 15px; color: #1F1433; } .ds-ai-input input::placeholder { color: #9A8FAE; } .ds-ai-submit { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #6A12CD; color: #FFFFFF; border: none; border-radius: 9999px; cursor: pointer; transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1); } .ds-ai-submit:hover { background: #8838DE; }"
+    },
+    {
+      "name": "Sidebar Nav Item",
+      "kind": "nav",
+      "refersTo": "sidebar-nav-item",
+      "description": "Dark sidebar row. The persistently-dark surface of the product, anchored to brand-900.",
+      "html": "<nav class=\"ds-sidebar\"><a href=\"#\" class=\"ds-nav-item ds-nav-item-active\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"/></svg><span>Auditify Chat</span></a><a href=\"#\" class=\"ds-nav-item\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\"/></svg><span>Workflows</span></a></nav>",
+      "css": ".ds-sidebar { display: flex; flex-direction: column; gap: 2px; padding: 12px; background: #26064A; border-radius: 16px; } .ds-nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: transparent; color: rgba(255, 255, 255, 0.85); font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 500; border-radius: 8px; text-decoration: none; transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1), color 150ms cubic-bezier(0.2, 0, 0, 1); } .ds-nav-item:hover { background: rgba(255, 255, 255, 0.08); color: #FFFFFF; } .ds-nav-item-active { background: rgba(255, 255, 255, 0.12); color: #FFFFFF; } .ds-nav-item:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Senior Auditor's Notebook",
+    "overview": "Auditify Chat is set, not styled. The page reads like a working notebook in the hands of a senior auditor: warm paper canvas behind a clean elevated sheet, ink-toned typography, marginalia in mono. Authority comes from Source Serif 4 at hero moments and from JetBrains Mono on every number, ID, and evidence excerpt. Inter does the everyday work in between. The deep purple anchor (brand-600 / #6A12CD) is the auditor's pen — used with restraint, never sprayed across the surface.\n\nWhat this system rejects, explicitly: the generic AI chat-app aesthetic (centered bubble streams, sparkle iconography, glow chrome); the heatmap compliance dashboard (red/amber/green tile grids, risk-rating thermometers); SaaS-cream-and-rounded everything (hero-metric templates, identical card grids, glassmorphism, gradient text used as decoration); and consumer-cute (mascots, pastel gradients, illustrative blobs). Auditors are paid to be skeptical — the chrome doesn't perform delight at them.\n\nDensity is comfortable, not cramped: the chat thread breathes (66ch responses, generous vertical rhythm); the workspace tightens up where data lives (tabular numerics mandatory, dense labels at 13px). Motion is responsive and modern — exponential ease-out, 150–200ms state changes, gentle component reveals — never bouncy, never theatrical. prefers-reduced-motion is honored globally.",
+    "keyCharacteristics": [
+      "Warm paper canvas (#FCFAFD) under a clean elevated sheet (#FFFFFF), softened by a subtle three-stop radial gradient mesh so cards read as floating material, not as 1px-bordered rectangles on flat white.",
+      "Borders before shadows. Shadows sparingly. Tinted glow chrome: never.",
+      "Type carries the brand: Source Serif 4 for authority, Inter for the working surface, JetBrains Mono for every number, ID, and evidence excerpt.",
+      "A single deep purple accent used as the auditor's pen — never as a curtain.",
+      "Tabular numerics on every number. Always. No exceptions.",
+      "Motion is exponential ease-out at 150–200ms, with a global reduced-motion fall-through.",
+      "The dark sidebar (brand-900, #26064A) is the only persistently dark surface — anchored every theme."
+    ],
+    "rules": [
+      { "name": "The Auditor's Pen Rule", "body": "brand-600 covers ≤10% of any screen. It is rare on purpose. If the page looks purple, the page is wrong.", "section": "colors" },
+      { "name": "The No-RAG Rule", "body": "Risk / high / mitigated / compliant are never arranged as a thermometric red→amber→green ramp. They are individual nouns. They appear one at a time, paired with an icon or label — never side-by-side as a heat strip.", "section": "colors" },
+      { "name": "The Single Dark Surface Rule", "body": "The sidebar is the only dark surface in the entire product. Dark modals, dark dialogs, dark cards: prohibited. If a surface feels like it wants to be dark, the answer is more whitespace, not more ink.", "section": "colors" },
+      { "name": "The Tinted Mesh Rule", "body": "The body background is never flat white. The three-stop radial mesh (brand-50 top-left, paper-100 bottom-right, brand-100 bottom-center, all at low alpha) is mandatory at the app root. Cards read as floating material because of it.", "section": "colors" },
+      { "name": "The Tabular Number Rule", "body": "Every numeric value in the product — KPIs, table cells, timestamps, percentages, currency, IDs, version numbers — uses font-variant-numeric: tabular-nums. Mixed-width numerals are a bug.", "section": "typography" },
+      { "name": "The Source Serif Authority Rule", "body": "Source Serif appears only at three places: the hero, section openers, and evidence quotes (when an excerpt is set in serif italic). Everywhere else, Inter. Reserving the serif keeps it loud.", "section": "typography" },
+      { "name": "The Mono For Truth Rule", "body": "JetBrains Mono is reserved for verifiable atoms: code, IDs, citation refs, file paths, version numbers, evidence excerpts. It signals 'this is the literal value, you can audit it.' Decorative mono is prohibited.", "section": "typography" },
+      { "name": "The 66ch Response Rule", "body": "AI response prose is capped at 66ch line length. Wider than that and the chat starts to read as a document instead of a conversation. Workspace tables and tiles are exempt.", "section": "typography" },
+      { "name": "The Border-First Rule", "body": "Depth starts at a 1px canvas-border. If a card needs separation from its surroundings, the border is the answer; reach for shadow only when the surface is hovering or actively focused.", "section": "elevation" },
+      { "name": "The No-Glow Rule", "body": "Decorative glow chrome around AI surfaces is explicitly prohibited and has been actively removed from the codebase (ai-glow, ai-shimmer, ai-pulse-ring, ai-float are all neutralized to no-ops). If you're tempted to make something glow because it's AI, the answer is no.", "section": "elevation" },
+      { "name": "The Focus Ring Is Sacred Rule", "body": "The 4px brand-600 @ 24% alpha focus ring appears on every focusable element. It is the single accessibility signature of the product. Do not remove it, do not restyle it per-component.", "section": "elevation" },
+      { "name": "The Workspace-First Rule", "body": "Visual weight, contrast, and motion bias toward the right-side workspace (Query Plan / Coder / Reference, or Workflow tiles). The chat composer is intentionally smaller, less chromed, less animated than the workspace it produces.", "section": "elevation" },
+      { "name": "The Single Gradient Rule", "body": "Two sanctioned gradients exist in the system: the body radial mesh, and the AI response border-image. Every other gradient — text, button, card, decoration — is prohibited.", "section": "elevation" },
+      { "name": "The Sidebar Noise Texture Rule", "body": "The sidebar carries a 1.8% opacity noise texture as its only decoration. Cards, modals, and other surfaces never wear noise.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use brand-600 (#6A12CD) as a rare accent — ≤10% of any screen. It is the auditor's pen.",
+      "Do set every number, ID, timestamp, percentage, and currency in font-variant-numeric: tabular-nums. Use the .tabular utility if a chart or table escaped the global setting.",
+      "Do reserve Source Serif 4 for the hero, section openers, and evidence quotes. Inter for everything else.",
+      "Do cap AI response prose at 66ch. Wider, and the chat reads like a document.",
+      "Do keep the sidebar as the single persistently-dark surface, anchored to brand-900 (#26064A).",
+      "Do apply the 4px brand-600 @ 24% focus ring on every focusable element. It is the global accessibility signature.",
+      "Do pair semantic state with an icon or label. Color is never the sole signal.",
+      "Do honor prefers-reduced-motion — the global rule reduces all animations to 0.01ms. Don't reintroduce motion under reduced-motion conditions.",
+      "Do use exponential ease-out for state changes: cubic-bezier(0.2, 0, 0, 1) at 150–200ms.",
+      "Do prefer borders over shadows for depth. Shadows appear on hover, focus, or for the AI input only."
+    ],
+    "donts": [
+      "Don't build a generic AI chat app. The workspace canvas, not the message stream, is the deliverable.",
+      "Don't arrange risk / high / mitigated / compliant as a thermometric red→amber→green ramp. They are individual nouns paired with icons or labels.",
+      "Don't use the hero-metric template (big number / small label / gradient accent / supporting stats). Prohibited.",
+      "Don't use gradient text (background-clip: text with a gradient background). The .ai-gradient-text utility exists for legacy; prefer solid brand-700.",
+      "Don't use glassmorphism (backdrop-filter: blur on cards) as a default. Forbidden.",
+      "Don't reintroduce decorative AI chrome — no glowing borders, no shimmer-while-streaming, no sparkle iconography.",
+      "Don't use side-stripe borders greater than 1px anywhere except the three Alert Card variants. That is the only sanctioned exception.",
+      "Don't use identical card grids with icon + heading + text repeated endlessly.",
+      "Don't use the em dash (—) in product copy. Comma, colon, semicolon, period, or parentheses.",
+      "Don't add bounce, elastic, or overshoot to motion. Exponential ease-out only.",
+      "Don't introduce a second dark surface. If something feels like it wants to be dark, give it more whitespace.",
+      "Don't add a second gradient. The body radial mesh and the AI response border-image are the only two.",
+      "Don't use mascots, illustrative blobs, pastel gradients, or rounded-everything friendliness. Auditors are paid to be skeptical.",
+      "Don't use pure red, amber, or green. The semantic palette is deliberately tinted away from RAG.",
+      "Don't use Material-style elevation tiers (elevation-1, elevation-2…). This system is flat with a few specific lifted states."
+    ]
+  }
+}
