@@ -6,8 +6,7 @@ import {
   AlertTriangle, Sparkles, Building2, Home, Calendar,
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
-  ClipboardCheck, FileText, Target, Layers, Bell,
-  Inbox, FlaskConical,
+  ClipboardCheck, Layers, Bell,
 } from 'lucide-react';
 import type { View } from '../../hooks/useAppState';
 import { useCurrentUser } from '../../context/CurrentUserContext';
@@ -29,23 +28,39 @@ interface SidebarProps {
 function NavItem({ icon: Icon, label, active, expanded, onClick, badge, dot }: {
   icon: React.ElementType; label: string; active: boolean; expanded: boolean; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void; badge?: string; dot?: boolean;
 }) {
+  const prefersReducedMotion = useReducedMotion();
   return (
-    <button
+    <motion.button
       onClick={onClick}
       title={!expanded ? label : undefined}
+      whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+      transition={{ type: 'spring', stiffness: 600, damping: 30 }}
       className={`
-        flex items-center gap-2.5 rounded-lg transition-colors duration-150 relative cursor-pointer
+        flex items-center gap-2.5 rounded-[6px] transition-colors duration-150 relative cursor-pointer
         ${expanded ? 'w-full h-8 px-3.5' : 'w-8 h-8 mx-auto px-0 justify-center'}
         ${active
-          ? 'bg-sidebar-surface-active text-sidebar-accent font-semibold'
+          ? 'text-sidebar-accent font-semibold'
           : 'text-sidebar-text hover:bg-sidebar-surface-hover hover:text-sidebar-accent'
         }
       `}
     >
+      {/* Animated active pill — shared layoutId glides the highlight between
+          nav items when the selection changes (modern Linear/Vercel-style nav). */}
       {active && (
-        <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-sidebar-accent rounded-r-lg" />
+        <motion.span
+          layoutId="sidebar-active-pill"
+          className="absolute inset-0 rounded-[6px] bg-brand-500/25"
+          transition={prefersReducedMotion ? { duration: 0 } : { type: 'spring', bounce: 0.18, duration: 0.5 }}
+        >
+          {/* Left accent bar — rides along with the pill */}
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-r-full bg-sidebar-accent" />
+        </motion.span>
       )}
-      <span className="relative shrink-0 flex items-center justify-center">
+      <motion.span
+        animate={prefersReducedMotion ? undefined : { scale: active ? [1, 1.1, 1] : 1 }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        className="relative z-10 shrink-0 flex items-center justify-center"
+      >
         <Icon size={18} />
         {dot && !expanded && (
           <span
@@ -53,15 +68,15 @@ function NavItem({ icon: Icon, label, active, expanded, onClick, badge, dot }: {
             aria-hidden="true"
           />
         )}
-      </span>
+      </motion.span>
       <AnimatePresence>
         {expanded && (
           <motion.span
-            initial={{ opacity: 0, width: 0 }}
-            animate={{ opacity: 1, width: 'auto' }}
-            exit={{ opacity: 0, width: 0 }}
-            transition={{ duration: 0.15 }}
-            className="text-[14px] leading-[20px] truncate overflow-hidden whitespace-nowrap"
+            initial={{ opacity: 0, x: -6 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -6, transition: { duration: 0.1, ease: 'easeIn' } }}
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: 0.06 }}
+            className="relative z-10 text-[14px] leading-[20px] truncate whitespace-nowrap"
             style={{ fontWeight: active ? 600 : 520 }}
           >
             {label}
@@ -75,13 +90,13 @@ function NavItem({ icon: Icon, label, active, expanded, onClick, badge, dot }: {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={{ duration: 0.12 }}
-            className="ml-auto text-[12px] font-semibold bg-sidebar-accent text-brand-600 px-[7px] py-[2px] rounded-full tabular-nums"
+            className="relative z-10 ml-auto text-[12px] font-semibold bg-sidebar-accent text-brand-600 px-[7px] py-[2px] rounded-full tabular-nums"
           >
             {badge}
           </motion.span>
         )}
       </AnimatePresence>
-    </button>
+    </motion.button>
   );
 }
 
@@ -172,22 +187,14 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
   const adminViews: View[] = ['admin-users', 'admin-roles', 'admin-logs'];
 
   return (
-    // Outer layout slot — ALWAYS the collapsed 64px width. Neither hovering nor
-    // pinning the rail open reflows the page; the visual rail overlays instead,
-    // so the content never moves/resizes.
-    <div
-      className="relative h-full shrink-0 z-50 w-16"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
-    {/* Visual rail — absolutely positioned so any expanded state (hover OR
-        pinned) floats OVER the content with a drop shadow, instead of pushing it. */}
+    // In-flow rail — animating its width reflows the page, so expanding (hover
+    // OR pinned) pushes the main content right. Content shifts on open.
     <motion.div
       animate={{ width: isExpanded ? 256 : 64 }}
-      transition={{
-        duration: prefersReducedMotion ? 0 : 0.28,
-      }}
-      className={`absolute inset-y-0 left-0 h-full bg-sidebar-bg noise-texture flex flex-col overflow-hidden z-50 ${isExpanded ? 'shadow-[8px_0_32px_-10px_rgba(15,8,30,0.55)]' : ''}`}
+      transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className="h-full bg-sidebar-bg noise-texture flex flex-col shrink-0 overflow-hidden z-50"
     >
       {/* ── Sidebar header: collapsed shows ONLY the bell (centered in 64px);
           expanded shows logo + IRAME.AI + Audit Intelligence on the left,
@@ -199,10 +206,10 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
         <AnimatePresence initial={false}>
           {isExpanded && (
             <motion.div
-              initial={{ opacity: 0, width: 0 }}
-              animate={{ opacity: 1, width: 'auto' }}
-              exit={{ opacity: 0, width: 0 }}
-              transition={{ duration: 0.22, ease: [0.22, 0.68, 0, 1] }}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -8, transition: { duration: 0.1, ease: 'easeIn' } }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1], delay: 0.06 }}
               className="flex items-center gap-3 overflow-hidden"
             >
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-400 flex items-center justify-center shrink-0" style={{ boxShadow: '0 2px 8px rgb(106 18 205 / 0.30)' }}>
@@ -497,6 +504,5 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
         )}
       </div>
     </motion.div>
-    </div>
   );
 }
