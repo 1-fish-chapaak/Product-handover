@@ -8,13 +8,18 @@ import {
   Sparkles, Settings, Palette, Type,
   Image, Layout, X, Edit3, BookOpen, Upload, Lightbulb, Loader2, Trash2,
   List, LayoutGrid, GripVertical, Plus, StickyNote, PanelLeftClose, PanelLeftOpen,
-  ShieldAlert, MoreVertical, Eye, EyeOff, Database, Search, PackageOpen, ExternalLink,
+  MoreVertical, Eye, EyeOff, Database, Search, PackageOpen, ExternalLink,
   MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
   Star, Layers, Check, CloudUpload, RefreshCw, Lock, WifiOff,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
 import { ChromaGrid, handleChromaCardMove } from './ChromaGrid';
+import { ManageExceptionsLaunchButton } from './ManageExceptionsLaunchButton';
+import UploadReportModal from './UploadReportModal';
+import GenerateATRModal from '../exceptions/GenerateATRModal';
+import AtrReportView from './AtrReportView';
+import type { AtrMeta, AtrObservation, AtrInsight, AtrReportData } from './atrTypes';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS } from '../../data/mockData';
 import { REPORT_QUERIES_ATR, type ReportQueryAtr } from '../../data/reportQueries';
@@ -124,6 +129,9 @@ type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   isReadOnly?: boolean;
   /** Display name of the user who shared the report — surfaces in the chip. */
   sharedByName?: string;
+  /** Present when this report is a generated Action Taken Report (renders via
+   *  AtrReportView instead of the standard template/query report layout). */
+  atrData?: AtrReportData;
 };
 
 // Dummy user-created templates. Replace with real data when the create-custom-template flow lands.
@@ -1468,131 +1476,6 @@ function startReportDownload(
   window.setTimeout(() => {
     updateToast(id, { type: 'success', message: `${file} downloaded.` });
   }, 1800);
-}
-
-/**
- * Modern launch-in-new-tab CTA for "Manage Exceptions". On click:
- *   1. A brand-tinted ripple radiates from the click point (tactile feedback).
- *   2. A short shimmer sweeps left→right across the button (state change signal).
- *   3. The trailing arrow "ejects" right and fades (directional cue → new tab).
- *   4. A tiny "Opening in new tab…" pill pops above the button (context hint
- *      so the user is never surprised by the new tab).
- *   5. After 340ms, window.open fires with a URL (?view=manage-exceptions)
- *      that the SPA reads on load to land directly on the Manage Exceptions view.
- *   6. Button is locked during the 340ms window to prevent double-fire.
- *
- * The whole interaction lives under 500ms, respects prefers-reduced-motion
- * (the keyframes auto-shorten to 10ms via the global reduced-motion rule in
- * index.css), and has no dependency on external animation libraries.
- */
-function ManageExceptionsLaunchButton({ queryId, compact = false }: { queryId: string; compact?: boolean }) {
-  const [launching, setLaunching] = useState(false);
-  const [ripple, setRipple] = useState<{ x: number; y: number; id: number } | null>(null);
-
-  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (launching) return;
-    if (!compact) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      setRipple({ x: e.clientX - rect.left, y: e.clientY - rect.top, id: Date.now() });
-    }
-    setLaunching(true);
-    // Kick off a page-level LTR launch pulse so the whole shell nudges right
-    // in sync with the button — reinforces the "content is ejecting" metaphor.
-    window.dispatchEvent(new CustomEvent('app:launch-pulse'));
-    // Fire the new tab just after the user's eye has locked onto the hint.
-    window.setTimeout(() => {
-      const url = `${window.location.pathname}?view=manage-exceptions&from=${encodeURIComponent(queryId)}`;
-      window.open(url, '_blank', 'noopener,noreferrer');
-    }, 340);
-    // Reset state so the button becomes re-usable (same tab stays open).
-    window.setTimeout(() => {
-      setLaunching(false);
-      setRipple(null);
-    }, 700);
-  };
-
-  // Compact link — lives in the QueryCard meta row alongside the icon buttons.
-  // Editorial register: type-only, no fill, no shadow. Hover lifts to brand.
-  if (compact) {
-    return (
-      <button
-        onClick={handleClick}
-        disabled={launching}
-        title="Review & classify exceptions · opens in a new tab"
-        aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-        className={`group inline-flex items-center gap-1.5 h-8 px-2 -mx-2 rounded-[8px] text-[12px] leading-4 font-semibold text-text-secondary hover:text-primary hover:bg-surface-2 cursor-pointer transition-colors ${
-          launching ? 'opacity-60' : ''
-        }`}
-      >
-        <span>Manage exceptions</span>
-        <ArrowRight
-          size={16}
-          className="shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
-        />
-      </button>
-    );
-  }
-
-  return (
-    <button
-      onClick={handleClick}
-      disabled={launching}
-      title="Review & classify exceptions · opens in a new tab"
-      aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-      className={`group relative overflow-hidden inline-flex items-center gap-1.5 h-8 pl-3 pr-2.5 text-[12px] font-semibold text-white rounded-[8px] cursor-pointer transition-all duration-200 shadow-[0_2px_8px_rgba(106,18,205,0.25)] hover:shadow-[0_4px_14px_rgba(106,18,205,0.35)] ${
-        launching ? 'scale-[0.97] shadow-[0_0_0_4px_rgba(106,18,205,0.25),0_4px_14px_rgba(106,18,205,0.35)]' : 'hover:-translate-y-[1px] active:translate-y-0'
-      }`}
-      style={{ background: 'linear-gradient(135deg, #6A12CD 0%, #A366F0 100%)' }}
-    >
-      <ShieldAlert size={14} className="shrink-0 relative z-10" />
-      <span className="relative z-10">Manage Exceptions</span>
-      <ArrowRight
-        size={14}
-        className={`shrink-0 relative z-10 ${launching ? '' : 'transition-transform duration-200 group-hover:translate-x-0.5'}`}
-        style={launching ? { animation: 'launch-arrow-eject 340ms cubic-bezier(0.2, 0, 0, 1) forwards' } : undefined}
-      />
-
-      {/* Ripple from click point */}
-      {ripple && (
-        <span
-          key={ripple.id}
-          aria-hidden="true"
-          className="absolute pointer-events-none rounded-full bg-white/50"
-          style={{
-            left: ripple.x,
-            top: ripple.y,
-            width: 8,
-            height: 8,
-            animation: 'launch-ripple 620ms cubic-bezier(0.2, 0, 0, 1) forwards',
-          }}
-        />
-      )}
-
-      {/* Shimmer sweep */}
-      {launching && (
-        <span
-          aria-hidden="true"
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: 'linear-gradient(100deg, transparent 0%, rgba(255,255,255,0.38) 50%, transparent 100%)',
-            animation: 'launch-shimmer 420ms cubic-bezier(0.4, 0, 0.2, 1) forwards',
-          }}
-        />
-      )}
-
-      {/* Context hint — "Opening in new tab…" */}
-      {launching && (
-        <span
-          aria-hidden="true"
-          className="absolute -top-[32px] left-1/2 text-[10px] font-semibold text-primary bg-white border border-primary/25 px-2 h-6 rounded-full shadow-md whitespace-nowrap flex items-center gap-1 pointer-events-none"
-          style={{ animation: 'launch-hint-in 220ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
-        >
-          <ArrowRight size={12} className="-rotate-45" />
-          Opening in new tab…
-        </span>
-      )}
-    </button>
-  );
 }
 
 /**
@@ -4510,6 +4393,11 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
 
   // Add Query modal — shown from the empty-state report layout.
   const [addQueryOpen, setAddQueryOpen] = useState(false);
+  // Upload Report → Generate ATR flow — only offered on the ATR template (rt-007).
+  const [uploadReportOpen, setUploadReportOpen] = useState(false);
+  const isAtrReport = report.templateId === 'rt-007';
+  // Report-level "Generate ATR" — same editable ATR preview as the Action Hub.
+  const [atrModalOpen, setAtrModalOpen] = useState(false);
 
   // ─── Shared comments state (common activity log across all query cards) ───
   const [comments, setComments] = useState<QueryComment[]>([
@@ -4696,13 +4584,24 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     })()}
                   </div>
                   {!isReadOnly && (
-                    <button
-                      onClick={() => setAddQueryOpen(true)}
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-primary bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-                    >
-                      <Plus size={14} />
-                      Add Query
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {isAtrReport && (
+                        <button
+                          onClick={() => setUploadReportOpen(true)}
+                          className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-white bg-white/15 border border-white/30 rounded-[8px] hover:bg-white/25 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
+                        >
+                          <Upload size={14} />
+                          Upload Report
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setAddQueryOpen(true)}
+                        className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-primary bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                      >
+                        <Plus size={14} />
+                        Add Query
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -4840,6 +4739,14 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setAtrModalOpen(true)}
+                      title="Generate Action Taken Report"
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-primary bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
+                    >
+                      <FileText size={14} />
+                      Generate ATR
+                    </button>
                     <button
                       onClick={() => setActivityLogOpen(true)}
                       title="View this report's activity log"
@@ -5016,6 +4923,14 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                                 )}
                               </div>
                               <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => setAtrModalOpen(true)}
+                                  title="Generate Action Taken Report"
+                                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-primary bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
+                                >
+                                  <FileText size={14} />
+                                  Generate ATR
+                                </button>
                                 <button
                                   onClick={() => setActivityLogOpen(true)}
                                   title="View this report's activity log"
@@ -5290,6 +5205,12 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         }}
       />
 
+      {/* Upload Report → Generate ATR modal — opened from the ATR report cover */}
+      {uploadReportOpen && <UploadReportModal onClose={() => setUploadReportOpen(false)} />}
+
+      {/* Generate ATR — editable Action Taken Report preview (same as Action Hub) */}
+      {atrModalOpen && <GenerateATRModal onClose={() => setAtrModalOpen(false)} />}
+
       {/* Confirm dialog — section delete from Contents */}
       <ConfirmDialog
         open={!!sectionPendingDelete}
@@ -5341,6 +5262,8 @@ export default function ReportsView({
   const [gridSearch, setGridSearch] = useState('');
   const [sharedGridSearch, setSharedGridSearch] = useState('');
   const [viewingReport, setViewingReport] = useState<GeneratedReport | null>(null);
+  // ATR template "Generate" opens the Generate-ATR-from-Observations wizard.
+  const [atrWizardOpen, setAtrWizardOpen] = useState(false);
   const [reportToDelete, setReportToDelete] = useState<{ id: string; name: string } | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const [editingAsCopy, setEditingAsCopy] = useState(false);
@@ -5546,6 +5469,17 @@ export default function ReportsView({
 
 
   if (viewingReport) {
+    // Generated Action Taken Reports render in their dedicated view (the same
+    // content shown in the preview, with Manage Exceptions + Generate ATR).
+    if (viewingReport.atrData) {
+      return (
+        <AtrReportView
+          report={{ ...viewingReport, atrData: viewingReport.atrData }}
+          onBack={() => setViewingReport(null)}
+          onShare={onShare ? () => onShare(viewingReport.id) : undefined}
+        />
+      );
+    }
     // All Bulk Audit reports now render as Editorial (chosen treatment) unless
     // an explicit aestheticVariant overrides it. Internal Audit reports keep
     // the default ReportView.
@@ -6110,6 +6044,9 @@ export default function ReportsView({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      // ATR template → open the Generate-ATR-from-Observations wizard
+                      // (download template → upload → review → Add to Report).
+                      if (rt.id === 'rt-007') { setAtrWizardOpen(true); return; }
                       addToast({ type: 'info', message: `Generating "${rt.name}"...` });
                       setTimeout(() => {
                         const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -6228,6 +6165,34 @@ export default function ReportsView({
           <UploadTemplateModal onClose={() => setShowUploadModal(false)} />
         )}
       </AnimatePresence>
+
+      {/* Generate ATR from Observations — opened by the ATR template "Generate".
+          The review step's "Add to Report" saves the ATR into My Reports. */}
+      {atrWizardOpen && (
+        <UploadReportModal
+          onClose={() => setAtrWizardOpen(false)}
+          onAddToReport={(meta: AtrMeta, observations: AtrObservation[], insights: AtrInsight[]) => {
+            const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const name = meta.auditTitle ? `ATR — ${meta.auditTitle}` : `Action Taken Report — ${today}`;
+            const newReport: GeneratedReport = {
+              id: `gr-atr-${Date.now()}`,
+              templateId: 'rt-007',
+              name,
+              tag: 'Internal Audit',
+              generatedBy: 'You',
+              generatedAt: today,
+              status: 'draft',
+              pages: Math.max(1, observations.length),
+              queries: observations.length,
+              atrData: { meta, observations, insights },
+            };
+            setGeneratedReports(prev => [newReport, ...prev]);
+            setViewingReport(newReport);
+            setAtrWizardOpen(false);
+            addToast({ type: 'success', message: 'Action Taken Report added to My Reports.' });
+          }}
+        />
+      )}
 
       {/* New Report Modal */}
       <AnimatePresence>

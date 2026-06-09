@@ -10,7 +10,7 @@ import {
   Download, Filter, Share2, Loader2,
   MoreVertical, Edit, Trash2, ChevronUp, Eye, EyeOff,
   Search, LineChart, AreaChart, ListChecks,
-  Database, Link2, Zap, ArrowRight, Unlink,
+  Database, Link2, ArrowRight, Unlink,
   Bell, Columns,
   MessageSquare, Star, Upload, Layers, CloudUpload, Check,
   Hash, GripVertical, PieChart as PieChartIcon, LayoutGrid,
@@ -23,6 +23,12 @@ import Gated from '../shared/Gated';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { KpiTile } from '../shared/KpiTile';
 import { AddCardModal } from './add-widget/AddCardModal';
+// ─── Data model (table relationships + multi-table widgets) ───
+import { MODEL_TABLES, DEFAULT_RELATIONSHIPS } from './model/modelData';
+import type { Relationship, WidgetModelConfig, ModelFilter, ModelTable } from './model/relationshipTypes';
+import { buildWidgetRows, distinctValues, colByName, tableById } from './model/joinEngine';
+import RelationshipManagerModal from './model/RelationshipManagerModal';
+import ModelChart from './model/ModelChart';
 import { AddDataModal } from './AddDataModal';
 import { WhiteDropdown } from './add-widget/WhiteDropdown';
 import { ConfigurableChart } from './add-widget/ConfigurableChart';
@@ -961,6 +967,11 @@ interface DragField {
   group: string;
 }
 
+// Width of the docked Filters panel; the main content reserves this space so
+// the panel never overlaps the widgets. Wide enough for the two-column layout
+// (Filters on Page | Data fields).
+const FILTER_PANEL_WIDTH = 640;
+
 const DRAG_FIELDS: DragField[] = [
   { id: 'date', label: 'Date', kind: 'dimension', group: 'Time' },
   { id: 'month', label: 'Month', kind: 'dimension', group: 'Time' },
@@ -1073,75 +1084,67 @@ function CheckboxItem({ label, checked, onChange }: { label: string; checked: bo
 
 function FilterPanel({
   open, onClose,
-  dateRange, onDateRangeChange,
-  status, onStatusChange,
-  risk, onRiskChange,
-  department, onDepartmentChange,
-  onResetAll,
+  modelTables,
   pageFilterFields, onPageFilterFieldsChange,
-  dataLinks, activeCrossFilters, onActiveCrossFiltersChange, onManageConnections,
+  pageFilterValues, onPageFilterValuesChange,
+  crossFilter,
+  onResetAll,
 }: {
   open: boolean;
   onClose: () => void;
-  dateRange: string;
-  onDateRangeChange: (v: string) => void;
-  status: string[];
-  onStatusChange: (v: string[]) => void;
-  risk: string[];
-  onRiskChange: (v: string[]) => void;
-  department: string[];
-  onDepartmentChange: (v: string[]) => void;
-  onResetAll: () => void;
+  modelTables: ModelTable[];
   pageFilterFields: string[];
   onPageFilterFieldsChange: (v: string[]) => void;
-  dataLinks: FieldLink[];
-  activeCrossFilters: string[];
-  onActiveCrossFiltersChange: (v: string[]) => void;
-  onManageConnections: () => void;
+  pageFilterValues: Record<string, (string | number)[]>;
+  onPageFilterValuesChange: (v: Record<string, (string | number)[]>) => void;
+  crossFilter: { table: string; column: string; value: string } | null;
+  onResetAll: () => void;
 }) {
-  const toggleItem = (arr: string[], item: string) =>
-    arr.includes(item) ? arr.filter(x => x !== item) : [...arr, item];
   const [fpPageDragOver, setFpPageDragOver] = useState(false);
-  const [fpCrossDragOver, setFpCrossDragOver] = useState(false);
   const [fpFieldSearch, setFpFieldSearch] = useState('');
-  const [fpFile1Open, setFpFile1Open] = useState(true);
-  const [fpFile2Open, setFpFile2Open] = useState(false);
-  const [fpCrossOpen, setFpCrossOpen] = useState(true);
-  const [fpCrossSearch, setFpCrossSearch] = useState('');
+  const [openTables, setOpenTables] = useState<Set<string>>(() => new Set([modelTables[0]?.id].filter(Boolean) as string[]));
 
-  const fpFilteredDimensions = DRAG_FIELDS.filter(f => f.kind === 'dimension' && f.label.toLowerCase().includes(fpFieldSearch.toLowerCase()));
-  const fpFilteredMeasures = DRAG_FIELDS.filter(f => f.kind === 'measure' && f.label.toLowerCase().includes(fpFieldSearch.toLowerCase()));
-  const getFieldLabel = (id: string) => DRAG_FIELDS.find(f => f.id === id)?.label || id;
+  const splitId = (id: string) => { const [table, column] = id.split('::'); return { table, column }; };
+  const colOf = (id: string) => { const { table, column } = splitId(id); const tbl = modelTables.find(t => t.id === table); return tbl?.columns.find(c => c.name === column); };
+  const fieldLabel = (id: string) => colOf(id)?.label ?? splitId(id).column;
+  const tableLabel = (id: string) => { const { table } = splitId(id); return modelTables.find(t => t.id === table)?.name ?? table; };
 
-  const hasAny = dateRange !== 'last-30-days' || status.length > 0 || risk.length > 0 || department.length > 0;
+  const addField = (id: string) => { if (!pageFilterFields.includes(id)) onPageFilterFieldsChange([...pageFilterFields, id]); };
+  const removeField = (id: string) => {
+    onPageFilterFieldsChange(pageFilterFields.filter(f => f !== id));
+    const { [id]: _drop, ...rest } = pageFilterValues; void _drop;
+    onPageFilterValuesChange(rest);
+  };
+  const toggleValue = (id: string, val: string | number) => {
+    const cur = pageFilterValues[id] ?? [];
+    const next = cur.some(v => String(v) === String(val)) ? cur.filter(v => String(v) !== String(val)) : [...cur, val];
+    onPageFilterValuesChange({ ...pageFilterValues, [id]: next });
+  };
+  const clearValues = (id: string) => onPageFilterValuesChange({ ...pageFilterValues, [id]: [] });
+
+  const hasAny = pageFilterFields.length > 0 || !!crossFilter;
 
   return (
     <AnimatePresence>
       {open && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-black/10"
-            onClick={onClose}
-          />
-          {/* Panel */}
-          <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed top-0 right-0 h-full w-[680px] z-50 bg-canvas border-l border-canvas-border shadow-2xl flex flex-col"
-          >
+        <motion.div
+          initial={{ x: '100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '100%' }}
+          transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+          style={{ width: FILTER_PANEL_WIDTH }}
+          className="fixed top-0 right-0 h-full z-50 bg-canvas border-l border-canvas-border shadow-2xl flex flex-col"
+        >
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-canvas-border shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="p-1.5 rounded-lg bg-brand-50">
                   <Filter size={14} className="text-brand-600" />
                 </div>
-                <span className="text-[0.875rem] font-semibold text-ink-900">Filters</span>
+                <div>
+                  <span className="text-[0.875rem] font-semibold text-ink-900">Filters</span>
+                  <p className="text-[0.625rem] text-ink-400 leading-none mt-0.5">Slice every widget on this dashboard</p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 {hasAny && (
@@ -1155,11 +1158,10 @@ function FilterPanel({
               </div>
             </div>
 
-            {/* Side-by-side content */}
+            {/* Two-column content: Filters on Page | Data fields */}
             <div className="flex flex-1 overflow-hidden min-h-0">
-              {/* Left column — Drop zones */}
+              {/* Left — page slicers */}
               <div className="w-1/2 border-r border-canvas-border overflow-y-auto px-4 py-4 space-y-4">
-                {/* Filters on Page */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
@@ -1167,203 +1169,135 @@ function FilterPanel({
                       <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-500">Filters on Page</span>
                     </div>
                     {pageFilterFields.length > 0 && (
-                      <button
-                        onClick={() => onPageFilterFieldsChange([])}
-                        className="text-[0.625rem] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer"
-                      >
+                      <button onClick={() => { onPageFilterFieldsChange([]); onPageFilterValuesChange({}); }} className="text-[0.625rem] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer">
                         Clear all
                       </button>
                     )}
                   </div>
-                  <div
-                    className={`rounded-xl border-2 border-dashed p-4 flex flex-col items-center justify-center min-h-[100px] transition-colors ${
-                      fpPageDragOver ? 'border-brand-400 bg-brand-50/50' : 'border-ink-200 bg-canvas-elevated'
-                    }`}
-                    onDragOver={e => { e.preventDefault(); setFpPageDragOver(true); }}
-                    onDragLeave={() => setFpPageDragOver(false)}
-                    onDrop={e => {
-                      e.preventDefault();
-                      setFpPageDragOver(false);
-                      const fieldId = e.dataTransfer.getData('fieldId');
-                      if (fieldId && !pageFilterFields.includes(fieldId)) onPageFilterFieldsChange([...pageFilterFields, fieldId]);
-                    }}
-                  >
-                    {pageFilterFields.length > 0 ? (
-                      <div className="flex flex-col gap-1.5 w-full">
-                        {pageFilterFields.map(fId => (
-                          <span key={fId} className="flex items-center justify-between gap-1 bg-brand-50 border border-brand-200 text-brand-700 text-[0.6875rem] font-medium px-2.5 py-1.5 rounded-md">
-                            {getFieldLabel(fId)}
-                            <button onClick={() => onPageFilterFieldsChange(pageFilterFields.filter(f => f !== fId))} className="hover:text-brand-900 cursor-pointer"><X size={10} /></button>
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <>
-                        <span className="text-[0.75rem] font-semibold text-ink-400">DROP FIELDS HERE</span>
-                        <span className="text-[0.6875rem] text-ink-300 mt-0.5">Drag from Data Fields</span>
-                      </>
-                    )}
-                  </div>
-                </div>
 
-                {/* Cross-Data Filters — drop zone */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="size-2 rounded-full bg-evidence" />
-                      <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-500">Cross-Data Filters</span>
-                    </div>
-                    {activeCrossFilters.length > 0 && (
-                      <button
-                        onClick={() => onActiveCrossFiltersChange([])}
-                        className="text-[0.625rem] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer"
-                      >
-                        Clear all
-                      </button>
-                    )}
-                  </div>
-                  {dataLinks.length === 0 ? (
-                    <div className="w-full rounded-xl border-2 border-dashed border-ink-100 bg-ink-50/30 p-5 flex flex-col items-center justify-center min-h-[90px]">
-                      <Link2 size={16} className="text-ink-200 mb-2" />
-                      <span className="text-[0.6875rem] font-medium text-ink-300 mb-3">No connections yet</span>
-                      <button
-                        onClick={onManageConnections}
-                        className="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-[0.6875rem] font-semibold rounded-full transition-colors cursor-pointer shadow-sm"
-                      >
-                        Connect Data Sources
-                      </button>
+                  {pageFilterFields.length === 0 ? (
+                    <div
+                      className={`rounded-xl border-2 border-dashed p-5 flex flex-col items-center justify-center min-h-[110px] transition-colors ${
+                        fpPageDragOver ? 'border-brand-400 bg-brand-50/50' : 'border-ink-200 bg-canvas-elevated'
+                      }`}
+                      onDragOver={e => { e.preventDefault(); setFpPageDragOver(true); }}
+                      onDragLeave={() => setFpPageDragOver(false)}
+                      onDrop={e => { e.preventDefault(); setFpPageDragOver(false); const id = e.dataTransfer.getData('fieldId'); if (id) addField(id); }}
+                    >
+                      <span className="text-[0.75rem] font-semibold text-ink-400">DROP A FIELD HERE</span>
+                      <span className="text-[0.6875rem] text-ink-300 mt-0.5 text-center">Drag a field from the right, or click it, to slice the whole page</span>
                     </div>
                   ) : (
                     <div
-                      className={`rounded-xl border-2 border-dashed p-4 flex flex-col items-center justify-center min-h-[80px] transition-colors ${
-                        fpCrossDragOver ? 'border-brand-400 bg-brand-50/50' : 'border-ink-200 bg-canvas-elevated'
-                      }`}
-                      onDragOver={e => { e.preventDefault(); if (e.dataTransfer.types.includes('crossLinkId')) setFpCrossDragOver(true); }}
-                      onDragLeave={() => setFpCrossDragOver(false)}
-                      onDrop={e => {
-                        e.preventDefault();
-                        setFpCrossDragOver(false);
-                        const linkId = e.dataTransfer.getData('crossLinkId');
-                        if (linkId && !activeCrossFilters.includes(linkId)) onActiveCrossFiltersChange([...activeCrossFilters, linkId]);
-                      }}
+                      className={`space-y-2.5 rounded-xl border-2 border-dashed p-2.5 transition-colors ${fpPageDragOver ? 'border-brand-400 bg-brand-50/40' : 'border-transparent'}`}
+                      onDragOver={e => { e.preventDefault(); setFpPageDragOver(true); }}
+                      onDragLeave={() => setFpPageDragOver(false)}
+                      onDrop={e => { e.preventDefault(); setFpPageDragOver(false); const id = e.dataTransfer.getData('fieldId'); if (id) addField(id); }}
                     >
-                      {activeCrossFilters.length > 0 ? (
-                        <div className="flex flex-col gap-1.5 w-full">
-                          {activeCrossFilters.map(linkId => {
-                            const link = dataLinks.find(l => l.id === linkId);
-                            if (!link) return null;
-                            const label = link.fieldA === link.fieldB ? link.fieldA : `${link.fieldA} · ${link.fieldB}`;
-                            return (
-                              <span key={linkId} className="flex items-center justify-between gap-1 bg-brand-50 border border-brand-200 text-brand-700 text-[0.6875rem] font-medium px-2.5 py-1.5 rounded-md">
-                                {label}
-                                <button onClick={() => onActiveCrossFiltersChange(activeCrossFilters.filter(id => id !== linkId))} className="hover:text-evidence-900 cursor-pointer"><X size={10} /></button>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <>
-                          <span className="text-[0.75rem] font-semibold text-ink-400">DROP LINKS HERE</span>
-                          <span className="text-[0.6875rem] text-ink-300 mt-0.5">Drag from Cross-Data Links</span>
-                        </>
-                      )}
+                      {pageFilterFields.map(fId => {
+                        const { table, column } = splitId(fId);
+                        const values = distinctValues(modelTables, table, column);
+                        const selected = pageFilterValues[fId] ?? [];
+                        return (
+                          <div key={fId} className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
+                            <div className="flex items-center justify-between gap-1 px-2.5 py-2 bg-brand-50/60 border-b border-canvas-border">
+                              <div className="min-w-0">
+                                <div className="text-[0.75rem] font-semibold text-ink-800 truncate">{fieldLabel(fId)}</div>
+                                <div className="text-[0.5625rem] text-ink-400 truncate">{tableLabel(fId)}{selected.length > 0 ? ` · ${selected.length} selected` : ' · all'}</div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {selected.length > 0 && (
+                                  <button onClick={() => clearValues(fId)} className="text-[0.5625rem] font-semibold text-brand-600 hover:text-brand-800 px-1 cursor-pointer">Clear</button>
+                                )}
+                                <button onClick={() => removeField(fId)} className="p-1 rounded hover:bg-risk-50 text-ink-400 hover:text-risk-700 cursor-pointer"><X size={11} /></button>
+                              </div>
+                            </div>
+                            <div className="p-2 flex flex-wrap gap-1.5 max-h-[150px] overflow-y-auto">
+                              {values.map(v => {
+                                const on = selected.some(s => String(s) === String(v));
+                                return (
+                                  <button
+                                    key={String(v)}
+                                    onClick={() => toggleValue(fId, v)}
+                                    className={`inline-flex items-center gap-1 h-7 px-2 rounded-md text-[0.6875rem] font-medium border transition-colors cursor-pointer ${
+                                      on ? 'bg-brand-600 border-brand-600 text-white' : 'bg-canvas border-canvas-border text-ink-600 hover:border-brand-300 hover:text-brand-700'
+                                    }`}
+                                  >
+                                    {on && <Check size={10} />}{String(v)}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Right column — Data fields */}
+              {/* Right — data fields (drag or click to add a page filter) */}
               <div className="w-1/2 overflow-y-auto px-4 py-4 space-y-3">
-                <div className="text-[0.9375rem] font-semibold text-ink-900 px-1">Data</div>
-
-                {/* Search */}
+                <div className="text-[0.9375rem] font-semibold text-ink-900 px-1">Data fields</div>
                 <div className="relative">
                   <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
                   <input
                     type="text"
-                    placeholder="Search"
+                    placeholder="Search fields"
                     value={fpFieldSearch}
                     onChange={e => setFpFieldSearch(e.target.value)}
                     className="w-full h-9 pl-8 pr-3 bg-canvas-elevated border border-canvas-border rounded-lg text-[0.75rem] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
                   />
                 </div>
 
-                <FileTreeView
-                  files={[
-                    { name: 'Invoice_Master.xlsx', icon: 'excel', sheets: [{ name: 'Sheet1', columns: fpFilteredDimensions.map(f => f.label) }] },
-                    { name: 'Vendor_Finance.xlsx', icon: 'excel', sheets: [{ name: 'Sheet1', columns: fpFilteredMeasures.map(f => f.label) }] },
-                  ]}
-                  draggable
-                  fieldIdMap={Object.fromEntries(DRAG_FIELDS.map(f => [f.label, f.id]))}
-                />
-
-                {/* Cross-Data section */}
-                {dataLinks.length > 0 && (<>
-                  <div className="text-[0.9375rem] font-semibold text-ink-900 px-1 pt-2 border-t border-canvas-border">Cross-Data</div>
-                  <div className="relative">
-                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-                    <input
-                      type="text"
-                      placeholder="Search"
-                      value={fpCrossSearch}
-                      onChange={e => setFpCrossSearch(e.target.value)}
-                      className="w-full h-9 pl-8 pr-3 bg-canvas-elevated border border-canvas-border rounded-lg text-[0.75rem] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
-                    />
-                  </div>
-                </>)}
-                {dataLinks.length > 0 && (
-                  <div className="bg-canvas-elevated rounded-md border border-canvas-border overflow-hidden">
-                    <button
-                      onClick={() => setFpCrossOpen(!fpCrossOpen)}
-                      className="w-full flex items-center justify-between px-2.5 py-2 bg-gradient-to-r from-brand-50 to-white border-b border-canvas-border hover:from-brand-100/50 hover:to-white transition-all cursor-pointer"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <Link2 size={12} className="text-brand-600" />
-                        <span className="text-[0.6875rem] font-semibold text-ink-800">Cross-Data Links</span>
-                        <span className="text-[0.625rem] text-ink-400">{dataLinks.length}</span>
+                <div className="rounded-lg border border-canvas-border overflow-hidden">
+                  {modelTables.map(tbl => {
+                    const dims = tbl.columns
+                      .filter(c => c.role === 'dimension')
+                      .filter(c => !fpFieldSearch || c.label.toLowerCase().includes(fpFieldSearch.toLowerCase()));
+                    if (dims.length === 0) return null;
+                    const isOpen = openTables.has(tbl.id) || !!fpFieldSearch;
+                    return (
+                      <div key={tbl.id} className="border-b border-canvas-border/60 last:border-b-0">
+                        <button
+                          onClick={() => setOpenTables(prev => { const n = new Set(prev); if (n.has(tbl.id)) n.delete(tbl.id); else n.add(tbl.id); return n; })}
+                          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-brand-50/40 cursor-pointer"
+                        >
+                          <ChevronDown size={12} className={`text-ink-400 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
+                          <Database size={12} className="text-brand-500" />
+                          <span className="text-[0.75rem] font-semibold text-ink-800 flex-1 text-left truncate">{tbl.name}</span>
+                        </button>
+                        {isOpen && (
+                          <div className="pb-1.5">
+                            {dims.map(c => {
+                              const id = `${tbl.id}::${c.name}`;
+                              const added = pageFilterFields.includes(id);
+                              return (
+                                <div
+                                  key={c.name}
+                                  draggable
+                                  onDragStart={e => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('fieldId', id); }}
+                                  onClick={() => (added ? removeField(id) : addField(id))}
+                                  className={`group flex items-center gap-2 pl-8 pr-3 py-1.5 cursor-grab active:cursor-grabbing transition-colors ${added ? 'bg-brand-50/60' : 'hover:bg-brand-50/40'}`}
+                                >
+                                  <Type size={11} className="text-ink-300 shrink-0" />
+                                  <span className="text-[0.75rem] text-ink-700 flex-1 truncate">{c.label}</span>
+                                  {added ? <Check size={12} className="text-brand-600" /> : <Plus size={12} className="text-ink-300 opacity-0 group-hover:opacity-100" />}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <ChevronDown size={12} className={`text-brand-600 transition-transform ${fpCrossOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {fpCrossOpen && (
-                      <div className="px-1.5 py-1">
-                        {dataLinks.filter(link => {
-                          if (!fpCrossSearch) return true;
-                          const q = fpCrossSearch.toLowerCase();
-                          return link.fieldA.toLowerCase().includes(q) || link.fieldB.toLowerCase().includes(q);
-                        }).map(link => {
-                          const label = link.fieldA === link.fieldB ? link.fieldA : `${link.fieldA} · ${link.fieldB}`;
-                          const sA = FILE_SOURCES.find(s => s.id === link.sourceA);
-                          const sB = FILE_SOURCES.find(s => s.id === link.sourceB);
-                          const isActive = activeCrossFilters.includes(link.id);
-                          return (
-                            <div
-                              key={link.id}
-                              draggable
-                              onDragStart={e => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('crossLinkId', link.id); }}
-                              className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-grab transition-colors active:cursor-grabbing ${
-                                isActive ? 'bg-brand-50/50' : 'hover:bg-brand-50/50'
-                              }`}
-                            >
-                              <svg className="shrink-0 size-3 text-ink-300" viewBox="0 0 12 12" fill="currentColor">
-                                <circle cx="4" cy="3" r="1" /><circle cx="8" cy="3" r="1" />
-                                <circle cx="4" cy="6" r="1" /><circle cx="8" cy="6" r="1" />
-                                <circle cx="4" cy="9" r="1" /><circle cx="8" cy="9" r="1" />
-                              </svg>
-                              <div className="min-w-0">
-                                <div className="text-[0.75rem] text-ink-700 truncate">{label}</div>
-                                <div className="text-[0.5625rem] text-ink-400 truncate">{sA?.name?.split('.')[0]} ↔ {sB?.name?.split('.')[0]}</div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
+                <p className="text-[0.625rem] text-ink-400 px-1 leading-relaxed">
+                  Filters apply to every related widget through the data-model connections. A widget on an unrelated table is left unchanged — just like Power BI.
+                </p>
               </div>
             </div>
           </motion.div>
-        </>
       )}
     </AnimatePresence>
   );
@@ -3001,7 +2935,6 @@ function WidgetCard({
   onDelete,
   onFilter,
   addToast,
-  pageFilterFields,
   widgetFields,
   dataLinks: dataLinksFromParent,
   onRemovePageFilter,
@@ -3099,15 +3032,9 @@ function WidgetCard({
     }
   };
 
-  const matchingPageFilters = pageFilterFields && widgetFields
-    ? pageFilterFields.filter(f => widgetFields.includes(f))
-    : [];
-  const hasActivePageFilter = matchingPageFilters.length > 0;
-  const hasPageFiltersButNoMatch = pageFilterFields && pageFilterFields.length > 0 && !hasActivePageFilter;
-
   return (
     <div
-      className={`glass-card rounded-xl transition-all duration-300 group relative flex flex-col cursor-pointer ${colSpan === 2 ? 'lg:col-span-2' : ''} ${hasActivePageFilter ? 'ring-2 ring-brand-400/40 border-brand-200 shadow-[0_0_16px_-4px_rgba(106,18,205,0.12)]' : ''} ${hasPageFiltersButNoMatch ? 'opacity-40' : ''}`}
+      className={`glass-card rounded-xl transition-all duration-300 group relative flex flex-col cursor-pointer ${colSpan === 2 ? 'lg:col-span-2' : ''}`}
       style={{ minHeight: 260, maxHeight: 800 }}
       onClick={() => onExpand?.()}
       onMouseEnter={() => setHovered(true)}
@@ -3899,399 +3826,6 @@ const FILE_SOURCES = [
   },
 ];
 
-interface ConnectTablesSource { id: string; name: string; fields: string[] }
-
-function ConnectTablesModal({ open, onClose, addToast, links, setLinks, sources }: {
-  open: boolean;
-  onClose: () => void;
-  addToast: (t: { message: string; type: ToastType }) => void;
-  links: FieldLink[];
-  setLinks: React.Dispatch<React.SetStateAction<FieldLink[]>>;
-  /** Sources to choose from. When provided, replaces the static FILE_SOURCES.
-   *  Used by SQL / combo dashboards to expose real DB tables alongside files. */
-  sources?: ConnectTablesSource[];
-}) {
-  const [pickedA, setPickedA] = useState<string | null>(null);
-  const [pickedB, setPickedB] = useState<string | null>(null);
-  const [selectingField, setSelectingField] = useState<{ side: 'A' | 'B'; field: string } | null>(null);
-  const [detecting, setDetecting] = useState(false);
-
-  const SOURCES = sources && sources.length > 0 ? sources : FILE_SOURCES;
-  const srcA = SOURCES.find(s => s.id === pickedA);
-  const srcB = SOURCES.find(s => s.id === pickedB);
-  const inFieldMode = pickedA && pickedB && srcA && srcB;
-
-  const linkedForPair = links.filter(l =>
-    (l.sourceA === pickedA && l.sourceB === pickedB) ||
-    (l.sourceA === pickedB && l.sourceB === pickedA)
-  );
-  const linkedFieldsA = new Set(linkedForPair.map(l => l.sourceA === pickedA ? l.fieldA : l.fieldB));
-  const linkedFieldsB = new Set(linkedForPair.map(l => l.sourceB === pickedB ? l.fieldB : l.fieldA));
-
-  // Count links per source pair
-  const getLinkCount = (aId: string, bId: string) =>
-    links.filter(l => (l.sourceA === aId && l.sourceB === bId) || (l.sourceA === bId && l.sourceB === aId)).length;
-
-  const handleFieldClick = (side: 'A' | 'B', field: string) => {
-    if (!selectingField) {
-      setSelectingField({ side, field });
-      return;
-    }
-    // If clicking same side, swap selection
-    if (selectingField.side === side) {
-      setSelectingField(selectingField.field === field ? null : { side, field });
-      return;
-    }
-    // Clicking opposite side — create link
-    const fA = side === 'A' ? field : selectingField.field;
-    const fB = side === 'B' ? field : selectingField.field;
-    const sA = pickedA!;
-    const sB = pickedB!;
-    const exists = links.some(l => l.sourceA === sA && l.fieldA === fA && l.sourceB === sB && l.fieldB === fB);
-    if (!exists) {
-      setLinks(prev => [...prev, { id: `l-${Date.now()}`, sourceA: sA, fieldA: fA, sourceB: sB, fieldB: fB }]);
-      addToast({ message: `Linked ${fA} → ${fB}`, type: 'success' });
-    }
-    setSelectingField(null);
-  };
-
-  const handleAutoDetect = () => {
-    setDetecting(true);
-    setTimeout(() => {
-      const auto: FieldLink[] = [];
-      // For each pair of sources, find fields with matching names
-      for (let i = 0; i < FILE_SOURCES.length; i++) {
-        for (let j = i + 1; j < FILE_SOURCES.length; j++) {
-          const a = FILE_SOURCES[i], b = FILE_SOURCES[j];
-          a.fields.forEach(fA => {
-            b.fields.forEach(fB => {
-              if (fA.toLowerCase() === fB.toLowerCase()) {
-                auto.push({ id: `auto-${a.id}-${b.id}-${fA}`, sourceA: a.id, fieldA: fA, sourceB: b.id, fieldB: fB });
-              }
-            });
-          });
-        }
-      }
-      // Also add some semantic matches
-      auto.push({ id: 'auto-sem-1', sourceA: 'invoice-master', fieldA: 'Date', sourceB: 'vendor-finance', fieldB: 'Processing Time (d)' });
-      auto.push({ id: 'auto-sem-2', sourceA: 'invoice-master', fieldA: 'Vendor Name', sourceB: 'vendor-finance', fieldB: 'Invoice Amount (₹)' });
-      setLinks(prev => {
-        const existing = new Set(prev.map(l => `${l.sourceA}|${l.fieldA}|${l.sourceB}|${l.fieldB}`));
-        return [...prev, ...auto.filter(a => !existing.has(`${a.sourceA}|${a.fieldA}|${a.sourceB}|${a.fieldB}`))];
-      });
-      setDetecting(false);
-      addToast({ message: `${auto.length} field mappings detected`, type: 'success' });
-    }, 2000);
-  };
-
-  if (!open) return null;
-
-  return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/40 z-[200]" onClick={onClose} />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: -8 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.97 }}
-        transition={{ duration: 0.15, ease: [0.22, 0.68, 0, 1] }}
-        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-canvas-elevated rounded-2xl border border-canvas-border shadow-2xl z-[201] flex flex-col overflow-hidden"
-        style={{ width: 'min(1200px, 96vw)', height: 'min(775px, 85vh)' }}
-        role="dialog" aria-modal="true" aria-label="Connect Tables"
-      >
-        {/* Header */}
-        <div className="shrink-0 flex items-center justify-between px-6 py-3 border-b border-canvas-border">
-          <div className="flex items-center gap-2.5">
-            <div className="bg-brand-50 rounded-lg size-7 flex items-center justify-center">
-              <Database size={14} className="text-brand-600" />
-            </div>
-            {inFieldMode ? (
-              <div className="flex items-center gap-2">
-                <button onClick={() => { setPickedA(null); setPickedB(null); setSelectingField(null); }} className="text-[0.8125rem] text-ink-500 hover:text-brand-600 transition-colors cursor-pointer">
-                  All Sources
-                </button>
-                <ChevronDown size={12} className="text-ink-400 -rotate-90" />
-                <span className="text-[0.9375rem] font-semibold text-ink-900">{srcA.name} ↔ {srcB.name}</span>
-              </div>
-            ) : (
-              <span className="text-[0.9375rem] font-semibold text-ink-900">Connect Data Sources</span>
-            )}
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-2 transition-colors cursor-pointer" aria-label="Close">
-            <X size={18} className="text-ink-500" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-
-          {/* Auto-detect banner */}
-          <div className="flex items-center justify-between p-4 rounded-xl bg-brand-50/60 border border-brand-100">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-brand-600"><Zap size={15} className="text-white" /></div>
-              <div>
-                <div className="text-[0.8125rem] font-bold text-ink-900">Smart Link</div>
-                <div className="text-[0.75rem] text-ink-500">Let IRA auto-detect field mappings across all files</div>
-              </div>
-            </div>
-            <button
-              onClick={handleAutoDetect}
-              disabled={detecting}
-              className="flex items-center gap-2 px-4 h-9 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer disabled:opacity-60"
-            >
-              {detecting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              {detecting ? 'Scanning...' : 'Auto Detect'}
-            </button>
-          </div>
-
-          {/* Step 1: File picker (when no pair selected) */}
-          {!inFieldMode && (
-            <>
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[0.6875rem] text-ink-500 uppercase tracking-wide">Choose two files to connect</span>
-                <span className="text-[0.75rem] text-ink-400">{FILE_SOURCES.length} data sources available</span>
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 max-h-[320px] overflow-y-scroll pr-1">
-                {FILE_SOURCES.map(src => {
-                  const isA = pickedA === src.id;
-                  const isB = pickedB === src.id;
-                  const isPicked = isA || isB;
-                  const totalLinks = FILE_SOURCES.filter(s => s.id !== src.id).reduce((sum, other) => sum + getLinkCount(src.id, other.id), 0);
-                  return (
-                    <button
-                      key={src.id}
-                      onClick={() => {
-                        if (isPicked) {
-                          if (isA) setPickedA(null);
-                          else setPickedB(null);
-                        } else if (!pickedA) setPickedA(src.id);
-                        else if (!pickedB) setPickedB(src.id);
-                      }}
-                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg border transition-all cursor-pointer text-left ${
-                        isPicked
-                          ? 'border-brand-400 bg-brand-50/50'
-                          : 'border-canvas-border bg-canvas hover:border-brand-200'
-                      }`}
-                    >
-                      <div className={`p-1.5 rounded-lg ${isPicked ? 'bg-brand-600' : 'bg-canvas-elevated border border-canvas-border'}`}>
-                        <FileText size={13} className={isPicked ? 'text-white' : 'text-ink-500'} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[0.8125rem] font-semibold text-ink-900">{src.name}</div>
-                        <div className="text-[0.6875rem] text-ink-500">{src.fields.length} columns</div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {totalLinks > 0 && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[0.625rem] font-semibold">
-                            <Link2 size={9} />{totalLinks}
-                          </span>
-                        )}
-                        {isPicked && (
-                          <span className="w-5 h-5 rounded-full bg-brand-600 text-white text-[0.625rem] font-bold flex items-center justify-center">
-                            {isA ? '1' : '2'}
-                          </span>
-                        )}
-                        <ChevronDown size={12} className="text-ink-400 -rotate-90" />
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {pickedA && !pickedB && (
-                <div className="flex items-center gap-2 text-[0.75rem] text-brand-600 justify-center py-1 bg-brand-50 rounded-lg px-3">
-                  <div className="w-2 h-2 rounded-full bg-brand-500 animate-pulse" />
-                  Now select a second file to connect with {FILE_SOURCES.find(s => s.id === pickedA)?.name}
-                </div>
-              )}
-
-              {/* Summary of all links across all pairs */}
-              {links.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-mono text-[0.6875rem] text-ink-500 uppercase tracking-wide">All Active Links ({links.length})</span>
-                    <button onClick={() => setLinks([])} className="text-[0.625rem] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer">Clear all</button>
-                  </div>
-                  <div className="space-y-1.5">
-                    {links.map((link, i) => {
-                      const sA = FILE_SOURCES.find(s => s.id === link.sourceA);
-                      const sB = FILE_SOURCES.find(s => s.id === link.sourceB);
-                      return (
-                        <motion.div
-                          key={link.id}
-                          initial={{ opacity: 0, x: -6 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: i * 0.02 }}
-                          className="flex items-center p-2.5 rounded-lg bg-canvas border border-canvas-border group hover:border-brand-200 transition-colors"
-                        >
-                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                            <span className="text-[0.625rem] text-ink-400 shrink-0">{sA?.name?.split('.')[0]}</span>
-                            <span className="text-[0.75rem] font-medium text-ink-800">{link.fieldA}</span>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0 mx-2">
-                            <div className="w-3 h-px bg-brand-200" />
-                            <Link2 size={10} className="text-brand-500" />
-                            <div className="w-3 h-px bg-brand-200" />
-                          </div>
-                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                            <span className="text-[0.625rem] text-ink-400 shrink-0">{sB?.name?.split('.')[0]}</span>
-                            <span className="text-[0.75rem] font-medium text-ink-800">{link.fieldB}</span>
-                          </div>
-                          <button
-                            onClick={() => { setLinks(prev => prev.filter(l => l.id !== link.id)); addToast({ message: 'Link removed', type: 'info' }); }}
-                            className="p-1 rounded text-ink-300 hover:text-risk-700 hover:bg-risk-50 opacity-0 group-hover:opacity-100 transition-all cursor-pointer shrink-0 ml-2"
-                            aria-label="Remove link"
-                          ><X size={11} /></button>
-                        </motion.div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Step 2: Field-level linking (when pair selected) */}
-          {inFieldMode && (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                {/* Source A fields */}
-                <div className="rounded-xl border border-canvas-border bg-canvas overflow-hidden">
-                  <div className="flex items-center gap-2 px-4 py-3 bg-canvas-elevated border-b border-canvas-border">
-                    <FileText size={14} className="text-brand-600" />
-                    <span className="text-[0.8125rem] font-bold text-ink-900">{srcA.name}</span>
-                    <span className="text-[0.6875rem] text-ink-400 ml-auto">{srcA.fields.length} cols</span>
-                  </div>
-                  <div className="divide-y divide-canvas-border max-h-[320px] overflow-y-scroll">
-                    {srcA.fields.map(field => {
-                      const isLinked = linkedFieldsA.has(field);
-                      const isSelected = selectingField?.side === 'A' && selectingField.field === field;
-                      return (
-                        <button
-                          key={field}
-                          onClick={() => handleFieldClick('A', field)}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors cursor-pointer ${
-                            isSelected ? 'bg-brand-50 text-brand-700' :
-                            isLinked ? 'bg-compliant-50/30' :
-                            'hover:bg-brand-50/30 text-ink-700'
-                          }`}
-                        >
-                          <svg width="8" height="12" viewBox="0 0 8 12" className="text-ink-300 shrink-0">
-                            <circle cx="2" cy="3" r="1" fill="currentColor" /><circle cx="6" cy="3" r="1" fill="currentColor" />
-                            <circle cx="2" cy="6" r="1" fill="currentColor" /><circle cx="6" cy="6" r="1" fill="currentColor" />
-                            <circle cx="2" cy="9" r="1" fill="currentColor" /><circle cx="6" cy="9" r="1" fill="currentColor" />
-                          </svg>
-                          <span className={`text-[0.8125rem] ${isSelected ? 'font-semibold' : isLinked ? 'font-medium' : ''}`}>{field}</span>
-                          {isLinked && <CheckCircle2 size={12} className="text-compliant ml-auto shrink-0" />}
-                          {isSelected && <div className="ml-auto w-2 h-2 rounded-full bg-brand-500 animate-pulse shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Source B fields */}
-                <div className="rounded-xl border border-canvas-border bg-canvas overflow-hidden">
-                  <div className="flex items-center gap-2 px-4 py-3 bg-canvas-elevated border-b border-canvas-border">
-                    <FileText size={14} className="text-brand-600" />
-                    <span className="text-[0.8125rem] font-bold text-ink-900">{srcB.name}</span>
-                    <span className="text-[0.6875rem] text-ink-400 ml-auto">{srcB.fields.length} cols</span>
-                  </div>
-                  <div className="divide-y divide-canvas-border max-h-[320px] overflow-y-scroll">
-                    {srcB.fields.map(field => {
-                      const isLinked = linkedFieldsB.has(field);
-                      const isSelected = selectingField?.side === 'B' && selectingField.field === field;
-                      return (
-                        <button
-                          key={field}
-                          onClick={() => handleFieldClick('B', field)}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors cursor-pointer ${
-                            isSelected ? 'bg-brand-50 text-brand-700' :
-                            isLinked ? 'bg-compliant-50/30' :
-                            'hover:bg-brand-50/30 text-ink-700'
-                          }`}
-                        >
-                          <svg width="8" height="12" viewBox="0 0 8 12" className="text-ink-300 shrink-0">
-                            <circle cx="2" cy="3" r="1" fill="currentColor" /><circle cx="6" cy="3" r="1" fill="currentColor" />
-                            <circle cx="2" cy="6" r="1" fill="currentColor" /><circle cx="6" cy="6" r="1" fill="currentColor" />
-                            <circle cx="2" cy="9" r="1" fill="currentColor" /><circle cx="6" cy="9" r="1" fill="currentColor" />
-                          </svg>
-                          <span className={`text-[0.8125rem] ${isSelected ? 'font-semibold' : isLinked ? 'font-medium' : ''}`}>{field}</span>
-                          {isLinked && <CheckCircle2 size={12} className="text-compliant ml-auto shrink-0" />}
-                          {isSelected && <div className="ml-auto w-2 h-2 rounded-full bg-brand-500 animate-pulse shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Hint */}
-              {selectingField ? (
-                <div className="flex items-center gap-2 text-[0.75rem] text-brand-600 justify-center py-2 bg-brand-50 rounded-lg px-3">
-                  <div className="w-2 h-2 rounded-full bg-brand-500 animate-pulse" />
-                  Selected &ldquo;{selectingField.field}&rdquo; — now click a field in {selectingField.side === 'A' ? srcB.name : srcA.name}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-[0.75rem] text-ink-400 justify-center py-1">
-                  <Sparkles size={12} className="text-brand-400" />
-                  Click a field on either side to start linking
-                </div>
-              )}
-
-              {/* Links for this pair */}
-              {linkedForPair.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-mono text-[0.6875rem] text-ink-500 uppercase tracking-wide">Links for this pair ({linkedForPair.length})</span>
-                    <button onClick={() => setLinks(prev => prev.filter(l => !linkedForPair.some(lp => lp.id === l.id)))} className="text-[0.625rem] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer">Clear all</button>
-                  </div>
-                  <div className="space-y-1.5">
-                    {linkedForPair.map((link, i) => (
-                      <motion.div
-                        key={link.id}
-                        initial={{ opacity: 0, x: -6 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.03 }}
-                        className="flex items-center p-2.5 rounded-lg bg-canvas border border-canvas-border group hover:border-brand-200 transition-colors"
-                      >
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <FileText size={11} className="text-brand-600 shrink-0" />
-                          <span className="text-[0.75rem] font-medium text-ink-800">{link.sourceA === pickedA ? link.fieldA : link.fieldB}</span>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0 mx-2">
-                          <div className="w-3 h-px bg-brand-200" /><Link2 size={10} className="text-brand-500" /><div className="w-3 h-px bg-brand-200" />
-                        </div>
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <FileText size={11} className="text-brand-600 shrink-0" />
-                          <span className="text-[0.75rem] font-medium text-ink-800">{link.sourceB === pickedB ? link.fieldB : link.fieldA}</span>
-                        </div>
-                        <button
-                          onClick={() => { setLinks(prev => prev.filter(l => l.id !== link.id)); addToast({ message: 'Link removed', type: 'info' }); }}
-                          className="p-1 rounded text-ink-300 hover:text-risk-700 hover:bg-risk-50 opacity-0 group-hover:opacity-100 transition-all cursor-pointer shrink-0 ml-2"
-                          aria-label="Remove link"
-                        ><X size={11} /></button>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-t border-canvas-border bg-canvas shrink-0">
-          <p className="text-[0.6875rem] text-ink-400 leading-relaxed max-w-[420px]">
-            Linked fields share filter context — filtering by Region on one widget updates all connected widgets.
-          </p>
-          <button onClick={onClose} className="px-5 h-9 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
-            Done
-          </button>
-        </div>
-      </motion.div>
-    </>
-  );
-}
 
 export default function DashboardView({ initialDashboardId, initialDashboardName, initialCustomFields, initialDataSource, initialDataSourceNames, savedWidgets = [], onSaveWidgets, onUpdateDashboardSource, onOpenKnowledgeHub, onBack, onImportPowerBI }: DashboardProps = {}) {
   const { addToast } = useToast();
@@ -4350,10 +3884,6 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
   const [editingKpiIdx, setEditingKpiIdx] = useState<number | null>(null);
   const [openEditSidebarOnExpand, setOpenEditSidebarOnExpand] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [filterDateRange, setFilterDateRange] = useState('last-30-days');
-  const [filterStatus, setFilterStatus] = useState<string[]>([]);
-  const [filterRisk, setFilterRisk] = useState<string[]>([]);
-  const [filterDepartment, setFilterDepartment] = useState<string[]>([]);
   const [pageFilterFields, setPageFilterFields] = useState<string[]>([]);
   const [addWidgetOpen, setAddWidgetOpen] = useState(!!initialCustomFields?.length);
   const [addDataOpen, setAddDataOpen] = useState(false);
@@ -4393,32 +3923,62 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
     setExpandYField(yLabel);
     setExpandLegendField('');
   }, [expandedWidget]);
-  const [editingWidget, setEditingWidget] = useState<{ index: number; data: { chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string> } } | null>(null);
+  const [editingWidget, setEditingWidget] = useState<{ index: number; data: { chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string>; model?: WidgetModelConfig } } | null>(null);
   const [customFields] = useState<string[] | null>(initialCustomFields || null);
-  const [userWidgets, setUserWidgets] = useState<Array<{ chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string> }>>(savedWidgets);
+  const [userWidgets, setUserWidgets] = useState<Array<{ chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string>; model?: WidgetModelConfig }>>(savedWidgets);
+  // Data-model relationships (table joins). Combined widgets are built directly
+  // in the Add Widget modal (no separate builder).
+  const [relationships, setRelationships] = useState<Relationship[]>(DEFAULT_RELATIONSHIPS);
   const isCustomDashboard = isCustomInitial;
   const [editingDashName, setEditingDashName] = useState(false);
   const [dashName, setDashName] = useState(isCustomDashboard ? (initialDashboardName || 'Custom Dashboard') : (initialDashboardName || ''));
   const [widgetSizes, setWidgetSizes] = useState<Record<number, 1 | 2>>({});
   const [connectTablesOpen, setConnectTablesOpen] = useState(false);
-  const [dataLinks, setDataLinks] = useState<FieldLink[]>([]);
-  const [activeCrossFilters, setActiveCrossFilters] = useState<string[]>([]);
-  const [activeFiltersCount, setActiveFiltersCount] = useState(0);
+  const [dataLinks] = useState<FieldLink[]>([]);
+  // Global page slicers: pageFilterFields holds `table::column` ids; selected
+  // values per field live in pageFilterValues (empty ⇒ all, i.e. inactive).
+  const [pageFilterValues, setPageFilterValues] = useState<Record<string, (string | number)[]>>({});
+  // Cross-filter from clicking a chart element. `source` is the originating
+  // widget index — it keeps its full axis (highlighted) while others filter.
+  const [crossFilter, setCrossFilter] = useState<{ table: string; column: string; value: string; source: number } | null>(null);
+
+  // ── Global filter context (page slicers + chart-click cross-filter) ──
+  const splitFieldId = (id: string) => { const [table, column] = id.split('::'); return { table, column }; };
+  const modelFieldLabel = (id: string) => { const { table, column } = splitFieldId(id); return colByName(tableById(MODEL_TABLES, table), column)?.label ?? column; };
+  const pageModelFilters: ModelFilter[] = pageFilterFields
+    .map(id => { const { table, column } = splitFieldId(id); return { table, column, values: pageFilterValues[id] ?? [] }; })
+    .filter(f => f.values.length > 0);
+  const crossModelFilter: ModelFilter | null = crossFilter
+    ? { table: crossFilter.table, column: crossFilter.column, values: [crossFilter.value] }
+    : null;
+  // Filters applied to widget `index`. The cross-filter SOURCE keeps its own
+  // data (every category stays clickable, the selection is highlighted) — only
+  // page slicers apply to it; every other widget also gets the cross-filter.
+  const filtersForWidget = (index: number): ModelFilter[] => {
+    const out = [...pageModelFilters];
+    if (crossModelFilter && crossFilter && crossFilter.source !== index) out.push(crossModelFilter);
+    return out;
+  };
+  const highlightForWidget = (index: number): string | null =>
+    crossFilter && crossFilter.source === index ? crossFilter.value : null;
+  // Click on a model widget element → set/toggle the cross-filter on the
+  // widget's first dimension (multi-dim labels 'A · B' map to the first dim).
+  const handleWidgetSelect = (index: number, model: WidgetModelConfig | undefined, label: string) => {
+    const dim = model?.fields.find(f => f.role === 'dimension');
+    if (!dim) return;
+    const value = label.split(' · ')[0];
+    setCrossFilter(prev =>
+      prev && prev.source === index && prev.value === value && prev.column === dim.column
+        ? null
+        : { table: dim.table, column: dim.column, value, source: index });
+  };
+  const clearAllFilters = () => { setPageFilterFields([]); setPageFilterValues({}); setCrossFilter(null); };
+  const totalActiveFilterCount = pageModelFilters.length + (crossFilter ? 1 : 0);
 
   const handleEditDefaultWidget = (widgetTitle: string, _chartType: string, subtitle?: string) => {
     setOpenEditSidebarOnExpand(true);
     setExpandedWidget({ title: widgetTitle, subtitle });
   };
-
-  // Recalculate active filter count
-  useEffect(() => {
-    let n = 0;
-    if (filterDateRange !== 'last-30-days') n++;
-    if (filterStatus.length > 0) n++;
-    if (filterRisk.length > 0) n++;
-    if (filterDepartment.length > 0) n++;
-    setActiveFiltersCount(n);
-  }, [filterDateRange, filterStatus, filterRisk, filterDepartment]);
 
   const handleRefresh = () => {
     // Guard against overlap — if a refresh is already mid-flight (manual or
@@ -4538,8 +4098,12 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
 
       {/* Sidebar removed — dashboard switching handled via list page */}
 
-      {/* Main content */}
-      <div className="flex-1 overflow-y-auto relative">
+      {/* Main content — shrinks to the left when the docked Filters panel is open
+          so widgets are never overlapped; the responsive grid reflows to fit. */}
+      <div
+        className="flex-1 overflow-y-auto relative transition-[margin] duration-300 ease-out"
+        style={{ marginRight: filtersOpen ? FILTER_PANEL_WIDTH : 0 }}
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={dashboard.id}
@@ -4663,40 +4227,39 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   </button>
                   </Gated>
 
-                  {/* Connect Tables — hidden for static file dashboards */}
-                  {!isStaticFileDashboard && (
+                  {/* Connect Data Sources — manages the table relationships that
+                      power combined (multi-table) widgets; available on every dashboard. */}
                   <button
                     onClick={() => setConnectTablesOpen(true)}
                     className={`relative flex items-center justify-center size-9 rounded-lg transition-colors cursor-pointer border ${
-                      dataLinks.length > 0
+                      relationships.length > 0
                         ? 'border-brand-200 bg-brand-50 text-brand-700'
                         : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:text-brand-600 hover:border-brand-200'
                     }`}
                     title="Connect Data Sources"
                   >
                     <Link2 size={15} />
-                    {dataLinks.length > 0 && (
+                    {relationships.length > 0 && (
                       <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-brand-600 text-white text-[0.625rem] font-bold rounded-full flex items-center justify-center px-1 tabular-nums">
-                        {dataLinks.length}
+                        {relationships.length}
                       </span>
                     )}
                   </button>
-                  )}
 
                   {/* Filter */}
                   <button
                     onClick={() => setFiltersOpen(!filtersOpen)}
                     className={`relative flex items-center gap-1.5 px-2.5 h-9 rounded-lg text-[0.75rem] font-medium transition-colors cursor-pointer border ${
-                      activeFiltersCount > 0 || pageFilterFields.length > 0
+                      totalActiveFilterCount > 0
                         ? 'border-brand-200 bg-brand-50 text-brand-700'
                         : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:text-brand-600 hover:border-brand-200'
                     }`}
                     title="Filters"
                   >
                     <Filter size={15} />
-                    {(activeFiltersCount + pageFilterFields.length) > 0 && (
+                    {totalActiveFilterCount > 0 && (
                       <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-brand-600 text-white text-[0.625rem] font-bold rounded-full flex items-center justify-center px-1 tabular-nums">
-                        {activeFiltersCount + pageFilterFields.length}
+                        {totalActiveFilterCount}
                       </span>
                     )}
                   </button>
@@ -4809,32 +4372,31 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
               </motion.div>
             )}
 
-            {/* Page-level filter strip */}
-            {(pageFilterFields.length > 0 || activeCrossFilters.length > 0) && (
+            {/* Page-level filter strip — global slicers + active cross-filter */}
+            {(pageModelFilters.length > 0 || crossFilter) && (
               <div className="flex items-center gap-2 flex-wrap px-5 py-3 mb-4 rounded-xl bg-brand-50/50 border border-brand-100">
                 <Filter size={13} className="text-brand-600 shrink-0" />
-                {pageFilterFields.map(fId => {
-                  const label = DRAG_FIELDS.find(f => f.id === fId)?.label || fId;
+                {pageFilterFields.filter(id => (pageFilterValues[id]?.length ?? 0) > 0).map(fId => {
+                  const vals = pageFilterValues[fId] ?? [];
+                  const summary = vals.length <= 2 ? vals.join(', ') : `${vals.length} selected`;
                   return (
                     <span key={fId} className="flex items-center gap-1.5 bg-brand-100 border border-brand-200 text-brand-800 text-[0.75rem] font-medium px-2.5 py-1 rounded-lg">
-                      {label}
-                      <button onClick={() => setPageFilterFields(pageFilterFields.filter(f => f !== fId))} className="hover:text-brand-900 cursor-pointer"><X size={11} /></button>
+                      <span className="font-semibold">{modelFieldLabel(fId)}</span>
+                      <span className="text-brand-600">·</span> {summary}
+                      <button onClick={() => setPageFilterValues(prev => ({ ...prev, [fId]: [] }))} className="hover:text-brand-900 cursor-pointer"><X size={11} /></button>
                     </span>
                   );
                 })}
-                {activeCrossFilters.map(linkId => {
-                  const link = dataLinks.find(l => l.id === linkId);
-                  if (!link) return null;
-                  const label = link.fieldA === link.fieldB ? link.fieldA : `${link.fieldA} · ${link.fieldB}`;
-                  return (
-                    <span key={linkId} className="flex items-center gap-1.5 bg-brand-100 border border-brand-200 text-brand-800 text-[0.75rem] font-medium px-2.5 py-1 rounded-lg">
-                      {label}
-                      <button onClick={() => setActiveCrossFilters(activeCrossFilters.filter(id => id !== linkId))} className="hover:text-brand-900 cursor-pointer"><X size={11} /></button>
-                    </span>
-                  );
-                })}
+                {crossFilter && (
+                  <span className="flex items-center gap-1.5 bg-evidence-50 border border-evidence/30 text-evidence-700 text-[0.75rem] font-medium px-2.5 py-1 rounded-lg">
+                    <Link2 size={11} />
+                    <span className="font-semibold">{colByName(tableById(MODEL_TABLES, crossFilter.table), crossFilter.column)?.label ?? crossFilter.column}</span>
+                    <span className="text-evidence/60">·</span> {crossFilter.value}
+                    <button onClick={() => setCrossFilter(null)} className="hover:text-evidence-900 cursor-pointer"><X size={11} /></button>
+                  </span>
+                )}
                 <button
-                  onClick={() => { setPageFilterFields([]); setActiveCrossFilters([]); }}
+                  onClick={clearAllFilters}
                   className="text-[0.6875rem] font-medium text-brand-600 hover:text-brand-800 ml-auto cursor-pointer transition-colors"
                 >
                   Clear all
@@ -4866,14 +4428,15 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
               </motion.div>
             )}
 
-            {/* User-created widgets (from Create Dashboard flow) */}
-            {isCustomDashboard && userWidgets.length > 0 && (
+            {/* User-created widgets — render on any dashboard (custom or seeded)
+                so combined/model widgets added via Add Widget actually appear. */}
+            {userWidgets.length > 0 && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.25 }}
-                className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6"
-                style={{ gridAutoRows: 'minmax(420px, auto)' }}
+                className="grid gap-5 mb-6"
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gridAutoRows: 'minmax(420px, auto)' }}
               >
                 {userWidgets.map((w, i) => (
                   <WidgetCard
@@ -4913,6 +4476,13 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   >
                     {/* Render chart based on type */}
                     {(() => {
+                      // Multi-table (model) widgets render real joined+aggregated data,
+                      // filtered by global page slicers + chart-click cross-filter.
+                      if (w.model) {
+                        // stopPropagation so a chart-element click cross-filters
+                        // instead of bubbling to the card's expand handler.
+                        return <div className="h-full w-full p-3" onClick={(e) => e.stopPropagation()}><ModelChart data={buildWidgetRows(MODEL_TABLES, relationships, w.model, filtersForWidget(i))} type={w.chartType} color={w.color} onSelect={(label) => handleWidgetSelect(i, w.model, label)} highlight={highlightForWidget(i)} /></div>;
+                      }
                       const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
                       const vals = [45, 62, 38, 71, 55, 84];
                       const max = Math.max(...vals);
@@ -5413,32 +4983,27 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
       <FilterPanel
         open={filtersOpen}
         onClose={() => setFiltersOpen(false)}
-        dateRange={filterDateRange}
-        onDateRangeChange={setFilterDateRange}
-        status={filterStatus}
-        onStatusChange={setFilterStatus}
-        risk={filterRisk}
-        onRiskChange={setFilterRisk}
-        department={filterDepartment}
-        onDepartmentChange={setFilterDepartment}
-        onResetAll={() => {
-          setFilterDateRange('last-30-days');
-          setFilterStatus([]);
-          setFilterRisk([]);
-          setFilterDepartment([]);
-        }}
+        modelTables={MODEL_TABLES}
         pageFilterFields={pageFilterFields}
         onPageFilterFieldsChange={setPageFilterFields}
-        dataLinks={dataLinks}
-        activeCrossFilters={activeCrossFilters}
-        onActiveCrossFiltersChange={setActiveCrossFilters}
-        onManageConnections={() => { setFiltersOpen(false); setConnectTablesOpen(true); }}
+        pageFilterValues={pageFilterValues}
+        onPageFilterValuesChange={setPageFilterValues}
+        crossFilter={crossFilter}
+        onResetAll={clearAllFilters}
       />
 
-      {/* Connect Tables Modal */}
+      {/* Table relationships (data model) */}
       <AnimatePresence>
         {connectTablesOpen && (
-          <ConnectTablesModal open={connectTablesOpen} onClose={() => setConnectTablesOpen(false)} addToast={addToast} links={dataLinks} setLinks={setDataLinks} />
+          <RelationshipManagerModal
+            open={connectTablesOpen}
+            onClose={() => setConnectTablesOpen(false)}
+            tables={MODEL_TABLES}
+            relationships={relationships}
+            setRelationships={setRelationships}
+            widgets={userWidgets.map(w => ({ title: w.title, model: w.model }))}
+            addToast={addToast}
+          />
         )}
       </AnimatePresence>
 
@@ -5460,6 +5025,10 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
         initialFontFamily={editingWidget?.data?.fontFamily}
         initialName={editingWidget?.data?.title}
         initialSeriesColors={editingWidget?.data?.seriesColors}
+        initialModel={editingWidget?.data?.model}
+        modelTables={MODEL_TABLES}
+        relationships={relationships}
+        onConnectTables={() => setConnectTablesOpen(true)}
         onSelectCard={(cardType, config) => {
           const widget = {
             chartType: cardType,
@@ -5469,6 +5038,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
             color: config?.color,
             fontFamily: config?.fontFamily,
             seriesColors: config?.seriesColors,
+            model: config?.model,
           };
           if (editingWidget !== null && editingWidget.index >= 0) {
             const next = userWidgets.map((w, i) => i === editingWidget.index ? widget : w);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { X } from 'lucide-react';
+import { X, Calendar, ArrowRight } from 'lucide-react';
 import type {
   GrcException,
   GrcExceptionSeverity,
@@ -37,6 +37,12 @@ const REVIEW_STYLE: Record<string, string> = {
   Pending:  'bg-mitigated-50 text-mitigated-700',
   Approved: 'bg-compliant-50 text-compliant-700',
   Rejected: 'bg-risk-50 text-risk-700',
+};
+
+const fmtDate = (iso?: string) => {
+  if (!iso) return 'Not set';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
 interface Props {
@@ -139,6 +145,44 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, onC
               </Pill>
             </DetailField>
           </section>
+
+          {/* Action-plan due date — with the revised-date request when present */}
+          {(ex.dueDate || ex.dueDateRevision) && (
+            <section>
+              <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Action Plan Due Date</h3>
+              {ex.dueDateRevision ? (
+                <div className="border border-canvas-border rounded-[10px] p-4">
+                  <div className="flex items-stretch gap-2.5">
+                    <div className="flex-1 rounded-[8px] border border-canvas-border bg-[#FAFAFB] p-3">
+                      <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-1">Previous</div>
+                      <div className={`text-[13.5px] font-semibold ${ex.dueDateRevision.status === 'Approved' ? 'text-ink-500 line-through decoration-ink-300' : 'text-ink-800'}`}>
+                        {fmtDate(ex.dueDateRevision.previousDueDate)}
+                      </div>
+                    </div>
+                    <div className="flex items-center shrink-0"><ArrowRight size={15} className="text-ink-400" /></div>
+                    <div className="flex-1 rounded-[8px] border border-brand-200 bg-brand-50/60 p-3">
+                      <div className="text-[10.5px] font-semibold uppercase tracking-wider text-brand-700 mb-1">Revised</div>
+                      <div className="text-[13.5px] font-bold text-brand-700">{fmtDate(ex.dueDateRevision.revisedDueDate)}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between mt-3">
+                    <span className="text-[11.5px] text-ink-500">Requested by {ex.dueDateRevision.requestedBy}</span>
+                    <Pill className={REVIEW_STYLE[ex.dueDateRevision.status] ?? 'bg-[#F4F2F7] text-ink-600'}>
+                      {ex.dueDateRevision.status === 'Pending' ? 'Awaiting approval' : ex.dueDateRevision.status}
+                    </Pill>
+                  </div>
+                  {ex.dueDateRevision.reason && (
+                    <p className="text-[12.5px] text-ink-700 leading-relaxed mt-3 pt-3 border-t border-canvas-border">{ex.dueDateRevision.reason}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-2 h-9 px-3 rounded-[8px] border border-canvas-border bg-[#FAFAFB] text-[13px] font-semibold text-ink-800">
+                  <Calendar size={14} className="text-ink-500" />
+                  {fmtDate(ex.dueDate)}
+                </div>
+              )}
+            </section>
+          )}
 
           {/* All data fields — joined row from the source query's output table */}
           <section>
