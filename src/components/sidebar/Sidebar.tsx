@@ -187,25 +187,14 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
   const adminViews: View[] = ['admin-users', 'admin-roles', 'admin-logs'];
 
   return (
-    // Outer layout slot — its width tracks ONLY the pinned (click) state.
-    // Hover-expanding does NOT change the slot, so the page never reflows on
-    // hover (buttery overlay); pinning open animates the slot and pushes the
-    // content. Either way the visual rail below sits flush left.
-    <motion.div
-      animate={{ width: expanded ? 256 : 64 }}
-      transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      className="relative h-full shrink-0 z-50"
-    >
-    {/* Visual rail — absolutely positioned; width tracks hover OR pinned. On
-        hover it floats OVER the content (only the rail relayouts — no page
-        reflow, so it stays smooth) with a drop shadow; when pinned it matches
-        the slot width and sits in-flow, so the page is pushed. */}
+    // In-flow rail — animating its width reflows the page, so expanding (hover
+    // OR pinned) pushes the main content right. Content shifts on open.
     <motion.div
       animate={{ width: isExpanded ? 256 : 64 }}
       transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
-      className={`absolute inset-y-0 left-0 h-full bg-sidebar-bg noise-texture flex flex-col overflow-hidden z-50 ${hoverExpanded && !expanded ? 'shadow-[8px_0_32px_-10px_rgba(15,8,30,0.55)]' : ''}`}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className="h-full bg-sidebar-bg noise-texture flex flex-col shrink-0 overflow-hidden z-50"
     >
       {/* ── Sidebar header: collapsed shows ONLY the bell (centered in 64px);
           expanded shows logo + IRAME.AI + Audit Intelligence on the left,
@@ -514,7 +503,6 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
           </button>
         )}
       </div>
-    </motion.div>
     </motion.div>
   );
 }
