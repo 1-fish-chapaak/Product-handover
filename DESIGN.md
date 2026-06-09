@@ -1,6 +1,7 @@
 ---
 name: Auditify Chat
 description: Editorial GRC chat surface — query and workflow in one auditor's thread.
+maintainer: Nilesh Anand
 colors:
   brand-50: "#F7F0FF"
   brand-100: "#EDDEFE"
@@ -177,6 +178,7 @@ A purple-anchored editorial palette over warm paper and ink, with a deliberately
 ### Primary
 - **Royal Audit Purple** (`#6A12CD`, `brand-600`): The auditor's pen. Primary buttons, active states, focus rings (at 24% alpha), citation chips, the streaming caret. The one accent in a Restrained strategy — present on ≤10% of the surface at any time.
 - **Sidebar Midnight** (`#26064A`, `brand-900`): The persistent dark shell. The sidebar — and only the sidebar — wears this color in every theme. Anchors the brand identity without darkening the working surface.
+- **On-dark neutrals.** On the dark sidebar shell, fills and text are pure white at fixed alphas — never opaque grey: `sidebar-surface` `rgba(255,255,255,0.06)` for hover/active fills, `sidebar-text-dim` `rgba(255,255,255,0.55)` and `sidebar-text-muted` `rgba(255,255,255,0.45)` for secondary and meta labels.
 
 ### Neutral — Canvas (chrome surfaces: chat, workspace, dashboards)
 - **Paper Canvas** (`#FCFAFD`, `canvas`): The page itself, softened by a three-stop radial mesh of `brand-50` and `brand-100` at very low alpha. Cards float over this; they do not stamp onto it.
@@ -188,6 +190,7 @@ A purple-anchored editorial palette over warm paper and ink, with a deliberately
 - **Brief Ink** (`#1F1433`, `ink-800`): Primary body text on canvas.
 - **Margin Ink** (`#6B5D82`, `ink-500`): Secondary text, supporting copy.
 - **Faded Margin** (`#9A8FAE`, `ink-400`): Muted, meta, placeholder.
+- **Workpaper Edge** (`#D6CCB7`, `paper-300`): Hairline borders and dividers on paper / report surfaces — the warm counterpart to Hairline Grey.
 
 ### GRC Semantic
 A vocabulary, not a heatmap. Each color is a noun that names a state; they do not sit beside each other in a thermometric ramp.
@@ -198,6 +201,8 @@ A vocabulary, not a heatmap. Each color is a noun that names a state; they do no
 - **Compliant Forest** (`#15803D`, `compliant`): Low severity, compliant, success. Deeper and less performative than UI green.
 - **Evidence Blue** (`#0369A1`, `evidence`): Sources, citations, info-blue. The color of references and provenance.
 - **Draft Stone** (`#6B5D82`, `draft`): Drafts and muted states. Identical hue to `ink-500` — drafts read as text, not as decoration.
+
+**Surface & ink tints.** Each semantic noun ships a `-50` surface wash and a `-700` ink, used together for flat badges and alert cards (never as fills competing with `brand-600`): `risk-50 #FEF3F2`/`risk-700 #912018`, `high-50 #FFF7ED`/`high-700 #9A3412`, `mitigated-50 #FFFBEB`/`mitigated-700 #92400E`, `compliant-50 #F0FDF4`/`compliant-700 #166534`, `draft-50 #F4F2F7`. **Evidence Blue** carries a full ramp for source / citation chrome — `50 #F0F9FF · 100 #E0F2FE · 200 #BAE6FD · 300 #7DD3FC · 400 #38BDF8 · 600 #0284C7 · 700 #075985`. These are consumed by `StatusBadge` / `SeverityBadge` (§7.10.4); they do not get arranged into a heat strip (see The No-RAG Rule).
 
 ### Named Rules
 
@@ -218,29 +223,31 @@ A vocabulary, not a heatmap. Each color is a noun that names a state; they do no
 
 **Character:** Source Serif 4 is the voice of authority — present at the hero, on chat thread titles, and on evidence quotes. It is set at a heavier weight than typical serif headlines (420–500) because confidence reads as substance, not as elegance. Inter does the working surface: dense, legible, opinionated about its alternates (`ss01`, `cv11`, `tnum` enabled globally). JetBrains Mono carries every number, every ID, every SQL snippet, and every citation chip. The pairing reads editorial-precise, never decorative.
 
-### Type scale (4-base · rem)
+### Type scale — the real ramp
 
-**rem only.** Root = 16px; base step `0.25rem` (4px). Every size is a **whole** multiple of it (×3–×14), lowest = `0.75rem` (12px). Eleven steps span body to hero.
+Authored in `rem` (root 16px). The product runs a **dense** ramp — compact GRC tables, chips, and registries need many small steps, so it's finer than a typical 8-step scale (~24 sizes are in active use). It is **descriptive** (what ships), not a strict 4px grid — several steps are deliberately off-grid (11/13/15px). When building UI, **reuse the nearest existing step**, don't invent a new one.
 
-| Token | rem | Step | Role | Font · weight | Line-height |
-|---|---|---|---|---|---|
-| `text-xs` | 0.75rem | ×3 | Caption, meta, labels, mono, IDs, chips | Inter / JetBrains Mono · 400 | 1.4 |
-| `text-base` | 1rem | ×4 | Body — copy, chat, AI prose (cap 66ch) | Inter · 400 | 1.6 |
-| `text-lg` | 1.25rem | ×5 | Large body, subheading | Inter · 500 | 1.5 |
-| `text-xl` | 1.5rem | ×6 | Heading — section / card / dialog title | Source Serif 4 · 500 | 1.25 |
-| `text-2xl` | 1.75rem | ×7 | KPI value, prominent heading | Inter · 700 / Source Serif 4 | 1.2 |
-| `text-3xl` | 2rem | ×8 | Display — small | Source Serif 4 · 480 | 1.2 |
-| `text-4xl` | 2.25rem | ×9 | Display | Source Serif 4 · 460 | 1.15 |
-| `text-5xl` | 2.5rem | ×10 | Display | Source Serif 4 · 440 | 1.1 |
-| `text-6xl` | 2.75rem | ×11 | Display — large | Source Serif 4 · 420 | 1.1 |
-| `text-7xl` | 3rem | ×12 | Display — large | Source Serif 4 · 400 | 1.05 |
-| `display` | 3.5rem | ×14 | Hero — empty-state, once per page | Source Serif 4 · 420 | 1.05 |
-
-(`×13` / `3.25rem` is intentionally skipped — nothing in the build lands there.)
+| rem | px | Role | Font · weight |
+|---|---|---|---|
+| 0.4375–0.5625 | 7–9 | Micro sub-meta (sparing) | Inter · 500 |
+| 0.625 | 10 | Tiny meta, count badges | Inter · 500 |
+| 0.6875 | 11 | Uppercase eyebrow / KPI labels | Inter · 600 |
+| **0.75** | **12** | **Caption · meta · chip · label · button-sm** — the default (1.8k uses) | Inter / JetBrains Mono · 400–600 |
+| 0.8125 | 13 | `--text-meta` — dense body, table & admin rows, admin button-md | Inter · 400–600 |
+| 0.875 | 14 | Secondary body, shared button-md | Inter · 400–500 |
+| 0.9375 | 15 | Chat / composer body | Inter · 400 |
+| 1 | 16 | Body, AI prose (cap 66ch) | Inter · 400 |
+| 1.0625–1.125 | 17–18 | Large body, AI response body, Admin KPI value (18px) | Inter · 400–700 |
+| 1.25 | 20 | Modal title, subheading | Inter · 600 |
+| 1.5 | 24 | Section / card title | Source Serif 4 · 500 |
+| 1.625–1.75 | 26–28 | Dashboard KPI value (26px), prominent heading | Inter · 700 |
+| 2–2.25 | 32–36 | Display — small, widget-builder KPI value (32px) | Source Serif 4 / Inter |
+| 2.5–3 | 40–48 | Display | Source Serif 4 · 420–480 |
+| 3.5+ | 56+ | Hero — once per page | Source Serif 4 · 320–420 |
 
 ### Named Rules
 
-**The rem-Only Rule.** Font sizes are **always declared in `rem`, never `px`.** If a size comes in as px, convert it before use — `rem = px ÷ 16` (root font-size is 16px). px may appear only as a parenthetical reference for design-tool parity, never in code. This keeps type responsive to the user's browser font-size (an accessibility requirement) and on the `0.25rem` (4px) base grid. Quick map: `12px → 0.75rem`, `16px → 1rem`, `20px → 1.25rem`, `24px → 1.5rem`, `28px → 1.75rem`, `32px → 2rem`, `36px → 2.25rem`, `40px → 2.5rem`, `48px → 3rem`, `56px → 3.5rem`.
+**The rem Rule.** Author font sizes in `rem` (root 16px) so type scales with the user's browser setting (an accessibility requirement). New code: `rem` always. A few legacy `px` declarations remain in `src/index.css` (composer `15px`, AI body `17px`, a couple of `12px`) — not aspirational, just unconverted; migrate them when you touch those rules. The light + dark previews are fully `rem`. Quick map: `11px → 0.6875rem`, `12px → 0.75rem`, `13px → 0.8125rem`, `14px → 0.875rem`, `15px → 0.9375rem`, `16px → 1rem`, `18px → 1.125rem`, `20px → 1.25rem`, `26px → 1.625rem`, `32px → 2rem`.
 
 **The Tabular Number Rule.** Every numeric value in the product — KPIs, table cells, timestamps, percentages, currency, IDs, version numbers — uses `font-variant-numeric: tabular-nums`. Mixed-width numerals are a bug. There is a `.tabular` utility for any element that escaped the global setting.
 
@@ -578,20 +585,26 @@ Order: **Ask IRA / Home · Recents / Audit Planning · Engagements · Engagement
 #### 7.8.3 `NavItem` states
 Rest transparent → hover `rgba(255,255,255,0.08)` → active `rgba(255,255,255,0.12)`; text `rgba(255,255,255,0.85)` lifting to full white when active. (Tokens: `--color-sidebar-*` in `index.css`.)
 
-### 7.9 Modals & overlays (`modals/`, `shared/`)
+### 7.9 Modals & overlays (`shared/`, `chat/`, `modals/`)
 
-Layering scale (`index.css`): `--z-popover 100` < `--z-modal 200` < `--z-toast 300`.
+**Shared overlay (every modal):** `bg-ink-900/40 backdrop-blur-[2px]`, fade 150ms. **Panel motion:** enter `y+8–10 · scale .98 → 0,1`, 180ms `ease [0.2,0,0,1]` (exit reverses); wrap mounts in `<AnimatePresence>`. **Titles are Inter semibold — never serif.** ESC closes; body scroll locks while open. Layering: `Modal` `z-[60]` < `ConfirmationModal` `z-[70]`; the `--z-popover/modal/toast` tokens (100/200/300) are for non-modal layered UI.
 
-#### 7.9.1 `ConfirmationModal` (`shared/ConfirmationModal`)
-Destructive/confirm dialogs.
+#### 7.9.1 `Modal` (`shared/Modal.tsx`) — centered shell for detail / create / edit
+`bg-canvas-elevated rounded-2xl border border-canvas-border shadow-xl`, `max-h-[85vh]`, `width` prop (default `max-w-[560px]`). Header `px-7 py-3` (`py-3.5` with subtitle) + `border-b border-canvas-border`: title `text-[1.25rem] font-semibold text-ink-900 tracking-tight`, subtitle `text-[0.8125rem] text-ink-500`, close `<X 18>` in `w-8 h-8 rounded-md text-ink-500 hover:bg-canvas`. Body `flex-1 overflow-y-auto px-7 py-5`. Optional footer `px-7 py-3 border-t flex items-center justify-end gap-2`. Same API as the Drawer shell — callers swap with no other change.
 
-#### 7.9.2 `ModalPrimitives` (`chat/ModalPrimitives`)
-Shared dialog shell: overlay + surface (`bg-canvas-elevated rounded-2xl border border-canvas-border`, common widths `w-[28rem]` / `w-[32rem]` / `w-[800px]`, all `max-w-[92vw]`) + close.
+#### 7.9.2 `ConfirmationModal` (`shared/ConfirmationModal.tsx`) — confirm / destructive dialogs
+The shadcn AlertDialog layout in-theme: one padded card `bg-canvas-elevated rounded-2xl shadow-lg border border-canvas-border w-full max-w-lg p-6 min-h-[180px]` (radius matches the `Modal` shell — both `rounded-2xl`). **No icon, no header rule, no close X.** Title `text-lg font-semibold text-ink-900 tracking-tight`; description `mt-2 text-sm text-ink-500`. Actions bottom-right (`mt-auto pt-5 flex justify-end gap-2`): Cancel = shared `Button variant="outline" h-10 px-4`; confirm = shared `Button` — `tone="destructive"` → risk-red (default), `"primary"` → brand. `pending` swaps the confirm label for a `Loader2` spinner and locks the backdrop. Built on the shared `Button` so it inherits the focus ring / active-scale / disabled tokens.
 
-#### 7.9.3 `Toast` (`shared/Toast`)
-`useToast` provider; success / error / info (`z-toast`).
+#### 7.9.3 `ModalPrimitives` (`chat/ModalPrimitives.tsx`)
+Chat-local dialog shell + `ModalEmptyState` (Inter heading, per §"Modal/EmptyState titles use Inter"). Widths `w-[28rem]` / `w-[32rem]` / `w-[800px]`, all `max-w-[92vw]`. New work outside chat uses `shared/Modal` (§7.9.1), not this.
 
-#### 7.9.4 `useModalA11y` / `useDialogA11y` (`chat/useModalA11y`)
+#### 7.9.4 Feature modals (`modals/`, surface folders)
+`ShareModal`, `EmailPreviewModal`, `ExceptionManagementModal`, plus surface dialogs (`audit/ConfirmDeleteRacmModal`, `reports/ReportDownloadModal`, `dashboard/AddCardModal`, `concierge-workflow-builder/SaveWorkflowModal`, …). All compose `shared/Modal` (create/edit) or `ConfirmationModal` (confirm/destructive) — they do **not** hand-roll the overlay or panel chrome.
+
+#### 7.9.5 `Toast` (`shared/Toast.tsx`)
+`useToast` provider; success / error / info.
+
+#### 7.9.6 `useModalA11y` / `useDialogA11y` (`chat/useModalA11y`)
 Focus trap + ESC + restore focus.
 
 ### 7.10 Shared primitives (exact specs)
@@ -601,17 +614,139 @@ Defined once in `shared/`, reused across surfaces.
 #### 7.10.1 `Button` (`shared/Button.tsx`)
 Single source of truth. 6 variants × 2 sizes (`sm` h-7/text-xs, `md` h-9/text-sm) × 4 shapes (`md`/`lg`(default)/`xl`/`full`). Base: `inline-flex items-center justify-center font-medium transition-[…] duration-150 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1`. Primary `bg-primary text-white shadow-sm shadow-brand-900/10 hover:bg-primary-hover hover:shadow-md`; stop `bg-ink-900 text-white`; destructive `bg-risk text-white`; outline `bg-canvas-elevated border border-canvas-border hover:bg-brand-50 hover:border-brand-200`; ghost `bg-transparent text-text-muted hover:bg-brand-50`; secondary `bg-brand-50 text-brand-700`. Pressed: ghost → `bg-primary/10 text-primary`, outline → `bg-primary/5 border-primary/30 text-primary`.
 
-#### 7.10.2 `KpiTile` / `KpiCountUp` (`shared/KpiTile.tsx`)
-Full spec in §7.2.2 (`glass-card rounded-xl px-5 py-4`, 11px label, 26px tabular value).
+#### 7.10.2 KPI family (`shared/KpiTile.tsx`, `admin/AdminPrimitives.tsx`, `dashboard/add-widget/KpiCard.tsx`)
+Four KPI shapes, one per surface — all share `tabular-nums` + the `KpiCountUp` count-up, differ only in chrome:
+- **`KpiTile`** (Dashboard, §7.2.2) — `glass-card rounded-xl px-5 py-4`, 11px uppercase label, **26px** (`1.625rem`) bold value; `selected` = `2px brand-500` outline; clickable hover lift.
+- **`AdminKpiCard` / `AdminKpiRow`** (Admin, §7.11.2) — compact `rounded-lg border px-3 py-2`, `h-7` icon chip, **18px** value; click-to-filter (inset brand baseline) + amber `attention` state.
+- **`StatLedger`** (Admin) — inline `label · value` text strip; the dense, chrome-less alternative to the card band.
+- **`KpiCard`** (Dashboard widget-builder, `add-widget/`) — `bg-white rounded-2xl p-6`, 14px label, **32px** (`2rem`) value; the larger composed-widget variant (`KpiPreviewRow` is its picker-row preview).
 
-#### 7.10.3 `SmartTable` (`shared/SmartTable.tsx`)
-Table `w-full text-[0.8125rem]` (modern) / `text-[0.75rem]`. Header row `border-b border-border-light` (modern) or `bg-surface-2 border-b border-border-light`. Cells `py-3`. Search input `pl-8 pr-8 py-1.5 border border-border bg-white text-[0.75rem] rounded-[8px]`, focus `border-primary/40 ring-2 ring-primary/10`. Expand-row detail `px-10 py-4 bg-surface-2/50 border-b border-border-light`. Footer/pagination `px-4 py-3 border-t border-border-light bg-surface-2/30`, page buttons `p-1.5 rounded-md hover:bg-gray-100 disabled:opacity-30`. Empty state `w-10 h-10 rounded-xl bg-surface-2` icon + `text-[0.8125rem] font-medium text-text-secondary`.
+Visual reference: `preview.html` → "KPI cards" (all four side by side).
 
-#### 7.10.4 `StatusBadge` / `SeverityBadge` (`shared/StatusBadge.tsx`)
-Flat pill, **no border, no icon**: `inline-flex items-center px-2.5 h-6 rounded-full text-[0.75rem] leading-[16px] font-medium whitespace-nowrap tabular-nums`. Tones: `risk` `bg-risk-50 text-risk-700`, `high` `bg-high-50 text-high-700`, `mitigated` `bg-mitigated-50 text-mitigated-700`, `compliant` `bg-compliant-50 text-compliant-700`, `evidence` `bg-evidence-50 text-evidence-700`, `info` `bg-brand-50 text-brand-700`, `draft` `bg-draft-50 text-draft-700`. Labels spelled out (`Critical`, not `C`).
+#### 7.10.3 Table family (`shared/SmartTable.tsx` + two registry tables)
+**`SmartTable`** is the default for any list. It has two variants via `variant`:
+- *default* — `text-[0.75rem]`, header `bg-surface-2 border-b border-border-light`.
+- *modern* — minimal AI-SaaS chrome: `text-[0.8125rem]`, no header fill, subtle outer edge, search hidden until a column is active.
+
+Shared: cells `py-3`; search input `pl-8 pr-8 py-1.5 border bg-white text-[0.75rem] rounded-[8px]`, focus `border-primary/40 ring-2 ring-primary/10`; expand-row detail `px-10 py-4 bg-surface-2/50`; footer/pagination `px-4 py-3 border-t bg-surface-2/30`, page buttons `p-1.5 rounded-md hover:bg-gray-100 disabled:opacity-30`; empty state `w-10 h-10 rounded-xl bg-surface-2` icon + `text-[0.8125rem] font-medium`.
+
+Two **registry-specific** tables exist for denser GRC domains — not the modern SaaS variant, and not a license to hand-roll: **`ExceptionsTable`** (`exceptions/`, `w-full text-[12.5px]` — tighter than SmartTable for the exceptions queue) and **`RacmListTable`** (`audit/`, the RACM risk↔control registry). New surfaces use `SmartTable`; these two are deliberate domain exceptions.
+
+#### 7.10.4 Badge / chip / tag family (`shared/StatusBadge.tsx`)
+Every status chip renders through one canonical base — **`Pill`**: `inline-flex items-center px-2.5 h-6 rounded-full text-[0.75rem] leading-[16px] whitespace-nowrap tabular-nums`, full radius, title-case, **no icon**. **`variant="bordered"` is the default and the common status used everywhere** — semibold + a soft tone border (`border-{tone}/30`) over the tone pair. 7 tones: `risk` `bg-risk-50 text-risk-700`, `high` `bg-high-50 text-high-700`, `mitigated` `bg-mitigated-50 text-mitigated-700`, `compliant` `bg-compliant-50 text-compliant-700`, `evidence` `bg-evidence-50 text-evidence-700`, `info` `bg-brand-50 text-brand-700`, `draft` `bg-draft-50 text-draft-700`. `variant="flat"` (no border, `font-medium`) is the quiet opt-out. Labels always spelled out (`Critical`, not `C`); never arranged as a RAG strip.
+
+Six **domain badges** map a vocabulary → tone+label on that base — **use these, never hand-roll an inline status span:**
+- **`StatusBadge`** — 22 lifecycle states (active→compliant, open→risk, in-progress→evidence, resolved/effective→compliant, invited→info, suspended/expired→high, locked/blocked→risk, pending→mitigated, draft/inactive/not-started/not-tested→draft, …).
+- **`SeverityBadge`** — critical→risk, high, medium→mitigated, low→compliant, **plus SOX deficiency types** MW (Material Weakness→risk), SD (Significant Deficiency→high), CD (Control Deficiency→evidence).
+- **`ActionBadge`** — audit-trail verbs: Create→compliant, Update→evidence, Delete→risk, Login→info, Export→draft.
+- **`ResultBadge`** — Success→compliant / Failed→risk.
+- **`FrameworkBadge`** — SOX→evidence, ITGC→compliant, Internal / IFC→info, Key Control→high.
+- **`TypeBadge`** — Detection→risk, Monitoring→evidence, Compliance→info, Reconciliation→compliant.
+
+Surface-local chips: **`presetChip`** (Admin quick-set — hairline at rest, brand wash when active; §7.11.5) and **`OwnerBadge`** (crown pill `bg-brand-50 text-brand-700`).
+
+**Variants.** `bordered` (default, above) **is now the standard status chip platform-wide** — flipping the `Pill` default means every domain badge, registry, and table renders bordered with no caller change. **`flat`** (`<Pill variant="flat">`, no border + `font-medium`) is the quiet opt-out for the rare place a bordered chip is too heavy. ⚠️ **Home still off-spec:** the overdue badge (`home/HomeView.tsx` ~L332 + the ~L4449 OVERDUE filter button) renders a *bespoke loud chip* (uppercase + `AlertTriangle` + 6px border) instead of the shared `Pill` — swapping it to `<Pill tone="risk">{n} Overdue</Pill>` (now bordered by default) is an open follow-up. Visual reference: `preview.html` → "Status pill — alert variant".
+
+⚠️ **Two avatars exist — one is off-spec.** `InitialsAvatar` (`admin/AdminPrimitives.tsx`) is the canonical **monochrome** avatar (`bg-brand-100 text-brand-700`). A legacy **rainbow** `Avatar` in `StatusBadge.tsx` derives a per-name colour from a 7-hue array — this violates the monochrome rule. Prefer `InitialsAvatar`; treat the rainbow `Avatar` as deprecated.
 
 #### 7.10.5 `InlineRename` (`shared/InlineRename.tsx`)
 The "click to rename in place" editor — single source of truth across the Knowledge Hub data-source surfaces (grid tile, list row, file row). Auto-selects on mount; **Enter or blur commits, Escape cancels**; the ✓/✕ buttons use `onMouseDown`-preventDefault so a click doesn't blur-commit first. Input: `flex-1 min-w-0 text-[0.875rem] font-semibold text-ink-900 bg-canvas-elevated border border-brand-600 focus:outline-none`, sized by the `size` prop — `md` (default) `h-8 px-2.5 rounded-lg` for cards, `sm` `h-7 px-2 rounded-md` for the denser file rows. Save `<Check 15>` `text-brand-700 hover:bg-brand-50`, cancel `<X 15>` `text-ink-500 hover:bg-brand-50`, both `p-1.5 rounded-md`. The detail-view **hero header** rename stays bespoke (white ✓/✕ over the brand header) — it is intentionally not this primitive.
 
 #### 7.10.6 Other shared primitives
-`Orb` (ambient "ask IRA here"; Dashboard/Governance/Execution), `FloatingLines` (empty-state line motion; Chat/Knowledge Hub/Reports), `GlassCard` (`.glass-card` flat-at-rest card), `AssistantMarkdown` (markdown → prose + mono citation pills), `Toast` / `ConfirmationModal` (everywhere), `Breadcrumbs`, `DateFilterPicker`, `TextShimmer`, `HelloEffect`, `Persona` / `AIPersona`.
+**Form controls:** `Checkbox` / `Toggle` (flat — `bg-brand-600` on, `bg-canvas-border` off, white knob; `Toggle` is `w-10 h-[22px]`), `Textarea` (`rounded-lg border-canvas-border`, 13px), `InlineRename` (§7.10.5). **Overlays / feedback:** `CommandPalette` (⌘K global command + search palette), `Toast` (`useToast`; success/error/info), `EmptyState` (centered, **Inter** 20px title, `bg-brand-50` icon disc — content-sized, never fixed-width). **Loading / error:** `Skeleton`, `ComponentLoader`, `ListLoadError`, `BulkRunProgress`. **Ambient / decorative:** `Orb` (Dashboard/Governance/Execution), `FloatingLines` (empty-state motion), `GlassCard` (`.glass-card` flat-at-rest card), `AssistantMarkdown` (markdown → prose + mono citation pills), `Breadcrumbs`, `DateFilterPicker`, `TextShimmer`, `HelloEffect`, `Persona` / `AIPersona`. (Effect-only `BorderGlow` / `NoiseButton` / `SoftAurora` / `3DCard` are surface-specific, not design-system primitives.)
+
+#### 7.10.7 Dropdown / select family
+Two shapes, by need — both share the field chrome (`rounded-lg border-canvas-border bg-canvas-elevated`, hover `border-brand-200`, focus/open `border-brand-600`, 13px `0.8125rem` text, a chevron that rotates/points down). **Two selection modes:** *single-select* marks the chosen row with a brand `Check` ✓ — **no checkbox**; *multi-select* gives every option a **`Checkbox`** and the trigger a count badge (`bg-brand-600` pill).
+
+- **`AdminSelect`** (`admin/AdminPrimitives.tsx`) — **the canonical app dropdown.** A styled trigger + floating `role="listbox"` panel (`bg-canvas-elevated border-canvas-border rounded-xl shadow p-1`), options `h-8 rounded-md`, selected row `bg-brand-50 text-brand-700 font-semibold` with a brand `Check`. Closes on outside-click / Esc / selection; full keyboard nav. Sizes `sm` (h-8) / `md` (h-10). **Use this instead of a native `<select>`** so the menu never falls back to the OS-dark rendering.
+- **`Select`** (`ui/Select.tsx`) — the primitive: a styled **native** `<select>` (`appearance-none`, chevron as a `bg-image`, sizes `sm` h-7 / `md` h-9). Use only where a real native control is wanted (no custom panel). `FIELD_SELECT` (`adminTokens`) is the admin-form flavor (`FIELD_INPUT + appearance-none pr-9`, h-10).
+
+Specialized dropdowns built on the same chrome: **`ColumnFilter`** (`shared/` — the **multi-select** table-header filter used in `SmartTable`: trigger `h-8` + count badge, `rounded-xl` panel with a search input, options `h-8 rounded-lg` checked `bg-brand-50 text-brand-800`, a `Checkbox` per row via `selectIndicator="checkbox"` (or a `Check` tick), and a select-all / clear footer), the **date pickers** (`DateFilterPicker` / `DatePicker` / `CustomDatePicker` — calendar panels), and the dashboard widget-builder's **`CustomDropdown` / `WhiteDropdown`** (denser, `bg-white`, surface-local). ⚠️ 43 raw native `<select>` usages remain — migrate to `AdminSelect` (or `ui/Select`) when touched.
+
+### 7.11 Administration (`admin/`, the "Access Console")
+
+A flattened single-spine governance surface: **People · Teams · Roles · Audit Log**. Invite → role assignment only; **no impersonation surface**. Every mutation writes the audit trail + the live RBAC model. Crisp-flat, *not* editorial-floating — hairline cards, flat fills, `h-10` spine actions.
+
+#### 7.11.1 Section skeleton
+Three flat tabs (`members` · `roles` · `logs`); People & Teams are two views of one Members tab, toggled by a segmented switch. Every section shares one skeleton: **KPI band → toolbar (search left · filters/CTA right) → content.** Section nav reuses Knowledge Hub's underlined-tab language (`pb-3`, `text-[0.8125rem] font-semibold`, spring underline via shared `layoutId`, active `text-brand-700`). Count badge `text-[0.625rem] font-bold px-1.5 rounded-full`: active `bg-brand-100 text-brand-700`, rest `bg-paper-50 text-ink-500`.
+
+#### 7.11.2 KPI band (`AdminKpiRow` / `AdminKpiCard`, `AdminPrimitives.tsx`)
+4-up `grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4`. Card `flex items-center gap-2.5 rounded-lg border px-3 py-2`; icon chip `h-7 w-7 rounded-md bg-brand-50 text-brand-600`; value `text-[1.125rem] font-bold tabular-nums` via `KpiCountUp`; label `text-[0.75rem] text-ink-500`. Click-to-filter: active `border-brand-200 bg-brand-50/40 shadow-[inset_0_-2px_0_0_#6A12CD]` + solid `bg-brand-600` icon chip; hover `y:-3` spring lift. `tone:'attention'` tints amber (`mitigated-50/60` + `mitigated-700`) to flag an actionable gap. Spring cascade, absolute delay `0.08 + i*0.08`.
+
+#### 7.11.3 Tables · avatar · row actions
+Content is `SmartTable` (§7.10.3). People rows use `InitialsAvatar` — **monochrome `bg-brand-100 text-brand-700 ring-1 ring-inset ring-brand-600/10`; never a rainbow / per-person avatar.** Row action = `BTN_ROW` (`inline-flex gap-1.5 px-2.5 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-600 hover:border-ink-300/70 hover:text-brand-700`). Status is a noun → semantic pill tone, not brand: active `compliant-50/700`, suspended `high-50/700`, locked `risk-50/700`, inactive `draft-50/700`, invited `brand-50/700`. Owner = crown pill `bg-brand-50 text-brand-700`.
+
+#### 7.11.4 Roles (`RolesWorkspace.tsx`)
+Two-pane workspace (role list · permission detail), with `CreateRoleModal` driven by `PERMISSION_GROUPS` (`data/rbac`). Preset quick-set chips = `presetChip`: `px-3 h-7 rounded-full`, active `bg-brand-50 text-brand-700 border-brand-200`, rest hairline.
+
+#### 7.11.5 Admin design tokens (`adminTokens.ts`)
+The single source for admin form / button / row classes — both `AdminView` and `RolesWorkspace` consume them: `FIELD_INPUT` (`h-10 rounded-lg border-canvas-border focus:border-brand-600`), `FIELD_LABEL` (`text-[0.75rem] font-semibold text-ink-700`), modal-footer `BTN_CANCEL` / `BTN_PRIMARY` (`h-9`), page CTAs `BTN_CTA_PRIMARY` / `BTN_CTA_OUTLINE` (flat, **`h-10 rounded-md`** spine actions). `AdminSelect` replaces native `<select>` (styled trigger + floating panel, brand `Check` on the active row) so menus never fall back to OS-dark rendering. Search = `MemberSearch` (`h-10 rounded-lg`, glyph-left, clear-on-`X`).
+
+#### 7.11.6 Modals
+Create / edit flows live in centered `Modal` (§7.9) — no dark dialog surfaces (the Single Dark Surface Rule holds; the sidebar stays the only dark chrome).
+
+### 7.12 Auth — Workspace chooser (`auth/`)
+
+The entry gate. **No backend auth** — the user picks a workspace and enters; the signed-in identity defaults, and in production the invited account's role drives all access (§ RBAC model). No password UI in scope.
+
+#### 7.12.1 Two-pane layout
+`flex h-screen` — left **brand panel** `hidden lg:flex w-[44%] bg-sidebar-bg text-white p-12` (the one sanctioned second dark surface, mirroring the sidebar shell); right = the workspace chooser on `bg-canvas`.
+
+#### 7.12.2 Brand-panel FX (`BrandPanelFX` · `FloatingPaths` · `Spotlight`)
+Ambient depth on the dark panel: three slow-drifting brand-glow blooms (`bg-brand-600/30` → `brand-500/15` → `brand-400/10`, `blur-[130px]`), drifting particles + draw-in hairline accents, a shimmer hero (`text-shimmer font-display text-[2.75rem]`), and a sweeping shimmer rule line. Eyebrow `text-[0.6875rem] uppercase tracking-[0.18em] text-white/45`.
+
+#### 7.12.3 Reveal motion
+The approved **cascade reveal** — one-by-one spring with absolute delays (`delay 0.15 + i*0.08`, `stiffness 460 / damping 24 / mass 0.7`), the same spring + stagger constants as the chat follow-up chips. Honors `useReducedMotion` (falls back to no motion).
+
+### 7.13 Recents (`recents/RecentsView.tsx`)
+
+A cross-surface activity index: chat history + workflows + bookmarked messages in one searchable, date-filtered list. Reuses `DateFilterPicker` (§7.10.6) and the search-left toolbar. Bookmarks persist via `utils/bookmarkedMessages`; Star / Bookmark pins an item. Card list over canvas, standard hairline cards.
+
+### 7.14 Engagements — the audit lifecycle (`engagement/`, `engagement-configurable/`, `engagement-execution-v2/`, `engagement-final/`)
+
+The audit-engagement spine behind the sidebar's **Audit Planning · Engagements · Engagement Config · Engagement Final** group. Every sub-surface reuses KPI cards (§7.2.2), `SmartTable` (§7.10.3), `StatusBadge` / `SeverityBadge` semantic tones (§7.10.4), and the search-left toolbar.
+
+#### 7.14.1 Library (`engagement-configurable/EngagementLibraryView`)
+One landing page listing all engagements across Compliance / Internal Audit / Automation, with a type filter. "Plan Engagement" opens the pattern-selection modal (`ConfigurableEngagementWizard`).
+
+#### 7.14.2 Detail & setup (`engagement/EngagementDetailView` + `EngagementSetupPanel`)
+Per-engagement controls, findings, and linked workflows; embeds `Orb` for inline AI. Control status via a local `StatusPill` on semantic tones.
+
+#### 7.14.3 Execution V2 (`engagement-execution-v2/`)
+Engagement header → KPI cards → controls `SmartTable`, all from derived helpers (no hardcoded state). Embeds `RacmMappingWorkspace` (§7.6). Status / conclusion / review render through display maps.
+
+#### 7.14.4 Final (`engagement-final/EngagementFinalModule`)
+Reuses IA Scope, Automation Workflows/Cases, Business-Process RACM, Compliance Controls/Evidence/WorkingPaper, and the shared Activity Trail. Role-gated via `Gated` (§6).
+
+### 7.15 Workflow Library & Builder (`workflow/`, `concierge-workflow-builder/`, `workflow-edit-in-chat/`, `artifacts/`)
+
+#### 7.15.1 Library (`workflow/WorkflowLibraryView`)
+Searchable, paginated workflow registry; **per-row** run / edit / delete actions (not whole-list), plus upload + "Build with AI".
+
+#### 7.15.2 Executor (`workflow/WorkflowExecutor`)
+Runs a workflow: upload data → plan params (`PlanPanel`) → run → output preview. Run states via `CheckCircle2` / `Clock` / `Loader2`.
+
+#### 7.15.3 Builder journey (`concierge-workflow-builder/WorkflowBuilderJourney`)
+Stepper-driven build (Write Prompt → Upload → Clarify → Review/Run) with an `AIAssistantPanel` chat alongside; uses the chat clarify-card + tolerance-card patterns.
+
+#### 7.15.4 Edit-in-chat (`workflow-edit-in-chat/`)
+Edit an existing workflow conversationally; reuses the builder's `DataSourcePanel` + clarify stages.
+
+#### 7.15.5 Artifacts (`artifacts/ArtifactPanel`)
+Right-side artifact panel (rendered through a portal) for workflow output — output / data / config tabs, `KpiTile`, share + download. Role-gated via `Gated`.
+
+### 7.16 Exceptions & Action Hub (`exceptions/`)
+
+#### 7.16.1 Action Hub (`ActionHubView`)
+The cross-engagement queue of exceptions and actions: KPI band → table → activity timeline.
+
+#### 7.16.2 Manage Exceptions (`ManageExceptionsView`)
+Exceptions `SmartTable` with bulk assign / classify (`BulkAssignDrawer`, `BulkClassifyModal`), an exception detail drawer, status tracker, and ATR generation (`GenerateATRModal`). Drawers slide from the right; the bulk-action bar is the one dark over-content surface (matches the registry bulk bar). Severity via `SeverityBadge` semantic tones.
+
+### 7.17 Intelligence — AI Concierge (`intelligence/AIConciergeView.tsx`)
+
+A tool-launcher landing: `GlowCard` tiles for AI tools (doc search, table extract, workflow build) that launch the workflow builder with a seeded prompt. Sparkle / bot iconography over a quiet brand glow — the one place GlowCard's glow is sanctioned outside hero moments.
+
+### 7.18 Notifications (`notifications/NotificationDrawer.tsx`)
+
+Right-side drawer at `z-modal`, grouped by day bucket (`utils/timeAgo`). Primary filter (all / action / unread) + category filter; `NotificationRow` carries inline actions driven by a small action-state machine; mark-all-read. Empty state uses `Inbox` / `BellOff`.

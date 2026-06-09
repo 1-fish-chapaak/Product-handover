@@ -26,7 +26,6 @@
       --brand-700: #550FA5;
       --brand-800: #3B0B72;
       --brand-900: #26064A;
-      --brand-950: #170330;
 
       /* Paper & Ink — inverted roles */
       --canvas:    #12081E;             /* body background */
@@ -109,7 +108,7 @@
         var(--canvas);
       color: var(--ink-800);
       font-family: var(--font-sans);
-      font-size: 15px;
+      font-size:0.9375rem;
       line-height: 1.6;
       font-feature-settings: "cv08", "cv11", "ss01";
       -webkit-font-smoothing: antialiased;
@@ -121,20 +120,20 @@
     .wrap { max-width: 1200px; margin: 0 auto; padding: 64px 32px 128px; }
     .hero { padding: 96px 0 48px; border-bottom: 1px solid var(--border-1); margin-bottom: 64px; }
     .hero .kicker {
-      font-size: 12px; font-weight: 560; letter-spacing: 0.14em;
+      font-size:0.75rem; font-weight: 560; letter-spacing: 0.14em;
       text-transform: uppercase; color: var(--brand-300);
     }
     .hero h1 {
       font-family: var(--font-display);
       font-weight: 320;
-      font-size: 72px;
+      font-size:4.5rem;
       line-height: 1.05;
       letter-spacing: -0.03em;
       color: var(--ink-900);
       margin: 16px 0 24px;
     }
     .hero p {
-      font-size: 19px;
+      font-size:1.1875rem;
       line-height: 1.55;
       color: var(--ink-700);
       max-width: 66ch;
@@ -142,7 +141,7 @@
     .hero .link-row {
       margin-top: 32px;
       display: flex; gap: 16px; align-items: center;
-      font-size: 13px; color: var(--ink-600);
+      font-size:0.8125rem; color: var(--ink-600);
     }
     .hero .link-row a { color: var(--brand-300); text-decoration: none; border-bottom: 1px solid rgba(195,147,250,0.3); }
     .hero .link-row a:hover { color: var(--brand-200); border-bottom-color: var(--brand-300); }
@@ -150,20 +149,20 @@
     .section { margin: 96px 0 0; }
     .section:first-of-type { margin-top: 0; }
     .section > .label {
-      font-size: 12px; font-weight: 560; letter-spacing: 0.14em;
+      font-size:0.75rem; font-weight: 560; letter-spacing: 0.14em;
       text-transform: uppercase; color: var(--brand-300); margin-bottom: 8px;
     }
     .section > h2 {
       font-family: var(--font-display);
       font-weight: 380;
-      font-size: 44px;
+      font-size:2.75rem;
       line-height: 1.1;
       letter-spacing: -0.02em;
       color: var(--ink-900);
       margin: 0 0 24px;
     }
     .section > .intro {
-      font-size: 17px;
+      font-size:1.0625rem;
       line-height: 1.6;
       color: var(--ink-700);
       max-width: 66ch;
@@ -172,7 +171,7 @@
     /* "Used in:" — maps each component to the product surfaces that use it. */
     .used-in {
       font-family: var(--font-mono);
-      font-size: 12px;
+      font-size:0.75rem;
       line-height: 1.5;
       color: var(--ink-600);
       margin: -12px 0 24px;
@@ -187,8 +186,8 @@
     .grid-12 { grid-template-columns: repeat(12, 1fr); gap: 24px; }
     @media (max-width: 880px) {
       .grid-4, .grid-6, .grid-12 { grid-template-columns: repeat(2, 1fr); }
-      .hero h1 { font-size: 56px; }
-      .section > h2 { font-size: 36px; }
+      .hero h1 { font-size:3.5rem; }
+      .section > h2 { font-size:2.25rem; }
     }
 
     /* ──────────────────────────────────────────────────────────
@@ -202,8 +201,8 @@
     }
     .swatch .chip { height: 72px; border-bottom: 1px solid rgba(255,255,255,0.04); }
     .swatch .meta { padding: 10px 12px; }
-    .swatch .name { font-size: 13px; font-weight: 560; color: var(--ink-800); font-family: var(--font-mono); }
-    .swatch .hex { font-size: 12px; color: var(--ink-600); font-family: var(--font-mono); margin-top: 2px; }
+    .swatch .name { font-size:0.8125rem; font-weight: 560; color: var(--ink-800); font-family: var(--font-mono); }
+    .swatch .hex { font-size:0.75rem; color: var(--ink-600); font-family: var(--font-mono); margin-top: 2px; }
 
     /* ──────────────────────────────────────────────────────────
        TYPE SCALE
@@ -218,25 +217,25 @@
     }
     .type-row .tag {
       font-family: var(--font-mono);
-      font-size: 12px;
+      font-size:0.75rem;
       color: var(--ink-600);
       padding-top: 8px;
     }
     .type-row .sample { color: var(--ink-900); }
-    .t-display-2xl { font-family: var(--font-display); font-weight: 300; font-size: 72px; line-height: 1.05; letter-spacing: -0.03em; }
-    .t-display-xl  { font-family: var(--font-display); font-weight: 340; font-size: 56px; line-height: 1.07; letter-spacing: -0.025em; }
-    .t-display-lg  { font-family: var(--font-display); font-weight: 380; font-size: 44px; line-height: 1.1;  letter-spacing: -0.02em; }
-    .t-display-md  { font-family: var(--font-display); font-weight: 420; font-size: 36px; line-height: 1.15; letter-spacing: -0.015em; }
-    .t-display-sm  { font-family: var(--font-display); font-weight: 460; font-size: 28px; line-height: 1.2;  letter-spacing: -0.01em; }
-    .t-heading-xl  { font-weight: 600; font-size: 24px; line-height: 1.25; letter-spacing: -0.005em; }
-    .t-heading-lg  { font-weight: 600; font-size: 20px; line-height: 1.3; }
-    .t-heading-md  { font-weight: 600; font-size: 17px; line-height: 1.4; }
-    .t-heading-sm  { font-weight: 620; font-size: 15px; line-height: 1.45; letter-spacing: 0.005em; }
-    .t-body-lg     { font-weight: 400; font-size: 17px; line-height: 1.65; }
-    .t-body        { font-weight: 400; font-size: 15px; line-height: 1.6; }
-    .t-body-sm     { font-weight: 440; font-size: 13px; line-height: 1.55; }
-    .t-label       { font-weight: 560; font-size: 12px; line-height: 1.3; letter-spacing: 0.02em; text-transform: uppercase; color: var(--ink-600); }
-    .t-code        { font-family: var(--font-mono); font-weight: 420; font-size: 13px; }
+    .t-display-2xl { font-family: var(--font-display); font-weight: 300; font-size:4.5rem; line-height: 1.05; letter-spacing: -0.03em; }
+    .t-display-xl  { font-family: var(--font-display); font-weight: 340; font-size:3.5rem; line-height: 1.07; letter-spacing: -0.025em; }
+    .t-display-lg  { font-family: var(--font-display); font-weight: 380; font-size:2.75rem; line-height: 1.1;  letter-spacing: -0.02em; }
+    .t-display-md  { font-family: var(--font-display); font-weight: 420; font-size:2.25rem; line-height: 1.15; letter-spacing: -0.015em; }
+    .t-display-sm  { font-family: var(--font-display); font-weight: 460; font-size:1.75rem; line-height: 1.2;  letter-spacing: -0.01em; }
+    .t-heading-xl  { font-weight: 600; font-size:1.5rem; line-height: 1.25; letter-spacing: -0.005em; }
+    .t-heading-lg  { font-weight: 600; font-size:1.25rem; line-height: 1.3; }
+    .t-heading-md  { font-weight: 600; font-size:1.0625rem; line-height: 1.4; }
+    .t-heading-sm  { font-weight: 620; font-size:0.9375rem; line-height: 1.45; letter-spacing: 0.005em; }
+    .t-body-lg     { font-weight: 400; font-size:1.0625rem; line-height: 1.65; }
+    .t-body        { font-weight: 400; font-size:0.9375rem; line-height: 1.6; }
+    .t-body-sm     { font-weight: 440; font-size:0.8125rem; line-height: 1.55; }
+    .t-label       { font-weight: 560; font-size:0.75rem; line-height: 1.3; letter-spacing: 0.02em; text-transform: uppercase; color: var(--ink-600); }
+    .t-code        { font-family: var(--font-mono); font-weight: 420; font-size:0.8125rem; }
     .t-numeric     { font-weight: 520; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 
     /* ──────────────────────────────────────────────────────────
@@ -247,7 +246,7 @@
     .btn {
       display: inline-flex; align-items: center; justify-content: center; gap: 8px;
       height: 40px; padding: 0 16px; border-radius: var(--r-md);
-      font: 600 15px/1 var(--font-sans); letter-spacing: 0.005em;
+      font: 600 0.9375rem/1 var(--font-sans); letter-spacing: 0.005em;
       border: 1px solid transparent; cursor: pointer;
       transition: background 150ms var(--ease-standard), transform 75ms var(--ease-standard), box-shadow 150ms var(--ease-standard);
     }
@@ -266,12 +265,12 @@
     .input {
       height: 40px; padding: 0 12px; border-radius: var(--r-md);
       border: 1px solid var(--border-2); background: var(--surface-1);
-      font: 400 15px/1 var(--font-sans); color: var(--ink-900);
+      font: 400 0.9375rem/1 var(--font-sans); color: var(--ink-900);
       width: 280px; transition: border-color 150ms var(--ease-standard), box-shadow 150ms var(--ease-standard);
     }
     .input::placeholder { color: var(--ink-500); }
     .input:hover { border-color: var(--border-3); }
-    .input:focus { outline: none; border-color: var(--brand-400); box-shadow: 0 0 0 4px rgba(163, 102, 240, 0.32); }
+    .input:focus { outline: none; border-color: var(--brand-400); }
 
     .card {
       background: var(--surface-1);
@@ -289,7 +288,7 @@
     .pill {
       display: inline-flex; align-items: center;
       height: 24px; padding: 0 10px; border-radius: 999px;
-      font: 560 12px/1 var(--font-sans); letter-spacing: 0.02em; text-transform: uppercase;
+      font: 560 0.75rem/1 var(--font-sans); letter-spacing: 0.02em; text-transform: uppercase;
     }
     .pill .glyph { display: none; }
     .pill-risk { background: var(--risk-50); color: var(--risk); }
@@ -300,7 +299,7 @@
     .pill-ev   { background: var(--evidence-50); color: var(--evidence); }
     .pill-draft{ background: var(--draft-50); color: var(--draft); }
 
-    .shadow-demo { padding: 24px; background: var(--surface-1); border-radius: var(--r-lg); text-align: center; font-family: var(--font-mono); font-size: 12px; color: var(--ink-700); border: 1px solid rgba(255,255,255,0.02); }
+    .shadow-demo { padding: 24px; background: var(--surface-1); border-radius: var(--r-lg); text-align: center; font-family: var(--font-mono); font-size:0.75rem; color: var(--ink-700); border: 1px solid rgba(255,255,255,0.02); }
     .s-xs { box-shadow: var(--shadow-xs); }
     .s-sm { box-shadow: var(--shadow-sm); }
     .s-md { box-shadow: var(--shadow-md); }
@@ -310,7 +309,7 @@
     .radius-demo {
       height: 80px; background: rgba(163, 102, 240, 0.2);
       display: flex; align-items: center; justify-content: center;
-      font-family: var(--font-mono); font-size: 12px; color: var(--brand-200);
+      font-family: var(--font-mono); font-size:0.75rem; color: var(--brand-200);
     }
 
     .space-row { display: flex; align-items: flex-end; gap: 16px; height: 160px; padding: 24px; background: var(--surface-1); border-radius: var(--r-md); border: 1px solid var(--border-1); }
@@ -318,7 +317,7 @@
     .space-unit::after {
       content: attr(data-label);
       position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%);
-      font-family: var(--font-mono); font-size: 11px; color: var(--ink-600); white-space: nowrap;
+      font-family: var(--font-mono); font-size:0.6875rem; color: var(--ink-600); white-space: nowrap;
     }
 
     /* AI Response */
@@ -334,16 +333,16 @@
     }
     .ai-meta {
       display: flex; align-items: center; gap: 12px;
-      font-size: 13px; color: var(--ink-600); margin-bottom: 16px;
+      font-size:0.8125rem; color: var(--ink-600); margin-bottom: 16px;
     }
     .ai-meta .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand-300); animation: pulse 1.4s var(--ease-spring) infinite; }
     @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.5; } 50% { transform: scale(1.4); opacity: 1; } }
-    .ai-body { font-size: 17px; line-height: 1.65; color: var(--ink-800); max-width: 66ch; }
+    .ai-body { font-size:1.0625rem; line-height: 1.65; color: var(--ink-800); max-width: 66ch; }
     .ai-body p { margin: 0 0 14px; }
     .ai-citation {
       display: inline-block;
       padding: 1px 7px;
-      font: 460 12px/1.5 var(--font-mono);
+      font: 460 0.75rem/1.5 var(--font-mono);
       color: var(--brand-200);
       background: rgba(106, 18, 205, 0.25);
       border-radius: 4px;
@@ -355,7 +354,7 @@
       border: 1px solid var(--border-1);
       border-radius: var(--r-md);
       padding: 12px 16px;
-      font: 460 12px/1.7 var(--font-mono);
+      font: 460 0.75rem/1.7 var(--font-mono);
       color: var(--ink-700);
     }
     .ai-tools .tool-head { color: var(--ink-600); margin-bottom: 4px; }
@@ -375,21 +374,21 @@
       border-radius: var(--r-lg);
       padding: 28px 32px;
     }
-    .dash-card .kicker { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brand-300); font-weight: 560; }
+    .dash-card .kicker { font-size:0.6875rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brand-300); font-weight: 560; }
     .dash-card .metric {
       font-family: var(--font-display);
       font-weight: 300;
-      font-size: 64px;
+      font-size:4rem;
       line-height: 1;
       letter-spacing: -0.03em;
       color: var(--ink-900);
       margin-top: 12px;
       display: flex; align-items: baseline; gap: 10px;
     }
-    .dash-card .metric .denom { font-size: 18px; color: var(--ink-600); font-weight: 400; letter-spacing: 0; }
+    .dash-card .metric .denom { font-size:1.125rem; color: var(--ink-600); font-weight: 400; letter-spacing: 0; }
     .dash-card .trend {
       display: inline-flex; align-items: center; gap: 6px;
-      margin-top: 8px; font-size: 13px; font-weight: 520; color: var(--compliant);
+      margin-top: 8px; font-size:0.8125rem; font-weight: 520; color: var(--compliant);
       font-variant-numeric: tabular-nums;
     }
     .dash-card .bar {
@@ -403,10 +402,10 @@
     .dash-card .breakdown { margin-top: 20px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
     .dash-card .breakdown .cell { display: flex; flex-direction: column; gap: 4px; }
     .dash-card .breakdown .num {
-      font-variant-numeric: tabular-nums; font-weight: 600; font-size: 20px; color: var(--ink-900);
+      font-variant-numeric: tabular-nums; font-weight: 600; font-size:1.25rem; color: var(--ink-900);
     }
     .dash-card .breakdown .lbl {
-      font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-600); font-weight: 560;
+      font-size:0.6875rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-600); font-weight: 560;
     }
 
     /* Report */
@@ -417,12 +416,12 @@
       padding: 56px 64px 48px;
     }
     .report .report-kicker {
-      font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brand-300); font-weight: 560;
+      font-size:0.75rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brand-300); font-weight: 560;
     }
     .report h2 {
       font-family: var(--font-display);
       font-weight: 340;
-      font-size: 44px;
+      font-size:2.75rem;
       line-height: 1.08;
       letter-spacing: -0.02em;
       color: var(--ink-900);
@@ -430,7 +429,7 @@
       max-width: 18ch;
     }
     .report p {
-      font-size: 17px;
+      font-size:1.0625rem;
       line-height: 1.7;
       color: var(--ink-800);
       max-width: 66ch;
@@ -439,7 +438,7 @@
     .report .dropcap::first-letter {
       font-family: var(--font-display);
       font-weight: 300;
-      font-size: 76px;
+      font-size:4.75rem;
       line-height: 0.9;
       float: left;
       margin: 6px 10px 0 -2px;
@@ -447,18 +446,18 @@
     }
     .report .eyebrow {
       margin-top: 36px;
-      font-size: 13px; color: var(--ink-600);
+      font-size:0.8125rem; color: var(--ink-600);
       display: flex; align-items: center; gap: 10px;
     }
     .report .eyebrow .divider { flex: 1; height: 1px; background: var(--border-2); }
 
     /* Table */
     .table-wrap { border: 1px solid var(--border-1); border-radius: var(--r-lg); overflow: hidden; background: var(--surface-1); }
-    table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.data { width: 100%; border-collapse: collapse; font-size:0.8125rem; }
     table.data thead th {
       background: var(--surface-2);
       color: var(--ink-700);
-      font-weight: 560; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+      font-weight: 560; font-size:0.6875rem; letter-spacing: 0.14em; text-transform: uppercase;
       text-align: left; padding: 12px 16px;
       border-bottom: 1px solid var(--border-1);
     }
@@ -467,12 +466,12 @@
     table.data tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
     table.data tbody tr.selected { background: rgba(106, 18, 205, 0.18); box-shadow: inset 2px 0 0 var(--brand-400); }
     table.data .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 520; }
-    table.data .mono { font-family: var(--font-mono); font-size: 12px; color: var(--ink-600); }
+    table.data .mono { font-family: var(--font-mono); font-size:0.75rem; color: var(--ink-600); }
 
     .foot {
       margin-top: 128px; padding-top: 32px;
       border-top: 1px solid var(--border-1);
-      font-size: 13px; color: var(--ink-600);
+      font-size:0.8125rem; color: var(--ink-600);
       display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px;
     }
     .foot a { color: var(--brand-300); text-decoration: none; }
@@ -502,7 +501,7 @@
     <section class="section">
       <div class="label">01 · Color</div>
       <h2>Brand scale</h2>
-      <p class="intro">Same eleven stops. In dark mode the hero shifts to <code class="t-code">brand-300</code>/<code class="t-code">brand-400</code> for text and <code class="t-code">brand-500</code>/<code class="t-code">brand-600</code> for fills.</p>
+      <p class="intro">Same ten stops. In dark mode the hero shifts to <code class="t-code">brand-300</code>/<code class="t-code">brand-400</code> for text and <code class="t-code">brand-500</code>/<code class="t-code">brand-600</code> for fills.</p>
       <div class="grid grid-6">
         <div class="swatch"><div class="chip" style="background: var(--brand-50)"></div><div class="meta"><div class="name">brand-50</div><div class="hex">#F7F0FF</div></div></div>
         <div class="swatch"><div class="chip" style="background: var(--brand-100)"></div><div class="meta"><div class="name">brand-100</div><div class="hex">#EDDEFE</div></div></div>
@@ -513,8 +512,7 @@
         <div class="swatch"><div class="chip" style="background: var(--brand-600)"></div><div class="meta"><div class="name">brand-600</div><div class="hex">#6A12CD</div></div></div>
         <div class="swatch"><div class="chip" style="background: var(--brand-700)"></div><div class="meta"><div class="name">brand-700</div><div class="hex">#550FA5</div></div></div>
         <div class="swatch"><div class="chip" style="background: var(--brand-800)"></div><div class="meta"><div class="name">brand-800</div><div class="hex">#3B0B72</div></div></div>
-        <div class="swatch"><div class="chip" style="background: var(--brand-900)"></div><div class="meta"><div class="name">brand-900</div><div class="hex">#26064A</div></div></div>
-        <div class="swatch" style="outline: 2px solid rgba(163,102,240,0.35); outline-offset: 2px;"><div class="chip" style="background: var(--brand-950)"></div><div class="meta"><div class="name">brand-950 ★</div><div class="hex">#170330</div></div></div>
+        <div class="swatch" style="outline: 2px solid rgba(163,102,240,0.35); outline-offset: 2px;"><div class="chip" style="background: var(--brand-900)"></div><div class="meta"><div class="name">brand-900 ★</div><div class="hex">#26064A</div></div></div>
       </div>
     </section>
 
@@ -557,7 +555,7 @@
       <p class="intro">Serif display weight drops one notch in dark mode — heavier strokes muddy on dark. Body stays Inter 400. Mono stays JetBrains.</p>
 
       <!-- 4-base type scale (rem) -->
-      <table style="border-collapse:collapse; width:100%; max-width:560px; margin:0 0 40px; font-size:13px; font-variant-numeric:tabular-nums;">
+      <table style="border-collapse:collapse; width:100%; max-width:560px; margin:0 0 40px; font-size:0.8125rem; font-variant-numeric:tabular-nums;">
         <thead>
           <tr style="text-align:left; border-bottom:1px solid var(--border-2);">
             <th style="padding:8px 12px 8px 0; font-weight:560;">Token</th>
@@ -591,7 +589,7 @@
       <div class="type-row"><div class="tag">body-lg</div><div class="sample t-body-lg">A comprehensive review of control effectiveness across business units, with findings prioritized by impact and remediation velocity.</div></div>
       <div class="type-row"><div class="tag">body</div><div class="sample t-body">Default UI copy — interface descriptions, form helper text, list items, tooltip prose.</div></div>
       <div class="type-row"><div class="tag">code</div><div class="sample t-code" style="color: var(--brand-300)">audit_trail_q1_2026.json · evt_8c3f2b · confidence 0.94</div></div>
-      <div class="type-row"><div class="tag">numeric</div><div class="sample t-numeric" style="font-size:36px;">  12,481,306.44  </div></div>
+      <div class="type-row"><div class="tag">numeric</div><div class="sample t-numeric" style="font-size:2.25rem;">  12,481,306.44  </div></div>
     </section>
 
     <!-- SPACING -->
@@ -655,7 +653,7 @@
     </section>
 
     <section class="section" style="margin-top: 56px;">
-      <h2 style="font-size: 28px;">Input</h2>
+      <h2 style="font-size:1.75rem;">Input</h2>
       <p class="used-in"><b>Used in:</b> Knowledge Hub search, RACM / Control Library filters, form fields across Engagements &amp; Admin. (The Ask IRA composer uses border-tone focus, not the ring.)</p>
       <div class="row">
         <input class="input" placeholder="Search risks…" />
@@ -664,7 +662,7 @@
     </section>
 
     <section class="section" style="margin-top: 56px;">
-      <h2 style="font-size: 28px;">Severity pills</h2>
+      <h2 style="font-size:1.75rem;">Severity pills</h2>
       <p class="used-in"><b>Used in:</b> Risk Register rows, Findings (Execution), Control Library status, chat Sources type pills. Spelled-out labels, no RAG ramp.</p>
       <div class="row">
         <span class="pill pill-risk"><span class="glyph">●</span> Critical</span>
@@ -848,8 +846,120 @@
       </div>
     </section>
 
+    <!-- ───── SURFACE: ADMINISTRATION ───── -->
+    <section class="section">
+      <div class="label">Surface · Access Console</div>
+      <h2>Administration</h2>
+      <p class="intro">Crisp-flat, not editorial-floating: hairline cards, flat fills, <code>h-10</code> spine actions. People · Teams · Roles · Audit Log, each on one skeleton — KPI band → toolbar (search left · CTA right) → SmartTable. Invite → role assignment only; no impersonation surface.</p>
+      <p class="used-in"><b>Used in:</b> <code>admin/AdminView</code>, <code>RolesWorkspace</code>; classes in <code>adminTokens.ts</code>, widgets in <code>AdminPrimitives.tsx</code>. See DESIGN.md §7.11.</p>
+
+      <!-- KPI band (AdminKpiRow): one active filter tile + one 'attention' tile -->
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;">
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid var(--brand-700); background:rgba(136,56,222,0.12); box-shadow:inset 0 -2px 0 0 var(--brand-500);">
+          <div style="display:flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:6px; background:var(--brand-600); color:#fff; font-size:0.75rem;">◧</div>
+          <div style="display:flex; align-items:baseline; gap:6px; min-width:0;"><span style="font-size:1.125rem; font-weight:700; color:var(--brand-300); font-variant-numeric:tabular-nums;">128</span><span style="font-size:0.75rem; color:var(--ink-500);">People</span></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid var(--paper-200); background:var(--paper-0);">
+          <div style="display:flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:6px; background:rgba(163,102,240,0.15); color:var(--brand-300); font-size:0.75rem;">◩</div>
+          <div style="display:flex; align-items:baseline; gap:6px;"><span style="font-size:1.125rem; font-weight:700; color:var(--ink-900); font-variant-numeric:tabular-nums;">14</span><span style="font-size:0.75rem; color:var(--ink-500);">Teams</span></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid var(--paper-200); background:var(--paper-0);">
+          <div style="display:flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:6px; background:rgba(163,102,240,0.15); color:var(--brand-300); font-size:0.75rem;">◈</div>
+          <div style="display:flex; align-items:baseline; gap:6px;"><span style="font-size:1.125rem; font-weight:700; color:var(--ink-900); font-variant-numeric:tabular-nums;">9</span><span style="font-size:0.75rem; color:var(--ink-500);">Roles</span></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid rgba(251,191,36,0.25); background:var(--mitigated-50);">
+          <div style="display:flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:6px; background:rgba(251,191,36,0.18); color:var(--mitigated); font-size:0.75rem;">!</div>
+          <div style="display:flex; align-items:baseline; gap:6px;"><span style="font-size:1.125rem; font-weight:700; color:var(--mitigated); font-variant-numeric:tabular-nums;">3</span><span style="font-size:0.75rem; color:var(--mitigated);">No team</span></div>
+        </div>
+      </div>
+
+      <!-- toolbar: search left · flat h-10 CTA right -->
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px;">
+        <input class="input" placeholder="Search people…" style="max-width:280px;" />
+        <button class="btn btn-primary">+ Invite people</button>
+      </div>
+
+      <!-- People table — monochrome InitialsAvatar + semantic status pills + row action -->
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr><th>Member</th><th>Email</th><th>Role</th><th>Status</th><th class="num"></th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span style="display:inline-flex; align-items:center; gap:10px;"><span style="display:inline-flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:9999px; background:rgba(163,102,240,0.18); color:var(--brand-300); font-size:0.6875rem; font-weight:600; box-shadow:inset 0 0 0 1px rgba(163,102,240,0.25);">JM</span> J. Mendoza</span></td>
+              <td class="mono">j.mendoza@acme.co</td><td>Audit Lead</td>
+              <td><span class="pill pill-comp"><span class="glyph">■</span> Active</span></td>
+              <td class="num"><button class="btn btn-secondary" style="height:28px; padding:0 10px; font-size:0.75rem;">Edit</button></td>
+            </tr>
+            <tr>
+              <td><span style="display:inline-flex; align-items:center; gap:10px;"><span style="display:inline-flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:9999px; background:rgba(163,102,240,0.18); color:var(--brand-300); font-size:0.6875rem; font-weight:600; box-shadow:inset 0 0 0 1px rgba(163,102,240,0.25);">ML</span> M. Lee</span></td>
+              <td class="mono">m.lee@acme.co</td><td>Reviewer</td>
+              <td><span class="pill pill-info"><span class="glyph">○</span> Invited</span></td>
+              <td class="num"><button class="btn btn-secondary" style="height:28px; padding:0 10px; font-size:0.75rem;">Edit</button></td>
+            </tr>
+            <tr>
+              <td><span style="display:inline-flex; align-items:center; gap:10px;"><span style="display:inline-flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:9999px; background:rgba(163,102,240,0.18); color:var(--brand-300); font-size:0.6875rem; font-weight:600; box-shadow:inset 0 0 0 1px rgba(163,102,240,0.25);">KR</span> K. Ray</span></td>
+              <td class="mono">k.ray@acme.co</td><td>Contributor</td>
+              <td><span class="pill pill-high"><span class="glyph">▲</span> Suspended</span></td>
+              <td class="num"><button class="btn btn-secondary" style="height:28px; padding:0 10px; font-size:0.75rem;">Edit</button></td>
+            </tr>
+            <tr>
+              <td><span style="display:inline-flex; align-items:center; gap:10px;"><span style="display:inline-flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:9999px; background:rgba(163,102,240,0.18); color:var(--brand-300); font-size:0.6875rem; font-weight:600; box-shadow:inset 0 0 0 1px rgba(163,102,240,0.25);">AP</span> A. Park</span></td>
+              <td class="mono">a.park@acme.co</td><td>Viewer</td>
+              <td><span class="pill pill-draft"><span class="glyph">▢</span> Inactive</span></td>
+              <td class="num"><button class="btn btn-secondary" style="height:28px; padding:0 10px; font-size:0.75rem;">Edit</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="used-in" style="margin-top:12px;"><b>Rules in play:</b> avatar is monochrome (brand-tinted on the dark surface) — never per-person colour; status is a noun, so each pill wears its own semantic tone, not a brand fill; the dark canvas is the theme, the sidebar stays the anchor.</p>
+    </section>
+
+    <!-- ───── SURFACE: AUTH — WORKSPACE CHOOSER ───── -->
+    <section class="section">
+      <div class="label">Surface · Entry gate</div>
+      <h2>Auth — Workspace chooser</h2>
+      <p class="intro">The one sanctioned second dark surface, mirroring the sidebar shell. No backend auth — pick a workspace and enter; the invited account's role drives all access. Approved cascade-reveal on mount (the chat follow-up chip spring).</p>
+      <p class="used-in"><b>Used in:</b> <code>auth/LoginView</code> + <code>BrandPanelFX</code>. See DESIGN.md §7.12.</p>
+      <div style="display:grid; grid-template-columns:44% 1fr; border-radius:16px; overflow:hidden; border:1px solid var(--paper-200); min-height:320px;">
+        <!-- dark brand panel -->
+        <div style="position:relative; background:var(--brand-900); color:#fff; padding:32px; overflow:hidden;">
+          <div style="position:absolute; top:-80px; right:-60px; width:260px; height:260px; border-radius:9999px; background:rgba(106,18,205,0.45); filter:blur(80px);"></div>
+          <div style="position:absolute; bottom:-70px; left:-50px; width:220px; height:220px; border-radius:9999px; background:rgba(136,56,222,0.30); filter:blur(80px);"></div>
+          <div style="position:relative; display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,var(--brand-500),var(--brand-400)); display:flex; align-items:center; justify-content:center;">✦</div>
+            <span style="font-size:0.875rem; font-weight:700; letter-spacing:-0.01em;">IRAME.AI</span>
+          </div>
+          <div style="position:relative; margin-top:56px;">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+              <span style="height:1px; width:40px; background:rgba(255,255,255,0.2);"></span>
+              <span style="font-size:0.6875rem; font-weight:600; letter-spacing:0.18em; text-transform:uppercase; color:rgba(255,255,255,0.45);">Auditify · Ask IRA</span>
+            </div>
+            <div style="font-family:'Source Serif 4',Georgia,serif; font-size:2.5rem; line-height:1.08; letter-spacing:-0.02em;">Audit smarter.<br>Not harder.</div>
+            <p style="margin-top:16px; max-width:34ch; font-size:0.875rem; line-height:1.6; color:rgba(255,255,255,0.55);">On-dark text uses white at fixed alphas — 0.55 dim, 0.45 muted, 0.06 fills — never opaque grey.</p>
+          </div>
+        </div>
+        <!-- workspace chooser -->
+        <div style="padding:32px; background:var(--paper-0); display:flex; flex-direction:column; justify-content:center; gap:10px;">
+          <div class="t-label" style="margin-bottom:6px;">Choose a workspace</div>
+          <div style="display:flex; align-items:center; gap:12px; padding:14px 16px; border-radius:12px; border:1px solid var(--brand-500); background:rgba(136,56,222,0.15);">
+            <span style="font-size:1.125rem; color:var(--brand-300);">▣</span>
+            <div style="flex:1;"><div style="font-size:0.875rem; font-weight:600; color:var(--ink-900);">Acme Corp — Internal Audit</div><div style="font-size:0.75rem; color:var(--ink-500);">128 members · 14 teams</div></div>
+            <span style="color:var(--brand-300);">✓</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; padding:14px 16px; border-radius:12px; border:1px solid var(--paper-200); background:var(--paper-0);">
+            <span style="font-size:1.125rem; color:var(--ink-400);">▣</span>
+            <div style="flex:1;"><div style="font-size:0.875rem; font-weight:600; color:var(--ink-800);">Acme Corp — Compliance</div><div style="font-size:0.75rem; color:var(--ink-500);">42 members · 5 teams</div></div>
+          </div>
+          <button class="btn btn-primary" style="align-self:flex-start; margin-top:8px;">Enter workspace →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOT ─────────────────────────────────────────────── -->
     <footer class="foot">
-      <div>DESIGN.md — Editorial GRC · Dark preview · refined 2026-04-21</div>
+      <div>DESIGN.md — Editorial GRC · Dark preview · refined 2026-06-08</div>
       <div>
         <a href="./DESIGN.md">DESIGN.md</a> ·
         <a href="./preview.html">Light preview</a> ·
