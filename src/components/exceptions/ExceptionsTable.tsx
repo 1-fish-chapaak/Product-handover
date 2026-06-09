@@ -2,6 +2,8 @@ import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
+  Calendar,
+  CalendarClock,
   Eye,
   Filter,
   GripVertical,
@@ -243,6 +245,7 @@ function buildColumnDefs(
     { key: 'status',         label: 'Status',         draggable: true, filterable: true, filterMode: 'multi', filterOptions: ALL_STATUS_LABELS, accessor: (e) => STATUS_LABEL[e.status] },
     { key: 'classification', label: 'Classification', draggable: true, filterable: true, filterMode: 'multi', filterOptions: ALL_CLASSIFICATIONS, accessor: (e) => e.classification },
     { key: 'actionReview',   label: 'Action Review',  draggable: true, filterable: true, filterMode: 'multi', filterOptions: ALL_COMBINED_REVIEW_LABELS, accessor: combinedReviewAccessor, minWidth: 220 },
+    { key: 'dueDate',        label: 'Due Date',       draggable: true, filterable: false, accessor: (e) => e.dueDate ?? '', minWidth: 170 },
     { key: 'actionableId',   label: 'Actionable ID',  draggable: true, filterable: true, filterMode: 'text', accessor: (e) => e.bulkId ?? '', minWidth: 110 },
     { key: 'lastUpdated',    label: 'Last Updated',   draggable: true, filterable: false, accessor: (e) => e.lastUpdated },
     { key: 'assignedTo',     label: 'Assigned To',    draggable: true, filterable: true,  filterMode: 'text', accessor: (e) => (e.assignees ?? (e.assignedTo ? [e.assignedTo] : [])).map(a => a.name).join(', '), minWidth: 160 },
@@ -499,6 +502,12 @@ function HeaderMenu({
 }
 
 // ─── Cell rendering ───
+const fmtDate = (iso?: string) => {
+  if (!iso) return 'Not set';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
 function renderCell(
   col: ColumnKey,
   ex: GrcException,
@@ -512,6 +521,8 @@ function renderCell(
   dataRow: string[] | undefined,
   dataColumnNames: string[],
   onOpenDetail?: (ex: GrcException) => void,
+  onRequestDueDate?: (ex: GrcException) => void,
+  onReviewDueDate?: (ex: GrcException) => void,
 ): React.ReactNode {
   // Overdue is dynamically derived from the action-plan due date set during
   // classification. The legacy `flags: ['Overdue']` array on the default mock
@@ -562,8 +573,8 @@ function renderCell(
           >
             {ex.id}
           </button>
-          {(isOverdue || isBulk) && (
-            <div className="flex items-center gap-1">
+          {(isOverdue || isBulk || ex.dueDateRevision?.status === 'Pending') && (
+            <div className="flex items-center gap-1 flex-wrap">
               {isOverdue && (
                 <span
                   title={overdueTooltip}
@@ -576,6 +587,15 @@ function renderCell(
               {isBulk && (
                 <span className="inline-flex items-center h-5 px-2 text-[10px] font-medium bg-brand-50 text-brand-700 rounded-full">
                   Bulk
+                </span>
+              )}
+              {ex.dueDateRevision?.status === 'Pending' && (
+                <span
+                  title={`Revised due date awaiting auditor approval · Previous ${ex.dueDateRevision.previousDueDate} → Revised ${ex.dueDateRevision.revisedDueDate}`}
+                  className="inline-flex items-center gap-1 h-5 px-2 text-[10px] font-medium bg-mitigated-50 text-mitigated-700 rounded-full cursor-help"
+                >
+                  <CalendarClock size={9} />
+                  Date change · pending
                 </span>
               )}
             </div>
@@ -691,6 +711,66 @@ function renderCell(
         <GhostButton icon={<Eye size={12} />} onClick={onOpenAction}>View</GhostButton>
       );
     }
+    case 'dueDate': {
+      const due = ex.dueDate;
+      const rev = ex.dueDateRevision;
+      if (!due && !rev) return <span className="text-ink-400 text-[12.5px]">—</span>;
+      const revPending = rev?.status === 'Pending';
+      const isActionable =
+        ex.classification === 'Design Deficiency' ||
+        ex.classification === 'System Deficiency' ||
+        ex.classification === 'Procedural Non-Compliance';
+      return (
+        <div className="flex flex-col items-start gap-1.5">
+          <span className={`inline-flex items-center gap-1.5 text-[12.5px] tabular-nums ${isOverdue ? 'text-risk-700 font-medium' : 'text-ink-800'}`}>
+            <Calendar size={12} className={isOverdue ? 'text-risk-700' : 'text-ink-400'} />
+            {fmtDate(due)}
+          </span>
+          {revPending ? (
+            role === 'auditor' ? (
+              onReviewDueDate && (
+                <button
+                  type="button"
+                  onClick={() => onReviewDueDate(ex)}
+                  title={`Review revised due date · ${rev?.previousDueDate} → ${rev?.revisedDueDate}`}
+                  className="inline-flex items-center gap-1 h-7 px-2.5 text-[11px] font-semibold text-white bg-mitigated hover:bg-mitigated-700 rounded-[6px] transition-colors cursor-pointer"
+                >
+                  <CalendarClock size={11} />
+                  Review date
+                </button>
+              )
+            ) : (
+              <span
+                title={`Awaiting auditor approval · ${fmtDate(rev?.previousDueDate)} → ${fmtDate(rev?.revisedDueDate)}`}
+                className="inline-flex items-center gap-1 h-6 px-2 text-[11px] font-medium bg-mitigated-50 text-mitigated-700 rounded-[6px] cursor-help"
+              >
+                <CalendarClock size={11} />
+                Change requested
+              </span>
+            )
+          ) : role === 'risk-owner' && isActionable && due && onRequestDueDate ? (
+            <button
+              type="button"
+              onClick={() => onRequestDueDate(ex)}
+              title="Request a revised due date (auditor-approved)"
+              className="inline-flex items-center gap-1 h-7 px-2.5 text-[11px] font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-100 hover:border-brand-200 rounded-[6px] transition-colors cursor-pointer"
+            >
+              <CalendarClock size={11} />
+              Request change
+            </button>
+          ) : rev?.status === 'Approved' ? (
+            <span className="inline-flex items-center gap-1 h-6 px-2 text-[11px] font-medium bg-compliant-50 text-compliant-700 rounded-[6px]">
+              <CalendarClock size={11} />
+              Revised
+            </span>
+          ) : rev?.status === 'Rejected' ? (
+            <span className="inline-flex items-center gap-1 h-6 px-2 text-[11px] font-medium bg-risk-50 text-risk-700 rounded-[6px]">
+              Change rejected
+            </span>
+          ) : null}
+        </div>
+      );
+    }
   }
 }
 
@@ -703,6 +783,10 @@ export interface ExceptionsTableProps {
   onToggleAll: (allIds: string[]) => void;
   onOpenClassification: (ex: GrcException) => void;
   onOpenAction: (ex: GrcException) => void;
+  /** Risk-owner: request a revised action-plan due date (auditor-approved). */
+  onRequestDueDate?: (ex: GrcException) => void;
+  /** Auditor: review a pending revised-due-date request. */
+  onReviewDueDate?: (ex: GrcException) => void;
   onOpenActionable?: (bulkId: string) => void;
   onAssign?: (ex: GrcException) => void;
   headerLeading?: React.ReactNode;
@@ -733,6 +817,8 @@ export default function ExceptionsTable({
   onToggleAll,
   onOpenClassification,
   onOpenAction,
+  onRequestDueDate,
+  onReviewDueDate,
   onOpenActionable,
   onAssign,
   headerLeading,
@@ -1406,6 +1492,8 @@ export default function ExceptionsTable({
                             dataRow,
                             dataColumnNames,
                             onOpenDetail,
+                            onRequestDueDate,
+                            onReviewDueDate,
                           )}
                         </td>
                       );

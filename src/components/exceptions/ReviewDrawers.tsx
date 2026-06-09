@@ -9,9 +9,11 @@ import {
   XCircle,
   ChevronDown,
   Calendar,
+  CalendarClock,
+  ArrowRight,
   FileText,
   User,
-  Pencil,
+  Plus,
   Trash2,
   Check,
 } from 'lucide-react';
@@ -629,6 +631,15 @@ const ACTIONABLE_CLASSIFICATIONS = new Set<string>([
   'Procedural Non-Compliance',
 ]);
 
+// A single remediation action plan. Actionable classifications can carry several,
+// each rendered as a collapsible card in the Classify drawer.
+interface ActionPlanDraft {
+  id: string;
+  name: string;
+  details: string;
+  dueDate: string;
+}
+
 const SEVERITY_TONE: Record<GrcExceptionSeverity, { base: string; active: string }> = {
   High:   { base: 'text-ink-700', active: 'bg-high-50 border-high text-high-700' },
   Medium: { base: 'text-ink-700', active: 'bg-mitigated-50 border-mitigated text-mitigated-700' },
@@ -649,16 +660,30 @@ export function ClassifyExceptionDrawer({
     actionName?: string;
     actionTaken?: string;
     dueDate?: string;
+    actionPlans?: { name: string; details: string; dueDate: string }[];
   }) => void;
 }) {
   const [severity, setSeverity] = useState<GrcExceptionSeverity>(exception.severity);
   const [classification, setClassification] = useState<string>('');
   const [comment, setComment] = useState('');
-  const [actionName, setActionName] = useState('');
-  const [actionTaken, setActionTaken] = useState('');
-  const [dueDate, setDueDate] = useState('');
+  const [actionPlans, setActionPlans] = useState<ActionPlanDraft[]>([
+    { id: 'ap-1', name: '', details: '', dueDate: '' },
+  ]);
+  const [expandedPlan, setExpandedPlan] = useState<string>('ap-1');
   const [classificationOpen, setClassificationOpen] = useState(false);
   const classificationRef = useRef<HTMLDivElement>(null);
+
+  const updatePlan = (id: string, patch: Partial<ActionPlanDraft>) =>
+    setActionPlans(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)));
+  const addPlan = () => {
+    const id = `ap-${Date.now()}`;
+    setActionPlans(prev => [...prev, { id, name: '', details: '', dueDate: '' }]);
+    setExpandedPlan(id);
+  };
+  const removePlan = (id: string) => {
+    setActionPlans(prev => (prev.length > 1 ? prev.filter(p => p.id !== id) : prev));
+    setExpandedPlan(prev => (prev === id ? '' : prev));
+  };
 
   // Block any due-date earlier than today.
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -685,10 +710,11 @@ export function ClassifyExceptionDrawer({
   const canSave = useMemo(() => {
     if (!classification || !comment.trim()) return false;
     if (requiresActionPlan) {
-      if (!actionName.trim() || !actionTaken.trim() || !dueDate) return false;
+      if (actionPlans.length === 0) return false;
+      if (actionPlans.some(p => !p.name.trim() || !p.details.trim() || !p.dueDate)) return false;
     }
     return true;
-  }, [classification, comment, requiresActionPlan, actionName, actionTaken, dueDate]);
+  }, [classification, comment, requiresActionPlan, actionPlans]);
 
   return (
     <>
@@ -710,9 +736,12 @@ export function ClassifyExceptionDrawer({
                 severity,
                 classification,
                 comment,
-                actionName: requiresActionPlan ? actionName.trim() : undefined,
-                actionTaken: requiresActionPlan ? actionTaken.trim() : undefined,
-                dueDate: requiresActionPlan ? dueDate : undefined,
+                actionName: requiresActionPlan ? actionPlans[0]?.name.trim() : undefined,
+                actionTaken: requiresActionPlan ? actionPlans[0]?.details.trim() : undefined,
+                dueDate: requiresActionPlan ? actionPlans.find(p => p.dueDate)?.dueDate : undefined,
+                actionPlans: requiresActionPlan
+                  ? actionPlans.map(p => ({ name: p.name.trim(), details: p.details.trim(), dueDate: p.dueDate }))
+                  : undefined,
               })}
               disabled={!canSave}
               className={`h-10 px-5 text-[13px] font-semibold rounded-[8px] transition-colors ${
@@ -807,89 +836,146 @@ export function ClassifyExceptionDrawer({
           )}
         </div>
 
-        {/* Conditional action-plan fields — mirrors Bulk Classify modal behaviour */}
+        {/* Conditional action-plan fields — multiple plans, each a collapsible
+            card so the panel stays compact (only the open one shows its fields). */}
         {requiresActionPlan && (
           <motion.div
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.15 }}
-            className="space-y-4 border-t border-canvas-border pt-5 mb-5"
+            className="border-t border-canvas-border pt-5 mb-5"
           >
-            {/* Grouped Action Plan card with shared edit/delete toolbar */}
-            <div className="border border-canvas-border rounded-[10px] p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10.5px] uppercase tracking-wider font-semibold text-ink-500">
-                  Action Plan
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const el = document.querySelector<HTMLInputElement>('input[data-field="action-name"]');
-                      el?.focus();
-                    }}
-                    title="Edit action plan"
-                    aria-label="Edit action plan"
-                    className="w-6 h-6 flex items-center justify-center rounded text-ink-400 hover:text-brand-700 hover:bg-[#F4F2F7] cursor-pointer"
-                  >
-                    <Pencil size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setActionName(''); setActionTaken(''); }}
-                    title="Clear action plan"
-                    aria-label="Clear action plan"
-                    className="w-6 h-6 flex items-center justify-center rounded text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
-                  Action Name <span className="text-risk">*</span>
-                </label>
-                <input
-                  data-field="action-name"
-                  value={actionName}
-                  onChange={(e) => setActionName(e.target.value)}
-                  placeholder="e.g. MFA enforcement for executive accounts"
-                  className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
-                  Action Details <span className="text-risk">*</span>
-                </label>
-                <div className="relative">
-                  <textarea
-                    value={actionTaken}
-                    onChange={(e) => setActionTaken(e.target.value)}
-                    rows={4}
-                    placeholder="Describe the remediation steps, evidence, and rollout plan…"
-                    className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
-                  />
-                  <button
-                    type="button"
-                    title="Attach file"
-                    aria-label="Attach file to action details"
-                    className="absolute bottom-2 right-2 w-7 h-7 flex items-center justify-center text-ink-400 hover:text-brand-700 cursor-pointer"
-                  >
-                    <Paperclip size={14} />
-                  </button>
-                </div>
-              </div>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10.5px] uppercase tracking-wider font-semibold text-ink-500">
+                Action Plans
+                <span className="ml-1.5 normal-case tracking-normal text-ink-400 tabular-nums">· {actionPlans.length}</span>
+              </span>
+              <button
+                type="button"
+                onClick={addPlan}
+                className="inline-flex items-center gap-1 h-7 px-2.5 text-[12px] font-semibold text-brand-700 bg-brand-50 rounded-[8px] hover:bg-brand-100 transition-colors cursor-pointer"
+              >
+                <Plus size={13} />
+                Add plan
+              </button>
             </div>
 
-            <div>
-              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
-                Due Date <span className="text-risk">*</span>
-              </label>
-              <div className="w-[220px]">
-                <CustomDatePicker value={dueDate} onChange={setDueDate} minDate={todayIso} />
-              </div>
+            <div className="space-y-2.5">
+              {actionPlans.map((plan, idx) => {
+                const open = expandedPlan === plan.id;
+                const complete = plan.name.trim() && plan.details.trim() && !!plan.dueDate;
+                return (
+                  <div key={plan.id} className="border border-canvas-border rounded-[10px] overflow-hidden">
+                    {/* Collapsible header */}
+                    <div className={`flex items-center gap-2 pl-3 pr-2 h-11 ${open ? 'bg-[#FAFAFB]' : ''}`}>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPlan(open ? '' : plan.id)}
+                        aria-expanded={open}
+                        className="flex-1 min-w-0 flex items-center gap-2.5 text-left cursor-pointer h-full"
+                      >
+                        <span className="shrink-0 w-5 h-5 rounded-full bg-brand-50 text-brand-700 text-[11px] font-bold flex items-center justify-center tabular-nums">
+                          {idx + 1}
+                        </span>
+                        <span className="flex-1 min-w-0 truncate text-[13px] font-semibold text-ink-800">
+                          {plan.name.trim() || `Action Plan ${idx + 1}`}
+                        </span>
+                        {plan.dueDate && (
+                          <span className="hidden sm:inline-flex items-center gap-1 h-6 px-2 text-[11px] text-brand-700 bg-brand-50 rounded-full shrink-0 tabular-nums">
+                            <Calendar size={10} />
+                            {plan.dueDate}
+                          </span>
+                        )}
+                        {!complete && (
+                          <span
+                            className="w-1.5 h-1.5 rounded-full bg-mitigated shrink-0"
+                            title="Incomplete — fill in all required fields"
+                            aria-label="Incomplete"
+                          />
+                        )}
+                        <ChevronDown
+                          size={14}
+                          className={`text-ink-400 transition-transform duration-150 shrink-0 ${open ? 'rotate-180' : ''}`}
+                        />
+                      </button>
+                      {actionPlans.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removePlan(plan.id)}
+                          title="Remove this action plan"
+                          aria-label={`Remove action plan ${idx + 1}`}
+                          className="shrink-0 w-7 h-7 flex items-center justify-center rounded text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Collapsible body */}
+                    <AnimatePresence initial={false}>
+                      {open && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                          className="overflow-hidden"
+                        >
+                          <div className="px-3 pt-3 pb-3.5 space-y-3 border-t border-canvas-border">
+                            <div>
+                              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                                Action Name <span className="text-risk">*</span>
+                              </label>
+                              <input
+                                value={plan.name}
+                                onChange={(e) => updatePlan(plan.id, { name: e.target.value })}
+                                placeholder="e.g. MFA enforcement for executive accounts"
+                                className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                                Action Details <span className="text-risk">*</span>
+                              </label>
+                              <div className="relative">
+                                <textarea
+                                  value={plan.details}
+                                  onChange={(e) => updatePlan(plan.id, { details: e.target.value })}
+                                  rows={4}
+                                  placeholder="Describe the remediation steps, evidence, and rollout plan…"
+                                  className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                                />
+                                <button
+                                  type="button"
+                                  title="Attach file"
+                                  aria-label="Attach file to action details"
+                                  className="absolute bottom-2 right-2 w-7 h-7 flex items-center justify-center text-ink-400 hover:text-brand-700 cursor-pointer"
+                                >
+                                  <Paperclip size={14} />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                                Due Date <span className="text-risk">*</span>
+                              </label>
+                              <div className="w-[220px]">
+                                <CustomDatePicker
+                                  value={plan.dueDate}
+                                  onChange={(v) => updatePlan(plan.id, { dueDate: v })}
+                                  minDate={todayIso}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
             </div>
           </motion.div>
         )}
@@ -934,6 +1020,477 @@ export function ClassifyExceptionDrawer({
                 Exception flagged by Ira (AI) with <span className="font-semibold text-brand-700 tabular-nums">94%</span> confidence
               </p>
             </div>
+          </div>
+        </section>
+      </DrawerShell>
+    </>
+  );
+}
+
+// ─── Due Date Revision (Risk Owner request → Auditor approval) ───
+
+function formatDueDate(iso?: string): string {
+  if (!iso) return 'Not set';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+const REVISION_STATUS_STYLE: Record<'Pending' | 'Approved' | 'Rejected', string> = {
+  Pending:  'bg-mitigated-50 text-mitigated-700',
+  Approved: 'bg-compliant-50 text-compliant-700',
+  Rejected: 'bg-risk-50 text-risk-700',
+};
+
+// Shared "previous → revised" visual so both roles see the change identically.
+function DueDateDelta({ previous, revised }: { previous?: string; revised?: string }) {
+  return (
+    <div className="flex items-stretch gap-2.5">
+      <div className="flex-1 rounded-[10px] border border-canvas-border bg-[#FAFAFB] p-3">
+        <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-1">Previous Due Date</div>
+        <div className="text-[14px] font-semibold text-ink-600 line-through decoration-ink-300">{formatDueDate(previous)}</div>
+      </div>
+      <div className="flex items-center shrink-0">
+        <ArrowRight size={16} className="text-ink-400" />
+      </div>
+      <div className="flex-1 rounded-[10px] border border-brand-200 bg-brand-50/60 p-3">
+        <div className="text-[10.5px] font-semibold uppercase tracking-wider text-brand-700 mb-1">Revised Due Date</div>
+        <div className="text-[14px] font-bold text-brand-700">{formatDueDate(revised)}</div>
+      </div>
+    </div>
+  );
+}
+
+// Risk Owner — request a revised due date (goes to the auditor for approval).
+export function RequestDueDateDrawer({
+  exception,
+  onClose,
+  onSubmit,
+}: {
+  exception: GrcException;
+  onClose: () => void;
+  onSubmit: (payload: { revisedDueDate: string; reason: string }) => void;
+}) {
+  const existing = exception.dueDateRevision;
+  const pending = existing?.status === 'Pending';
+  const current = exception.dueDate;
+  const [revisedDueDate, setRevisedDueDate] = useState('');
+  const [reason, setReason] = useState('');
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const canSubmit = !pending && !!revisedDueDate && revisedDueDate !== current && reason.trim().length > 0;
+
+  return (
+    <>
+      <Overlay onClick={onClose} />
+      <DrawerShell
+        title="Request Due Date Change"
+        subtitle={`${exception.id} · sends to the auditor for approval`}
+        onClose={onClose}
+        footer={
+          <>
+            <button
+              onClick={onClose}
+              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+            >
+              {pending ? 'Close' : 'Cancel'}
+            </button>
+            {!pending && (
+              <button
+                onClick={() => canSubmit && onSubmit({ revisedDueDate, reason: reason.trim() })}
+                disabled={!canSubmit}
+                className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+                  canSubmit
+                    ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
+                    : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
+                }`}
+              >
+                <CalendarClock size={14} />
+                Send Request to Auditor
+              </button>
+            )}
+          </>
+        }
+      >
+        <div className="mb-5">
+          <SectionLabel>Action Plan</SectionLabel>
+          <h3 className="text-[14px] font-semibold text-ink-900 leading-snug">{exception.title}</h3>
+        </div>
+
+        {pending && existing ? (
+          <div className="rounded-[12px] border border-mitigated/40 bg-mitigated-50/60 p-4 mb-5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[12.5px] font-semibold text-mitigated-700">Revision already requested</span>
+              <Pill className={REVISION_STATUS_STYLE[existing.status]}>Awaiting auditor approval</Pill>
+            </div>
+            <DueDateDelta previous={existing.previousDueDate} revised={existing.revisedDueDate} />
+            <p className="text-[12.5px] text-ink-700 leading-relaxed mt-3">{existing.reason}</p>
+            <p className="text-[11px] text-ink-500 mt-2">
+              Requested by {existing.requestedBy} · {formatDueDate(existing.requestedAt.slice(0, 10))}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="mb-5">
+              <SectionLabel>Current Due Date</SectionLabel>
+              <div className="inline-flex items-center gap-2 h-9 px-3 rounded-[8px] border border-canvas-border bg-[#FAFAFB] text-[13px] font-semibold text-ink-800">
+                <Calendar size={13} className="text-ink-500" />
+                {formatDueDate(current)}
+              </div>
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                Revised Due Date <span className="text-risk">*</span>
+              </label>
+              <div className="w-[220px]">
+                <CustomDatePicker value={revisedDueDate} onChange={setRevisedDueDate} minDate={todayIso} />
+              </div>
+              {revisedDueDate && revisedDueDate === current && (
+                <p className="mt-2 text-[11.5px] text-risk-700">Pick a date different from the current due date.</p>
+              )}
+            </div>
+
+            {revisedDueDate && revisedDueDate !== current && (
+              <div className="mb-5">
+                <SectionLabel>Preview</SectionLabel>
+                <DueDateDelta previous={current} revised={revisedDueDate} />
+              </div>
+            )}
+
+            <div className="mb-5">
+              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                Reason for change <span className="text-risk">*</span>
+              </label>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={4}
+                placeholder="Explain why the action can't be completed by the current due date…"
+                className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+              />
+            </div>
+          </>
+        )}
+      </DrawerShell>
+    </>
+  );
+}
+
+// Auditor — review a pending revised-due-date request (approve / reject).
+export function ReviewDueDateDrawer({
+  exception,
+  onClose,
+  onDecision,
+}: {
+  exception: GrcException;
+  onClose: () => void;
+  onDecision: (decision: 'approve' | 'reject', comment: string) => void;
+}) {
+  const rev = exception.dueDateRevision;
+  const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
+  const [comment, setComment] = useState('');
+
+  if (!rev) return null;
+  const isPending = rev.status === 'Pending';
+  const canSubmit = isPending && decision !== null;
+
+  return (
+    <>
+      <Overlay onClick={onClose} />
+      <DrawerShell
+        title="Review Due Date Request"
+        subtitle={`${exception.id} · requested by ${rev.requestedBy}`}
+        onClose={onClose}
+        footer={
+          <>
+            <button
+              onClick={onClose}
+              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+            >
+              {isPending ? 'Cancel' : 'Close'}
+            </button>
+            {isPending && (
+              <button
+                onClick={() => canSubmit && decision && onDecision(decision, comment.trim())}
+                disabled={!canSubmit}
+                className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+                  canSubmit
+                    ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
+                    : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
+                }`}
+              >
+                Submit Decision
+              </button>
+            )}
+          </>
+        }
+      >
+        <div className="mb-5">
+          <SectionLabel>Action Plan</SectionLabel>
+          <h3 className="text-[14px] font-semibold text-ink-900 leading-snug">{exception.title}</h3>
+        </div>
+
+        <div className="mb-5">
+          <SectionLabel>Requested Change</SectionLabel>
+          <DueDateDelta previous={rev.previousDueDate} revised={rev.revisedDueDate} />
+        </div>
+
+        <div className="mb-5">
+          <SectionLabel>Reason from Risk Owner</SectionLabel>
+          <div className="px-3 py-2.5 bg-[#FAFAFB] border border-canvas-border rounded-[8px] text-[12.5px] text-ink-800 leading-relaxed">
+            {rev.reason}
+          </div>
+          <p className="text-[11px] text-ink-500 mt-2">
+            Requested by {rev.requestedBy} · {formatDueDate(rev.requestedAt.slice(0, 10))}
+          </p>
+        </div>
+
+        {isPending ? (
+          <section className="border border-canvas-border rounded-[12px] p-4">
+            <SectionLabel>Auditor Decision</SectionLabel>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <button
+                onClick={() => setDecision('approve')}
+                className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                  decision === 'approve'
+                    ? 'bg-compliant text-white border-compliant shadow-[0_2px_8px_rgba(22,163,74,0.25)]'
+                    : 'bg-compliant-50 border-compliant text-compliant-700 hover:bg-compliant hover:text-white'
+                }`}
+              >
+                <CheckCircle2 size={14} />
+                Approve new date
+              </button>
+              <button
+                onClick={() => setDecision('reject')}
+                className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                  decision === 'reject'
+                    ? 'bg-risk text-white border-risk shadow-[0_2px_8px_rgba(220,38,38,0.25)]'
+                    : 'bg-risk-50 border-risk text-risk-700 hover:bg-risk hover:text-white'
+                }`}
+              >
+                <XCircle size={14} />
+                Reject
+              </button>
+            </div>
+            {decision === 'approve' && (
+              <p className="mb-4 text-[12px] text-compliant-700 leading-snug">
+                On approve, the action plan's due date moves to <span className="font-semibold">{formatDueDate(rev.revisedDueDate)}</span>.
+              </p>
+            )}
+            {decision === 'reject' && (
+              <p className="mb-4 text-[12px] text-risk-700 leading-snug">
+                On reject, the due date stays at <span className="font-semibold">{formatDueDate(rev.previousDueDate)}</span> and the request returns to the Risk Owner.
+              </p>
+            )}
+            <div>
+              <label className="block text-[12.5px] font-medium text-ink-800 mb-2">Comment</label>
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                rows={3}
+                placeholder="Add a note for the Risk Owner (optional)…"
+                className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+              />
+            </div>
+          </section>
+        ) : (
+          <div className="rounded-[12px] border border-canvas-border p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[12.5px] font-semibold text-ink-800">Decision</span>
+              <Pill className={REVISION_STATUS_STYLE[rev.status]}>{rev.status}</Pill>
+            </div>
+            {rev.decisionComment && (
+              <p className="text-[12.5px] text-ink-700 leading-relaxed mt-3">{rev.decisionComment}</p>
+            )}
+            {rev.decidedBy && (
+              <p className="text-[11px] text-ink-500 mt-2">
+                {rev.status} by {rev.decidedBy}{rev.decidedAt ? ` · ${formatDueDate(rev.decidedAt.slice(0, 10))}` : ''}
+              </p>
+            )}
+          </div>
+        )}
+      </DrawerShell>
+    </>
+  );
+}
+
+// Risk Owner — request one revised due date across several selected cases.
+export function BulkRequestDueDateDrawer({
+  exceptions,
+  onClose,
+  onSubmit,
+}: {
+  exceptions: GrcException[];
+  onClose: () => void;
+  onSubmit: (payload: { revisedDueDate: string; reason: string }) => void;
+}) {
+  const [revisedDueDate, setRevisedDueDate] = useState('');
+  const [reason, setReason] = useState('');
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const canSubmit = !!revisedDueDate && reason.trim().length > 0;
+  const n = exceptions.length;
+
+  return (
+    <>
+      <Overlay onClick={onClose} />
+      <DrawerShell
+        title="Request Due Date Change"
+        subtitle={`${n} case${n === 1 ? '' : 's'} · sends to the auditor for approval`}
+        onClose={onClose}
+        footer={
+          <>
+            <button
+              onClick={onClose}
+              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => canSubmit && onSubmit({ revisedDueDate, reason: reason.trim() })}
+              disabled={!canSubmit}
+              className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+                canSubmit ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
+              }`}
+            >
+              <CalendarClock size={14} />
+              Send {n} Request{n === 1 ? '' : 's'}
+            </button>
+          </>
+        }
+      >
+        <div className="mb-5">
+          <SectionLabel>Selected Cases</SectionLabel>
+          <div className="border border-canvas-border rounded-[10px] divide-y divide-canvas-border max-h-[200px] overflow-y-auto">
+            {exceptions.map(e => (
+              <div key={e.id} className="flex items-center justify-between px-3 py-2.5">
+                <span className="text-[12.5px] font-mono font-medium text-brand-700">{e.id}</span>
+                <span className="text-[12px] text-ink-600 tabular-nums">Current: {formatDueDate(e.dueDate)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-5">
+          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+            New Revised Due Date <span className="text-risk">*</span>
+          </label>
+          <div className="w-[220px]">
+            <CustomDatePicker value={revisedDueDate} onChange={setRevisedDueDate} minDate={todayIso} />
+          </div>
+          <p className="mt-2 text-[11.5px] text-ink-500">Applied to all {n} selected case{n === 1 ? '' : 's'}.</p>
+        </div>
+
+        <div className="mb-5">
+          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+            Reason for change <span className="text-risk">*</span>
+          </label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={4}
+            placeholder="Explain why these actions can't be completed by their current due dates…"
+            className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+          />
+        </div>
+      </DrawerShell>
+    </>
+  );
+}
+
+// Auditor — approve / reject several pending revised-due-date requests at once.
+export function BulkReviewDueDateDrawer({
+  exceptions,
+  onClose,
+  onDecision,
+}: {
+  exceptions: GrcException[];
+  onClose: () => void;
+  onDecision: (decision: 'approve' | 'reject', comment: string) => void;
+}) {
+  const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
+  const [comment, setComment] = useState('');
+  const canSubmit = decision !== null;
+  const n = exceptions.length;
+
+  return (
+    <>
+      <Overlay onClick={onClose} />
+      <DrawerShell
+        title="Review Due Date Requests"
+        subtitle={`${n} pending request${n === 1 ? '' : 's'}`}
+        onClose={onClose}
+        footer={
+          <>
+            <button
+              onClick={onClose}
+              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => canSubmit && decision && onDecision(decision, comment.trim())}
+              disabled={!canSubmit}
+              className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+                canSubmit ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
+              }`}
+            >
+              Submit Decision
+            </button>
+          </>
+        }
+      >
+        <div className="mb-5">
+          <SectionLabel>Pending Requests</SectionLabel>
+          <div className="border border-canvas-border rounded-[10px] divide-y divide-canvas-border max-h-[260px] overflow-y-auto">
+            {exceptions.map(e => (
+              <div key={e.id} className="px-3 py-2.5">
+                <div className="text-[12.5px] font-mono font-medium text-brand-700 mb-1">{e.id}</div>
+                <div className="flex items-center gap-2 text-[12px]">
+                  <span className="text-ink-500 line-through decoration-ink-300 tabular-nums">{formatDueDate(e.dueDateRevision?.previousDueDate)}</span>
+                  <ArrowRight size={12} className="text-ink-400" />
+                  <span className="font-semibold text-brand-700 tabular-nums">{formatDueDate(e.dueDateRevision?.revisedDueDate)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <section className="border border-canvas-border rounded-[12px] p-4">
+          <SectionLabel>Decision · applies to all {n}</SectionLabel>
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <button
+              onClick={() => setDecision('approve')}
+              className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                decision === 'approve'
+                  ? 'bg-compliant text-white border-compliant shadow-[0_2px_8px_rgba(22,163,74,0.25)]'
+                  : 'bg-compliant-50 border-compliant text-compliant-700 hover:bg-compliant hover:text-white'
+              }`}
+            >
+              <CheckCircle2 size={14} />
+              Approve all
+            </button>
+            <button
+              onClick={() => setDecision('reject')}
+              className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                decision === 'reject'
+                  ? 'bg-risk text-white border-risk shadow-[0_2px_8px_rgba(220,38,38,0.25)]'
+                  : 'bg-risk-50 border-risk text-risk-700 hover:bg-risk hover:text-white'
+              }`}
+            >
+              <XCircle size={14} />
+              Reject all
+            </button>
+          </div>
+          <div>
+            <label className="block text-[12.5px] font-medium text-ink-800 mb-2">Comment</label>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={3}
+              placeholder="Add a note for the Risk Owner (optional)…"
+              className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+            />
           </div>
         </section>
       </DrawerShell>

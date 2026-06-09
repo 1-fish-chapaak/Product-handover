@@ -20,6 +20,11 @@ import {
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { ConfigurableChart, PIE_DATA } from "./ConfigurableChart";
+// ─── Multi-table (model) widget building — merged into Add Widget ───
+import MultiTableFieldPicker from "../model/MultiTableFieldPicker";
+import ModelChart from "../model/ModelChart";
+import { buildWidgetRows } from "../model/joinEngine";
+import type { ModelTable, Relationship, WidgetModelConfig, WidgetModelField } from "../model/relationshipTypes";
 import { FileTreeView, type FileTreeFile } from "./FileTreeView";
 import { ColorPicker } from "./ColorPicker";
 import { WhiteDropdown } from "./WhiteDropdown";
@@ -316,7 +321,15 @@ export interface AddCardDashboardSource {
 interface AddCardModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSelectCard: (cardType: string, config?: { xAxis: string; yAxis: string; color: string; name?: string; description?: string; seriesColors?: Record<string, string>; fontFamily?: string }) => void;
+  onSelectCard: (cardType: string, config?: { xAxis: string; yAxis: string; color: string; name?: string; description?: string; seriesColors?: Record<string, string>; fontFamily?: string; model?: WidgetModelConfig }) => void;
+  /** Related tables → when present (and not a SQL dashboard), the Data Source
+   *  tab becomes the multi-table model builder. */
+  modelTables?: ModelTable[];
+  relationships?: Relationship[];
+  /** Pre-fills the model builder when editing a combined widget. */
+  initialModel?: WidgetModelConfig;
+  /** Opens the relationship manager (from the "needs connecting" prompt). */
+  onConnectTables?: () => void;
   mode?: 'add' | 'edit';
   initialXAxis?: string;
   initialYAxis?: string;
@@ -340,7 +353,7 @@ interface AddCardModalProps {
 }
 
 /* ─── Modal ─────────────────────────────────────────────────────────────────── */
-export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', initialXAxis, initialYAxis, initialWidgetType, initialColor, initialFontFamily, initialName, initialSeriesColors, onOpenExcelUpload, onOpenQueryModal, onOpenAddData, onOpenKnowledgeHub, isCreateDashboardMode = false, onNavigateToBuilder, dashboardSource }: AddCardModalProps) {
+export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', initialXAxis, initialYAxis, initialWidgetType, initialColor, initialFontFamily, initialName, initialSeriesColors, onOpenExcelUpload, onOpenQueryModal, onOpenAddData, onOpenKnowledgeHub, isCreateDashboardMode = false, onNavigateToBuilder, dashboardSource, modelTables, relationships = [], initialModel, onConnectTables }: AddCardModalProps) {
   const [activeTab, setActiveTab] = useState<"data" | "format">("data");
   const [selected, setSelected] = useState<WidgetDef | null>(null); // No default selection
   const [chartTypeOpen, setChartTypeOpen] = useState(true);
@@ -360,7 +373,22 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
   
   // Widget Info section collapsed state
   const [widgetInfoCollapsed, setWidgetInfoCollapsed] = useState(false);
-  
+
+  // ── Multi-table (model) widget state ──
+  const [modelFields, setModelFields] = useState<WidgetModelField[]>(initialModel?.fields ?? []);
+  const [modelType, setModelType] = useState<string>(initialWidgetType ?? 'Bar Chart');
+  const [modelColor, setModelColor] = useState<string>(initialColor ?? '#6a12cd');
+  useEffect(() => {
+    if (!open) return;
+    if (initialModel) {
+      setModelFields(initialModel.fields);
+      setModelType(initialWidgetType ?? 'Bar Chart');
+      setModelColor(initialColor ?? '#6a12cd');
+    } else if (mode === 'add') {
+      setModelFields([]);
+    }
+  }, [open, initialModel, mode, initialWidgetType, initialColor]);
+
   // Chart type dropdown state
   const [chartDropdownOpen, setChartDropdownOpen] = useState(false);
   const chartDropdownBtnRef = useRef<HTMLButtonElement>(null);
@@ -666,6 +694,66 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
   const isFile1Disabled = activeDatasource === "file2";
   const isFile2Disabled = activeDatasource === "file1";
 
+  // ── Multi-table model builder: active for file/custom dashboards (excel /
+  //    csv / query / combo). SQL-typed dashboards keep their DB-table path
+  //    (valid → DB tree, invalid binding → SQL empty state). ──
+  const useModel = widgetSource?.type !== 'sql' && (modelTables?.length ?? 0) > 0;
+  const MODEL_CHART_TYPES = ['Bar Chart', 'Line Chart', 'Area Chart', 'Pie Chart', 'KPI', 'Table'];
+  const MODEL_COLORS = ['#6a12cd', '#0d9488', '#C2410C', '#1a2744', '#dc2626'];
+  const modelPreview = useModel ? buildWidgetRows(modelTables!, relationships, { fields: modelFields }) : null;
+  const canAddModel = useModel && modelFields.length > 0 && !modelPreview?.error;
+  const addModelWidget = () => {
+    onSelectCard(modelType, { xAxis: '', yAxis: '', color: modelColor, name: widgetName || 'Combined widget', model: { fields: modelFields } });
+    onOpenChange(false);
+  };
+
+  const renderModelBuilder = () => (
+    <div className="flex flex-1 overflow-hidden min-h-0">
+      <div className="flex-1 p-4 min-h-0 overflow-hidden">
+        <MultiTableFieldPicker
+          tables={modelTables!}
+          relationships={relationships}
+          selected={modelFields}
+          onChange={setModelFields}
+          onConnectTables={() => { onOpenChange(false); onConnectTables?.(); }}
+        />
+      </div>
+      <div className="w-[340px] shrink-0 border-l border-[#f3f4f6] bg-[rgba(249,250,251,0.5)] p-4 flex flex-col gap-4 overflow-y-auto">
+        <div>
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Widget name</label>
+          <input value={widgetName} onChange={e => setWidgetName(e.target.value)} placeholder="e.g. Spend by Vendor" className="w-full h-9 px-3 bg-white border border-[#e5e7eb] rounded-[8px] text-[12.5px] text-text focus:outline-none focus:border-[#6a12cd]/40" />
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Chart type</label>
+          <div className="grid grid-cols-3 gap-1.5">
+            {MODEL_CHART_TYPES.map(ct => (
+              <button key={ct} onClick={() => setModelType(ct)} className={`py-2 rounded-[8px] border text-[10.5px] font-medium cursor-pointer transition-colors ${modelType === ct ? 'border-[#6a12cd]/40 bg-[#faf5ff] text-[#6a12cd]' : 'border-[#e5e7eb] text-ink-600 hover:border-[#6a12cd]/20'}`}>
+                {ct.replace(' Chart', '')}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Color</label>
+          <div className="flex gap-1.5">
+            {MODEL_COLORS.map(c => <button key={c} onClick={() => setModelColor(c)} className={`w-7 h-7 rounded-[8px] border-2 cursor-pointer ${modelColor === c ? 'border-ink-900 scale-110' : 'border-transparent'}`} style={{ background: c }} />)}
+          </div>
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Preview</label>
+          <div className="h-[200px] border border-[#e5e7eb] rounded-[10px] p-2 bg-white">
+            {modelFields.length === 0
+              ? <div className="h-full flex items-center justify-center text-[11.5px] text-ink-400 text-center px-4">Pick fields from the related tables to preview the chart.</div>
+              : <ModelChart data={modelPreview!} type={modelType} color={modelColor} />}
+          </div>
+        </div>
+        <button onClick={addModelWidget} disabled={!canAddModel} className="mt-auto h-10 inline-flex items-center justify-center gap-2 text-[13px] font-semibold text-white bg-[#6a12cd] hover:bg-[#5a0ebd] rounded-[8px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+          {mode === 'edit' ? 'Save Widget' : 'Add Widget'}
+        </button>
+      </div>
+    </div>
+  );
+
   // Open chart dropdown
   const openChartDropdown = () => {
     if (chartDropdownBtnRef.current) {
@@ -705,7 +793,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
           </button>
         </div>
 
-        {/* ── Two-tab switcher ── */}
+        {useModel ? renderModelBuilder() : (
         <div className="flex flex-1 overflow-hidden min-h-0">
 
           {/* ── Right Sidebar (moved to right) ── */}
@@ -1573,6 +1661,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
             </div>
           </div>
         </div>
+        )}
       </DialogContent>
 
 
