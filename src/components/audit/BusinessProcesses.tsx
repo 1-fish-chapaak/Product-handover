@@ -61,9 +61,9 @@ import DesignControlAddModal from './DesignControlAddModal';
 // deliberate mix: Sample SOP + Agrawal Metals read as fully Ready (Active · Ready),
 // while Testing RACM is mapped but still Workflow Missing.
 const P2P_RACM_READY_RACMS: import('./RacmListTable').RacmEntry[] = [
-  { id: 'RACM-102', name: 'Sample SOP', version: 'v1.0', createdAt: 'May 28, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 6, controls: 16, mappedRisks: 6, unmappedRisks: 0, keyControls: 4, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
-  { id: 'RACM-104', name: 'Testing RACM (4)_RACM', version: 'v1.0', createdAt: 'May 12, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 8, controls: 20, mappedRisks: 8, unmappedRisks: 0, keyControls: 5, workflowCoverage: 80, attributesCoverage: 100, isValidated: false, linkedToEngagement: false },
-  { id: 'RACM-105', name: 'Agrawal Metals - Part 1 - Fixed Assets - SOP', version: 'v1.0', createdAt: 'Apr 30, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 7, controls: 19, mappedRisks: 7, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
+  { id: 'RACM-102', name: 'Sample SOP', version: 'v1.0', createdAt: 'May 28, 2026', updatedAt: 'Jun 6, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 6, controls: 16, mappedRisks: 6, unmappedRisks: 0, keyControls: 4, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
+  { id: 'RACM-104', name: 'Testing RACM (4)_RACM', version: 'v1.0', createdAt: 'May 12, 2026', updatedAt: 'May 30, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 8, controls: 20, mappedRisks: 8, unmappedRisks: 0, keyControls: 5, workflowCoverage: 80, attributesCoverage: 100, isValidated: false, linkedToEngagement: false },
+  { id: 'RACM-105', name: 'Agrawal Metals - Part 1 - Fixed Assets - SOP', version: 'v1.0', createdAt: 'Apr 30, 2026', updatedAt: 'May 25, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 7, controls: 19, mappedRisks: 7, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
 ];
 const P2P_RACM_READY_IDS = new Set(P2P_RACM_READY_RACMS.map(r => r.id));
 
@@ -2439,12 +2439,6 @@ const WORKFLOW_POOL: AttrWorkflow[] = [
 ];
 
 // ─── Control Detail Page (Step 4) ────────────────────────────────────────
-const ATTR_RESULT_CLS: Record<AttrResult, string> = {
-  Pass:    'bg-compliant-50 text-compliant-700 border-compliant-100',
-  Fail:    'bg-risk-50 text-risk-700 border-risk-100',
-  Pending: 'bg-draft-50 text-draft-700 border-canvas-border',
-};
-
 function ControlDetailPage({ ctrl, bpAbbr, onBack }: {
   ctrl: DesignControl;
   bpAbbr: string;
@@ -2524,9 +2518,11 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack }: {
           </div>
           {/* Status + Nature + Automation tags */}
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            {/* Control status chip — commented out for now (per request). Uncomment to restore Effective / Failed / In Test / Pending.
             <span className={`px-2.5 h-7 rounded-full text-[0.6875rem] font-semibold border inline-flex items-center gap-1.5 ${CTRL_STATUS_CLS[status]}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${CTRL_STATUS_DOT[status]}`} />{status}
             </span>
+            */}
             <span className={`px-2.5 h-7 rounded-full text-[0.6875rem] font-semibold border inline-flex items-center ${naturePillCls(ctrl.nature)}`}>{ctrl.nature || '—'}</span>
             <span className={`px-2.5 h-7 rounded-full text-[0.6875rem] font-semibold border inline-flex items-center ${automationPillCls(ctrl.automation)}`}>{ctrl.automation || '—'}</span>
           </div>
@@ -2578,7 +2574,6 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack }: {
               <thead>
                 <tr className="border-b border-canvas-border">
                   <th className="py-2 pr-4 text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider">Attribute</th>
-                  <th className="py-2 pr-4 text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider w-[90px]">Result</th>
                   <th className="py-2 text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider">Linked Workflows</th>
                 </tr>
               </thead>
@@ -2588,9 +2583,6 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack }: {
                     <td className="py-3 pr-4">
                       <div className="font-mono text-[0.65625rem] font-semibold text-brand-700">{attr.id}</div>
                       <div className="text-[0.78125rem] text-ink-800 leading-snug">{attr.description}</div>
-                    </td>
-                    <td className="py-3 pr-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-1.5 h-5 rounded text-[0.625rem] font-bold border ${ATTR_RESULT_CLS[attr.result]}`}>{attr.result}</span>
                     </td>
                     <td className="py-3">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -3285,9 +3277,11 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                       {ctrl.name}
                     </button>
                   </h3>
+                  {/* Control status chip — commented out for now (per request). Uncomment to restore Effective / Failed / In Test / Pending.
                   <span className={`inline-flex items-center gap-1.5 px-2 h-5 rounded-full text-[0.625rem] font-semibold border ${CTRL_STATUS_CLS[status]}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${CTRL_STATUS_DOT[status]}`} />{status}
                   </span>
+                  */}
                   {/* Key/Non-Key classification — a control-level property, so it sits on the
                       identity line next to status (not in the workflow lane). */}
                   <span className={`inline-flex items-center px-2 h-5 rounded-full text-[0.625rem] font-bold shrink-0 ${isKey ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'}`}>

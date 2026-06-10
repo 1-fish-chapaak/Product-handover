@@ -24,7 +24,6 @@ const Button = (props: ComponentProps<typeof BaseButton>) => {
     />
   );
 };
-import { KpiTile } from '../shared/KpiTile';
 import ListLoadError from '../shared/ListLoadError';
 import ListPlaceholder from '../shared/ListPlaceholder';
 import { LinkControlPickerDrawer, WorkflowControlChooserDrawer } from './RacmListTable';
@@ -96,13 +95,6 @@ export function nextRiskId(risks: RiskEntry[]): string {
 }
 
 // ─── Style maps ─────────────────────────────────────────────────────────────
-
-const STATUS_STYLES: Record<RiskLifecycleStatus, string> = {
-  Draft: 'bg-paper-100 text-ink-600',
-  Active: 'bg-compliant-50 text-compliant-700',
-  'Under Review': 'bg-high-50 text-high-700',
-  Archived: 'bg-paper-100 text-ink-400',
-};
 
 const PRIORITY_STYLES: Record<RiskPriority, string> = {
   Critical: 'text-risk-700 font-bold',
@@ -201,6 +193,10 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, nextId, pres
 
   const fieldCls = 'w-full px-3 py-2.5 border border-border rounded-md text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 transition-all';
   const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1.5';
+  // Risk Category dropdown — matched to the product Select component (12px corners,
+  // brand focus ring, chevron). Kept at the input height (py-2.5) so it lines up with
+  // the Sub-process field beside it. Other modal fields keep their existing style.
+  const categorySelectCls = 'w-full px-3 py-2.5 pr-9 border border-canvas-border rounded-lg text-[0.8125rem] text-ink-800 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 transition-all cursor-pointer appearance-none bg-no-repeat bg-[length:14px_14px] bg-[position:right_12px_center]';
 
   // Fix #10: Escape-to-close for both modal and drawer presentations
   useEffect(() => {
@@ -263,16 +259,20 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, nextId, pres
               <label className={labelCls}>Description <span className="text-risk">*</span></label>
               <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Describe the risk scenario and potential impact..." className={fieldCls + ' resize-none'} />
             </div>
-            <div>
-              <label className={labelCls}>Sub-process</label>
-              <input value={subProcess} onChange={e => setSubProcess(e.target.value)} placeholder="e.g. Accounts Payable" className={fieldCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Risk Category</label>
-              <select value={category} onChange={e => setCategory(e.target.value as RiskCategory)} className={fieldCls + ' cursor-pointer appearance-none'}>
-                <option value="">Select...</option>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+            {/* Sub-process + Risk Category share a 2-col row; Name & Description stay full-width above. */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Sub-process</label>
+                <input value={subProcess} onChange={e => setSubProcess(e.target.value)} placeholder="e.g. Accounts Payable" className={fieldCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Risk Category</label>
+                <select value={category} onChange={e => setCategory(e.target.value as RiskCategory)} className={categorySelectCls}
+                  style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236B5D82' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E\")" }}>
+                  <option value="">Select...</option>
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -309,11 +309,6 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, nextId, pres
         {/* Footer */}
         <div className="px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3 shrink-0">
           <Button variant="outline" size="md" onClick={requestClose}>Cancel</Button>
-          {!isEdit && (
-            <Button variant="outline" size="md" onClick={() => { if (isValid) onSave(buildRisk('Draft')); }} disabled={!isValid}>
-              Save as Draft
-            </Button>
-          )}
           <Button variant="primary" size="md" onClick={() => { if (isValid) onSave(buildRisk('Active')); }} disabled={!isValid}>
             Save
           </Button>
@@ -348,7 +343,7 @@ function RiskDetailPage({
   const rels = getRiskRelationships(risk.id, risk.businessProcess);
   const keyCount = controls.filter(c => c.isKey).length;
 
-  // Business Process / Category / Priority / Status are surfaced as header badges &
+  // Business Process / Category / Priority are surfaced as header badges &
   // pills now (like the control detail page), so the grid keeps the remaining facts.
   const fields: { label: string; value: string }[] = [
     { label: 'Sub-process', value: risk.subProcess || '—' },
@@ -392,12 +387,8 @@ function RiskDetailPage({
             </div>
             <h1 className="font-display text-[1.625rem] font-[420] tracking-tight text-ink-900 leading-[1.2]">{risk.name}</h1>
           </div>
-          {/* Status + Business Process + Category pills */}
+          {/* Business Process + Category pills */}
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-            <span className={`px-2.5 h-7 rounded-full text-[0.6875rem] font-semibold inline-flex items-center gap-1.5 ${STATUS_STYLES[risk.status]}`}>
-              <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
-              {risk.status}
-            </span>
             <span className="px-2.5 h-7 rounded-full text-[0.6875rem] font-semibold border border-border-light bg-surface-2 text-text-secondary inline-flex items-center">
               {risk.businessProcess}
             </span>
@@ -548,12 +539,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const { openShare } = useShare();
   const [risks, setRisks] = useState<RiskEntry[]>(SEED_RISKS);
   const [searchQuery, setSearchQuery] = useState('');
-  // Lifecycle-status filter driven by the clickable KPI tiles (single-select;
-  // null = show all). Used by the standalone Risk Register page only.
-  const [activeStatusTile, setActiveStatusTile] = useState<RiskLifecycleStatus | null>(null);
-  // Lifecycle-status filter (multi-select) for the Process Hub Risk tab's "Status"
-  // pill — replaces the KPI tiles there (which are hidden in embedded mode).
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [detailRiskId, setDetailRiskId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -641,22 +626,8 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const baseRisks = (processFilter ? risks.filter(r => r.businessProcess === processFilter) : risks)
     .filter(r => !archivedRiskIds.includes(r.id));
 
-  // Derived KPIs
-  const totalRisks = baseRisks.length;
-  const activeCount = baseRisks.filter(r => r.status === 'Active').length;
-  const underReviewCount = baseRisks.filter(r => r.status === 'Under Review').length;
-  const draftCount = baseRisks.filter(r => r.status === 'Draft').length;
   const filteredRisks = useMemo(() => {
     let result = baseRisks;
-
-    // Lifecycle status — KPI tiles (standalone, single-select) or the Status
-    // pill (Process Hub, multi-select). Only one is active per surface.
-    if (activeStatusTile) {
-      result = result.filter(r => r.status === activeStatusTile);
-    }
-    if (statusFilter.length > 0) {
-      result = result.filter(r => statusFilter.includes(r.status));
-    }
 
     // Search
     if (searchQuery.trim()) {
@@ -674,7 +645,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     if (priorityFilter.length > 0) result = result.filter(r => priorityFilter.includes(r.priority));
 
     return result;
-  }, [baseRisks, activeStatusTile, statusFilter, searchQuery, subProcessFilter, categoryFilter, priorityFilter]);
+  }, [baseRisks, searchQuery, subProcessFilter, categoryFilter, priorityFilter]);
 
   const subProcessOptions = useMemo(() => Array.from(new Set(baseRisks.map(r => r.subProcess))).sort(), [baseRisks]);
   const categoryOptions = useMemo(() => Array.from(new Set(baseRisks.map(r => r.category))).sort(), [baseRisks]);
@@ -685,11 +656,9 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   }, [baseRisks]);
 
   // Single source of truth for "is any filter on" + a reset that clears every
-  // filter (the KPI tile, the slim Status dropdown, the other dropdowns, search).
-  const hasActiveFilters = !!activeStatusTile || statusFilter.length > 0 || subProcessFilter.length > 0 || categoryFilter.length > 0 || priorityFilter.length > 0 || searchQuery.length > 0;
+  // filter (the dropdowns + search).
+  const hasActiveFilters = subProcessFilter.length > 0 || categoryFilter.length > 0 || priorityFilter.length > 0 || searchQuery.length > 0;
   const clearAllFilters = () => {
-    setActiveStatusTile(null);
-    setStatusFilter([]);
     setSubProcessFilter([]);
     setCategoryFilter([]);
     setPriorityFilter([]);
@@ -737,7 +706,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
       addToast({ message: `Risk "${risk.name}" updated`, type: 'success' });
     } else {
       setRisks(prev => [risk, ...prev]);
-      addToast({ message: `Risk "${risk.name}" created as ${risk.status}`, type: 'success' });
+      addToast({ message: `Risk "${risk.name}" created`, type: 'success' });
     }
     setShowCreateDrawer(false);
   };
@@ -1004,9 +973,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                 Clear all
               </button>
             )}
-            {embedded && (
-              <ColumnFilter variant="button" label="Status" options={['Active', 'Under Review', 'Draft']} value={statusFilter} onChange={setStatusFilter} align="end" />
-            )}
             <ColumnFilter variant="button" label="Priority" options={priorityOptions} value={priorityFilter} onChange={setPriorityFilter} align="end" />
             <ColumnFilter variant="button" label="Sub-process" options={subProcessOptions} value={subProcessFilter} onChange={setSubProcessFilter} align="end" />
             <ColumnFilter variant="button" label="Category" options={categoryOptions} value={categoryFilter} onChange={setCategoryFilter} align="end" />
@@ -1019,17 +985,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             )}
           </div>
         </div>
-
-        {/* KPI strip (4 tiles) — single-select lifecycle-status filter; Total clears.
-            Standalone Risk Register only; the Process Hub Risk tab uses the Status pill instead. */}
-        {!embedded && (
-        <div className="grid grid-cols-4 gap-3">
-          <KpiTile label="Total Risks"  value={String(totalRisks)}       index={0} onClick={() => setActiveStatusTile(null)} />
-          <KpiTile label="Active"       value={String(activeCount)}      index={1} valueClassName="text-compliant-700" onClick={() => setActiveStatusTile(p => p === 'Active' ? null : 'Active')} selected={activeStatusTile === 'Active'} />
-          <KpiTile label="Under Review" value={String(underReviewCount)} index={2} valueClassName="text-high-700" onClick={() => setActiveStatusTile(p => p === 'Under Review' ? null : 'Under Review')} selected={activeStatusTile === 'Under Review'} />
-          <KpiTile label="Draft"        value={String(draftCount)}       index={3} onClick={() => setActiveStatusTile(p => p === 'Draft' ? null : 'Draft')} selected={activeStatusTile === 'Draft'} />
-        </div>
-        )}
 
         {/* Risk Cards — engagement-style list, one card per risk. Click anywhere to open detail. */}
         <div className="space-y-2 min-h-[calc(100vh-280px)]">
@@ -1083,12 +1038,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                           {risk.name}
                         </a>
                       </h3>
-                    );
-                    const statusPill = (
-                      <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-semibold ${STATUS_STYLES[risk.status]}`}>
-                        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
-                        {risk.status}
-                      </span>
                     );
                     const p2pChip = (
                       <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
@@ -1151,12 +1100,11 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                       </>
                     );
                     return embedded ? (
-                      /* Process Hub Risks tab — Controls-style column grid: [id+title+status / desc] · [P2P+type stacked] · [severity] · [tags+actions] */
+                      /* Process Hub Risks tab — Controls-style column grid: [id+title / desc] · [P2P+type stacked] · [severity] · [tags+actions] */
                       <div className="grid grid-cols-[minmax(0,1fr)_7rem_6rem_20rem] gap-5 items-start">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             {identity}
-                            {statusPill}
                           </div>
                           <p className="text-[0.8125rem] text-text leading-relaxed mt-2.5">{risk.description || '—'}</p>
                         </div>
@@ -1177,7 +1125,6 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             {identity}
-                            {statusPill}
                             {p2pChip}
                             {categoryChip}
                             {priorityChip}

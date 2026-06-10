@@ -341,6 +341,8 @@ export interface RacmEntry {
   isValidated: boolean; linkedToEngagement: boolean;
   /** Creation date (human-readable, e.g. "May 28, 2026") — shown on the RACM card meta line. */
   createdAt?: string;
+  /** Last-updated date (human-readable) — shown next to "Created" on the RACM card meta line. */
+  updatedAt?: string;
   /** false = still in draft review (editable Excel grid); true | undefined = frozen / active */
   isFrozen?: boolean;
   /** Original uploaded file name — used when re-opening the review editor */
@@ -388,12 +390,12 @@ const READINESS_BADGE: Record<RacmTableReadiness, string> = {
 
 export const RACM_SEED_DATA: RacmEntry[] = [
   { id: AR_RACM_ID, name: 'FY26 AR: Accounts Receivable RACM', version: 'v1.0', process: 'O2C', framework: 'IFC/ICOFR, COSO 2013', risks: AR_RACM_ENTRIES.length, controls: new Set(AR_RACM_ENTRIES.map(e => e.controlId)).size, mappedRisks: AR_RACM_ENTRIES.length, unmappedRisks: 0, keyControls: AR_RACM_ENTRIES.filter(e => e.riskRating === 'Critical' || e.riskRating === 'High').length, workflowCoverage: 78, attributesCoverage: 100, isValidated: true, linkedToEngagement: false, sourceFileName: 'SOP_Accounts Receivable.pptx' },
-  { id: 'racm-001', name: 'FY26 P2P: Vendor Payment', version: 'v2.1', createdAt: 'May 20, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 9, controls: 24, mappedRisks: 9, unmappedRisks: 0, keyControls: 6, workflowCoverage: 92, attributesCoverage: 88, isValidated: true, linkedToEngagement: true },
-  { id: 'racm-002', name: 'FY26 O2C: Order to Cash RACM', version: 'v2.1', createdAt: 'May 15, 2026', process: 'O2C', framework: 'SOX ICFR', risks: 7, controls: 18, mappedRisks: 7, unmappedRisks: 0, keyControls: 5, workflowCoverage: 80, attributesCoverage: 75, isValidated: true, linkedToEngagement: false },
-  { id: 'racm-003', name: 'FY26 R2R: Financial Close', version: 'v2.1', createdAt: 'Apr 28, 2026', process: 'R2R', framework: 'SOX ICFR', risks: 11, controls: 31, mappedRisks: 10, unmappedRisks: 1, keyControls: 8, workflowCoverage: 85, attributesCoverage: 80, isValidated: true, linkedToEngagement: true },
+  { id: 'racm-001', name: 'FY26 P2P: Vendor Payment', version: 'v2.1', createdAt: 'May 20, 2026', updatedAt: 'Jun 4, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 9, controls: 24, mappedRisks: 9, unmappedRisks: 0, keyControls: 6, workflowCoverage: 92, attributesCoverage: 88, isValidated: true, linkedToEngagement: true },
+  { id: 'racm-002', name: 'FY26 O2C: Order to Cash RACM', version: 'v2.1', createdAt: 'May 15, 2026', updatedAt: 'Jun 1, 2026', process: 'O2C', framework: 'SOX ICFR', risks: 7, controls: 18, mappedRisks: 7, unmappedRisks: 0, keyControls: 5, workflowCoverage: 80, attributesCoverage: 75, isValidated: true, linkedToEngagement: false },
+  { id: 'racm-003', name: 'FY26 R2R: Financial Close', version: 'v2.1', createdAt: 'Apr 28, 2026', updatedAt: 'May 22, 2026', process: 'R2R', framework: 'SOX ICFR', risks: 11, controls: 31, mappedRisks: 10, unmappedRisks: 1, keyControls: 8, workflowCoverage: 85, attributesCoverage: 80, isValidated: true, linkedToEngagement: true },
   // S2C intentionally has NO seed RACM — it's the "from scratch" demo process whose
   // RACM tab shows the empty state + Create RACM flow. (Was racm-004 Contract Review.)
-  { id: 'racm-005', name: 'FY26 ITGC: Access & Change', version: 'v2.1', createdAt: 'Mar 30, 2026', process: 'ITGC', framework: 'ISO 27001', risks: 6, controls: 15, mappedRisks: 6, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: true },
+  { id: 'racm-005', name: 'FY26 ITGC: Access & Change', version: 'v2.1', createdAt: 'Mar 30, 2026', updatedAt: 'May 8, 2026', process: 'ITGC', framework: 'ISO 27001', risks: 6, controls: 15, mappedRisks: 6, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: true },
 ];
 
 // ─── RACM mapping view ───────────────────────────────────────────────────────
@@ -969,7 +971,12 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
               </button>
             )}
             <ColumnFilter variant="button" label="Status" options={statusOptions} value={statusFilter} onChange={setStatusFilter} align="end" />
-            <ColumnFilter variant="button" label="Process" options={processOptions} value={processColFilter} onChange={setProcessColFilter} align="end" />
+            {/* Process filter is hidden when the list is already scoped to one business
+                process (Process Hub RACM tab) — every row shares that process, so the
+                filter is redundant. It still shows in any unscoped RACM list. */}
+            {!processFilter && (
+              <ColumnFilter variant="button" label="Process" options={processOptions} value={processColFilter} onChange={setProcessColFilter} align="end" />
+            )}
             <ColumnFilter variant="button" label="Framework" options={frameworkOptions} value={frameworkFilter} onChange={setFrameworkFilter} align="end" />
             {onCreate && (
               <Button
@@ -1072,7 +1079,9 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
             const readiness = getRacmTableReadiness(racm);
             const isSelected = selectedIds.includes(racm.id);
             const versionLabel = racm.version.replace(/^v/i, '');
-            const descLine = racm.createdAt ? `v${versionLabel} · Created ${racm.createdAt}` : `v${versionLabel}`;
+            const createdPart = racm.createdAt ? ` · Created ${racm.createdAt}` : '';
+            const updatedPart = racm.updatedAt ? ` · Updated ${racm.updatedAt}` : '';
+            const descLine = `v${versionLabel}${createdPart}${updatedPart}`;
             // Inline risk–control mapping rows for the expand panel — derived from the
             // process's risks/controls (locally-unmapped pairs removed).
             const cardExpanded = expandedCardIds.has(racm.id);
