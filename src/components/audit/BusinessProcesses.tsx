@@ -6,7 +6,7 @@ import {
   ArrowLeft, ArrowRight,
   Building2,
   FileText, FileUp, Check, CheckCircle2, AlertTriangle, X, Eye, Pencil, Loader2, Paperclip, Play, Lock, ShieldCheck, Trash2, Download, RotateCcw,
-  HelpCircle, Grid3x3, Shield, Workflow, Archive, Zap, Link2, User, Clock, Share2,
+  HelpCircle, Grid3x3, Shield, Workflow, Zap, Link2, User, Clock, Share2,
 } from 'lucide-react';
 import { KpiTile } from '../shared/KpiTile';
 import { getSopRelationships, getControlRelationships, getWorkflowRelationships, getRacmRelationships } from '../../data/processHubJoins';
@@ -43,7 +43,7 @@ const Button = (props: React.ComponentProps<typeof BaseButton>) => {
   return (
     <BaseButton
       {...props}
-      className={['rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
+      className={[/rounded-/.test(props.className ?? '') ? '' : 'rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
     />
   );
 };
@@ -2026,7 +2026,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               <FilterCTA label="File type" options={fileTypeOptions} value={fileTypeFilter} onChange={setFileTypeFilter} />
               <FilterCTA label="User" options={uploaderOptions} value={uploaderFilter} onChange={setUploaderFilter} />
               {can('bp_create') && (
-              <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadModal(true)} className="shrink-0" leftIcon={<Plus size={13} />}>
+              <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadModal(true)} disabled={searchQuery.trim().length > 0} title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined} className="shrink-0 rounded-md!" leftIcon={<Plus size={13} />}>
                 Create new SOP
               </Button>
               )}
@@ -3185,11 +3185,10 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           )}
           <ControlFilterPill label="Status" options={['Effective', 'In Test', 'Failed', 'Pending']} value={statusFilter} onChange={setStatusFilter} />
           <ControlFilterPill label="Classification" options={classificationOptions} value={classificationFilter} onChange={setClassificationFilter} />
-          <ControlFilterPill label="Nature" options={natureOptions} value={natureFilter} onChange={setNatureFilter} />
           <ControlFilterPill label="Automation" options={automationOptions} value={automationFilter} onChange={setAutomationFilter} />
           <ControlFilterPill label="Frequency" options={frequencyOptions} value={frequencyFilter} onChange={setFrequencyFilter} />
           {can('ctrl_create') && (
-          <Button variant="primary" size="md" onClick={() => setShowCreateControl(true)} leftIcon={<Plus size={14} />}>
+          <Button variant="primary" size="md" onClick={() => setShowCreateControl(true)} disabled={searchQuery.trim().length > 0} title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined} className="rounded-md!" leftIcon={<Plus size={14} />}>
             Create Control
           </Button>
           )}
@@ -3246,7 +3245,18 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           />
         ) : filteredControls.map((ctrl, i) => {
           const isKey = ctrl.classification === 'Key';
-          const wfCount = ctrl.workflows.length;
+          // Workflow id labels for the card: prefer the WF-xxx code (lives on the
+          // control's attributes, matched by workflow name); fall back to the
+          // workflow's own name when no code exists (e.g. freshly-linked ones).
+          const wfLabels = (() => {
+            const codeByName = new Map<string, string>();
+            for (const attr of ctrl.attributes ?? []) {
+              for (const w of attr.workflows ?? []) {
+                if (w?.name && w?.code && !codeByName.has(w.name)) codeByName.set(w.name, w.code);
+              }
+            }
+            return (ctrl.workflows ?? []).map(w => codeByName.get(w.name) ?? w.name);
+          })();
           const status = controlStatuses.get(ctrl.id) ?? 'Pending';
           return (
             <motion.div
@@ -3278,6 +3288,11 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                   <span className={`inline-flex items-center gap-1.5 px-2 h-5 rounded-full text-[0.625rem] font-semibold border ${CTRL_STATUS_CLS[status]}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${CTRL_STATUS_DOT[status]}`} />{status}
                   </span>
+                  {/* Key/Non-Key classification — a control-level property, so it sits on the
+                      identity line next to status (not in the workflow lane). */}
+                  <span className={`inline-flex items-center px-2 h-5 rounded-full text-[0.625rem] font-bold shrink-0 ${isKey ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'}`}>
+                    {isKey ? 'Key' : 'Non-Key'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
                   <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-white text-text-muted border border-border-light">
@@ -3297,17 +3312,28 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                 </span>
               </div>
 
-              {/* Lane 3 — numbers + Key tag, left-aligned together on the workflows side.
-                  Workflow count (mirrors RACM's risks·controls·key line) then the Key /
-                  Non-Key badge (RACM card style: filled mitigated for Key, neutral grey
-                  for Non-Key). */}
+              {/* Lane 3 — linked workflow ids as lavender brand pills (same chip style the
+                  control id uses elsewhere). First two render inline; extras collapse into a
+                  +N with a hover tooltip. Code-less workflows fall back to their name (also a
+                  pill). No workflows → em dash. (Key/Non-Key now lives on the headline.) */}
               <div className="flex items-center gap-2.5 min-w-0">
-                <span className="text-[0.75rem] text-text-muted leading-relaxed whitespace-nowrap"><span className="font-semibold text-text">{wfCount}</span> workflow{wfCount !== 1 ? 's' : ''}</span>
-                <span className={`inline-flex items-center px-1.5 h-4 rounded-xs text-[0.625rem] font-bold shrink-0 ${
-                  isKey ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'
-                }`}>
-                  {isKey ? 'Key' : 'Non-Key'}
-                </span>
+                {wfLabels.length === 0 ? (
+                  <span className="text-[0.75rem] text-text-muted leading-relaxed whitespace-nowrap">—</span>
+                ) : (
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {wfLabels.slice(0, 2).map((label, idx) => (
+                      <span key={idx} title={label} className="inline-flex items-center px-2 py-0.5 rounded-md bg-brand-50 border border-brand-100 text-brand-700 text-[0.6875rem] font-mono font-semibold max-w-[13rem] min-w-0">
+                        <span className="truncate">{label}</span>
+                      </span>
+                    ))}
+                    {wfLabels.length > 2 && (
+                      <span className="relative group/wfids shrink-0">
+                        <span className="text-[0.75rem] text-text-muted cursor-default whitespace-nowrap">+{wfLabels.length - 2}</span>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium opacity-0 group-hover/wfids:opacity-100 pointer-events-none transition-opacity z-50 whitespace-nowrap">{wfLabels.slice(2).join(', ')}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Lane 4 — Actions: delete only. Always-visible hover tooltip (matches the
@@ -3541,7 +3567,6 @@ const RUN_STATUS_PILL: Record<RunStatus, string> = {
 function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateWorkflow, onRunWorkflow, onBulkRunComplete }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void; onCreateWorkflow?: () => void; onRunWorkflow?: (workflowId: string) => void; onBulkRunComplete?: (run: BulkAuditRun) => void }) {
   const { addToast } = useToast();
   const { can } = useCan();
-  const logEvent = useAuditLog();
   const [workflows, setWorkflows] = useState<BPWorkflow[]>(getSeedWorkflows(bpAbbr));
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [confirmDeleteWf, setConfirmDeleteWf] = useState<{ id: string; name: string } | null>(null);
@@ -3549,6 +3574,11 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
   const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Bulk-run mode — mirrors the Workflow Library: the always-visible "Bulk Run"
+  // button turns this on (swapping to "Cancel"), which reveals the per-card
+  // checkboxes; turning it off clears any selection. The run itself is launched
+  // from the Continue bar that appears once ≥1 workflow is ticked.
+  const [bulkMode, setBulkMode] = useState(false);
   // Bulk-run config modal (shared with the Workflow Library flow).
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   // Workflows currently re-running in place after a technical error.
@@ -3658,6 +3688,9 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
     }
   };
   const clearSelection = () => setSelectedIds([]);
+  // Bulk-run mode toggle — entering starts from a clean selection; cancelling clears it.
+  const enterBulkMode = () => { setBulkMode(true); setSelectedIds([]); };
+  const exitBulkMode = () => { setBulkMode(false); setSelectedIds([]); };
 
   // Selected workflows mapped to the Library's shape so the shared BulkExecuteModal
   // can drive the same bulk-run flow from the Process Hub.
@@ -3690,15 +3723,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
       date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
     });
     clearSelection();
-  };
-
-  const handleArchiveOne = (id: string) => {
-    const wf = workflows.find(w => w.id === id);
-    if (!wf) return;
-    setWorkflows(prev => prev.map(w => w.id === id ? { ...w, status: 'Archived' as const } : w));
-    setSelectedIds(prev => prev.filter(s => s !== id));
-    addToast({ message: `Workflow "${wf.name}" archived.`, type: 'info' });
-    logEvent({ action: 'Update', description: `Archived workflow "${wf.name}" (${wf.id})`, module: 'Workflow Library', entity: 'Workflow' });
+    setBulkMode(false);
   };
 
   if (!isLoading && loadError) {
@@ -3812,25 +3837,30 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
               Clear all
             </button>
           )}
-          {/* Bulk run — appears once ≥1 workflow is selected; single runs go via the
-              card's Execute button. Same button + flow as the Workflow Library. */}
-          {selectedIds.length > 0 && (
-            <Button variant="outline" size="md" onClick={() => setBulkModalOpen(true)} className="shrink-0" leftIcon={<Play size={14} />}>
+          {/* Bulk run — always-visible toggle, mirroring the Workflow Library: it
+              swaps to "Cancel" and reveals the per-card checkboxes. The run is then
+              launched from the Continue bar that appears once ≥1 card is ticked. */}
+          {can('wf_run') && (bulkMode ? (
+            <Button variant="outline" size="md" onClick={exitBulkMode} className="shrink-0 rounded-md!">
+              Cancel
+            </Button>
+          ) : (
+            <Button variant="outline" size="md" onClick={enterBulkMode} className="shrink-0 rounded-md!" leftIcon={<Play size={14} />}>
               Bulk Run
             </Button>
-          )}
+          ))}
           <FilterPill filterKey="owner"  label="User"   options={ownerOptions}  value={ownerFilter}  onChange={setOwnerFilter} />
           <FilterPill filterKey="type"   label="Type"   options={typeOptions}   value={typeFilter}   onChange={setTypeFilter} />
           {can('wf_create') && (
-          <Button variant="primary" size="md" shape="lg" onClick={() => onCreateWorkflow?.()} className="shrink-0" leftIcon={<Plus size={13} />}>
+          <Button variant="primary" size="md" shape="lg" onClick={() => onCreateWorkflow?.()} disabled={searchQuery.trim().length > 0} title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined} className="shrink-0 rounded-md!" leftIcon={<Plus size={13} />}>
             Create Workflow
           </Button>
           )}
         </div>
       </div>
 
-      {/* Bulk-select strip — only when ≥1 card is ticked */}
-      {selectedIds.length > 0 && (
+      {/* Bulk-select strip — only in bulk-run mode, once ≥1 card is ticked */}
+      {bulkMode && selectedIds.length > 0 && (
         <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-brand-50 border border-brand-100">
           <input
             ref={selectAllRef}
@@ -3898,26 +3928,30 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.02 }}
-                className={`group grid grid-cols-[28px_1.8fr_2.1fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all items-start ${
+                onClick={bulkMode ? () => toggleSelect(wf.id) : undefined}
+                className={`group grid ${bulkMode ? 'grid-cols-[28px_1.8fr_2.1fr_80px] cursor-pointer select-none' : 'grid-cols-[1.8fr_2.1fr_80px]'} gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all items-start ${
                   isSelected ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border-light'
                 }`}
               >
-                {/* Select checkbox — its own column on the left, always visible. */}
-                <div onClick={e => e.stopPropagation()} className="pt-[2px]">
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${wf.name}`}
-                    checked={isSelected}
-                    onChange={() => toggleSelect(wf.id)}
-                    className="w-4 h-4 rounded-xs border border-ink-300 cursor-pointer accent-brand-600"
-                  />
-                </div>
+                {/* Select checkbox — its own 28px column on the left, shown only in
+                    bulk-run mode (revealed when "Bulk Run" is toggled on). */}
+                {bulkMode && (
+                  <div onClick={e => e.stopPropagation()} className="pt-[2px]">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${wf.name}`}
+                      checked={isSelected}
+                      onChange={() => toggleSelect(wf.id)}
+                      className="w-4 h-4 rounded-xs border border-ink-300 cursor-pointer accent-brand-600"
+                    />
+                  </div>
+                )}
 
                 {/* Col 2 — id + title, description, run meta, error/retry. */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-[0.75rem] font-semibold text-brand-700 shrink-0">{wf.id.toUpperCase()}</span>
-                    <button type="button" onClick={openDetail} className="text-[0.875rem] font-semibold text-text leading-snug truncate text-left hover:text-brand-700 hover:underline cursor-pointer">{wf.name}</button>
+                    <button type="button" onClick={openDetail} className={`text-[0.875rem] font-semibold text-text leading-snug truncate text-left ${bulkMode ? 'pointer-events-none' : 'hover:text-brand-700 hover:underline cursor-pointer'}`}>{wf.name}</button>
                     {/* Live tag — only for SQL-based workflows (matches the Workflow Library pill) */}
                     {wf.isSql && (
                       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[0.6875rem] font-medium shrink-0 bg-compliant-50 text-compliant-700">
@@ -3945,7 +3979,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
                         title="Retry"
                         disabled={isRetrying}
                         onClick={(e) => { e.stopPropagation(); handleRetry(wf); }}
-                        className="shrink-0 inline-flex items-center align-middle text-risk-700 hover:text-risk-800 disabled:opacity-60 disabled:cursor-default cursor-pointer"
+                        className={`shrink-0 inline-flex items-center align-middle text-risk-700 hover:text-risk-800 disabled:opacity-60 disabled:cursor-default cursor-pointer ${bulkMode ? 'opacity-40 pointer-events-none' : ''}`}
                       >
                         <RotateCcw size={13} className={isRetrying ? 'animate-spin' : ''} />
                       </button>
@@ -3990,52 +4024,54 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
                   </span>
                 </div>
 
-                {/* Col 4 — actions (80px) */}
-                <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-0.5">
-                  {isSelected ? (
-                    <>
-                      {can('wf_update_delete') && (
-                      <button type="button" aria-label="Archive" title="Archive"
-                        onClick={() => handleArchiveOne(wf.id)}
-                        className="w-8 h-8 rounded-sm flex items-center justify-center text-text-muted hover:text-ink-800 hover:bg-paper-100 cursor-pointer transition-colors">
-                        <Archive size={14} />
-                      </button>
-                      )}
-                      <button type="button" aria-label="Cancel selection" title="Cancel selection"
-                        onClick={() => toggleSelect(wf.id)}
-                        className="w-8 h-8 rounded-sm flex items-center justify-center text-text-muted hover:text-ink-800 hover:bg-paper-100 cursor-pointer transition-colors">
-                        <X size={14} />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <div className="relative group/run">
-                        <button type="button" aria-label="Execute workflow"
-                          onClick={(e) => { e.stopPropagation(); onRunWorkflow?.(wf.id); }}
-                          className="w-8 h-8 rounded-sm flex items-center justify-center text-text-muted hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors">
-                          <Play size={14} />
-                        </button>
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/run:opacity-100 pointer-events-none transition-opacity z-50">
-                          Execute workflow
-                        </span>
-                      </div>
-                      <div className="relative group/del">
-                        <button type="button" aria-label="Delete workflow"
-                          onClick={() => setConfirmDeleteWf({ id: wf.id, name: wf.name })}
-                          className="w-8 h-8 rounded-sm flex items-center justify-center text-text-muted hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors">
-                          <Trash2 size={14} />
-                        </button>
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/del:opacity-100 pointer-events-none transition-opacity z-50">
-                          Delete
-                        </span>
-                      </div>
-                    </>
-                  )}
+                {/* Col 4 — actions (80px). In bulk-run mode these dim and go
+                    non-interactive: selection is the only action, so a click here
+                    falls through to the card and toggles the checkbox instead. */}
+                <div onClick={e => e.stopPropagation()} className={`flex items-center justify-end gap-0.5 ${bulkMode ? 'opacity-40 pointer-events-none' : ''}`}>
+                  <div className="relative group/run">
+                    <button type="button" aria-label="Execute workflow"
+                      onClick={(e) => { e.stopPropagation(); onRunWorkflow?.(wf.id); }}
+                      className="w-8 h-8 rounded-sm flex items-center justify-center text-text-muted hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors">
+                      <Play size={14} />
+                    </button>
+                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/run:opacity-100 pointer-events-none transition-opacity z-50">
+                      Execute workflow
+                    </span>
+                  </div>
+                  <div className="relative group/del">
+                    <button type="button" aria-label="Delete workflow"
+                      onClick={() => setConfirmDeleteWf({ id: wf.id, name: wf.name })}
+                      className="w-8 h-8 rounded-sm flex items-center justify-center text-text-muted hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors">
+                      <Trash2 size={14} />
+                    </button>
+                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/del:opacity-100 pointer-events-none transition-opacity z-50">
+                      Delete
+                    </span>
+                  </div>
                 </div>
               </motion.div>
             );
           })}
         </div>
+      )}
+
+      {/* Bulk action bar — appears once ≥1 workflow is ticked. Continue opens the
+          shared 3-step Bulk Execute setup, same as the Workflow Library. Sticky so
+          it stays reachable at the bottom of a long card list. */}
+      {bulkMode && selectedIds.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.16 }}
+          className="sticky bottom-0 z-20 flex items-center gap-3 py-3 px-4 -mx-1 border-t border-border-light bg-white/95 backdrop-blur-sm"
+        >
+          <span className="text-[0.75rem] text-text-secondary">
+            <span className="font-semibold text-text">{selectedIds.length}</span> selected
+          </span>
+          <Button variant="primary" size="md" onClick={() => setBulkModalOpen(true)} className="ml-auto shrink-0" rightIcon={<ArrowRight size={14} />}>
+            Continue
+          </Button>
+        </motion.div>
       )}
 
       {/* Delete-workflow confirmation */}
@@ -5474,7 +5510,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
             aria-label={isOverview ? 'Overview' : `Switch to ${sectionMeta[key as SectionKey].title}`}
             aria-current={isActive ? 'page' : undefined}
             onClick={() => (isOverview ? closeDrilledSection() : switchDrilledSection(key as SectionKey))}
-            className={`group shrink-0 inline-flex items-center gap-2 px-1 pb-2.5 border-b-2 text-[0.8125rem] transition-colors cursor-pointer focus-visible:outline-none ${
+            className={`group no-focus-ring shrink-0 inline-flex items-center gap-2 px-1 pb-2.5 border-b-2 text-[0.8125rem] transition-colors cursor-pointer focus-visible:outline-none ${
               isActive
                 ? 'border-brand-600 text-brand-700 font-semibold'
                 : 'border-transparent text-ink-500 font-medium hover:text-ink-800'

@@ -22,7 +22,7 @@ const Button = (props: React.ComponentProps<typeof BaseButton>) => {
   return (
     <BaseButton
       {...props}
-      className={['rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
+      className={[/rounded-/.test(props.className ?? '') ? '' : 'rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
     />
   );
 };
@@ -975,9 +975,11 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
               <Button
                 variant="primary"
                 size="md"
-                className="shrink-0 !h-8"
+                className="shrink-0 !h-8 rounded-md!"
                 leftIcon={<Plus size={13} />}
                 onClick={onCreate}
+                disabled={searchQuery.trim().length > 0}
+                title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined}
               >
                 Create new RACM
               </Button>

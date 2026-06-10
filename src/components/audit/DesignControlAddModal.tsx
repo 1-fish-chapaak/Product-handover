@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { Shield, X, Plus } from 'lucide-react';
 import { Button as BaseButton } from '../shared/Button';
+import Toggle from '../shared/Toggle';
 
 // Process Hub button standard (mirrors BusinessProcesses): 8px radius; primary
 // CTAs render flat + semibold and lock to a compact h-8.
@@ -84,11 +85,13 @@ export default function DesignControlAddModal({ subProcesses, onClose, onCreate 
               />
               <datalist id="design-control-subprocesses">{subProcesses.map(s => <option key={s} value={s} />)}</datalist>
             </div>
-            <div className="flex items-end gap-4 pb-0.5">
-              <label className="inline-flex items-center gap-2 cursor-pointer text-[0.78125rem] text-ink-700 font-medium">
-                <input type="checkbox" checked={isKey} onChange={e => setIsKey(e.target.checked)} className="accent-brand-600 w-4 h-4" />
-                Key control
-              </label>
+            <div className="flex items-end pb-1.5">
+              <div className="flex items-center gap-2.5">
+                <Toggle checked={isKey} onChange={setIsKey} ariaLabel="Key control" />
+                <span onClick={() => setIsKey(!isKey)} className="text-[0.78125rem] text-ink-700 font-medium cursor-pointer select-none">
+                  Key control
+                </span>
+              </div>
             </div>
           </div>
 

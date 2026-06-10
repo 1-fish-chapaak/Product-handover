@@ -20,7 +20,7 @@ const Button = (props: ComponentProps<typeof BaseButton>) => {
   return (
     <BaseButton
       {...props}
-      className={['rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
+      className={[/rounded-/.test(props.className ?? '') ? '' : 'rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
     />
   );
 };
@@ -1012,7 +1012,8 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             <ColumnFilter variant="button" label="Category" options={categoryOptions} value={categoryFilter} onChange={setCategoryFilter} align="end" />
             {embedded && (
               <Button variant="primary" size="sm" shape="lg" onClick={() => setShowCreateDrawer(true)}
-                leftIcon={<Plus size={13} />} className="shrink-0">
+                disabled={searchQuery.trim().length > 0} title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined}
+                leftIcon={<Plus size={13} />} className="shrink-0 rounded-md!">
                 Create Risk
               </Button>
             )}
@@ -1126,7 +1127,9 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                           </>
                         ) : (
                           <>
-                            <div className="relative group/lcontrol">
+                            {/* 24px gap between the linked-control chips and the
+                                "Control" link button — Process Hub Risks tab only. */}
+                            <div className={`relative group/lcontrol${embedded && cardControls.length > 0 ? ' ml-[24px]' : ''}`}>
                               <button type="button" onClick={() => setLinkControlRisk(risk)} aria-label="Link control"
                                 className="shrink-0 inline-flex items-center gap-1 px-2 h-7 rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer">
                                 <Link2 size={12} className="shrink-0" /> Control
