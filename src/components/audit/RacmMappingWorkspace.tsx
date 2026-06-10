@@ -1622,7 +1622,7 @@ function NewRiskDrawer({ defaultProcess, onClose, onSave }: {
         className="fixed inset-0 z-50 bg-ink-900/40 backdrop-blur-[2px]" onClick={onClose} />
       <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[560px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
+        className="fixed top-0 right-0 z-50 w-full max-w-[600px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
           <div>
             <h2 className="text-[1rem] font-bold text-ink-900">Create Risk</h2>
@@ -1764,7 +1764,7 @@ function LinkControlDrawer({ alreadyLinkedIds, onClose, onLink }: {
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40" onClick={onClose} />
       <motion.aside initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
+        className="fixed top-0 right-0 bottom-0 w-full max-w-[600px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
         role="dialog" aria-label="Link Control">
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-4">
@@ -1853,7 +1853,7 @@ function CreateControlMiniDrawer({ onClose, onCreate, defaultProcess }: {
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40" onClick={onClose} />
       <motion.aside initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
+        className="fixed top-0 right-0 bottom-0 w-full max-w-[600px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
         role="dialog" aria-label="Create Control">
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-4">
@@ -1950,18 +1950,27 @@ export function LinkWorkflowToControlDrawer({ control, onClose, onLink }: {
   onLink: (wf: ControlWorkflow) => void;
 }) {
   const [search, setSearch] = useState('');
+  // "Create Workflow" opens the AI workflow builder — the chat view with the
+  // composer's Query/Workflow toggle pre-set to Workflow — in a new tab, then
+  // closes this modal.
+  const handleCreate = () => {
+    const url = new URL(window.location.href);
+    url.search = new URLSearchParams({ view: 'chat', compose: 'workflow' }).toString();
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
+    onClose();
+  };
   const alreadyLinkedIds = new Set((control.workflows || []).map(w => w.id));
   const available = AVAILABLE_WORKFLOWS.filter(w => !alreadyLinkedIds.has(w.id));
   const filtered = search ? available.filter(w => w.name.toLowerCase().includes(search.toLowerCase())) : available;
 
   return (
-    <>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40" onClick={onClose} />
-      <motion.aside initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }}
-        transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-[520px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
-        role="dialog" aria-label="Link Workflow to Control">
+        className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" onClick={onClose} />
+      <motion.div initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+        className="relative w-full max-w-[600px] max-h-[calc(100vh-2rem)] bg-canvas-elevated rounded-xl shadow-2xl border border-canvas-border flex flex-col overflow-hidden z-10"
+        role="dialog" aria-modal="true" aria-label="Link Workflow to Control">
 
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-4">
@@ -1981,12 +1990,15 @@ export function LinkWorkflowToControlDrawer({ control, onClose, onLink }: {
           </div>
         </header>
 
-        <div className="px-6 py-3 border-b border-canvas-border">
-          <div className="relative">
+        <div className="px-6 py-3 border-b border-canvas-border flex items-center gap-2.5">
+          <div className="relative flex-1">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search workflows..."
               className="w-full pl-8 pr-3 py-2 rounded-lg border border-canvas-border bg-white text-[0.8125rem] placeholder:text-ink-400 outline-none focus:border-brand-500/60 transition-all" />
           </div>
+          <Button variant="primary" size="md" onClick={handleCreate} className="shrink-0" leftIcon={<Plus size={13} />}>
+            Create Workflow
+          </Button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
@@ -1996,7 +2008,7 @@ export function LinkWorkflowToControlDrawer({ control, onClose, onLink }: {
               title={search.trim() ? 'No matching workflows' : 'All workflows already linked'}
               body={search.trim() ? `No workflows match "${search.trim()}". Try a different search or create a new one.` : 'Every available workflow is already linked to this control.'}
               action={
-                <button onClick={() => { onClose(); }}
+                <button onClick={handleCreate}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 text-[0.6875rem] font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer">
                   <Plus size={11} />Create Workflow
                 </button>
@@ -2040,8 +2052,8 @@ export function LinkWorkflowToControlDrawer({ control, onClose, onLink }: {
           </div>
           <Button variant="outline" size="md" onClick={onClose} className="w-full">Cancel</Button>
         </footer>
-      </motion.aside>
-    </>
+      </motion.div>
+    </div>
   );
 }
 
@@ -2107,7 +2119,7 @@ function CreateWorkflowBuilderDrawer({ control, onClose, onCreate }: {
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40" onClick={onClose} />
       <motion.aside initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
+        className="fixed top-0 right-0 bottom-0 w-full max-w-[600px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
         role="dialog" aria-label="Create Workflow">
 
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border">

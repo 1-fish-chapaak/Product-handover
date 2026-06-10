@@ -2920,8 +2920,13 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
   // Composer mode toggle — drives whether a Submit routes to query or workflow flow.
   // Default is query (toggle off); user opts into workflow build by toggling the pill on.
-  // When opened from an engagement's "Create new workflow" flow, start in workflow mode.
-  const [buildWorkflowMode, setBuildWorkflowMode] = useState(!!workflowEngagementContext);
+  // Start in workflow mode when opened from an engagement's "Create new workflow"
+  // flow, or via a new-tab deep link carrying ?compose=workflow (e.g. the Link
+  // Workflow modal's "Create Workflow" button).
+  const [buildWorkflowMode, setBuildWorkflowMode] = useState(
+    !!workflowEngagementContext ||
+    (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('compose') === 'workflow')
+  );
 
   // If we land here scoped to an engagement, ensure the composer is in workflow-build mode.
   useEffect(() => {

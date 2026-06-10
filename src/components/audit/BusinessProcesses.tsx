@@ -6,7 +6,7 @@ import {
   ArrowLeft, ArrowRight,
   Building2,
   FileText, FileUp, Check, CheckCircle2, AlertTriangle, X, Eye, Pencil, Loader2, Paperclip, Play, Lock, ShieldCheck, Trash2, Download, RotateCcw,
-  HelpCircle, Grid3x3, Shield, Workflow, Archive, Zap, Link2, User, Clock, Share2,
+  HelpCircle, Grid3x3, Shield, Workflow, Zap, Link2, User, Clock, Share2,
 } from 'lucide-react';
 import { KpiTile } from '../shared/KpiTile';
 import { getSopRelationships, getControlRelationships, getWorkflowRelationships, getRacmRelationships } from '../../data/processHubJoins';
@@ -21,6 +21,7 @@ import { useCan } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import RacmListTable, { RACM_SEED_DATA } from './RacmListTable';
+import { LinkWorkflowToControlDrawer, type ControlWorkflow } from './RacmMappingWorkspace';
 import SopDetailDrawer, { DEFAULT_SOP_SECTIONS } from './SopDetailDrawer';
 import { BulkExecuteModal } from '../workflow/BulkExecuteModal';
 import { AuditLogsView, deterministicCaseCount, type LibraryWorkflow, type BulkRunWorkflowResult } from '../workflow/WorkflowLibraryView';
@@ -42,13 +43,14 @@ const Button = (props: React.ComponentProps<typeof BaseButton>) => {
   return (
     <BaseButton
       {...props}
-      className={['rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
+      className={[/rounded-/.test(props.className ?? '') ? '' : 'rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
     />
   );
 };
 import ListPlaceholder from '../shared/ListPlaceholder';
 import ListLoadError from '../shared/ListLoadError';
 import FloatingLines from '../shared/FloatingLines';
+import DesignControlAddModal from './DesignControlAddModal';
 // ControlLibraryView no longer embedded — replaced by ControlDesignTab
 // WorkflowLibraryView no longer used — replaced by WorkflowGovernanceTab
 
@@ -94,7 +96,7 @@ function NewRacmModal({ onClose, onUploadRacm, onUploadSop }: { onClose: () => v
       <motion.div
         initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.98 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-[560px] bg-white rounded-xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-[600px] bg-white rounded-xl shadow-2xl overflow-hidden"
       >
         <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-border-light">
           <div>
@@ -129,43 +131,44 @@ function RacmExtractionOverlay({ filename, onCancel }: { filename: string; onCan
     const t = window.setTimeout(() => setSlow(true), 8000);
     return () => window.clearTimeout(t);
   }, []);
+  // Non-blocking progress card — docked bottom-right where toasts appear, so the
+  // user can keep working while the SOP→RACM extraction runs.
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-      <motion.div className="absolute inset-0 bg-ink-900/50 backdrop-blur-[3px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
-      <motion.div
-        initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
-        transition={{ duration: 0.18 }} className="relative w-full max-w-[440px] bg-white rounded-xl shadow-2xl p-6"
-      >
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2.5 rounded-xl bg-brand-50"><Loader2 size={20} className="text-brand-600 animate-spin" /></div>
-          <div className="min-w-0">
-            <div className="text-[0.875rem] font-bold text-text">Extracting RACM from SOP</div>
-            <div className="text-[0.71875rem] text-text-muted truncate flex items-center gap-1"><FileText size={11} />{filename}</div>
-          </div>
+    <motion.div
+      role="status" aria-live="polite"
+      initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: 0.98 }}
+      transition={{ duration: 0.2 }}
+      className="fixed bottom-6 right-6 z-[110] w-[360px] bg-white rounded-xl shadow-2xl border border-canvas-border p-5"
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-2.5 rounded-xl bg-brand-50"><Loader2 size={20} className="text-brand-600 animate-spin" /></div>
+        <div className="min-w-0">
+          <div className="text-[0.875rem] font-bold text-text">Extracting RACM from SOP</div>
+          <div className="text-[0.71875rem] text-text-muted truncate flex items-center gap-1"><FileText size={11} />{filename}</div>
         </div>
-        <div className="space-y-2">
-          {steps.map((s, i) => (
-            <motion.div key={s} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.32, duration: 0.3 }} className="flex items-center gap-2.5 text-[0.75rem] text-text-secondary">
-              <span className="w-4 h-4 rounded-full bg-brand-50 border border-brand-100 inline-flex items-center justify-center shrink-0">
-                <Sparkles size={9} className="text-brand-600" />
-              </span>
-              {s}
-            </motion.div>
-          ))}
+      </div>
+      <div className="space-y-2">
+        {steps.map((s, i) => (
+          <motion.div key={s} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.32, duration: 0.3 }} className="flex items-center gap-2.5 text-[0.75rem] text-text-secondary">
+            <span className="w-4 h-4 rounded-full bg-brand-50 border border-brand-100 inline-flex items-center justify-center shrink-0">
+              <Sparkles size={9} className="text-brand-600" />
+            </span>
+            {s}
+          </motion.div>
+        ))}
+      </div>
+      <div className="mt-5 h-1.5 rounded-full bg-surface-2 overflow-hidden">
+        <motion.div className="h-full bg-brand-500 rounded-full" initial={{ width: '6%' }} animate={{ width: '92%' }} transition={{ duration: 1.5, ease: 'easeInOut' }} />
+      </div>
+      {slow && (
+        <p className="mt-3 text-[0.6875rem] text-text-muted text-center">Still working. This is taking longer than usual…</p>
+      )}
+      {onCancel && (
+        <div className="mt-4 flex justify-end">
+          <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
         </div>
-        <div className="mt-5 h-1.5 rounded-full bg-surface-2 overflow-hidden">
-          <motion.div className="h-full bg-brand-500 rounded-full" initial={{ width: '6%' }} animate={{ width: '92%' }} transition={{ duration: 1.5, ease: 'easeInOut' }} />
-        </div>
-        {slow && (
-          <p className="mt-3 text-[0.6875rem] text-text-muted text-center">Still working. This is taking longer than usual…</p>
-        )}
-        {onCancel && (
-          <div className="mt-4 flex justify-center">
-            <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
-          </div>
-        )}
-      </motion.div>
-    </div>
+      )}
+    </motion.div>
   );
 }
 
@@ -961,7 +964,7 @@ function UploadSOPModal({ bpAbbr, retrySopName, onClose, onUploadAndProcess, onS
         className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" onClick={requestClose} />
       <motion.div initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.98 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-[560px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
+        className="relative w-full max-w-[600px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
 
         {/* Discard-changes confirm strip — only shows when user tried to close after editing */}
         {showDiscardConfirm && (
@@ -1144,7 +1147,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
         className="fixed inset-0 z-50 bg-ink-900/40 backdrop-blur-[2px]" onClick={requestClose} />
       <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[560px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
+        className="fixed top-0 right-0 z-50 w-full max-w-[600px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
 
         {/* Discard-changes confirm strip — only shows when user tried to close after editing */}
         {showDiscardConfirm && (
@@ -2023,7 +2026,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               <FilterCTA label="File type" options={fileTypeOptions} value={fileTypeFilter} onChange={setFileTypeFilter} />
               <FilterCTA label="User" options={uploaderOptions} value={uploaderFilter} onChange={setUploaderFilter} />
               {can('bp_create') && (
-              <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadModal(true)} className="shrink-0" leftIcon={<Plus size={13} />}>
+              <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadModal(true)} disabled={searchQuery.trim().length > 0} title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined} className="shrink-0 rounded-md!" leftIcon={<Plus size={13} />}>
                 Create new SOP
               </Button>
               )}
@@ -2148,7 +2151,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                     </div>
 
                     {/* Actions — view + download + delete (retry is the inline icon at the end of the error message). */}
-                    <div onClick={e => e.stopPropagation()} className="flex items-center gap-2 shrink-0">
+                    <div onClick={e => e.stopPropagation()} className="flex items-center gap-0.5 shrink-0">
                       <div className="relative group/view">
                         <button
                           type="button"
@@ -2757,7 +2760,7 @@ function AiMapPanel({ attributes, onClose, onAccept }: {
       <motion.div
         initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[520px] bg-canvas-elevated rounded-xl border border-canvas-border shadow-xl z-50 flex flex-col max-h-[85vh]"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[600px] bg-canvas-elevated rounded-xl border border-canvas-border shadow-xl z-50 flex flex-col max-h-[85vh]"
         role="dialog" aria-label="AI workflow suggestions"
       >
         <header className="shrink-0 px-5 pt-4 pb-3 border-b border-canvas-border flex items-center justify-between">
@@ -2820,7 +2823,7 @@ function AttrWorkflowMapModal({ attr, onClose, onLink, onUnlink }: {
       <motion.div
         initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[460px] bg-canvas-elevated rounded-xl border border-canvas-border shadow-xl z-50 flex flex-col max-h-[85vh]"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[600px] bg-canvas-elevated rounded-xl border border-canvas-border shadow-xl z-50 flex flex-col max-h-[85vh]"
         role="dialog" aria-label="Map workflows"
       >
         <header className="shrink-0 px-5 pt-4 pb-3 border-b border-canvas-border flex items-center justify-between">
@@ -2963,7 +2966,9 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
   const [frequencyFilter, setFrequencyFilter] = useState<string[]>([]);
   // KPI-as-filter: clicking a KPI tile narrows the list below by control status.
   // 'total' = show all (default); 'tested' = Effective + In Test + Failed.
-  const [statusKpi, setStatusKpi] = useState<StatusKpi>('total');
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  // Control whose "Link workflow" drawer is open (Controls-tab card action).
+  const [linkWfCtrlId, setLinkWfCtrlId] = useState<string | null>(null);
 
   // Persist whenever the list changes, and re-hydrate when this tab regains focus
   // (a control detail opened in another browser tab may have edited workflow links).
@@ -3011,20 +3016,9 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
     [controls],
   );
 
-  // Clicking a KPI tile filters by status. 'total' = all; 'tested' = every tested
-  // control (status ≠ Pending), so the list size matches the Tested count exactly.
-  const matchesKpi = (c: DesignControl) => {
-    if (statusKpi === 'total') return true;
-    const s = controlStatuses.get(c.id) ?? 'Pending';
-    if (statusKpi === 'tested') return s !== 'Pending';
-    if (statusKpi === 'effective') return s === 'Effective';
-    if (statusKpi === 'failed') return s === 'Failed';
-    return s === 'Pending'; // 'pending'
-  };
-
   const filteredControls = controls.filter(c => {
     if (!matchesSearch(c)) return false;
-    if (!matchesKpi(c)) return false;
+    if (statusFilter.length > 0 && !statusFilter.includes(controlStatuses.get(c.id) ?? 'Pending')) return false;
     if (classificationFilter.length > 0 && !classificationFilter.includes(c.classification)) return false;
     if (natureFilter.length > 0 && !natureFilter.includes(c.nature)) return false;
     if (automationFilter.length > 0 && !automationFilter.includes(c.automation)) return false;
@@ -3077,26 +3071,12 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
     setSelectedIds(prev => prev.filter(s => s !== id));
   };
 
-  // The 5 list KPIs (Image 1) — counted over ALL controls, independent of the
-  // active KPI filter, so the totals stay put while the list narrows.
-  const kpis = useMemo(() => {
-    let tested = 0, effective = 0, failed = 0, pending = 0;
-    controls.forEach(c => {
-      const s = controlStatuses.get(c.id) ?? 'Pending';
-      if (s !== 'Pending') tested++;
-      if (s === 'Effective') effective++;
-      else if (s === 'Failed') failed++;
-      else if (s === 'Pending') pending++;
-    });
-    return { total: controls.length, tested, effective, failed, pending };
-  }, [controls, controlStatuses]);
-
   const hasActiveFilter =
     classificationFilter.length > 0 ||
     natureFilter.length > 0 ||
     automationFilter.length > 0 ||
     frequencyFilter.length > 0 ||
-    statusKpi !== 'total' ||
+    statusFilter.length > 0 ||
     searchQuery.length > 0;
 
   const clearAll = () => {
@@ -3104,12 +3084,9 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
     setNatureFilter([]);
     setAutomationFilter([]);
     setFrequencyFilter([]);
-    setStatusKpi('total');
+    setStatusFilter([]);
     setSearchQuery('');
   };
-
-  // Single-select toggle — clicking the highlighted tile (or Total) returns to all.
-  const handleKpiClick = (k: StatusKpi) => setStatusKpi(prev => (prev === k ? 'total' : k));
 
   // Open the Create Control flow when the journey/setup checklist (or the empty
   // state) requests it via the shared 'process-hub-create' event for this section.
@@ -3206,27 +3183,16 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
               Clear all
             </button>
           )}
+          <ControlFilterPill label="Status" options={['Effective', 'In Test', 'Failed', 'Pending']} value={statusFilter} onChange={setStatusFilter} />
           <ControlFilterPill label="Classification" options={classificationOptions} value={classificationFilter} onChange={setClassificationFilter} />
-          <ControlFilterPill label="Nature" options={natureOptions} value={natureFilter} onChange={setNatureFilter} />
           <ControlFilterPill label="Automation" options={automationOptions} value={automationFilter} onChange={setAutomationFilter} />
           <ControlFilterPill label="Frequency" options={frequencyOptions} value={frequencyFilter} onChange={setFrequencyFilter} />
           {can('ctrl_create') && (
-          <Button variant="primary" size="md" onClick={() => setShowCreateControl(true)} leftIcon={<Plus size={14} />}>
+          <Button variant="primary" size="md" onClick={() => setShowCreateControl(true)} disabled={searchQuery.trim().length > 0} title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined} className="rounded-md!" leftIcon={<Plus size={14} />}>
             Create Control
           </Button>
           )}
         </div>
-      </div>
-
-      {/* KPI strip (5 tiles) — each is a status filter for the list below. Total =
-          show all; Tested = Effective + In Test + Failed; click the highlighted tile
-          again to clear. Same count-up + spring + hover as the BP Overview KPIs. */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <KpiTile label="Total Controls" value={String(kpis.total)}     index={0} onClick={() => handleKpiClick('total')}     selected={statusKpi === 'total'} />
-        <KpiTile label="Tested"         value={String(kpis.tested)}    index={1} onClick={() => handleKpiClick('tested')}    selected={statusKpi === 'tested'} valueClassName="text-brand-700" />
-        <KpiTile label="Effective"      value={String(kpis.effective)} index={2} onClick={() => handleKpiClick('effective')} selected={statusKpi === 'effective'} valueClassName="text-compliant-700" />
-        <KpiTile label="Failed"         value={String(kpis.failed)}    index={3} onClick={() => handleKpiClick('failed')}    selected={statusKpi === 'failed'} valueClassName="text-risk-700" />
-        <KpiTile label="Pending"        value={String(kpis.pending)}   index={4} onClick={() => handleKpiClick('pending')}   selected={statusKpi === 'pending'} valueClassName="text-mitigated-700" />
       </div>
 
       {/* Bulk-select strip — only renders once at least one card is ticked. */}
@@ -3279,7 +3245,18 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
           />
         ) : filteredControls.map((ctrl, i) => {
           const isKey = ctrl.classification === 'Key';
-          const wfCount = ctrl.workflows.length;
+          // Workflow id labels for the card: prefer the WF-xxx code (lives on the
+          // control's attributes, matched by workflow name); fall back to the
+          // workflow's own name when no code exists (e.g. freshly-linked ones).
+          const wfLabels = (() => {
+            const codeByName = new Map<string, string>();
+            for (const attr of ctrl.attributes ?? []) {
+              for (const w of attr.workflows ?? []) {
+                if (w?.name && w?.code && !codeByName.has(w.name)) codeByName.set(w.name, w.code);
+              }
+            }
+            return (ctrl.workflows ?? []).map(w => codeByName.get(w.name) ?? w.name);
+          })();
           const status = controlStatuses.get(ctrl.id) ?? 'Pending';
           return (
             <motion.div
@@ -3311,6 +3288,11 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                   <span className={`inline-flex items-center gap-1.5 px-2 h-5 rounded-full text-[0.625rem] font-semibold border ${CTRL_STATUS_CLS[status]}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${CTRL_STATUS_DOT[status]}`} />{status}
                   </span>
+                  {/* Key/Non-Key classification — a control-level property, so it sits on the
+                      identity line next to status (not in the workflow lane). */}
+                  <span className={`inline-flex items-center px-2 h-5 rounded-full text-[0.625rem] font-bold shrink-0 ${isKey ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'}`}>
+                    {isKey ? 'Key' : 'Non-Key'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
                   <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-white text-text-muted border border-border-light">
@@ -3330,22 +3312,44 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                 </span>
               </div>
 
-              {/* Lane 3 — numbers + Key tag, left-aligned together on the workflows side.
-                  Workflow count (mirrors RACM's risks·controls·key line) then the Key /
-                  Non-Key badge (RACM card style: filled mitigated for Key, neutral grey
-                  for Non-Key). */}
+              {/* Lane 3 — linked workflow ids as lavender brand pills (same chip style the
+                  control id uses elsewhere). First two render inline; extras collapse into a
+                  +N with a hover tooltip. Code-less workflows fall back to their name (also a
+                  pill). No workflows → em dash. (Key/Non-Key now lives on the headline.) */}
               <div className="flex items-center gap-2.5 min-w-0">
-                <span className="text-[0.75rem] text-text-muted leading-relaxed whitespace-nowrap"><span className="font-semibold text-text">{wfCount}</span> workflow{wfCount !== 1 ? 's' : ''}</span>
-                <span className={`inline-flex items-center px-1.5 h-4 rounded-xs text-[0.625rem] font-bold shrink-0 ${
-                  isKey ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'
-                }`}>
-                  {isKey ? 'Key' : 'Non-Key'}
-                </span>
+                {wfLabels.length === 0 ? (
+                  <span className="text-[0.75rem] text-text-muted leading-relaxed whitespace-nowrap">—</span>
+                ) : (
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {wfLabels.slice(0, 2).map((label, idx) => (
+                      <span key={idx} title={label} className="inline-flex items-center px-2 py-0.5 rounded-md bg-brand-50 border border-brand-100 text-brand-700 text-[0.6875rem] font-mono font-semibold max-w-[13rem] min-w-0">
+                        <span className="truncate">{label}</span>
+                      </span>
+                    ))}
+                    {wfLabels.length > 2 && (
+                      <span className="relative group/wfids shrink-0">
+                        <span className="text-[0.75rem] text-text-muted cursor-default whitespace-nowrap">+{wfLabels.length - 2}</span>
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium opacity-0 group-hover/wfids:opacity-100 pointer-events-none transition-opacity z-50 whitespace-nowrap">{wfLabels.slice(2).join(', ')}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Lane 4 — Actions: delete only. Always-visible hover tooltip (matches the
                   Workflow/RACM rows) + the "Delete this control?" confirmation modal. */}
-              <div className="flex items-start justify-end gap-1">
+              <div className="flex items-start justify-end gap-0.5">
+                <div className="relative group/lwf">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setLinkWfCtrlId(ctrl.id); }}
+                    aria-label="Link workflow"
+                    className="shrink-0 inline-flex items-center gap-1 px-2 h-7 whitespace-nowrap rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer"
+                  >
+                    <Link2 size={12} className="shrink-0" aria-hidden="true" /> Link workflow
+                  </button>
+                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/lwf:opacity-100 pointer-events-none transition-opacity z-50">Link workflow</span>
+                </div>
                 {can('ctrl_share') && (
                 <div className="relative group/share">
                   <button
@@ -3386,6 +3390,31 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
       {/* Create control — engagement-style modal (shared with the empty state). */}
       {createControlModal}
 
+      {/* Link workflow to a control — reuses the shared drawer; on link the control's
+          workflow count bumps (BoundWorkflow appended, deduped by name). */}
+      <AnimatePresence>
+        {linkWfCtrlId && (() => {
+          const c = controls.find(x => x.id === linkWfCtrlId);
+          if (!c) return null;
+          return (
+            <LinkWorkflowToControlDrawer
+              control={{ name: c.name, description: c.description, isKey: c.classification === 'Key', workflows: [] }}
+              onClose={() => setLinkWfCtrlId(null)}
+              onLink={(wf: ControlWorkflow) => {
+                setControls(prev => prev.map(x => {
+                  if (x.id !== linkWfCtrlId) return x;
+                  if (x.workflows.some(w => w.name === wf.name)) return x;
+                  const bound: BoundWorkflow = { name: wf.name, type: 'Automated', status: wf.status === 'Active' ? 'Ready' : wf.status, lastRun: wf.lastRun || '—', runs: 0 };
+                  return { ...x, workflows: [...x.workflows, bound] };
+                }));
+                addToast({ message: `Workflow "${wf.name}" linked to ${c.name}`, type: 'success' });
+                setLinkWfCtrlId(null);
+              }}
+            />
+          );
+        })()}
+      </AnimatePresence>
+
       {/* Delete-control confirmation */}
       <ConfirmationModal
         open={!!confirmDeleteCtrl}
@@ -3399,111 +3428,6 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
         onClose={() => setConfirmDeleteCtrl(null)}
       />
     </div>
-  );
-}
-
-// ─── DesignControlAddModal ───────────────────────────────────────────────────
-// Exact mirror of the engagement Controls "New control" modal: description,
-// sub-process, Key?, attribute list, and "Also add to RACM".
-function DesignControlAddModal({ subProcesses, onClose, onCreate }: {
-  subProcesses: string[];
-  onClose: () => void;
-  onCreate: (input: { description: string; isKey: boolean; subProcess: string; attributes: string[]; inRacm: boolean }) => void;
-}) {
-  const [description, setDescription] = useState('');
-  const [subProcess, setSubProcess] = useState(subProcesses[0] ?? 'New controls');
-  const [isKey, setIsKey] = useState(true);
-  const [inRacm, setInRacm] = useState(true);
-  const [attrs, setAttrs] = useState<string[]>(['']);
-
-  const setAttr = (i: number, v: string) => setAttrs(prev => prev.map((a, idx) => (idx === i ? v : a)));
-  const addAttrRow = () => setAttrs(prev => [...prev, '']);
-  const removeAttrRow = (i: number) => setAttrs(prev => prev.filter((_, idx) => idx !== i));
-  const valid = description.trim().length > 0;
-
-  return (
-    <>
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40" onClick={onClose}
-      />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
-        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[520px] bg-canvas-elevated rounded-xl border border-canvas-border shadow-xl z-50 flex flex-col max-h-[85vh]"
-        role="dialog" aria-label="Add control"
-      >
-        <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Shield size={16} className="text-brand-600" />
-            <h2 className="text-[1rem] font-bold text-ink-900">Create Control</h2>
-          </div>
-          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60" aria-label="Close"><X size={16} /></button>
-        </header>
-
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-          <div>
-            <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block">Control description</label>
-            <textarea
-              autoFocus value={description} onChange={e => setDescription(e.target.value)} rows={2}
-              placeholder="e.g. Bank account changes require independent verification before payment."
-              className="w-full px-3 py-2 border border-canvas-border rounded-lg text-[0.8125rem] text-ink-800 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 resize-none"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block">Sub-process</label>
-              <input
-                value={subProcess} onChange={e => setSubProcess(e.target.value)} list="design-control-subprocesses"
-                className="w-full px-3 py-2 border border-canvas-border rounded-lg text-[0.8125rem] text-ink-800 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15"
-              />
-              <datalist id="design-control-subprocesses">{subProcesses.map(s => <option key={s} value={s} />)}</datalist>
-            </div>
-            <div className="flex items-end gap-4 pb-0.5">
-              <label className="inline-flex items-center gap-2 cursor-pointer text-[0.78125rem] text-ink-700 font-medium">
-                <input type="checkbox" checked={isKey} onChange={e => setIsKey(e.target.checked)} className="accent-brand-600 w-4 h-4" />
-                Key control
-              </label>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block">Attributes</label>
-            <div className="space-y-2">
-              {attrs.map((a, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-ink-300 shrink-0" />
-                  <input
-                    value={a} onChange={e => setAttr(i, e.target.value)}
-                    placeholder={`Attribute ${i + 1}`}
-                    className="flex-1 px-3 py-1.5 border border-canvas-border rounded-lg text-[0.78125rem] text-ink-800 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15"
-                  />
-                  {attrs.length > 1 && (
-                    <button onClick={() => removeAttrRow(i)} className="w-7 h-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer" aria-label="Remove attribute"><X size={13} /></button>
-                  )}
-                </div>
-              ))}
-            </div>
-            <button onClick={addAttrRow} className="mt-2 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer">
-              <Plus size={12} /> Add attribute
-            </button>
-          </div>
-        </div>
-
-        <footer className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center justify-between gap-3">
-          <label className="inline-flex items-center gap-2 cursor-pointer text-[0.78125rem] text-ink-700 font-medium">
-            <input type="checkbox" checked={inRacm} onChange={e => setInRacm(e.target.checked)} className="accent-brand-600 w-4 h-4" />
-            Also add to RACM
-          </label>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="md" onClick={onClose}>Cancel</Button>
-            <Button variant="primary" size="md" onClick={() => onCreate({ description, isKey, subProcess, attributes: attrs, inRacm })} disabled={!valid}>
-              Create control
-            </Button>
-          </div>
-        </footer>
-      </motion.div>
-    </>
   );
 }
 
@@ -3643,7 +3567,6 @@ const RUN_STATUS_PILL: Record<RunStatus, string> = {
 function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateWorkflow, onRunWorkflow, onBulkRunComplete }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void; onCreateWorkflow?: () => void; onRunWorkflow?: (workflowId: string) => void; onBulkRunComplete?: (run: BulkAuditRun) => void }) {
   const { addToast } = useToast();
   const { can } = useCan();
-  const logEvent = useAuditLog();
   const [workflows, setWorkflows] = useState<BPWorkflow[]>(getSeedWorkflows(bpAbbr));
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [confirmDeleteWf, setConfirmDeleteWf] = useState<{ id: string; name: string } | null>(null);
@@ -3651,6 +3574,11 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
   const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Bulk-run mode — mirrors the Workflow Library: the always-visible "Bulk Run"
+  // button turns this on (swapping to "Cancel"), which reveals the per-card
+  // checkboxes; turning it off clears any selection. The run itself is launched
+  // from the Continue bar that appears once ≥1 workflow is ticked.
+  const [bulkMode, setBulkMode] = useState(false);
   // Bulk-run config modal (shared with the Workflow Library flow).
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   // Workflows currently re-running in place after a technical error.
@@ -3760,6 +3688,9 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
     }
   };
   const clearSelection = () => setSelectedIds([]);
+  // Bulk-run mode toggle — entering starts from a clean selection; cancelling clears it.
+  const enterBulkMode = () => { setBulkMode(true); setSelectedIds([]); };
+  const exitBulkMode = () => { setBulkMode(false); setSelectedIds([]); };
 
   // Selected workflows mapped to the Library's shape so the shared BulkExecuteModal
   // can drive the same bulk-run flow from the Process Hub.
@@ -3792,15 +3723,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
       date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
     });
     clearSelection();
-  };
-
-  const handleArchiveOne = (id: string) => {
-    const wf = workflows.find(w => w.id === id);
-    if (!wf) return;
-    setWorkflows(prev => prev.map(w => w.id === id ? { ...w, status: 'Archived' as const } : w));
-    setSelectedIds(prev => prev.filter(s => s !== id));
-    addToast({ message: `Workflow "${wf.name}" archived.`, type: 'info' });
-    logEvent({ action: 'Update', description: `Archived workflow "${wf.name}" (${wf.id})`, module: 'Workflow Library', entity: 'Workflow' });
+    setBulkMode(false);
   };
 
   if (!isLoading && loadError) {
@@ -3914,25 +3837,30 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
               Clear all
             </button>
           )}
-          {/* Bulk run — appears once ≥1 workflow is selected; single runs go via the
-              card's Execute button. Same button + flow as the Workflow Library. */}
-          {selectedIds.length > 0 && (
-            <Button variant="outline" size="md" onClick={() => setBulkModalOpen(true)} className="shrink-0" leftIcon={<Play size={14} />}>
+          {/* Bulk run — always-visible toggle, mirroring the Workflow Library: it
+              swaps to "Cancel" and reveals the per-card checkboxes. The run is then
+              launched from the Continue bar that appears once ≥1 card is ticked. */}
+          {can('wf_run') && (bulkMode ? (
+            <Button variant="outline" size="md" onClick={exitBulkMode} className="shrink-0 rounded-md!">
+              Cancel
+            </Button>
+          ) : (
+            <Button variant="outline" size="md" onClick={enterBulkMode} className="shrink-0 rounded-md!" leftIcon={<Play size={14} />}>
               Bulk Run
             </Button>
-          )}
+          ))}
           <FilterPill filterKey="owner"  label="User"   options={ownerOptions}  value={ownerFilter}  onChange={setOwnerFilter} />
           <FilterPill filterKey="type"   label="Type"   options={typeOptions}   value={typeFilter}   onChange={setTypeFilter} />
           {can('wf_create') && (
-          <Button variant="primary" size="md" shape="lg" onClick={() => onCreateWorkflow?.()} className="shrink-0" leftIcon={<Plus size={13} />}>
+          <Button variant="primary" size="md" shape="lg" onClick={() => onCreateWorkflow?.()} disabled={searchQuery.trim().length > 0} title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined} className="shrink-0 rounded-md!" leftIcon={<Plus size={13} />}>
             Create Workflow
           </Button>
           )}
         </div>
       </div>
 
-      {/* Bulk-select strip — only when ≥1 card is ticked */}
-      {selectedIds.length > 0 && (
+      {/* Bulk-select strip — only in bulk-run mode, once ≥1 card is ticked */}
+      {bulkMode && selectedIds.length > 0 && (
         <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-brand-50 border border-brand-100">
           <input
             ref={selectAllRef}
@@ -4000,26 +3928,30 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.02 }}
-                className={`group grid grid-cols-[28px_1.8fr_2.1fr_80px] gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all items-start ${
+                onClick={bulkMode ? () => toggleSelect(wf.id) : undefined}
+                className={`group grid ${bulkMode ? 'grid-cols-[28px_1.8fr_2.1fr_80px] cursor-pointer select-none' : 'grid-cols-[1.8fr_2.1fr_80px]'} gap-5 px-6 py-5 rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all items-start ${
                   isSelected ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border-light'
                 }`}
               >
-                {/* Select checkbox — its own column on the left, always visible. */}
-                <div onClick={e => e.stopPropagation()} className="pt-[2px]">
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${wf.name}`}
-                    checked={isSelected}
-                    onChange={() => toggleSelect(wf.id)}
-                    className="w-4 h-4 rounded-xs border border-ink-300 cursor-pointer accent-brand-600"
-                  />
-                </div>
+                {/* Select checkbox — its own 28px column on the left, shown only in
+                    bulk-run mode (revealed when "Bulk Run" is toggled on). */}
+                {bulkMode && (
+                  <div onClick={e => e.stopPropagation()} className="pt-[2px]">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${wf.name}`}
+                      checked={isSelected}
+                      onChange={() => toggleSelect(wf.id)}
+                      className="w-4 h-4 rounded-xs border border-ink-300 cursor-pointer accent-brand-600"
+                    />
+                  </div>
+                )}
 
                 {/* Col 2 — id + title, description, run meta, error/retry. */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-[0.75rem] font-semibold text-brand-700 shrink-0">{wf.id.toUpperCase()}</span>
-                    <button type="button" onClick={openDetail} className="text-[0.875rem] font-semibold text-text leading-snug truncate text-left hover:text-brand-700 hover:underline cursor-pointer">{wf.name}</button>
+                    <button type="button" onClick={openDetail} className={`text-[0.875rem] font-semibold text-text leading-snug truncate text-left ${bulkMode ? 'pointer-events-none' : 'hover:text-brand-700 hover:underline cursor-pointer'}`}>{wf.name}</button>
                     {/* Live tag — only for SQL-based workflows (matches the Workflow Library pill) */}
                     {wf.isSql && (
                       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[0.6875rem] font-medium shrink-0 bg-compliant-50 text-compliant-700">
@@ -4047,7 +3979,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
                         title="Retry"
                         disabled={isRetrying}
                         onClick={(e) => { e.stopPropagation(); handleRetry(wf); }}
-                        className="shrink-0 inline-flex items-center align-middle text-risk-700 hover:text-risk-800 disabled:opacity-60 disabled:cursor-default cursor-pointer"
+                        className={`shrink-0 inline-flex items-center align-middle text-risk-700 hover:text-risk-800 disabled:opacity-60 disabled:cursor-default cursor-pointer ${bulkMode ? 'opacity-40 pointer-events-none' : ''}`}
                       >
                         <RotateCcw size={13} className={isRetrying ? 'animate-spin' : ''} />
                       </button>
@@ -4092,52 +4024,54 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
                   </span>
                 </div>
 
-                {/* Col 4 — actions (80px) */}
-                <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-0.5">
-                  {isSelected ? (
-                    <>
-                      {can('wf_update_delete') && (
-                      <button type="button" aria-label="Archive" title="Archive"
-                        onClick={() => handleArchiveOne(wf.id)}
-                        className="w-8 h-8 rounded-sm flex items-center justify-center text-text-muted hover:text-ink-800 hover:bg-paper-100 cursor-pointer transition-colors">
-                        <Archive size={14} />
-                      </button>
-                      )}
-                      <button type="button" aria-label="Cancel selection" title="Cancel selection"
-                        onClick={() => toggleSelect(wf.id)}
-                        className="w-8 h-8 rounded-sm flex items-center justify-center text-text-muted hover:text-ink-800 hover:bg-paper-100 cursor-pointer transition-colors">
-                        <X size={14} />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <div className="relative group/run">
-                        <button type="button" aria-label="Execute workflow"
-                          onClick={(e) => { e.stopPropagation(); onRunWorkflow?.(wf.id); }}
-                          className="w-8 h-8 rounded-sm flex items-center justify-center text-text-muted hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors">
-                          <Play size={14} />
-                        </button>
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/run:opacity-100 pointer-events-none transition-opacity z-50">
-                          Execute workflow
-                        </span>
-                      </div>
-                      <div className="relative group/del">
-                        <button type="button" aria-label="Delete workflow"
-                          onClick={() => setConfirmDeleteWf({ id: wf.id, name: wf.name })}
-                          className="w-8 h-8 rounded-sm flex items-center justify-center text-text-muted hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors">
-                          <Trash2 size={14} />
-                        </button>
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/del:opacity-100 pointer-events-none transition-opacity z-50">
-                          Delete
-                        </span>
-                      </div>
-                    </>
-                  )}
+                {/* Col 4 — actions (80px). In bulk-run mode these dim and go
+                    non-interactive: selection is the only action, so a click here
+                    falls through to the card and toggles the checkbox instead. */}
+                <div onClick={e => e.stopPropagation()} className={`flex items-center justify-end gap-0.5 ${bulkMode ? 'opacity-40 pointer-events-none' : ''}`}>
+                  <div className="relative group/run">
+                    <button type="button" aria-label="Execute workflow"
+                      onClick={(e) => { e.stopPropagation(); onRunWorkflow?.(wf.id); }}
+                      className="w-8 h-8 rounded-sm flex items-center justify-center text-text-muted hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors">
+                      <Play size={14} />
+                    </button>
+                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/run:opacity-100 pointer-events-none transition-opacity z-50">
+                      Execute workflow
+                    </span>
+                  </div>
+                  <div className="relative group/del">
+                    <button type="button" aria-label="Delete workflow"
+                      onClick={() => setConfirmDeleteWf({ id: wf.id, name: wf.name })}
+                      className="w-8 h-8 rounded-sm flex items-center justify-center text-text-muted hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors">
+                      <Trash2 size={14} />
+                    </button>
+                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/del:opacity-100 pointer-events-none transition-opacity z-50">
+                      Delete
+                    </span>
+                  </div>
                 </div>
               </motion.div>
             );
           })}
         </div>
+      )}
+
+      {/* Bulk action bar — appears once ≥1 workflow is ticked. Continue opens the
+          shared 3-step Bulk Execute setup, same as the Workflow Library. Sticky so
+          it stays reachable at the bottom of a long card list. */}
+      {bulkMode && selectedIds.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.16 }}
+          className="sticky bottom-0 z-20 flex items-center gap-3 py-3 px-4 -mx-1 border-t border-border-light bg-white/95 backdrop-blur-sm"
+        >
+          <span className="text-[0.75rem] text-text-secondary">
+            <span className="font-semibold text-text">{selectedIds.length}</span> selected
+          </span>
+          <Button variant="primary" size="md" onClick={() => setBulkModalOpen(true)} className="ml-auto shrink-0" rightIcon={<ArrowRight size={14} />}>
+            Continue
+          </Button>
+        </motion.div>
       )}
 
       {/* Delete-workflow confirmation */}
@@ -4179,7 +4113,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
             return (<>
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-ink-900/40 backdrop-blur-[2px]" onClick={requestClose} />
               <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                className="fixed top-0 right-0 z-50 w-full max-w-[560px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
+                className="fixed top-0 right-0 z-50 w-full max-w-[600px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col">
                 {/* Discard-changes confirm strip */}
                 {showDiscardConfirm && (
                   <div className="p-3 bg-mitigated-50 border-b border-mitigated-200 flex items-center gap-3 text-[0.8125rem]">
@@ -5079,7 +5013,8 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     const raw = new URLSearchParams(window.location.search).get('section');
     return raw && (VALID_SECTIONS as string[]).includes(raw) ? (raw as SectionKey) : null;
   };
-  const [drilledSection, setDrilledSection] = useState<SectionKey | null>(() => readSectionFromUrl());
+  // Overview tab is hidden — opening a process (no ?section= in URL) lands on the first section.
+  const [drilledSection, setDrilledSection] = useState<SectionKey | null>(() => readSectionFromUrl() ?? 'sop');
 
   // Track which risk/control detail is open (URL-driven) so the BP-level breadcrumb
   // can add the entity name and the tab pills row can be hidden while a detail is on screen.
@@ -5121,7 +5056,8 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
       const raw = typeof window !== 'undefined'
         ? new URLSearchParams(window.location.search).get('section')
         : null;
-      const next = raw && (VALID_SECTIONS as string[]).includes(raw) ? (raw as SectionKey) : null;
+      // Overview hidden — a section-less URL falls back to the first section, not the Overview index.
+      const next = raw && (VALID_SECTIONS as string[]).includes(raw) ? (raw as SectionKey) : 'sop';
       setDrilledSection(next);
     };
     window.addEventListener('popstate', onPop);
@@ -5154,11 +5090,13 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   // Close the drilled view and also clear any open risk/control detail so the BP-name
   // breadcrumb always lands on the BP index page, never on a still-open detail child.
   const closeDrilledSection = () => {
+    // Overview tab is hidden — the process "home" is now the first section (SOPs), so the
+    // BP-name breadcrumb lands on SOPs instead of the (hidden) Overview index.
     if (typeof window !== 'undefined') {
-      window.history.pushState({}, '', window.location.pathname);
+      window.history.pushState({ section: 'sop' }, '', `?section=sop`);
       window.dispatchEvent(new PopStateEvent('popstate'));
     }
-    setDrilledSection(null);
+    setDrilledSection('sop');
   };
 
   // Close any open detail (?risk= / ?control= / ?racm= / ?sop=) without leaving the current
@@ -5558,7 +5496,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   // and on every drilled section, so navigation is identical everywhere.
   const renderTabBar = (active: 'overview' | SectionKey) => (
     <div className="flex items-center gap-6 overflow-x-auto -mx-1 px-1 min-w-0">
-      {(['overview', ...sectionOrder] as ('overview' | SectionKey)[]).map((key) => {
+      {([/* 'overview' tab hidden — process opens on the first section (SOPs); re-add 'overview' here to restore the tab */ ...sectionOrder] as ('overview' | SectionKey)[]).map((key) => {
         const isActive = active === key;
         const isOverview = key === 'overview';
         const TabIcon = isOverview ? LayoutGrid : sectionTabIcon[key as SectionKey];
@@ -5572,7 +5510,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
             aria-label={isOverview ? 'Overview' : `Switch to ${sectionMeta[key as SectionKey].title}`}
             aria-current={isActive ? 'page' : undefined}
             onClick={() => (isOverview ? closeDrilledSection() : switchDrilledSection(key as SectionKey))}
-            className={`group shrink-0 inline-flex items-center gap-2 px-1 pb-2.5 border-b-2 text-[0.8125rem] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 ${
+            className={`group no-focus-ring shrink-0 inline-flex items-center gap-2 px-1 pb-2.5 border-b-2 text-[0.8125rem] transition-colors cursor-pointer focus-visible:outline-none ${
               isActive
                 ? 'border-brand-600 text-brand-700 font-semibold'
                 : 'border-transparent text-ink-500 font-medium hover:text-ink-800'

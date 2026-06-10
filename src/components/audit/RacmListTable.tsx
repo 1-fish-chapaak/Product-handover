@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   AlertTriangle, Check, Grid3x3,
   Archive, ArrowLeft, ArrowRight, Shield, Workflow as WorkflowIcon, FileText,
-  Search, Trash2, X, ChevronDown, Download, ChevronRight, Plus, Pencil, Star, Link2, Eye, ExternalLink, Share2,
+  Search, Trash2, X, ChevronDown, Download, ChevronRight, Plus, Pencil, Star, Link2, Eye, Share2,
 } from 'lucide-react';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import RacmMappingWorkspace, { CONTROL_LIBRARY, AUTO_CLS, LinkWorkflowToControlDrawer, type MappedControl, type ControlWorkflow } from './RacmMappingWorkspace';
@@ -22,7 +22,7 @@ const Button = (props: React.ComponentProps<typeof BaseButton>) => {
   return (
     <BaseButton
       {...props}
-      className={['rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
+      className={[/rounded-/.test(props.className ?? '') ? '' : 'rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
     />
   );
 };
@@ -331,981 +331,6 @@ function synthSeedEntries(racm: RacmEntry): Record<string, string>[] {
   });
 }
 
-function RacmDetailPage({ racm, onOpenMapping }: { racm: RacmEntry; onBack: () => void; onOpenMapping: () => void }) {
-  const { openShare } = useShare();
-  // The AR RACM is wired to a real RACM extract (123 risk/control rows) loaded from
-  // `arRacm.ts`. The remaining seed RACMs derive a slimmer view from mockData by
-  // matching `racm.process` against BUSINESS_PROCESSES — both paths feed the same
-  // section layout below.
-  const isRichRacm = racm.id === AR_RACM_ID;
-  const arEntries: ArRacmEntry[] = isRichRacm ? AR_RACM_ENTRIES : [];
-
-  const bp = BUSINESS_PROCESSES.find(b => b.abbr === racm.process) ?? null;
-  const sop = isRichRacm ? null : (SOPS.find(s => s.bpId === bp?.id) ?? null);
-  const scopedRisks = isRichRacm ? [] : (bp ? RISKS.filter(r => r.bpId === bp.id) : []);
-  const scopedRiskIds = new Set(scopedRisks.map(r => r.id));
-  const scopedControls = isRichRacm ? [] : CONTROLS.filter(c => scopedRiskIds.has(c.riskId));
-  const scopedWorkflows = isRichRacm ? [] : (bp ? WORKFLOWS.filter(w => w.bpId === bp.id) : []);
-  const rels = { sop, risks: scopedRisks, controls: scopedControls, workflows: scopedWorkflows };
-
-  // Full-schema rows for the SEED entries table — synthesised to match AR's columns
-  // (see synthSeedEntries above). Empty for the rich AR RACM, which uses arEntries.
-  const seedEntryRows: Record<string, string>[] = isRichRacm ? [] : synthSeedEntries(racm);
-  // Gap-analysis aggregates derived from the synthesised seed entries.
-  const seedSodEnforced = seedEntryRows.filter(r => r.segregationOfDuties === 'Enforced').length;
-  const seedGapCount = seedEntryRows.filter(r => r.gapsIdentified !== 'No gaps identified.').length;
-  const seedKeyCount = seedEntryRows.filter(r => r.controlType === 'Key').length;
-  const seedTotal = seedEntryRows.length;
-  const seedKpiPct = seedTotal ? Math.round((seedKeyCount / seedTotal) * 100) : 0;
-
-  // ── Aggregations ─────────────────────────────────────────────────────────
-  // Severity distribution. The AR data uses capitalised ratings ("Critical");
-  // the legacy seed data uses lowercase ("critical"). Normalise to capitalised.
-  const severityRows: Array<{ label: 'Critical' | 'High' | 'Medium' | 'Low'; tone: string }> = [
-    { label: 'Critical', tone: 'bg-risk-700' },
-    { label: 'High',     tone: 'bg-high-700' },
-    { label: 'Medium',   tone: 'bg-mitigated-700' },
-    { label: 'Low',      tone: 'bg-compliant-700' },
-  ];
-  const severityCounts: Record<string, number> = { Critical: 0, High: 0, Medium: 0, Low: 0 };
-  if (isRichRacm) {
-    arEntries.forEach(e => { severityCounts[e.riskRating] = (severityCounts[e.riskRating] ?? 0) + 1; });
-  } else {
-    scopedRisks.forEach(r => {
-      const cap = r.severity.charAt(0).toUpperCase() + r.severity.slice(1);
-      severityCounts[cap] = (severityCounts[cap] ?? 0) + 1;
-    });
-  }
-  const totalRisks = isRichRacm ? arEntries.length : scopedRisks.length;
-  const uniqueControlIds = isRichRacm
-    ? new Set(arEntries.map(e => e.controlId))
-    : new Set(scopedControls.map(c => c.id));
-  const processAreaSet = isRichRacm
-    ? new Set(arEntries.map(e => e.processArea))
-    : (bp ? new Set([bp.name]) : new Set<string>());
-
-  // Process area breakdown — group rich entries by processArea, fall back to the
-  // single-BP row for seed RACMs.
-  const processAreaRows: Array<{ area: string; risks: number; controls: number }> = isRichRacm
-    ? Array.from(processAreaSet).map(area => {
-        const inArea = arEntries.filter(e => e.processArea === area);
-        return {
-          area,
-          risks: inArea.length,
-          controls: new Set(inArea.map(e => e.controlId)).size,
-        };
-      })
-    : (bp ? [{ area: bp.name, risks: scopedRisks.length, controls: scopedControls.length }] : []);
-
-  // Control type distribution — only meaningful for rich data (mockData CONTROLS
-  // lacks a Preventive/Detective field).
-  const controlTypeCounts: Record<string, number> = { Preventive: 0, Detective: 0 };
-  if (isRichRacm) {
-    arEntries.forEach(e => { controlTypeCounts[e.controlType] = (controlTypeCounts[e.controlType] ?? 0) + 1; });
-  } else {
-    seedEntryRows.forEach(r => { controlTypeCounts[r.controlNature] = (controlTypeCounts[r.controlNature] ?? 0) + 1; });
-  }
-
-  // Extraction confidence — also rich-only. EXTRACTED dominates; INFERRED and
-  // RECOMMENDED flag entries that the user should review.
-  const confidenceRows: Array<{ label: 'EXTRACTED' | 'INFERRED' | 'RECOMMENDED'; tone: string }> = [
-    { label: 'EXTRACTED',   tone: 'text-compliant-700' },
-    { label: 'INFERRED',    tone: 'text-mitigated-700' },
-    { label: 'RECOMMENDED', tone: 'text-high-700' },
-  ];
-  const confidenceCounts: Record<string, number> = { EXTRACTED: 0, INFERRED: 0, RECOMMENDED: 0 };
-  if (isRichRacm) {
-    arEntries.forEach(e => { confidenceCounts[e.extractionConfidence] = (confidenceCounts[e.extractionConfidence] ?? 0) + 1; });
-  } else {
-    seedEntryRows.forEach(r => { confidenceCounts[r.extractionConfidence] = (confidenceCounts[r.extractionConfidence] ?? 0) + 1; });
-  }
-  const confidenceTotal = confidenceRows.reduce((sum, c) => sum + (confidenceCounts[c.label] ?? 0), 0);
-
-  // Gap analysis — three fixed checks matching the Irame screenshot layout.
-  const sodCoverage = isRichRacm
-    ? (arEntries.every(e => e.segregationOfDuties === 'N/A') ? 'Complete'
-       : arEntries.some(e => /sod|segregation/i.test(e.segregationOfDuties)) ? 'Partial'
-       : 'Documented')
-    : '';
-  const hasDoaSignal = isRichRacm && arEntries.some(e => /\bdoa\b|delegation of authority/i.test(`${e.controlActivity} ${e.controlObjective} ${e.regulatoryReference}`));
-  const doaMatrix = isRichRacm ? (hasDoaSignal ? 'Present' : 'Absent') : '';
-  const hasKpiSignal = isRichRacm && arEntries.some(e => /\bkpi\b|key performance/i.test(`${e.controlActivity} ${e.controlObjective}`));
-  const kpiCoverage = isRichRacm ? (hasKpiSignal ? 'Sufficient' : 'Insufficient') : '';
-  const entriesWithGaps = isRichRacm ? arEntries.filter(e => e.gapsIdentified && e.gapsIdentified.trim().length > 0).length : 0;
-
-  // Templated Executive Summary — built from the actual numbers so it reads
-  // like a generated narrative (mirrors the Irame "Executive Summary" paragraph).
-  const execPctMedium = isRichRacm && totalRisks > 0 ? ((severityCounts.Medium / totalRisks) * 100).toFixed(1) : '0';
-  const execPctHigh = isRichRacm && totalRisks > 0 ? ((severityCounts.High / totalRisks) * 100).toFixed(1) : '0';
-  const execPreventive = controlTypeCounts.Preventive ?? 0;
-  const execDetective = controlTypeCounts.Detective ?? 0;
-  const execTopArea = isRichRacm
-    ? (Array.from(processAreaSet).sort((a, b) => arEntries.filter(e => e.processArea === b).length - arEntries.filter(e => e.processArea === a).length)[0] ?? '')
-    : '';
-  // Seed executive-summary inputs — derived from the synthesised seed entries.
-  const seedHiPct = !isRichRacm && totalRisks > 0 ? Math.round(((severityCounts.High + severityCounts.Critical) / totalRisks) * 100) : 0;
-  const seedLean = execPreventive >= execDetective ? 'preventive' : 'detective';
-  const seedGapClause = seedGapCount === 0
-    ? 'No remediation gaps were flagged across the mapped controls.'
-    : `${seedGapCount} ${seedGapCount === 1 ? 'entry has' : 'entries have'} documented gaps requiring remediation.`;
-  const executiveSummary = isRichRacm
-    ? `The recent RACM analysis, encompassing ${uniqueControlIds.size} unique controls predominantly within the ${execTopArea} process, indicates that most identified risks are medium (${execPctMedium}%), with a notable ${execPctHigh}% classified as high. Control coverage leans slightly towards ${execDetective > execPreventive ? 'detective' : 'preventive'} measures, with ${execDetective} detective controls compared to ${execPreventive} preventive. While Segregation of Duties and Delegation of Authority are ${sodCoverage === 'Complete' ? 'adequately addressed' : 'partially addressed'}, a significant gap was identified in Key Performance Indicator (KPI) coverage, as ${hasKpiSignal ? 'few' : 'no'} controls for KPI reporting were present.`
-    : `This RACM maps ${totalRisks} risk${totalRisks !== 1 ? 's' : ''} to ${uniqueControlIds.size} control${uniqueControlIds.size !== 1 ? 's' : ''} across the ${bp?.name ?? racm.process} process. ${seedHiPct}% of risks are rated high or critical, and control coverage leans ${seedLean} (${execPreventive} preventive, ${execDetective} detective). Segregation of duties is enforced on ${seedSodEnforced} of ${seedTotal} control${seedTotal !== 1 ? 's' : ''}, with ${seedKeyCount} key control${seedKeyCount !== 1 ? 's' : ''} identified. ${seedGapClause}`;
-
-  // Header controls — collapse the long SOP summary, and a Download menu.
-  const [showSummary, setShowSummary] = useState(true);
-  const [downloadOpen, setDownloadOpen] = useState(false);
-  const downloadRef = useRef<HTMLDivElement>(null);
-  // Close the Download menu on any outside click.
-  useEffect(() => {
-    if (!downloadOpen) return;
-    const onDoc = (ev: MouseEvent) => {
-      if (downloadRef.current && !downloadRef.current.contains(ev.target as Node)) setDownloadOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [downloadOpen]);
-
-  // Trigger a real browser download from the on-screen rows. Rich RACMs export the
-  // full AR entries; seed RACMs export the synthesised full-schema rows. XLSX is a
-  // pragmatic CSV-with-.xlsx-extension stub (opens cleanly in Excel) — enough to be
-  // functional without pulling in a spreadsheet library.
-  const triggerDownload = (format: 'xlsx' | 'csv' | 'json') => {
-    const rows: Record<string, unknown>[] = isRichRacm
-      ? (arEntries as unknown as Record<string, unknown>[])
-      : seedEntryRows;
-    const base = (racm.name || racm.id).replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '') || 'racm';
-    let content: string;
-    let mime: string;
-    let ext: string;
-    if (format === 'json') {
-      content = JSON.stringify(rows, null, 2);
-      mime = 'application/json';
-      ext = 'json';
-    } else {
-      const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-      const header = AR_RACM_COLUMNS.map(col => esc(col.label)).join(',');
-      const body = rows.map(r => AR_RACM_COLUMNS.map(col => esc(r[col.key as string])).join(',')).join('\n');
-      content = `${header}\n${body}`;
-      mime = format === 'xlsx' ? 'application/vnd.ms-excel' : 'text/csv';
-      ext = format;
-    }
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${base}.${ext}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setDownloadOpen(false);
-  };
-
-  // Entries-table search — functional filter on risk id / control id / description / sub-process.
-  const [entriesQuery, setEntriesQuery] = useState('');
-
-  // Column show/hide for the Entries table — Risk ID + Control ID are the frozen
-  // anchors (always on, never in the menu). `shownEntryColumns` drives both the rich
-  // (AR) and seed Entries tables so the two stay in sync.
-  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => new Set(AR_ALL_KEYS));
-  const toggleColumn = (key: string) => setVisibleColumns(prev => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    return next;
-  });
-  const shownEntryColumns = AR_RACM_COLUMNS.filter(c => visibleColumns.has(c.key as string));
-  const filteredEntries = isRichRacm && entriesQuery.trim()
-    ? (() => {
-        const q = entriesQuery.toLowerCase();
-        // Search the whole row now that every field is on screen.
-        return arEntries.filter(e => Object.values(e).some(v => String(v).toLowerCase().includes(q)));
-      })()
-    : arEntries;
-
-  // ── Pagination over filteredEntries ────────────────────────────────────────
-  const ENTRIES_PER_PAGE = 25;
-  const [entriesPage, setEntriesPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(filteredEntries.length / ENTRIES_PER_PAGE));
-  // Clamp the page back to 1 whenever the search shrinks the result set below the
-  // current page (otherwise the user would land on an empty page).
-  useEffect(() => { setEntriesPage(1); }, [entriesQuery]);
-  const safePage = Math.min(entriesPage, totalPages);
-  const pageStart = (safePage - 1) * ENTRIES_PER_PAGE;
-  const pageEnd = Math.min(pageStart + ENTRIES_PER_PAGE, filteredEntries.length);
-  const pagedEntries = filteredEntries.slice(pageStart, pageEnd);
-
-  return (
-    <div className="space-y-5">
-      <RacmDetailHeader
-        racm={racm}
-        action={
-          <div className="flex items-center gap-2">
-            <Gated permission="racm_share">
-              <Button
-                variant="outline"
-                size="md"
-                leftIcon={<Share2 size={13} />}
-                className="shrink-0"
-                onClick={(e) => openShare({ type: 'racm', id: racm.id, anchor: rectFromEvent(e) })}
-              >
-                Share
-              </Button>
-            </Gated>
-            <div ref={downloadRef} className="relative">
-              <Gated permission="ctrl_export" mode="disable" title="You don't have permission to export">
-              <Button
-                variant="outline"
-                size="md"
-                rightIcon={<ChevronDown size={13} />}
-                onClick={() => setDownloadOpen(v => !v)}
-              >
-                Download
-              </Button>
-              </Gated>
-              {downloadOpen && (
-                <div className="absolute right-0 mt-1.5 w-[200px] bg-white border border-border-light rounded-md shadow-lg z-50">
-                  <button type="button" onClick={() => triggerDownload('xlsx')} className="block w-full text-left px-3 py-2 text-[0.75rem] text-ink-700 hover:bg-paper-50 cursor-pointer">Download as XLSX</button>
-                  <button type="button" onClick={() => triggerDownload('csv')} className="block w-full text-left px-3 py-2 text-[0.75rem] text-ink-700 hover:bg-paper-50 cursor-pointer">Download as CSV</button>
-                  <button type="button" onClick={() => triggerDownload('json')} className="block w-full text-left px-3 py-2 text-[0.75rem] text-ink-700 hover:bg-paper-50 cursor-pointer">Download as JSON</button>
-                </div>
-              )}
-            </div>
-            <Button
-              variant="primary"
-              size="md"
-              className="shrink-0"
-              rightIcon={<ArrowRight size={13} />}
-              onClick={onOpenMapping}
-            >
-              Open mapping
-            </Button>
-          </div>
-        }
-      />
-
-      {/* ═══════════════════════════════════════════════════════════════════════
-          Rich (AR RACM) layout — mirrors the Irame.ai RACM Generator screenshot.
-          For seed RACMs we keep the simpler layout below (after this block).
-          ═══════════════════════════════════════════════════════════════════ */}
-      {isRichRacm ? (
-        <>
-          {/* ─── 3 metric cards ─── */}
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: 'Total Risks',     value: totalRisks,             tone: 'text-ink-900' },
-              { label: 'Unique Controls', value: uniqueControlIds.size,  tone: 'text-ink-900' },
-              { label: 'Process Areas',   value: processAreaSet.size,    tone: 'text-ink-900' },
-            ].map(card => (
-              <div key={card.label} className="bg-white border border-canvas-border rounded-lg p-6 text-center">
-                <div className={`text-[2.5rem] font-bold tabular-nums leading-none ${card.tone}`}>{card.value}</div>
-                <div className="text-[0.75rem] text-ink-500 mt-2">{card.label}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* ─── Top dashboard: chart on the left, breakdown table on the right ─── */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white border border-canvas-border rounded-lg p-5">
-              <h2 className="text-[0.8125rem] font-bold text-ink-900 mb-4">Risk Rating Distribution</h2>
-              <div className="space-y-2.5">
-                {severityRows.map(s => {
-                  const count = severityCounts[s.label] ?? 0;
-                  const pct = totalRisks > 0 ? (count / totalRisks) * 100 : 0;
-                  return (
-                    <div key={s.label} className="flex items-center gap-3 text-[0.75rem]">
-                      <span className="w-16 shrink-0 text-ink-700">{s.label}</span>
-                      <div className="flex-1 h-3 bg-paper-100 rounded-full overflow-hidden">
-                        <div className={`h-full ${s.tone}`} style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="w-8 text-right tabular-nums text-ink-700 font-semibold">{count}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="bg-white border border-canvas-border rounded-lg p-5">
-              <h2 className="text-[0.8125rem] font-bold text-ink-900 mb-3">Process Area Breakdown</h2>
-              <table className="w-full text-[0.75rem]">
-                <thead>
-                  <tr className="text-left text-[0.625rem] text-ink-400 uppercase tracking-wider border-b border-canvas-border">
-                    <th className="py-2 font-semibold">Process Area</th>
-                    <th className="py-2 font-semibold text-right">Count</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {processAreaRows.map(row => (
-                    <tr key={row.area} className="border-b border-canvas-border/40 last:border-0">
-                      <td className="py-2.5 text-ink-800">{row.area}</td>
-                      <td className="py-2.5 text-right tabular-nums text-ink-700">{row.risks}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* ─── SOP Analysis Summary — long-form narrative + tables ─── */}
-          <div className="bg-white border border-canvas-border rounded-lg p-6 space-y-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-[0.6875rem] uppercase tracking-wider font-semibold text-ink-400 mb-1">SOP Analysis Summary</div>
-                <h2 className="font-display text-[1.625rem] font-[420] tracking-tight text-ink-900 leading-tight">RACM Generation Summary</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowSummary(v => !v)}
-                className="shrink-0 mt-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer"
-              >
-                {showSummary ? 'Hide summary' : 'Show summary'}
-              </button>
-            </div>
-
-            {showSummary && (<>
-            <section>
-              <h3 className="text-[0.875rem] font-bold text-ink-900 mb-2">Executive Summary</h3>
-              <p className="text-[0.8125rem] text-ink-700 leading-relaxed max-w-[80ch]">{executiveSummary}</p>
-            </section>
-
-            <section>
-              <h3 className="text-[0.875rem] font-bold text-ink-900 mb-2">Overview</h3>
-              <ul className="text-[0.8125rem] text-ink-700 leading-relaxed space-y-1 list-disc pl-5">
-                <li><span className="font-semibold">Total Risk-Control Entries:</span> {totalRisks}</li>
-                <li><span className="font-semibold">Unique Controls:</span> {uniqueControlIds.size}</li>
-                <li><span className="font-semibold">Process Areas:</span> {processAreaSet.size}</li>
-              </ul>
-            </section>
-
-            <section>
-              <h3 className="text-[0.875rem] font-bold text-ink-900 mb-3">Extraction Confidence</h3>
-              <table className="w-full text-[0.8125rem]">
-                <thead>
-                  <tr className="text-left text-[0.6875rem] text-ink-500 font-semibold border-b border-canvas-border">
-                    <th className="py-2 pr-3">Confidence</th>
-                    <th className="py-2 pr-3">Count</th>
-                    <th className="py-2">%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {confidenceRows.map(c => {
-                    const count = confidenceCounts[c.label] ?? 0;
-                    const pct = totalRisks > 0 ? (count / totalRisks) * 100 : 0;
-                    return (
-                      <tr key={c.label} className="border-b border-canvas-border/40 last:border-0">
-                        <td className={`py-2.5 font-semibold ${c.tone}`}>{c.label}</td>
-                        <td className="py-2.5 tabular-nums text-ink-800">{count}</td>
-                        <td className="py-2.5 tabular-nums text-ink-700">{pct.toFixed(1)}%</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </section>
-
-            <section>
-              <h3 className="text-[0.875rem] font-bold text-ink-900 mb-3">Risk Rating Distribution</h3>
-              <table className="w-full text-[0.8125rem]">
-                <thead>
-                  <tr className="text-left text-[0.6875rem] text-ink-500 font-semibold border-b border-canvas-border">
-                    <th className="py-2 pr-3">Rating</th>
-                    <th className="py-2 pr-3">Count</th>
-                    <th className="py-2">%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {severityRows.map(s => {
-                    const count = severityCounts[s.label] ?? 0;
-                    const pct = totalRisks > 0 ? (count / totalRisks) * 100 : 0;
-                    return (
-                      <tr key={s.label} className="border-b border-canvas-border/40 last:border-0">
-                        <td className="py-2.5 text-ink-800">{s.label}</td>
-                        <td className="py-2.5 tabular-nums text-ink-800">{count}</td>
-                        <td className="py-2.5 tabular-nums text-ink-700">{pct.toFixed(1)}%</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </section>
-
-            <section>
-              <h3 className="text-[0.875rem] font-bold text-ink-900 mb-3">Control Type Distribution</h3>
-              <table className="w-full text-[0.8125rem]">
-                <thead>
-                  <tr className="text-left text-[0.6875rem] text-ink-500 font-semibold border-b border-canvas-border">
-                    <th className="py-2 pr-3">Type</th>
-                    <th className="py-2">Count</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(['Preventive', 'Detective'] as const).map(type => (
-                    <tr key={type} className="border-b border-canvas-border/40 last:border-0">
-                      <td className="py-2.5 text-ink-800">{type}</td>
-                      <td className="py-2.5 tabular-nums text-ink-800">{controlTypeCounts[type] ?? 0}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-
-            <section>
-              <h3 className="text-[0.875rem] font-bold text-ink-900 mb-3">Process Area Breakdown</h3>
-              <table className="w-full text-[0.8125rem]">
-                <thead>
-                  <tr className="text-left text-[0.6875rem] text-ink-500 font-semibold border-b border-canvas-border">
-                    <th className="py-2 pr-3">Process Area</th>
-                    <th className="py-2 pr-3">Risks</th>
-                    <th className="py-2">Controls</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {processAreaRows.map(row => (
-                    <tr key={row.area} className="border-b border-canvas-border/40 last:border-0">
-                      <td className="py-2.5 text-ink-800">{row.area}</td>
-                      <td className="py-2.5 tabular-nums text-ink-800">{row.risks}</td>
-                      <td className="py-2.5 tabular-nums text-ink-800">{row.controls}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-
-            <section>
-              <h3 className="text-[0.875rem] font-bold text-ink-900 mb-2">Gap Analysis</h3>
-              <ul className="text-[0.8125rem] text-ink-700 leading-relaxed space-y-1 list-disc pl-5">
-                <li><span className="font-semibold">SoD Coverage:</span> {sodCoverage}</li>
-                <li><span className="font-semibold">DOA Matrix:</span> {doaMatrix}</li>
-                <li><span className="font-semibold">KPI Coverage:</span> {kpiCoverage}</li>
-              </ul>
-            </section>
-
-            <section>
-              <h3 className="text-[0.875rem] font-bold text-ink-900 mb-2">Notes</h3>
-              <ul className="text-[0.8125rem] text-ink-700 leading-relaxed space-y-1 list-disc pl-5">
-                {!hasKpiSignal && <li>No Key Performance Indicator (KPI) reporting controls identified</li>}
-                {!hasDoaSignal && <li>Delegation of Authority (DOA) matrix not surfaced in any control activity</li>}
-                <li>{entriesWithGaps} of {arEntries.length} entries have documented gaps to remediate</li>
-              </ul>
-            </section>
-            </>)}
-          </div>
-
-          {/* ─── Entries table — full Irame columns + search + scroll hint ─── */}
-          <div className="bg-white border border-canvas-border rounded-lg p-5">
-            <div className="flex items-center justify-between gap-4 mb-3 flex-wrap">
-              <div className="relative shrink-0">
-                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-                <input
-                  value={entriesQuery}
-                  onChange={e => setEntriesQuery(e.target.value)}
-                  placeholder="Search entries..."
-                  className="pl-9 pr-3 py-2 rounded-md border border-border bg-white text-[0.75rem] w-[260px] placeholder:text-ink-400 outline-none focus:border-primary/40 transition-all"
-                />
-              </div>
-              <div className="flex items-center gap-3 text-[0.6875rem]">
-                <ColumnsMenu visible={visibleColumns} onToggle={toggleColumn} />
-                <span className="text-ink-400">Risk ID &amp; Control ID stay pinned →</span>
-                <span className="text-ink-500 tabular-nums">{filteredEntries.length} entries</span>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-max min-w-full text-[0.75rem]">
-                {/* Fix the two frozen anchor lanes to a known width so the 2nd column's
-                    sticky offset lines up; the rest stay content-sized. */}
-                <colgroup>
-                  {shownEntryColumns.map((col, idx) => (
-                    <col key={col.key} style={idx < 2 ? { width: AR_ANCHOR_W } : undefined} />
-                  ))}
-                </colgroup>
-                <thead>
-                  <tr className="text-left text-[0.625rem] text-ink-400 uppercase tracking-wider border-b border-canvas-border">
-                    {shownEntryColumns.map((col, idx) => (
-                      <th
-                        key={col.key}
-                        className={`py-2 font-semibold pr-4 whitespace-nowrap align-bottom ${idx < 2 ? 'bg-white' : ''}`}
-                        style={{ ...(col.minW ? { minWidth: col.minW } : {}), ...arStickyStyle(idx, true) }}
-                      >
-                        {col.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredEntries.length === 0 ? (
-                    <tr><td colSpan={shownEntryColumns.length} className="py-6 text-center text-ink-400 italic">No entries match "{entriesQuery.trim()}".</td></tr>
-                  ) : pagedEntries.map(e => (
-                    <tr key={`${e.riskId}-${e.controlId}`} className="border-b border-canvas-border/40 last:border-0 align-top">
-                      {shownEntryColumns.map((col, idx) => (
-                        <td
-                          key={col.key}
-                          className={`py-2.5 pr-4 align-top ${idx < 2 ? 'bg-white' : ''}`}
-                          style={{ ...(col.minW ? { minWidth: col.minW } : {}), ...arStickyStyle(idx, false) }}
-                        >
-                          {renderArCell(e, col)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination — only shown when there's more than one page worth of entries. */}
-            {filteredEntries.length > ENTRIES_PER_PAGE && (
-              <div className="flex items-center justify-between gap-3 pt-4 mt-2 border-t border-canvas-border text-[0.75rem]">
-                <span className="text-ink-500 tabular-nums">
-                  Showing {pageStart + 1}–{pageEnd} of {filteredEntries.length}
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setEntriesPage(p => Math.max(1, p - 1))}
-                    disabled={safePage === 1}
-                    className="px-3 py-1.5 rounded-sm border border-canvas-border text-[0.75rem] text-ink-700 hover:bg-paper-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                  >
-                    Prev
-                  </button>
-                  {Array.from({ length: totalPages }).map((_, i) => {
-                    const n = i + 1;
-                    // Show first, last, and a 2-page window around the current page.
-                    const showAlways = n === 1 || n === totalPages || Math.abs(n - safePage) <= 1;
-                    const isEllipsisLeft = n === safePage - 2 && safePage - 2 > 1;
-                    const isEllipsisRight = n === safePage + 2 && safePage + 2 < totalPages;
-                    if (isEllipsisLeft || isEllipsisRight) {
-                      return <span key={`e-${n}`} className="px-1.5 text-ink-400">…</span>;
-                    }
-                    if (!showAlways) return null;
-                    const isActive = n === safePage;
-                    return (
-                      <button
-                        type="button"
-                        key={n}
-                        onClick={() => setEntriesPage(n)}
-                        aria-current={isActive ? 'page' : undefined}
-                        className={`min-w-[28px] px-2 py-1.5 rounded-sm text-[0.75rem] tabular-nums cursor-pointer transition-colors ${
-                          isActive
-                            ? 'bg-brand-600 text-paper-0'
-                            : 'border border-canvas-border text-ink-700 hover:bg-paper-50'
-                        }`}
-                      >
-                        {n}
-                      </button>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    onClick={() => setEntriesPage(p => Math.min(totalPages, p + 1))}
-                    disabled={safePage === totalPages}
-                    className="px-3 py-1.5 rounded-sm border border-canvas-border text-[0.75rem] text-ink-700 hover:bg-paper-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </>
-      ) : (
-      <>
-      {/* ═══════════════ Simple layout for seed (non-AR) RACMs ═══════════════ */}
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          { label: 'Total Risks',     value: totalRisks,             tone: 'text-ink-900' },
-          { label: 'Unique Controls', value: uniqueControlIds.size,  tone: 'text-ink-900' },
-          { label: 'Process Areas',   value: processAreaSet.size,    tone: 'text-ink-900' },
-        ].map(card => (
-          <div key={card.label} className="bg-white border border-canvas-border rounded-lg p-5 text-center">
-            <div className={`text-[2.125rem] font-bold tabular-nums leading-none ${card.tone}`}>{card.value}</div>
-            <div className="text-[0.75rem] text-ink-500 mt-1.5">{card.label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ─── Top dashboard: chart left, breakdown table right (mirrors rich) ─── */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white border border-canvas-border rounded-lg p-5">
-          <h2 className="text-[0.8125rem] font-bold text-ink-900 mb-4">Risk Rating Distribution</h2>
-          {totalRisks === 0 ? (
-            <p className="text-[0.75rem] text-ink-400 italic">No risks captured.</p>
-          ) : (
-            <div className="space-y-2.5">
-              {severityRows.map(s => {
-                const count = severityCounts[s.label] ?? 0;
-                const pct = totalRisks > 0 ? (count / totalRisks) * 100 : 0;
-                return (
-                  <div key={s.label} className="flex items-center gap-3 text-[0.75rem]">
-                    <span className="w-16 shrink-0 text-ink-700">{s.label}</span>
-                    <div className="flex-1 h-3 bg-paper-100 rounded-full overflow-hidden">
-                      <div className={`h-full ${s.tone}`} style={{ width: `${pct}%` }} />
-                    </div>
-                    <span className="w-8 text-right tabular-nums text-ink-700 font-semibold">{count}</span>
-                    <span className="w-12 text-right tabular-nums text-ink-500">{pct.toFixed(1)}%</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white border border-canvas-border rounded-lg p-5">
-          <h2 className="text-[0.8125rem] font-bold text-ink-900 mb-3">Process Area Breakdown</h2>
-          {processAreaRows.length === 0 ? (
-            <p className="text-[0.75rem] text-ink-400 italic">No process area mapped.</p>
-          ) : (
-            <table className="w-full text-[0.75rem]">
-              <thead>
-                <tr className="text-left text-[0.625rem] text-ink-400 uppercase tracking-wider border-b border-canvas-border">
-                  <th className="py-2 font-semibold">Process Area</th>
-                  <th className="py-2 font-semibold text-right">Risks</th>
-                  <th className="py-2 font-semibold text-right">Controls</th>
-                </tr>
-              </thead>
-              <tbody>
-                {processAreaRows.map(row => (
-                  <tr key={row.area} className="border-b border-canvas-border/40 last:border-0">
-                    <td className="py-2.5 text-ink-800">{row.area}</td>
-                    <td className="py-2.5 text-right tabular-nums text-ink-700">{row.risks}</td>
-                    <td className="py-2.5 text-right tabular-nums text-ink-700">{row.controls}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      {/* ─── SOP Analysis Summary — same structure as rich. Every section is now
-          derived from the synthesised seed entries (exec summary, confidence,
-          control-type, gap analysis, notes). ─── */}
-      <div className="bg-white border border-canvas-border rounded-lg p-6 space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-[0.6875rem] uppercase tracking-wider font-semibold text-ink-400 mb-1">SOP Analysis Summary</div>
-            <h2 className="font-display text-[1.625rem] font-[420] tracking-tight text-ink-900 leading-tight">RACM Generation Summary</h2>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowSummary(v => !v)}
-            className="shrink-0 mt-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer"
-          >
-            {showSummary ? 'Hide summary' : 'Show summary'}
-          </button>
-        </div>
-
-        {showSummary && (<>
-        <section>
-          <h3 className="text-[0.875rem] font-bold text-ink-900 mb-2">Executive Summary</h3>
-          <p className="text-[0.8125rem] leading-relaxed max-w-[80ch] text-ink-700">{executiveSummary}</p>
-        </section>
-
-        <section>
-          <h3 className="text-[0.875rem] font-bold text-ink-900 mb-2">Overview</h3>
-          <ul className="text-[0.8125rem] text-ink-700 leading-relaxed space-y-1 list-disc pl-5">
-            <li><span className="font-semibold">Total Risk-Control Entries:</span> {totalRisks}</li>
-            <li><span className="font-semibold">Unique Controls:</span> {uniqueControlIds.size}</li>
-            <li><span className="font-semibold">Process Areas:</span> {processAreaSet.size}</li>
-          </ul>
-        </section>
-
-        <section>
-          <h3 className="text-[0.875rem] font-bold text-ink-900 mb-3">Extraction Confidence</h3>
-          <table className="w-full text-[0.8125rem]">
-            <thead>
-              <tr className="text-left text-[0.6875rem] text-ink-500 font-semibold border-b border-canvas-border">
-                <th className="py-2 pr-3">Confidence</th>
-                <th className="py-2 pr-3">Count</th>
-                <th className="py-2">%</th>
-              </tr>
-            </thead>
-            <tbody>
-              {confidenceRows.map(c => {
-                const count = confidenceCounts[c.label] ?? 0;
-                const pct = confidenceTotal > 0 ? (count / confidenceTotal) * 100 : 0;
-                return (
-                  <tr key={c.label} className="border-b border-canvas-border/40 last:border-0">
-                    <td className={`py-2.5 font-semibold ${c.tone}`}>{c.label}</td>
-                    <td className="py-2.5 tabular-nums text-ink-800">{count}</td>
-                    <td className="py-2.5 tabular-nums text-ink-700">{pct.toFixed(1)}%</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
-
-        <section>
-          <h3 className="text-[0.875rem] font-bold text-ink-900 mb-3">Risk Rating Distribution</h3>
-          <table className="w-full text-[0.8125rem]">
-            <thead>
-              <tr className="text-left text-[0.6875rem] text-ink-500 font-semibold border-b border-canvas-border">
-                <th className="py-2 pr-3">Rating</th>
-                <th className="py-2 pr-3">Count</th>
-                <th className="py-2">%</th>
-              </tr>
-            </thead>
-            <tbody>
-              {severityRows.map(s => {
-                const count = severityCounts[s.label] ?? 0;
-                const pct = totalRisks > 0 ? (count / totalRisks) * 100 : 0;
-                return (
-                  <tr key={s.label} className="border-b border-canvas-border/40 last:border-0">
-                    <td className="py-2.5 text-ink-800">{s.label}</td>
-                    <td className="py-2.5 tabular-nums text-ink-800">{count}</td>
-                    <td className="py-2.5 tabular-nums text-ink-700">{pct.toFixed(1)}%</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
-
-        <section>
-          <h3 className="text-[0.875rem] font-bold text-ink-900 mb-3">Control Type Distribution</h3>
-          <table className="w-full text-[0.8125rem]">
-            <thead>
-              <tr className="text-left text-[0.6875rem] text-ink-500 font-semibold border-b border-canvas-border">
-                <th className="py-2 pr-3">Type</th>
-                <th className="py-2">Count</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(['Preventive', 'Detective'] as const).map(type => (
-                <tr key={type} className="border-b border-canvas-border/40 last:border-0">
-                  <td className="py-2.5 text-ink-800">{type}</td>
-                  <td className="py-2.5 tabular-nums text-ink-800">{controlTypeCounts[type] ?? 0}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-
-        <section>
-          <h3 className="text-[0.875rem] font-bold text-ink-900 mb-3">Process Area Breakdown</h3>
-          <table className="w-full text-[0.8125rem]">
-            <thead>
-              <tr className="text-left text-[0.6875rem] text-ink-500 font-semibold border-b border-canvas-border">
-                <th className="py-2 pr-3">Process Area</th>
-                <th className="py-2 pr-3">Risks</th>
-                <th className="py-2">Controls</th>
-              </tr>
-            </thead>
-            <tbody>
-              {processAreaRows.map(row => (
-                <tr key={row.area} className="border-b border-canvas-border/40 last:border-0">
-                  <td className="py-2.5 text-ink-800">{row.area}</td>
-                  <td className="py-2.5 tabular-nums text-ink-800">{row.risks}</td>
-                  <td className="py-2.5 tabular-nums text-ink-800">{row.controls}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-
-        <section>
-          <h3 className="text-[0.875rem] font-bold text-ink-900 mb-2">Gap Analysis</h3>
-          <ul className="text-[0.8125rem] text-ink-700 leading-relaxed space-y-1 list-disc pl-5">
-            <li><span className="font-semibold">SoD Coverage:</span> {seedSodEnforced} of {seedTotal} controls enforce segregation of duties</li>
-            <li><span className="font-semibold">DOA Matrix:</span> Delegation of Authority thresholds mapped for {seedKeyCount} key control{seedKeyCount !== 1 ? 's' : ''}</li>
-            <li><span className="font-semibold">KPI Coverage:</span> Monitoring KPIs defined for {seedKpiPct}% of controls</li>
-          </ul>
-        </section>
-
-        <section>
-          <h3 className="text-[0.875rem] font-bold text-ink-900 mb-2">Notes</h3>
-          <ul className="text-[0.8125rem] text-ink-700 leading-relaxed space-y-1 list-disc pl-5">
-            <li>{seedGapCount} of {seedTotal} entries have documented gaps to remediate</li>
-            <li>{seedKeyCount} key control{seedKeyCount !== 1 ? 's' : ''} identified across the process</li>
-            <li>Test of Design completed for all mapped controls; results recorded per entry</li>
-          </ul>
-        </section>
-        </>)}
-      </div>
-
-      {/* ─── Entries table — full RACM schema (reuses AR_RACM_COLUMNS); every field
-          is synthesised for seed RACMs. ─── */}
-      <div className="bg-white border border-canvas-border rounded-lg p-5">
-        <div className="flex items-center justify-between gap-4 mb-3 flex-wrap">
-          <h2 className="text-[0.8125rem] font-bold text-ink-900">Entries</h2>
-          <div className="flex items-center gap-3 text-[0.6875rem]">
-            <ColumnsMenu visible={visibleColumns} onToggle={toggleColumn} />
-            <span className="text-ink-500 tabular-nums">{scopedControls.length} entries</span>
-          </div>
-        </div>
-        {scopedControls.length === 0 ? (
-          <ListPlaceholder icon={Grid3x3} title="No risk–control pairs yet" body="This RACM has no mapped entries. Open the mapping workspace to add pairs." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-max min-w-full text-[0.75rem]">
-              {/* Fix the two frozen anchor lanes so the 2nd column's sticky offset
-                  lines up; the rest stay content-sized. */}
-              <colgroup>
-                {shownEntryColumns.map((col, idx) => (
-                  <col key={col.key} style={idx < 2 ? { width: AR_ANCHOR_W } : undefined} />
-                ))}
-              </colgroup>
-              <thead>
-                <tr className="text-left text-[0.625rem] text-ink-400 uppercase tracking-wider border-b border-canvas-border">
-                  {shownEntryColumns.map((col, idx) => (
-                    <th
-                      key={col.key}
-                      className={`py-2 font-semibold pr-4 whitespace-nowrap align-bottom ${idx < 2 ? 'bg-white' : ''}`}
-                      style={{ ...(col.minW ? { minWidth: col.minW } : {}), ...arStickyStyle(idx, true) }}
-                    >
-                      {col.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {seedEntryRows.map((row, i) => (
-                  <tr key={`${row.riskId}-${row.controlId}-${i}`} className="border-b border-canvas-border/40 last:border-0 align-top">
-                    {shownEntryColumns.map((col, idx) => {
-                      const val = row[col.key];
-                      return (
-                        <td
-                          key={col.key}
-                          className={`py-2.5 pr-4 align-top ${idx < 2 ? 'bg-white' : ''}`}
-                          style={{ ...(col.minW ? { minWidth: col.minW } : {}), ...arStickyStyle(idx, false) }}
-                        >
-                          {val === '[NA]' ? (
-                            <span className="text-ink-400">[NA]</span>
-                          ) : col.kind === 'mono' ? (
-                            <span className="font-mono text-[0.6875rem] text-ink-600 tabular-nums whitespace-nowrap">{val}</span>
-                          ) : col.kind === 'rating' ? (
-                            <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center whitespace-nowrap ${
-                              val === 'Critical' ? 'bg-risk-50 text-risk-700' :
-                              val === 'High'     ? 'bg-high-50 text-high-700' :
-                              val === 'Medium'   ? 'bg-mitigated-50 text-mitigated-700' :
-                                                   'bg-compliant-50 text-compliant-700'
-                            }`}>{val}</span>
-                          ) : (
-                            <span className="text-ink-700">{val}</span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-4">
-        <div className="bg-white border border-canvas-border rounded-lg p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-[0.8125rem] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <FileText size={13} className="text-ink-500" />
-              Source SOP
-            </h2>
-            <span className="text-[0.75rem] font-mono text-ink-400 tabular-nums">{rels.sop ? 1 : 0}</span>
-          </div>
-          {!rels.sop ? (
-            <p className="text-[0.75rem] text-ink-400 italic">Built without an SOP (manual import).</p>
-          ) : (
-            <div className="rounded-md border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{rels.sop.name}</span>
-                <span className="text-[0.625rem] font-mono text-ink-400 tabular-nums shrink-0">{rels.sop.version}</span>
-              </div>
-              <span className="text-[0.6875rem] text-ink-500 leading-snug">Uploaded by {rels.sop.by} · {rels.sop.at}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Risks / Controls / Workflows cards — commented out. The risk + control
-            detail now lives in the full-schema Entries table above (every
-            AR_RACM_COLUMNS field, "[NA]" where the SOP extract has no value).
-        <div className="bg-white border border-canvas-border rounded-lg p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-[0.8125rem] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <AlertTriangle size={13} className="text-ink-500" />
-              Risks in this RACM
-            </h2>
-            <span className="text-[0.75rem] font-mono text-ink-400 tabular-nums">{rels.risks.length}</span>
-          </div>
-          {rels.risks.length === 0 ? (
-            <p className="text-[0.75rem] text-ink-400 italic">No risks captured.</p>
-          ) : (
-            <ul className="space-y-2">
-              {rels.risks.map(r => (
-                <li key={r.id} className="rounded-md border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-                  <div className="flex items-start gap-2.5">
-                    <span className="font-mono text-[0.625rem] text-ink-400 tabular-nums shrink-0 mt-0.5">{r.id}</span>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug">{r.name}</span>
-                      <span className="text-[0.6875rem] text-ink-500 leading-snug block">Severity: {r.severity} · Status: {r.status}</span>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="bg-white border border-canvas-border rounded-lg p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-[0.8125rem] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <Shield size={13} className="text-ink-500" />
-              Controls in this RACM
-            </h2>
-            <span className="text-[0.75rem] font-mono text-ink-400 tabular-nums">{rels.controls.length}</span>
-          </div>
-          {rels.controls.length === 0 ? (
-            <p className="text-[0.75rem] text-ink-400 italic">No controls mapped.</p>
-          ) : (
-            <ul className="space-y-2">
-              {rels.controls.map(c => (
-                <li key={c.id} className="rounded-md border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-                  <div className="flex items-start gap-2.5">
-                    <span className="font-mono text-[0.625rem] text-ink-400 tabular-nums shrink-0 mt-0.5">{c.id}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug">{c.name}</span>
-                        {c.isKey && <span className="px-1.5 h-4 rounded-xs text-[0.625rem] font-bold inline-flex items-center bg-mitigated-50 text-mitigated-700 shrink-0">Key</span>}
-                      </div>
-                      <span className="text-[0.6875rem] text-ink-500 leading-snug">{c.desc}</span>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="bg-white border border-canvas-border rounded-lg p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-[0.8125rem] font-bold text-ink-900 inline-flex items-center gap-1.5">
-              <WorkflowIcon size={13} className="text-ink-500" />
-              Workflows linked via controls
-            </h2>
-            <span className="text-[0.75rem] font-mono text-ink-400 tabular-nums">{rels.workflows.length}</span>
-          </div>
-          {rels.workflows.length === 0 ? (
-            <p className="text-[0.75rem] text-ink-400 italic">No workflows linked yet.</p>
-          ) : (
-            <ul className="space-y-2">
-              {rels.workflows.map(w => (
-                <li key={w.id} className="rounded-md border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[0.8125rem] text-ink-800 font-medium leading-snug truncate flex-1">{w.name}</span>
-                    <span className="text-[0.625rem] font-mono text-ink-400 tabular-nums shrink-0">{w.runs} runs</span>
-                  </div>
-                  <span className="text-[0.6875rem] text-ink-500 leading-snug">{w.desc}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        */}
-      </div>
-      </>
-      )}
-    </div>
-  );
-}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -1748,45 +773,13 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
   const [processColFilter, setProcessColFilter] = useState<string[]>([]);
   const [frameworkFilter, setFrameworkFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [detailRacmId, setDetailRacmId] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return new URLSearchParams(window.location.search).get('racm');
-  });
   const selectAllRef = useRef<HTMLInputElement | null>(null);
 
-  // URL sync — ?racm=RACM-001
+  // Tell the parent (BusinessProcesses) when a RACM mapping takeover is on screen,
+  // so it can hide its section-pills row and let the RACM header own the top.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const current = params.get('racm');
-    if (detailRacmId && current !== detailRacmId) {
-      params.set('racm', detailRacmId);
-      window.history.pushState({ ...window.history.state, racm: detailRacmId }, '', `?${params.toString()}`);
-      // Fire synthetic popstate so the BP-level listener hides the tab pills and
-      // extends the breadcrumb with the RACM name.
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    } else if (!detailRacmId && current) {
-      params.delete('racm');
-      const qs = params.toString();
-      window.history.pushState({ ...window.history.state, racm: null }, '', qs ? `?${qs}` : window.location.pathname);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    }
-  }, [detailRacmId]);
-
-  // Tell the parent (BusinessProcesses) when a RACM detail or mapping takeover is on
-  // screen, so it can hide its section-pills row and let the RACM header own the top.
-  useEffect(() => {
-    onTakeoverChange?.(detailRacmId ? 'detail' : (showMappingWorkspace && mappingRacm ? 'mapping' : null));
-  }, [detailRacmId, showMappingWorkspace, mappingRacm, onTakeoverChange]);
-
-  useEffect(() => {
-    const onPop = () => {
-      const param = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('racm') : null;
-      setDetailRacmId(param);
-    };
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
+    onTakeoverChange?.(showMappingWorkspace && mappingRacm ? 'mapping' : null);
+  }, [showMappingWorkspace, mappingRacm, onTakeoverChange]);
 
   useEffect(() => {
     const armSkeleton = setTimeout(() => setShowSkeleton(true), 150);
@@ -1894,7 +887,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
         <ArRacmMappingView
           racm={mr}
           entries={mappingEntries}
-          onBack={() => { setShowMappingWorkspace(false); setMappingRacm(null); setDetailRacmId(mr.id); }}
+          onBack={() => { setShowMappingWorkspace(false); setMappingRacm(null); }}
         />
       );
     }
@@ -1903,41 +896,6 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
         racmId={mr.id} racmName={mr.name} racmProcess={mr.process}
         isEmpty={mr.risks === 0}
         onBack={() => { setShowMappingWorkspace(false); setMappingRacm(null); }}
-      />
-    );
-  }
-
-  // Detail page takeover when ?racm= is in URL
-  const detailRacmFromUrl = detailRacmId ? allRacms.find(r => r.id === detailRacmId) : null;
-  if (detailRacmFromUrl) {
-    return (
-      <RacmDetailPage
-        racm={detailRacmFromUrl}
-        onBack={() => setDetailRacmId(null)}
-        // "Open mapping" opens the same full editable RACM grid as the card's
-        // "Open in editor" action — in a new browser tab. The detail page stays
-        // open behind it. (Old in-app ArRacmMappingView is still reachable via
-        // the initialMappingRacm path, line ~1750.)
-        onOpenMapping={() => onOpenInEditor?.(detailRacmFromUrl)}
-      />
-    );
-  }
-  // Deep-link guard — ?racm=<id> was set but no matching record exists.
-  if (detailRacmId && !detailRacmFromUrl) {
-    return (
-      <ListPlaceholder
-        icon={Search}
-        title="RACM not found"
-        body={`No RACM with ID "${detailRacmId}" exists in this engagement.`}
-        action={
-          <button
-            type="button"
-            onClick={() => setDetailRacmId(null)}
-            className="text-[0.8125rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer transition-colors"
-          >
-            ← Back to RACMs
-          </button>
-        }
       />
     );
   }
@@ -2017,9 +975,11 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
               <Button
                 variant="primary"
                 size="md"
-                className="shrink-0 !h-8"
+                className="shrink-0 !h-8 rounded-md!"
                 leftIcon={<Plus size={13} />}
                 onClick={onCreate}
+                disabled={searchQuery.trim().length > 0}
+                title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined}
               >
                 Create new RACM
               </Button>
@@ -2164,7 +1124,12 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.02 }}
-                className={`group rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all ${
+                role="button"
+                tabIndex={0}
+                aria-label={`Open ${displayName} in editor`}
+                onClick={() => onOpenInEditor?.(racm)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenInEditor?.(racm); } }}
+                className={`group cursor-pointer rounded-xl border bg-white hover:border-primary/50 hover:shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 ${
                   isSelected ? 'border-primary/40 ring-1 ring-primary/20' : 'border-border-light'
                 }`}
               >
@@ -2174,14 +1139,10 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                 {/* RACM column — title + status pill + description + meta + tag pills */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => setDetailRacmId(racm.id)}
-                      className="group/title text-[0.9375rem] font-semibold text-text leading-snug hover:text-brand-700 cursor-pointer text-left"
-                    >
+                    <span className="text-[0.9375rem] font-semibold text-text leading-snug text-left">
                       <span className="font-mono text-[0.75rem] font-semibold text-brand-700 mr-2">{racm.id.toUpperCase()}</span>
-                      <span className="group-hover/title:underline">{displayName}</span>
-                    </button>
+                      <span>{displayName}</span>
+                    </span>
                     <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-semibold border ${STATUS_BADGE[status]}`}>
                       <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
                       {status}
@@ -2212,7 +1173,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                 </div>
 
                 {/* Actions column */}
-                <div onClick={e => e.stopPropagation()} className="flex items-start justify-end gap-1">
+                <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-0.5">
                   {isSelected ? (
                     <>
                       {can('racm_archive') && (
@@ -2261,25 +1222,12 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
                           type="button"
                           onClick={() => setLinkRiskTarget({ racmId: racm.id, bpAbbr: racm.process })}
                           aria-label="Link risk"
-                          className="shrink-0 inline-flex items-center gap-1 px-2 h-10 whitespace-nowrap rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer"
+                          className="shrink-0 inline-flex items-center gap-1 px-2 h-7 whitespace-nowrap rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer"
                         >
                           <Link2 size={12} className="shrink-0" aria-hidden="true" />
                           Link risk
                         </button>
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/lrisk:opacity-100 pointer-events-none transition-opacity z-50">Link risk</span>
-                      </div>
-                      )}
-                      {can('racm_edit') && (
-                      <div className="relative group/edit">
-                        <button
-                          type="button"
-                          onClick={() => onOpenInEditor?.(racm)}
-                          aria-label="Open in editor"
-                          className="w-10 h-10 flex items-center justify-center rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                        >
-                          <ExternalLink size={14} />
-                        </button>
-                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/edit:opacity-100 pointer-events-none transition-opacity z-50">Open in editor (new tab)</span>
                       </div>
                       )}
                       {can('racm_share') && (
@@ -2527,7 +1475,7 @@ function LinkRiskDrawer({ bpAbbr, alreadyLinkedIds, onClose, onCreateRisk, onLin
         className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
       <motion.aside initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.16 }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[560px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[600px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
         role="dialog" aria-label="Link Risk to RACM">
 
         {/* Header */}
@@ -2653,7 +1601,7 @@ export function LinkControlPickerDrawer({ riskName, alreadyLinkedIds, onClose, o
         className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
       <motion.aside initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.16 }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[520px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[600px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
         role="dialog" aria-label="Link Existing Control">
 
         {/* Header */}
@@ -2814,7 +1762,7 @@ export function WorkflowControlChooserDrawer({ riskName, controls, onPick, onClo
         className="fixed inset-0 z-50 bg-ink-900/20 backdrop-blur-sm" onClick={onClose} />
       <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 z-50 w-full max-w-[560px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col"
+        className="fixed top-0 right-0 z-50 w-full max-w-[600px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col"
         role="dialog" aria-label="Choose a control">
 
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">

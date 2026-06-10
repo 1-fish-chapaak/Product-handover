@@ -20,7 +20,7 @@ const Button = (props: ComponentProps<typeof BaseButton>) => {
   return (
     <BaseButton
       {...props}
-      className={['rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
+      className={[/rounded-/.test(props.className ?? '') ? '' : 'rounded-lg!', isPrimary ? 'shadow-none! hover:shadow-none! font-semibold! h-8!' : '', props.className].filter(Boolean).join(' ')}
     />
   );
 };
@@ -29,7 +29,8 @@ import ListLoadError from '../shared/ListLoadError';
 import ListPlaceholder from '../shared/ListPlaceholder';
 import { LinkControlPickerDrawer, WorkflowControlChooserDrawer } from './RacmListTable';
 import { LinkWorkflowToControlDrawer, type ControlWorkflow } from './RacmMappingWorkspace';
-import CreateControlDrawer from '../governance/CreateControlDrawer';
+import type { NewControlData } from '../governance/CreateControlDrawer';
+import DesignControlAddModal from './DesignControlAddModal';
 import { addCreatedControl, useCreatedControls } from '../../data/createdControlsStore';
 import { useRiskControlLinks, addRiskControlLinks } from '../../data/riskControlLinksStore';
 import { getRiskRelationships, getControlRelationships } from '../../data/processHubJoins';
@@ -84,6 +85,16 @@ const PROCESSES = ['P2P', 'O2C', 'R2R', 'ITGC', 'S2C'];
 const CATEGORIES: RiskCategory[] = ['Financial', 'Operational', 'Compliance', 'IT', 'Fraud', 'Reporting', 'Other'];
 const PRIORITIES: RiskPriority[] = ['Critical', 'High', 'Medium', 'Low'];
 
+// Next sequential risk ID (RSK-NNN) derived from existing risks — pre-fills the
+// read-only ID shown in the Create Risk modal.
+export function nextRiskId(risks: RiskEntry[]): string {
+  const max = risks.reduce((m, r) => {
+    const n = parseInt(String(r.id).replace(/^RSK-/i, ''), 10);
+    return Number.isFinite(n) && n > m ? n : m;
+  }, 0);
+  return `RSK-${String(max + 1).padStart(3, '0')}`;
+}
+
 // ─── Style maps ─────────────────────────────────────────────────────────────
 
 const STATUS_STYLES: Record<RiskLifecycleStatus, string> = {
@@ -107,11 +118,13 @@ interface DrawerProps {
   onClose: () => void;
   onSave: (risk: RiskEntry) => void;
   defaultProcess?: string;
+  /** Pre-generated sequential ID for create mode (read-only). Falls back to next-after-seed. */
+  nextId?: string;
   /** 'drawer' (default, right-side) or 'modal' (centered — e.g. stacked over the Link Risk modal) */
   presentation?: 'drawer' | 'modal';
 }
 
-export function RiskDrawer({ risk, onClose, onSave, defaultProcess, presentation = 'drawer' }: DrawerProps) {
+export function RiskDrawer({ risk, onClose, onSave, defaultProcess, nextId, presentation = 'drawer' }: DrawerProps) {
   const isEdit = !!risk;
   const isModal = presentation === 'modal';
   // Capture initial values once so dirty-tracking is stable across re-renders
@@ -133,6 +146,8 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, presentation
   const [priority, setPriority] = useState<RiskPriority | ''>(initial.priority);
   const [owner, setOwner] = useState(initial.owner);
   const [reviewer, setReviewer] = useState(initial.reviewer);
+  // Read-only identifier: existing id when editing, else the next sequential id (frozen once).
+  const [assignedId] = useState(() => risk?.id || nextId || nextRiskId(SEED_RISKS));
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   const isDirty =
@@ -167,10 +182,10 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, presentation
     onClose();
   };
 
-  const isValid = name.trim() && description.trim() && businessProcess;
+  const isValid = name.trim() && description.trim();
 
   const buildRisk = (status: RiskLifecycleStatus): RiskEntry => ({
-    id: risk?.id || `RSK-${String(Date.now()).slice(-3)}`,
+    id: assignedId,
     name: name.trim(),
     description: description.trim(),
     businessProcess,
@@ -208,8 +223,8 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, presentation
         transition={isModal ? { duration: 0.16 } : { type: 'spring', damping: 30, stiffness: 300 }}
         role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit Risk' : 'Create Risk'}
         className={isModal
-          ? 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-[560px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden'
-          : 'fixed top-0 right-0 z-50 w-full max-w-[560px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col'}>
+          ? 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] w-full max-w-[600px] max-h-[calc(100vh-2rem)] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden'
+          : 'fixed top-0 right-0 z-50 w-full max-w-[600px] h-full bg-white border-l border-canvas-border shadow-2xl flex flex-col'}>
 
         {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between shrink-0">
@@ -232,6 +247,11 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, presentation
 
         {/* Form */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          {/* Risk ID — system-assigned identifier, shown as read-only info above the sections */}
+          <div className="flex items-baseline gap-2">
+            <span className="text-[0.75rem] font-semibold text-text-muted">Risk ID</span>
+            <span className="font-mono text-[0.8125rem] font-semibold text-ink-900">{assignedId}</span>
+          </div>
           {/* Basic Details */}
           <div className="space-y-3">
             <h3 className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Basic Details</h3>
@@ -243,18 +263,9 @@ export function RiskDrawer({ risk, onClose, onSave, defaultProcess, presentation
               <label className={labelCls}>Description <span className="text-risk">*</span></label>
               <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Describe the risk scenario and potential impact..." className={fieldCls + ' resize-none'} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Business Process <span className="text-risk">*</span></label>
-                <select value={businessProcess} onChange={e => setBusinessProcess(e.target.value)} className={fieldCls + ' cursor-pointer appearance-none'}>
-                  <option value="">Select...</option>
-                  {PROCESSES.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Sub-process</label>
-                <input value={subProcess} onChange={e => setSubProcess(e.target.value)} placeholder="e.g. Accounts Payable" className={fieldCls} />
-              </div>
+            <div>
+              <label className={labelCls}>Sub-process</label>
+              <input value={subProcess} onChange={e => setSubProcess(e.target.value)} placeholder="e.g. Accounts Payable" className={fieldCls} />
             </div>
             <div>
               <label className={labelCls}>Risk Category</label>
@@ -420,11 +431,11 @@ function RiskDetailPage({
             </h3>
             <div className="flex items-center gap-2 shrink-0">
               <button type="button" onClick={onLinkControl} aria-label="Link control"
-                className="inline-flex items-center gap-1 px-2 h-[26px] rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer">
+                className="inline-flex items-center gap-1 px-2 h-7 rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer">
                 <Link2 size={12} className="shrink-0" /> Link control
               </button>
               <button type="button" onClick={onLinkWorkflow} aria-label="Link workflow"
-                className="inline-flex items-center gap-1 px-2 h-[26px] rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer">
+                className="inline-flex items-center gap-1 px-2 h-7 rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer">
                 <WorkflowIcon size={12} className="shrink-0" /> Link workflow
               </button>
               <span className="text-[0.75rem] font-mono text-ink-400 tabular-nums ml-1">{controls.length}</span>
@@ -538,8 +549,11 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const [risks, setRisks] = useState<RiskEntry[]>(SEED_RISKS);
   const [searchQuery, setSearchQuery] = useState('');
   // Lifecycle-status filter driven by the clickable KPI tiles (single-select;
-  // null = show all). Kept separate from the slim High Priority / Unreviewed dropdown.
+  // null = show all). Used by the standalone Risk Register page only.
   const [activeStatusTile, setActiveStatusTile] = useState<RiskLifecycleStatus | null>(null);
+  // Lifecycle-status filter (multi-select) for the Process Hub Risk tab's "Status"
+  // pill — replaces the KPI tiles there (which are hidden in embedded mode).
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [detailRiskId, setDetailRiskId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -635,9 +649,13 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const filteredRisks = useMemo(() => {
     let result = baseRisks;
 
-    // Lifecycle status — single-select via the KPI tiles (null = show all).
+    // Lifecycle status — KPI tiles (standalone, single-select) or the Status
+    // pill (Process Hub, multi-select). Only one is active per surface.
     if (activeStatusTile) {
       result = result.filter(r => r.status === activeStatusTile);
+    }
+    if (statusFilter.length > 0) {
+      result = result.filter(r => statusFilter.includes(r.status));
     }
 
     // Search
@@ -656,7 +674,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     if (priorityFilter.length > 0) result = result.filter(r => priorityFilter.includes(r.priority));
 
     return result;
-  }, [baseRisks, activeStatusTile, searchQuery, subProcessFilter, categoryFilter, priorityFilter]);
+  }, [baseRisks, activeStatusTile, statusFilter, searchQuery, subProcessFilter, categoryFilter, priorityFilter]);
 
   const subProcessOptions = useMemo(() => Array.from(new Set(baseRisks.map(r => r.subProcess))).sort(), [baseRisks]);
   const categoryOptions = useMemo(() => Array.from(new Set(baseRisks.map(r => r.category))).sort(), [baseRisks]);
@@ -668,9 +686,10 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
 
   // Single source of truth for "is any filter on" + a reset that clears every
   // filter (the KPI tile, the slim Status dropdown, the other dropdowns, search).
-  const hasActiveFilters = !!activeStatusTile || subProcessFilter.length > 0 || categoryFilter.length > 0 || priorityFilter.length > 0 || searchQuery.length > 0;
+  const hasActiveFilters = !!activeStatusTile || statusFilter.length > 0 || subProcessFilter.length > 0 || categoryFilter.length > 0 || priorityFilter.length > 0 || searchQuery.length > 0;
   const clearAllFilters = () => {
     setActiveStatusTile(null);
+    setStatusFilter([]);
     setSubProcessFilter([]);
     setCategoryFilter([]);
     setPriorityFilter([]);
@@ -774,19 +793,50 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         )}
       </AnimatePresence>
 
-      {/* Create Control wizard — swaps in over the picker (modal). Cancel returns to
-          the picker; saving creates the control, links it to this risk, and closes. */}
+      {/* Create Control — the same simple modal as the Controls tab, swapped in over
+          the picker. Cancel returns to the picker; saving creates the control, links
+          it to this risk (mappedRisks), files it under this process so it also shows
+          in the Controls tab (businessProcess), and closes. */}
       <AnimatePresence>
         {linkControlRisk && createControlFromLink && (
-          <CreateControlDrawer
-            presentation="modal"
-            defaultProcess={linkControlRisk.businessProcess}
-            defaultRiskIds={[linkControlRisk.id]}
-            defaultRisk={linkControlRisk.name}
+          <DesignControlAddModal
+            subProcesses={Array.from(new Set(
+              createdControls
+                .filter(c => c.businessProcess === linkControlRisk.businessProcess)
+                .map(c => c.subProcess)
+                .filter((s): s is string => !!s),
+            ))}
             onClose={() => setCreateControlFromLink(false)}
-            onSave={(data) => {
+            onCreate={({ description, isKey, subProcess, attributes, inRacm }) => {
+              const name = description.trim();
+              const data: NewControlData = {
+                risk: linkControlRisk.name,
+                name,
+                description: name,
+                objective: '',
+                businessProcess: linkControlRisk.businessProcess,
+                subProcess,
+                owner: '',
+                classification: isKey ? 'Key' : 'Non-Key',
+                nature: 'Preventive',
+                automation: 'Manual',
+                frequency: '',
+                assertions: [],
+                attributes: attributes
+                  .map(a => a.trim())
+                  .filter(Boolean)
+                  .map(a => ({ name: a, description: '' })),
+                mappedRisks: [linkControlRisk.id],
+                workflowChoice: 'skip',
+                linkedWorkflowId: null,
+              };
               addCreatedControl(data);
-              addToast({ message: `Created "${data.name}" and linked it to ${linkControlRisk.name}.`, type: 'success' });
+              addToast({
+                message: inRacm
+                  ? `Created "${name}", linked it to ${linkControlRisk.name}, and added it to the RACM.`
+                  : `Created "${name}" and linked it to ${linkControlRisk.name}.`,
+                type: 'success',
+              });
               setCreateControlFromLink(false);
               setLinkControlRisk(null);
             }}
@@ -954,25 +1004,32 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                 Clear all
               </button>
             )}
+            {embedded && (
+              <ColumnFilter variant="button" label="Status" options={['Active', 'Under Review', 'Draft']} value={statusFilter} onChange={setStatusFilter} align="end" />
+            )}
             <ColumnFilter variant="button" label="Priority" options={priorityOptions} value={priorityFilter} onChange={setPriorityFilter} align="end" />
             <ColumnFilter variant="button" label="Sub-process" options={subProcessOptions} value={subProcessFilter} onChange={setSubProcessFilter} align="end" />
             <ColumnFilter variant="button" label="Category" options={categoryOptions} value={categoryFilter} onChange={setCategoryFilter} align="end" />
             {embedded && (
               <Button variant="primary" size="sm" shape="lg" onClick={() => setShowCreateDrawer(true)}
-                leftIcon={<Plus size={13} />} className="shrink-0">
+                disabled={searchQuery.trim().length > 0} title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined}
+                leftIcon={<Plus size={13} />} className="shrink-0 rounded-md!">
                 Create Risk
               </Button>
             )}
           </div>
         </div>
 
-        {/* KPI strip (4 tiles) — single-select lifecycle-status filter; Total clears. */}
+        {/* KPI strip (4 tiles) — single-select lifecycle-status filter; Total clears.
+            Standalone Risk Register only; the Process Hub Risk tab uses the Status pill instead. */}
+        {!embedded && (
         <div className="grid grid-cols-4 gap-3">
           <KpiTile label="Total Risks"  value={String(totalRisks)}       index={0} onClick={() => setActiveStatusTile(null)} />
           <KpiTile label="Active"       value={String(activeCount)}      index={1} valueClassName="text-compliant-700" onClick={() => setActiveStatusTile(p => p === 'Active' ? null : 'Active')} selected={activeStatusTile === 'Active'} />
           <KpiTile label="Under Review" value={String(underReviewCount)} index={2} valueClassName="text-high-700" onClick={() => setActiveStatusTile(p => p === 'Under Review' ? null : 'Under Review')} selected={activeStatusTile === 'Under Review'} />
           <KpiTile label="Draft"        value={String(draftCount)}       index={3} onClick={() => setActiveStatusTile(p => p === 'Draft' ? null : 'Draft')} selected={activeStatusTile === 'Draft'} />
         </div>
+        )}
 
         {/* Risk Cards — engagement-style list, one card per risk. Click anywhere to open detail. */}
         <div className="space-y-2 min-h-[calc(100vh-280px)]">
@@ -1012,81 +1069,127 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                 }`}
               >
                 <div className="px-6 py-5">
-                  {/* Risk identity + row actions */}
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-[0.9375rem] font-semibold leading-snug">
-                          <span className="font-mono text-[0.75rem] font-semibold text-brand-700 mr-2">{risk.id}</span>
-                          <a
-                            href={`${window.location.origin}${window.location.pathname}?${new URLSearchParams({ view: 'audit-risk-register', risk: risk.id }).toString()}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="Open detail in a new tab"
-                            className="text-left text-text hover:text-brand-700 hover:underline underline-offset-2 transition-colors cursor-pointer">
-                            {risk.name}
-                          </a>
-                        </h3>
-                        <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-semibold ${STATUS_STYLES[risk.status]}`}>
-                          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
-                          {risk.status}
-                        </span>
-                        <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
-                          {risk.businessProcess}
-                        </span>
-                        <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-white text-text-muted border border-border-light">
-                          {risk.category}
-                        </span>
-                        <span className={`inline-flex items-center px-2.5 h-5 rounded-md text-[0.6875rem] font-semibold border border-border-light bg-white ${PRIORITY_STYLES[risk.priority]}`}>
-                          {risk.priority}
-                        </span>
-                      </div>
-                      <p className="text-[0.8125rem] text-text leading-relaxed mt-3 max-w-3xl">{risk.description || '—'}</p>
-                    </div>
-                    {/* Top-right: control tags moved up (before the actions, like the workflow card),
-                        then row actions — Link control placed like the RACM card's Link risk button. */}
-                    <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-1.5 shrink-0 flex-wrap max-w-[60%]">
-                      {cardControls.map(ctrl => (
-                        <span key={ctrl.id}
-                          className="inline-flex items-center gap-1 px-2 h-[26px] rounded-md bg-brand-50 border border-brand-100 text-brand-700 text-[0.6875rem] font-mono font-semibold">
-                          {ctrl.isKey && <Star size={11} className="fill-amber-400 text-amber-500 shrink-0" aria-label="Key control" />}
-                          {ctrl.id}
-                        </span>
-                      ))}
-                      {isChecked ? (
-                        <>
-                          <button type="button" onClick={() => handleArchiveOne(risk.id)} title="Archive" aria-label="Archive risk"
-                            className="min-w-[40px] min-h-[40px] inline-flex items-center justify-center rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer">
-                            <Archive size={14} />
-                          </button>
-                          <button type="button" onClick={() => handleCancelOne(risk.id)} title="Cancel selection" aria-label="Cancel selection"
-                            className="min-w-[40px] min-h-[40px] inline-flex items-center justify-center rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer">
-                            <X size={14} />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <div className="relative group/lcontrol">
-                            <button type="button" onClick={() => setLinkControlRisk(risk)} aria-label="Link control"
-                              className="shrink-0 inline-flex items-center gap-1 px-2 min-h-[40px] rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer">
-                              <Link2 size={12} className="shrink-0" /> Control
+                  {(() => {
+                    // Chips + actions shared by both layouts (Process Hub grid vs standalone inline row).
+                    const identity = (
+                      <h3 className="text-[0.9375rem] font-semibold leading-snug">
+                        <span className="font-mono text-[0.75rem] font-semibold text-brand-700 mr-2">{risk.id}</span>
+                        <a
+                          href={`${window.location.origin}${window.location.pathname}?${new URLSearchParams({ view: 'audit-risk-register', risk: risk.id }).toString()}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Open detail in a new tab"
+                          className="text-left text-text hover:text-brand-700 hover:underline underline-offset-2 transition-colors cursor-pointer">
+                          {risk.name}
+                        </a>
+                      </h3>
+                    );
+                    const statusPill = (
+                      <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-semibold ${STATUS_STYLES[risk.status]}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
+                        {risk.status}
+                      </span>
+                    );
+                    const p2pChip = (
+                      <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
+                        {risk.businessProcess}
+                      </span>
+                    );
+                    const categoryChip = (
+                      <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-medium bg-white text-text-muted border border-border-light">
+                        {risk.category}
+                      </span>
+                    );
+                    const priorityChip = (
+                      <span className={`inline-flex items-center px-2.5 h-5 rounded-md text-[0.6875rem] font-semibold border border-border-light bg-white ${PRIORITY_STYLES[risk.priority]}`}>
+                        {risk.priority}
+                      </span>
+                    );
+                    const cardActions = (
+                      <>
+                        {cardControls.map(ctrl => (
+                          <span key={ctrl.id}
+                            className="inline-flex items-center gap-1 px-2 h-[26px] rounded-md bg-brand-50 border border-brand-100 text-brand-700 text-[0.6875rem] font-mono font-semibold">
+                            {ctrl.isKey && <Star size={11} className="fill-amber-400 text-amber-500 shrink-0" aria-label="Key control" />}
+                            {ctrl.id}
+                          </span>
+                        ))}
+                        {isChecked ? (
+                          <>
+                            <button type="button" onClick={() => handleArchiveOne(risk.id)} title="Archive" aria-label="Archive risk"
+                              className="min-w-[40px] min-h-[40px] inline-flex items-center justify-center rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer">
+                              <Archive size={14} />
                             </button>
-                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/lcontrol:opacity-100 pointer-events-none transition-opacity z-50">Link control</span>
+                            <button type="button" onClick={() => handleCancelOne(risk.id)} title="Cancel selection" aria-label="Cancel selection"
+                              className="min-w-[40px] min-h-[40px] inline-flex items-center justify-center rounded-md text-text-muted hover:text-ink-800 hover:bg-paper-100 transition-colors cursor-pointer">
+                              <X size={14} />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {/* 24px gap between the linked-control chips and the
+                                "Control" link button — Process Hub Risks tab only. */}
+                            <div className={`relative group/lcontrol${embedded && cardControls.length > 0 ? ' ml-[24px]' : ''}`}>
+                              <button type="button" onClick={() => setLinkControlRisk(risk)} aria-label="Link control"
+                                className="shrink-0 inline-flex items-center gap-1 px-2 h-7 rounded-md border border-dashed border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer">
+                                <Link2 size={12} className="shrink-0" /> Control
+                              </button>
+                              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-sm bg-ink-800 text-paper-0 text-[0.6875rem] font-medium whitespace-nowrap opacity-0 group-hover/lcontrol:opacity-100 pointer-events-none transition-opacity z-50">Link control</span>
+                            </div>
+                            {can('risk_share') && (
+                              <button type="button" onClick={(e) => { e.stopPropagation(); openShare({ type: 'risk', id: risk.id, anchor: rectFromEvent(e) }); }} title="Share risk" aria-label="Share risk"
+                                className="min-w-[40px] min-h-[40px] inline-flex items-center justify-center rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer">
+                                <Share2 size={14} />
+                              </button>
+                            )}
+                            <button type="button" onClick={() => setConfirmDeleteRisk({ id: risk.id, name: risk.name })} title="Delete risk" aria-label="Delete risk"
+                              className="min-w-[40px] min-h-[40px] inline-flex items-center justify-center rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
+                      </>
+                    );
+                    return embedded ? (
+                      /* Process Hub Risks tab — Controls-style column grid: [id+title+status / desc] · [P2P+type stacked] · [severity] · [tags+actions] */
+                      <div className="grid grid-cols-[minmax(0,1fr)_7rem_6rem_20rem] gap-5 items-start">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {identity}
+                            {statusPill}
                           </div>
-                          {can('risk_share') && (
-                            <button type="button" onClick={(e) => { e.stopPropagation(); openShare({ type: 'risk', id: risk.id, anchor: rectFromEvent(e) }); }} title="Share risk" aria-label="Share risk"
-                              className="min-w-[40px] min-h-[40px] inline-flex items-center justify-center rounded-md text-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer">
-                              <Share2 size={14} />
-                            </button>
-                          )}
-                          <button type="button" onClick={() => setConfirmDeleteRisk({ id: risk.id, name: risk.name })} title="Delete risk" aria-label="Delete risk"
-                            className="min-w-[40px] min-h-[40px] inline-flex items-center justify-center rounded-md text-text-muted hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
-                            <Trash2 size={14} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                          <p className="text-[0.8125rem] text-text leading-relaxed mt-2.5">{risk.description || '—'}</p>
+                        </div>
+                        <div className="flex flex-col items-start gap-1.5">
+                          {p2pChip}
+                          {categoryChip}
+                        </div>
+                        <div className="flex items-start">
+                          {priorityChip}
+                        </div>
+                        <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-0.5 flex-wrap">
+                          {cardActions}
+                        </div>
+                      </div>
+                    ) : (
+                      /* Standalone Risk Register — original inline-chip row */
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {identity}
+                            {statusPill}
+                            {p2pChip}
+                            {categoryChip}
+                            {priorityChip}
+                          </div>
+                          <p className="text-[0.8125rem] text-text leading-relaxed mt-3 max-w-3xl">{risk.description || '—'}</p>
+                        </div>
+                        <div onClick={e => e.stopPropagation()} className="flex items-center justify-end gap-0.5 shrink-0 flex-wrap max-w-[60%]">
+                          {cardActions}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </motion.div>
             );
@@ -1099,7 +1202,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
       {/* Create modal */}
       <AnimatePresence>
         {showCreateDrawer && (
-          <RiskDrawer risk={null} presentation="modal" onClose={() => setShowCreateDrawer(false)} onSave={handleSaveRisk} defaultProcess={processFilter} />
+          <RiskDrawer risk={null} presentation="modal" nextId={nextRiskId(risks)} onClose={() => setShowCreateDrawer(false)} onSave={handleSaveRisk} defaultProcess={processFilter} />
         )}
       </AnimatePresence>
 
