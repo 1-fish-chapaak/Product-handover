@@ -3859,7 +3859,9 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
         </div>
       </div>
 
-      {/* Bulk-select strip — only in bulk-run mode, once ≥1 card is ticked */}
+      {/* Bulk-select strip — the single bulk control bar above the card list.
+          Left: select-all, selected count, Clear selection. Right: Continue
+          (the run launcher → opens the shared 3-step Bulk Execute setup). */}
       {bulkMode && selectedIds.length > 0 && (
         <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-brand-50 border border-brand-100">
           <input
@@ -3874,9 +3876,12 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
             <span className="font-semibold text-text">{selectedVisibleCount}</span> of <span className="font-semibold text-text">{visibleIds.length}</span> selected
           </span>
           <button type="button" onClick={clearSelection}
-            className="ml-auto text-[0.75rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer">
+            className="text-[0.75rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer">
             Clear selection
           </button>
+          <Button variant="primary" size="md" onClick={() => setBulkModalOpen(true)} className="ml-auto shrink-0" rightIcon={<ArrowRight size={14} />}>
+            Continue
+          </Button>
         </div>
       )}
 
@@ -4053,25 +4058,6 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
             );
           })}
         </div>
-      )}
-
-      {/* Bulk action bar — appears once ≥1 workflow is ticked. Continue opens the
-          shared 3-step Bulk Execute setup, same as the Workflow Library. Sticky so
-          it stays reachable at the bottom of a long card list. */}
-      {bulkMode && selectedIds.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.16 }}
-          className="sticky bottom-0 z-20 flex items-center gap-3 py-3 px-4 -mx-1 border-t border-border-light bg-white/95 backdrop-blur-sm"
-        >
-          <span className="text-[0.75rem] text-text-secondary">
-            <span className="font-semibold text-text">{selectedIds.length}</span> selected
-          </span>
-          <Button variant="primary" size="md" onClick={() => setBulkModalOpen(true)} className="ml-auto shrink-0" rightIcon={<ArrowRight size={14} />}>
-            Continue
-          </Button>
-        </motion.div>
       )}
 
       {/* Delete-workflow confirmation */}
