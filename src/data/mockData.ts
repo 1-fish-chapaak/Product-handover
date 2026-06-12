@@ -142,6 +142,7 @@ export const REPORT_TEMPLATES = [
   { id: "rt-001", name: "SOX Compliance Report", desc: "Comprehensive SOX compliance status with control testing results", category: "Compliance", icon: "shield", sections: [
     { name: 'Executive Summary', icon: 'file-text' },
     { name: 'Scope & Objectives', icon: 'file-text' },
+    { name: 'Testing Methodology', icon: 'file-text' },
     { name: 'Control Testing Results', icon: 'check-circle' },
     { name: 'Deficiency Analysis', icon: 'alert-triangle' },
     { name: 'Remediation Status', icon: 'shield' },

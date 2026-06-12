@@ -6,15 +6,18 @@ import {
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { exportReportWord, exportReportPpt, exportReportPdf } from './reportExport';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import type { QueryGraph, QueryTable } from '../../data/queryGraphs';
 
 export type DownloadPreviewKpi = { label: string; value: string };
+/** Report-level KPI tile — accent is the resolved hex of the tile's tone. */
+export type DownloadPreviewStat = { label: string; value: string; accent?: string };
 
 export type DownloadPreviewSection =
   | { id: string; kind: 'cover'; title: string }
-  | { id: string; kind: 'summary'; title: string; content: string }
-  | { id: string; kind: 'stats'; title: string }
+  | { id: string; kind: 'summary'; title: string; content: string; stats?: DownloadPreviewStat[] }
+  | { id: string; kind: 'stats'; title: string; stats?: DownloadPreviewStat[] }
   | {
       id: string;
       kind: 'query';
@@ -48,6 +51,8 @@ export type DownloadPreviewSection =
 interface Props {
   reportName: string;
   reportTag?: string;
+  reportId?: string;
+  templateName?: string;
   generatedBy: string;
   generatedAt: string;
   sections: DownloadPreviewSection[];
@@ -58,8 +63,8 @@ type Format = 'pdf' | 'pptx' | 'docx';
 
 const FORMATS: { id: Format; label: string; ext: string }[] = [
   { id: 'pdf', label: 'PDF', ext: 'pdf' },
-  { id: 'pptx', label: 'PPT', ext: 'pptx' },
-  { id: 'docx', label: 'DOCX', ext: 'docx' },
+  { id: 'pptx', label: 'PPT', ext: 'ppt' },
+  { id: 'docx', label: 'Word', ext: 'doc' },
 ];
 
 // Severity badge colour mapping — High (red) / Medium (amber) / Low (green).
@@ -72,6 +77,8 @@ function severityBadgeClass(severity: string): string {
 export default function ReportDownloadModal({
   reportName,
   reportTag,
+  reportId,
+  templateName,
   generatedBy,
   generatedAt,
   sections,
@@ -113,12 +120,22 @@ export default function ReportDownloadModal({
     if (isDownloading) return;
     setIsDownloading(true);
     // Brief preparing window so the in-place spinner registers visually
-    // before the toast fires and the modal closes.
+    // before the export fires and the modal closes.
     window.setTimeout(() => {
-      addToast({
-        type: 'success',
-        message: `${reportName}.${activeFormat.ext} downloaded.`,
-      });
+      const ctx = { reportName, reportTag, reportId, templateName, generatedBy, generatedAt, sections };
+      if (format === 'docx') {
+        exportReportWord(ctx);
+        addToast({ type: 'success', message: `${reportName}.${activeFormat.ext} downloaded.` });
+      } else if (format === 'pptx') {
+        exportReportPpt(ctx);
+        addToast({ type: 'success', message: `${reportName}.${activeFormat.ext} downloaded.` });
+      } else if (exportReportPdf(ctx)) {
+        addToast({ type: 'info', message: 'Opening print dialog — choose “Save as PDF”.' });
+      } else {
+        addToast({ type: 'error', message: 'Pop-up blocked — allow pop-ups to export the PDF.' });
+        setIsDownloading(false);
+        return;
+      }
       setIsDownloading(false);
       onClose();
     }, 700);
@@ -753,12 +770,28 @@ function SectionContent({ section, typeface, compact = false }: {
   const labelClass = 'text-[10px] font-bold uppercase tracking-[0.16em] text-text-muted';
 
   if (section.kind === 'summary') {
+    const stats = section.stats ?? [];
     return (
       <div>
         <h2 className={titleClass + ' mb-4 flex items-center gap-2'}>
           <Sparkles size={14} className="text-primary" />
           {section.title || 'Executive Summary'}
         </h2>
+        {/* ATR-style KPI tile grid — mirrors the on-screen exec summary */}
+        {stats.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4">
+            {stats.map(st => (
+              <div
+                key={st.label}
+                className="rounded-[10px] border border-border-light bg-white p-3"
+                style={{ borderLeft: `3px solid ${st.accent ?? '#6A12CD'}` }}
+              >
+                <div className="text-[18px] font-bold tabular-nums leading-none mb-1" style={{ color: st.accent ?? '#6A12CD' }}>{st.value}</div>
+                <div className="text-[9px] font-semibold uppercase tracking-wide text-ink-600 leading-tight">{st.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
         <p className={bodyClass}>{section.content}</p>
       </div>
     );

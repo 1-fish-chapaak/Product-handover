@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 
 /**
  * Traps Tab / Shift+Tab focus inside the referenced container while `active`.
@@ -26,6 +26,12 @@ export function useFocusTrap(
   active: boolean,
   onEscape?: () => void,
 ) {
+  // Callers routinely pass a freshly-created closure for onEscape. Keep it in
+  // a ref so it is NOT an effect dependency — otherwise every parent render
+  // re-arms the trap, which yanks focus back to the first field mid-typing.
+  const onEscapeRef = useRef(onEscape);
+  useEffect(() => { onEscapeRef.current = onEscape; });
+
   useEffect(() => {
     if (!active) return;
     const container = containerRef.current;
@@ -40,9 +46,9 @@ export function useFocusTrap(
     (focusables[0] ?? container).focus({ preventScroll: true });
 
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && onEscape) {
+      if (e.key === 'Escape' && onEscapeRef.current) {
         e.stopPropagation();
-        onEscape();
+        onEscapeRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -70,5 +76,5 @@ export function useFocusTrap(
       document.removeEventListener('keydown', handleKey);
       previouslyFocused?.focus?.({ preventScroll: true });
     };
-  }, [active, containerRef, onEscape]);
+  }, [active, containerRef]);
 }

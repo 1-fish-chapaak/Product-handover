@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight,
   Sparkles, Settings, Palette, Type,
   Image, Layout, X, Edit3, BookOpen, Upload, Lightbulb, Loader2, Trash2,
-  List, LayoutGrid, GripVertical, Plus, StickyNote, PanelLeftClose, PanelLeftOpen,
+  List, LayoutGrid, GripVertical, Plus, PanelLeftClose, PanelLeftOpen,
   MoreVertical, Eye, EyeOff, Database, Search, PackageOpen, ExternalLink,
   MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
   Star, Layers, Check, CloudUpload, RefreshCw, Lock, WifiOff,
@@ -33,11 +33,14 @@ import SmartTable from '../shared/SmartTable';
 import { useToast, type ToastType } from '../shared/Toast';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useCan } from '../../context/CurrentUserContext';
-import FloatingLines from '../shared/FloatingLines';
 import { KpiCountUp } from '../shared/KpiTile';
+import { ReportBrandBanner, ReportMetaCell, ReportNumberedHeading, ReportKpiTiles } from './ReportDocumentChrome';
+import { statTone } from './reportTones';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import ReportBuilder from './ReportBuilder';
 import { BulkAuditVariantView } from './BulkAuditVariants';
+import GenerateReportWizard, { type WizardCreatePayload } from './GenerateReportWizard';
+import { composeExecSummary, composeSectionContent, defForKey, type GeneratedQueryDef } from './templateQueryPool';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import AddObservationModal, {
   computeNextObservationId,
@@ -122,6 +125,15 @@ export type BulkAuditAestheticVariant = 'editorial';
 type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   isEmpty?: boolean;
   attachedQueries?: AttachedQuery[];
+  /** Queries the Generate wizard baked into this report — when present, the
+   *  report body renders these instead of the demo DEFAULT_QUERIES. */
+  generatedQueries?: GeneratedQueryDef[];
+  /** Executive-summary rollup composed from generatedQueries at generate time. */
+  execSummary?: string;
+  /** The template's advertised sections, baked at generate time so the report
+   *  delivers the structure the template card promises (rendered as editable
+   *  note blocks around the query body). */
+  templateSections?: { name: string; icon: string }[];
   description?: string;
   workflowResults?: WorkflowResult[];
   aestheticVariant?: BulkAuditAestheticVariant;
@@ -134,7 +146,19 @@ type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   atrData?: AtrReportData;
 };
 
-// Dummy user-created templates. Replace with real data when the create-custom-template flow lands.
+// Blank base for the create-from-scratch flow — the TemplateEditor opens on
+// this with an empty section list and a name the user is expected to replace.
+const BLANK_TEMPLATE = {
+  id: 'ct-blank',
+  name: 'Untitled Template',
+  desc: 'Custom template',
+  category: 'Custom',
+  icon: 'file-text',
+  sections: [] as { name: string; icon: string }[],
+};
+
+// First-run seeds for Custom Templates — used only until the user's own
+// customs are persisted to localStorage.
 export const CUSTOM_TEMPLATES = [
   {
     id: 'ct-custom-01',
@@ -233,6 +257,7 @@ interface ReportsViewProps {
   onOpenQuery?: (query: { id: string; title: string }) => void;
   customTemplates?: typeof REPORT_TEMPLATES[number][];
   onAddCustomTemplate?: (template: typeof REPORT_TEMPLATES[number]) => void;
+  onRemoveCustomTemplate?: (id: string) => void;
   /** When set, ReportsView opens that report in the full detail view. Cleared by the parent after consumption. */
   focusReportId?: string | null;
   onFocusReportConsumed?: () => void;
@@ -305,12 +330,25 @@ function TemplateCarousel({ children }: { children: React.ReactNode }) {
 }
 
 // ─── Upload Template Modal ───
-function UploadTemplateModal({ onClose }: { onClose: () => void }) {
+function UploadTemplateModal({ onClose, onSave }: { onClose: () => void; onSave?: (t: typeof REPORT_TEMPLATES[number]) => void }) {
   const { addToast } = useToast();
   const [step, setStep] = useState<'upload' | 'selected' | 'converting' | 'converted'>('upload');
   const [templateName, setTemplateName] = useState('SOX Report Template');
+  const [pickedFile, setPickedFile] = useState<{ name: string; size: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   useFocusTrap(containerRef, true, onClose);
+
+  const handleFilePicked = (file: File) => {
+    const sizeMb = file.size >= 1024 * 1024
+      ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+      : `${Math.max(1, Math.round(file.size / 1024))} KB`;
+    setPickedFile({ name: file.name, size: sizeMb });
+    // Prettify the filename into a template-name suggestion.
+    const base = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    if (base) setTemplateName(base.replace(/\b\w/g, c => c.toUpperCase()));
+    setStep('selected');
+  };
 
   const DETECTED_SECTIONS = [
     'Executive Summary', 'Findings', 'Risk Assessment',
@@ -351,8 +389,15 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
           {/* Drop Zone */}
           {step === 'upload' && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".docx,.pdf,.xlsx"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleFilePicked(f); }}
+              />
               <button
-                onClick={() => setStep('selected')}
+                onClick={() => fileInputRef.current?.click()}
                 className="w-full border-2 border-dashed border-border-light hover:border-primary/40 rounded-[12px] p-10 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:bg-primary/[0.02] cursor-pointer group"
               >
                 <div className="p-3 bg-primary/5 rounded-[8px] group-hover:bg-primary/10 transition-colors">
@@ -372,8 +417,8 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
               <div className="flex items-center gap-3 p-4 bg-primary/[0.03] border border-primary/10 rounded-[12px]">
                 <div className="p-2 bg-primary/10 rounded-[8px]"><FileText size={20} className="text-primary" /></div>
                 <div className="flex-1">
-                  <p className="text-[13px] font-semibold text-text">SOX_Report_Template.docx</p>
-                  <p className="text-[11px] text-text-muted">2.4 MB</p>
+                  <p className="text-[13px] font-semibold text-text">{pickedFile?.name ?? 'SOX_Report_Template.docx'}</p>
+                  <p className="text-[11px] text-text-muted">{pickedFile?.size ?? '2.4 MB'}</p>
                 </div>
                 <CheckCircle2 size={20} className="text-compliant-700" />
               </div>
@@ -455,7 +500,23 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
           <div className="px-6 py-4 border-t border-border-light flex justify-end gap-2 shrink-0">
             <button onClick={onClose} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light hover:bg-paper-50 transition-colors cursor-pointer rounded-[8px]">Cancel</button>
             <button
-              onClick={() => { addToast({ type: 'success', message: `"${templateName}" saved to template library.` }); onClose(); }}
+              onClick={() => {
+                const name = templateName.trim();
+                if (!name) { addToast({ type: 'error', message: 'Give the template a name before saving.' }); return; }
+                if (onSave) {
+                  onSave({
+                    id: `ct-upload-${Date.now()}`,
+                    name,
+                    desc: `Converted from ${pickedFile?.name ?? 'uploaded document'} — ${DETECTED_SECTIONS.length} sections detected.`,
+                    category: 'Custom',
+                    icon: 'file-text',
+                    sections: DETECTED_SECTIONS.map(s => ({ name: s, icon: 'file-text' })),
+                  } as typeof REPORT_TEMPLATES[number]);
+                } else {
+                  addToast({ type: 'success', message: `"${name}" saved to template library.` });
+                }
+                onClose();
+              }}
               className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-primary text-white text-[13px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer rounded-[8px]"
             >
               Save Template
@@ -467,213 +528,22 @@ function UploadTemplateModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ─── Template Preview Modal ───
-function TemplatePreviewModal({ template, onClose, onEdit, onUse }: { template: typeof REPORT_TEMPLATES[0]; onClose: () => void; onEdit: () => void; onUse: () => void }) {
-  const Icon = ICON_MAP[template.icon] || FileText;
-  const color = CATEGORY_COLORS[template.category] || 'text-ink-500 bg-paper-50';
-  const containerRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(containerRef, true, onClose);
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
-      <motion.div
-        ref={containerRef}
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        role="dialog" aria-modal="true" aria-label="Template Preview"
-        className="relative bg-white rounded-[16px] shadow-2xl w-[560px] max-h-[80vh] overflow-hidden flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className={`p-2 rounded-[8px] ${color}`}><Icon size={16} /></div>
-            <div>
-              <h3 className="text-[15px] font-semibold text-text">{template.name}</h3>
-              <p className="text-[11px] text-text-muted">{template.category} template</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          <p className="text-[12px] text-text-secondary leading-relaxed">{template.desc}</p>
-
-          <div>
-            <label className="text-[12px] font-semibold text-text mb-3 block">Template Structure</label>
-            <div className="space-y-2">
-              {(template.sections || []).map((section, i) => {
-                const SectionIcon = SECTION_ICONS[section.icon] || FileText;
-                return (
-                  <motion.div
-                    key={section.name}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.06 }}
-                    className="flex items-center gap-3 px-4 py-3 bg-surface-2 rounded-[12px] hover:bg-primary/[0.03] transition-colors"
-                  >
-                    <div className="p-1.5 rounded-[8px] bg-white border border-border-light shadow-sm">
-                      <SectionIcon size={14} className="text-primary" />
-                    </div>
-                    <span className="text-[13px] text-text font-medium">{section.name}</span>
-                    <span className="ml-auto text-[10px] text-text-muted font-medium">Section {i + 1}</span>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div className="px-6 py-4 border-t border-border-light flex justify-between shrink-0">
-          <button
-            onClick={() => { onClose(); onEdit(); }}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"
-          >
-            <Edit3 size={12} /> Edit Template
-          </button>
-          <button
-            onClick={onUse}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-primary text-white rounded-[8px] text-[13px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
-          >
-            <Sparkles size={12} /> Use This Template
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-// ─── Choose Report Modal ───
-function ChooseReportModal({
-  template,
-  reports,
-  onCancel,
-  onClose,
-  onContinue,
-  onAddNew,
-}: {
-  template: typeof REPORT_TEMPLATES[0];
-  reports: typeof GENERATED_REPORTS;
-  onCancel: () => void;
-  onClose: () => void;
-  onContinue: (report: typeof GENERATED_REPORTS[0]) => void;
-  onAddNew: () => void;
-}) {
-  const { can } = useCan();
-  const canAddReport = can('rp_edit');
-  const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(containerRef, true, onClose);
-
-  const filtered = reports.filter(r => r.name.toLowerCase().includes(search.trim().toLowerCase()));
-  const selected = reports.find(r => r.id === selectedId) || null;
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
-      <motion.div
-        ref={containerRef}
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        role="dialog" aria-modal="true" aria-label="Choose Report"
-        className="relative bg-white rounded-[16px] shadow-2xl w-[560px] max-h-[85vh] overflow-hidden flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-border-light flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-primary/10 text-primary rounded-[8px]"><PackageOpen size={16} /></div>
-            <div>
-              <h3 className="text-[15px] font-semibold text-text">Choose Report</h3>
-              <p className="text-[12px] text-text-muted">Select an existing report or create a new report</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"><X size={16} className="text-text-muted" /></button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-          {/* Search */}
-          <div className="flex items-center gap-2 px-3 py-2.5 rounded-[8px] border border-border-light focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
-            <Search size={14} className="text-text-muted shrink-0" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search Report"
-              className="flex-1 bg-transparent text-[13px] text-text placeholder:text-text-muted focus:outline-none"
-            />
-          </div>
-
-          {/* Report list */}
-          <div className="space-y-2">
-            {filtered.length === 0 && (
-              <div className="px-3 py-6 text-center text-[12px] text-text-muted">No reports match your search</div>
-            )}
-            {filtered.map(r => {
-              const isSelected = selectedId === r.id;
-              return (
-                <button
-                  key={r.id}
-                  onClick={() => setSelectedId(r.id)}
-                  className={`w-full text-left flex items-start gap-3 px-4 py-3 rounded-[12px] border transition-colors cursor-pointer ${
-                    isSelected ? 'border-primary bg-primary/[0.04]' : 'border-border-light hover:border-primary/30 hover:bg-surface-2'
-                  }`}
-                >
-                  <span className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${
-                    isSelected ? 'border-primary' : 'border-border'
-                  }`}>
-                    {isSelected && <span className="w-2 h-2 rounded-full bg-primary" />}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-[13px] font-semibold text-text truncate">{r.name}</span>
-                      <span className="text-[11px] text-text-muted shrink-0">{r.generatedAt}</span>
-                    </div>
-                    <div className="text-[11px] text-text-muted truncate mt-0.5">{r.tag}</div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Add New Report */}
-          {canAddReport && (
-            <button
-              onClick={onAddNew}
-              className="w-full px-4 py-3 rounded-[8px] bg-primary/10 hover:bg-primary/15 text-primary text-[13px] font-semibold transition-colors cursor-pointer"
-            >
-              + Add New Report
-            </button>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-border-light flex items-center gap-3 shrink-0">
-          <button
-            onClick={onCancel}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] border border-border-light text-text bg-white text-[13px] font-semibold hover:bg-paper-50 transition-colors cursor-pointer"
-          >
-            Back
-          </button>
-          <button
-            onClick={() => { if (selected) onContinue(selected); }}
-            disabled={!selected}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:bg-primary/40 disabled:cursor-not-allowed"
-            title={`Apply "${template.name}"`}
-          >
-            Continue
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
+// Merge template lists into a single deduped option list (by id). Used to build
+// the Apply Template dropdown: standard + the user's active customs + the
+// report's own template (which may be a removed seed not in the active list).
+function mergeTemplateOptions(
+  ...lists: (typeof REPORT_TEMPLATES[number] | null | undefined)[][]
+): typeof REPORT_TEMPLATES[number][] {
+  const seen = new Set<string>();
+  const out: typeof REPORT_TEMPLATES[number][] = [];
+  for (const t of lists.flat()) {
+    if (t && !seen.has(t.id)) { seen.add(t.id); out.push(t); }
+  }
+  return out;
 }
 
 // ─── Apply Template Dropdown ───
-function ApplyTemplateDropdown({ onSelect, onClose }: { onSelect: (template: typeof REPORT_TEMPLATES[0]) => void; onClose: () => void }) {
+function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, onSelect, onClose }: { templates?: typeof REPORT_TEMPLATES[number][]; activeId?: string | null; onSelect: (template: typeof REPORT_TEMPLATES[0]) => void; onClose: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: -5, scale: 0.97 }}
@@ -685,21 +555,24 @@ function ApplyTemplateDropdown({ onSelect, onClose }: { onSelect: (template: typ
         <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">Select Template</span>
       </div>
       <div className="max-h-[260px] overflow-y-auto p-1.5">
-        {REPORT_TEMPLATES.map(rt => {
+        {templates.map(rt => {
           const Icon = ICON_MAP[rt.icon] || FileText;
+          const isActive = rt.id === activeId;
           return (
             <button
               key={rt.id}
               onClick={() => { onSelect(rt); onClose(); }}
-              className="w-full text-left px-3 py-2.5 rounded-[8px] hover:bg-primary-xlight transition-colors cursor-pointer flex items-center gap-2.5"
+              aria-current={isActive || undefined}
+              className={`w-full text-left px-3 py-2.5 rounded-[8px] transition-colors cursor-pointer flex items-center gap-2.5 ${isActive ? 'bg-primary-xlight' : 'hover:bg-primary-xlight'}`}
             >
               <div className={`p-1.5 rounded-[8px] ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
                 <Icon size={12} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[12px] font-medium text-text truncate">{rt.name}</div>
+                <div className={`text-[12px] truncate ${isActive ? 'font-semibold text-primary' : 'font-medium text-text'}`}>{rt.name}</div>
                 <div className="text-[10px] text-text-muted">{rt.category}</div>
               </div>
+              {isActive && <Check size={14} className="shrink-0 text-primary" />}
             </button>
           );
         })}
@@ -750,14 +623,25 @@ function TemplateSectionRow({
   );
 }
 
-function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existingTemplateNames = [] }: { template: typeof REPORT_TEMPLATES[0]; onClose: () => void; isCopy?: boolean; onSaveCopy?: (copy: typeof REPORT_TEMPLATES[0]) => void; existingTemplateNames?: string[] }) {
+function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existingTemplateNames = [], initialName }: { template: typeof REPORT_TEMPLATES[0]; onClose: () => void; isCopy?: boolean; onSaveCopy?: (copy: typeof REPORT_TEMPLATES[0]) => void; existingTemplateNames?: string[]; initialName?: string }) {
   const { addToast } = useToast();
-  const [copyName, setCopyName] = useState(`Copy of ${template.name}`);
+  const [copyName, setCopyName] = useState(initialName ?? `Copy of ${template.name}`);
   const [brand, setBrand] = useState('Auditify');
   const [theme, setTheme] = useState('Purple & White');
   const [headerText, setHeaderText] = useState('Confidential — For Internal Use Only');
   const [footerText, setFooterText] = useState('Generated by Auditify Copilot');
   const [sections, setSections] = useState(template.sections || []);
+  const [newSectionName, setNewSectionName] = useState('');
+  const addSection = () => {
+    const name = newSectionName.trim();
+    if (!name) return;
+    if (sections.some(s => s.name.toLowerCase() === name.toLowerCase())) {
+      addToast({ type: 'error', message: `Section "${name}" already exists.` });
+      return;
+    }
+    setSections(prev => [...prev, { name, icon: 'file-text' }]);
+    setNewSectionName('');
+  };
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<{ field: 'copyName' | 'brand' | 'sections'; label: string }[]>([]);
   const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
@@ -770,7 +654,7 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
 
   // Initial state captured at mount for dirty-detection.
   const initialRef = useRef({
-    copyName: `Copy of ${template.name}`,
+    copyName: initialName ?? `Copy of ${template.name}`,
     brand: 'Auditify',
     theme: 'Purple & White',
     headerText: 'Confidential — For Internal Use Only',
@@ -961,6 +845,23 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
                     />
                   ))}
                 </Reorder.Group>
+                {/* Add section — required for from-scratch templates (save needs ≥1 section) */}
+                <div className="px-3 pb-3 flex items-center gap-2">
+                  <input
+                    value={newSectionName}
+                    onChange={e => setNewSectionName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSection(); } }}
+                    placeholder="Add a section…"
+                    className="flex-1 h-8 px-3 rounded-[8px] border border-border-light text-[12px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                  />
+                  <button
+                    onClick={addSection}
+                    disabled={!newSectionName.trim()}
+                    className="inline-flex items-center gap-1 h-8 px-3 text-[12px] font-semibold text-primary bg-white border border-border-light hover:border-primary/40 rounded-[8px] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Plus size={12} /> Add
+                  </button>
+                </div>
                 {/* Footer */}
                 <div className="px-4 py-2 bg-surface-2 flex items-center justify-center border-t border-border-light">
                   <span className="text-[10px] text-text-muted">{footerText}</span>
@@ -996,446 +897,6 @@ function TemplateEditor({ template, onClose, isCopy = false, onSaveCopy, existin
         destructive
       />
     </motion.div>
-  );
-}
-
-// ─── Template Layout Component — renders actual report layouts per template ───
-function TemplateLayout({ templateId, template, report }: { templateId: string; template: typeof REPORT_TEMPLATES[0]; report: typeof GENERATED_REPORTS[0] }) {
-  const sections = template.sections || [];
-
-  // SOX Compliance — Excel-style control testing table
-  if (templateId === 'rt-001') {
-    const controls = [
-      { id: 'CTR-001', name: 'Invoice Approval Workflow', process: 'P2P', type: 'Preventive', freq: 'Per Transaction', owner: 'Tushar Goel', result: 'Effective', exceptions: 0 },
-      { id: 'CTR-002', name: 'Three-Way PO Match', process: 'P2P', type: 'Detective', freq: 'Daily', owner: 'AP Module', result: 'Effective', exceptions: 2 },
-      { id: 'CTR-003', name: 'Vendor Master Change Approval', process: 'P2P', type: 'Preventive', freq: 'Per Change', owner: 'Deepak Bansal', result: 'Deficient', exceptions: 7 },
-      { id: 'CTR-004', name: 'Duplicate Invoice Detection', process: 'P2P', type: 'Detective', freq: 'Real-time', owner: 'AI Workflow', result: 'Effective', exceptions: 0 },
-      { id: 'CTR-005', name: 'Payment Batch Authorization', process: 'P2P', type: 'Preventive', freq: 'Per Batch', owner: 'Tushar Goel', result: 'Effective', exceptions: 1 },
-      { id: 'CTR-006', name: 'Revenue Recognition Cutoff', process: 'O2C', type: 'Detective', freq: 'Monthly', owner: 'Neha Joshi', result: 'Pending', exceptions: 0 },
-      { id: 'CTR-007', name: 'GL Reconciliation Review', process: 'R2R', type: 'Detective', freq: 'Monthly', owner: 'Karan Mehta', result: 'Effective', exceptions: 3 },
-      { id: 'CTR-008', name: 'Journal Entry Approval', process: 'R2R', type: 'Preventive', freq: 'Per Entry', owner: 'Sneha Desai', result: 'Deficient', exceptions: 7 },
-      { id: 'CTR-009', name: 'SOD Rule Enforcement', process: 'ALL', type: 'Preventive', freq: 'Continuous', owner: 'GRC Module', result: 'Effective', exceptions: 4 },
-      { id: 'CTR-010', name: 'Intercompany Elimination', process: 'R2R', type: 'Detective', freq: 'Quarterly', owner: 'Karan Mehta', result: 'Effective', exceptions: 0 },
-    ];
-    const resultColor = (r: string) => r === 'Effective' ? 'text-compliant-700 bg-compliant-50' : r === 'Deficient' ? 'text-risk-700 bg-risk-50' : 'text-mitigated-700 bg-mitigated-50';
-    return (
-      <div className="space-y-5">
-        {/* Section nav */}
-        <div className="flex gap-2 flex-wrap">
-          {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
-              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
-            </div>
-          ))}
-        </div>
-        {/* Executive Summary */}
-        <div className="bg-white rounded-[12px] border border-border-light p-5">
-          <h3 className="text-[13px] font-bold text-text mb-2 flex items-center gap-2"><FileText size={14} className="text-primary" /> Executive Summary</h3>
-          <p className="text-[12px] text-text-secondary leading-relaxed">FY26 Q1 SOX compliance audit covered 87 controls across 4 business processes (P2P, O2C, R2R, S2C). 54 controls tested to date with 89% effectiveness rate. 2 material weaknesses identified requiring remediation before March 31 deadline. Overall compliance score: 94.2% — improved from 91.8% prior quarter.</p>
-        </div>
-        {/* Control Testing Results — Excel-style */}
-        <div className="bg-white rounded-[12px] border border-border-light overflow-hidden">
-          <div className="px-5 py-3 border-b border-border-light flex items-center justify-between">
-            <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><CheckCircle2 size={14} className="text-primary" /> Control Testing Results</h3>
-            <span className="text-[10px] text-text-muted">{controls.length} controls · {report.generatedAt}</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-[11px]">
-              <thead>
-                <tr className="bg-paper-50 border-b border-border-light">
-                  {['Control ID', 'Control Name', 'Process', 'Type', 'Frequency', 'Owner', 'Result', 'Exceptions'].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-left font-semibold text-text-muted uppercase tracking-wider">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {controls.map((c, i) => (
-                  <tr key={c.id} className={`border-b border-border-light/60 hover:bg-primary/[0.015] transition-colors ${i % 2 === 0 ? '' : 'bg-paper-50/40'}`}>
-                    <td className="px-4 py-2.5 font-mono font-semibold text-primary">{c.id}</td>
-                    <td className="px-4 py-2.5 font-medium text-text">{c.name}</td>
-                    <td className="px-4 py-2.5 text-text-secondary">{c.process}</td>
-                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${c.type === 'Preventive' ? 'text-evidence-700 bg-evidence-50' : 'text-brand-700 bg-brand-50'}`}>{c.type}</span></td>
-                    <td className="px-4 py-2.5 text-text-secondary">{c.freq}</td>
-                    <td className="px-4 py-2.5 text-text-secondary">{c.owner}</td>
-                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${resultColor(c.result)}`}>{c.result}</span></td>
-                    <td className="px-4 py-2.5 text-center font-semibold">{c.exceptions > 0 ? <span className="text-risk-700">{c.exceptions}</span> : <span className="text-text-muted">—</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="px-5 py-3 border-t border-border-light bg-paper-50/50 flex items-center justify-between text-[10px] text-text-muted">
-            <span>Showing {controls.length} of 54 tested controls</span>
-            <span>8 Effective · 2 Deficient · 0 Pending</span>
-          </div>
-        </div>
-        {/* Deficiency Detail */}
-        <div className="bg-white rounded-[12px] border border-border-light p-5">
-          <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><AlertTriangle size={14} className="text-risk-700" /> Deficiency Analysis</h3>
-          <div className="grid grid-cols-2 gap-4">
-            {[
-              { id: 'DEF-001', control: 'CTR-003', title: 'Vendor Master Change — Missing Dual Approval', severity: 'Significant', status: 'In Remediation', due: 'Mar 31, 2026', owner: 'Deepak Bansal', desc: '7 vendor master changes processed without dual-approval. Includes 3 bank account modifications.' },
-              { id: 'DEF-002', control: 'CTR-008', title: 'Journal Entry Override — Approval Bypass', severity: 'Material Weakness', status: 'Evidence Submitted', due: 'Mar 31, 2026', owner: 'Rohan Patel', desc: '7 journal entries posted bypassing approval workflow. Total value: 12.4L. Root cause: system configuration gap.' },
-            ].map(d => (
-              <div key={d.id} className="rounded-[12px] border border-border-light p-4 hover:shadow-sm transition-shadow">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[10px] font-bold text-white px-2 py-0.5 rounded-[8px] bg-risk">{d.id}</span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${d.severity === 'Material Weakness' ? 'text-risk-700 bg-risk-50' : 'text-high-700 bg-high-50'}`}>{d.severity}</span>
-                  <span className="text-[10px] font-semibold text-evidence-700 bg-evidence-50 px-2 py-0.5 rounded-full">{d.status}</span>
-                </div>
-                <h4 className="text-[12px] font-semibold text-text mb-1">{d.title}</h4>
-                <p className="text-[11px] text-text-secondary leading-relaxed mb-2">{d.desc}</p>
-                <div className="flex items-center gap-3 text-[10px] text-text-muted">
-                  <span>Control: <span className="font-mono font-semibold text-primary">{d.control}</span></span>
-                  <span>Due: <span className="font-semibold">{d.due}</span></span>
-                  <span>Owner: {d.owner}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Risk Assessment — Risk matrix + risk register
-  if (templateId === 'rt-002') {
-    const risks = [
-      { id: 'RSK-001', name: 'Unauthorized vendor payments', process: 'P2P', likelihood: 3, impact: 4, controls: 3, status: 'Mitigated' },
-      { id: 'RSK-002', name: 'Revenue recognition errors', process: 'O2C', likelihood: 2, impact: 4, controls: 2, status: 'Mitigated' },
-      { id: 'RSK-003', name: 'Duplicate payments', process: 'P2P', likelihood: 4, impact: 3, controls: 3, status: 'Partial' },
-      { id: 'RSK-004', name: 'Fictitious vendor registration', process: 'P2P', likelihood: 3, impact: 5, controls: 0, status: 'Uncontrolled' },
-      { id: 'RSK-005', name: 'GL misstatement', process: 'R2R', likelihood: 2, impact: 5, controls: 4, status: 'Mitigated' },
-      { id: 'RSK-006', name: 'Inventory discrepancy', process: 'O2C', likelihood: 3, impact: 2, controls: 2, status: 'Mitigated' },
-      { id: 'RSK-007', name: 'Malware via vendor portals', process: 'P2P', likelihood: 2, impact: 5, controls: 0, status: 'Uncontrolled' },
-    ];
-    const riskColor = (l: number, i: number) => {
-      const score = l * i;
-      if (score >= 12) return 'bg-risk';
-      if (score >= 5) return 'bg-mitigated';
-      return 'bg-compliant';
-    };
-    return (
-      <div className="space-y-5">
-        <div className="flex gap-2 flex-wrap">
-          {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
-              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
-            </div>
-          ))}
-        </div>
-        {/* Risk Heatmap */}
-        <div className="bg-white rounded-[12px] border border-border-light p-5">
-          <h3 className="text-[13px] font-bold text-text mb-4 flex items-center gap-2"><Shield size={14} className="text-primary" /> Risk Matrix</h3>
-          <div className="flex gap-6">
-            <div className="flex-1">
-              <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2 text-center">Impact →</div>
-              <div className="grid grid-cols-5 gap-1">
-                {[5,4,3,2,1].map(likelihood => (
-                  [1,2,3,4,5].map(impact => {
-                    const risksInCell = risks.filter(r => r.likelihood === likelihood && r.impact === impact);
-                    return (
-                      <div key={`${likelihood}-${impact}`} className={`aspect-square rounded-[8px] flex items-center justify-center text-[12px] font-bold text-white ${riskColor(likelihood, impact)} ${risksInCell.length > 0 ? 'ring-2 ring-white shadow-md' : 'opacity-30'}`}>
-                        {risksInCell.length > 0 ? risksInCell.map(r => r.id.split('-')[1]).join(',') : ''}
-                      </div>
-                    );
-                  })
-                ))}
-              </div>
-              <div className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mt-1 -rotate-0">↑ Likelihood</div>
-            </div>
-            <div className="w-48">
-              <div className="text-[11px] font-semibold text-text mb-2">Legend</div>
-              <div className="space-y-1.5">
-                {[{ c: 'bg-risk', l: 'High (12-25)' }, { c: 'bg-mitigated', l: 'Medium (5-11)' }, { c: 'bg-compliant', l: 'Low (1-4)' }].map(item => (
-                  <div key={item.l} className="flex items-center gap-2 text-[11px] text-text-secondary"><div className={`w-3 h-3 rounded ${item.c}`} /> {item.l}</div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-        {/* Risk Register */}
-        <div className="bg-white rounded-[12px] border border-border-light overflow-hidden">
-          <div className="px-5 py-3 border-b border-border-light">
-            <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Risk Register</h3>
-          </div>
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="bg-paper-50 border-b border-border-light">
-                {['Risk ID', 'Description', 'Process', 'L', 'I', 'Score', 'Controls', 'Status'].map(h => (
-                  <th key={h} className="px-4 py-2.5 text-left font-semibold text-text-muted uppercase tracking-wider">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {risks.map((r, i) => (
-                <tr key={r.id} className={`border-b border-border-light/60 hover:bg-primary/[0.015] transition-colors ${i % 2 === 0 ? '' : 'bg-paper-50/40'}`}>
-                  <td className="px-4 py-2.5 font-mono font-semibold text-primary">{r.id}</td>
-                  <td className="px-4 py-2.5 font-medium text-text">{r.name}</td>
-                  <td className="px-4 py-2.5 text-text-secondary">{r.process}</td>
-                  <td className="px-4 py-2.5 text-center">{r.likelihood}</td>
-                  <td className="px-4 py-2.5 text-center">{r.impact}</td>
-                  <td className="px-4 py-2.5 text-center"><span className={`inline-flex w-6 h-6 items-center justify-center rounded-[8px] text-[10px] font-bold text-white ${riskColor(r.likelihood, r.impact)}`}>{r.likelihood * r.impact}</span></td>
-                  <td className="px-4 py-2.5 text-center font-semibold">{r.controls}</td>
-                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.status === 'Mitigated' ? 'text-compliant-700 bg-compliant-50' : r.status === 'Partial' ? 'text-mitigated-700 bg-mitigated-50' : 'text-risk-700 bg-risk-50'}`}>{r.status}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  }
-
-  // Control Effectiveness — Scorecard layout
-  if (templateId === 'rt-003') {
-    const processes = [
-      { name: 'P2P', total: 24, tested: 17, effective: 15, deficient: 2, rate: 88 },
-      { name: 'O2C', total: 18, tested: 8, effective: 7, deficient: 1, rate: 88 },
-      { name: 'R2R', total: 31, tested: 26, effective: 23, deficient: 3, rate: 88 },
-      { name: 'S2C', total: 14, tested: 3, effective: 3, deficient: 0, rate: 100 },
-    ];
-    return (
-      <div className="space-y-5">
-        <div className="flex gap-2 flex-wrap">
-          {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
-              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
-            </div>
-          ))}
-        </div>
-        {/* Effectiveness Scorecards */}
-        <div className="grid grid-cols-4 gap-3">
-          {processes.map(p => (
-            <div key={p.name} className="bg-white rounded-[12px] border border-border-light p-4 hover:shadow-primary/5 transition-all">
-              <div className="text-[11px] font-semibold text-text-muted mb-2">{p.name}</div>
-              <div className="text-[28px] font-bold text-text leading-none">{p.rate}%</div>
-              <div className="text-[10px] text-text-muted mt-1 mb-3">Effectiveness Rate</div>
-              {/* Progress bar */}
-              <div className="h-2 bg-paper-50 rounded-full overflow-hidden mb-2">
-                <motion.div initial={{ width: 0 }} animate={{ width: `${(p.tested / p.total) * 100}%` }} transition={{ delay: 0.3, duration: 0.6 }} className="h-full rounded-full bg-primary" />
-              </div>
-              <div className="flex justify-between text-[9px] text-text-muted">
-                <span>{p.tested}/{p.total} tested</span>
-                <span>{p.deficient} deficient</span>
-              </div>
-            </div>
-          ))}
-        </div>
-        {/* Gap Analysis Table */}
-        <div className="bg-white rounded-[12px] border border-border-light overflow-hidden">
-          <div className="px-5 py-3 border-b border-border-light">
-            <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Gap Analysis — Untested Controls</h3>
-          </div>
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="bg-paper-50 border-b border-border-light">
-                {['Process', 'Untested', 'Deadline', 'Priority', 'Assigned To'].map(h => (
-                  <th key={h} className="px-4 py-2.5 text-left font-semibold text-text-muted uppercase tracking-wider">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                { process: 'P2P', untested: 7, deadline: 'Mar 31', priority: 'High', assignee: 'Tushar Goel' },
-                { process: 'O2C', untested: 10, deadline: 'Mar 31', priority: 'High', assignee: 'Neha Joshi' },
-                { process: 'R2R', untested: 5, deadline: 'Mar 31', priority: 'Medium', assignee: 'Karan Mehta' },
-                { process: 'S2C', untested: 11, deadline: 'Jun 30', priority: 'Medium', assignee: 'Rohan Patel' },
-              ].map((g, i) => (
-                <tr key={g.process} className={`border-b border-border-light/60 hover:bg-primary/[0.015] transition-colors ${i % 2 === 0 ? '' : 'bg-paper-50/40'}`}>
-                  <td className="px-4 py-2.5 font-semibold text-text">{g.process}</td>
-                  <td className="px-4 py-2.5 font-bold text-risk-700">{g.untested}</td>
-                  <td className="px-4 py-2.5 text-text-secondary">{g.deadline}</td>
-                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${g.priority === 'High' ? 'text-risk-700 bg-risk-50' : 'text-mitigated-700 bg-mitigated-50'}`}>{g.priority}</span></td>
-                  <td className="px-4 py-2.5 text-text-secondary">{g.assignee}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {/* Improvement Plan */}
-        <div className="bg-white rounded-[12px] border border-border-light p-5">
-          <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><TrendingUp size={14} className="text-primary" /> Improvement Plan</h3>
-          <div className="space-y-2">
-            {['Automate 5 manual detective controls in P2P — target: 98% effectiveness', 'Accelerate S2C control testing — hire 1 contractor for April-June sprint', 'Deploy AI anomaly detection on R2R reconciliation — reduce deficiency rate by 50%', 'Implement continuous monitoring for all preventive controls by Q2'].map((item, i) => (
-              <div key={i} className="flex items-start gap-2.5 px-3 py-2 bg-primary/[0.02] rounded-[8px]">
-                <span className="text-[9px] font-bold text-primary bg-primary/10 w-5 h-5 rounded-[8px] flex items-center justify-center shrink-0">{i + 1}</span>
-                <span className="text-[11px] text-text-secondary leading-relaxed">{item}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Workflow Analytics — Dashboard-style with charts
-  if (templateId === 'rt-004') {
-    const workflows = [
-      { name: 'Duplicate Invoice Detector', runs: 45, accuracy: 96, savings: '2.4L', trend: [82, 88, 91, 94, 96] },
-      { name: 'Three-Way PO Match', runs: 28, accuracy: 87, savings: '1.1L', trend: [78, 80, 83, 85, 87] },
-      { name: 'Vendor Master Monitor', runs: 24, accuracy: 98, savings: '0.8L', trend: [92, 94, 95, 97, 98] },
-      { name: 'SOD Violation Detector', runs: 18, accuracy: 94, savings: '0.5L', trend: [88, 90, 91, 93, 94] },
-    ];
-    return (
-      <div className="space-y-5">
-        <div className="flex gap-2 flex-wrap">
-          {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
-              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
-            </div>
-          ))}
-        </div>
-        {/* Workflow Performance Cards */}
-        <div className="grid grid-cols-2 gap-3">
-          {workflows.map(w => (
-            <div key={w.name} className="bg-white rounded-[12px] border border-border-light p-4 hover:shadow-primary/5 transition-all">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-[12px] font-semibold text-text">{w.name}</h4>
-                <span className="text-[10px] font-bold text-compliant-700 bg-compliant-50 px-2 py-0.5 rounded-full">{w.accuracy}% accuracy</span>
-              </div>
-              <div className="flex items-end gap-4 mb-3">
-                <div>
-                  <div className="text-[20px] font-bold text-text">{w.runs}</div>
-                  <div className="text-[9px] text-text-muted uppercase">Runs</div>
-                </div>
-                <div>
-                  <div className="text-[20px] font-bold text-compliant-700">{w.savings}</div>
-                  <div className="text-[9px] text-text-muted uppercase">Saved</div>
-                </div>
-                <div className="flex-1">
-                  <svg width="100%" height="28" viewBox="0 0 100 28" preserveAspectRatio="none">
-                    <polyline points={w.trend.map((v, i) => `${i * 25},${28 - ((v - 75) / 25) * 28}`).join(' ')} fill="none" stroke="#6a12cd" strokeWidth="1.5" strokeLinecap="round" />
-                    <polyline points={`0,28 ${w.trend.map((v, i) => `${i * 25},${28 - ((v - 75) / 25) * 28}`).join(' ')} 100,28`} fill="rgba(106,18,205,0.06)" stroke="none" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-        {/* Exception Breakdown */}
-        <div className="bg-white rounded-[12px] border border-border-light overflow-hidden">
-          <div className="px-5 py-3 border-b border-border-light">
-            <h3 className="text-[13px] font-bold text-text flex items-center gap-2"><AlertTriangle size={14} className="text-high-700" /> Exception Breakdown</h3>
-          </div>
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="bg-paper-50 border-b border-border-light">
-                {['Exception', 'Workflow', 'Type', 'Resolution', 'Time', 'Status'].map(h => (
-                  <th key={h} className="px-4 py-2.5 text-left font-semibold text-text-muted uppercase tracking-wider">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                { id: 'EXC-001', workflow: 'Duplicate Detector', type: 'High-value match', resolution: 'Auto-resolved', time: '0.5h', status: 'Closed' },
-                { id: 'EXC-002', workflow: 'PO Match', type: 'Variance > 5%', resolution: 'Manual review', time: '4.2h', status: 'Closed' },
-                { id: 'EXC-003', workflow: 'Vendor Monitor', type: 'Bank account change', resolution: 'Escalated', time: '12h', status: 'Open' },
-                { id: 'EXC-004', workflow: 'SOD Detector', type: 'Critical SOD', resolution: 'Under review', time: '—', status: 'Open' },
-                { id: 'EXC-005', workflow: 'Duplicate Detector', type: 'Cross-vendor match', resolution: 'Auto-resolved', time: '0.3h', status: 'Closed' },
-              ].map((e, i) => (
-                <tr key={e.id} className={`border-b border-border-light/60 hover:bg-primary/[0.015] transition-colors ${i % 2 === 0 ? '' : 'bg-paper-50/40'}`}>
-                  <td className="px-4 py-2.5 font-mono font-semibold text-primary">{e.id}</td>
-                  <td className="px-4 py-2.5 text-text">{e.workflow}</td>
-                  <td className="px-4 py-2.5 text-text-secondary">{e.type}</td>
-                  <td className="px-4 py-2.5 text-text-secondary">{e.resolution}</td>
-                  <td className="px-4 py-2.5 text-text-secondary">{e.time}</td>
-                  <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${e.status === 'Closed' ? 'text-compliant-700 bg-compliant-50' : 'text-mitigated-700 bg-mitigated-50'}`}>{e.status}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  }
-
-  // Executive Dashboard — Board-ready KPI summary
-  if (templateId === 'rt-006') {
-    return (
-      <div className="space-y-5">
-        <div className="flex gap-2 flex-wrap">
-          {sections.map((s, i) => (
-            <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
-              <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
-            </div>
-          ))}
-        </div>
-        {/* Key Metrics */}
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Compliance Score', value: '94.2%', delta: '+2.4%', sub: 'vs prior quarter', color: 'text-primary' },
-            { label: 'Controls Effective', value: '48/54', delta: '89%', sub: 'effectiveness rate', color: 'text-compliant-700' },
-            { label: 'Audit Progress', value: '58%', delta: 'On track', sub: '54 of 87 controls tested', color: 'text-evidence-700' },
-          ].map(m => (
-            <div key={m.label} className="bg-white rounded-[12px] border border-border-light p-5 text-center">
-              <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2">{m.label}</div>
-              <div className={`text-[32px] font-bold leading-none ${m.color}`}>{m.value}</div>
-              <div className="text-[11px] font-semibold text-compliant-700 mt-1">{m.delta}</div>
-              <div className="text-[10px] text-text-muted">{m.sub}</div>
-            </div>
-          ))}
-        </div>
-        {/* Process Breakdown */}
-        <div className="bg-white rounded-[12px] border border-border-light p-5">
-          <h3 className="text-[13px] font-bold text-text mb-4 flex items-center gap-2"><BarChart3 size={14} className="text-primary" /> Process Performance</h3>
-          <div className="space-y-3">
-            {[
-              { name: 'P2P — Procure to Pay', progress: 72, controls: '17/24', risk: 'High' },
-              { name: 'O2C — Order to Cash', progress: 44, controls: '8/18', risk: 'Medium' },
-              { name: 'R2R — Record to Report', progress: 85, controls: '26/31', risk: 'Low' },
-              { name: 'S2C — Source to Contract', progress: 21, controls: '3/14', risk: 'Medium' },
-            ].map(p => (
-              <div key={p.name} className="flex items-center gap-4">
-                <div className="w-48 text-[11px] font-medium text-text">{p.name}</div>
-                <div className="flex-1 h-3 bg-paper-50 rounded-full overflow-hidden">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${p.progress}%` }} transition={{ delay: 0.2, duration: 0.6 }} className="h-full rounded-full bg-primary" />
-                </div>
-                <span className="text-[11px] font-bold text-text w-10 text-right">{p.progress}%</span>
-                <span className="text-[10px] text-text-muted w-12">{p.controls}</span>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.risk === 'High' ? 'text-risk-700 bg-risk-50' : p.risk === 'Medium' ? 'text-mitigated-700 bg-mitigated-50' : 'text-compliant-700 bg-compliant-50'}`}>{p.risk}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        {/* Strategic Recommendations */}
-        <div className="bg-white rounded-[12px] border border-border-light p-5">
-          <h3 className="text-[13px] font-bold text-text mb-3 flex items-center gap-2"><Sparkles size={14} className="text-primary" /> Strategic Recommendations</h3>
-          <div className="space-y-2">
-            {['Approve additional AI workflow investment for S2C process — projected 3x ROI based on P2P results', 'Remediate DEF-002 (journal entry override) before March 31 — material weakness impacting filing', 'Reallocate Tushar Goel from P2P to S2C support in April — P2P is 72% complete, S2C needs acceleration', 'Expand vendor master monitoring to O2C process — similar risk profile to P2P where it saved 2.4L'].map((rec, i) => (
-              <div key={i} className="flex items-start gap-2.5 px-3 py-2.5 bg-primary/[0.02] rounded-[8px] border border-primary/5">
-                <span className="text-[9px] font-bold text-white bg-primary w-5 h-5 rounded-[8px] flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-                <span className="text-[11px] text-text leading-relaxed">{rec}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Default/fallback — just show sections with placeholder
-  return (
-    <div className="space-y-5">
-      <div className="flex gap-2 flex-wrap">
-        {sections.map((s, i) => (
-          <div key={s.name} className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[8px] border border-border-light text-[11px] font-medium text-text-secondary shadow-sm">
-            <span className="text-[9px] font-bold text-primary/50">{i + 1}</span> {s.name}
-          </div>
-        ))}
-      </div>
-      {sections.map((s) => {
-        const SIcon = SECTION_ICONS[s.icon] || FileText;
-        return (
-          <div key={s.name} className="bg-white rounded-[12px] border border-border-light p-5">
-            <h3 className="text-[13px] font-bold text-text mb-2 flex items-center gap-2"><SIcon size={14} className="text-primary" /> {s.name}</h3>
-            <div className="h-16 bg-paper-50 rounded-[12px] flex items-center justify-center text-[11px] text-text-muted border border-dashed border-border-light">
-              Section content generated from {report.name} data
-            </div>
-          </div>
-        );
-      })}
-    </div>
   );
 }
 
@@ -3831,7 +3292,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
 }
 
 // ─── Report View (with multiple queries) ───
-function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, initialTemplate, customTemplates = [], onAddQuery, onRemoveQuery, onUpdateDescription }: {
+function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, initialTemplate, customTemplates = [], onAddQuery, onRemoveQuery, onUpdateDescription, onSaveAsTemplate }: {
   report: GeneratedReport;
   onAddQuery: (reportId: string, query: AttachedQuery) => void;
   onRemoveQuery: (reportId: string, queryId: string) => void;
@@ -3842,6 +3303,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   initialTemplate?: typeof REPORT_TEMPLATES[0] | null;
   customTemplates?: typeof REPORT_TEMPLATES[number][];
   onUpdateDescription?: (reportId: string, description: string) => void;
+  onSaveAsTemplate?: (t: typeof REPORT_TEMPLATES[number]) => void;
 }) {
   const { addToast } = useToast();
   const { can } = useCan();
@@ -3888,9 +3350,14 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
     applyTemplateNow(template);
   };
 
+  // Resolve the template this report was generated from — used to show the
+  // Apply Template control as active. Falls back to the seed constant so a
+  // report made from a custom template still names it even after that template
+  // is removed from the user's active list.
   const reportTemplate =
     REPORT_TEMPLATES.find(t => t.id === report.templateId) ??
     customTemplates.find(t => t.id === report.templateId) ??
+    CUSTOM_TEMPLATES.find(t => t.id === report.templateId) ??
     null;
 
   const displayDescription = report.description ?? reportTemplate?.desc ?? '';
@@ -4156,9 +3623,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         id: 'sec-summary',
         kind: 'summary',
         title: 'Executive Summary',
-        content: isBulkAudit
+        content: report.execSummary ?? (isBulkAudit
           ? `Bulk audit ran ${reportWorkflows.length} ${reportWorkflows.length === 1 ? 'workflow' : 'workflows'} across the supplied datasets. Flagged records have been grouped by severity for review; high-severity items should be triaged first.`
-          : 'FY26 Q1 SOX compliance audit covered 87 controls across 4 business processes (P2P, O2C, R2R, S2C). 54 controls tested to date with 89% effectiveness rate. 2 material weaknesses identified requiring remediation before March 31 deadline. Overall compliance score: 94.2% — improved from 91.8% prior quarter.',
+          : 'FY26 Q1 SOX compliance audit covered 87 controls across 4 business processes (P2P, O2C, R2R, S2C). 54 controls tested to date with 89% effectiveness rate. 2 material weaknesses identified requiring remediation before March 31 deadline. Overall compliance score: 94.2% — improved from 91.8% prior quarter.'),
       },
     ];
     if (isBulkAudit) {
@@ -4172,18 +3639,46 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
         })),
       ];
     }
-    return [
-      ...head,
-      ...queries.map(q => ({
-        id: `sec-query-${q.id}`,
-        kind: 'query' as const,
-        title: `Query · ${q.id}`,
-        query: q,
-      })),
-    ];
+    const queryBlocks: SectionItem[] = queries.map(q => ({
+      id: `sec-query-${q.id}`,
+      kind: 'query' as const,
+      title: `Query · ${q.id}`,
+      query: q,
+    }));
+
+    // Wizard-generated reports bake the template's advertised sections into
+    // the block stream as editable note blocks, so the generated report
+    // delivers the structure the template card promises. The "anchor" section
+    // (queries / testing results) heads the query body; sections before it
+    // render above the queries, the rest below.
+    const tmpl = report.generatedQueries?.length ? (report.templateSections ?? []) : [];
+    if (tmpl.length > 0) {
+      const anchorIdx = tmpl.findIndex(s => /quer(y|ies)|testing results|findings/i.test(s.name));
+      const pre: SectionItem[] = [];
+      const post: SectionItem[] = [];
+      tmpl.forEach((s, i) => {
+        if (/executive summary/i.test(s.name)) return; // covered by the summary block
+        const block: SectionItem = {
+          id: `sec-tmpl-${i}`,
+          kind: 'note',
+          title: s.name,
+          content: composeSectionContent(s.name, queries),
+        };
+        if (i === anchorIdx || (anchorIdx !== -1 && i < anchorIdx)) pre.push(block);
+        else post.push(block);
+      });
+      return [...head, ...pre, ...queryBlocks, ...post];
+    }
+
+    return [...head, ...queryBlocks];
   };
 
-  const [sections, setSections] = useState<SectionItem[]>(() => buildInitialSections(DEFAULT_QUERIES));
+  // Wizard-generated reports carry their own query blocks; demo reports keep
+  // the seeded defaults. Absent field = pre-wizard behavior, untouched.
+  const seededQueries: typeof DEFAULT_QUERIES = report.generatedQueries?.length
+    ? report.generatedQueries
+    : DEFAULT_QUERIES;
+  const [sections, setSections] = useState<SectionItem[]>(() => buildInitialSections(seededQueries));
   const appliedTemplateId = appliedTemplate?.id ?? null;
 
   // Regenerate summary mock — overrides the summary section's content with an
@@ -4195,7 +3690,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   useEffect(() => {
     const queries = appliedTemplateId && TEMPLATE_QUERIES[appliedTemplateId]
       ? TEMPLATE_QUERIES[appliedTemplateId]
-      : DEFAULT_QUERIES;
+      : seededQueries;
     setSections(buildInitialSections(queries));
     setSummaryOverride(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4212,6 +3707,28 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
 
   const removeSection = (id: string) => {
     setSections(prev => prev.filter(s => s.id !== id));
+  };
+
+  // Capture the report's current block stream as a reusable custom template.
+  // Cover is implicit on every report, so it isn't stored as a section.
+  const handleSaveAsTemplate = () => {
+    const sectionDefs = sections
+      .filter(s => s.kind !== 'cover')
+      .map(s => ({
+        name: s.title,
+        icon: s.kind === 'query' ? 'check-circle'
+          : s.kind === 'stats' || s.kind === 'workflow' ? 'bar-chart'
+          : s.kind === 'observation' ? 'alert-triangle'
+          : 'file-text',
+      }));
+    onSaveAsTemplate?.({
+      id: `ct-report-${Date.now()}`,
+      name: `${report.name} Template`,
+      desc: `Captured from "${report.name}" — ${sectionDefs.length} ${sectionDefs.length === 1 ? 'section' : 'sections'}.`,
+      category: 'Custom',
+      icon: 'file-text',
+      sections: sectionDefs,
+    } as typeof REPORT_TEMPLATES[number]);
   };
 
   // ─── Add-Observation modal state ───
@@ -4424,6 +3941,11 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   const isReadOnly = report.isReadOnly === true || report.tag === 'Shared';
   const sharedByName = report.sharedByName ?? (report as { sharedBy?: string }).sharedBy;
 
+  // ATR-style section numbering — position in the stream, cover excluded.
+  // Reordering renumbers, like a real document.
+  const sectionNumber = (id: string) =>
+    sections.filter(s => s.kind !== 'cover').findIndex(s => s.id === id) + 1;
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
@@ -4431,7 +3953,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
       transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
       className="report-printable h-full overflow-y-auto bg-surface-2"
     >
-      <div className="mx-auto px-8 py-6 max-w-6xl flex-col md:flex-row">
+      <div className="px-[124px] py-8 flex-col md:flex-row">
         {/* Top bar */}
         <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
           <div className="flex items-center gap-3 flex-wrap">
@@ -4455,7 +3977,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
                 >
                   <Layout size={14} />
-                  <span className="truncate max-w-[220px]">{appliedTemplate?.name ?? 'Apply Template'}</span>
+                  <span className="truncate max-w-[220px]">{appliedTemplate?.name ?? reportTemplate?.name ?? 'Apply Template'}</span>
                   <motion.span
                     animate={{ rotate: showApplyTemplate ? 180 : 0 }}
                     transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
@@ -4469,6 +3991,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setShowApplyTemplate(false)} />
                       <ApplyTemplateDropdown
+                        templates={mergeTemplateOptions(REPORT_TEMPLATES, customTemplates, [reportTemplate])}
+                        activeId={appliedTemplate?.id ?? reportTemplate?.id ?? null}
                         onSelect={handleApplyTemplate}
                         onClose={() => setShowApplyTemplate(false)}
                       />
@@ -4488,6 +4012,15 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
             >
               <Download size={14} /> Download
             </button>
+            {!isReadOnly && !report.isEmpty && onSaveAsTemplate && (
+              <button
+                onClick={handleSaveAsTemplate}
+                title="Save this report's structure as a custom template"
+                className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-[8px]"
+              >
+                <BookOpen size={14} /> Save as template
+              </button>
+            )}
           </div>
         </div>
 
@@ -4553,57 +4086,63 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
 
         {report.isEmpty ? (
           <>
-            {/* Empty-state Cover — same chrome, simpler body */}
-            <div className="relative rounded-[12px] overflow-hidden mb-5 bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
-              <div className="relative z-10 px-8 py-7">
-                <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
+            {/* Empty-state Cover — ATR-style banner, simpler body */}
+            <div className="rounded-[12px] overflow-hidden mb-5 border border-border-light bg-white">
+              <ReportBrandBanner
+                title={report.name}
+                actions={!isReadOnly && (
+                  <>
+                    {isAtrReport && (
+                      <button
+                        onClick={() => setUploadReportOpen(true)}
+                        className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-white bg-white/15 border border-white/30 rounded-[8px] hover:bg-white/25 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
+                      >
+                        <Upload size={14} />
+                        Upload Report
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setAddQueryOpen(true)}
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-primary bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                    >
+                      <Plus size={14} />
+                      Add Query
+                    </button>
+                  </>
+                )}
+              >
                 {reportTemplate && (
                   <p className="text-white/60 text-[13px] mb-3">{reportTemplate.desc}</p>
                 )}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-[13px]">
-                    <span className="font-semibold text-white">{report.generatedBy}</span>
-                    <span className="text-white/30 mx-0.5">|</span>
-                    <span className="text-white/70">{report.generatedAt}</span>
-                    <span className="text-white/30 mx-0.5">|</span>
-                    <span className="text-white/70">{reportTemplate?.sections.length ?? 0} {reportTemplate?.sections.length === 1 ? 'section' : 'sections'}</span>
-                    {report.tag && (() => {
-                      const TagIcon = report.tag === 'Internal Audit' ? Shield : report.tag === 'Bulk Audit' ? Layers : Share2;
-                      return (
-                        <span
-                          className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-[8px]"
-                          style={{
-                            background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
-                            color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
-                          }}
-                        >
-                          <TagIcon size={12} aria-hidden="true" />
-                          {report.tag}
-                        </span>
-                      );
-                    })()}
-                  </div>
-                  {!isReadOnly && (
-                    <div className="flex items-center gap-2">
-                      {isAtrReport && (
-                        <button
-                          onClick={() => setUploadReportOpen(true)}
-                          className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-white bg-white/15 border border-white/30 rounded-[8px] hover:bg-white/25 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
-                        >
-                          <Upload size={14} />
-                          Upload Report
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setAddQueryOpen(true)}
-                        className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-primary bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                <div className="flex items-center gap-2 text-[13px] flex-wrap">
+                  <span className="font-semibold text-white">{report.generatedBy}</span>
+                  <span className="text-white/30 mx-0.5">|</span>
+                  <span className="text-white/70">{report.generatedAt}</span>
+                  <span className="text-white/30 mx-0.5">|</span>
+                  <span className="text-white/70">{reportTemplate?.sections.length ?? 0} {reportTemplate?.sections.length === 1 ? 'section' : 'sections'}</span>
+                  {report.tag && (() => {
+                    const TagIcon = report.tag === 'Internal Audit' ? Shield : report.tag === 'Bulk Audit' ? Layers : Share2;
+                    return (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-[8px]"
+                        style={{
+                          background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
+                          color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
+                        }}
                       >
-                        <Plus size={14} />
-                        Add Query
-                      </button>
-                    </div>
-                  )}
+                        <TagIcon size={12} aria-hidden="true" />
+                        {report.tag}
+                      </span>
+                    );
+                  })()}
                 </div>
+              </ReportBrandBanner>
+              <div className="px-9 py-6 grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
+                <ReportMetaCell label="Report ID" value={report.id?.toUpperCase()} />
+                <ReportMetaCell label="Template" value={reportTemplate?.name} />
+                <ReportMetaCell label="Report Type" value={report.tag ?? 'Internal Audit'} />
+                <ReportMetaCell label="Prepared By" value={report.generatedBy} />
+                <ReportMetaCell label="Generated On" value={report.generatedAt} />
               </div>
             </div>
 
@@ -4615,6 +4154,23 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
               const attached = report.attachedQueries ?? [];
               const queriesSectionIndex = sections.findIndex(s => /quer(y|ies)/i.test(s.name));
               const hasQueriesSection = queriesSectionIndex !== -1;
+
+              // Resolve attached saved queries to their rich content (same
+              // label→key lookup AttachedQueryCard uses) so the surrounding
+              // sections can compose real content instead of placeholders.
+              // Recomputes on every attach/remove since attachedQueries flows
+              // through props.
+              const seenKeys = new Set<string>();
+              const attachedDefs = attached
+                .filter(q => q.kind === 'query')
+                .map(q => QUERY_LABEL_TO_KEY[q.label])
+                .filter((k): k is keyof typeof REPORT_QUERIES_ATR => Boolean(k) && !seenKeys.has(k) && Boolean(seenKeys.add(k)))
+                .map(k => defForKey(k))
+                .filter((d): d is GeneratedQueryDef => d !== null);
+              const execText = attachedDefs.length > 0
+                ? composeExecSummary(reportTemplate?.name ?? report.name, attachedDefs)
+                : null;
+              const recBullets = attachedDefs.flatMap(d => d.observations).slice(0, 6);
 
               return (
                 <div className="space-y-4">
@@ -4664,13 +4220,37 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                           <Icon size={16} className="text-primary" />
                           <h3 className="text-[14px] font-bold text-text tracking-tight">{section.name}</h3>
                         </div>
-                        <div className="border border-dashed border-border-light rounded-[12px] bg-paper-50/40 px-6 py-7 text-center">
-                          <p className="text-[12px] text-text-muted/80">
-                            {attached.length > 0
-                              ? `${section.name} will be generated from your attached queries.`
-                              : `Section content generated from ${report.name} data`}
-                          </p>
-                        </div>
+                        {/* Composed from attached queries where the section maps to
+                            query content; dashed placeholder otherwise. */}
+                        {/executive summary/i.test(section.name) && execText ? (
+                          <p className="text-[13px] text-text-secondary leading-relaxed">{execText}</p>
+                        ) : /recommendation|insight/i.test(section.name) && recBullets.length > 0 ? (
+                          <ul className="space-y-2">
+                            {recBullets.map((b, bi) => (
+                              <li key={bi} className="flex gap-2.5 text-[13px] text-text-secondary leading-relaxed">
+                                <span className="text-primary mt-px shrink-0">•</span>
+                                <span>{b}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : /appendix/i.test(section.name) && attached.length > 0 ? (
+                          <ul className="space-y-1.5">
+                            {attached.map(q => (
+                              <li key={q.id} className="flex items-baseline gap-2 text-[12.5px] text-text-secondary">
+                                <span className="font-medium text-text">{q.label}</span>
+                                <span className="text-[11px] text-text-muted">Attached {q.attachedAt} by {q.attachedBy}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="border border-dashed border-border-light rounded-[12px] bg-paper-50/40 px-6 py-7 text-center">
+                            <p className="text-[12px] text-text-muted/80">
+                              {attached.length > 0
+                                ? `${section.name} will be generated from your attached queries.`
+                                : `Section content generated from ${report.name} data`}
+                            </p>
+                          </div>
+                        )}
                       </motion.section>
                     );
                   })}
@@ -4708,41 +4288,16 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
           </>
         ) : appliedTemplate ? (
           <>
-            {/* Report Cover */}
-            <div className="relative rounded-[12px] overflow-hidden mb-5 bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
-              <div className="absolute inset-0 z-0" style={{ maskImage: 'linear-gradient(to right, transparent 35%, white 70%)', WebkitMaskImage: 'linear-gradient(to right, transparent 35%, white 70%)' }}>
-                <FloatingLines
-                  enabledWaves={['top', 'middle']}
-                  lineCount={6}
-                  lineDistance={6}
-                  bendRadius={4}
-                  bendStrength={-0.3}
-                  interactive={true}
-                  parallax={false}
-                  color="#e879f9"
-                  opacity={0.3}
-                />
-              </div>
-              <div className="relative z-10 px-8 py-7">
-                <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
-                <EditableDescription />
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-[13px]">
-                    <span className="font-semibold text-white">{report.generatedBy}</span>
-                    <span className="text-white/30 mx-0.5">|</span>
-                    <span className="text-white/70">{report.generatedAt}</span>
-                    <span className="text-white/30 mx-0.5">|</span>
-                    <span className="text-white/70">{activeQueries.length} {activeQueries.length === 1 ? 'query' : 'queries'}</span>
-                    {/* When a template is applied, show only the applied-template chip — the default report.tag chip is hidden to avoid duplicate badges. */}
-                    <span className="inline-flex items-center h-6 px-2.5 ml-1 text-[11px] font-medium text-white bg-white/15 border border-white/25 rounded-full whitespace-nowrap">
-                      {appliedTemplate.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
+            {/* Report Cover — ATR-style banner with attached metadata grid */}
+            <div className="rounded-[12px] overflow-hidden mb-5 border border-border-light bg-white">
+              <ReportBrandBanner
+                title={report.name}
+                actions={
+                  <>
                     <button
                       onClick={() => setAtrModalOpen(true)}
                       title="Generate Action Taken Report"
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-primary bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-primary bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
                     >
                       <FileText size={14} />
                       Generate ATR
@@ -4755,8 +4310,29 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     >
                       <History size={16} />
                     </button>
-                  </div>
+                  </>
+                }
+              >
+                <EditableDescription />
+                <div className="flex items-center gap-2 text-[13px] flex-wrap">
+                  <span className="font-semibold text-white">{report.generatedBy}</span>
+                  <span className="text-white/30 mx-0.5">|</span>
+                  <span className="text-white/70">{report.generatedAt}</span>
+                  <span className="text-white/30 mx-0.5">|</span>
+                  <span className="text-white/70">{activeQueries.length} {activeQueries.length === 1 ? 'query' : 'queries'}</span>
+                  {/* When a template is applied, show only the applied-template chip — the default report.tag chip is hidden to avoid duplicate badges. */}
+                  <span className="inline-flex items-center h-6 px-2.5 ml-1 text-[11px] font-medium text-white bg-white/15 border border-white/25 rounded-full whitespace-nowrap">
+                    {appliedTemplate.name}
+                  </span>
                 </div>
+              </ReportBrandBanner>
+              <div className="px-9 py-6 grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
+                <ReportMetaCell label="Report ID" value={report.id?.toUpperCase()} />
+                <ReportMetaCell label="Template" value={appliedTemplate.name} />
+                <ReportMetaCell label="Scope" value={`${activeQueries.length} ${activeQueries.length === 1 ? 'query' : 'queries'}`} />
+                <ReportMetaCell label="Prepared By" value={report.generatedBy} />
+                <ReportMetaCell label="Generated On" value={report.generatedAt} />
+                <ReportMetaCell label="Report Type" value={report.tag ?? 'Internal Audit'} />
               </div>
             </div>
 
@@ -4820,22 +4396,51 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
               </div>
             )}
 
-            {/* Summary Stats Bar */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-              {activeStats.map(stat => (
-                <div key={stat.label} className="glass-card rounded-[12px] p-4 flex items-center gap-3 hover:shadow-md hover:shadow-primary/5 transition-all">
-                  <div className={`p-2 rounded-[8px] ${stat.color}`}><stat.icon size={16} /></div>
-                  <div>
-                    <div className="text-xl font-bold text-text">{stat.value}</div>
-                    <div className="text-[10px] text-text-muted tracking-wide">{stat.label}</div>
-                  </div>
-                </div>
-              ))}
+            {/* Summary Stats Bar — ATR-style KPI tiles */}
+            <div className="mb-5">
+              <ReportKpiTiles stats={activeStats} />
             </div>
 
             <AnimatePresence mode="wait">
               <motion.div key={appliedTemplate.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                <TemplateLayout templateId={appliedTemplate.id} template={appliedTemplate} report={report} />
+                {/* Template body — same engine as wizard-generated reports:
+                    section cards with composed starter prose, real QueryCards
+                    slotted at the anchor section. Replaces the retired
+                    hardcoded TemplateLayout fakes. */}
+                {(() => {
+                  const tmplSections = appliedTemplate.sections ?? [];
+                  const anchorIdx = tmplSections.findIndex(s => /quer(y|ies)|testing results|findings/i.test(s.name));
+                  const queryBlocks = (
+                    <div className="space-y-4">
+                      {activeQueries.map((q, qi) => (
+                        <QueryCard key={q.id} query={q} index={qi} onOpenQuery={onOpenQuery} />
+                      ))}
+                    </div>
+                  );
+                  if (tmplSections.length === 0) return queryBlocks;
+                  return (
+                    <div className="space-y-4">
+                      {tmplSections.map((s, i) => {
+                        const Icon = SECTION_ICONS[s.icon] || FileText;
+                        const isExec = /executive summary/i.test(s.name);
+                        const content = isExec
+                          ? composeExecSummary(appliedTemplate.name, activeQueries)
+                          : composeSectionContent(s.name, activeQueries);
+                        return (
+                          <div key={`${s.name}-${i}`} className="space-y-4">
+                            <div className="bg-white rounded-[12px] border border-border-light p-5">
+                              <h3 className="text-[13px] font-bold text-text mb-2 flex items-center gap-2">
+                                <Icon size={14} className="text-primary" /> {s.name}
+                              </h3>
+                              <p className="text-[12.5px] text-text-secondary leading-relaxed">{content}</p>
+                            </div>
+                            {(i === anchorIdx || (anchorIdx === -1 && i === tmplSections.length - 1)) && queryBlocks}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </motion.div>
             </AnimatePresence>
 
@@ -4861,7 +4466,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
           <div className="w-full">
             {/* Sections rendered as a continuous report (drag-to-reorder enabled for query cards) */}
             <main className="min-w-0">
-              <Reorder.Group axis="y" values={sections} onReorder={setSections} as="div" className="list-none p-0 m-0 [&>*:last-child>*]:rounded-b-2xl">
+              <Reorder.Group axis="y" values={sections} onReorder={setSections} as="div" className="list-none p-0 m-0 [&>*:last-child>*]:rounded-b-[12px]">
                 {sections.map((section, i) => {
                   const sectionProps = {
                     key: section.id,
@@ -4877,73 +4482,64 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   };
 
                   if (section.kind === 'cover') {
+                    const scopeLabel = isBulkAudit
+                      ? (() => { const n = sections.filter(s => s.kind === 'workflow').length; return `${n} ${n === 1 ? 'workflow' : 'workflows'}`; })()
+                      : (() => { const n = sections.filter(s => s.kind === 'query').length; return `${n} ${n === 1 ? 'query' : 'queries'}`; })();
                     return [
                       <Reorder.Item {...sectionProps} key={`${section.id}-item`}>
-                        <div className="relative rounded-t-2xl overflow-hidden bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
-                          <div className="absolute inset-0 z-0" style={{ maskImage: 'linear-gradient(to right, transparent 35%, white 70%)', WebkitMaskImage: 'linear-gradient(to right, transparent 35%, white 70%)' }}>
-                            <FloatingLines
-                              enabledWaves={['top', 'middle']}
-                              lineCount={6}
-                              lineDistance={6}
-                              bendRadius={4}
-                              bendStrength={-0.3}
-                              interactive={true}
-                              parallax={false}
-                              color="#e879f9"
-                              opacity={0.3}
-                            />
+                        <ReportBrandBanner
+                          title={report.name}
+                          className="rounded-t-[12px]"
+                          actions={
+                            <>
+                              <button
+                                onClick={() => setAtrModalOpen(true)}
+                                title="Generate Action Taken Report"
+                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-primary bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
+                              >
+                                <FileText size={14} />
+                                Generate ATR
+                              </button>
+                              <button
+                                onClick={() => setActivityLogOpen(true)}
+                                title="View this report's activity log"
+                                aria-label="View report activity log"
+                                className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/80 bg-white/10 border border-white/20 hover:bg-white/20 hover:text-white transition-colors cursor-pointer"
+                              >
+                                <History size={16} />
+                              </button>
+                            </>
+                          }
+                        >
+                          <EditableDescription />
+                          <div className="flex items-center gap-2 text-[13px] flex-wrap">
+                            <span className="font-semibold text-white">{report.generatedBy}</span>
+                            <span className="text-white/30 mx-0.5">|</span>
+                            <span className="text-white/70">{report.generatedAt}</span>
+                            <span className="text-white/30 mx-0.5">|</span>
+                            <span className="text-white/70">{scopeLabel}</span>
+                            {report.tag && (
+                              <span
+                                className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-[8px]"
+                                style={{
+                                  background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
+                                  color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
+                                }}
+                              >
+                                {report.tag}
+                              </span>
+                            )}
                           </div>
-                          <div className="relative z-10 px-8 py-7">
-                            <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
-                            <EditableDescription />
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-2 text-[13px]">
-                                <span className="font-semibold text-white">{report.generatedBy}</span>
-                                <span className="text-white/30 mx-0.5">|</span>
-                                <span className="text-white/70">{report.generatedAt}</span>
-                                <span className="text-white/30 mx-0.5">|</span>
-                                {(() => {
-                                  if (isBulkAudit) {
-                                    const n = sections.filter(s => s.kind === 'workflow').length;
-                                    return <span className="text-white/70">{n} {n === 1 ? 'workflow' : 'workflows'}</span>;
-                                  }
-                                  const n = sections.filter(s => s.kind === 'query').length;
-                                  return <span className="text-white/70">{n} {n === 1 ? 'query' : 'queries'}</span>;
-                                })()}
-                                {report.tag && (
-                                  <span
-                                    className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-[8px]"
-                                    style={{
-                                      background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
-                                      color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
-                                    }}
-                                  >
-                                    {report.tag}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => setAtrModalOpen(true)}
-                                  title="Generate Action Taken Report"
-                                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-primary bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
-                                >
-                                  <FileText size={14} />
-                                  Generate ATR
-                                </button>
-                                <button
-                                  onClick={() => setActivityLogOpen(true)}
-                                  title="View this report's activity log"
-                                  aria-label="View report activity log"
-                                  className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/80 bg-white/10 border border-white/20 hover:bg-white/20 hover:text-white transition-colors cursor-pointer"
-                                >
-                                  <History size={16} />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+                        </ReportBrandBanner>
                       </Reorder.Item>,
+                      <div key={`${section.id}-meta`} className="border-x border-b border-border-light bg-white px-9 py-6 grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
+                        <ReportMetaCell label="Report ID" value={report.id?.toUpperCase()} />
+                        <ReportMetaCell label="Report Type" value={report.tag ?? 'Internal Audit'} />
+                        <ReportMetaCell label="Scope" value={scopeLabel} />
+                        <ReportMetaCell label="Prepared By" value={report.generatedBy} />
+                        <ReportMetaCell label="Generated On" value={report.generatedAt} />
+                        <ReportMetaCell label="Template" value={reportTemplate?.name} />
+                      </div>,
                       <ContentsBlock key={`${section.id}-contents`} />,
                     ];
                   }
@@ -4952,13 +4548,12 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     const hasQueries = sections.some(s => s.kind === 'query');
                     return (
                       <Reorder.Item {...sectionProps}>
-                        <div className="border-x border-b border-border-light bg-white p-6">
-                          <div className="flex items-center justify-between gap-3 mb-6">
-                            <div className="flex items-center gap-2">
-                              <FileText size={16} className="text-primary" />
-                              <h3 className="text-[15px] leading-[20px] font-bold text-text">{section.title}</h3>
-                            </div>
-                            {hasQueries && (
+                        <div className="border-x border-b border-border-light bg-white px-9 pt-7 pb-6">
+                          <ReportNumberedHeading
+                            n={sectionNumber(section.id)}
+                            title={section.title}
+                            subtitle={isBulkAudit ? 'Overall workflow result rollup' : 'Overall observation and action plan rollup'}
+                            right={hasQueries && (
                               <button
                                 onClick={() => {
                                   if (isRegeneratingSummary) return;
@@ -4982,25 +4577,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                                 {isRegeneratingSummary ? 'Regenerating…' : 'Regenerate'}
                               </button>
                             )}
-                          </div>
-                          <div className="grid grid-cols-4 gap-3 pb-5 border-b border-border-light mb-5">
-                            {activeStats.map((stat, si) => (
-                              <motion.div
-                                key={stat.label}
-                                initial={{ opacity: 0, y: 10, scale: 0.96 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                transition={{ type: 'spring', stiffness: 320, damping: 18, mass: 0.7, delay: 0.08 + si * 0.08 }}
-                                className="flex items-center gap-3"
-                              >
-                                <div className={`p-2 rounded-[8px] ${stat.color}`}><stat.icon size={16} /></div>
-                                <div>
-                                  <div className="text-xl font-bold text-text leading-none mb-1">
-                                    <KpiCountUp value={stat.value} delay={120 + si * 80} />
-                                  </div>
-                                  <div className="text-[11px] text-text-muted tracking-wide">{stat.label}</div>
-                                </div>
-                              </motion.div>
-                            ))}
+                          />
+                          <div className="pb-5 border-b border-border-light mb-5">
+                            <ReportKpiTiles stats={activeStats} animate />
                           </div>
                           <p className="text-[13px] text-text-secondary leading-relaxed">{summaryOverride ?? section.content}</p>
                         </div>
@@ -5011,16 +4590,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   if (section.kind === 'stats') {
                     return (
                       <Reorder.Item {...sectionProps}>
-                        <div className="grid grid-cols-4 gap-3">
-                          {activeStats.map(stat => (
-                            <div key={stat.label} className="glass-card rounded-[12px] p-4 flex items-center gap-3 hover:shadow-md hover:shadow-primary/5 transition-all">
-                              <div className={`p-2 rounded-[8px] ${stat.color}`}><stat.icon size={16} /></div>
-                              <div>
-                                <div className="text-xl font-bold text-text">{stat.value}</div>
-                                <div className="text-[10px] text-text-muted tracking-wide">{stat.label}</div>
-                              </div>
-                            </div>
-                          ))}
+                        <div className="border-x border-b border-border-light bg-white px-9 py-6">
+                          <ReportKpiTiles stats={activeStats} />
                         </div>
                       </Reorder.Item>
                     );
@@ -5079,10 +4650,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   if (section.kind === 'note') {
                     return (
                       <Reorder.Item {...sectionProps}>
-                        <div className="border-x border-b border-border-light bg-white p-5">
-                          <div className="flex items-center gap-2 mb-2.5 text-[11px] text-text-muted font-semibold uppercase tracking-wider">
-                            <StickyNote size={12} className="text-primary" /> {section.title}
-                          </div>
+                        <div className="border-x border-b border-border-light bg-white px-9 pt-7 pb-6">
+                          <ReportNumberedHeading n={sectionNumber(section.id)} title={section.title} />
                           <p className="text-[13px] text-text leading-relaxed">{section.content}</p>
                         </div>
                       </Reorder.Item>
@@ -5129,6 +4698,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
           <ReportDownloadModal
             reportName={report.name}
             reportTag={report.tag}
+            reportId={report.id?.toUpperCase()}
+            templateName={reportTemplate?.name}
             generatedBy={report.generatedBy}
             generatedAt={report.generatedAt}
             sections={sections.map((s): DownloadPreviewSection => {
@@ -5177,8 +4748,17 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   description: s.description,
                 };
               }
-              if (s.kind === 'summary' || s.kind === 'note') {
-                return { id: s.id, kind: s.kind, title: s.title, content: s.content };
+              if (s.kind === 'note') {
+                return { id: s.id, kind: 'note', title: s.title, content: s.content };
+              }
+              // Exec summary + stats sections carry the KPI tiles so exports can
+              // render the same ATR-style tile grid as the on-screen document.
+              const statTiles = activeStats.map(st => ({ label: st.label, value: st.value, accent: statTone(st.color).hex }));
+              if (s.kind === 'summary') {
+                return { id: s.id, kind: 'summary', title: s.title, content: summaryOverride ?? s.content, stats: statTiles };
+              }
+              if (s.kind === 'stats') {
+                return { id: s.id, kind: 'stats', title: s.title, stats: statTiles };
               }
               return { id: s.id, kind: s.kind, title: s.title };
             })}
@@ -5244,6 +4824,7 @@ export default function ReportsView({
   onOpenQuery,
   customTemplates: customTemplatesProp,
   onAddCustomTemplate,
+  onRemoveCustomTemplate,
   focusReportId,
   onFocusReportConsumed,
 }: ReportsViewProps = {}) {
@@ -5267,11 +4848,73 @@ export default function ReportsView({
   const [reportToDelete, setReportToDelete] = useState<{ id: string; name: string } | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const [editingAsCopy, setEditingAsCopy] = useState(false);
-  const [customTemplatesLocal, setCustomTemplatesLocal] = useState<typeof REPORT_TEMPLATES[number][]>(CUSTOM_TEMPLATES as typeof REPORT_TEMPLATES[number][]);
+  const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
+  const [customTemplatesLocal, setCustomTemplatesLocal] = useState<typeof REPORT_TEMPLATES[number][]>(() => {
+    try {
+      const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed as typeof REPORT_TEMPLATES[number][];
+      }
+    } catch { /* unreadable blob — start empty */ }
+    return [];
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(customTemplatesLocal));
+    } catch { /* quota/private mode — customs stay session-only */ }
+  }, [customTemplatesLocal]);
   const customTemplates = customTemplatesProp ?? customTemplatesLocal;
   const addCustomTemplate = (t: typeof REPORT_TEMPLATES[number]) => {
     if (onAddCustomTemplate) onAddCustomTemplate(t);
     else setCustomTemplatesLocal(prev => [t, ...prev]);
+  };
+  const removeCustomTemplate = (id: string) => {
+    if (onRemoveCustomTemplate) onRemoveCustomTemplate(id);
+    else setCustomTemplatesLocal(prev => prev.filter(t => t.id !== id));
+  };
+  const [templateToDelete, setTemplateToDelete] = useState<{ id: string; name: string } | null>(null);
+
+  // Turn a report's content into ATR observations so the ATR wizard can use an
+  // existing report as its source (instead of a file upload). Workflow reports
+  // map run results; query reports map their baked queries; demo reports fall
+  // back to the two seeded defaults.
+  const observationsFromReport = (r: GeneratedReport): AtrObservation[] => {
+    if (r.workflowResults?.length) {
+      return r.workflowResults
+        .filter(w => w.runStatus !== 'failed')
+        .map(w => ({
+          title: w.name,
+          process: w.businessProcess,
+          querySummary: w.findings[0],
+          riskSummary: w.findings[1] ?? w.findings[0],
+          risk: w.severity,
+          status: 'Open' as const,
+          actionPlans: w.observations.map((text, i) => ({ id: `ap-${w.id}-${i}`, text })),
+        }));
+    }
+    const defs = r.generatedQueries?.length
+      ? r.generatedQueries
+      : [defForKey('Q01'), defForKey('Q02')].filter((d): d is GeneratedQueryDef => d !== null);
+    return defs.map(q => ({
+      title: q.title,
+      process: q.risk,
+      querySummary: q.summary,
+      riskSummary: q.findings[0],
+      risk: q.severity as AtrObservation['risk'],
+      status: 'Open' as const,
+      actionPlans: q.observations.map((text, i) => ({ id: `ap-${q.id}-${i}`, text })),
+    }));
+  };
+  // Save with collision-proof naming — upload + save-as-template flows suffix
+  // "(2)", "(3)"… instead of erroring like the editor's copy flow does.
+  const addCustomTemplateUnique = (t: typeof REPORT_TEMPLATES[number]) => {
+    const names = [...REPORT_TEMPLATES.map(x => x.name), ...customTemplates.map(x => x.name)];
+    let name = t.name;
+    let i = 2;
+    while (names.some(n => n.toLowerCase() === name.toLowerCase())) name = `${t.name} (${i++})`;
+    addCustomTemplate({ ...t, name });
+    addToast({ type: 'success', message: `Template "${name}" saved to Custom templates.` });
   };
   const GENERATED_REPORTS_KEY = 'irame.reports.generatedReports.v7';
   const [hydrationFailed, setHydrationFailed] = useState(false);
@@ -5399,10 +5042,33 @@ export default function ReportsView({
     );
   };
 
-  const [previewingTemplate, setPreviewingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
+  // Generate-from-template wizard — non-ATR templates pick queries here.
+  const [wizardTemplate, setWizardTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
+  const createReportFromWizard = (rt: typeof REPORT_TEMPLATES[0], payload: WizardCreatePayload) => {
+    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const newReport: GeneratedReport = {
+      id: `gr-gen-${Date.now()}`,
+      templateId: rt.id,
+      name: `${rt.name} — ${today}`,
+      tag: 'Internal Audit',
+      generatedBy: 'You',
+      generatedAt: today,
+      status: 'draft',
+      pages: payload.queries.length + 2,
+      queries: payload.queries.length,
+      generatedQueries: payload.queries,
+      execSummary: payload.execSummary,
+      templateSections: rt.sections,
+    };
+    setGeneratedReports(prev => [newReport, ...prev]);
+    setWizardTemplate(null);
+    setViewingReport(newReport);
+    addToast({
+      type: 'success',
+      message: `Report generated from ${payload.queries.length} ${payload.queries.length === 1 ? 'query' : 'queries'}.`,
+    });
+  };
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [reportAppliedTemplates, setReportAppliedTemplates] = useState<Record<string, typeof REPORT_TEMPLATES[0]>>({});
-  const [chooseReportFor, setChooseReportFor] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const [showNewReportTemplateSelector, setShowNewReportTemplateSelector] = useState(false);
   const [showBuilderModal, setShowBuilderModal] = useState(false);
   const [newReportName, setNewReportName] = useState('');
@@ -5487,6 +5153,7 @@ export default function ReportsView({
       return (
         <BulkAuditVariantView
           report={{ ...viewingReport, aestheticVariant: viewingReport.aestheticVariant ?? 'editorial' }}
+          templates={mergeTemplateOptions(REPORT_TEMPLATES, customTemplates)}
           onBack={() => setViewingReport(null)}
           onShare={onShare ? () => onShare(viewingReport.id) : undefined}
         />
@@ -5499,11 +5166,11 @@ export default function ReportsView({
         onShare={onShare ? () => onShare(viewingReport.id) : undefined}
         onManageExceptions={onManageExceptions}
         onOpenQuery={onOpenQuery}
-        initialTemplate={reportAppliedTemplates[viewingReport.id] ?? null}
         customTemplates={customTemplates}
         onAddQuery={addQueryToReport}
         onRemoveQuery={removeAttachedQuery}
         onUpdateDescription={updateReportDescription}
+        onSaveAsTemplate={addCustomTemplateUnique}
       />
     );
   }
@@ -5686,11 +5353,6 @@ export default function ReportsView({
                           </span>
                         );
                       })()}
-                      {reportAppliedTemplates[String(item.id)] && (
-                        <span className="text-[10px] font-medium text-primary inline-flex items-center gap-1 shrink-0">
-                          <Layout size={12} /> {reportAppliedTemplates[String(item.id)].name}
-                        </span>
-                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-1.5">
                       <span className="text-[11px] text-text-muted font-mono tabular-nums shrink-0">{String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'}</span>
@@ -6010,70 +5672,74 @@ export default function ReportsView({
         })()}
 
         {activeTab === 'templates' && (() => {
-          const renderCard = (rt: typeof REPORT_TEMPLATES[0], i: number, fixedWidth?: boolean) => {
+          const renderCard = (rt: typeof REPORT_TEMPLATES[0], i: number, fixedWidth?: boolean, deletable?: boolean) => {
             const Icon = ICON_MAP[rt.icon] || FileText;
             const color = CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50';
             const eyebrowTone = color.split(' ')[0];
             const tintBg = color.split(' ')[1] ?? 'bg-paper-50';
+            // Section pills never truncate mid-word: show the second pill only
+            // when both names fit the card's single pill row (deletable cards
+            // reserve room for the Delete control on the same row).
+            const sectionNames = rt.sections?.map(s => s.name) ?? [];
+            const pillBudget = deletable ? 22 : 30;
+            const pillCount = sectionNames.length === 0 ? 0
+              : sectionNames.length > 1 && sectionNames[0].length + sectionNames[1].length <= pillBudget ? 2
+              : 1;
             return (
               <motion.div
                 key={rt.id}
                 initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                className={`bg-white border border-border-light rounded-[12px] p-6 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:border-primary/30 hover:shadow-[0_8px_24px_rgba(15,8,30,0.06)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[200px] ${fixedWidth ? 'w-[200px] shrink-0' : ''}`}
-                onClick={() => setPreviewingTemplate(rt)}
+                animate={{ opacity: 1, y: 0, transition: { delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
+                whileHover={{ y: -3, transition: { duration: 0.18, ease: 'easeOut' } }}
+                className={`bg-white border border-border-light rounded-[12px] p-5 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:border-primary/30 hover:shadow-[0_12px_32px_rgba(15,8,30,0.08)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[176px] ${fixedWidth ? 'w-[200px] shrink-0' : ''}`}
+                onClick={() => {
+                  // Whole card = the primary action. One click, straight to generate.
+                  if (rt.id === 'rt-007') { setAtrWizardOpen(true); return; }
+                  setWizardTemplate(rt);
+                }}
               >
                 <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className={`inline-flex items-center justify-center w-9 h-9 rounded-[8px] ${tintBg}`}>
+                  <div className={`inline-flex items-center justify-center w-9 h-9 rounded-[10px] ${tintBg} transition-transform duration-200 group-hover:scale-[1.06]`}>
                     <Icon size={16} className={eyebrowTone} strokeWidth={1.75} />
                   </div>
-                  <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] mt-1 ${eyebrowTone}`}>
-                    {rt.category}
+                  <div className="relative flex items-center h-7">
+                    <span className={`text-[10px] font-semibold uppercase tracking-[0.14em] transition-opacity duration-200 group-hover:opacity-0 ${eyebrowTone}`}>
+                      {rt.category}
+                    </span>
+                    <span
+                      aria-hidden
+                      className="absolute right-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary/[0.07] text-primary opacity-0 -translate-x-1.5 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 ease-out"
+                    >
+                      <ArrowRight size={14} />
+                    </span>
                   </div>
                 </div>
                 <h3 className="text-[15px] leading-[1.35] font-semibold text-text group-hover:text-primary transition-colors mb-1.5">{rt.name}</h3>
-                <p className="text-[12px] text-text-secondary leading-[1.55] line-clamp-3">{rt.desc}</p>
-                <div className="mt-auto pt-5 flex items-center justify-between gap-3 border-t border-border-light/60">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setEditingAsCopy(true); setEditingTemplate(rt); }}
-                    className="inline-flex items-center gap-1.5 text-[12px] text-text-muted hover:text-primary font-medium cursor-pointer transition-colors"
-                  >
-                    <Settings size={12} /> Customize
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // ATR template → open the Generate-ATR-from-Observations wizard
-                      // (download template → upload → review → Add to Report).
-                      if (rt.id === 'rt-007') { setAtrWizardOpen(true); return; }
-                      addToast({ type: 'info', message: `Generating "${rt.name}"...` });
-                      setTimeout(() => {
-                        const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                        const sectionsCount = rt.sections?.length ?? 0;
-                        const tagFromTemplate = rt.category === 'Risk' ? 'Bulk Audit' : 'Internal Audit';
-                        const newReport: GeneratedReport = {
-                          id: `gr-gen-${Date.now()}`,
-                          templateId: rt.id,
-                          name: `${rt.name} — ${today}`,
-                          tag: tagFromTemplate,
-                          generatedBy: 'You',
-                          generatedAt: today,
-                          status: 'draft',
-                          pages: Math.max(1, sectionsCount),
-                          queries: 0,
-                          isEmpty: true,
-                        };
-                        setGeneratedReports(prev => [newReport, ...prev]);
-                        setViewingReport(newReport);
-                        addToast({ type: 'success', message: 'Report generated.' });
-                      }, 1200);
-                    }}
-                    className="group/gen inline-flex items-center gap-1.5 h-8 px-3.5 bg-primary hover:bg-primary-hover text-white text-[11px] font-semibold rounded-[8px] cursor-pointer transition-colors shadow-[0_1px_2px_rgba(106,18,205,0.18)]"
-                  >
-                    Generate
-                    <ArrowRight size={12} className="transition-transform duration-200 group-hover/gen:translate-x-[1.5px]" />
-                  </button>
+                <p className="text-[12px] text-text-secondary leading-[1.55] line-clamp-2">{rt.desc}</p>
+                <div className="mt-auto pt-4 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {sectionNames.slice(0, pillCount).map(name => (
+                      <span key={name} className="inline-flex items-center h-6 px-2.5 rounded-full border border-border-light bg-paper-50/70 text-[11px] font-medium text-ink-600 whitespace-nowrap shrink-0">
+                        {name}
+                      </span>
+                    ))}
+                    {sectionNames.length > pillCount && (
+                      <span className="inline-flex items-center h-6 px-2 rounded-full border border-border-light bg-white text-[11px] font-medium text-ink-500 tabular-nums shrink-0">
+                        +{sectionNames.length - pillCount}
+                      </span>
+                    )}
+                  </div>
+                  {deletable && (
+                    <ActionTooltip label="Delete template">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setTemplateToDelete({ id: rt.id, name: rt.name }); }}
+                        aria-label={`Delete template ${rt.name}`}
+                        className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full text-ink-400 hover:text-risk-700 hover:bg-risk-50 opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </ActionTooltip>
+                  )}
                 </div>
               </motion.div>
             );
@@ -6089,17 +5755,33 @@ export default function ReportsView({
               </section>
 
               <section>
-                <h2 className="font-display text-[20px] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-4">Custom templates</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-display text-[20px] font-[420] tracking-tight text-ink-900 leading-[1.2]">Custom templates</h2>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowUploadModal(true)}
+                      className="inline-flex items-center gap-1.5 h-8 px-3.5 text-[12px] font-semibold text-text-secondary bg-white border border-border-light hover:border-primary/40 hover:text-primary rounded-[8px] transition-colors cursor-pointer"
+                    >
+                      <Upload size={13} /> Upload template
+                    </button>
+                    <button
+                      onClick={() => { setEditingAsCopy(true); setEditingTemplate(BLANK_TEMPLATE as typeof REPORT_TEMPLATES[number]); }}
+                      className="inline-flex items-center gap-1.5 h-8 px-3.5 text-[12px] font-semibold text-primary bg-white border border-border-light hover:border-primary/40 hover:bg-primary/[0.03] rounded-[8px] transition-colors cursor-pointer"
+                    >
+                      <Plus size={13} /> New template
+                    </button>
+                  </div>
+                </div>
                 {customTemplates.length === 0 ? (
                   <EmptyState
                     icon={Upload}
                     title="No custom templates"
-                    body="Upload a template to reuse it across reports."
+                    body="Create a template from scratch or upload one to reuse it across reports."
                     size="compact"
                   />
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
-                    {customTemplates.map((rt, i) => renderCard(rt as any, i, false))}
+                    {customTemplates.map((rt, i) => renderCard(rt as any, i, false, true))}
                   </div>
                 )}
               </section>
@@ -6108,12 +5790,30 @@ export default function ReportsView({
         })()}
       </div>
 
+      {/* Generate-from-template wizard */}
+      <AnimatePresence>
+        {wizardTemplate && (
+          <GenerateReportWizard
+            template={wizardTemplate}
+            onClose={() => setWizardTemplate(null)}
+            onCreate={(payload) => createReportFromWizard(wizardTemplate, payload)}
+            onCustomize={() => {
+              const tmpl = wizardTemplate;
+              setWizardTemplate(null);
+              setEditingAsCopy(true);
+              setEditingTemplate(tmpl);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Template Editor Modal */}
       <AnimatePresence>
         {editingTemplate && (
           <TemplateEditor
             template={editingTemplate}
             isCopy={editingAsCopy}
+            initialName={editingTemplate.id === 'ct-blank' ? 'Untitled Template' : undefined}
             onClose={() => { setEditingTemplate(null); setEditingAsCopy(false); }}
             onSaveCopy={(copy) => addCustomTemplate(copy)}
             existingTemplateNames={[...REPORT_TEMPLATES.map(t => t.name), ...customTemplates.map(t => t.name)]}
@@ -6121,48 +5821,10 @@ export default function ReportsView({
         )}
       </AnimatePresence>
 
-      {/* Template Preview Modal */}
-      <AnimatePresence>
-        {previewingTemplate && (
-          <TemplatePreviewModal
-            template={previewingTemplate}
-            onClose={() => setPreviewingTemplate(null)}
-            onEdit={() => { setEditingAsCopy(false); setEditingTemplate(previewingTemplate); setPreviewingTemplate(null); }}
-            onUse={() => { setChooseReportFor(previewingTemplate); setPreviewingTemplate(null); }}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Choose Report Modal */}
-      <AnimatePresence>
-        {chooseReportFor && (
-          <ChooseReportModal
-            template={chooseReportFor}
-            reports={GENERATED_REPORTS}
-            onClose={() => setChooseReportFor(null)}
-            onCancel={() => { setPreviewingTemplate(chooseReportFor); setChooseReportFor(null); }}
-            onContinue={(report) => {
-              setReportAppliedTemplates(prev => ({ ...prev, [report.id]: chooseReportFor }));
-              addToast({ type: 'success', message: `"${chooseReportFor.name}" applied to "${report.name}"` });
-              setViewingReport(report);
-              setChooseReportFor(null);
-            }}
-            onAddNew={() => {
-              setNewReportName('');
-              setNewReportDesc('');
-              setNewReportTemplate(chooseReportFor.id);
-              setNewReportTemplatePrefilled(true);
-              setShowNewReportTemplateSelector(true);
-              setChooseReportFor(null);
-            }}
-          />
-        )}
-      </AnimatePresence>
-
       {/* Upload Template Modal */}
       <AnimatePresence>
         {showUploadModal && (
-          <UploadTemplateModal onClose={() => setShowUploadModal(false)} />
+          <UploadTemplateModal onClose={() => setShowUploadModal(false)} onSave={addCustomTemplateUnique} />
         )}
       </AnimatePresence>
 
@@ -6171,6 +5833,17 @@ export default function ReportsView({
       {atrWizardOpen && (
         <UploadReportModal
           onClose={() => setAtrWizardOpen(false)}
+          reportSources={generatedReports
+            .filter(r => !r.atrData && !r.isEmpty)
+            .slice(0, 6)
+            .map(r => ({
+              id: r.id,
+              name: r.name,
+              generatedBy: r.generatedBy,
+              generatedAt: r.generatedAt,
+              queries: r.queries,
+              observations: observationsFromReport(r),
+            }))}
           onAddToReport={(meta: AtrMeta, observations: AtrObservation[], insights: AtrInsight[]) => {
             const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
             const name = meta.auditTitle ? `ATR — ${meta.auditTitle}` : `Action Taken Report — ${today}`;
@@ -6190,6 +5863,13 @@ export default function ReportsView({
             setViewingReport(newReport);
             setAtrWizardOpen(false);
             addToast({ type: 'success', message: 'Action Taken Report added to My Reports.' });
+          }}
+          onCustomize={() => {
+            const atrTemplate = REPORT_TEMPLATES.find(t => t.id === 'rt-007');
+            if (!atrTemplate) return;
+            setAtrWizardOpen(false);
+            setEditingAsCopy(true);
+            setEditingTemplate(atrTemplate);
           }}
         />
       )}
@@ -6340,6 +6020,22 @@ export default function ReportsView({
         )}
       </AnimatePresence>
 
+      <ConfirmDialog
+        open={!!templateToDelete}
+        onClose={() => setTemplateToDelete(null)}
+        title="Delete template?"
+        description={templateToDelete && (
+          <>This removes <span className="font-semibold text-text">{templateToDelete.name}</span> from Custom templates. Reports already generated from it are not affected.</>
+        )}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          if (!templateToDelete) return;
+          removeCustomTemplate(templateToDelete.id);
+          addToast({ type: 'success', message: `Template "${templateToDelete.name}" deleted.` });
+          setTemplateToDelete(null);
+        }}
+      />
       <ConfirmDialog
         open={!!reportToDelete}
         onClose={() => setReportToDelete(null)}
