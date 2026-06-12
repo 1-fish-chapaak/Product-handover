@@ -66,8 +66,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
     if (!q) return list;
     return list.filter(r =>
       r.label.toLowerCase().includes(q) ||
-      r.sourceLabel.toLowerCase().includes(q) ||
-      (r.chatTitle?.toLowerCase().includes(q) ?? false)
+      r.sourceLabel.toLowerCase().includes(q)
     );
   }, [sourceTab, search]);
 

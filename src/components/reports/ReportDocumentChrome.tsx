@@ -10,7 +10,9 @@ import { statTone } from './reportTones';
 export type ReportStat = {
   label: string;
   value: string;
-  icon: React.ComponentType<{ size?: number | string; className?: string }>;
+  // Carried for parity with the report's stat rows; the ATR tiles render only
+  // value + label, so any element type is fine.
+  icon: React.ElementType;
   color: string;
 };
 
