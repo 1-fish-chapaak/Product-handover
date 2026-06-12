@@ -523,15 +523,38 @@ function AppInner() {
                 saveDashboardWidgets(payload.dashboardId, [...existing, ...widgetStubs]);
               }}
               onAddResultToReport={(payload) => {
-                // Report builder doesn't have widget persistence yet — for hackathon
-                // the message-level addedTo state (handled in ChatView) is sufficient.
-                // In production, this would append sections to the report draft.
+                // Persist a brand-new report so it actually appears in Reports
+                // and "View Report" can open it. Mirrors the Bulk-Run report
+                // sink (localStorage key + irame:open-report). The report body
+                // is a stub for now — the chat selection isn't rendered into
+                // sections yet.
                 if (payload.isNew) {
-                  // Could add to a reports list — skipped for hackathon scope
+                  const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                  const newReport = {
+                    id: payload.reportId,
+                    templateId: 'rt-001',
+                    name: payload.reportName,
+                    tag: 'From chat',
+                    generatedBy: 'You',
+                    generatedAt: today,
+                    status: 'draft',
+                    pages: 1,
+                    queries: 1,
+                  };
+                  try {
+                    const key = 'irame.reports.generatedReports.v7';
+                    const raw = localStorage.getItem(key);
+                    const arr = raw ? JSON.parse(raw) : [];
+                    if (Array.isArray(arr) && !arr.some((r: { id: string }) => r.id === newReport.id)) {
+                      localStorage.setItem(key, JSON.stringify([newReport, ...arr]));
+                    }
+                  } catch { /* ignore */ }
+                  // Hot-update ReportsView if it happens to be mounted.
+                  window.dispatchEvent(new CustomEvent('irame:bulk-report-created', { detail: newReport }));
                 }
               }}
               onViewDashboard={(id) => openDashboard(id)}
-              onViewReport={() => setView('reports')}
+              onViewReport={(id) => { setView('reports'); setFocusReportId(id); }}
               workflowEngagementContext={state.workflowBuilderEngagementName}
             /></div>
             {state.showArtifacts && (

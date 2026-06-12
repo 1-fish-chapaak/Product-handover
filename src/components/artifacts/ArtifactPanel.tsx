@@ -565,7 +565,7 @@ function SourceCard({
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[0.8125rem] font-semibold text-ink-900 truncate">{source.name}</div>
-          <div className="text-[0.6875rem] text-ink-500 mt-0.5 tabular-nums truncate">
+          <div className="text-[0.75rem] text-ink-500 mt-0.5 tabular-nums truncate">
             {source.subtype} · <span className="text-ink-400">{formatDate(source.createdAt)}</span>
           </div>
         </div>
@@ -575,11 +575,11 @@ function SourceCard({
           the column picker popover anchored to it. */}
       {available.length > 0 && (
         <div className="relative border-t border-canvas-border/70 px-4 py-2 flex items-center gap-2 min-w-0">
-          <span className="text-[0.6875rem] text-ink-500 shrink-0">
+          <span className="text-[0.75rem] text-ink-500 shrink-0">
             Using <span className="font-mono tabular-nums text-ink-700">{columnsUsed.length}</span> of{' '}
             <span className="font-mono tabular-nums text-ink-700">{available.length}</span>:
           </span>
-          <span className="text-[0.6875rem] font-mono text-ink-700 truncate flex-1" title={columnsUsed.join(', ')}>
+          <span className="text-[0.75rem] font-mono text-ink-700 truncate flex-1" title={columnsUsed.join(', ')}>
             {columnsUsed.join(', ') || '(none)'}
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
