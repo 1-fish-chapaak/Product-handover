@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { ArrowLeft, CheckCircle2, Eye, Link2, Play, Send, ShieldCheck, Sparkles } from 'lucide-react';
-import InlineClarifyCard from './InlineClarifyCard';
+import QueryClarificationCard, { type QueryClarificationData } from '../chat/QueryClarificationCard';
+import type { AttachmentSelection } from '../chat/DataPickerModal';
 import StepOutputView from '../concierge-workflow-builder/StepOutputView';
 import type { RunResult, WorkflowDraft } from '../concierge-workflow-builder/types';
-import type { EditChatMessage, InlineClarifyState, WorkflowPlanCard } from './types';
+import type { EditChatMessage, WorkflowPlanCard } from './types';
 
 interface Props {
   messages: EditChatMessage[];
@@ -15,9 +16,18 @@ interface Props {
   onViewWorkspace: () => void;
   onValidateWorkflow?: () => void;
   onViewPreview?: () => void;
-  inlineClarify?: InlineClarifyState | null;
-  onClarifyAnswer?: (questionId: string, answer: string) => void;
-  onClarifySkip?: (questionId: string) => void;
+  // Inline validate-step clarification — now the shared chat Q&A card.
+  clarify?: {
+    data: QueryClarificationData;
+    onSetAnswer: (qi: number, ans: string[]) => void;
+    onSubmit: () => void;
+    onCancel: () => void;
+    onAttach: () => void;
+    attachedSources: AttachmentSelection[];
+    files: File[];
+    onRemoveSource: (i: number) => void;
+    onRemoveFile: (i: number) => void;
+  } | null;
   // For rendering the AI Summary block inside an IRA bubble when
   // `msg.outputSummary` is set.
   draft?: WorkflowDraft;
@@ -36,9 +46,7 @@ export default function EditChatPanel({
   onViewWorkspace,
   onValidateWorkflow,
   onViewPreview,
-  inlineClarify,
-  onClarifyAnswer,
-  onClarifySkip,
+  clarify,
   draft,
   editResult,
   onSaveEdits,
@@ -90,15 +98,17 @@ export default function EditChatPanel({
           />
         ))}
 
-        {inlineClarify && onClarifyAnswer && onClarifySkip && (
-          <InlineClarifyCard
-            key={inlineClarify.questions[inlineClarify.index].id}
-            question={inlineClarify.questions[inlineClarify.index]}
-            index={inlineClarify.index}
-            total={inlineClarify.questions.length}
-            stepLabel={inlineClarify.stepLabel}
-            onAnswer={onClarifyAnswer}
-            onSkip={onClarifySkip}
+        {clarify && (
+          <QueryClarificationCard
+            data={clarify.data}
+            onSetAnswer={clarify.onSetAnswer}
+            onSubmit={clarify.onSubmit}
+            onCancel={clarify.onCancel}
+            onAttach={clarify.onAttach}
+            attachedSources={clarify.attachedSources}
+            files={clarify.files}
+            onRemoveSource={clarify.onRemoveSource}
+            onRemoveFile={clarify.onRemoveFile}
           />
         )}
       </div>

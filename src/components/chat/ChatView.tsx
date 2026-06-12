@@ -27,8 +27,8 @@ import { TextShimmer } from '../shared/TextShimmer';
 import { AuditifyHelloEffect } from '../shared/HelloEffect';
 import FloatingLines from '../shared/FloatingLines';
 // Persona removed — Rive WebGL crashes in some browsers
-import ClarificationCard from './ClarificationCard';
 import DataPickerModal, { type AttachmentSelection } from './DataPickerModal';
+import QueryClarificationCard, { type QueryClarificationData } from './QueryClarificationCard';
 import { AddToDashboardModal } from './AddToDashboardModal';
 import { AddToReportModal } from './AddToReportModal';
 import { LIBRARY_WORKFLOWS } from '../workflow/WorkflowLibraryView';
@@ -127,16 +127,6 @@ interface ClarificationData {
   purpose?: 'audit-query' | 'save-workflow';
 }
 
-// Query-clarification shape — distinct from the workflow ClarificationData
-// above because query questions can be multiple-choice. Answers are stored as
-// a string[] per question, and each question carries an optional `multi` flag.
-interface QueryClarificationData {
-  intro: string;
-  questions: { question: string; options: string[]; multi?: boolean }[];
-  answers: Record<number, string[]>;
-  status: 'open' | 'submitted';
-  purpose?: 'audit-query' | 'save-workflow';
-}
 
 // ─── Audit-query result fixture ──────────────────────────────────────────────
 // KPIs render in the dashboard's widget pattern: 4 across on lg, 2 on mobile,
@@ -1339,533 +1329,6 @@ function ThinkingTrail({ summary, steps, defaultOpen = false }: {
         )}
       </span>
     </button>
-  );
-}
-
-// ─── Clarification block (interactive, lives inside an IRA message) ────────
-
-function ClarificationBlock({
-  data, onAnswer, onSubmit, onSkipAll, onSkipCurrent,
-}: {
-  data: ClarificationData;
-  onAnswer: (qIndex: number, answer: string) => void;
-  onSubmit: () => void;
-  onSkipAll: () => void;
-  onSkipCurrent: (qIndex: number) => void;
-}) {
-  const total = data.questions.length;
-  const answeredCount = Object.keys(data.answers).length;
-  const activeIndex = data.questions.findIndex((_, i) => data.answers[i] === undefined);
-
-  // displayIndex lets the user navigate back to already-answered questions to
-  // change their picks. `null` = follow the natural flow (next-unanswered =
-  // activeIndex). Back/Forward chevrons set it explicitly.
-  const [displayIndex, setDisplayIndex] = useState<number | null>(null);
-  const viewIndex = displayIndex ?? (activeIndex !== -1 ? activeIndex : total - 1);
-  const viewQ = viewIndex >= 0 && viewIndex < total ? data.questions[viewIndex] : null;
-  const optionCount = viewQ?.options.length ?? 0;
-  const canGoBack = viewIndex > 0;
-  const canGoForward =
-    viewIndex < total - 1 &&
-    (data.answers[viewIndex] !== undefined || viewIndex < activeIndex || activeIndex === -1);
-
-  const [highlighted, setHighlighted] = useState(0);
-  const [customInput, setCustomInput] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-  const customInputRef = useRef(customInput);
-  customInputRef.current = customInput;
-
-  // Reset highlight + input when viewed question changes
-  useEffect(() => {
-    setHighlighted(0);
-    setCustomInput('');
-  }, [viewIndex]);
-
-  // Keyboard navigation — only fires while clarification is open and active
-  useEffect(() => {
-    if (data.status === 'submitted' || !viewQ) return;
-    const handler = (e: KeyboardEvent) => {
-      const active = document.activeElement;
-      const inMainTextarea =
-        active instanceof HTMLTextAreaElement ||
-        (active instanceof HTMLInputElement && active !== inputRef.current);
-      const inOurInput = active === inputRef.current;
-
-      if (e.key === 'ArrowDown') {
-        if (inMainTextarea) return;
-        e.preventDefault();
-        setHighlighted(h => Math.min(h + 1, optionCount - 1));
-      } else if (e.key === 'ArrowUp') {
-        if (inMainTextarea) return;
-        e.preventDefault();
-        setHighlighted(h => Math.max(h - 1, 0));
-      } else if (e.key === 'Enter' && !inMainTextarea && !inOurInput) {
-        e.preventDefault();
-        selectOption(viewQ.options[highlighted]);
-      } else if (e.key === 'Escape') {
-        if (inMainTextarea) return;
-        e.preventDefault();
-        skipCurrent();
-      } else if (/^[1-9]$/.test(e.key) && !inMainTextarea && !inOurInput) {
-        const num = parseInt(e.key, 10) - 1;
-        if (num < optionCount) {
-          e.preventDefault();
-          selectOption(viewQ.options[num]);
-        }
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-    // selectOption / skipCurrent close over highlighted + viewIndex; we want fresh ones
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlighted, viewIndex, optionCount, data.status]);
-
-  if (data.status === 'submitted') {
-    return (
-      <div className="text-[0.8125rem] text-ink-700 leading-relaxed">
-        Got it. Running with these inputs.
-      </div>
-    );
-  }
-
-  if (!viewQ) {
-    return null;
-  }
-
-  function selectOption(opt: string) {
-    if (!viewQ) return;
-    const isReAnswering = data.answers[viewIndex] !== undefined;
-    const willBeLast =
-      !isReAnswering && answeredCount === total - 1 && viewIndex === activeIndex;
-    onAnswer(viewIndex, opt);
-    if (willBeLast) setTimeout(() => onSubmit(), 80);
-    // When the user is answering the question they're naturally on (viewIndex
-    // tracking activeIndex), resume auto-follow so the next render advances to
-    // the new first-unanswered. When they back-navigated to re-answer, stay put
-    // so they can confirm the change before moving on.
-    if (!isReAnswering && viewIndex === activeIndex) {
-      setDisplayIndex(null);
-    }
-  }
-
-  function skipCurrent() {
-    if (!viewQ) return;
-    const wasLast = viewIndex === total - 1;
-    onSkipCurrent(viewIndex);
-    if (wasLast) setTimeout(() => onSubmit(), 80);
-    if (viewIndex === activeIndex) setDisplayIndex(null);
-  }
-
-  // Back/forward navigation removed — Claude's pattern is one question
-  // at a time, auto-advance on pick. canGoBack / canGoForward / etc.
-  // remain in scope for the keyboard handler effect but no UI calls them.
-
-  return (
-    <div className="space-y-2.5">
-      <div className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
-        {/* Header — question on the left, close X on the right. No
-            pagination chip, no Back/Next buttons. Auto-advance handles
-            most navigation; footer carries the chip + nav as quieter
-            chrome. */}
-        <div className="px-5 pt-4 pb-3.5 flex items-start justify-between gap-3">
-          {/* Question — always reserves space for 2 lines so short and
-              long questions sit at the same height. Clamps at 2 lines
-              with an ellipsis for very long content; full text in the
-              native tooltip. */}
-          <p
-            className="text-[0.9375rem] font-semibold leading-[1.4] text-ink-900 flex-1 min-w-0 break-words line-clamp-2"
-            title={viewQ.question}
-          >
-            {viewQ.question}
-          </p>
-          <button
-            type="button"
-            onClick={onSkipAll}
-            aria-label="Close clarification"
-            title="Close — skip the rest"
-            className="inline-flex items-center justify-center size-7 rounded-md text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
-          >
-            <Minimize2 size={14} />
-          </button>
-        </div>
-
-        {/* Numbered options — refined: compact badges, brand-tinted hover,
-            picked state gets a left brand accent rail + soft fill. Hairline
-            dividers hide around active rows so the wash reads as one block. */}
-        <div role="listbox" aria-label={viewQ.question} className="py-1">
-          {viewQ.options.map((opt, idx) => {
-            const isHighlighted = highlighted === idx;
-            const isPicked = data.answers[viewIndex] === opt;
-            const prevIsHighlighted = highlighted === idx - 1;
-            const prevIsPicked = idx > 0 && data.answers[viewIndex] === viewQ.options[idx - 1];
-            const showDivider = idx > 0 && !isHighlighted && !prevIsHighlighted && !isPicked && !prevIsPicked;
-            return (
-              <button
-                key={opt}
-                type="button"
-                role="option"
-                aria-selected={isHighlighted}
-                onClick={() => selectOption(opt)}
-                onMouseEnter={() => setHighlighted(idx)}
-                className={`group/opt relative w-full flex items-center gap-3 px-5 py-2.5 text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-inset ${
-                  isPicked
-                    ? 'bg-brand-50'
-                    : isHighlighted
-                      ? 'bg-brand-50/50'
-                      : 'hover:bg-brand-50/30'
-                } ${showDivider ? 'before:absolute before:left-5 before:right-5 before:top-0 before:h-px before:bg-canvas-border/60' : ''}`}
-              >
-                {/* Left accent rail — brand-600 when picked, faint brand-300 on hover */}
-                <span
-                  aria-hidden="true"
-                  className={`absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-sm transition-all duration-200 ${
-                    isPicked ? 'h-[60%] bg-brand-600' : isHighlighted ? 'h-[40%] bg-brand-300' : 'h-0 bg-transparent'
-                  }`}
-                />
-                <span
-                  className={`inline-flex items-center justify-center size-6 rounded-md text-[0.71875rem] font-semibold tabular-nums shrink-0 transition-colors ${
-                    isPicked
-                      ? 'bg-brand-600 text-white shadow-[inset_0_-1px_0_rgba(0,0,0,0.10)]'
-                      : isHighlighted
-                        ? 'bg-brand-100 text-brand-700'
-                        : 'bg-brand-50 text-brand-500 group-hover/opt:bg-brand-100 group-hover/opt:text-brand-700'
-                  }`}
-                  aria-hidden="true"
-                >
-                  {isPicked ? <Check size={12} strokeWidth={2.75} /> : idx + 1}
-                </span>
-                <span className={`flex-1 text-[0.875rem] leading-snug transition-colors ${
-                  isPicked ? 'text-ink-900 font-medium' : isHighlighted ? 'text-ink-900' : 'text-ink-800'
-                }`}>
-                  {opt}
-                </span>
-                {isHighlighted && !isPicked && (
-                  <span className="inline-flex items-center gap-1 text-[0.65625rem] font-medium text-ink-400 shrink-0">
-                    <kbd className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded bg-canvas-elevated border border-canvas-border text-ink-600 font-mono text-[0.625rem] leading-none">
-                      <CornerDownLeft size={11} strokeWidth={2.25} />
-                    </kbd>
-                  </span>
-                )}
-              </button>
-            );
-          })}
-
-          {/* Custom input row — visually distinct from the numbered options:
-              dashed pencil chip, thicker divider above, primary CTA appears
-              once the user has typed. */}
-          <div className="relative flex items-center gap-3 px-5 py-2.5 before:absolute before:left-5 before:right-5 before:top-0 before:h-px before:bg-canvas-border">
-            <span
-              className="inline-flex items-center justify-center size-6 rounded-md bg-canvas-elevated border border-dashed border-canvas-border text-ink-400 shrink-0"
-              aria-hidden="true"
-            >
-              <Pencil size={11} strokeWidth={2.25} />
-            </span>
-            <input
-              ref={inputRef}
-              value={customInput}
-              onChange={e => setCustomInput(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && customInputRef.current.trim()) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  selectOption(customInputRef.current.trim());
-                }
-              }}
-              placeholder="Type something else…"
-              className="no-focus-ring flex-1 bg-transparent text-[0.875rem] text-ink-800 placeholder:text-ink-400 outline-none h-7"
-            />
-            {customInput.trim() ? (
-              <button
-                onClick={() => selectOption(customInput.trim())}
-                className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-              >
-                Use this
-                <CornerDownLeft size={11} strokeWidth={2.25} />
-              </button>
-            ) : (
-              <button
-                onClick={skipCurrent}
-                className="h-7 px-2.5 text-[0.75rem] font-medium text-ink-500 hover:text-ink-800 hover:bg-brand-50 rounded-md transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-              >
-                Skip
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* No footer inside this card — the hint row below the composer
-          handles navigation hints (Claude pattern). Submission is
-          handled by the parent: once all questions are answered it
-          fires onSubmit automatically. */}
-    </div>
-  );
-}
-
-// ─── Query clarification card (multi-select, navigated) ──────────────────────
-// The query-flow clarification. Unlike the workflow ClarificationBlock above,
-// this one supports per-question multi-select (checkboxes), explicit Back /
-// Next / Done navigation, a "Question X of Y" count, and no skip — answering
-// is required to advance. The corner ✕ cancels the whole card (nothing runs).
-function QueryClarificationCard({
-  data, onSetAnswer, onSubmit, onCancel, onAttach, attachedSources, files, onRemoveSource, onRemoveFile,
-}: {
-  data: QueryClarificationData;
-  onSetAnswer: (qIndex: number, answers: string[]) => void;
-  onSubmit: () => void;
-  onCancel: () => void;
-  onAttach: () => void;
-  attachedSources: AttachmentSelection[];
-  files: File[];
-  onRemoveSource: (index: number) => void;
-  onRemoveFile: (index: number) => void;
-}) {
-  const total = data.questions.length;
-  const firstUnanswered = data.questions.findIndex((_, i) => !(data.answers[i]?.length));
-  const [viewIndex, setViewIndex] = useState(firstUnanswered === -1 ? 0 : firstUnanswered);
-  const [highlighted, setHighlighted] = useState(0);
-  const [customInput, setCustomInput] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-  const customInputRef = useRef(customInput);
-  customInputRef.current = customInput;
-
-  const safeIndex = Math.min(viewIndex, total - 1);
-  const viewQ = total > 0 ? data.questions[safeIndex] : null;
-  const selected = data.answers[safeIndex] ?? [];
-  const isMulti = !!viewQ?.multi;
-  const answeredCurrent = selected.length > 0;
-  const isLast = safeIndex === total - 1;
-  const canBack = safeIndex > 0;
-
-  // Render the question's options plus any selected custom answers (typed via
-  // "Type something else") so those show up as checked rows too.
-  const displayOptions = viewQ
-    ? [...viewQ.options, ...selected.filter(s => !viewQ.options.includes(s))]
-    : [];
-  const optionCount = displayOptions.length;
-
-  // Reset highlight + custom input when the viewed question changes.
-  useEffect(() => {
-    setHighlighted(0);
-    setCustomInput('');
-  }, [safeIndex]);
-
-  function toggleOption(opt: string) {
-    if (!viewQ) return;
-    if (isMulti) {
-      onSetAnswer(safeIndex, selected.includes(opt) ? selected.filter(s => s !== opt) : [...selected, opt]);
-    } else {
-      // Single-select (radio): pick replaces; can't deselect by re-clicking.
-      onSetAnswer(safeIndex, [opt]);
-    }
-  }
-
-  function addCustom() {
-    const v = customInputRef.current.trim();
-    if (!v) return;
-    if (isMulti) {
-      if (!selected.includes(v)) onSetAnswer(safeIndex, [...selected, v]);
-    } else {
-      onSetAnswer(safeIndex, [v]);
-    }
-    setCustomInput('');
-  }
-
-  function goNext() {
-    const pending = customInputRef.current.trim();
-    if (pending) addCustom();
-    if ((answeredCurrent || pending) && !isLast) setViewIndex(safeIndex + 1);
-  }
-  function goBack() { if (canBack) setViewIndex(safeIndex - 1); }
-  function done() {
-    if (!isLast) return;
-    const pending = customInputRef.current.trim();
-    if (pending) {
-      addCustom();
-      setTimeout(() => onSubmit(), 0);
-    } else if (answeredCurrent) {
-      onSubmit();
-    }
-  }
-
-  // Keyboard: ↑/↓ highlight, 1-9 / Enter toggle, Esc cancels.
-  useEffect(() => {
-    if (data.status === 'submitted' || !viewQ) return;
-    const handler = (e: KeyboardEvent) => {
-      const active = document.activeElement;
-      const inMainTextarea = active instanceof HTMLTextAreaElement || (active instanceof HTMLInputElement && active !== inputRef.current);
-      const inOurInput = active === inputRef.current;
-      if (e.key === 'ArrowDown') { if (inMainTextarea) return; e.preventDefault(); setHighlighted(h => Math.min(h + 1, optionCount - 1)); }
-      else if (e.key === 'ArrowUp') { if (inMainTextarea) return; e.preventDefault(); setHighlighted(h => Math.max(h - 1, 0)); }
-      else if (e.key === 'Enter' && !inMainTextarea && !inOurInput) { e.preventDefault(); if (displayOptions[highlighted]) toggleOption(displayOptions[highlighted]); }
-      else if (e.key === 'Escape') { if (inMainTextarea) return; e.preventDefault(); if (inOurInput) { setCustomInput(''); } else { onCancel(); } }
-      else if (/^[1-9]$/.test(e.key) && !inMainTextarea && !inOurInput) { const n = parseInt(e.key, 10) - 1; if (n < optionCount) { e.preventDefault(); toggleOption(displayOptions[n]); } }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlighted, safeIndex, optionCount, data.status, isMulti, selected]);
-
-  if (data.status === 'submitted') {
-    return <div className="text-[0.8125rem] text-ink-700 leading-relaxed">Got it. Running with these inputs.</div>;
-  }
-  if (!viewQ) return null;
-
-  return (
-    <div className="space-y-2.5">
-      <div className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
-        {/* Header — question count + close on top, then the question */}
-        <div className="px-5 pt-3.5 pb-3">
-          <div className="flex items-center justify-between gap-3 mb-2">
-            <span className="text-[0.75rem] font-medium text-ink-500 tabular-nums">Question {safeIndex + 1} of {total}</span>
-            <button
-              type="button"
-              onClick={onCancel}
-              aria-label="Close clarification"
-              title="Close — cancels this question set"
-              className="inline-flex items-center justify-center size-7 -mr-1 rounded-md text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
-            >
-              <X size={15} />
-            </button>
-          </div>
-          <p className="text-[0.9375rem] font-semibold leading-[1.4] text-ink-900 break-words" title={viewQ.question}>{viewQ.question}</p>
-          {isMulti && <p className="mt-0.5 text-[0.71875rem] font-medium text-ink-400">Select all that apply</p>}
-        </div>
-
-        {/* Options — checkbox rows */}
-        <div role={isMulti ? 'group' : 'radiogroup'} aria-label={viewQ.question} className="py-1">
-          {displayOptions.map((opt, idx) => {
-            const isChecked = selected.includes(opt);
-            const isHighlighted = highlighted === idx;
-            return (
-              <button
-                key={opt}
-                type="button"
-                role={isMulti ? 'checkbox' : 'radio'}
-                aria-checked={isChecked}
-                onClick={() => toggleOption(opt)}
-                onMouseEnter={() => setHighlighted(idx)}
-                className={`group/opt relative w-full flex items-center gap-3 px-5 py-2.5 text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-inset ${
-                  isChecked ? 'bg-brand-50' : isHighlighted ? 'bg-brand-50/50' : 'hover:bg-brand-50/30'
-                }`}
-              >
-                {/* Marker — square checkbox for multi-select, round radio for single */}
-                <span
-                  aria-hidden="true"
-                  className={`inline-flex items-center justify-center size-[18px] border-2 shrink-0 transition-colors ${isMulti ? 'rounded-[5px]' : 'rounded-full'} ${
-                    isChecked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-canvas-elevated border-canvas-border group-hover/opt:border-brand-300'
-                  }`}
-                >
-                  {isChecked && (isMulti
-                    ? <Check size={12} strokeWidth={3} />
-                    : <span className="size-1.5 rounded-full bg-white" />)}
-                </span>
-                <span className={`flex-1 text-[0.875rem] leading-snug transition-colors ${isChecked ? 'text-ink-900 font-medium' : 'text-ink-800'}`}>
-                  {opt}
-                </span>
-              </button>
-            );
-          })}
-
-          {/* Attachments added via the + below — these ride along with the answers */}
-          {(attachedSources.length > 0 || files.length > 0) && (
-            <div className="flex items-center gap-1.5 overflow-x-auto px-5 pt-3 pb-1">
-              {attachedSources.map((s, i) => (
-                <div
-                  key={`src-${i}`}
-                  title={s.kind === 'source' ? s.name : undefined}
-                  className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[0.75rem] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0"
-                >
-                  {s.kind === 'source' && (
-                    <>
-                      <span className="text-[0.625rem] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
-                      <span className="truncate max-w-[10rem]">{s.name}</span>
-                    </>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => onRemoveSource(i)}
-                    className="text-ink-400 hover:text-ink-800 hover:bg-brand-100 ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                    aria-label={`Remove ${s.kind === 'source' ? s.name : 'attachment'}`}
-                  ><X size={11} /></button>
-                </div>
-              ))}
-              {files.map((f, i) => (
-                <div
-                  key={`file-${i}`}
-                  title={f.name}
-                  className="flex items-center gap-2 bg-canvas-elevated text-ink-800 text-[0.8125rem] pl-2 pr-1.5 py-1.5 rounded-lg font-medium border border-canvas-border shrink-0"
-                >
-                  <span className="inline-flex items-center justify-center size-6 rounded bg-brand-50 text-brand-700 shrink-0"><FileText size={13} /></span>
-                  <span className="truncate max-w-[10rem]">{f.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => onRemoveFile(i)}
-                    className="text-ink-400 hover:text-brand-700 hover:bg-brand-50 ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                    aria-label={`Remove ${f.name}`}
-                  ><X size={12} /></button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Input row — the only input while a clarification is open (the chat
-              composer is hidden). "+" attaches data/files; typing adds a custom
-              answer to this question. */}
-          <div className="flex items-center gap-2 px-3.5 py-2.5 border-t border-canvas-border">
-            <button
-              type="button"
-              onClick={onAttach}
-              aria-label="Attach data sources or files"
-              title="Attach data or files"
-              className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-            >
-              <Plus size={18} strokeWidth={2} />
-            </button>
-            <input
-              ref={inputRef}
-              value={customInput}
-              onChange={e => setCustomInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && customInputRef.current.trim()) { e.preventDefault(); e.stopPropagation(); addCustom(); } }}
-              placeholder="Type something else…"
-              className="no-focus-ring flex-1 bg-transparent text-[0.875rem] text-ink-800 placeholder:text-ink-400 outline-none h-8"
-            />
-            {/* Back / Next (or Done) live here in the input row — no separate footer */}
-            <div className="flex items-center gap-2 shrink-0 ml-1">
-              <button
-                type="button"
-                onClick={goBack}
-                disabled={!canBack}
-                className="inline-flex items-center gap-1 h-8 pl-2 pr-3 rounded-lg text-[0.8125rem] font-medium text-ink-600 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-              >
-                <ChevronLeft size={15} /> Back
-              </button>
-              {isLast ? (
-                <button
-                  type="button"
-                  onClick={done}
-                  disabled={!answeredCurrent && !customInput.trim()}
-                  title={answeredCurrent ? undefined : 'Pick an answer to continue'}
-                  className="inline-flex items-center justify-center h-8 px-4 rounded-lg text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                >
-                  Done
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={goNext}
-                  disabled={!answeredCurrent && !customInput.trim()}
-                  title={answeredCurrent ? undefined : 'Pick an answer to continue'}
-                  className="inline-flex items-center gap-1 h-8 pl-3 pr-2 rounded-lg text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                >
-                  Next <ChevronRight size={15} />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -3311,6 +2774,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // New flow state
   const [showClarificationCard, setShowClarificationCard] = useState(false);
   const [clarificationQuestions, setClarificationQuestions] = useState<Array<{ question: string; options: string[] }>>([]);
+  // Answers for the legacy phase-based workflow clarification, now rendered
+  // through the shared QueryClarificationCard. Keyed by question index; each
+  // value is a string[] (single-select → length 1). Reset on submit/cancel.
+  const [wfPhaseAnswers, setWfPhaseAnswers] = useState<Record<number, string[]>>({});
   const [showProgressiveLoader, setShowProgressiveLoader] = useState(false);
   // Ref mirror of showProgressiveLoader — read inside the ResizeObserver
   // closure (which would otherwise capture stale state) to gate the auto-
@@ -4748,21 +4215,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     }, 700);
   }, [messages, wfWorkflow, wfFiles, wfMappings, wfPushAssistant, wfPushCard]);
 
-  const wfAnswerClarify = useCallback((msgId: string, answerOrSkip: string | null) => {
-    setMessages(prev => prev.map(m => {
-      if (m.id !== msgId || m.richType !== 'workflow-clarify') return m;
-      const data = m.richData as { questions: ClarifyQuestion[]; phase: 'initial' | 'validate'; index: number; answers: Record<string, string>; stepLabel?: string };
-      const q = data.questions[data.index];
-      if (!q) return m;
-      const nextAnswers = { ...data.answers };
-      if (answerOrSkip != null) nextAnswers[q.id] = answerOrSkip;
-      return { ...m, richData: { ...data, answers: nextAnswers, index: data.index + 1 } };
-    }));
-    if (answerOrSkip != null) {
-      setMessages(prev => [...prev, { id: `msg-${Date.now()}-ans`, role: 'user', text: answerOrSkip, timestamp: new Date() }]);
-    }
-  }, []);
-
   const simulateResponse = (userMsg: string, explicitMode?: 'query' | 'workflow') => {
     clearTimers();
 
@@ -5391,23 +4843,25 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
   // pattern as the query clarification, so the UI/placement matches.
   const openWorkflowClarify = [...messages].reverse().find(m => {
     if (m.richType !== 'workflow-clarify') return false;
-    const d = m.richData as { questions?: ClarifyQuestion[]; index?: number };
+    const d = m.richData as { questions?: ClarifyQuestion[]; index?: number; cancelled?: boolean };
+    if (d.cancelled) return false;
     return (d.questions?.length ?? 0) > 0 && (d.index ?? 0) < (d.questions?.length ?? 0);
   });
-  const openWorkflowClarifyData: ClarificationData | null = openWorkflowClarify ? (() => {
+  // Built as QueryClarificationData so the workflow clarify renders through the
+  // shared chat Q&A card. Answers are string[] (single-select → length 1).
+  const openWorkflowClarifyData: QueryClarificationData | null = openWorkflowClarify ? (() => {
     const d = openWorkflowClarify.richData as { questions: ClarifyQuestion[]; answers: Record<string, string>; index: number; stepLabel?: string; phase?: string };
-    const numericAnswers: Record<number, string> = {};
+    const answersArr: Record<number, string[]> = {};
     d.questions.forEach((q, i) => {
       const a = d.answers?.[q.id];
-      if (a) numericAnswers[i] = a;
+      if (a) answersArr[i] = [a];
     });
     return {
       intro: d.stepLabel ?? 'Asking a few clarifying questions',
       questions: d.questions.map(q => ({ question: q.title, options: q.options })),
-      answers: numericAnswers,
+      answers: answersArr,
       status: 'open',
-      purpose: 'workflow-build',
-    } as unknown as ClarificationData;
+    };
   })() : null;
 
   /* ────────────────────── CHAT HISTORY SIDEBAR ────────────────────── */
@@ -7010,17 +6464,36 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             messages column's true 52.5rem width so both surfaces span
             edge-to-edge identically. px-4 retained on mobile only. */}
         <div className="shrink-0 pb-2 max-w-[52.5rem] mx-auto w-full px-4 sm:px-0">
-          {/* Workflow clarification (legacy ClarificationCard kept for the workflow flow only) */}
+          {/* Legacy phase-based workflow clarification — now rendered through the
+              shared QueryClarificationCard so it matches the chat Q&A flow. */}
           <AnimatePresence>
             {showClarificationCard && workflowBuildPhase > 0 && (
-              <div className="mb-0">
-                <ClarificationCard
-                  questions={clarificationQuestions}
-                  onComplete={handleClarificationCardComplete}
-                  onSkipAll={() => {
-                    setShowClarificationCard(false);
-                    handleWorkflowClarificationComplete({});
+              <div className="mb-2">
+                <QueryClarificationCard
+                  key={`wf-phase-${workflowBuildPhase}`}
+                  data={{
+                    intro: '',
+                    questions: clarificationQuestions.map(q => ({ question: q.question, options: q.options })),
+                    answers: wfPhaseAnswers,
+                    status: 'open',
                   }}
+                  onSetAnswer={(qi, ans) => setWfPhaseAnswers(prev => ({ ...prev, [qi]: ans }))}
+                  onSubmit={() => {
+                    const flat: Record<number, string> = {};
+                    clarificationQuestions.forEach((_, i) => { const a = wfPhaseAnswers[i]?.[0]; if (a) flat[i] = a; });
+                    setWfPhaseAnswers({});
+                    handleClarificationCardComplete(flat);
+                  }}
+                  onCancel={() => {
+                    // ✕ cancels the set — dismiss without advancing the build.
+                    setShowClarificationCard(false);
+                    setWfPhaseAnswers({});
+                  }}
+                  onAttach={() => setShowDataPicker(true)}
+                  attachedSources={attachedSources}
+                  files={files}
+                  onRemoveSource={(i) => setAttachedSources(prev => prev.filter((_, j) => j !== i))}
+                  onRemoveFile={(i) => setFiles(prev => prev.filter((_, j) => j !== i))}
                 />
               </div>
             )}
@@ -7045,27 +6518,53 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             </div>
           )}
           {openWorkflowClarify && openWorkflowClarifyData && (
-            // Workflow clarify — same docked treatment as the query
-            // clarification above. Mirrors UI + placement so the user
-            // doesn't see two different patterns in the same surface.
+            // Workflow clarify — same shared Q&A card as the query clarification
+            // above. Answers are written without advancing; Done sets index to
+            // the question count, which fires the build's continuation effect.
             <div className="mb-2">
-              <ClarificationBlock
+              <QueryClarificationCard
                 data={openWorkflowClarifyData}
-                onAnswer={(_qi, ans) => wfAnswerClarify(openWorkflowClarify.id, ans)}
-                onSubmit={() => { /* advancement is driven by wfAnswerClarify; no submit step */ }}
-                onSkipAll={() => {
-                  // Skip every remaining question by passing null until exhausted.
-                  const d = openWorkflowClarify.richData as { questions: ClarifyQuestion[]; index: number };
-                  const remaining = (d.questions?.length ?? 0) - (d.index ?? 0);
-                  for (let i = 0; i < remaining; i++) wfAnswerClarify(openWorkflowClarify.id, null);
+                onSetAnswer={(qi, ans) => {
+                  setMessages(prev => prev.map(m => {
+                    if (m.id !== openWorkflowClarify.id || m.richType !== 'workflow-clarify') return m;
+                    const d = m.richData as { questions: ClarifyQuestion[]; answers: Record<string, string>; index: number };
+                    const q = d.questions[qi];
+                    if (!q) return m;
+                    const nextAnswers = { ...d.answers };
+                    if (ans[0]) nextAnswers[q.id] = ans[0]; else delete nextAnswers[q.id];
+                    return { ...m, richData: { ...d, answers: nextAnswers } };
+                  }));
                 }}
-                onSkipCurrent={() => wfAnswerClarify(openWorkflowClarify.id, null)}
+                onSubmit={() => {
+                  // Mark all questions answered → the Clarify→Map / validate
+                  // continuation effects advance the build.
+                  setMessages(prev => prev.map(m => {
+                    if (m.id !== openWorkflowClarify.id || m.richType !== 'workflow-clarify') return m;
+                    const d = m.richData as { questions: ClarifyQuestion[] };
+                    return { ...m, richData: { ...(m.richData as object), index: d.questions.length } };
+                  }));
+                }}
+                onCancel={() => {
+                  // ✕ cancels the set — flag the message so it stops showing and
+                  // the build does not auto-continue.
+                  setMessages(prev => prev.map(m =>
+                    m.id === openWorkflowClarify.id
+                      ? { ...m, richData: { ...(m.richData as object), cancelled: true } }
+                      : m
+                  ));
+                }}
+                onAttach={() => setShowDataPicker(true)}
+                attachedSources={attachedSources}
+                files={files}
+                onRemoveSource={(i) => setAttachedSources(prev => prev.filter((_, j) => j !== i))}
+                onRemoveFile={(i) => setFiles(prev => prev.filter((_, j) => j !== i))}
               />
             </div>
           )}
-          {/* Composer is hidden while a query clarification is open — the
-              clarification card becomes the single input surface. */}
-          {!openClarification && (
+          {/* Composer is hidden while ANY clarification is open — the
+              clarification card (query, workflow build, or legacy phase)
+              becomes the single input surface, matching the chat Q&A pattern. */}
+          {!openClarification && !openWorkflowClarify && !(showClarificationCard && workflowBuildPhase > 0) && (
             <>
               {/* Engagement context banner — shown when the workflow builder was
                   opened from a specific engagement's "Link Workflow → Create new"

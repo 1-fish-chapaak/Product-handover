@@ -4,11 +4,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   X, ChevronDown, FileCode, PanelRightClose,
   Database, BarChart3, Sparkles, Copy, Download,
-  AlertTriangle, LayoutDashboard, Wand2, HelpCircle,
+  AlertTriangle, Wand2, HelpCircle,
   Check, Pencil, Search, ListChecks, MessageSquare, Share2,
 } from 'lucide-react';
 import type { ArtifactTab } from '../../hooks/useAppState';
-import OutputConfigTab from './OutputConfigTab';
 import Gated from '../shared/Gated';
 import { useToast } from '../shared/Toast';
 import { KpiTile } from '../shared/KpiTile';
@@ -35,7 +34,6 @@ const TABS: { id: ArtifactTab; label: string; icon: React.ElementType; count?: n
   { id: 'plan', label: 'Plan', icon: Sparkles, count: 5 },
   { id: 'code', label: 'Code', icon: FileCode },
   { id: 'sources', label: 'Sources', icon: Database, count: 5 },
-  { id: 'output', label: 'Output', icon: LayoutDashboard },
 ];
 
 function CollapsibleSection({ title, icon: Icon, defaultOpen = true, children, actions }: { title: string; icon: React.ElementType; defaultOpen?: boolean; children: React.ReactNode; actions?: React.ReactNode }) {
@@ -1217,7 +1215,6 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
             {activeTab === 'plan' && <PlanTab onComposeInChat={onComposeInChat} />}
             {activeTab === 'code' && <CodeTab />}
             {activeTab === 'sources' && <SourcesTab onOpenInKnowledgeHub={onOpenInKnowledgeHub} onComposeInChat={onComposeInChat} />}
-            {activeTab === 'output' && <OutputConfigTab />}
           </motion.div>
         </AnimatePresence>
         <HighlightToolbar scopeRef={contentRef} />
