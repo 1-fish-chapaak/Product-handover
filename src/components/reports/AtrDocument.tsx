@@ -1,4 +1,4 @@
-import { Sparkles, Calendar, FileText, ShieldCheck, PenLine, Eye, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Calendar, FileText, ShieldCheck, PenLine, Eye, CheckCircle2, Wrench } from 'lucide-react';
 import type {
   AtrMeta, AtrObservation, AtrActionPlan, AtrInsight,
   AtrRisk, AtrClassification, AtrObservationStatus, AtrActionStatus,
@@ -101,7 +101,7 @@ export default function AtrDocument({
   // Build the KPI list — only metrics that have data.
   const kpis: { label: string; value: number; tone: Tone }[] = [];
   kpis.push({ label: 'Total Observations', value: ex.totalObservations, tone: 'brand' });
-  if (ex.totalActionPlans) kpis.push({ label: 'Total Action Plans', value: ex.totalActionPlans, tone: 'brand' });
+  if (ex.totalActionPlans) kpis.push({ label: 'Total Management Action Plans', value: ex.totalActionPlans, tone: 'brand' });
   (['Closed', 'In Progress', 'Open', 'Overdue'] as const).forEach(s => {
     if (ex.obsStatus[s]) kpis.push({ label: s, value: ex.obsStatus[s], tone: s === 'Closed' ? 'compliant' : s === 'In Progress' ? 'mitigated' : s === 'Open' ? 'high' : 'risk' });
   });
@@ -161,7 +161,7 @@ export default function AtrDocument({
 
       {/* Section 1 — Executive Summary */}
       <section className="px-9 pt-7 pb-6">
-        <NumberedHeading n={1} title="Executive Summary" subtitle="Overall observation and action plan rollup" />
+        <NumberedHeading n={1} title="Executive Summary" subtitle="Overall observation and management action plan rollup" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {kpis.map(k => (
             <div key={k.label} className={`rounded-[10px] border border-canvas-border border-l-[3px] ${KPI_BORDER[k.tone]} bg-canvas-elevated p-4`}>
@@ -221,7 +221,7 @@ export default function AtrDocument({
       {/* Section 3 — Observation Details */}
       <section className="px-9 pt-2 pb-6 border-t border-canvas-border">
         <div className="pt-6">
-          <NumberedHeading n={3} title="Observation Details" subtitle="Issue, risk, action plan, evidence and verification" />
+          <NumberedHeading n={3} title="Observation Details" subtitle="Issue, risk, management action plan, evidence and verification" />
         </div>
         <div className="space-y-5">
           {observations.map((o, i) => (
@@ -258,7 +258,7 @@ export default function AtrDocument({
             <div className="h-full rounded-full bg-white" style={{ width: `${ex.progressPct}%` }} />
           </div>
           <p className="text-[0.6875rem] text-white/70 mt-2">
-            Of {ex.totalActionPlans} action plan{ex.totalActionPlans === 1 ? '' : 's'}, {ex.actionStatus.Implemented} fully implemented
+            Of {ex.totalActionPlans} management action plan{ex.totalActionPlans === 1 ? '' : 's'}, {ex.actionStatus.Implemented} fully implemented
             {ex.actionStatus['Partially Implemented'] ? ` and ${ex.actionStatus['Partially Implemented']} partially implemented` : ''}.
           </p>
         </div>
@@ -316,11 +316,6 @@ function ObservationCard({ index, obs }: { index: number; obs: AtrObservation })
               <span className={`w-1.5 h-1.5 rounded-full ${RISK_DOT[obs.risk]}`} />{obs.risk} Risk
             </span>
           )}
-          {obs.classification && (
-            <span className={`inline-flex items-center h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded-full ${CLASSIFICATION_PILL[obs.classification]}`}>
-              {obs.classification}
-            </span>
-          )}
           {obs.status && (
             <span className={`inline-flex items-center gap-1.5 h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded-full ${OBS_STATUS_PILL[obs.status].cls}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${OBS_STATUS_PILL[obs.status].dot}`} />{obs.status}
@@ -342,7 +337,7 @@ function ObservationCard({ index, obs }: { index: number; obs: AtrObservation })
         {/* Action plans */}
         <div className="space-y-3">
           {obs.actionPlans.map((ap, i) => (
-            <ActionPlanCard key={i} index={i + 1} plan={ap} />
+            <ActionPlanCard key={i} index={i + 1} plan={ap} classification={obs.classification} />
           ))}
         </div>
       </div>
@@ -350,21 +345,21 @@ function ObservationCard({ index, obs }: { index: number; obs: AtrObservation })
   );
 }
 
-function ActionPlanCard({ index, plan }: { index: number; plan: AtrActionPlan }) {
+function ActionPlanCard({ index, plan, classification }: { index: number; plan: AtrActionPlan; classification?: AtrClassification }) {
   const tone = plan.status ? ACTION_STATUS[plan.status] : null;
   return (
     <div className={`border border-canvas-border rounded-[10px] p-4 ${tone ? `border-t-2 ${tone.border}` : ''}`}>
       <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
         <div className="flex items-center gap-2.5 flex-wrap">
-          <span className="inline-flex items-center h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded bg-brand-50 text-brand-700">Action Plan {index}</span>
+          <span className="inline-flex items-center h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded bg-brand-50 text-brand-700">Management Action Plan {index}</span>
+          {classification && (
+            <span className={`inline-flex items-center h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded-full ${CLASSIFICATION_PILL[classification]}`}>
+              {classification}
+            </span>
+          )}
           {plan.dueDate && (
             <span className="inline-flex items-center gap-1.5 h-6 px-2.5 text-[0.6875rem] font-medium rounded-full bg-[#FAFAFB] border border-canvas-border text-ink-700">
               <Calendar size={11} className="text-ink-500" /> Due {fmt(plan.dueDate)}
-            </span>
-          )}
-          {plan.priority && (
-            <span className="inline-flex items-center gap-1.5 text-[0.6875rem] font-semibold text-ink-800">
-              <span className={`w-1.5 h-1.5 rounded-full ${RISK_DOT[plan.priority]}`} />{plan.priority} Priority
             </span>
           )}
         </div>
@@ -375,8 +370,16 @@ function ActionPlanCard({ index, plan }: { index: number; plan: AtrActionPlan })
 
       <p className="text-[0.75rem] text-ink-800 leading-relaxed mb-3">{plan.text}</p>
 
-      {(plan.evidence || plan.verification) && (
+      {(plan.actionTaken || plan.evidence || plan.verification) && (
         <div className="grid grid-cols-[150px_1fr] gap-x-5 gap-y-3 items-start border-t border-dashed border-canvas-border pt-3">
+          {plan.actionTaken && (
+            <>
+              <div className="flex items-center gap-1.5 pt-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ink-500">
+                <Wrench size={12} /> Action Taken
+              </div>
+              <p className="pt-1 text-[0.75rem] text-ink-800 leading-relaxed">{plan.actionTaken}</p>
+            </>
+          )}
           {plan.evidence && (
             <>
               <div className="flex items-center gap-1.5 pt-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ink-500">

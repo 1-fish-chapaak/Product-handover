@@ -1,17 +1,10 @@
 import { motion } from 'motion/react';
-import { X } from 'lucide-react';
+import { X, ChevronRight } from 'lucide-react';
 import {
   type GrcException,
-  type GrcExceptionSeverity,
   type GrcExceptionStatus,
   type GrcExceptionClassification,
 } from '../../data/mockData';
-
-const SEVERITY_STYLE: Record<GrcExceptionSeverity, string> = {
-  High:   'bg-high-50 text-high-700',
-  Medium: 'bg-mitigated-50 text-mitigated-700',
-  Low:    'bg-compliant-50 text-compliant-700',
-};
 
 const STATUS_STYLE: Record<GrcExceptionStatus, string> = {
   Open:           'bg-[#EEEEF1] text-ink-600',
@@ -41,10 +34,15 @@ function Pill({ children, className }: { children: React.ReactNode; className: s
   );
 }
 
-function ExceptionCard({ ex }: { ex: GrcException }) {
+function ExceptionCard({ ex, onClick }: { ex: GrcException; onClick?: () => void }) {
   const isBulk = Boolean(ex.bulkId);
   return (
-    <article className="border border-canvas-border rounded-[12px] p-4 hover:border-brand-200 transition-colors cursor-pointer">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className="group w-full text-left border border-canvas-border rounded-[12px] p-4 transition-colors enabled:hover:border-brand-300 enabled:hover:bg-brand-50/20 enabled:cursor-pointer disabled:cursor-default"
+    >
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className="font-mono text-[12.5px] font-semibold text-brand-700 whitespace-nowrap">{ex.id}</span>
@@ -54,17 +52,21 @@ function ExceptionCard({ ex }: { ex: GrcException }) {
             </span>
           )}
         </div>
-        <Pill className={SEVERITY_STYLE[ex.severity]}>{ex.severity}</Pill>
+        <Pill className={STATUS_STYLE[ex.status]}>{STATUS_LABEL[ex.status]}</Pill>
       </div>
       <h4 className="text-[14px] font-semibold text-ink-900 leading-snug mb-2.5">{ex.title}</h4>
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Pill className={STATUS_STYLE[ex.status]}>{STATUS_LABEL[ex.status]}</Pill>
-          <Pill className={CLASSIFICATION_STYLE[ex.classification]}>{ex.classification}</Pill>
+        <Pill className={CLASSIFICATION_STYLE[ex.classification]}>{ex.classification}</Pill>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[12px] text-ink-700">{ex.assignedTo?.name ?? 'Unassigned'}</span>
+          {onClick && (
+            <span className="inline-flex items-center gap-0.5 text-[11.5px] font-medium text-brand-600 opacity-0 group-hover:opacity-100 transition-opacity">
+              Details <ChevronRight size={13} />
+            </span>
+          )}
         </div>
-        <span className="text-[12px] text-ink-700 shrink-0">{ex.assignedTo?.name ?? 'Unassigned'}</span>
       </div>
-    </article>
+    </button>
   );
 }
 
@@ -73,11 +75,13 @@ export default function ExceptionListDrawer({
   subtitle,
   exceptions,
   onClose,
+  onSelectException,
 }: {
   title: string;
   subtitle: string;
   exceptions: GrcException[];
   onClose: () => void;
+  onSelectException?: (ex: GrcException) => void;
 }) {
   return (
     <>
@@ -115,7 +119,7 @@ export default function ExceptionListDrawer({
           {exceptions.length === 0 ? (
             <div className="text-[13px] text-ink-500 text-center py-12">No exceptions match this filter.</div>
           ) : (
-            exceptions.map(ex => <ExceptionCard key={ex.id} ex={ex} />)
+            exceptions.map(ex => <ExceptionCard key={ex.id} ex={ex} onClick={onSelectException ? () => onSelectException(ex) : undefined} />)
           )}
         </div>
         <footer className="shrink-0 px-6 py-3 border-t border-canvas-border text-right text-[11.5px] text-ink-500 tabular-nums">

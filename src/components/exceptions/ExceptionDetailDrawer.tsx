@@ -1,30 +1,26 @@
 import { useEffect, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { X, Calendar, ArrowRight } from 'lucide-react';
+import { X, Calendar, ArrowRight, FileText, Paperclip, CheckCircle2, User, Tag, RotateCcw, ClipboardCheck, CornerUpLeft } from 'lucide-react';
+import { GRC_CASE_DETAILS } from '../../data/mockData';
 import type {
   GrcException,
-  GrcExceptionSeverity,
-  GrcExceptionStatus,
   GrcExceptionClassification,
 } from '../../data/mockData';
+import { exceptionActionsFor, type ExceptionActionKind } from './statusModel';
+
+// Icon per action kind — mirrors the Exceptions-table CTA icons.
+const ACTION_ICON: Record<ExceptionActionKind, React.ElementType> = {
+  classify:             Tag,
+  reclassify:           RotateCcw,
+  markComplete:         CheckCircle2,
+  reviewClassification: Tag,
+  reviewPlan:           ClipboardCheck,
+  reviewAction:         CornerUpLeft,
+  review:               CornerUpLeft,
+};
 
 // ─── Chip styling tokens — mirrors the table chips so the drawer reads
 //     consistently with the row it was opened from. ─────────────────────
-const SEVERITY_STYLE: Record<GrcExceptionSeverity, string> = {
-  High:   'bg-high-50 text-high-700',
-  Medium: 'bg-mitigated-50 text-mitigated-700',
-  Low:    'bg-compliant-50 text-compliant-700',
-};
-const STATUS_STYLE: Record<GrcExceptionStatus, string> = {
-  Open:           'bg-evidence-50 text-evidence-700',
-  'Under Review': 'bg-mitigated-50 text-mitigated-700',
-  Closed:         'bg-compliant-50 text-compliant-700',
-};
-const STATUS_LABEL: Record<GrcExceptionStatus, string> = {
-  Open:           'Open',
-  'Under Review': 'In-Progress',
-  Closed:         'Closed',
-};
 const CLASSIFICATION_STYLE: Record<GrcExceptionClassification, string> = {
   Unclassified:                'bg-[#F4F2F7] text-ink-600',
   'Design Deficiency':         'bg-high-50 text-high-700',
@@ -50,10 +46,16 @@ interface Props {
   /** Source query's output table — when present, its non-first columns
    *  flesh out the ALL DATA FIELDS section using the row joined on ex.id. */
   extraColumns?: { columns: string[]; rows: string[][] };
+  /** Active persona — drives which next actions are offered (mirrors Exceptions). */
+  role?: 'risk-owner' | 'auditor';
+  /** Fire the same action the Exceptions tab would — opens the shared drawer
+   *  (which persists the change + logs activity). When omitted, the drawer is
+   *  read-only. */
+  onAction?: (kind: ExceptionActionKind, ex: GrcException) => void;
   onClose: () => void;
 }
 
-export default function ExceptionDetailDrawer({ exception: ex, extraColumns, onClose }: Props) {
+export default function ExceptionDetailDrawer({ exception: ex, extraColumns, role, onAction, onClose }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
@@ -87,6 +89,15 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, onC
   }, [extraColumns, dataRow]);
 
   const reviewStatus = ex.actionReview ?? 'Pending';
+  const detail = GRC_CASE_DETAILS[ex.id];
+  const plans = detail?.actionPlans && detail.actionPlans.length > 0
+    ? detail.actionPlans
+    : (detail?.actionTitle ? [{ name: detail.actionTitle, details: detail.actionDescription, dueDate: '' }] : []);
+  const completion = detail?.completion;
+  const activity = detail?.activityLog ?? [];
+
+  // Next actions for the active persona — same set the Exceptions table offers.
+  const actions = role && onAction ? exceptionActionsFor(ex, role) : [];
 
   return (
     <>
@@ -128,14 +139,8 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, onC
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-7 py-6 space-y-7">
-          {/* Status / Severity / Classification / Action Review — 2-col grid */}
+          {/* Classification / Action Review — 2-col grid */}
           <section className="grid grid-cols-2 gap-x-8 gap-y-5">
-            <DetailField label="Status">
-              <Pill className={STATUS_STYLE[ex.status]}>{STATUS_LABEL[ex.status]}</Pill>
-            </DetailField>
-            <DetailField label="Severity">
-              <Pill className={SEVERITY_STYLE[ex.severity]}>{ex.severity}</Pill>
-            </DetailField>
             <DetailField label="Classification">
               <Pill className={CLASSIFICATION_STYLE[ex.classification]}>{ex.classification}</Pill>
             </DetailField>
@@ -184,6 +189,85 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, onC
             </section>
           )}
 
+          {/* Management Action Plan(s) */}
+          {plans.length > 0 && (
+            <section>
+              <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">
+                {plans.length > 1 ? `Management Action Plans · ${plans.length}` : 'Management Action Plan'}
+              </h3>
+              <div className="border border-canvas-border rounded-[10px] divide-y divide-canvas-border overflow-hidden">
+                {plans.map((p, i) => (
+                  <div key={i} className="p-4">
+                    <div className="flex items-center gap-1.5 text-[13.5px] font-semibold text-ink-900 leading-snug mb-1">
+                      <FileText size={13} className="text-ink-500 shrink-0" />
+                      {p.name || `Management Action Plan ${i + 1}`}
+                    </div>
+                    {p.dueDate && (
+                      <span className="inline-flex items-center gap-1.5 text-[11.5px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
+                        <Calendar size={11} /> Due {fmtDate(p.dueDate)}
+                      </span>
+                    )}
+                    {p.details && <p className="text-[12.5px] text-ink-700 leading-relaxed mt-1">{p.details}</p>}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Action completed by the Risk Owner — note + evidence */}
+          {completion && (
+            <section>
+              <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Action Taken</h3>
+              <div className="border border-compliant/40 bg-compliant-50/40 rounded-[10px] p-4">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700">
+                    <CheckCircle2 size={13} /> Completed by the Risk Owner
+                  </div>
+                  {completion.selfAssessment && (
+                    <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[11px] font-semibold ${completion.selfAssessment === 'Implemented' ? 'bg-compliant-50 text-compliant-700' : 'bg-mitigated-50 text-mitigated-700'}`}>
+                      Reported: {completion.selfAssessment}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[12.5px] text-ink-700 leading-relaxed">{completion.note}</p>
+                {completion.evidence.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2.5">
+                    {completion.evidence.map((ev, i) => (
+                      <span key={i} className="inline-flex items-center gap-1.5 h-7 px-2.5 bg-white border border-canvas-border rounded-full text-[11.5px] text-ink-700">
+                        <Paperclip size={11} className="text-brand-600" /> {ev.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {completion.completedAt && <p className="text-[11px] text-ink-400 mt-2">Marked complete on {completion.completedAt}</p>}
+              </div>
+            </section>
+          )}
+
+          {/* Activity journey — everything that happened to this case */}
+          {activity.length > 0 && (
+            <section>
+              <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Activity Journey</h3>
+              <ol className="space-y-3.5">
+                {activity.map((entry) => (
+                  <li key={entry.id} className="flex gap-3">
+                    <div className="shrink-0 w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center"><User size={13} /></div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="text-[12.5px] text-ink-800"><span className="font-semibold">{entry.author}</span> <span className="text-ink-500">[{entry.role}]</span></div>
+                        <span className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">{entry.timestamp}</span>
+                      </div>
+                      <p className="text-[12.5px] text-ink-700 leading-snug mt-0.5">{entry.message}</p>
+                      {entry.comment && (
+                        <div className="mt-2 px-3 py-2 bg-[#FAFAFB] border border-canvas-border rounded-[8px] text-[12px] text-ink-700 leading-relaxed">{entry.comment}</div>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+
           {/* All data fields — joined row from the source query's output table */}
           <section>
             <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">All Data Fields</h3>
@@ -226,12 +310,32 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, onC
           </section>
         </div>
 
-        {/* Footer */}
-        <footer className="shrink-0 px-7 py-4 border-t border-canvas-border flex items-center justify-end">
+        {/* Footer — persona-aware actions (same as the Exceptions tab) + Close */}
+        <footer className="shrink-0 px-7 py-4 border-t border-canvas-border flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            {actions.length > 0 ? (
+              actions.map(a => {
+                const Icon = ACTION_ICON[a.kind];
+                return (
+                  <button
+                    key={a.kind}
+                    type="button"
+                    onClick={() => onAction?.(a.kind, ex)}
+                    title={`${a.label} · ${role === 'risk-owner' ? 'Risk Owner' : 'Auditor'} action`}
+                    className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-[8px] cursor-pointer transition-colors"
+                  >
+                    <Icon size={14} /> {a.label}
+                  </button>
+                );
+              })
+            ) : role ? (
+              <span className="text-[12px] text-ink-400">No actions available for the {role === 'risk-owner' ? 'Risk Owner' : 'Auditor'} right now.</span>
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="h-9 px-5 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-[#F4F2F7] cursor-pointer transition-colors"
+            className="h-9 px-5 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-[#F4F2F7] cursor-pointer transition-colors shrink-0"
           >
             Close
           </button>
