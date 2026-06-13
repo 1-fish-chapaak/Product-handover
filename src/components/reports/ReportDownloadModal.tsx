@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { exportReportWord, exportReportPpt, exportReportPdf } from './reportExport';
+import { exportReportWord, exportReportPpt, exportReportPdf, exportReportHtml } from './reportExport';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import type { QueryGraph, QueryTable } from '../../data/queryGraphs';
 
@@ -59,12 +59,13 @@ interface Props {
   onClose: () => void;
 }
 
-type Format = 'pdf' | 'pptx' | 'docx';
+type Format = 'pdf' | 'docx' | 'pptx' | 'html';
 
 const FORMATS: { id: Format; label: string; ext: string }[] = [
   { id: 'pdf', label: 'PDF', ext: 'pdf' },
-  { id: 'pptx', label: 'PPT', ext: 'ppt' },
-  { id: 'docx', label: 'Word', ext: 'doc' },
+  { id: 'docx', label: 'DOCX', ext: 'doc' },
+  { id: 'pptx', label: 'PPTX', ext: 'ppt' },
+  { id: 'html', label: 'HTML', ext: 'html' },
 ];
 
 // Severity badge colour mapping — High (red) / Medium (amber) / Low (green).
@@ -128,6 +129,9 @@ export default function ReportDownloadModal({
         addToast({ type: 'success', message: `${reportName}.${activeFormat.ext} downloaded.` });
       } else if (format === 'pptx') {
         exportReportPpt(ctx);
+        addToast({ type: 'success', message: `${reportName}.${activeFormat.ext} downloaded.` });
+      } else if (format === 'html') {
+        exportReportHtml(ctx);
         addToast({ type: 'success', message: `${reportName}.${activeFormat.ext} downloaded.` });
       } else if (exportReportPdf(ctx)) {
         addToast({ type: 'info', message: 'Opening print dialog — choose “Save as PDF”.' });
@@ -243,7 +247,7 @@ export default function ReportDownloadModal({
                     sections={bodySections}
                   />
                 )}
-                {format === 'docx' && (
+                {(format === 'docx' || format === 'html') && (
                   <DocxPreview
                     reportName={reportName}
                     reportTag={reportTag}

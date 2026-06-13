@@ -175,6 +175,14 @@ export function exportReportWord(ctx: ReportExportContext) {
   );
 }
 
+// ─── HTML (.html) — the composed document as a standalone web page ───
+export function exportReportHtml(ctx: ReportExportContext) {
+  triggerDownload(
+    new Blob([documentHtml(ctx)], { type: 'text/html;charset=utf-8' }),
+    `${ctx.reportName}.html`,
+  );
+}
+
 // ─── PPT (.ppt) — title slide + one slide per section (PRD: exec summary + slide per query group) ───
 // Slides keep the standard 16:9 deck ratio (960×540).
 function slideShell(inner: string, background?: string): string {

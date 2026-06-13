@@ -17,7 +17,7 @@ import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { ReportBrandBanner, ReportMetaCell, ReportNumberedHeading, ReportKpiTiles } from './ReportDocumentChrome';
 import { statTone } from './reportTones';
-import { exportReportWord, exportReportPpt, exportReportPdf, exportBulkAuditExcel } from './reportExport';
+import { exportReportWord, exportReportPpt, exportReportPdf, exportReportHtml, exportBulkAuditExcel } from './reportExport';
 import type { DownloadPreviewSection } from './ReportDownloadModal';
 import { REPORT_TEMPLATES } from '../../data/mockData';
 import type { WorkflowResult } from './ReportsView';
@@ -230,7 +230,7 @@ export function BulkAuditVariantView({
 
   // Real exports — same composers as standard reports, so the downloaded
   // document mirrors the on-screen ATR-style layout.
-  const handleExport = (ext: 'pdf' | 'doc' | 'ppt' | 'xlsx') => {
+  const handleExport = (ext: 'pdf' | 'doc' | 'ppt' | 'html' | 'xlsx') => {
     if (ext === 'xlsx') {
       exportBulkAuditExcel(report.name, successfulWorkflows);
       addToast({ type: 'success', message: `${report.name}.xlsx downloaded.` });
@@ -277,6 +277,9 @@ export function BulkAuditVariantView({
     } else if (ext === 'ppt') {
       exportReportPpt(ctx);
       addToast({ type: 'success', message: `${report.name}.ppt downloaded.` });
+    } else if (ext === 'html') {
+      exportReportHtml(ctx);
+      addToast({ type: 'success', message: `${report.name}.html downloaded.` });
     } else if (exportReportPdf(ctx)) {
       addToast({ type: 'info', message: 'Opening print dialog — choose “Save as PDF”.' });
     } else {
@@ -610,7 +613,7 @@ function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, 
 function BulkReportHeader({ onBack, onShare, onExport, templates = REPORT_TEMPLATES }: {
   onBack: () => void;
   onShare?: () => void;
-  onExport: (ext: 'pdf' | 'doc' | 'ppt' | 'xlsx') => void;
+  onExport: (ext: 'pdf' | 'doc' | 'ppt' | 'html' | 'xlsx') => void;
   /** Options listed in the Apply Template dropdown (standard + custom). */
   templates?: typeof REPORT_TEMPLATES[number][];
 }) {
@@ -696,12 +699,13 @@ function BulkReportHeader({ onBack, onShare, onExport, templates = REPORT_TEMPLA
                 <Download size={14} /> Download <ChevronDown size={12} className={`transition-transform ${showDownloadDropdown ? 'rotate-180' : ''}`} />
               </button>
               {showDownloadDropdown && (
-                <div className="absolute right-0 top-full mt-1 bg-white border border-border-light shadow-xl z-50 py-1 w-36 rounded-[8px]">
+                <div className="absolute right-0 top-full mt-1 bg-white border border-border-light shadow-xl z-50 py-1 w-48 rounded-[8px]">
                   {([
-                    { label: 'PDF', ext: 'pdf' },
-                    { label: 'Word (DOC)', ext: 'doc' },
-                    { label: 'PowerPoint', ext: 'ppt' },
-                    { label: 'Excel', ext: 'xlsx' },
+                    { label: 'Download as PDF', ext: 'pdf' },
+                    { label: 'Download as DOCX', ext: 'doc' },
+                    { label: 'Download as PPTX', ext: 'ppt' },
+                    { label: 'Download as HTML', ext: 'html' },
+                    { label: 'Download as Excel', ext: 'xlsx' },
                   ] as const).map(({ label, ext }) => (
                     <button
                       key={ext}
