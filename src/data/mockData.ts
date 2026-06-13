@@ -816,6 +816,7 @@ export const CLARIFICATION_STEPS = [
     stage: 4,
     question: 'What matching logic should I use to detect duplicates between candidate invoice pairs in your data?',
     options: ['Invoice number + amount', 'Fuzzy match all fields', 'AI-powered pattern detection'],
+    multi: true, // matching logic can legitimately combine several methods
     fillPercent: 100,
     category: 'Ready',
   },

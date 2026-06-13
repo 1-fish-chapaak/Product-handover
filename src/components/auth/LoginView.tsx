@@ -82,7 +82,7 @@ export default function LoginView() {
               />
             </div>
             <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.18em] text-white/45">
-              Auditify · Ask IRA
+              Irame · Ask IRA
             </span>
           </motion.div>
 

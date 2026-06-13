@@ -2852,7 +2852,7 @@ function AttrWorkflowMapModal({ attr, onClose, onLink, onUnlink }: {
         </div>
         <footer className="shrink-0 px-5 py-3 border-t border-canvas-border flex items-center justify-between gap-3">
           <button
-            onClick={() => window.open(`${window.location.origin}${window.location.pathname}?view=chat`, '_blank')}
+            onClick={() => window.open(`${window.location.origin}${window.location.pathname}?view=chat&compose=workflow`, '_blank', 'noopener,noreferrer')}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-brand-200 bg-brand-50/50 text-brand-700 text-[0.78125rem] font-semibold hover:bg-brand-50 cursor-pointer transition-colors"
           >
             <Plus size={13} /> Create workflow

@@ -265,7 +265,7 @@ The Editorial GRC doctrine is **borders before shadows, shadows sparingly, tinte
 
 - **Flat at rest** (`box-shadow: none`): The default for every surface — cards, KPI tiles, the AI input composer, the AI response surface. Depth comes from the 1px `canvas-border` against the warm canvas, not from shadow. This is the Claude-aligned resting state; the composer no longer carries a resting shadow.
 - **Lifted hover** (`box-shadow: 0 8px 24px rgba(15, 8, 30, 0.04)`): Reserved for the few large surfaces that earn it on hover. Diffuse, never crisp. Most cards hover by tinting their border to `brand-200`, not by lifting.
-- **Focus ring** (`box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24)`): Applied globally to every interactive element on `:focus-visible` (buttons, inputs, selects, `[role="button"]`). The single most consistent visual signature in the product. The composer input opts out via `.no-focus-ring` because its `ai-border` already signals focus by darkening its border tone.
+- **Focus ring** (`box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24)`): Applied globally to every interactive element on `:focus-visible` (buttons, inputs, selects, `[role="button"]`) via `index.css`. The single most consistent visual signature in the product. The composer input opts out via `.no-focus-ring` because its `ai-border` already signals focus by darkening its border tone. **Note:** the shared `Button` (and some hand-rolled chat buttons) additionally layer a Tailwind `ring-2 ring-primary/30 ring-offset-1` on top — the two rings coexist by design (this global 4px box-shadow is canonical; the Tailwind ring is complementary, not a replacement).
 
 ### Named Rules
 
@@ -372,7 +372,7 @@ Single source of truth: `src/components/shared/Button.tsx`. Six variants, two si
 - **Don't** reintroduce decorative AI chrome — no glowing borders, no shimmer-while-streaming, no sparkle iconography. The codebase has actively removed these (`ai-glow`, `ai-shimmer`, `ai-pulse-ring`).
 - **Don't** use side-stripe borders greater than 1px anywhere except the three Alert Card variants. That is the only sanctioned exception.
 - **Don't** use identical card grids with icon + heading + text repeated endlessly. Vary spacing, vary affordance, vary hierarchy.
-- **Don't** use the em dash (`—`) in product copy. Comma, colon, semicolon, period, or parentheses. Also not `--`.
+- **Don't** use a literal double-hyphen (`--`) as punctuation. (The em dash `—` **is allowed** in product copy where it reads well — an earlier rule banned it, and that was reversed.)
 - **Don't** add bounce, elastic, or overshoot to motion. Exponential ease-out only.
 - **Don't** introduce a second dark surface. If something feels like it wants to be dark, give it more whitespace.
 - **Don't** add a second gradient. The body radial mesh and the AI response border-image are the only two.
@@ -417,6 +417,7 @@ Single horizontally-scrolling row inside the composer: `composer-chips-row flex 
 
 Row: `flex items-center justify-between gap-2 px-3 pb-4`.
 - Attach button: `size-8 rounded-lg text-ink-500 hover:bg-brand-50 hover:text-ink-800`.
+- Mode control: on the empty-state composer, a **"Build a workflow"** toggle (off = ask / Q&A; on = workflow builder, lavender filled icon). Once a chat has started the mode **locks** and the control becomes a quiet, read-only **"Q&A" / "Workflow"** status tag — a label, not a button.
 - Stop (in-flight): `size-8 rounded-lg bg-ink-900 text-canvas-elevated hover:bg-ink-800`, glyph `Square size={11} fill="currentColor"`. Dark, not red.
 - Send: `size-8 rounded-lg bg-primary text-white hover:bg-primary-hover active:bg-brand-800`, glyph `ArrowUp size={16} strokeWidth={2.25}`. Hidden entirely when the composer is empty.
 
@@ -442,7 +443,7 @@ Heading `<h3>`: `mb-2 text-[0.75rem] font-medium tracking-normal text-ink-900`, 
 
 #### 7.1.11 Clarification
 
-`ClarificationBlock` (audit-query) and legacy `ClarificationCard` (`chat/ClarificationCard`, workflow flow) — inline choice cards above the composer, never modals, so the user can answer inline or bypass and type. `AssumptionsPanel` (`chat/AssumptionsPanel`) is the collapsible "assumptions made" list.
+`QueryClarificationCard` (audit-query flow — multi-select rows, a `Question X of Y` count, Back / Next / Done, answering required to advance) and `ClarificationBlock` (workflow flow) render inline choice cards, never modals. **While a clarification is open the composer is hidden — the card replaces it as the single input surface:** pick an option, or type a custom answer in the card's own field (the `+` attach lives inside the card too, and pending typed text commits when you advance). The legacy `ClarificationCard` (`chat/ClarificationCard`) remains for the older workflow path. `AssumptionsPanel` (`chat/AssumptionsPanel`) is the collapsible "assumptions made" list.
 
 #### 7.1.12 Plan-approve gate (`qna-plan`)
 
@@ -612,7 +613,7 @@ Focus trap + ESC + restore focus.
 Defined once in `shared/`, reused across surfaces.
 
 #### 7.10.1 `Button` (`shared/Button.tsx`)
-Single source of truth. 6 variants × 2 sizes (`sm` h-7/text-xs, `md` h-9/text-sm) × 4 shapes (`md`/`lg`(default)/`xl`/`full`). Base: `inline-flex items-center justify-center font-medium transition-[…] duration-150 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1`. Primary `bg-primary text-white shadow-sm shadow-brand-900/10 hover:bg-primary-hover hover:shadow-md`; stop `bg-ink-900 text-white`; destructive `bg-risk text-white`; outline `bg-canvas-elevated border border-canvas-border hover:bg-brand-50 hover:border-brand-200`; ghost `bg-transparent text-text-muted hover:bg-brand-50`; secondary `bg-brand-50 text-brand-700`. Pressed: ghost → `bg-primary/10 text-primary`, outline → `bg-primary/5 border-primary/30 text-primary`.
+Single source of truth. 6 variants × 2 sizes (`sm` h-7/text-xs, `md` h-9/text-sm) × 4 shapes (`md`/`lg`(default)/`xl`/`full`). Base: `inline-flex items-center justify-center font-medium transition-[…] duration-150 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1`. Primary `bg-primary text-white shadow-sm shadow-brand-900/10 hover:bg-primary-hover hover:shadow-md`; stop `bg-ink-900 text-white`; destructive `bg-risk text-white`; outline `bg-canvas-elevated border border-canvas-border hover:bg-brand-50 hover:border-brand-200`; ghost `bg-transparent text-text-muted hover:bg-brand-50`; secondary `bg-brand-50 text-brand-700`. Pressed: ghost → `bg-primary/10 text-primary`, outline → `bg-primary/5 border-primary/30 text-primary`. The `ring-2 ring-primary/30 ring-offset-1` here layers **on top of** the global 4px `:focus-visible` ring (§4) — both apply by design, not a contradiction.
 
 #### 7.10.2 KPI family (`shared/KpiTile.tsx`, `admin/AdminPrimitives.tsx`, `dashboard/add-widget/KpiCard.tsx`)
 Four KPI shapes, one per surface — all share `tabular-nums` + the `KpiCountUp` count-up, differ only in chrome:
@@ -633,7 +634,7 @@ Shared: cells `py-3`; search input `pl-8 pr-8 py-1.5 border bg-white text-[0.75r
 Two **registry-specific** tables exist for denser GRC domains — not the modern SaaS variant, and not a license to hand-roll: **`ExceptionsTable`** (`exceptions/`, `w-full text-[12.5px]` — tighter than SmartTable for the exceptions queue) and **`RacmListTable`** (`audit/`, the RACM risk↔control registry). New surfaces use `SmartTable`; these two are deliberate domain exceptions.
 
 #### 7.10.4 Badge / chip / tag family (`shared/StatusBadge.tsx`)
-Every status chip renders through one canonical base — **`Pill`**: `inline-flex items-center px-2.5 h-6 rounded-full text-[0.75rem] leading-[16px] whitespace-nowrap tabular-nums`, full radius, title-case, **no icon**. **`variant="bordered"` is the default and the common status used everywhere** — semibold + a soft tone border (`border-{tone}/30`) over the tone pair. 7 tones: `risk` `bg-risk-50 text-risk-700`, `high` `bg-high-50 text-high-700`, `mitigated` `bg-mitigated-50 text-mitigated-700`, `compliant` `bg-compliant-50 text-compliant-700`, `evidence` `bg-evidence-50 text-evidence-700`, `info` `bg-brand-50 text-brand-700`, `draft` `bg-draft-50 text-draft-700`. `variant="flat"` (no border, `font-medium`) is the quiet opt-out. Labels always spelled out (`Critical`, not `C`); never arranged as a RAG strip.
+Every status chip renders through one canonical base — **`Pill`**: `inline-flex items-center px-2.5 h-6 rounded-full text-[0.75rem] leading-[16px] whitespace-nowrap tabular-nums`, full radius, title-case, **no icon**. **`variant="bordered"` is the default and the common status used everywhere** — semibold + a soft tone border (`border-{tone}/30`) over the tone pair. 7 tones: `risk` `bg-risk-50 text-risk-700`, `high` `bg-high-50 text-high-700`, `mitigated` `bg-mitigated-50 text-mitigated-700`, `compliant` `bg-compliant-50 text-compliant-700`, `evidence` `bg-evidence-50 text-evidence-700`, `info` `bg-brand-50 text-brand-700`, `draft` `bg-draft-50 text-draft-700`. `variant="flat"` (no border, `font-medium`) is the quiet opt-out. Labels always spelled out (`Critical`, not `C`); never arranged as a RAG strip. **Raw-data cells are exempt:** a query-result data table (e.g. the chat `ResultsTable`) renders literal cell values — including a `Status` column like "Open / In review / Resolved" — as **plain text, not `StatusBadge` pills**, so the table stays column-agnostic and matches the CSV / HTML export.
 
 Six **domain badges** map a vocabulary → tone+label on that base — **use these, never hand-roll an inline status span:**
 - **`StatusBadge`** — 22 lifecycle states (active→compliant, open→risk, in-progress→evidence, resolved/effective→compliant, invited→info, suspended/expired→high, locked/blocked→risk, pending→mitigated, draft/inactive/not-started/not-tested→draft, …).
