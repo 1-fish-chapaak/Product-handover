@@ -1,10 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Custom date picker that matches the app's design tokens.
 // `value` and `onChange` use ISO format (YYYY-MM-DD) so it stays compatible
-// with native input behavior. Opens downward by default. Optionally pass
-// `minDate` (ISO YYYY-MM-DD) to disable any day strictly before that date.
+// with native input behavior. The calendar is rendered in a portal with fixed
+// positioning so it is never clipped by a scrolling/overflow-hidden ancestor
+// (e.g. a slide-over drawer); it flips upward when there isn't room below.
+// Optionally pass `minDate` (ISO YYYY-MM-DD) to disable any day strictly before.
+const POPUP_WIDTH = 300;
+const POPUP_HEIGHT = 360;
+
 export function CustomDatePicker({
   value,
   onChange,
@@ -17,7 +23,9 @@ export function CustomDatePicker({
   minDate?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number; openUp: boolean } | null>(null);
 
   const today = new Date();
   const parsed = value ? new Date(value + 'T00:00:00') : null;
@@ -37,20 +45,47 @@ export function CustomDatePicker({
     return a < b;
   };
 
+  // Position the portal popup relative to the trigger, flipping up if needed
+  // and clamping inside the viewport. Recomputed on open, scroll and resize.
+  const reposition = () => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    const openUp = spaceBelow < POPUP_HEIGHT + 8 && r.top > POPUP_HEIGHT;
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - POPUP_WIDTH - 8));
+    const top = openUp ? r.top - 6 : r.bottom + 6;
+    setCoords({ top, left, openUp });
+  };
+
+  useLayoutEffect(() => {
+    if (open) reposition();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onClickOutside = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || popupRef.current?.contains(t)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
     };
+    const onReflow = () => reposition();
     document.addEventListener('mousedown', onClickOutside);
     document.addEventListener('keydown', onKey);
+    // capture:true so we also catch scrolling inside the drawer/any container.
+    window.addEventListener('scroll', onReflow, true);
+    window.addEventListener('resize', onReflow);
     return () => {
       document.removeEventListener('mousedown', onClickOutside);
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onReflow, true);
+      window.removeEventListener('resize', onReflow);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const formatDisplay = (d: Date) => {
@@ -119,8 +154,9 @@ export function CustomDatePicker({
     a.getDate() === b.getDate();
 
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(p => !p)}
         className="w-full flex items-center justify-between px-3 py-2 rounded-md border border-border-light bg-white text-[13px] text-text hover:border-primary/30 focus:border-primary/40 focus:ring-2 focus:ring-primary/10 outline-none transition-all cursor-pointer"
@@ -131,8 +167,18 @@ export function CustomDatePicker({
         <Calendar size={14} className="text-text-muted shrink-0" />
       </button>
 
-      {open && (
-        <div className="absolute left-0 top-full mt-1.5 z-30 w-[300px] rounded-lg border border-border-light bg-white shadow-lg p-3">
+      {open && coords && createPortal(
+        <div
+          ref={popupRef}
+          style={{
+            position: 'fixed',
+            left: coords.left,
+            top: coords.openUp ? undefined : coords.top,
+            bottom: coords.openUp ? window.innerHeight - coords.top : undefined,
+            width: POPUP_WIDTH,
+          }}
+          className="z-[1000] rounded-lg border border-border-light bg-white shadow-lg p-3"
+        >
           {/* Header */}
           <div className="flex items-center justify-between mb-2">
             <div className="text-[13px] font-semibold text-text">{monthName}</div>
@@ -222,7 +268,8 @@ export function CustomDatePicker({
               Today
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

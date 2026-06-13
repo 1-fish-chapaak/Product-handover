@@ -8,10 +8,10 @@ import type {
   AtrRisk,
 } from './atrTypes';
 
-// ─── The 9 required observation fields (drives template + parsing) ───
+// ─── The required observation fields (drives template + parsing) ───
 type FieldKey =
   | 'title' | 'description' | 'riskSummary' | 'recommendation'
-  | 'evidence' | 'verification' | 'classification' | 'risk' | 'dueDate';
+  | 'actionTaken' | 'evidence' | 'verification' | 'classification' | 'risk' | 'dueDate';
 
 export interface AtrField {
   key: FieldKey;
@@ -26,7 +26,8 @@ export const REQUIRED_FIELDS: AtrField[] = [
   { key: 'title',          label: 'Observation Title',                       hint: 'Short title of the observation.', example: 'Vendor Master Management', match: ['observation title', 'title'] },
   { key: 'description',     label: 'Observation Description',                 hint: 'What was observed / the issue.', example: '14 vendor codes activated in SAP without standard onboarding documentation.', match: ['description', 'issue', 'observation'] },
   { key: 'riskSummary',    label: 'Risk Summary',                            hint: 'The risk this exposes.', example: 'Unauthorized vendor creation could enable fictitious vendor fraud and duplicate payments.', match: ['risk summary'] },
-  { key: 'recommendation', label: 'Recommendation / Action Plan',            hint: 'Management action / recommendation.', example: "Enforce a 'Maker-Checker' protocol for vendor onboarding in SAP.", match: ['recommendation', 'action plan', 'action'] },
+  { key: 'recommendation', label: 'Recommendation / Management Action Plan',  hint: 'Management action / recommendation.', example: "Enforce a 'Maker-Checker' protocol for vendor onboarding in SAP.", match: ['recommendation', 'management action plan', 'action plan'] },
+  { key: 'actionTaken',    label: 'Action Taken',                            hint: 'What management actually did to remediate.', example: "Redesigned the SAP vendor onboarding workflow to enforce maker-checker; no profile activates without second-level validation.", match: ['action taken', 'remediation', 'action'] },
   { key: 'evidence',       label: 'Evidence',                                hint: 'Evidence / supporting documents.', example: 'UAT report, SAP workflow diagram, sample of 3 newly activated vendors.', match: ['evidence'] },
   { key: 'verification',   label: 'Management Comments / Auditor Verification', hint: 'Checker / auditor verification or management comments.', example: 'Verified flow in SAP Production. Workflow functioning as expected.', match: ['verification', 'management comment', 'checker', 'auditor'] },
   { key: 'classification', label: 'Classification Status',                   hint: 'Design Deficiency | System Deficiency | Procedural Non-Compliance', example: 'System Deficiency', match: ['classification'] },
@@ -191,10 +192,11 @@ function obsRows(meta: AtrMeta, observations: AtrObservation[]) {
         'Observation Title': o.title,
         'Observation Description': i === 0 ? (o.description ?? '') : '',
         'Risk Summary': i === 0 ? (o.riskSummary ?? '') : '',
-        'Recommendation / Action Plan': p.text ?? '',
+        'Recommendation / Management Action Plan': p.text ?? '',
+        'Action Taken': p.actionTaken ?? '',
         'Evidence': p.evidence ?? '',
         'Management Comments / Auditor Verification': p.verification ?? '',
-        'Classification Status': i === 0 ? (o.classification ?? '') : '',
+        'Classification Status': o.classification ?? '',
         'Risk Significance': i === 0 ? (o.risk ?? '') : '',
         'Due Date / Timeline': p.dueDate ?? '',
         'Status': p.status ?? '',
@@ -217,13 +219,14 @@ export function exportAtrWord(meta: AtrMeta, observations: AtrObservation[]) {
   const esc = (s?: string) => (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const blocks = observations.map((o, i) => {
     const plans = o.actionPlans.map((p, j) => `
-      <p style="margin:6px 0 2px;"><b>Action Plan ${j + 1}</b>${p.dueDate ? ` — Due ${esc(p.dueDate)}` : ''}${p.status ? ` (${esc(p.status)})` : ''}</p>
+      <p style="margin:6px 0 2px;"><b>Management Action Plan ${j + 1}</b>${o.classification ? ` — ${esc(o.classification)}` : ''}${p.dueDate ? ` · Due ${esc(p.dueDate)}` : ''}${p.status ? ` (${esc(p.status)})` : ''}</p>
       <p style="margin:0 0 2px;">${esc(p.text)}</p>
+      ${p.actionTaken ? `<p style="margin:0 0 2px;"><i>Action Taken:</i> ${esc(p.actionTaken)}</p>` : ''}
       ${p.evidence ? `<p style="margin:0 0 2px;color:#6B5D82;"><i>Evidence / Comments:</i> ${esc(p.evidence)}</p>` : ''}
       ${p.verification ? `<p style="margin:0 0 8px;"><i>Checker / Auditor Verification:</i> ${esc(p.verification)}</p>` : ''}`).join('');
     return `
       <h3 style="color:#550FA5;margin:16px 0 4px;">${i + 1}. ${esc(o.title)}${o.process ? ` — ${esc(o.process)}` : ''}</h3>
-      <p style="margin:0;color:#6B5D82;">${[o.risk && `${o.risk} Risk`, o.classification, o.status].filter(Boolean).map(esc).join(' · ')}</p>
+      <p style="margin:0;color:#6B5D82;">${[o.risk && `${o.risk} Risk`, o.status].filter(Boolean).map(esc).join(' · ')}</p>
       ${o.description ? `<p style="margin:6px 0 2px;"><b>Issue:</b> ${esc(o.description)}</p>` : ''}
       ${o.riskSummary ? `<p style="margin:0 0 2px;"><b>Risk Summary:</b> ${esc(o.riskSummary)}</p>` : ''}
       ${plans}`;
@@ -285,7 +288,7 @@ export async function parseObservationsFromFile(file: File): Promise<AtrObservat
           ? [{
               text: recommendation,
               dueDate,
-              priority: risk,
+              actionTaken: val(row, 'actionTaken') || undefined,
               evidence: val(row, 'evidence') || undefined,
               verification,
               status: deriveActionStatus(verification, dueDate),
@@ -314,9 +317,9 @@ export const SAMPLE_OBSERVATIONS: AtrObservation[] = [
     querySummary: 'Review of vendor creation and approval workflows in SAP.',
     riskSummary: 'Unauthorized vendor creation could enable fictitious vendor fraud, duplicate payments, and PMLA non-compliance.',
     actionPlans: [
-      { text: "Configure mandatory dual-factor authentication (2FA) via RSA tokens for all users with SAP 'Vendor Master' creation or modification rights.", dueDate: '15 May 2026', priority: 'High', status: 'Implemented', evidence: 'Security audit logs, configuration screenshots of SAP 2FA module, and signed monthly user access review report (April 2026).', verification: 'Verified in SAP on 25 Apr 2026 — 2FA active for all 18 users with M_LFA1_BUK authorization. Accepted.' },
-      { text: "Redesign the vendor onboarding workflow in SAP to enforce a strict 'Maker-Checker' protocol. No vendor profile can be activated without second-level validation.", dueDate: '20 Jun 2026', priority: 'Medium', status: 'Implemented', evidence: 'UAT report, workflow diagram in SAP, and sample of 3 newly activated vendors.', verification: 'Verified flow in SAP Production environment. Workflow functioning as expected.' },
-      { text: 'Establish a centralised Vendor Onboarding Portal to capture all statutory documents digitally with automated validation against MCA / GST databases.', dueDate: '30 Jul 2026', priority: 'High', status: 'Partially Implemented', evidence: 'Portal login credentials for testing, system user manual, and API integration evidence with MCA / GSTN.', verification: 'Verified end-to-end portal workflow. GST API integration validates credentials; MCA integration pending UAT scheduled for Jun 2026.' },
+      { text: "Configure mandatory dual-factor authentication (2FA) via RSA tokens for all users with SAP 'Vendor Master' creation or modification rights.", dueDate: '15 May 2026', status: 'Implemented', actionTaken: 'Enabled RSA-token 2FA on the M_LFA1_BUK authorization object for all 18 users with vendor-master create/change rights; legacy password-only access disabled on 24 Apr 2026.', evidence: 'Security audit logs, configuration screenshots of SAP 2FA module, and signed monthly user access review report (April 2026).', verification: 'Verified in SAP on 25 Apr 2026 — 2FA active for all 18 users with M_LFA1_BUK authorization. Accepted.' },
+      { text: "Redesign the vendor onboarding workflow in SAP to enforce a strict 'Maker-Checker' protocol. No vendor profile can be activated without second-level validation.", dueDate: '20 Jun 2026', status: 'Implemented', actionTaken: 'Rebuilt the vendor onboarding workflow so the maker can only submit; activation now requires a separate checker release. Deployed to production after UAT sign-off.', evidence: 'UAT report, workflow diagram in SAP, and sample of 3 newly activated vendors.', verification: 'Verified flow in SAP Production environment. Workflow functioning as expected.' },
+      { text: 'Establish a centralised Vendor Onboarding Portal to capture all statutory documents digitally with automated validation against MCA / GST databases.', dueDate: '30 Jul 2026', status: 'Partially Implemented', actionTaken: 'Launched the vendor onboarding portal with digital PAN/GST/MSME capture; GSTN API validation is live. MCA integration built but still in UAT.', evidence: 'Portal login credentials for testing, system user manual, and API integration evidence with MCA / GSTN.', verification: 'Verified end-to-end portal workflow. GST API integration validates credentials; MCA integration pending UAT scheduled for Jun 2026.' },
     ],
   },
   {
@@ -329,8 +332,8 @@ export const SAMPLE_OBSERVATIONS: AtrObservation[] = [
     querySummary: 'Assessment of PO / GRN / Invoice matching controls and tolerance override usage in SAP MM.',
     riskSummary: 'Bypass of 3-way match controls weakens accuracy of vendor payouts and may result in payment for goods not received or at incorrect rates.',
     actionPlans: [
-      { text: 'Tighten OMR1 tolerance limits and remove tolerance override authority from non-Finance Manager roles.', dueDate: '10 May 2026', priority: 'High', status: 'Implemented', evidence: 'OMR1 configuration screenshots, updated SU01 role assignments, and approval email from CFO dated 28 Apr 2026.', verification: 'Verified — tolerance limits revised, only 2 Finance Manager users retain override. Test transactions confirm block on others.' },
-      { text: 'Implement a monthly exception report from SAP for all MIRO override transactions, reviewed and signed by the Finance Controller.', dueDate: '30 Jun 2026', priority: 'Medium', status: 'Pending', evidence: 'Draft SAP query (SQ01) shared; report design under review. To be operationalised from May 2026 cycle.', verification: 'Pending — first signed exception report awaited. Will re-verify in Q4 follow-up.' },
+      { text: 'Tighten OMR1 tolerance limits and remove tolerance override authority from non-Finance Manager roles.', dueDate: '10 May 2026', status: 'Implemented', actionTaken: 'Revised OMR1 tolerance keys to near-zero and stripped the override authorization from all non-Finance-Manager roles via SU01; only 2 Finance Managers retain it.', evidence: 'OMR1 configuration screenshots, updated SU01 role assignments, and approval email from CFO dated 28 Apr 2026.', verification: 'Verified — tolerance limits revised, only 2 Finance Manager users retain override. Test transactions confirm block on others.' },
+      { text: 'Implement a monthly exception report from SAP for all MIRO override transactions, reviewed and signed by the Finance Controller.', dueDate: '30 Jun 2026', status: 'Pending', actionTaken: 'Drafted the SQ01 query for MIRO override transactions; report layout under review with the Finance Controller. Not yet operationalised.', evidence: 'Draft SAP query (SQ01) shared; report design under review. To be operationalised from May 2026 cycle.', verification: 'Pending — first signed exception report awaited. Will re-verify in Q4 follow-up.' },
     ],
   },
   {
@@ -343,8 +346,8 @@ export const SAMPLE_OBSERVATIONS: AtrObservation[] = [
     querySummary: 'Validation of pre-dispatch freight rate approval workflow and contract-rate vs actual-rate variance.',
     riskSummary: 'Post-facto rate approval undermines the integrity of dispatch authorisation and exposes the company to inflated freight outflow.',
     actionPlans: [
-      { text: 'Configure a hard block in the SAP logistics module preventing dispatch document creation (VL01N) unless an approved freight rate exists in the contract master (TK11).', dueDate: '30 Apr 2026', priority: 'High', status: 'Overdue', evidence: 'Functional spec drafted; user-exit development assigned to internal SAP team. Go-live slipped from 30 Apr to mid-June.', verification: 'OVERDUE — control still not enforced. Escalated to Audit Committee on 12 May 2026. Revised target: 15 Jun 2026.' },
-      { text: 'Introduce a pre-dispatch logistics checklist with mandatory rate-approval reference number capture before gate-out.', dueDate: '30 Jun 2026', priority: 'Medium', status: 'Pending', evidence: 'Checklist template circulated to plant-head; field rollout scheduled with monthly compliance KPI tracking.', verification: 'Awaiting first month of rollout data — verification deferred to Q4 review.' },
+      { text: 'Configure a hard block in the SAP logistics module preventing dispatch document creation (VL01N) unless an approved freight rate exists in the contract master (TK11).', dueDate: '30 Apr 2026', status: 'Overdue', actionTaken: 'Functional spec for the VL01N user-exit signed off and development assigned to the internal SAP team; build incomplete — go-live slipped from 30 Apr to mid-June.', evidence: 'Functional spec drafted; user-exit development assigned to internal SAP team. Go-live slipped from 30 Apr to mid-June.', verification: 'OVERDUE — control still not enforced. Escalated to Audit Committee on 12 May 2026. Revised target: 15 Jun 2026.' },
+      { text: 'Introduce a pre-dispatch logistics checklist with mandatory rate-approval reference number capture before gate-out.', dueDate: '30 Jun 2026', status: 'Pending', actionTaken: 'Checklist template designed and circulated to the plant head; field rollout with monthly compliance KPI tracking scheduled but not yet started.', evidence: 'Checklist template circulated to plant-head; field rollout scheduled with monthly compliance KPI tracking.', verification: 'Awaiting first month of rollout data — verification deferred to Q4 review.' },
     ],
   },
   {
@@ -357,7 +360,7 @@ export const SAMPLE_OBSERVATIONS: AtrObservation[] = [
     querySummary: 'Review of stock-take variance recording, root-cause analysis, and write-off approvals.',
     riskSummary: 'Uninvestigated stock variances may conceal pilferage or system mis-postings and distort FG inventory in financial statements.',
     actionPlans: [
-      { text: 'Introduce a mandatory 7-day variance investigation tracker with auto-escalation to Plant Head and Finance Controller for variances above ₹1 lakh.', dueDate: '25 May 2026', priority: 'High', status: 'Pending', evidence: 'SOP draft circulated; awaiting Plant Head sign-off. Tracker to be hosted on internal SharePoint.', verification: 'Open — implementation not yet started. Will follow up in next cycle.' },
+      { text: 'Introduce a mandatory 7-day variance investigation tracker with auto-escalation to Plant Head and Finance Controller for variances above ₹1 lakh.', dueDate: '25 May 2026', status: 'Pending', actionTaken: 'SOP for the 7-day variance tracker drafted and circulated; awaiting Plant Head sign-off before the SharePoint tracker is built. No investigations logged yet.', evidence: 'SOP draft circulated; awaiting Plant Head sign-off. Tracker to be hosted on internal SharePoint.', verification: 'Open — implementation not yet started. Will follow up in next cycle.' },
     ],
   },
   {
@@ -370,8 +373,8 @@ export const SAMPLE_OBSERVATIONS: AtrObservation[] = [
     querySummary: 'Assessment of scrap disposal authorisation, rate-setting committee minutes, and gate-pass to invoice reconciliation.',
     riskSummary: 'Inadequate scrap reconciliation can lead to revenue leakage and provides opportunity for unrecorded cash collections at the plant gate.',
     actionPlans: [
-      { text: 'Activate the SAP Scrap Sale module with mandatory gate-pass quantity capture, minimum rate validation, and end-of-month reconciliation report.', dueDate: '30 Apr 2026', priority: 'Medium', status: 'Implemented', evidence: 'SAP module configuration evidence, signed reconciliation reports for Feb–Apr 2026, and committee minutes.', verification: 'Verified — full reconciliation for 3 consecutive months reviewed. No variance noted. Closed.' },
-      { text: 'Mandate quarterly rotation of the Scrap Rate Committee members to reduce concentration risk.', dueDate: '30 Apr 2026', priority: 'Low', status: 'Implemented', evidence: 'Updated committee charter, HR communication, and Q1 FY26 committee composition.', verification: 'Verified — rotation effected for Q1 FY26. Closed.' },
+      { text: 'Activate the SAP Scrap Sale module with mandatory gate-pass quantity capture, minimum rate validation, and end-of-month reconciliation report.', dueDate: '30 Apr 2026', status: 'Implemented', actionTaken: 'Activated the SAP Scrap Sale module with gate-pass quantity capture and minimum-rate validation; end-of-month reconciliation reports run and signed for Feb–Apr 2026.', evidence: 'SAP module configuration evidence, signed reconciliation reports for Feb–Apr 2026, and committee minutes.', verification: 'Verified — full reconciliation for 3 consecutive months reviewed. No variance noted. Closed.' },
+      { text: 'Mandate quarterly rotation of the Scrap Rate Committee members to reduce concentration risk.', dueDate: '30 Apr 2026', status: 'Implemented', actionTaken: 'Updated the committee charter to require quarterly member rotation; HR communicated the change and the Q1 FY26 committee was reconstituted accordingly.', evidence: 'Updated committee charter, HR communication, and Q1 FY26 committee composition.', verification: 'Verified — rotation effected for Q1 FY26. Closed.' },
     ],
   },
 ];

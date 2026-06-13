@@ -19,8 +19,9 @@ export interface AtrActionPlan {
   /** Recommendation / management action plan text. */
   text: string;
   dueDate?: string;                 // ISO or free text (e.g. "30 Jun 2026")
-  priority?: AtrRisk;
   status?: AtrActionStatus;
+  /** What the risk owner actually did to remediate (shown before Evidence). */
+  actionTaken?: string;
   /** Evidence / comments backing the action. */
   evidence?: string;
   /** Management comments or checker / auditor verification. */
