@@ -4340,7 +4340,7 @@ export default function HomeView({
                   h >= 17 && h < 21 ? 'Good evening,'   :
                                       'Good night,'; // 21:00 – 04:59 IST
                 const greetingWords = greeting.split(' ');
-                const nameWords = ['Kapil', 'Arora'];
+                const nameWords = ['Kapil'];
                 // Word-level cascade: each word lifts + un-blurs in sequence.
                 // Stagger and easing match the rest of the section's motion
                 // language (subtle premium, no overshoot).

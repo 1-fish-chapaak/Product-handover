@@ -9,11 +9,14 @@ import {
   XCircle,
   ChevronDown,
   Calendar,
+  CalendarClock,
+  ArrowRight,
   FileText,
   User,
-  Pencil,
+  Plus,
   Trash2,
   Check,
+  Sparkles,
 } from 'lucide-react';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
 import Gated from '../shared/Gated';
@@ -38,11 +41,37 @@ const CLASSIFICATION_STYLE: Record<GrcExceptionClassification, string> = {
   'False Positive':            'bg-[#EEEEF1] text-ink-600',
 };
 
-const SEVERITY_STYLE: Record<GrcExceptionSeverity, string> = {
-  High:   'bg-high-50 text-high-700',
-  Medium: 'bg-mitigated-50 text-mitigated-700',
-  Low:    'bg-compliant-50 text-compliant-700',
-};
+// ─── Suggested (auto-typed, editable) decision message ────────────────────
+// When a decision/outcome is chosen, the comment auto-fills with a relatable
+// message the user can edit before submitting. Manual edits are preserved: the
+// field only re-fills while it's empty or still holds the previous suggestion.
+function useSuggestedMessage(suggested: string, value: string, setValue: (v: string) => void) {
+  const lastRef = useRef('');
+  useEffect(() => {
+    if (suggested && (value.trim() === '' || value === lastRef.current)) setValue(suggested);
+    lastRef.current = suggested;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggested]);
+  return () => { setValue(suggested); lastRef.current = suggested; };
+}
+
+// A clickable chip that re-applies the suggested message to the comment field.
+function SuggestedChip({ message, onApply }: { message: string; onApply: () => void }) {
+  if (!message) return null;
+  return (
+    <button
+      type="button"
+      onClick={onApply}
+      title="Use this suggested message"
+      className="group/sc w-full text-left mb-2 inline-flex items-start gap-1.5 px-2.5 py-1.5 bg-brand-50/70 border border-brand-100 rounded-[8px] text-[11.5px] text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+    >
+      <Sparkles size={12} className="mt-[1px] shrink-0 text-brand-500" />
+      <span className="leading-snug">
+        <span className="font-semibold">Suggested:</span> {message}
+      </span>
+    </button>
+  );
+}
 
 // Combined Action Review status — folds the auditor decision and the
 // implementation outcome into a single label.
@@ -73,6 +102,13 @@ const COMBINED_REVIEW_LABEL: Record<CombinedActionReview, string> = {
 };
 
 const NO_PLAN_CLASSIFICATIONS = new Set<string>(['Business as Usual', 'False Positive']);
+
+// Action-plan due date (ISO YYYY-MM-DD) → "25 Jun 2026".
+const fmtPlanDate = (iso: string) => {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+};
 
 // Legacy mock data sometimes stores 'Implemented' in actionReview — normalise.
 function normaliseActionReview(v: string): ActionReviewBase {
@@ -359,11 +395,7 @@ export function ReviewClassificationDrawer({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 mb-5">
-          <section className="border border-canvas-border rounded-[12px] p-4">
-            <SectionLabel>Severity</SectionLabel>
-            <Pill className={SEVERITY_STYLE[exception.severity]}>{exception.severity}</Pill>
-          </section>
+        <div className="mb-5">
           <section className="border border-canvas-border rounded-[12px] p-4">
             <SectionLabel>Classification</SectionLabel>
             <Pill className={CLASSIFICATION_STYLE[exception.classification]}>
@@ -408,33 +440,73 @@ export function ReviewCaseDrawer({
 }: {
   exception: GrcException;
   onClose: () => void;
-  onDecision: (decision: 'approve' | 'reject') => void;
+  onDecision: (
+    decision: 'approve' | 'reject',
+    payload: { implementation: 'Implemented' | 'Partially Implemented' | null; comment: string },
+  ) => void;
   onViewBulk: (bulkId: string) => void;
   role?: 'risk-owner' | 'auditor';
 }) {
-  const { can } = useCan();
   const detail = GRC_CASE_DETAILS[exception.id];
   const bulk = exception.bulkId ? GRC_BULK_ACTIONS[exception.bulkId] : null;
   const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
   const [implementation, setImplementation] = useState<'Implemented' | 'Partially Implemented' | null>(null);
   const [comment, setComment] = useState('');
 
-  // "Case Reviewed" mode — Auditor opened a case that's already past pending review,
-  // so the decision UI is hidden and only a comment box remains.
   const isAuditor = role === 'auditor';
-  const isViewMode = isAuditor && (exception.actionReview !== 'Pending' || exception.classification === 'Unclassified');
+  const actionable = ACTIONABLE_CLASSIFICATIONS.has(exception.classification);
+  const phase = exception.actionPhase;
 
-  // Submit is enabled only when (a) a decision is chosen and (b) for Approve, an implementation
-  // outcome is selected. Reject auto-implies Discrepancy so no extra choice required.
+  // The Auditor's review has two stages for an actionable plan, plus a single
+  // classification review for non-actionable cases:
+  //   plan-review       → Accept / Reject the management action plan
+  //   completion-review → review the completed work + implementation outcome
+  //   classification    → Approve / Reject (Business as Usual / False Positive)
+  // A classified, not-yet-reviewed actionable case with no explicit phase (legacy
+  // data) defaults to the plan-review stage.
+  const isPlanReview = isAuditor && actionable && (phase === 'plan-review' || (!phase && exception.actionReview === 'Pending' && exception.classification !== 'Unclassified'));
+  const isCompletionReview = isAuditor && actionable && phase === 'completion-review';
+  const isClassReview = isAuditor && !actionable && exception.actionReview === 'Pending' && exception.classification !== 'Unclassified';
+  const needsDecision = isPlanReview || isCompletionReview || isClassReview;
+  // Anything else (Risk Owner viewing, or an already-decided case) is read-only.
+  const isViewMode = !needsDecision;
+
+  const completion = detail?.completion;
+
+  // Submit is enabled when a decision is chosen — and, for a completion Approve,
+  // an implementation outcome is selected.
   const canSubmit = isViewMode
     ? true
-    : decision === 'reject' || (decision === 'approve' && implementation !== null);
+    : decision === 'reject' || (decision === 'approve' && (!isCompletionReview || implementation !== null));
+
+  // Auto-typed, editable message that reflects the chosen decision/outcome.
+  const suggested = (() => {
+    if (isViewMode || !decision) return '';
+    if (isPlanReview) {
+      return decision === 'approve'
+        ? 'Management action plan is well-scoped and appropriate — accepted for implementation.'
+        : 'Management action plan needs revision before it can be accepted. Please refine and resubmit.';
+    }
+    if (isCompletionReview) {
+      if (decision === 'reject') return 'A discrepancy was identified in the completed action — reopening for the Risk Owner to address.';
+      if (implementation === 'Implemented') return 'Action is fully implemented in the system and verified against the evidence provided.';
+      if (implementation === 'Partially Implemented') return 'Action is partially implemented — the verified portion is accepted; remaining items to be closed by the Risk Owner.';
+      return '';
+    }
+    if (isClassReview) {
+      return decision === 'approve'
+        ? 'Classification reviewed and approved — no action plan required.'
+        : 'Classification not accepted — reopening for the Risk Owner to re-assess.';
+    }
+    return '';
+  })();
+  const applySuggested = useSuggestedMessage(suggested, comment, setComment);
 
   return (
     <>
       <Overlay onClick={onClose} />
       <DrawerShell
-        title={isViewMode ? 'Case Reviewed' : 'Review Case'}
+        title={isPlanReview ? 'Review Management Action Plan' : isCompletionReview ? 'Review Completed Action' : isClassReview ? 'Review Classification' : 'Case Details'}
         onClose={onClose}
         footer={
           <>
@@ -447,11 +519,13 @@ export function ReviewCaseDrawer({
             <button
               onClick={() => {
                 if (isViewMode) { onClose(); return; }
-                if (!can('exc_resolve')) return; // resolve permission gates the action decision
-                if (canSubmit && decision) onDecision(decision);
+                // The action review is the Auditor's decision (the Risk Owner
+                // classifies; the Auditor approves/rejects).
+                if (!isAuditor) return;
+                if (canSubmit && decision) onDecision(decision, { implementation, comment });
               }}
-              disabled={!canSubmit || (!isViewMode && !can('exc_resolve'))}
-              title={!isViewMode && !can('exc_resolve') ? "You don't have permission to resolve exceptions" : undefined}
+              disabled={!canSubmit || (!isViewMode && !isAuditor)}
+              title={!isViewMode && !isAuditor ? 'Only the Auditor can submit a review decision' : undefined}
               className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
                 canSubmit
                   ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
@@ -485,11 +559,7 @@ export function ReviewCaseDrawer({
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <section className="border border-canvas-border rounded-[12px] p-4">
-                <SectionLabel>Severity</SectionLabel>
-                <Pill className={SEVERITY_STYLE[exception.severity]}>{exception.severity}</Pill>
-              </section>
+            <div className="mb-4">
               <section className="border border-canvas-border rounded-[12px] p-4">
                 <SectionLabel>Classification</SectionLabel>
                 <Pill className={CLASSIFICATION_STYLE[exception.classification]}>
@@ -500,23 +570,73 @@ export function ReviewCaseDrawer({
 
             {detail && (
               <section className="border border-canvas-border rounded-[12px] p-4 mb-4">
-                <SectionLabel>Action Submitted</SectionLabel>
-                <h3 className="text-[14px] font-semibold text-ink-900 mb-1.5 leading-snug">
-                  <FileText size={14} className="inline mr-1.5 text-ink-500 -mt-0.5" />
-                  {detail.actionTitle}
-                </h3>
-                <div className="inline-flex items-center gap-1.5 text-[12px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
-                  <Calendar size={11} />
-                  {detail.actionDueDate}
-                </div>
-                <p className="text-[12.5px] text-ink-700 leading-relaxed">{detail.actionDescription}</p>
+                <SectionLabel>{detail.actionPlans && detail.actionPlans.length > 1 ? `Management Action Plans · ${detail.actionPlans.length}` : 'Management Action Plan'}</SectionLabel>
+                {detail.actionPlans && detail.actionPlans.length > 0 ? (
+                  <div className="space-y-3">
+                    {detail.actionPlans.map((p, i) => (
+                      <div key={i} className={i > 0 ? 'pt-3 border-t border-canvas-border' : ''}>
+                        <h3 className="text-[14px] font-semibold text-ink-900 mb-1.5 leading-snug">
+                          <FileText size={14} className="inline mr-1.5 text-ink-500 -mt-0.5" />
+                          {p.name || `Management Action Plan ${i + 1}`}
+                        </h3>
+                        {p.dueDate && (
+                          <div className="inline-flex items-center gap-1.5 text-[12px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
+                            <Calendar size={11} />
+                            Due {fmtPlanDate(p.dueDate)}
+                          </div>
+                        )}
+                        {p.details && <p className="text-[12.5px] text-ink-700 leading-relaxed">{p.details}</p>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    <h3 className="text-[14px] font-semibold text-ink-900 mb-1.5 leading-snug">
+                      <FileText size={14} className="inline mr-1.5 text-ink-500 -mt-0.5" />
+                      {detail.actionTitle}
+                    </h3>
+                    {detail.actionDueDate && (
+                      <div className="inline-flex items-center gap-1.5 text-[12px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
+                        <Calendar size={11} />
+                        {detail.actionDueDate}
+                      </div>
+                    )}
+                    <p className="text-[12.5px] text-ink-700 leading-relaxed">{detail.actionDescription}</p>
+                  </>
+                )}
+              </section>
+            )}
+
+            {/* Completion review — the Risk Owner's completion note + evidence. */}
+            {isCompletionReview && completion && (
+              <section className="border border-compliant/40 bg-compliant-50/40 rounded-[12px] p-4 mb-4">
+                <SectionLabel>Risk Owner — Action Completed</SectionLabel>
+                {completion.selfAssessment && (
+                  <div className="mb-2.5">
+                    <span className="text-[11px] text-ink-500 mr-1.5">Risk Owner reports:</span>
+                    <Pill className={completion.selfAssessment === 'Implemented' ? 'bg-compliant-50 text-compliant-700 border border-compliant/40' : 'bg-mitigated-50 text-mitigated-700 border border-mitigated/40'}>
+                      {completion.selfAssessment}
+                    </Pill>
+                  </div>
+                )}
+                <p className="text-[12.5px] text-ink-700 leading-relaxed">{completion.note}</p>
+                {completion.evidence.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2.5">
+                    {completion.evidence.map((ev, i) => (
+                      <span key={i} className="inline-flex items-center gap-1.5 h-7 px-2.5 bg-white border border-canvas-border rounded-full text-[11.5px] text-ink-700">
+                        <Paperclip size={11} className="text-brand-600" /> {ev.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {completion.completedAt && <p className="text-[11px] text-ink-400 mt-2">Marked complete on {completion.completedAt}</p>}
               </section>
             )}
 
             <section className="border border-canvas-border rounded-[12px] p-4">
               <SectionLabel>Auditor Decision</SectionLabel>
 
-              {/* Approve / Reject toggle — hidden in Case Reviewed (view) mode */}
+              {/* Accept/Reject (plan) or Approve/Reject (completion / classification) */}
               {!isViewMode && (
                 <div className="mb-4">
                   <label className="block text-[12.5px] font-medium text-ink-800 mb-2">
@@ -532,7 +652,7 @@ export function ReviewCaseDrawer({
                       }`}
                     >
                       <CheckCircle2 size={14} />
-                      Approve
+                      {isPlanReview ? 'Accept Plan' : 'Approve'}
                     </button>
                     <button
                       onClick={() => { setDecision('reject'); setImplementation(null); }}
@@ -543,14 +663,17 @@ export function ReviewCaseDrawer({
                       }`}
                     >
                       <XCircle size={14} />
-                      Reject
+                      {isPlanReview ? 'Reject Plan' : 'Reject'}
                     </button>
                   </div>
+                  {isPlanReview && decision === 'approve' && (
+                    <p className="text-[11.5px] text-ink-500 mt-2 leading-snug">The Risk Owner will implement this plan, then submit evidence of completion for your final review.</p>
+                  )}
                 </div>
               )}
 
-              {/* Approve → mandatory implementation outcome */}
-              {!isViewMode && decision === 'approve' && (
+              {/* Completion Approve → mandatory implementation outcome */}
+              {isCompletionReview && decision === 'approve' && (
                 <motion.div
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -581,7 +704,7 @@ export function ReviewCaseDrawer({
                 </motion.div>
               )}
 
-              {/* Reject → Discrepancy auto-applied */}
+              {/* Reject → reopen at the Risk Owner's end (Discrepancy on completion). */}
               {!isViewMode && decision === 'reject' && (
                 <motion.div
                   initial={{ opacity: 0, y: -4 }}
@@ -589,17 +712,22 @@ export function ReviewCaseDrawer({
                   transition={{ duration: 0.15 }}
                   className="mb-4 p-3 bg-risk-50 border border-risk/40 rounded-[8px]"
                 >
-                  <div className="flex items-center gap-2 text-[12.5px] font-semibold text-risk-700 mb-1">
-                    <Pill className="bg-risk-50 text-risk-700 border border-risk/40">Discrepancy</Pill>
-                  </div>
+                  {isCompletionReview && (
+                    <div className="flex items-center gap-2 text-[12.5px] font-semibold text-risk-700 mb-1">
+                      <Pill className="bg-risk-50 text-risk-700 border border-risk/40">Discrepancy</Pill>
+                    </div>
+                  )}
                   <p className="text-[12px] text-risk-700 leading-snug">
-                    On submit, the case will reopen at the Risk Owner's end for further action.
+                    {isPlanReview
+                      ? "On submit, the management action plan is rejected and the case reopens for the Risk Owner to revise and resubmit."
+                      : "On submit, the case will reopen at the Risk Owner's end for further action."}
                   </p>
                 </motion.div>
               )}
 
               <div>
                 <label className="block text-[12.5px] font-medium text-ink-800 mb-2">Comment</label>
+                {!isViewMode && <SuggestedChip message={suggested} onApply={applySuggested} />}
                 <div className="relative">
                   <textarea
                     value={comment}
@@ -632,6 +760,180 @@ export function ReviewCaseDrawer({
   );
 }
 
+// ─── Mark Action Complete Drawer (Risk Owner) ───
+// After the Auditor accepts the plan, the Risk Owner implements it and submits a
+// completion note + evidence; this moves the case to the Auditor's completion review.
+export function CompleteActionDrawer({
+  exception,
+  onClose,
+  onSubmit,
+}: {
+  exception: GrcException;
+  onClose: () => void;
+  onSubmit: (payload: { note: string; evidence: { name: string }[]; implementation: 'Implemented' | 'Partially Implemented'; comment: string }) => void;
+}) {
+  const detail = GRC_CASE_DETAILS[exception.id];
+  const [implementation, setImplementation] = useState<'Implemented' | 'Partially Implemented' | null>(detail?.completion?.selfAssessment ?? null);
+  const [note, setNote] = useState(detail?.completion?.note ?? '');     // Action Taken — manual, no auto-fill
+  const [comment, setComment] = useState('');
+  const [evidence, setEvidence] = useState<{ name: string }[]>(detail?.completion?.evidence ?? []);
+  const fileRef = useRef<HTMLInputElement>(null);
+  // Risk Owner describes the action (manual) and reports how it landed.
+  const canSubmit = note.trim().length > 0 && implementation !== null;
+
+  // Once a status is picked, the Comment box auto-fills with an editable message.
+  const suggested = implementation === 'Implemented'
+    ? 'The management action plan has been fully implemented in the system. Evidence is attached for the Auditor’s review.'
+    : implementation === 'Partially Implemented'
+      ? 'The management action plan has been partially implemented. The remaining items are in progress; interim evidence is attached for review.'
+      : '';
+  const applySuggested = useSuggestedMessage(suggested, comment, setComment);
+
+  const addFiles = (files: FileList | null) => {
+    if (!files) return;
+    const incoming = Array.from(files).map(f => ({ name: f.name }));
+    setEvidence(prev => [...prev, ...incoming.filter(n => !prev.some(p => p.name === n.name))]);
+  };
+
+  return (
+    <>
+      <Overlay onClick={onClose} />
+      <DrawerShell
+        title="Mark Action Complete"
+        onClose={onClose}
+        footer={
+          <>
+            <button
+              onClick={onClose}
+              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => canSubmit && implementation && onSubmit({ note: note.trim(), evidence, implementation, comment: comment.trim() })}
+              disabled={!canSubmit}
+              className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+                canSubmit ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
+              }`}
+            >
+              <CheckCircle2 size={14} />
+              Submit for Review
+            </button>
+          </>
+        }
+      >
+        <>
+          <p className="text-[12.5px] text-ink-600 leading-relaxed mb-4">
+            Confirm the management action plan has been completed. Use the attach icon to add evidence as proof — the Auditor will review and record the outcome.
+          </p>
+
+          {detail && (detail.actionPlans?.length || detail.actionTitle) && (
+            <section className="border border-canvas-border rounded-[12px] p-4 mb-4">
+              <SectionLabel>Management Action Plan</SectionLabel>
+              {(detail.actionPlans && detail.actionPlans.length > 0 ? detail.actionPlans : [{ name: detail.actionTitle, details: detail.actionDescription, dueDate: '' }]).map((p, i) => (
+                <div key={i} className={i > 0 ? 'pt-2.5 mt-2.5 border-t border-canvas-border' : ''}>
+                  <h3 className="text-[13.5px] font-semibold text-ink-900 leading-snug">
+                    <FileText size={13} className="inline mr-1.5 text-ink-500 -mt-0.5" />
+                    {p.name || `Management Action Plan ${i + 1}`}
+                  </h3>
+                  {p.dueDate && (
+                    <span className="inline-flex items-center gap-1.5 text-[11.5px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mt-1.5">
+                      <Calendar size={11} /> Due {fmtPlanDate(p.dueDate)}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </section>
+          )}
+
+          {/* Action Taken — the Risk Owner describes what was done (manual). */}
+          <div className="mb-4">
+            <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+              Action Taken <span className="text-risk">*</span>
+            </label>
+            <div className="relative">
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Describe the action you completed before the due date…"
+                rows={4}
+                className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+              />
+              <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                title="Attach evidence"
+                aria-label="Attach evidence"
+                className="absolute bottom-2 right-2 w-7 h-7 flex items-center justify-center text-ink-400 hover:text-brand-700 cursor-pointer"
+              >
+                <Paperclip size={14} />
+              </button>
+            </div>
+            {evidence.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {evidence.map((ev) => (
+                  <span key={ev.name} className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1 bg-brand-50 border border-brand-200 rounded-full text-[11.5px] text-brand-700">
+                    <Paperclip size={11} /> {ev.name}
+                    <button onClick={() => setEvidence(prev => prev.filter(e => e.name !== ev.name))} className="w-5 h-5 rounded-full flex items-center justify-center hover:bg-white/70 cursor-pointer"><X size={11} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Implementation Status — Risk Owner reports how it landed, after Action Taken. */}
+          <div className="mb-4">
+            <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+              Implementation Status <span className="text-risk">*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {(['Implemented', 'Partially Implemented'] as const).map((status) => {
+                const selected = implementation === status;
+                return (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => setImplementation(status)}
+                    className={`h-10 text-[12.5px] font-medium rounded-[8px] border transition-colors cursor-pointer ${
+                      selected
+                        ? (status === 'Implemented' ? 'bg-compliant-50 border-compliant text-compliant-700' : 'bg-mitigated-50 border-mitigated text-mitigated-700')
+                        : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-200'
+                    }`}
+                  >
+                    {status}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11.5px] text-ink-500 mt-2 leading-snug">The Auditor reviews your evidence and confirms the final outcome.</p>
+          </div>
+
+          {/* Comment — always shown; the suggested chip appears once a status is
+              chosen and pre-fills an editable message. */}
+          <div className="mb-4">
+            <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Comment</label>
+            <SuggestedChip message={suggested} onApply={applySuggested} />
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Add a note for the Auditor…"
+              rows={3}
+              className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+            />
+          </div>
+
+          {detail && (
+            <div className="mt-5">
+              <ActivityTimeline entries={detail.activityLog} />
+            </div>
+          )}
+        </>
+      </DrawerShell>
+    </>
+  );
+}
+
 // ─── Classify Exception Drawer (Risk Owner) ───
 const CLASSIFY_OPTIONS: string[] = [
   'Business as Usual',
@@ -648,11 +950,14 @@ const ACTIONABLE_CLASSIFICATIONS = new Set<string>([
   'Procedural Non-Compliance',
 ]);
 
-const SEVERITY_TONE: Record<GrcExceptionSeverity, { base: string; active: string }> = {
-  High:   { base: 'text-ink-700', active: 'bg-high-50 border-high text-high-700' },
-  Medium: { base: 'text-ink-700', active: 'bg-mitigated-50 border-mitigated text-mitigated-700' },
-  Low:    { base: 'text-ink-700', active: 'bg-compliant-50 border-compliant text-compliant-700' },
-};
+// A single remediation action plan. Actionable classifications can carry several,
+// each rendered as a collapsible card in the Classify drawer.
+interface ActionPlanDraft {
+  id: string;
+  name: string;
+  details: string;
+  dueDate: string;
+}
 
 export function ClassifyExceptionDrawer({
   exception,
@@ -668,16 +973,42 @@ export function ClassifyExceptionDrawer({
     actionName?: string;
     actionTaken?: string;
     dueDate?: string;
+    actionPlans?: { name: string; details: string; dueDate: string }[];
   }) => void;
 }) {
-  const [severity, setSeverity] = useState<GrcExceptionSeverity>(exception.severity);
-  const [classification, setClassification] = useState<string>('');
-  const [comment, setComment] = useState('');
-  const [actionName, setActionName] = useState('');
-  const [actionTaken, setActionTaken] = useState('');
-  const [dueDate, setDueDate] = useState('');
+  // Re-classifying a (rejected) case pre-fills the previous classification,
+  // rationale and action plans so the Risk Owner can update them.
+  const reclassDetail = GRC_CASE_DETAILS[exception.id];
+  const isReclassify = exception.classification !== 'Unclassified';
+  // Severity is AI-assigned and no longer editable in the panel — carried through as-is.
+  const severity = exception.severity;
+  const [classification, setClassification] = useState<string>(isReclassify ? exception.classification : '');
+  const [comment, setComment] = useState(
+    isReclassify && reclassDetail?.classificationJustification
+      ? reclassDetail.classificationJustification.replace(/^"|"$/g, '')
+      : '',
+  );
+  const [actionPlans, setActionPlans] = useState<ActionPlanDraft[]>(() => {
+    if (isReclassify && reclassDetail?.actionPlans?.length) {
+      return reclassDetail.actionPlans.map((p, i) => ({ id: `ap-${i + 1}`, name: p.name, details: p.details, dueDate: p.dueDate }));
+    }
+    return [{ id: 'ap-1', name: '', details: '', dueDate: '' }];
+  });
+  const [expandedPlan, setExpandedPlan] = useState<string>('ap-1');
   const [classificationOpen, setClassificationOpen] = useState(false);
   const classificationRef = useRef<HTMLDivElement>(null);
+
+  const updatePlan = (id: string, patch: Partial<ActionPlanDraft>) =>
+    setActionPlans(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)));
+  const addPlan = () => {
+    const id = `ap-${Date.now()}`;
+    setActionPlans(prev => [...prev, { id, name: '', details: '', dueDate: '' }]);
+    setExpandedPlan(id);
+  };
+  const removePlan = (id: string) => {
+    setActionPlans(prev => (prev.length > 1 ? prev.filter(p => p.id !== id) : prev));
+    setExpandedPlan(prev => (prev === id ? '' : prev));
+  };
 
   // Block any due-date earlier than today.
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -702,12 +1033,15 @@ export function ClassifyExceptionDrawer({
   const requiresActionPlan = ACTIONABLE_CLASSIFICATIONS.has(classification);
 
   const canSave = useMemo(() => {
-    if (!classification || !comment.trim()) return false;
+    // Comment is optional — only classification (and an action plan when the
+    // classification requires one) are mandatory.
+    if (!classification) return false;
     if (requiresActionPlan) {
-      if (!actionName.trim() || !actionTaken.trim() || !dueDate) return false;
+      if (actionPlans.length === 0) return false;
+      if (actionPlans.some(p => !p.name.trim() || !p.details.trim() || !p.dueDate)) return false;
     }
     return true;
-  }, [classification, comment, requiresActionPlan, actionName, actionTaken, dueDate]);
+  }, [classification, requiresActionPlan, actionPlans]);
 
   return (
     <>
@@ -730,9 +1064,12 @@ export function ClassifyExceptionDrawer({
                 severity,
                 classification,
                 comment,
-                actionName: requiresActionPlan ? actionName.trim() : undefined,
-                actionTaken: requiresActionPlan ? actionTaken.trim() : undefined,
-                dueDate: requiresActionPlan ? dueDate : undefined,
+                actionName: requiresActionPlan ? actionPlans[0]?.name.trim() : undefined,
+                actionTaken: requiresActionPlan ? actionPlans[0]?.details.trim() : undefined,
+                dueDate: requiresActionPlan ? actionPlans.find(p => p.dueDate)?.dueDate : undefined,
+                actionPlans: requiresActionPlan
+                  ? actionPlans.map(p => ({ name: p.name.trim(), details: p.details.trim(), dueDate: p.dueDate }))
+                  : undefined,
               })}
               disabled={!canSave}
               className={`h-10 px-5 text-[13px] font-semibold rounded-[8px] transition-colors ${
@@ -747,27 +1084,6 @@ export function ClassifyExceptionDrawer({
           </>
         }
       >
-        <div className="mb-5">
-          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Severity</label>
-          <div className="grid grid-cols-3 gap-2">
-            {(['High', 'Medium', 'Low'] as const).map((s) => {
-              const selected = severity === s;
-              const tone = SEVERITY_TONE[s];
-              return (
-                <button
-                  key={s}
-                  onClick={() => setSeverity(s)}
-                  className={`h-10 text-[13px] font-medium rounded-[8px] border transition-colors cursor-pointer ${
-                    selected ? tone.active : `bg-canvas-elevated border-canvas-border ${tone.base} hover:border-brand-200`
-                  }`}
-                >
-                  {s}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         <div className="mb-5">
           <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
             Classification <span className="text-risk">*</span>
@@ -828,96 +1144,153 @@ export function ClassifyExceptionDrawer({
           )}
         </div>
 
-        {/* Conditional action-plan fields — mirrors Bulk Classify modal behaviour */}
+        {/* Conditional action-plan fields — multiple plans, each a collapsible
+            card so the panel stays compact (only the open one shows its fields). */}
         {requiresActionPlan && (
           <motion.div
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.15 }}
-            className="space-y-4 border-t border-canvas-border pt-5 mb-5"
+            className="border-t border-canvas-border pt-5 mb-5"
           >
-            {/* Grouped Action Plan card with shared edit/delete toolbar */}
-            <div className="border border-canvas-border rounded-[10px] p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10.5px] uppercase tracking-wider font-semibold text-ink-500">
-                  Action Plan
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const el = document.querySelector<HTMLInputElement>('input[data-field="action-name"]');
-                      el?.focus();
-                    }}
-                    title="Edit action plan"
-                    aria-label="Edit action plan"
-                    className="w-6 h-6 flex items-center justify-center rounded text-ink-400 hover:text-brand-700 hover:bg-[#F4F2F7] cursor-pointer"
-                  >
-                    <Pencil size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setActionName(''); setActionTaken(''); }}
-                    title="Clear action plan"
-                    aria-label="Clear action plan"
-                    className="w-6 h-6 flex items-center justify-center rounded text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
-                  Action Name <span className="text-risk">*</span>
-                </label>
-                <input
-                  data-field="action-name"
-                  value={actionName}
-                  onChange={(e) => setActionName(e.target.value)}
-                  placeholder="e.g. MFA enforcement for executive accounts"
-                  className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
-                  Action Details <span className="text-risk">*</span>
-                </label>
-                <div className="relative">
-                  <textarea
-                    value={actionTaken}
-                    onChange={(e) => setActionTaken(e.target.value)}
-                    rows={4}
-                    placeholder="Describe the remediation steps, evidence, and rollout plan…"
-                    className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
-                  />
-                  <button
-                    type="button"
-                    title="Attach file"
-                    aria-label="Attach file to action details"
-                    className="absolute bottom-2 right-2 w-7 h-7 flex items-center justify-center text-ink-400 hover:text-brand-700 cursor-pointer"
-                  >
-                    <Paperclip size={14} />
-                  </button>
-                </div>
-              </div>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10.5px] uppercase tracking-wider font-semibold text-ink-500">
+                Management Action Plans
+                <span className="ml-1.5 normal-case tracking-normal text-ink-400 tabular-nums">· {actionPlans.length}</span>
+              </span>
+              <button
+                type="button"
+                onClick={addPlan}
+                className="inline-flex items-center gap-1 h-7 px-2.5 text-[12px] font-semibold text-brand-700 bg-brand-50 rounded-[8px] hover:bg-brand-100 transition-colors cursor-pointer"
+              >
+                <Plus size={13} />
+                Add plan
+              </button>
             </div>
 
-            <div>
-              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
-                Due Date <span className="text-risk">*</span>
-              </label>
-              <div className="w-[220px]">
-                <CustomDatePicker value={dueDate} onChange={setDueDate} minDate={todayIso} />
-              </div>
+            <div className="space-y-2.5">
+              {actionPlans.map((plan, idx) => {
+                const open = expandedPlan === plan.id;
+                const complete = plan.name.trim() && plan.details.trim() && !!plan.dueDate;
+                return (
+                  <div key={plan.id} className="border border-canvas-border rounded-[10px] overflow-hidden">
+                    {/* Collapsible header */}
+                    <div className={`flex items-center gap-2 pl-3 pr-2 h-11 ${open ? 'bg-[#FAFAFB]' : ''}`}>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPlan(open ? '' : plan.id)}
+                        aria-expanded={open}
+                        className="flex-1 min-w-0 flex items-center gap-2.5 text-left cursor-pointer h-full"
+                      >
+                        <span className="shrink-0 w-5 h-5 rounded-full bg-brand-50 text-brand-700 text-[11px] font-bold flex items-center justify-center tabular-nums">
+                          {idx + 1}
+                        </span>
+                        <span className="flex-1 min-w-0 truncate text-[13px] font-semibold text-ink-800">
+                          {plan.name.trim() || `Management Action Plan ${idx + 1}`}
+                        </span>
+                        {plan.dueDate && (
+                          <span className="hidden sm:inline-flex items-center gap-1 h-6 px-2 text-[11px] text-brand-700 bg-brand-50 rounded-full shrink-0 tabular-nums">
+                            <Calendar size={10} />
+                            {plan.dueDate}
+                          </span>
+                        )}
+                        {!complete && (
+                          <span
+                            className="w-1.5 h-1.5 rounded-full bg-mitigated shrink-0"
+                            title="Incomplete — fill in all required fields"
+                            aria-label="Incomplete"
+                          />
+                        )}
+                        <ChevronDown
+                          size={14}
+                          className={`text-ink-400 transition-transform duration-150 shrink-0 ${open ? 'rotate-180' : ''}`}
+                        />
+                      </button>
+                      {actionPlans.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removePlan(plan.id)}
+                          title="Remove this action plan"
+                          aria-label={`Remove action plan ${idx + 1}`}
+                          className="shrink-0 w-7 h-7 flex items-center justify-center rounded text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Collapsible body */}
+                    <AnimatePresence initial={false}>
+                      {open && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                          className="overflow-hidden"
+                        >
+                          <div className="px-3 pt-3 pb-3.5 space-y-3 border-t border-canvas-border">
+                            <div>
+                              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                                Action Name <span className="text-risk">*</span>
+                              </label>
+                              <input
+                                value={plan.name}
+                                onChange={(e) => updatePlan(plan.id, { name: e.target.value })}
+                                placeholder="e.g. MFA enforcement for executive accounts"
+                                className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                                Action Details <span className="text-risk">*</span>
+                              </label>
+                              <div className="relative">
+                                <textarea
+                                  value={plan.details}
+                                  onChange={(e) => updatePlan(plan.id, { details: e.target.value })}
+                                  rows={4}
+                                  placeholder="Describe the remediation steps, evidence, and rollout plan…"
+                                  className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                                />
+                                <button
+                                  type="button"
+                                  title="Attach file"
+                                  aria-label="Attach file to action details"
+                                  className="absolute bottom-2 right-2 w-7 h-7 flex items-center justify-center text-ink-400 hover:text-brand-700 cursor-pointer"
+                                >
+                                  <Paperclip size={14} />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                                Due Date <span className="text-risk">*</span>
+                              </label>
+                              <div className="w-[220px]">
+                                <CustomDatePicker
+                                  value={plan.dueDate}
+                                  onChange={(v) => updatePlan(plan.id, { dueDate: v })}
+                                  minDate={todayIso}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
             </div>
           </motion.div>
         )}
 
         <div className="mb-5">
           <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
-            Comment <span className="text-risk">*</span>
+            Comment <span className="text-[11px] font-normal text-ink-400">(optional)</span>
           </label>
           <div className="relative">
             <textarea
@@ -937,24 +1310,479 @@ export function ClassifyExceptionDrawer({
           </div>
         </div>
 
-        <section className="border border-canvas-border rounded-[12px] p-4">
-          <SectionLabel>Activity Log</SectionLabel>
-          <div className="flex gap-3">
-            <div className="shrink-0 w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center">
-              <User size={13} />
+        {/* Synced activity log — every action by either persona shows here. */}
+        <div className="mt-1">
+          <ActivityTimeline entries={reclassDetail?.activityLog ?? []} />
+        </div>
+      </DrawerShell>
+    </>
+  );
+}
+
+// ─── Due Date Revision (Risk Owner request → Auditor approval) ───
+
+function formatDueDate(iso?: string): string {
+  if (!iso) return 'Not set';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+const REVISION_STATUS_STYLE: Record<'Pending' | 'Approved' | 'Rejected', string> = {
+  Pending:  'bg-mitigated-50 text-mitigated-700',
+  Approved: 'bg-compliant-50 text-compliant-700',
+  Rejected: 'bg-risk-50 text-risk-700',
+};
+
+// Shared "previous → revised" visual so both roles see the change identically.
+function DueDateDelta({ previous, revised }: { previous?: string; revised?: string }) {
+  return (
+    <div className="flex items-stretch gap-2.5">
+      <div className="flex-1 rounded-[10px] border border-canvas-border bg-[#FAFAFB] p-3">
+        <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-1">Previous Due Date</div>
+        <div className="text-[14px] font-semibold text-ink-600 line-through decoration-ink-300">{formatDueDate(previous)}</div>
+      </div>
+      <div className="flex items-center shrink-0">
+        <ArrowRight size={16} className="text-ink-400" />
+      </div>
+      <div className="flex-1 rounded-[10px] border border-brand-200 bg-brand-50/60 p-3">
+        <div className="text-[10.5px] font-semibold uppercase tracking-wider text-brand-700 mb-1">Revised Due Date</div>
+        <div className="text-[14px] font-bold text-brand-700">{formatDueDate(revised)}</div>
+      </div>
+    </div>
+  );
+}
+
+// Risk Owner — request a revised due date (goes to the auditor for approval).
+export function RequestDueDateDrawer({
+  exception,
+  onClose,
+  onSubmit,
+}: {
+  exception: GrcException;
+  onClose: () => void;
+  onSubmit: (payload: { revisedDueDate: string; reason: string }) => void;
+}) {
+  const existing = exception.dueDateRevision;
+  const pending = existing?.status === 'Pending';
+  const current = exception.dueDate;
+  const [revisedDueDate, setRevisedDueDate] = useState('');
+  const [reason, setReason] = useState('');
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const canSubmit = !pending && !!revisedDueDate && revisedDueDate !== current && reason.trim().length > 0;
+
+  return (
+    <>
+      <Overlay onClick={onClose} />
+      <DrawerShell
+        title="Request Due Date Change"
+        subtitle={`${exception.id} · sends to the auditor for approval`}
+        onClose={onClose}
+        footer={
+          <>
+            <button
+              onClick={onClose}
+              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+            >
+              {pending ? 'Close' : 'Cancel'}
+            </button>
+            {!pending && (
+              <button
+                onClick={() => canSubmit && onSubmit({ revisedDueDate, reason: reason.trim() })}
+                disabled={!canSubmit}
+                className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+                  canSubmit
+                    ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
+                    : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
+                }`}
+              >
+                <CalendarClock size={14} />
+                Send Request to Auditor
+              </button>
+            )}
+          </>
+        }
+      >
+        <div className="mb-5">
+          <SectionLabel>Management Action Plan</SectionLabel>
+          <h3 className="text-[14px] font-semibold text-ink-900 leading-snug">{exception.title}</h3>
+        </div>
+
+        {pending && existing ? (
+          <div className="rounded-[12px] border border-mitigated/40 bg-mitigated-50/60 p-4 mb-5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[12.5px] font-semibold text-mitigated-700">Revision already requested</span>
+              <Pill className={REVISION_STATUS_STYLE[existing.status]}>Awaiting auditor approval</Pill>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-3 mb-0.5">
-                <div className="text-[12.5px] text-ink-800">
-                  <span className="font-semibold">Ira</span>{' '}
-                  <span className="text-ink-500">(AI)</span>
-                </div>
-                <span className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">18 Apr 2026, 18:00</span>
+            <DueDateDelta previous={existing.previousDueDate} revised={existing.revisedDueDate} />
+            <p className="text-[12.5px] text-ink-700 leading-relaxed mt-3">{existing.reason}</p>
+            <p className="text-[11px] text-ink-500 mt-2">
+              Requested by {existing.requestedBy} · {formatDueDate(existing.requestedAt.slice(0, 10))}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="mb-5">
+              <SectionLabel>Current Due Date</SectionLabel>
+              <div className="inline-flex items-center gap-2 h-9 px-3 rounded-[8px] border border-canvas-border bg-[#FAFAFB] text-[13px] font-semibold text-ink-800">
+                <Calendar size={13} className="text-ink-500" />
+                {formatDueDate(current)}
               </div>
-              <p className="text-[12.5px] text-ink-700 leading-snug">
-                Exception flagged by Ira (AI) with <span className="font-semibold text-brand-700 tabular-nums">94%</span> confidence
-              </p>
             </div>
+
+            <div className="mb-5">
+              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                Revised Due Date <span className="text-risk">*</span>
+              </label>
+              <div className="w-[220px]">
+                <CustomDatePicker value={revisedDueDate} onChange={setRevisedDueDate} minDate={todayIso} />
+              </div>
+              {revisedDueDate && revisedDueDate === current && (
+                <p className="mt-2 text-[11.5px] text-risk-700">Pick a date different from the current due date.</p>
+              )}
+            </div>
+
+            {revisedDueDate && revisedDueDate !== current && (
+              <div className="mb-5">
+                <SectionLabel>Preview</SectionLabel>
+                <DueDateDelta previous={current} revised={revisedDueDate} />
+              </div>
+            )}
+
+            <div className="mb-5">
+              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                Reason for change <span className="text-risk">*</span>
+              </label>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={4}
+                placeholder="Explain why the action can't be completed by the current due date…"
+                className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+              />
+            </div>
+          </>
+        )}
+      </DrawerShell>
+    </>
+  );
+}
+
+// Auditor — review a pending revised-due-date request (approve / reject).
+export function ReviewDueDateDrawer({
+  exception,
+  onClose,
+  onDecision,
+}: {
+  exception: GrcException;
+  onClose: () => void;
+  onDecision: (decision: 'approve' | 'reject', comment: string) => void;
+}) {
+  const rev = exception.dueDateRevision;
+  const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
+  const [comment, setComment] = useState('');
+
+  if (!rev) return null;
+  const isPending = rev.status === 'Pending';
+  const canSubmit = isPending && decision !== null;
+
+  return (
+    <>
+      <Overlay onClick={onClose} />
+      <DrawerShell
+        title="Review Due Date Request"
+        subtitle={`${exception.id} · requested by ${rev.requestedBy}`}
+        onClose={onClose}
+        footer={
+          <>
+            <button
+              onClick={onClose}
+              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+            >
+              {isPending ? 'Cancel' : 'Close'}
+            </button>
+            {isPending && (
+              <button
+                onClick={() => canSubmit && decision && onDecision(decision, comment.trim())}
+                disabled={!canSubmit}
+                className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+                  canSubmit
+                    ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
+                    : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
+                }`}
+              >
+                Submit Decision
+              </button>
+            )}
+          </>
+        }
+      >
+        <div className="mb-5">
+          <SectionLabel>Management Action Plan</SectionLabel>
+          <h3 className="text-[14px] font-semibold text-ink-900 leading-snug">{exception.title}</h3>
+        </div>
+
+        <div className="mb-5">
+          <SectionLabel>Requested Change</SectionLabel>
+          <DueDateDelta previous={rev.previousDueDate} revised={rev.revisedDueDate} />
+        </div>
+
+        <div className="mb-5">
+          <SectionLabel>Reason from Risk Owner</SectionLabel>
+          <div className="px-3 py-2.5 bg-[#FAFAFB] border border-canvas-border rounded-[8px] text-[12.5px] text-ink-800 leading-relaxed">
+            {rev.reason}
+          </div>
+          <p className="text-[11px] text-ink-500 mt-2">
+            Requested by {rev.requestedBy} · {formatDueDate(rev.requestedAt.slice(0, 10))}
+          </p>
+        </div>
+
+        {isPending ? (
+          <section className="border border-canvas-border rounded-[12px] p-4">
+            <SectionLabel>Auditor Decision</SectionLabel>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <button
+                onClick={() => setDecision('approve')}
+                className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                  decision === 'approve'
+                    ? 'bg-compliant text-white border-compliant shadow-[0_2px_8px_rgba(22,163,74,0.25)]'
+                    : 'bg-compliant-50 border-compliant text-compliant-700 hover:bg-compliant hover:text-white'
+                }`}
+              >
+                <CheckCircle2 size={14} />
+                Approve new date
+              </button>
+              <button
+                onClick={() => setDecision('reject')}
+                className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                  decision === 'reject'
+                    ? 'bg-risk text-white border-risk shadow-[0_2px_8px_rgba(220,38,38,0.25)]'
+                    : 'bg-risk-50 border-risk text-risk-700 hover:bg-risk hover:text-white'
+                }`}
+              >
+                <XCircle size={14} />
+                Reject
+              </button>
+            </div>
+            {decision === 'approve' && (
+              <p className="mb-4 text-[12px] text-compliant-700 leading-snug">
+                On approve, the action plan's due date moves to <span className="font-semibold">{formatDueDate(rev.revisedDueDate)}</span>.
+              </p>
+            )}
+            {decision === 'reject' && (
+              <p className="mb-4 text-[12px] text-risk-700 leading-snug">
+                On reject, the due date stays at <span className="font-semibold">{formatDueDate(rev.previousDueDate)}</span> and the request returns to the Risk Owner.
+              </p>
+            )}
+            <div>
+              <label className="block text-[12.5px] font-medium text-ink-800 mb-2">Comment</label>
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                rows={3}
+                placeholder="Add a note for the Risk Owner (optional)…"
+                className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+              />
+            </div>
+          </section>
+        ) : (
+          <div className="rounded-[12px] border border-canvas-border p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[12.5px] font-semibold text-ink-800">Decision</span>
+              <Pill className={REVISION_STATUS_STYLE[rev.status]}>{rev.status}</Pill>
+            </div>
+            {rev.decisionComment && (
+              <p className="text-[12.5px] text-ink-700 leading-relaxed mt-3">{rev.decisionComment}</p>
+            )}
+            {rev.decidedBy && (
+              <p className="text-[11px] text-ink-500 mt-2">
+                {rev.status} by {rev.decidedBy}{rev.decidedAt ? ` · ${formatDueDate(rev.decidedAt.slice(0, 10))}` : ''}
+              </p>
+            )}
+          </div>
+        )}
+      </DrawerShell>
+    </>
+  );
+}
+
+// Risk Owner — request one revised due date across several selected cases.
+export function BulkRequestDueDateDrawer({
+  exceptions,
+  onClose,
+  onSubmit,
+}: {
+  exceptions: GrcException[];
+  onClose: () => void;
+  onSubmit: (payload: { revisedDueDate: string; reason: string }) => void;
+}) {
+  const [revisedDueDate, setRevisedDueDate] = useState('');
+  const [reason, setReason] = useState('');
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const canSubmit = !!revisedDueDate && reason.trim().length > 0;
+  const n = exceptions.length;
+
+  return (
+    <>
+      <Overlay onClick={onClose} />
+      <DrawerShell
+        title="Request Due Date Change"
+        subtitle={`${n} case${n === 1 ? '' : 's'} · sends to the auditor for approval`}
+        onClose={onClose}
+        footer={
+          <>
+            <button
+              onClick={onClose}
+              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => canSubmit && onSubmit({ revisedDueDate, reason: reason.trim() })}
+              disabled={!canSubmit}
+              className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+                canSubmit ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
+              }`}
+            >
+              <CalendarClock size={14} />
+              Send {n} Request{n === 1 ? '' : 's'}
+            </button>
+          </>
+        }
+      >
+        <div className="mb-5">
+          <SectionLabel>Selected Cases</SectionLabel>
+          <div className="border border-canvas-border rounded-[10px] divide-y divide-canvas-border max-h-[200px] overflow-y-auto">
+            {exceptions.map(e => (
+              <div key={e.id} className="flex items-center justify-between px-3 py-2.5">
+                <span className="text-[12.5px] font-mono font-medium text-brand-700">{e.id}</span>
+                <span className="text-[12px] text-ink-600 tabular-nums">Current: {formatDueDate(e.dueDate)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-5">
+          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+            New Revised Due Date <span className="text-risk">*</span>
+          </label>
+          <div className="w-[220px]">
+            <CustomDatePicker value={revisedDueDate} onChange={setRevisedDueDate} minDate={todayIso} />
+          </div>
+          <p className="mt-2 text-[11.5px] text-ink-500">Applied to all {n} selected case{n === 1 ? '' : 's'}.</p>
+        </div>
+
+        <div className="mb-5">
+          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+            Reason for change <span className="text-risk">*</span>
+          </label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={4}
+            placeholder="Explain why these actions can't be completed by their current due dates…"
+            className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+          />
+        </div>
+      </DrawerShell>
+    </>
+  );
+}
+
+// Auditor — approve / reject several pending revised-due-date requests at once.
+export function BulkReviewDueDateDrawer({
+  exceptions,
+  onClose,
+  onDecision,
+}: {
+  exceptions: GrcException[];
+  onClose: () => void;
+  onDecision: (decision: 'approve' | 'reject', comment: string) => void;
+}) {
+  const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
+  const [comment, setComment] = useState('');
+  const canSubmit = decision !== null;
+  const n = exceptions.length;
+
+  return (
+    <>
+      <Overlay onClick={onClose} />
+      <DrawerShell
+        title="Review Due Date Requests"
+        subtitle={`${n} pending request${n === 1 ? '' : 's'}`}
+        onClose={onClose}
+        footer={
+          <>
+            <button
+              onClick={onClose}
+              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => canSubmit && decision && onDecision(decision, comment.trim())}
+              disabled={!canSubmit}
+              className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+                canSubmit ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
+              }`}
+            >
+              Submit Decision
+            </button>
+          </>
+        }
+      >
+        <div className="mb-5">
+          <SectionLabel>Pending Requests</SectionLabel>
+          <div className="border border-canvas-border rounded-[10px] divide-y divide-canvas-border max-h-[260px] overflow-y-auto">
+            {exceptions.map(e => (
+              <div key={e.id} className="px-3 py-2.5">
+                <div className="text-[12.5px] font-mono font-medium text-brand-700 mb-1">{e.id}</div>
+                <div className="flex items-center gap-2 text-[12px]">
+                  <span className="text-ink-500 line-through decoration-ink-300 tabular-nums">{formatDueDate(e.dueDateRevision?.previousDueDate)}</span>
+                  <ArrowRight size={12} className="text-ink-400" />
+                  <span className="font-semibold text-brand-700 tabular-nums">{formatDueDate(e.dueDateRevision?.revisedDueDate)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <section className="border border-canvas-border rounded-[12px] p-4">
+          <SectionLabel>Decision · applies to all {n}</SectionLabel>
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <button
+              onClick={() => setDecision('approve')}
+              className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                decision === 'approve'
+                  ? 'bg-compliant text-white border-compliant shadow-[0_2px_8px_rgba(22,163,74,0.25)]'
+                  : 'bg-compliant-50 border-compliant text-compliant-700 hover:bg-compliant hover:text-white'
+              }`}
+            >
+              <CheckCircle2 size={14} />
+              Approve all
+            </button>
+            <button
+              onClick={() => setDecision('reject')}
+              className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                decision === 'reject'
+                  ? 'bg-risk text-white border-risk shadow-[0_2px_8px_rgba(220,38,38,0.25)]'
+                  : 'bg-risk-50 border-risk text-risk-700 hover:bg-risk hover:text-white'
+              }`}
+            >
+              <XCircle size={14} />
+              Reject all
+            </button>
+          </div>
+          <div>
+            <label className="block text-[12.5px] font-medium text-ink-800 mb-2">Comment</label>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={3}
+              placeholder="Add a note for the Risk Owner (optional)…"
+              className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+            />
           </div>
         </section>
       </DrawerShell>
@@ -1011,7 +1839,6 @@ export function BulkActionGroupModal({
               <thead>
                 <tr className="bg-[#FAFAFB] border-b border-canvas-border text-left text-ink-500 uppercase tracking-wider">
                   <th className="px-4 py-3 font-medium text-[10.5px]">Exception ID</th>
-                  <th className="px-4 py-3 font-medium text-[10.5px]">Severity</th>
                   <th className="px-4 py-3 font-medium text-[10.5px]">Classification</th>
                   <th className="px-4 py-3 font-medium text-[10.5px]">Action Review Status</th>
                 </tr>
@@ -1025,9 +1852,6 @@ export function BulkActionGroupModal({
                     <tr key={c.id} className="border-b border-canvas-border last:border-b-0">
                       <td className="px-4 py-3 align-middle">
                         <span className="font-mono font-medium text-brand-700 text-[12.5px]">{c.id}</span>
-                      </td>
-                      <td className="px-4 py-3 align-middle">
-                        <Pill className={SEVERITY_STYLE[c.severity]}>{c.severity}</Pill>
                       </td>
                       <td className="px-4 py-3 align-middle">
                         <Pill className={CLASSIFICATION_STYLE[c.classification]}>{c.classification}</Pill>

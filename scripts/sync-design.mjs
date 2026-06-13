@@ -92,6 +92,34 @@ for (const hex of new Set((tokenTables.match(/#[0-9a-f]{6}/gi) || []).map(h => h
   }
 }
 
+// ── 3. Preview token parity — preview.html :root must equal src/index.css @theme ─
+// The shippable light preview re-declares the design tokens for portability. Assert
+// every token it shares (by name) with the @theme block carries the SAME value, so
+// the preview can't silently drift from the system. (Dark preview is intentionally
+// remapped, so it is not compared.)
+const PREVIEW = join(ROOT, 'preview.html');
+let previewShared = 0;
+if (!existsSync(PREVIEW)) {
+  warn.push(`preview.html not found (${rel(PREVIEW)}); skipping preview token parity`);
+} else {
+  const html = readFileSync(PREVIEW, 'utf8');
+  const rootStart = html.indexOf(':root');
+  const rootBlock = rootStart === -1 ? '' : html.slice(rootStart, html.indexOf('}', rootStart));
+  const prev = {};
+  for (const m of rootBlock.matchAll(/--([\w-]+):\s*([^;]+);/g)) prev[m[1].trim()] = m[2].trim().toLowerCase();
+  // @theme colors, keyed without the `color-` prefix so they match the preview's names.
+  const srcColors = {};
+  for (const t of tokens) if (/^color-/.test(t.name)) srcColors[t.name.replace(/^color-/, '')] = t.value.toLowerCase();
+  for (const k of Object.keys(prev)) {
+    if (srcColors[k] === undefined) continue;
+    previewShared++;
+    if (srcColors[k] !== prev[k]) {
+      errs.push(`preview.html token drift — \`--${k}\` is \`${prev[k]}\`, but src/index.css has \`${srcColors[k]}\``);
+    }
+  }
+  if (!previewShared) warn.push('preview.html :root shares no token names with @theme — nothing to compare');
+}
+
 // ── report ───────────────────────────────────────────────────────────────────
 for (const w of warn) console.warn(`⚠ ${w}`);
 if (errs.length) {
@@ -101,6 +129,7 @@ if (errs.length) {
   process.exit(1);
 }
 console.log(check ? '✓ skill is in sync with src/index.css' : `✓ token tables match (${checkable.length} tokens checked)`);
+if (previewShared) console.log(`✓ preview.html tokens match src/index.css (${previewShared} checked)`);
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 function sliceBlock(css, marker) {

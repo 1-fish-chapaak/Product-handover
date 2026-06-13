@@ -416,6 +416,29 @@ export interface GrcException {
   /** Action-plan due date set during classification (ISO YYYY-MM-DD).
    *  When today > dueDate, the row is computed as overdue. */
   dueDate?: string;
+  /** Pending/decided request by the Risk Owner to move the action-plan due
+   *  date. Requires auditor approval before `dueDate` is actually changed. */
+  dueDateRevision?: GrcDueDateRevision;
+  /** Two-stage review lifecycle for an actionable management action plan:
+   *   'plan-review'       — RO submitted the plan; Auditor must Accept/Reject it
+   *   'in-progress'       — plan accepted; RO works on it, then marks complete
+   *   'completion-review' — RO marked complete (+ evidence); Auditor reviews outcome
+   *  Undefined for unclassified / non-actionable / already-reviewed cases. */
+  actionPhase?: 'plan-review' | 'in-progress' | 'completion-review';
+}
+
+/** A Risk Owner's request to revise an action-plan due date, gated on auditor
+ *  approval. Retains both dates so the panel can show previous vs revised. */
+export interface GrcDueDateRevision {
+  previousDueDate: string;            // ISO YYYY-MM-DD — the date in effect when requested
+  revisedDueDate: string;            // ISO YYYY-MM-DD — the proposed new date
+  reason: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  requestedBy: string;
+  requestedAt: string;               // ISO timestamp
+  decisionComment?: string;
+  decidedBy?: string;
+  decidedAt?: string;                // ISO timestamp
 }
 
 export type GrcActivityAuthorRole = 'Auditor' | 'Risk Owner';
@@ -436,6 +459,15 @@ export interface GrcCaseDetail {
   actionDescription: string;
   actionStatus: GrcActionStatus;
   activityLog: GrcActivityEntry[];
+  /** Full list of action plans the Risk Owner submitted (synced to the Auditor's
+   *  review). `actionTitle`/`actionDescription`/`actionDueDate` mirror the first
+   *  plan for back-compat with older readers. */
+  actionPlans?: { name: string; details: string; dueDate: string }[];
+  /** Set when the Risk Owner marks the action complete — the note + evidence the
+   *  Auditor reviews before recording the implementation outcome. `selfAssessment`
+   *  is the Risk Owner's own read (Implemented / Partially Implemented) that the
+   *  Auditor sees and then confirms or overrides. */
+  completion?: { note: string; evidence: { name: string }[]; completedAt: string; selfAssessment?: 'Implemented' | 'Partially Implemented' };
 }
 export interface GrcBulkAction {
   id: string;
@@ -453,7 +485,7 @@ export const GRC_EXCEPTIONS: GrcException[] = [
   { id: 'EXC001', riskCategory: 'Access Control',    severity: 'High',   status: 'Under Review', classification: 'Design Deficiency',        classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '2 days ago',   flags: ['Overdue', 'Bulk'], bulkId: 'ACT002', title: 'Unauthorized Admin Access via Legacy VPN Endpoint',                   assignedTo: PERSON.RK },
   { id: 'EXC002', riskCategory: 'Data Privacy',      severity: 'High',   status: 'Open',         classification: 'Unclassified',             classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '1 day ago',                        title: 'Customer PII Stored in Unencrypted S3 Buckets',                       assignedTo: PERSON.SR },
   { id: 'EXC003', riskCategory: 'Financial Controls',severity: 'High',   status: 'Closed',       classification: 'System Deficiency',        classificationReview: 'Approved',    actionReview: 'Approved',lastUpdated: '3 days ago',   flags: ['Bulk'], bulkId: 'ACT001', title: 'Vendor Invoice Approval Bypassed for Transactions Over $50K',         assignedTo: PERSON.AS },
-  { id: 'EXC004', riskCategory: 'IT Security',       severity: 'High',   status: 'Under Review', classification: 'System Deficiency',        classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '3 days ago',   flags: ['Bulk'], bulkId: 'ACT001', title: 'Missing MFA for C-Suite Remote Access',                               assignedTo: PERSON.AS },
+  { id: 'EXC004', riskCategory: 'IT Security',       severity: 'High',   status: 'Under Review', classification: 'System Deficiency',        classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '3 days ago',   flags: ['Bulk'], bulkId: 'ACT001', title: 'Missing MFA for C-Suite Remote Access',                               assignedTo: PERSON.AS, dueDate: '2026-06-20' },
   { id: 'EXC005', riskCategory: 'Compliance',        severity: 'High',   status: 'Open',         classification: 'Procedural Non-Compliance',classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '2 days ago',   flags: ['Overdue', 'Bulk'], bulkId: 'ACT002', title: 'GDPR Data Subject Requests Exceeding 30-Day SLA',                     assignedTo: PERSON.SR },
   { id: 'EXC006', riskCategory: 'Financial Controls',severity: 'High',   status: 'Closed',       classification: 'Design Deficiency',        classificationReview: 'Approved',    actionReview: 'Approved',lastUpdated: '15 days ago',  bulkId: 'ACT004', title: 'Trading Desk Reconciliation Errors in Q3',                            assignedTo: PERSON.RK },
   { id: 'EXC007', riskCategory: 'IT Security',       severity: 'Medium', status: 'Open',         classification: 'Unclassified',             classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: 'about 7 hours ago',                title: 'Firewall Rule Permits Unrestricted Outbound Traffic' },
@@ -462,8 +494,8 @@ export const GRC_EXCEPTIONS: GrcException[] = [
   { id: 'EXC010', riskCategory: 'Financial Controls',severity: 'High',   status: 'Closed',       classification: 'System Deficiency',        classificationReview: 'Approved',    actionReview: 'Approved',lastUpdated: '12 days ago',  bulkId: 'ACT005', title: 'Duplicate Payments to 3 Vendors (Oct-Nov)',                           assignedTo: PERSON.AS },
   { id: 'EXC011', riskCategory: 'IT Security',       severity: 'Medium', status: 'Open',         classification: 'False Positive',           classificationReview: 'Approved',    actionReview: 'Approved',lastUpdated: '6 days ago',                       title: 'Service Account API Key Usage: policy-exempt accounts',              assignedTo: PERSON.SR },
   { id: 'EXC012', riskCategory: 'Data Privacy',      severity: 'High',   status: 'Open',         classification: 'Procedural Non-Compliance',classificationReview: 'Pending',     actionReview: 'Rejected',   lastUpdated: '1 day ago',   bulkId: 'ACT006', title: 'Customer Data Shared with Unauthorized Third-Party',                  assignedTo: PERSON.RK },
-  { id: 'EXC013', riskCategory: 'Compliance',        severity: 'Low',    status: 'Open',         classification: 'Procedural Non-Compliance',classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '20 days ago', flags: ['Bulk'], bulkId: 'ACT003', title: 'CAB Approval Bypassed for Production Change',                         assignedTo: PERSON.RK },
-  { id: 'EXC014', riskCategory: 'Access Control',    severity: 'Medium', status: 'Open',         classification: 'Design Deficiency',        classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '8 days ago',  flags: ['Bulk'], bulkId: 'ACT003', title: 'Change Management System: CAB approval not enforced',                assignedTo: PERSON.SR },
+  { id: 'EXC013', riskCategory: 'Compliance',        severity: 'Low',    status: 'Open',         classification: 'Procedural Non-Compliance',classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '20 days ago', flags: ['Bulk'], bulkId: 'ACT003', title: 'CAB Approval Bypassed for Production Change',                         assignedTo: PERSON.RK, dueDate: '2026-06-15', dueDateRevision: { previousDueDate: '2026-06-15', revisedDueDate: '2026-07-10', reason: 'Awaiting the vendor’s patched CAB module (ETA early July) before the control can be enforced and evidenced.', status: 'Pending', requestedBy: 'Rohan Kapoor', requestedAt: '2026-06-03T11:20:00.000Z' } },
+  { id: 'EXC014', riskCategory: 'Access Control',    severity: 'Medium', status: 'Open',         classification: 'Design Deficiency',        classificationReview: 'Pending',     actionReview: 'Pending',     lastUpdated: '8 days ago',  flags: ['Bulk'], bulkId: 'ACT003', title: 'Change Management System: CAB approval not enforced',                assignedTo: PERSON.SR, dueDate: '2026-06-25' },
 ];
 
 export const GRC_BULK_ACTIONS: Record<string, GrcBulkAction> = {
@@ -784,6 +816,7 @@ export const CLARIFICATION_STEPS = [
     stage: 4,
     question: 'What matching logic should I use to detect duplicates between candidate invoice pairs in your data?',
     options: ['Invoice number + amount', 'Fuzzy match all fields', 'AI-powered pattern detection'],
+    multi: true, // matching logic can legitimately combine several methods
     fillPercent: 100,
     category: 'Ready',
   },

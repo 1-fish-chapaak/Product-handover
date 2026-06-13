@@ -10,22 +10,28 @@ import {
   FileBarChart,
   Layers,
   ChevronDown,
-  FileText,
   History,
   UserPlus,
+  CalendarClock,
+  Workflow,
 } from 'lucide-react';
-import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, ACTION_HUB_SUMMARY, type GrcException, type GrcExceptionSeverity, type GrcExceptionStatus, type GrcActivityEntry } from '../../data/mockData';
+import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, type GrcException, type GrcExceptionSeverity, type GrcActivityEntry, type GrcExceptionClassification, type GrcReviewStatus, type GrcDueDateRevision, type GrcActionStatus, type GrcCaseDetail } from '../../data/mockData';
+import { deriveStatus, requiresActionPlan, type ExceptionActionKind } from './statusModel';
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
 import { QUERY_TABLES } from '../../data/queryGraphs';
 import type { ExceptionRole } from '../../hooks/useAppState';
 import { useCan } from '../../context/CurrentUserContext';
-import Gated from '../shared/Gated';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
   ReviewClassificationDrawer,
   ReviewCaseDrawer,
+  CompleteActionDrawer,
   BulkActionGroupModal,
   ClassifyExceptionDrawer,
+  RequestDueDateDrawer,
+  ReviewDueDateDrawer,
+  BulkRequestDueDateDrawer,
+  BulkReviewDueDateDrawer,
 } from './ReviewDrawers';
 import ActionHubView, { CircularProgress } from './ActionHubView';
 import GenerateATRModal from './GenerateATRModal';
@@ -36,11 +42,20 @@ import BulkAssignDrawer, { type BulkAssignPayload } from './BulkAssignDrawer';
 import ExceptionDetailDrawer from './ExceptionDetailDrawer';
 import ActivityTimelineDrawer from './ActivityTimelineDrawer';
 import { useToast } from '../shared/Toast';
+// ─── Assignment & Approval Workflow module (configurable, data-driven) ───
+import { WorkflowProvider } from './workflow/WorkflowContext';
+import WorkflowModule from './workflow/WorkflowModule';
+import AssignmentModal from './workflow/AssignmentModal';
+import WorkflowAssignButton from './workflow/WorkflowAssignButton';
+import type { Assignment } from './workflow/workflowTypes';
 
 type DrawerState =
   | { type: 'classification'; exceptionId: string }
   | { type: 'action'; exceptionId: string }
   | { type: 'classify'; exceptionId: string }
+  | { type: 'complete'; exceptionId: string }
+  | { type: 'requestDueDate'; exceptionId: string }
+  | { type: 'reviewDueDate'; exceptionId: string }
   | null;
 
 interface ManageExceptionsViewProps {
@@ -181,12 +196,23 @@ function KpiBarInline({ cells }: { cells: KpiCell[] }) {
 // show the generic GRC_EXCEPTIONS mock — we want the actual rows from
 // QUERY_TABLES[Q01] so the data columns (Vendor, Invoice Date, Match %, …)
 // align row-for-row with the cells the auditor saw in the query result.
+// Format an ISO date for activity-log messages (e.g. "30 Apr 2026").
+const fmtDue = (iso?: string) => {
+  if (!iso) return 'Not set';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+// Activity-log timestamp, e.g. "12 Jun 2026, 14:30".
+const fmtStamp = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
 function deriveExceptionsFromOutputTable(
   table: { columns: string[]; rows: string[][] },
   riskCategory = 'Financial Controls',
 ): GrcException[] {
   const idxOf = (re: RegExp) => table.columns.findIndex(c => re.test(c));
-  const statusCol = idxOf(/^status$/i);
   const matchCol = idxOf(/match|score|similarity/i);
   const dateCol  = idxOf(/date/i);
   const labelCol = table.columns.findIndex((c, i) => i > 0 && !/^status$/i.test(c));
@@ -197,13 +223,6 @@ function deriveExceptionsFromOutputTable(
       const pct = parseFloat(String(row[matchCol]).replace('%', ''));
       if (!Number.isNaN(pct)) severity = pct >= 95 ? 'High' : pct >= 85 ? 'Medium' : 'Low';
     }
-    let status: GrcExceptionStatus = 'Open';
-    if (statusCol >= 0) {
-      const raw = String(row[statusCol]).toLowerCase();
-      if (raw.includes('review')) status = 'Under Review';
-      else if (raw.includes('resolved') || raw.includes('closed')) status = 'Closed';
-    }
-
     // Seed flags + dueDate on a few rows so the demo shows Overdue/Bulk chips
     // the same way the default GRC_EXCEPTIONS mock does.
     const flags: Array<'Overdue' | 'Bulk'> = [];
@@ -221,19 +240,64 @@ function deriveExceptionsFromOutputTable(
       dueDate = '2026-08-30';
     }
 
+    // Pre-classify a couple of rows with a future due date so the due-date
+    // revision flow is demoable without classifying first — one carries a
+    // pending request for the Auditor to review out of the box.
+    let classification: GrcExceptionClassification = 'Unclassified';
+    let classificationReview: GrcReviewStatus = 'Pending';
+    let dueDateRevision: GrcDueDateRevision | undefined;
+    if (i === 1) {
+      classification = 'Procedural Non-Compliance';
+      classificationReview = 'Approved';
+      dueDate = '2026-06-15';
+      dueDateRevision = {
+        previousDueDate: '2026-06-15',
+        revisedDueDate: '2026-07-10',
+        reason: 'Dependent control owner is on leave until early July; remediation evidence cannot be gathered before then.',
+        status: 'Pending',
+        requestedBy: 'Rohan Kapoor',
+        requestedAt: '2026-06-03T11:20:00.000Z',
+      };
+    } else if (i === 2) {
+      classification = 'Design Deficiency';
+      classificationReview = 'Approved';
+      dueDate = '2026-06-25';
+    } else if (i === 3) {
+      classification = 'System Deficiency';
+      classificationReview = 'Approved';
+      dueDate = '2026-06-30';
+    } else if (i === 4) {
+      classification = 'Procedural Non-Compliance';
+      classificationReview = 'Approved';
+      dueDate = '2026-06-18';
+      dueDateRevision = {
+        previousDueDate: '2026-06-18',
+        revisedDueDate: '2026-07-15',
+        reason: 'Third-party remediation vendor confirmed availability only from mid-July; cannot close earlier.',
+        status: 'Pending',
+        requestedBy: 'Rohan Kapoor',
+        requestedAt: '2026-06-03T09:10:00.000Z',
+      };
+    }
+
     return {
       id: `EXC${String(i + 1).padStart(3, '0')}`,
       riskCategory,
       severity,
-      status,
-      classification: 'Unclassified',
-      classificationReview: 'Pending',
+      // Status is derived from the classification (all seed rows start with the
+      // action review Pending): classified → In-Progress, else Open.
+      status: deriveStatus(classification, 'Pending', 'Pending'),
+      classification,
+      classificationReview,
       actionReview: 'Pending',
+      // Pre-classified actionable rows await the Auditor's plan review.
+      actionPhase: requiresActionPlan(classification) ? ('plan-review' as const) : undefined,
       lastUpdated: dateCol >= 0 ? String(row[dateCol]) : '—',
       title: labelCol >= 0 ? `Case — ${row[labelCol]}` : `Case ${row[0]}`,
       flags: flags.length ? flags : undefined,
       bulkId,
       dueDate,
+      dueDateRevision,
     };
   });
 }
@@ -273,7 +337,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [can]);
 
-  const [activeNav, setActiveNav] = useState<'exceptions' | 'action-hub'>('exceptions');
+  const [activeNav, setActiveNav] = useState<'exceptions' | 'action-hub' | 'workflow'>('exceptions');
   const [atrModalOpen, setAtrModalOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [drawer, setDrawer] = useState<DrawerState>(null);
@@ -287,6 +351,8 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
   const logEvent = useAuditLog();
   const [bulkClassifyOpen, setBulkClassifyOpen] = useState(false);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [bulkRequestDueOpen, setBulkRequestDueOpen] = useState(false);
+  const [bulkReviewDueOpen, setBulkReviewDueOpen] = useState(false);
   /** When set, opens the BulkAssignDrawer scoped to just this one case
    *  (from a per-row "Assign" click). Mutually exclusive with bulkAssignOpen
    *  at the UI level — closing either clears both. */
@@ -330,10 +396,41 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     });
   };
 
+  // Selected cases eligible for the bulk due-date flows.
+  const ACTIONABLE = new Set(['Design Deficiency', 'System Deficiency', 'Procedural Non-Compliance']);
+  const selectedList = exceptions.filter(e => selected.has(e.id));
+  const bulkRequestEligible = selectedList.filter(
+    e => ACTIONABLE.has(e.classification) && !!e.dueDate && e.dueDateRevision?.status !== 'Pending',
+  );
+  const bulkReviewEligible = selectedList.filter(e => e.dueDateRevision?.status === 'Pending');
+
   const drawerException = useMemo(
     () => (drawer ? exceptions.find(e => e.id === drawer.exceptionId) ?? null : null),
     [drawer, exceptions],
   );
+
+  // Shared action dispatcher — opens the same drawer the Exceptions-table CTAs
+  // open, so the Action Hub deep-dive and the Exceptions tab perform identical,
+  // recorded actions (the drawer's onDecision persists + logs activity).
+  const runExceptionAction = (kind: ExceptionActionKind, ex: GrcException) => {
+    switch (kind) {
+      case 'classify':
+      case 'reclassify':
+        setDrawer({ type: 'classify', exceptionId: ex.id });
+        break;
+      case 'markComplete':
+        setDrawer({ type: 'complete', exceptionId: ex.id });
+        break;
+      case 'reviewClassification':
+        setDrawer({ type: 'classification', exceptionId: ex.id });
+        break;
+      case 'reviewPlan':
+      case 'reviewAction':
+      case 'review':
+        setDrawer({ type: 'action', exceptionId: ex.id });
+        break;
+    }
+  };
 
   const stats = useMemo(() => {
     const total = exceptions.length;
@@ -390,8 +487,43 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     });
   };
 
+  // ─── Workflow integration hook ───
+  // When an assignment clears its final approval, write the drafted result back
+  // onto the exception using the SAME updateExceptions path the classification /
+  // review screens use — no changes to those screens. RO workflows hand the case
+  // to the Auditor's action review; Auditor workflows close the case.
+  const handleWorkflowFinalize = (a: Assignment) => {
+    const today = new Date().toISOString().slice(0, 10);
+    updateExceptions(prev => prev.map(e => {
+      if (e.id !== a.exceptionId) return e;
+      if (a.persona === 'risk-owner') {
+        const classification = (a.draft?.classification as GrcException['classification']) ?? e.classification;
+        return {
+          ...e,
+          classification,
+          classificationReview: 'Approved' as const,
+          actionReview: 'Pending' as const, // now available for Auditor review
+          actionPhase: requiresActionPlan(classification) ? ('plan-review' as const) : undefined,
+          status: deriveStatus(classification, 'Pending', 'Pending'),
+          dueDate: a.draft?.dueDate ?? e.dueDate,
+          lastUpdated: today,
+        };
+      }
+      // Auditor workflow → derive the case status from the review outcome.
+      const actionReview = (a.draft?.actionReview ?? 'Approved') as GrcReviewStatus;
+      const actionStatus: GrcActionStatus = actionReview === 'Rejected' ? 'Discrepancy' : 'Implemented';
+      return {
+        ...e,
+        actionReview,
+        actionPhase: undefined,
+        status: deriveStatus(e.classification, actionReview, actionStatus),
+        lastUpdated: today,
+      };
+    }));
+  };
 
   return (
+    <WorkflowProvider role={role} onFinalize={handleWorkflowFinalize}>
     <div className="h-full w-full flex flex-col overflow-hidden bg-canvas">
       {/* Top chrome — only shown when standalone (Back button); hidden when embedded */}
       {!embedded && (
@@ -437,12 +569,13 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             </div>
           </div>
 
-          {/* Tabs row — left: tab buttons; right (Action Hub only): Report Health + Generate ATR */}
+          {/* Tabs row */}
           <div className="flex items-center justify-between gap-6 -mb-px">
             <div className="flex items-center gap-0 border-b border-transparent">
               {([
                 { id: 'exceptions' as const, label: 'Exceptions', icon: Layers },
                 { id: 'action-hub' as const, label: 'Action Hub', icon: FileBarChart },
+                { id: 'workflow' as const, label: 'Approval & Configuration', icon: Workflow },
               ] as const).map(t => {
                 const Icon = t.icon;
                 const isActive = activeNav === t.id;
@@ -468,31 +601,14 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               })}
             </div>
 
-            {activeNav === 'action-hub' && (
-              <div className="flex items-center gap-4 shrink-0 pb-2">
-                <div className="flex items-baseline gap-1.5 leading-none">
-                  <span className="text-[11px] uppercase tracking-[0.12em] text-ink-500 font-medium">Report health</span>
-                  <span className="text-[13px] text-ink-900 font-medium">{ACTION_HUB_SUMMARY.reportHealthLabel}</span>
-                  <span className="text-[12px] text-ink-500 tabular-nums">· {ACTION_HUB_SUMMARY.reportHealthPct}%</span>
-                </div>
-                <div className="h-5 w-px bg-canvas-border" aria-hidden="true" />
-                <Gated permission="exc_resolve" mode="disable" title="You don't have permission to generate an ATR">
-                <button
-                  onClick={() => setAtrModalOpen(true)}
-                  className="h-9 px-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer transition-colors"
-                >
-                  <FileText size={14} />
-                  Generate ATR
-                </button>
-                </Gated>
-              </div>
-            )}
           </div>
         </div>
       </div>
 
       {activeNav === 'action-hub' ? (
-        <ActionHubView />
+        <ActionHubView exceptions={exceptions} role={role} onAction={runExceptionAction} />
+      ) : activeNav === 'workflow' ? (
+        <WorkflowModule role={role} exceptions={exceptions} />
       ) : (
         <motion.div
           initial={{ opacity: 0, y: 4 }}
@@ -617,13 +733,18 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 }
               }}
               onOpenClassification={(ex) => {
-                if (role === 'risk-owner' && ex.classification === 'Unclassified') {
+                // Risk Owner gets the editable classify drawer to classify (Unclassified)
+                // or re-classify a rejected case; otherwise a read-only view.
+                if (role === 'risk-owner' && (ex.classification === 'Unclassified' || ex.actionReview === 'Rejected')) {
                   setDrawer({ type: 'classify', exceptionId: ex.id });
                 } else {
                   setDrawer({ type: 'classification', exceptionId: ex.id });
                 }
               }}
               onOpenAction={(ex) => setDrawer({ type: 'action', exceptionId: ex.id })}
+              onMarkComplete={(ex) => setDrawer({ type: 'complete', exceptionId: ex.id })}
+              onRequestDueDate={(ex) => setDrawer({ type: 'requestDueDate', exceptionId: ex.id })}
+              onReviewDueDate={(ex) => setDrawer({ type: 'reviewDueDate', exceptionId: ex.id })}
               onOpenActionable={(bulkId) => setBulkModalId(bulkId)}
               onAssign={(ex) => {
                 setSingleAssignCase(ex);
@@ -632,6 +753,8 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               onOpenDetail={(ex) => setDetailExceptionId(ex.id)}
               headerLeading={
                 <div className="flex items-center gap-1.5">
+                  {/* Assignment & Approval Workflow — additive bulk action (both personas). */}
+                  <WorkflowAssignButton selectedIds={[...selected]} />
                   {/* Bulk Classify — permission-gated. */}
                   {can('exc_classify') && selected.size > 0 && (
                     <button
@@ -657,6 +780,34 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                       Bulk Assign
                       <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
                         {selected.size}
+                      </span>
+                    </button>
+                  )}
+                  {/* Risk owner: bulk request a revised due date for eligible selected cases. */}
+                  {role === 'risk-owner' && bulkRequestEligible.length > 0 && (
+                    <button
+                      onClick={() => setBulkRequestDueOpen(true)}
+                      title={`Request a revised due date for ${bulkRequestEligible.length} selected case${bulkRequestEligible.length === 1 ? '' : 's'}`}
+                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-brand-700 bg-canvas-elevated border-canvas-border hover:border-brand-200 cursor-pointer transition-colors"
+                    >
+                      <CalendarClock size={13} />
+                      Request Date Change
+                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full tabular-nums">
+                        {bulkRequestEligible.length}
+                      </span>
+                    </button>
+                  )}
+                  {/* Auditor: bulk review pending revised-due-date requests. */}
+                  {role !== 'risk-owner' && bulkReviewEligible.length > 0 && (
+                    <button
+                      onClick={() => setBulkReviewDueOpen(true)}
+                      title={`Review ${bulkReviewEligible.length} pending due-date request${bulkReviewEligible.length === 1 ? '' : 's'}`}
+                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-white bg-mitigated border-mitigated hover:bg-mitigated-700 cursor-pointer transition-colors"
+                    >
+                      <CalendarClock size={13} />
+                      Review Date Changes
+                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
+                        {bulkReviewEligible.length}
                       </span>
                     </button>
                   )}
@@ -701,18 +852,146 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             exception={drawerException}
             onClose={() => setDrawer(null)}
             onSave={(payload) => {
+              const classification = payload.classification as GrcException['classification'];
+              const nowIso = new Date().toISOString();
+              const actionable = requiresActionPlan(classification);
+              const isReclassify = drawerException.classification !== 'Unclassified';
+              const plans = actionable ? (payload.actionPlans ?? []) : [];
+              const first = plans[0];
+
+              // ── Sync the Risk Owner's inputs into the shared case detail so the
+              //    Auditor's Review Action drawer shows exactly what was entered. ──
+              const existing = GRC_CASE_DETAILS[drawerException.id];
+              const detail: GrcCaseDetail = existing ?? {
+                classificationJustification: '', actionTitle: '', actionDueDate: '',
+                actionDescription: '', actionStatus: 'Pending', activityLog: [],
+              };
+              detail.classificationJustification = payload.comment ? `"${payload.comment}"` : detail.classificationJustification;
+              detail.actionPlans = actionable ? plans : undefined;
+              detail.actionTitle = actionable ? (first?.name || 'Action plan') : 'No action required · documented rationale';
+              detail.actionDescription = actionable ? (first?.details || '') : '';
+              detail.actionDueDate = actionable && first?.dueDate ? `Due ${fmtDue(first.dueDate)}` : '';
+              detail.actionStatus = 'Pending';
+              // Activity log — one entry per slide-panel action (synced to both personas).
+              const planNote = actionable
+                ? ` · submitted ${plans.length} management action plan${plans.length === 1 ? '' : 's'} for review${first?.dueDate ? ` · due ${fmtDue(first.dueDate)}` : ''}`
+                : ' · no action plan required';
+              detail.activityLog = [{
+                id: `act-cls-${drawerException.id}-${Date.now()}`,
+                author: 'You',
+                role: 'Risk Owner',
+                timestamp: fmtStamp(nowIso),
+                message: `${isReclassify ? 'Re-classified' : 'Classified'} as ${classification}${planNote}`,
+                comment: payload.comment || undefined,
+              }, ...detail.activityLog];
+              GRC_CASE_DETAILS[drawerException.id] = detail;
+
               updateExceptions(prev => prev.map(e =>
                 e.id === drawerException.id
                   ? {
                       ...e,
                       severity: payload.severity,
-                      classification: payload.classification as GrcException['classification'],
+                      classification,
                       classificationReview: 'Approved' as const,
-                      dueDate: payload.dueDate ?? e.dueDate,
-                      lastUpdated: new Date().toISOString().slice(0, 10),
+                      actionReview: 'Pending' as const, // (re)classifying hands it back to the Auditor
+                      // Actionable plans go to plan-review (Auditor accepts the plan first);
+                      // non-actionable cases have no plan stage.
+                      actionPhase: actionable ? ('plan-review' as const) : undefined,
+                      status: deriveStatus(classification, 'Pending', 'Pending'),
+                      dueDate: (actionable && first?.dueDate) ? first.dueDate : (payload.dueDate ?? e.dueDate),
+                      lastUpdated: nowIso.slice(0, 10),
                     }
                   : e
               ));
+              logEvent({ action: 'Update', description: `${isReclassify ? 'Re-classified' : 'Classified'} ${drawerException.id} as ${classification}`, module: 'Exceptions', entity: 'Exception' });
+              addToast({ type: 'success', message: actionable
+                ? (isReclassify ? 'Re-classified — management action plan sent to the Auditor.' : 'Classified — management action plan sent to the Auditor for review.')
+                : 'Classified — sent to the Auditor for review.' });
+              setDrawer(null);
+            }}
+          />
+        )}
+        {drawer?.type === 'requestDueDate' && drawerException && (
+          <RequestDueDateDrawer
+            key="request-duedate-drawer"
+            exception={drawerException}
+            onClose={() => setDrawer(null)}
+            onSubmit={({ revisedDueDate, reason }) => {
+              const nowIso = new Date().toISOString();
+              const prev = drawerException.dueDate;
+              updateExceptions(list => list.map(e =>
+                e.id === drawerException.id
+                  ? {
+                      ...e,
+                      dueDateRevision: {
+                        previousDueDate: prev ?? '',
+                        revisedDueDate,
+                        reason,
+                        status: 'Pending' as const,
+                        requestedBy: 'You',
+                        requestedAt: nowIso,
+                      },
+                      lastUpdated: nowIso.slice(0, 10),
+                    }
+                  : e
+              ));
+              const detail = GRC_CASE_DETAILS[drawerException.id];
+              if (detail) {
+                detail.activityLog = [{
+                  id: `act-dd-req-${drawerException.id}-${Date.now()}`,
+                  author: 'You',
+                  role: 'Risk Owner',
+                  timestamp: fmtStamp(nowIso),
+                  message: `Requested revised due date: ${fmtDue(prev)} → ${fmtDue(revisedDueDate)}`,
+                  comment: reason,
+                }, ...detail.activityLog];
+              }
+              addToast({ type: 'success', message: 'Revised due date request sent to the auditor for approval.' });
+              setDrawer(null);
+            }}
+          />
+        )}
+        {drawer?.type === 'reviewDueDate' && drawerException && (
+          <ReviewDueDateDrawer
+            key="review-duedate-drawer"
+            exception={drawerException}
+            onClose={() => setDrawer(null)}
+            onDecision={(decision, comment) => {
+              const nowIso = new Date().toISOString();
+              const rev = drawerException.dueDateRevision;
+              const approved = decision === 'approve';
+              updateExceptions(list => list.map(e => {
+                if (e.id !== drawerException.id || !e.dueDateRevision) return e;
+                return {
+                  ...e,
+                  dueDate: approved ? e.dueDateRevision.revisedDueDate : e.dueDate,
+                  dueDateRevision: {
+                    ...e.dueDateRevision,
+                    status: approved ? ('Approved' as const) : ('Rejected' as const),
+                    decisionComment: comment || undefined,
+                    decidedBy: 'You',
+                    decidedAt: nowIso,
+                  },
+                  lastUpdated: nowIso.slice(0, 10),
+                };
+              }));
+              const detail = GRC_CASE_DETAILS[drawerException.id];
+              if (detail && rev) {
+                detail.activityLog = [{
+                  id: `act-dd-dec-${drawerException.id}-${Date.now()}`,
+                  author: 'You',
+                  role: 'Auditor',
+                  timestamp: fmtStamp(nowIso),
+                  message: approved
+                    ? `Approved revised due date → ${fmtDue(rev.revisedDueDate)}`
+                    : `Rejected revised due date request (stays ${fmtDue(rev.previousDueDate)})`,
+                  comment: comment || undefined,
+                }, ...detail.activityLog];
+              }
+              addToast({
+                type: approved ? 'success' : 'info',
+                message: approved ? 'Revised due date approved and applied.' : 'Revised due date request rejected.',
+              });
               setDrawer(null);
             }}
           />
@@ -732,8 +1011,91 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             exception={drawerException}
             role={role}
             onClose={() => setDrawer(null)}
-            onDecision={() => setDrawer(null)}
+            onDecision={(decision, { implementation, comment }) => {
+              const nowIso = new Date().toISOString();
+              const approved = decision === 'approve';
+              const actionable = requiresActionPlan(drawerException.classification);
+              const phase = drawerException.actionPhase;
+              const detail = GRC_CASE_DETAILS[drawerException.id];
+              const pushLog = (message: string) => {
+                if (!detail) return;
+                detail.activityLog = [{
+                  id: `act-rev-${drawerException.id}-${Date.now()}`,
+                  author: 'You', role: 'Auditor', timestamp: fmtStamp(nowIso), message,
+                  comment: comment || undefined,
+                }, ...detail.activityLog];
+              };
+
+              // ── Stage 1 · Plan review — Auditor accepts/rejects the management action plan ──
+              if (actionable && phase === 'plan-review') {
+                if (approved) {
+                  updateExceptions(list => list.map(e => e.id === drawerException.id
+                    ? { ...e, actionPhase: 'in-progress' as const, status: deriveStatus(e.classification, 'Pending', 'Pending'), lastUpdated: nowIso.slice(0, 10) }
+                    : e));
+                  pushLog('Accepted the management action plan — Risk Owner to implement before the due date.');
+                  addToast({ type: 'success', message: 'Management action plan accepted — handed back to the Risk Owner.' });
+                } else {
+                  if (detail) detail.actionStatus = 'Discrepancy';
+                  updateExceptions(list => list.map(e => e.id === drawerException.id
+                    ? { ...e, actionReview: 'Rejected' as const, actionPhase: undefined, status: deriveStatus(e.classification, 'Rejected', 'Discrepancy'), lastUpdated: nowIso.slice(0, 10) }
+                    : e));
+                  pushLog('Rejected the management action plan — reopened for the Risk Owner to revise.');
+                  addToast({ type: 'info', message: 'Plan rejected — reopened for the Risk Owner.' });
+                }
+                logEvent({ action: 'Update', description: `Plan review ${drawerException.id}: ${approved ? 'Accepted' : 'Rejected'}`, module: 'Exceptions', entity: 'Exception' });
+                setDrawer(null);
+                return;
+              }
+
+              // ── Stage 2 · Completion review (actionable) / classification review (non-actionable) ──
+              const actionReview: GrcReviewStatus = approved ? 'Approved' : 'Rejected';
+              const newActionStatus: GrcActionStatus = approved
+                ? (actionable ? (implementation ?? 'Implemented') : 'Implemented')
+                : 'Discrepancy';
+              if (detail) detail.actionStatus = newActionStatus;
+              // Partially implemented → stays with the Risk Owner to finish; otherwise the stage is done.
+              const nextPhase = (approved && actionable && implementation === 'Partially Implemented') ? ('in-progress' as const) : undefined;
+              updateExceptions(list => list.map(e => e.id === drawerException.id
+                ? { ...e, actionReview, actionPhase: nextPhase, status: deriveStatus(e.classification, actionReview, newActionStatus), lastUpdated: nowIso.slice(0, 10) }
+                : e));
+              pushLog(approved
+                ? (actionable ? `Reviewed the completed action — ${implementation ?? 'Implemented'}` : 'Approved the classification — no action plan required')
+                : (actionable ? 'Marked the completed action as Discrepancy — reopened for the Risk Owner' : 'Rejected the classification — back to the Risk Owner'));
+              logEvent({ action: 'Update', description: `Reviewed ${drawerException.id}: ${approved ? (implementation ?? 'Approved') : 'Rejected'}`, module: 'Exceptions', entity: 'Exception' });
+              addToast({ type: approved ? 'success' : 'info', message: approved
+                ? (nextPhase ? 'Marked partially implemented — back to the Risk Owner to finish.' : 'Action review approved — case closed.')
+                : 'Reopened for the Risk Owner.' });
+              setDrawer(null);
+            }}
             onViewBulk={(bulkId) => setBulkModalId(bulkId)}
+          />
+        )}
+        {drawer?.type === 'complete' && drawerException && (
+          <CompleteActionDrawer
+            key="complete-drawer"
+            exception={drawerException}
+            onClose={() => setDrawer(null)}
+            onSubmit={({ note, evidence, implementation, comment }) => {
+              const nowIso = new Date().toISOString();
+              const detail = GRC_CASE_DETAILS[drawerException.id];
+              if (detail) {
+                detail.completion = { note, evidence, completedAt: fmtStamp(nowIso), selfAssessment: implementation };
+                detail.activityLog = [{
+                  id: `act-done-${drawerException.id}-${Date.now()}`,
+                  author: 'You',
+                  role: 'Risk Owner',
+                  timestamp: fmtStamp(nowIso),
+                  message: `Reported the action as ${implementation}${evidence.length ? ` · ${evidence.length} evidence file${evidence.length === 1 ? '' : 's'} attached` : ''} — submitted to the Auditor for review.`,
+                  comment: comment || note || undefined,
+                }, ...detail.activityLog];
+              }
+              updateExceptions(list => list.map(e => e.id === drawerException.id
+                ? { ...e, actionPhase: 'completion-review' as const, status: deriveStatus(e.classification, 'Pending', 'Pending'), lastUpdated: nowIso.slice(0, 10) }
+                : e));
+              logEvent({ action: 'Update', description: `Marked ${drawerException.id} action complete — Risk Owner reports ${implementation}`, module: 'Exceptions', entity: 'Exception' });
+              addToast({ type: 'success', message: `Submitted to the Auditor for review — you reported "${implementation}".` });
+              setDrawer(null);
+            }}
           />
         )}
         {bulkModalId && (
@@ -767,6 +1129,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             actionableId={`ACT${String(nextActionableNum).padStart(3, '0')}`}
             onClose={() => setBulkClassifyOpen(false)}
             onApply={(payload: BulkClassifyPayload) => {
+              payload.caseIds.forEach(id => { const d = GRC_CASE_DETAILS[id]; if (d) d.actionStatus = 'Pending'; });
               updateExceptions(prev => prev.map(e =>
                 payload.caseIds.includes(e.id)
                   ? {
@@ -774,7 +1137,9 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                       severity: payload.severity,
                       classification: payload.classification,
                       classificationReview: 'Approved' as const,
-                      status: 'Under Review' as const,
+                      actionReview: 'Pending' as const,
+                      actionPhase: requiresActionPlan(payload.classification) ? ('plan-review' as const) : undefined,
+                      status: deriveStatus(payload.classification, 'Pending', 'Pending'),
                       dueDate: payload.dueDate ?? e.dueDate,
                       lastUpdated: new Date().toISOString().slice(0, 10),
                     }
@@ -784,6 +1149,98 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               setSelected(new Set());
               setBulkClassifyOpen(false);
               logEvent({ action: 'Update', description: `Classified ${payload.caseIds.length} exception${payload.caseIds.length === 1 ? '' : 's'} as ${payload.classification}`, module: 'Exceptions', entity: 'Exception' });
+            }}
+          />
+        )}
+        {bulkRequestDueOpen && bulkRequestEligible.length > 0 && (
+          <BulkRequestDueDateDrawer
+            key="bulk-request-duedate-drawer"
+            exceptions={bulkRequestEligible}
+            onClose={() => setBulkRequestDueOpen(false)}
+            onSubmit={({ revisedDueDate, reason }) => {
+              const nowIso = new Date().toISOString();
+              const ids = bulkRequestEligible.map(e => e.id);
+              updateExceptions(prev => prev.map(e =>
+                ids.includes(e.id)
+                  ? {
+                      ...e,
+                      dueDateRevision: {
+                        previousDueDate: e.dueDate ?? '',
+                        revisedDueDate,
+                        reason,
+                        status: 'Pending' as const,
+                        requestedBy: 'You',
+                        requestedAt: nowIso,
+                      },
+                      lastUpdated: nowIso.slice(0, 10),
+                    }
+                  : e
+              ));
+              ids.forEach(id => {
+                const detail = GRC_CASE_DETAILS[id];
+                if (!detail) return;
+                detail.activityLog = [{
+                  id: `act-dd-req-${id}-${Date.now()}`,
+                  author: 'You',
+                  role: 'Risk Owner',
+                  timestamp: fmtStamp(nowIso),
+                  message: `Requested revised due date → ${fmtDue(revisedDueDate)}`,
+                  comment: reason,
+                }, ...detail.activityLog];
+              });
+              addToast({ type: 'success', message: `Revised due date requested for ${ids.length} case${ids.length === 1 ? '' : 's'} — sent to the auditor.` });
+              setSelected(new Set());
+              setBulkRequestDueOpen(false);
+            }}
+          />
+        )}
+        {bulkReviewDueOpen && bulkReviewEligible.length > 0 && (
+          <BulkReviewDueDateDrawer
+            key="bulk-review-duedate-drawer"
+            exceptions={bulkReviewEligible}
+            onClose={() => setBulkReviewDueOpen(false)}
+            onDecision={(decision, comment) => {
+              const nowIso = new Date().toISOString();
+              const approved = decision === 'approve';
+              const ids = bulkReviewEligible.map(e => e.id);
+              updateExceptions(prev => prev.map(e => {
+                if (!ids.includes(e.id) || !e.dueDateRevision) return e;
+                return {
+                  ...e,
+                  dueDate: approved ? e.dueDateRevision.revisedDueDate : e.dueDate,
+                  dueDateRevision: {
+                    ...e.dueDateRevision,
+                    status: approved ? ('Approved' as const) : ('Rejected' as const),
+                    decisionComment: comment || undefined,
+                    decidedBy: 'You',
+                    decidedAt: nowIso,
+                  },
+                  lastUpdated: nowIso.slice(0, 10),
+                };
+              }));
+              ids.forEach(id => {
+                const detail = GRC_CASE_DETAILS[id];
+                const ex = bulkReviewEligible.find(e => e.id === id);
+                if (!detail || !ex?.dueDateRevision) return;
+                detail.activityLog = [{
+                  id: `act-dd-dec-${id}-${Date.now()}`,
+                  author: 'You',
+                  role: 'Auditor',
+                  timestamp: fmtStamp(nowIso),
+                  message: approved
+                    ? `Approved revised due date → ${fmtDue(ex.dueDateRevision.revisedDueDate)}`
+                    : `Rejected revised due date request (stays ${fmtDue(ex.dueDateRevision.previousDueDate)})`,
+                  comment: comment || undefined,
+                }, ...detail.activityLog];
+              });
+              addToast({
+                type: approved ? 'success' : 'info',
+                message: approved
+                  ? `Approved ${ids.length} revised due date${ids.length === 1 ? '' : 's'}.`
+                  : `Rejected ${ids.length} due date request${ids.length === 1 ? '' : 's'}.`,
+              });
+              setSelected(new Set());
+              setBulkReviewDueOpen(false);
             }}
           />
         )}
@@ -818,7 +1275,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   id: `act-assign-${caseId}-${Date.now()}`,
                   author: 'You',
                   role: 'Auditor',
-                  timestamp: nowIso,
+                  timestamp: fmtStamp(nowIso),
                   message: `Assigned to ${assigneeNames}`,
                   comment: payload.note,
                 };
@@ -850,6 +1307,8 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               key="exception-detail-drawer"
               exception={ex}
               extraColumns={sourceQuery ? QUERY_TABLES[sourceQuery.id] : undefined}
+              role={role}
+              onAction={(kind, target) => { setDetailExceptionId(null); runExceptionAction(kind, target); }}
               onClose={() => setDetailExceptionId(null)}
             />
           );
@@ -868,6 +1327,9 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
         )}
       </AnimatePresence>
     </div>
+    {/* Assignment modal — opened from the "Assign to Workflow" header button. */}
+    <AssignmentModal />
+    </WorkflowProvider>
   );
 }
 

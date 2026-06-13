@@ -31,6 +31,7 @@ import ClarificationCard from './ClarificationCard';
 import DataPickerModal, { type AttachmentSelection } from './DataPickerModal';
 import { AddToDashboardModal } from './AddToDashboardModal';
 import { AddToReportModal } from './AddToReportModal';
+import { LIBRARY_WORKFLOWS } from '../workflow/WorkflowLibraryView';
 import Gated from '../shared/Gated';
 import { useCan } from '../../context/CurrentUserContext';
 import {
@@ -77,6 +78,9 @@ interface ChatMessage {
   artifactType?: 'workflow' | 'query' | 'report';
   followUps?: string[];
   timestamp: Date;
+  // Files / data sources attached to a user message — rendered as chips
+  // above the bubble (not baked into the message text).
+  attachments?: { kind: 'source' | 'file'; name: string; type?: string }[];
   // Rich inline components
   richType?:
     | 'summary-kpi'
@@ -125,6 +129,17 @@ interface ClarificationData {
   status: 'open' | 'submitted'; // 'submitted' freezes the UI into a recap
   // 'audit-query' (default) feeds the audit run; 'save-workflow' captures
   // tolerance/threshold config and then opens the Save-as-Workflow modal.
+  purpose?: 'audit-query' | 'save-workflow';
+}
+
+// Query-clarification shape — distinct from the workflow ClarificationData
+// above because query questions can be multiple-choice. Answers are stored as
+// a string[] per question, and each question carries an optional `multi` flag.
+interface QueryClarificationData {
+  intro: string;
+  questions: { question: string; options: string[]; multi?: boolean }[];
+  answers: Record<number, string[]>;
+  status: 'open' | 'submitted';
   purpose?: 'audit-query' | 'save-workflow';
 }
 
@@ -467,6 +482,10 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
   const selectorRef = useRef<HTMLDivElement | null>(null);
   const active = charts.find(c => c.id === activeId) ?? charts[0];
   const useDropdown = charts.length > CHART_TAB_LIMIT;
+  // Title is capped at a fixed 25-character budget (then an ellipsis). The
+  // full name stays available on hover via the trigger's title attribute.
+  const TITLE_MAX = 25;
+  const titleLabel = active.label.length > TITLE_MAX ? `${active.label.slice(0, TITLE_MAX).trimEnd()}…` : active.label;
 
   useEffect(() => {
     if (!selectorOpen) return;
@@ -483,6 +502,62 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
     };
   }, [selectorOpen]);
 
+  // Download menu (CSV / Excel of the active chart's data) — mirrors the
+  // table card's download so both output cards share one affordance.
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const downloadMenuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!downloadOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const r = downloadMenuRef.current;
+      if (r && !r.contains(e.target as Node)) setDownloadOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDownloadOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [downloadOpen]);
+
+  const slugifyChart = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const triggerChartDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+  const handleChartCsv = () => {
+    const esc = (v: string) => (/["\n,]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    const rows = [[active.label, 'Count'], ...active.data.map(d => [d.bucket, String(d.count)])];
+    const csv = rows.map(r => r.map(esc).join(',')).join('\n');
+    triggerChartDownload(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${slugifyChart(active.label)}.csv`);
+  };
+  const handleChartExcel = async () => {
+    try {
+      const mod = await import('xlsx');
+      const XLSX = ((mod as unknown as { default?: typeof mod }).default ?? mod);
+      const wb = XLSX.utils.book_new();
+      const sheetRows: (string | number)[][] = [[active.label, 'Count'], ...active.data.map(d => [d.bucket, d.count])];
+      const sheet = XLSX.utils.aoa_to_sheet(sheetRows);
+      sheet['!cols'] = [{ wch: 24 }, { wch: 12 }];
+      const safeName = (active.label.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31)) || 'Chart';
+      XLSX.utils.book_append_sheet(wb, sheet, safeName);
+      const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+      triggerChartDownload(
+        new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+        `${slugifyChart(active.label)}.xlsx`,
+      );
+    } catch (err) {
+      console.error('Chart export failed', err);
+    }
+  };
+
   return (
     <>
       <div className="group rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden shadow-[0_1px_2px_rgba(15,8,30,0.04)] transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.16)]">
@@ -494,11 +569,62 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                       clicking. Expand sits at the far right. Padding
                       matches the table card (px-5 py-3.5). */}
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-canvas-border/70">
-          <div className="min-w-0 flex items-center gap-2">
-            <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[13px] font-semibold text-ink-800 truncate">{active.label}</span>
+          {/* Title doubles as the chart switcher: name + chevron opens a
+              dropdown of all charts. Replaces the old right-aligned selector
+              box (commented out below). Name is capped at 25 chars. */}
+          <div ref={selectorRef} className="min-w-0 flex-1 relative">
+            {charts.length > 1 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setSelectorOpen(o => !o)}
+                  aria-haspopup="menu"
+                  aria-expanded={selectorOpen}
+                  title={active.label}
+                  className="-ml-1 inline-flex items-center gap-2 max-w-full rounded-lg px-1 py-0.5 hover:bg-brand-50/60 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
+                  <span className="text-[0.8125rem] font-semibold text-ink-800 truncate min-w-0">{titleLabel}</span>
+                  <ChevronDown size={14} className={`text-ink-400 shrink-0 transition-transform ${selectorOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {selectorOpen && (
+                  <div
+                    role="menu"
+                    className="absolute left-0 top-full mt-1 z-40 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_28px_-12px_rgba(15,8,30,0.22)] overflow-hidden py-1 max-h-80 overflow-y-auto"
+                  >
+                    {charts.map(c => {
+                      const isActive = c.id === activeId;
+                      const Icon = chartIcon(c.id);
+                      return (
+                        <button
+                          key={c.id}
+                          role="menuitemradio"
+                          aria-checked={isActive}
+                          onClick={() => { setActiveId(c.id); setSelectorOpen(false); }}
+                          title={c.label}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-[0.78125rem] text-left transition-colors cursor-pointer ${
+                            isActive ? 'bg-brand-50/60 text-brand-700 font-medium' : 'text-ink-800 hover:bg-paper-50'
+                          }`}
+                        >
+                          <Icon size={13} className={`shrink-0 ${isActive ? 'text-brand-600' : 'text-ink-500'}`} />
+                          <span className="flex-1 min-w-0 truncate">{c.label}</span>
+                          {isActive && <Check size={12} strokeWidth={3} className="text-brand-600 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
+                <span className="text-[0.8125rem] font-semibold text-ink-800 truncate min-w-0">{titleLabel}</span>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {/* Right-aligned segmented graph-selector — commented out per
+                request; the chart switcher now lives on the title at left.
             {charts.length > 1 && !useDropdown && (
               <div className="inline-flex items-center gap-1" role="tablist">
                 {charts.map(c => {
@@ -510,7 +636,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                       role="tab"
                       aria-selected={isActive}
                       onClick={() => setActiveId(c.id)}
-                      className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                      className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                         isActive
                           ? 'bg-brand-50 text-brand-700 border-brand-200'
                           : 'bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
@@ -523,9 +649,10 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                 })}
               </div>
             )}
+            */}
 
-            {/* Dropdown variant — used when there are more than CHART_TAB_LIMIT
-                charts to keep the header from overflowing. */}
+            {/* Right-aligned dropdown graph-selector — commented out per
+                request; the chart switcher now lives on the title at left.
             {charts.length > 1 && useDropdown && (
               <div ref={selectorRef} className="relative">
                 <button
@@ -533,7 +660,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                   onClick={() => setSelectorOpen(o => !o)}
                   aria-haspopup="menu"
                   aria-expanded={selectorOpen}
-                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-brand-50 text-brand-700 border-brand-200 hover:bg-brand-100 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 max-w-[220px]"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border bg-brand-50 text-brand-700 border-brand-200 hover:bg-brand-100 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 max-w-[220px]"
                 >
                   {(() => { const I = chartIcon(active.id); return <I size={13} className="text-brand-600 shrink-0" />; })()}
                   <span className="truncate">{active.label}</span>
@@ -554,7 +681,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                           aria-checked={isActive}
                           onClick={() => { setActiveId(c.id); setSelectorOpen(false); }}
                           title={c.label}
-                          className={`w-full flex items-center gap-2 px-3 py-2 text-[12.5px] text-left transition-colors cursor-pointer ${
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-[0.78125rem] text-left transition-colors cursor-pointer ${
                             isActive ? 'bg-brand-50/60 text-brand-700 font-medium' : 'text-ink-800 hover:bg-paper-50'
                           }`}
                         >
@@ -568,6 +695,50 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                 )}
               </div>
             )}
+            */}
+
+            {/* Download — icon + chevron, opens a CSV / Excel menu. Same
+                affordance as the table card; sits just left of Expand. */}
+            <div ref={downloadMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setDownloadOpen(o => !o)}
+                aria-haspopup="menu"
+                aria-expanded={downloadOpen}
+                aria-label="Download chart"
+                title="Download"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                <Download size={13} className="text-ink-400" />
+                <span>Download</span>
+                <ChevronDown size={12} className={`text-ink-400 transition-transform ${downloadOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {downloadOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full mt-1.5 z-50 min-w-full origin-top-right rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_10px_24px_-14px_rgba(15,8,30,0.20)] overflow-hidden py-1"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setDownloadOpen(false); handleChartCsv(); }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.78125rem] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
+                  >
+                    <FileText size={13} className="text-ink-400 shrink-0" />
+                    <span>CSV</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setDownloadOpen(false); handleChartExcel(); }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.78125rem] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
+                  >
+                    <FileSpreadsheet size={13} className="text-ink-400 shrink-0" />
+                    <span>Excel</span>
+                  </button>
+                </div>
+              )}
+            </div>
 
             <button
               onClick={() => setFullscreen(true)}
@@ -618,8 +789,8 @@ function FullscreenChartModal({
       className="fixed inset-0 z-[9999] flex items-center justify-center"
       onClick={onClose}
     >
-      {/* Backdrop — same as dashboard */}
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      {/* Backdrop — shared overlay per DESIGN §7.9 (ink-900/40, 2px blur) */}
+      <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
 
       {/* Dialog — same ratio as dashboard ExpandedWidgetModal */}
       <motion.div
@@ -637,7 +808,7 @@ function FullscreenChartModal({
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border shrink-0">
           <div className="min-w-0 flex items-center gap-2">
             <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[13px] font-semibold text-ink-800 truncate">{active.label}</span>
+            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{active.label}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {charts.length > 1 && (
@@ -651,7 +822,7 @@ function FullscreenChartModal({
                       role="tab"
                       aria-selected={isActive}
                       onClick={() => onActiveChange(c.id)}
-                      className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                      className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                         isActive
                           ? 'bg-brand-50 text-brand-700 border-brand-200'
                           : 'bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
@@ -693,14 +864,13 @@ function FullscreenChartModal({
 const PREVIEW_ROW_COUNT = 9;
 
 function ResultsTable({
-  columns, rows, totalRows, onOpen, onDownload, title = 'Flagged duplicate pairs',
+  columns, rows, totalRows, onDownload, title = 'Flagged duplicate pairs',
 }: {
   columns: string[];
   rows: string[][];
   totalRows: number;
-  /** Caller can fire side-effects (toast) when the table is opened in a
-   *  new tab. The fullscreen / expand path is handled locally. */
-  onOpen: () => void;
+  /** Caller can fire side-effects (toast) when a download starts. The
+   *  fullscreen / expand path is handled locally. */
   onDownload: () => void;
   /** Card / fullscreen / new-tab heading. Defaults to the audit fixture's
    *  "Flagged duplicate pairs"; the workflow-run recap passes the run's own
@@ -714,76 +884,6 @@ function ResultsTable({
   const fileSlug = (title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'results');
 
   const openFullscreen = () => { setFullscreen(true); };
-
-  // Standalone HTML page built from the data, opened in a fresh tab. Cells
-  // are HTML-escaped so user data can never inject markup; the page styles
-  // match the in-app table for visual continuity.
-  const handleOpenInNewTab = () => {
-    const esc = (s: string) => s.replace(/[&<>"']/g, c => (
-      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
-    ));
-    // Mirror the in-app card dimensions: same max-width (52.5rem), same
-    // rounded card chrome, same border + spacing tokens. Tab gets a clean
-    // centered card on the off-white canvas, identical to the embedded
-    // surface.
-    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(title)} · Auditify</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root { color-scheme: light; --ink-900:#1a1124; --ink-800:#3a2f4a; --ink-700:#52456a; --ink-500:#7b6f8c; --ink-400:#9d92ab; --canvas-border:#ebe7f0; --canvas-elevated:#ffffff; --paper-50:#faf9fc; --brand-600:#6a12cd; --brand-50:#f4edff; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; font-size: 13px; line-height: 1.5; color: var(--ink-800); background: var(--paper-50); -webkit-font-smoothing: antialiased; }
-  .wrap { max-width: min(1280px, calc(100% - 48px)); margin: 32px auto; padding: 0; }
-  .card { background: var(--canvas-elevated); border: 1px solid var(--canvas-border); border-radius: 16px; overflow: hidden; box-shadow: 0 1px 2px rgba(15,8,30,0.04); }
-  .card-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--canvas-border); }
-  .dot { width: 8px; height: 8px; border-radius: 2px; background: var(--brand-600); flex: 0 0 8px; }
-  .title { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink-800); }
-  .meta { color: var(--ink-400); font-size: 11px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead th { background: rgba(245,243,248,0.6); text-align: left; padding: 10px 16px; font-size: 11px; font-weight: 600; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--canvas-border); white-space: nowrap; }
-  thead th.num { text-align: left; }
-  tbody td { padding: 10px 16px; color: var(--ink-700); border-bottom: 1px solid rgba(235,231,240,0.6); white-space: nowrap; }
-  tbody tr:last-child td { border-bottom: none; }
-  tbody tr:hover { background: rgba(244,237,255,0.45); }
-  .num { font-variant-numeric: tabular-nums; }
-  .card-footer { padding: 8px 16px; border-top: 1px solid var(--canvas-border); font-size: 11px; color: var(--ink-500); font-variant-numeric: tabular-nums; }
-</style></head><body>
-<div class="wrap">
-  <div class="card">
-    <div class="card-header">
-      <span class="dot" aria-hidden="true"></span>
-      <h1 class="title">${esc(title)}</h1>
-      <span class="meta">· ${totalRows}</span>
-    </div>
-    <div style="overflow-x:auto">
-      <table>
-        <thead><tr>${columns.map((c, j) => `<th class="${j >= 3 ? 'num' : ''}">${esc(c)}</th>`).join('')}</tr></thead>
-        <tbody>${rows.map(r => `<tr>${r.map((c, j) => `<td class="${j >= 3 ? 'num' : ''}">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
-      </table>
-    </div>
-    <div class="card-footer">Showing ${rows.length} of ${totalRows}</div>
-  </div>
-</div>
-</body></html>`;
-    // Use a programmatic anchor click with target="_blank" — this opens
-    // in a new tab even when window.open is rerouted to the same tab by
-    // popup blockers, browser settings, or extensions. The anchor must be
-    // attached to the DOM before .click() for Safari to honor the target.
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-    onOpen();
-  };
 
   // CSV file built from the visible rows on click. Same blob-download
   // pattern as the SQL Copy/Download in the workspace panel — no server
@@ -859,19 +959,11 @@ function ResultsTable({
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-canvas-border/70">
           <div className="min-w-0 flex items-center gap-2">
             <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[13px] font-semibold text-ink-800 truncate">{title}</span>
-            <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
+            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{title}</span>
+            <span className="font-mono text-[0.6875rem] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <div className="inline-flex items-center gap-1">
-              <button
-                onClick={handleOpenInNewTab}
-                title="Open in new tab"
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-              >
-                <ExternalLink size={13} className="text-ink-400" />
-                <span>Open</span>
-              </button>
               <div ref={downloadMenuRef} className="relative">
                 <button
                   type="button"
@@ -879,7 +971,7 @@ function ResultsTable({
                   aria-haspopup="menu"
                   aria-expanded={downloadOpen}
                   title="Download"
-                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <Download size={13} className="text-ink-400" />
                   <span>Download</span>
@@ -902,7 +994,7 @@ function ResultsTable({
                         type="button"
                         role="menuitem"
                         onClick={() => { setDownloadOpen(false); handleCsvDownload(); }}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.78125rem] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
                       >
                         <FileText size={13} className="text-ink-400 shrink-0" />
                         <span>CSV</span>
@@ -911,7 +1003,7 @@ function ResultsTable({
                         type="button"
                         role="menuitem"
                         onClick={() => { setDownloadOpen(false); handleExcelDownload(); }}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.78125rem] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
                       >
                         <FileSpreadsheet size={13} className="text-ink-400 shrink-0" />
                         <span>Excel</span>
@@ -939,11 +1031,11 @@ function ResultsTable({
             Only the first PREVIEW_ROW_COUNT rows render — any additional
             rows live in the fullscreen modal / new tab. */}
         <div className="overflow-x-auto overflow-y-hidden" style={{ height: 390 }}>
-          <table className="w-full text-[13px]">
+          <table className="w-full text-[0.8125rem]">
             <thead>
               <tr className="border-b border-canvas-border/70 bg-paper-50/40">
                 {columns.map(c => (
-                  <th key={c} className="text-left px-5 py-2.5 font-medium text-ink-500 uppercase tracking-[0.06em] text-[10.5px] whitespace-nowrap">{c}</th>
+                  <th key={c} className="text-left px-5 py-2.5 font-medium text-ink-500 uppercase tracking-[0.06em] text-[0.65625rem] whitespace-nowrap">{c}</th>
                 ))}
               </tr>
             </thead>
@@ -966,19 +1058,22 @@ function ResultsTable({
           const hidden = Math.max(0, totalRows - visible);
           return (
             <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-canvas-border/70 bg-paper-50/40">
-              <span className="text-[11px] text-ink-500 tabular-nums">
+              <span className="text-[0.6875rem] text-ink-500 tabular-nums">
                 Showing <span className="font-medium text-ink-800">{visible}</span>
                 <span className="text-ink-400"> of {totalRows}</span>
               </span>
+              {/* "View all" button hidden per request — kept here so it's a
+                  one-line restore. The expand icon still opens the full table.
               {hidden > 0 && (
                 <button
                   onClick={openFullscreen}
-                  className="inline-flex items-center gap-1 h-7 px-2.5 text-[11px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-100 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
+                  className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.6875rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-100 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
                 >
                   View all
                   <ArrowRight size={11} strokeWidth={2.5} />
                 </button>
               )}
+              */}
             </div>
           );
         })()}
@@ -1043,7 +1138,7 @@ function FullscreenTableModal({
       className="fixed inset-0 z-[9999] flex items-center justify-center"
       onClick={onClose}
     >
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -1057,8 +1152,8 @@ function FullscreenTableModal({
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border shrink-0">
           <div className="min-w-0 flex items-center gap-2">
             <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[13px] font-semibold text-ink-800 truncate">{title}</span>
-            <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
+            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{title}</span>
+            <span className="font-mono text-[0.6875rem] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <div ref={downloadMenuRef} className="relative">
@@ -1068,7 +1163,7 @@ function FullscreenTableModal({
                 aria-haspopup="menu"
                 aria-expanded={downloadOpen}
                 title="Download"
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[12px] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <Download size={13} className="text-ink-400" />
                 <span>Download</span>
@@ -1088,7 +1183,7 @@ function FullscreenTableModal({
                       type="button"
                       role="menuitem"
                       onClick={() => { setDownloadOpen(false); onDownloadCsv(); }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.78125rem] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer"
                     >
                       <FileText size={13} className="text-ink-400 shrink-0" />
                       <span>CSV</span>
@@ -1097,7 +1192,7 @@ function FullscreenTableModal({
                       type="button"
                       role="menuitem"
                       onClick={() => { setDownloadOpen(false); onDownloadExcel(); }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.78125rem] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer"
                     >
                       <FileSpreadsheet size={13} className="text-ink-400 shrink-0" />
                       <span>Excel</span>
@@ -1118,11 +1213,11 @@ function FullscreenTableModal({
 
         {/* Table body — full row set, sticky header */}
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-[13px]">
+          <table className="w-full text-[0.8125rem]">
             <thead className="sticky top-0 z-10 bg-canvas-elevated">
               <tr className="border-b border-canvas-border/80 bg-paper-50/60">
                 {columns.map(c => (
-                  <th key={c} className="text-left px-5 py-3 font-semibold text-ink-500 uppercase tracking-wide text-[11px] whitespace-nowrap">{c}</th>
+                  <th key={c} className="text-left px-5 py-3 font-semibold text-ink-500 uppercase tracking-wide text-[0.6875rem] whitespace-nowrap">{c}</th>
                 ))}
               </tr>
             </thead>
@@ -1140,10 +1235,10 @@ function FullscreenTableModal({
 
         {/* Footer count */}
         <div className="flex items-center justify-between px-5 py-2 border-t border-canvas-border/60 shrink-0">
-          <span className="text-[11px] text-ink-500 tabular-nums">
+          <span className="text-[0.6875rem] text-ink-500 tabular-nums">
             Showing <span className="font-medium text-ink-700">{rows.length}</span> of <span className="font-medium text-ink-700">{totalRows}</span>
           </span>
-          <span className="text-[11px] text-ink-400">Press Esc to close</span>
+          <span className="text-[0.6875rem] text-ink-400">Press Esc to close</span>
         </div>
       </motion.div>
     </motion.div>
@@ -1171,7 +1266,7 @@ function ThinkingTrail({ summary, steps, defaultOpen = false }: {
   return (
     <button
       onClick={() => setOpen(p => !p)}
-      className="group inline-flex items-start gap-1.5 text-left text-[12px] text-ink-500 hover:text-ink-700 transition-colors cursor-pointer mb-2"
+      className="group inline-flex items-start gap-1.5 text-left text-[0.75rem] text-ink-500 hover:text-ink-700 transition-colors cursor-pointer mb-2"
     >
       <ChevronRight size={12} className={`mt-0.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
       <span className="flex-1">
@@ -1268,7 +1363,7 @@ function ClarificationBlock({
 
   if (data.status === 'submitted') {
     return (
-      <div className="text-[13px] text-ink-700 leading-relaxed">
+      <div className="text-[0.8125rem] text-ink-700 leading-relaxed">
         Got it. Running with these inputs.
       </div>
     );
@@ -1319,7 +1414,7 @@ function ClarificationBlock({
               with an ellipsis for very long content; full text in the
               native tooltip. */}
           <p
-            className="text-[15px] font-semibold leading-[1.4] text-ink-900 flex-1 min-w-0 break-words line-clamp-2"
+            className="text-[0.9375rem] font-semibold leading-[1.4] text-ink-900 flex-1 min-w-0 break-words line-clamp-2"
             title={viewQ.question}
           >
             {viewQ.question}
@@ -1369,7 +1464,7 @@ function ClarificationBlock({
                   }`}
                 />
                 <span
-                  className={`inline-flex items-center justify-center size-6 rounded-md text-[11.5px] font-semibold tabular-nums shrink-0 transition-colors ${
+                  className={`inline-flex items-center justify-center size-6 rounded-md text-[0.71875rem] font-semibold tabular-nums shrink-0 transition-colors ${
                     isPicked
                       ? 'bg-brand-600 text-white shadow-[inset_0_-1px_0_rgba(0,0,0,0.10)]'
                       : isHighlighted
@@ -1380,14 +1475,14 @@ function ClarificationBlock({
                 >
                   {isPicked ? <Check size={12} strokeWidth={2.75} /> : idx + 1}
                 </span>
-                <span className={`flex-1 text-[14px] leading-snug transition-colors ${
+                <span className={`flex-1 text-[0.875rem] leading-snug transition-colors ${
                   isPicked ? 'text-ink-900 font-medium' : isHighlighted ? 'text-ink-900' : 'text-ink-800'
                 }`}>
                   {opt}
                 </span>
                 {isHighlighted && !isPicked && (
-                  <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-ink-400 shrink-0">
-                    <kbd className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded bg-canvas-elevated border border-canvas-border text-ink-600 font-mono text-[10px] leading-none">
+                  <span className="inline-flex items-center gap-1 text-[0.65625rem] font-medium text-ink-400 shrink-0">
+                    <kbd className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded bg-canvas-elevated border border-canvas-border text-ink-600 font-mono text-[0.625rem] leading-none">
                       <CornerDownLeft size={11} strokeWidth={2.25} />
                     </kbd>
                   </span>
@@ -1418,12 +1513,12 @@ function ClarificationBlock({
                 }
               }}
               placeholder="Type something else…"
-              className="no-focus-ring flex-1 bg-transparent text-[14px] text-ink-800 placeholder:text-ink-400 outline-none h-7"
+              className="no-focus-ring flex-1 bg-transparent text-[0.875rem] text-ink-800 placeholder:text-ink-400 outline-none h-7"
             />
             {customInput.trim() ? (
               <button
                 onClick={() => selectOption(customInput.trim())}
-                className="inline-flex items-center gap-1 h-7 px-2.5 text-[12px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 Use this
                 <CornerDownLeft size={11} strokeWidth={2.25} />
@@ -1431,7 +1526,7 @@ function ClarificationBlock({
             ) : (
               <button
                 onClick={skipCurrent}
-                className="h-7 px-2.5 text-[12px] font-medium text-ink-500 hover:text-ink-800 hover:bg-brand-50 rounded-md transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="h-7 px-2.5 text-[0.75rem] font-medium text-ink-500 hover:text-ink-800 hover:bg-brand-50 rounded-md transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 Skip
               </button>
@@ -1444,6 +1539,273 @@ function ClarificationBlock({
           handles navigation hints (Claude pattern). Submission is
           handled by the parent: once all questions are answered it
           fires onSubmit automatically. */}
+    </div>
+  );
+}
+
+// ─── Query clarification card (multi-select, navigated) ──────────────────────
+// The query-flow clarification. Unlike the workflow ClarificationBlock above,
+// this one supports per-question multi-select (checkboxes), explicit Back /
+// Next / Done navigation, a "Question X of Y" count, and no skip — answering
+// is required to advance. The corner ✕ cancels the whole card (nothing runs).
+function QueryClarificationCard({
+  data, onSetAnswer, onSubmit, onCancel, onAttach, attachedSources, files, onRemoveSource, onRemoveFile,
+}: {
+  data: QueryClarificationData;
+  onSetAnswer: (qIndex: number, answers: string[]) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+  onAttach: () => void;
+  attachedSources: AttachmentSelection[];
+  files: File[];
+  onRemoveSource: (index: number) => void;
+  onRemoveFile: (index: number) => void;
+}) {
+  const total = data.questions.length;
+  const firstUnanswered = data.questions.findIndex((_, i) => !(data.answers[i]?.length));
+  const [viewIndex, setViewIndex] = useState(firstUnanswered === -1 ? 0 : firstUnanswered);
+  const [highlighted, setHighlighted] = useState(0);
+  const [customInput, setCustomInput] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const customInputRef = useRef(customInput);
+  customInputRef.current = customInput;
+
+  const safeIndex = Math.min(viewIndex, total - 1);
+  const viewQ = total > 0 ? data.questions[safeIndex] : null;
+  const selected = data.answers[safeIndex] ?? [];
+  const isMulti = !!viewQ?.multi;
+  const answeredCurrent = selected.length > 0;
+  const isLast = safeIndex === total - 1;
+  const canBack = safeIndex > 0;
+
+  // Render the question's options plus any selected custom answers (typed via
+  // "Type something else") so those show up as checked rows too.
+  const displayOptions = viewQ
+    ? [...viewQ.options, ...selected.filter(s => !viewQ.options.includes(s))]
+    : [];
+  const optionCount = displayOptions.length;
+
+  // Reset highlight + custom input when the viewed question changes.
+  useEffect(() => {
+    setHighlighted(0);
+    setCustomInput('');
+  }, [safeIndex]);
+
+  function toggleOption(opt: string) {
+    if (!viewQ) return;
+    if (isMulti) {
+      onSetAnswer(safeIndex, selected.includes(opt) ? selected.filter(s => s !== opt) : [...selected, opt]);
+    } else {
+      // Single-select (radio): pick replaces; can't deselect by re-clicking.
+      onSetAnswer(safeIndex, [opt]);
+    }
+  }
+
+  function addCustom() {
+    const v = customInputRef.current.trim();
+    if (!v) return;
+    if (isMulti) {
+      if (!selected.includes(v)) onSetAnswer(safeIndex, [...selected, v]);
+    } else {
+      onSetAnswer(safeIndex, [v]);
+    }
+    setCustomInput('');
+  }
+
+  function goNext() {
+    const pending = customInputRef.current.trim();
+    if (pending) addCustom();
+    if ((answeredCurrent || pending) && !isLast) setViewIndex(safeIndex + 1);
+  }
+  function goBack() { if (canBack) setViewIndex(safeIndex - 1); }
+  function done() {
+    if (!isLast) return;
+    const pending = customInputRef.current.trim();
+    if (pending) {
+      addCustom();
+      setTimeout(() => onSubmit(), 0);
+    } else if (answeredCurrent) {
+      onSubmit();
+    }
+  }
+
+  // Keyboard: ↑/↓ highlight, 1-9 / Enter toggle, Esc cancels.
+  useEffect(() => {
+    if (data.status === 'submitted' || !viewQ) return;
+    const handler = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      const inMainTextarea = active instanceof HTMLTextAreaElement || (active instanceof HTMLInputElement && active !== inputRef.current);
+      const inOurInput = active === inputRef.current;
+      if (e.key === 'ArrowDown') { if (inMainTextarea) return; e.preventDefault(); setHighlighted(h => Math.min(h + 1, optionCount - 1)); }
+      else if (e.key === 'ArrowUp') { if (inMainTextarea) return; e.preventDefault(); setHighlighted(h => Math.max(h - 1, 0)); }
+      else if (e.key === 'Enter' && !inMainTextarea && !inOurInput) { e.preventDefault(); if (displayOptions[highlighted]) toggleOption(displayOptions[highlighted]); }
+      else if (e.key === 'Escape') { if (inMainTextarea) return; e.preventDefault(); if (inOurInput) { setCustomInput(''); } else { onCancel(); } }
+      else if (/^[1-9]$/.test(e.key) && !inMainTextarea && !inOurInput) { const n = parseInt(e.key, 10) - 1; if (n < optionCount) { e.preventDefault(); toggleOption(displayOptions[n]); } }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlighted, safeIndex, optionCount, data.status, isMulti, selected]);
+
+  if (data.status === 'submitted') {
+    return <div className="text-[0.8125rem] text-ink-700 leading-relaxed">Got it. Running with these inputs.</div>;
+  }
+  if (!viewQ) return null;
+
+  return (
+    <div className="space-y-2.5">
+      <div className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
+        {/* Header — question count + close on top, then the question */}
+        <div className="px-5 pt-3.5 pb-3">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <span className="text-[0.75rem] font-medium text-ink-500 tabular-nums">Question {safeIndex + 1} of {total}</span>
+            <button
+              type="button"
+              onClick={onCancel}
+              aria-label="Close clarification"
+              title="Close — cancels this question set"
+              className="inline-flex items-center justify-center size-7 -mr-1 rounded-md text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
+            >
+              <X size={15} />
+            </button>
+          </div>
+          <p className="text-[0.9375rem] font-semibold leading-[1.4] text-ink-900 break-words" title={viewQ.question}>{viewQ.question}</p>
+          {isMulti && <p className="mt-0.5 text-[0.71875rem] font-medium text-ink-400">Select all that apply</p>}
+        </div>
+
+        {/* Options — checkbox rows */}
+        <div role={isMulti ? 'group' : 'radiogroup'} aria-label={viewQ.question} className="py-1">
+          {displayOptions.map((opt, idx) => {
+            const isChecked = selected.includes(opt);
+            const isHighlighted = highlighted === idx;
+            return (
+              <button
+                key={opt}
+                type="button"
+                role={isMulti ? 'checkbox' : 'radio'}
+                aria-checked={isChecked}
+                onClick={() => toggleOption(opt)}
+                onMouseEnter={() => setHighlighted(idx)}
+                className={`group/opt relative w-full flex items-center gap-3 px-5 py-2.5 text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-inset ${
+                  isChecked ? 'bg-brand-50' : isHighlighted ? 'bg-brand-50/50' : 'hover:bg-brand-50/30'
+                }`}
+              >
+                {/* Marker — square checkbox for multi-select, round radio for single */}
+                <span
+                  aria-hidden="true"
+                  className={`inline-flex items-center justify-center size-[18px] border-2 shrink-0 transition-colors ${isMulti ? 'rounded-[5px]' : 'rounded-full'} ${
+                    isChecked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-canvas-elevated border-canvas-border group-hover/opt:border-brand-300'
+                  }`}
+                >
+                  {isChecked && (isMulti
+                    ? <Check size={12} strokeWidth={3} />
+                    : <span className="size-1.5 rounded-full bg-white" />)}
+                </span>
+                <span className={`flex-1 text-[0.875rem] leading-snug transition-colors ${isChecked ? 'text-ink-900 font-medium' : 'text-ink-800'}`}>
+                  {opt}
+                </span>
+              </button>
+            );
+          })}
+
+          {/* Attachments added via the + below — these ride along with the answers */}
+          {(attachedSources.length > 0 || files.length > 0) && (
+            <div className="flex items-center gap-1.5 overflow-x-auto px-5 pt-3 pb-1">
+              {attachedSources.map((s, i) => (
+                <div
+                  key={`src-${i}`}
+                  title={s.kind === 'source' ? s.name : undefined}
+                  className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[0.75rem] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0"
+                >
+                  {s.kind === 'source' && (
+                    <>
+                      <span className="text-[0.625rem] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
+                      <span className="truncate max-w-[10rem]">{s.name}</span>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onRemoveSource(i)}
+                    className="text-ink-400 hover:text-ink-800 hover:bg-brand-100 ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                    aria-label={`Remove ${s.kind === 'source' ? s.name : 'attachment'}`}
+                  ><X size={11} /></button>
+                </div>
+              ))}
+              {files.map((f, i) => (
+                <div
+                  key={`file-${i}`}
+                  title={f.name}
+                  className="flex items-center gap-2 bg-canvas-elevated text-ink-800 text-[0.8125rem] pl-2 pr-1.5 py-1.5 rounded-lg font-medium border border-canvas-border shrink-0"
+                >
+                  <span className="inline-flex items-center justify-center size-6 rounded bg-brand-50 text-brand-700 shrink-0"><FileText size={13} /></span>
+                  <span className="truncate max-w-[10rem]">{f.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveFile(i)}
+                    className="text-ink-400 hover:text-brand-700 hover:bg-brand-50 ml-0.5 p-0.5 cursor-pointer rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                    aria-label={`Remove ${f.name}`}
+                  ><X size={12} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Input row — the only input while a clarification is open (the chat
+              composer is hidden). "+" attaches data/files; typing adds a custom
+              answer to this question. */}
+          <div className="flex items-center gap-2 px-3.5 py-2.5 border-t border-canvas-border">
+            <button
+              type="button"
+              onClick={onAttach}
+              aria-label="Attach data sources or files"
+              title="Attach data or files"
+              className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
+              <Plus size={18} strokeWidth={2} />
+            </button>
+            <input
+              ref={inputRef}
+              value={customInput}
+              onChange={e => setCustomInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && customInputRef.current.trim()) { e.preventDefault(); e.stopPropagation(); addCustom(); } }}
+              placeholder="Type something else…"
+              className="no-focus-ring flex-1 bg-transparent text-[0.875rem] text-ink-800 placeholder:text-ink-400 outline-none h-8"
+            />
+            {/* Back / Next (or Done) live here in the input row — no separate footer */}
+            <div className="flex items-center gap-2 shrink-0 ml-1">
+              <button
+                type="button"
+                onClick={goBack}
+                disabled={!canBack}
+                className="inline-flex items-center gap-1 h-8 pl-2 pr-3 rounded-lg text-[0.8125rem] font-medium text-ink-600 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                <ChevronLeft size={15} /> Back
+              </button>
+              {isLast ? (
+                <button
+                  type="button"
+                  onClick={done}
+                  disabled={!answeredCurrent && !customInput.trim()}
+                  title={answeredCurrent ? undefined : 'Pick an answer to continue'}
+                  className="inline-flex items-center justify-center h-8 px-4 rounded-lg text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  Done
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={goNext}
+                  disabled={!answeredCurrent && !customInput.trim()}
+                  title={answeredCurrent ? undefined : 'Pick an answer to continue'}
+                  className="inline-flex items-center gap-1 h-8 pl-3 pr-2 rounded-lg text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  Next <ChevronRight size={15} />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1492,7 +1854,7 @@ function WorkflowOutputPreviewCard({
 
   return (
     <div className="space-y-4 w-full">
-      <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[72ch]">
+      <div className="text-[0.9375rem] leading-[1.65] text-ink-800 max-w-[66ch]">
         {renderAssistantText(summary)}
       </div>
 
@@ -1502,7 +1864,7 @@ function WorkflowOutputPreviewCard({
         <button
           type="button"
           onClick={onViewWorkspace}
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:bg-brand-50 rounded-md px-2.5 py-1.5 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-[0.78125rem] font-semibold text-ink-700 hover:text-brand-700 hover:bg-brand-50 rounded-md px-2.5 py-1.5 transition-colors cursor-pointer"
         >
           <PanelRightOpen size={13} />
           View Workspace
@@ -1510,7 +1872,7 @@ function WorkflowOutputPreviewCard({
         <button
           type="button"
           onClick={onConfirm}
-          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[12.5px] font-semibold px-3.5 py-1.5 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.78125rem] font-semibold px-3.5 py-1.5 transition-colors cursor-pointer"
         >
           <CheckCircle size={13} />
           Approve &amp; Run
@@ -1591,7 +1953,7 @@ function InlineAuditLoader({
     <div
       ref={rootRef}
       style={{ scrollMarginBottom: 24 }}
-      className="flex items-center gap-2 text-[13px] text-ink-600"
+      className="flex items-center gap-2 text-[0.8125rem] text-ink-600"
     >
       <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
         <span className="absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-60 motion-safe:animate-ping" />
@@ -1614,7 +1976,7 @@ function SaveWorkflowButton() {
     );
   }
   return (
-    <button onClick={() => setSaved(true)} className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer">
+    <button onClick={() => setSaved(true)} className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer">
       <Save size={12} /> Save to Library
     </button>
   );
@@ -1759,7 +2121,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
   }, [bpOpen, subOpen]);
 
   const pillCls = (active: boolean) =>
-    `inline-flex items-center h-7 px-3 rounded-full text-[11.5px] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+    `inline-flex items-center h-7 px-3 rounded-full text-[0.71875rem] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
       active
         ? 'bg-brand-600 border-brand-600 text-white shadow-[inset_0_-1px_0_rgba(0,0,0,0.08)]'
         : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/60'
@@ -1811,7 +2173,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-ink-900/40 backdrop-blur-[4px]"
+        className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]"
         onClick={onCancel}
       />
       {/* Modal */}
@@ -1829,10 +2191,10 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
               <Save size={16} className="text-brand-600" />
             </div>
             <div>
-              <h2 id="save-as-wf-title" className="text-[15px] font-semibold text-ink-900">
+              <h2 id="save-as-wf-title" className="text-[0.9375rem] font-semibold text-ink-900">
                 {step === 'details' ? 'Save as workflow' : 'Choose what to add'}
               </h2>
-              <p className="text-[12px] text-ink-500 mt-0.5">
+              <p className="text-[0.75rem] text-ink-500 mt-0.5">
                 {step === 'details'
                   ? 'Turn this query result into a re-runnable workflow.'
                   : 'Select individual KPIs, charts, and columns to attach to this workflow.'}
@@ -1852,7 +2214,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
         {step === 'details' && (
           <div className="mx-6 mb-4 px-3 py-2.5 rounded-lg bg-brand-50 border border-brand-200/60 flex gap-2 items-start">
             <Lightbulb size={13} className="text-brand-600 mt-0.5 shrink-0" />
-            <p className="text-[12px] leading-relaxed text-ink-700">
+            <p className="text-[0.75rem] leading-relaxed text-ink-700">
               This chat will switch to <strong className="text-brand-700">workflow mode</strong>. You won't be able to switch back to query mode in this chat. Start a new chat for that.
             </p>
           </div>
@@ -1864,23 +2226,23 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
           <>
           {/* Workflow name */}
           <div>
-            <label className="block text-[12px] font-semibold text-ink-900 mb-1.5">
+            <label className="block text-[0.75rem] font-semibold text-ink-900 mb-1.5">
               Workflow name <span className="text-brand-500" aria-hidden>*</span>
             </label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="no-focus-ring w-full h-10 px-3 text-[13px] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors"
+              className="no-focus-ring w-full h-10 px-3 text-[0.8125rem] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors"
               placeholder="e.g., Duplicate Invoice Detection: Q1 ±3 days"
             />
-            <p className="text-[11px] text-ink-500 mt-1">IRA pre-filled this from your query. Edit if needed.</p>
+            <p className="text-[0.6875rem] text-ink-500 mt-1">IRA pre-filled this from your query. Edit if needed.</p>
           </div>
 
           {/* Two-column row: BP + Sub-process (custom dropdowns matching app theme) */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor="wf-bp-trigger" className="block text-[12px] font-semibold text-ink-900 mb-1.5">
+              <label htmlFor="wf-bp-trigger" className="block text-[0.75rem] font-semibold text-ink-900 mb-1.5">
                 Business process <span className="text-brand-500" aria-hidden>*</span>
               </label>
               <div ref={bpRef} className="relative">
@@ -1890,7 +2252,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
                   onClick={() => { setBpOpen(o => !o); setSubOpen(false); }}
                   aria-haspopup="listbox"
                   aria-expanded={bpOpen}
-                  className={`w-full h-10 px-3 inline-flex items-center justify-between gap-2 text-[13px] text-left border rounded-lg bg-canvas-elevated transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                  className={`w-full h-10 px-3 inline-flex items-center justify-between gap-2 text-[0.8125rem] text-left border rounded-lg bg-canvas-elevated transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                     bpOpen ? 'border-brand-400' : 'border-canvas-border hover:border-ink-300'
                   }`}
                 >
@@ -1926,7 +2288,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
                             role="option"
                             aria-selected={isSelected}
                             onClick={() => { setBpId(bp.id); setSubProcessId(''); setBpOpen(false); }}
-                            className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[13px] transition-colors cursor-pointer focus:outline-none ${
+                            className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[0.8125rem] transition-colors cursor-pointer focus:outline-none ${
                               isSelected ? 'bg-brand-50 text-brand-800 font-medium' : 'text-ink-800 hover:bg-brand-50/60 hover:text-ink-900'
                             }`}
                           >
@@ -1941,7 +2303,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
               </div>
             </div>
             <div>
-              <label htmlFor="wf-sub-trigger" className="block text-[12px] font-semibold text-ink-900 mb-1.5">
+              <label htmlFor="wf-sub-trigger" className="block text-[0.75rem] font-semibold text-ink-900 mb-1.5">
                 Sub-process <span className="text-brand-500" aria-hidden>*</span>
               </label>
               <div ref={subRef} className="relative">
@@ -1952,7 +2314,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
                   onClick={() => { setSubOpen(o => !o); setBpOpen(false); }}
                   aria-haspopup="listbox"
                   aria-expanded={subOpen}
-                  className={`w-full h-10 px-3 inline-flex items-center justify-between gap-2 text-[13px] text-left border rounded-lg bg-canvas-elevated transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                  className={`w-full h-10 px-3 inline-flex items-center justify-between gap-2 text-[0.8125rem] text-left border rounded-lg bg-canvas-elevated transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                     !bpId
                       ? 'border-canvas-border text-ink-400 cursor-not-allowed bg-paper-50/40'
                       : subOpen
@@ -1992,7 +2354,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
                             role="option"
                             aria-selected={isSelected}
                             onClick={() => { setSubProcessId(sp.id); setSubOpen(false); }}
-                            className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[13px] transition-colors cursor-pointer focus:outline-none ${
+                            className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[0.8125rem] transition-colors cursor-pointer focus:outline-none ${
                               isSelected ? 'bg-brand-50 text-brand-800 font-medium' : 'text-ink-800 hover:bg-brand-50/60 hover:text-ink-900'
                             }`}
                           >
@@ -2010,15 +2372,15 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
 
           {/* Description */}
           <div>
-            <label className="block text-[12px] font-semibold text-ink-900 mb-1.5">Description</label>
+            <label className="block text-[0.75rem] font-semibold text-ink-900 mb-1.5">Description</label>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
               rows={3}
-              className="no-focus-ring w-full px-3 py-2 text-[13px] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors resize-none"
+              className="no-focus-ring w-full px-3 py-2 text-[0.8125rem] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors resize-none"
               placeholder="One-line summary of what this workflow does."
             />
-            <p className="text-[11px] text-ink-500 mt-1">Optional. IRA pre-filled this from your query.</p>
+            <p className="text-[0.6875rem] text-ink-500 mt-1">Optional. IRA pre-filled this from your query.</p>
           </div>
 
           {/* Configuration — LLM-detected configurable keys. Removing a key
@@ -2026,8 +2388,8 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
               exposing it as a runtime parameter on the workflow. */}
           {configurables.length > 0 && (
             <div>
-              <label className="block text-[12px] font-semibold text-ink-900 mb-1">Configuration</label>
-              <p className="text-[11px] text-ink-500 mb-2.5 leading-relaxed">
+              <label className="block text-[0.75rem] font-semibold text-ink-900 mb-1">Configuration</label>
+              <p className="text-[0.6875rem] text-ink-500 mb-2.5 leading-relaxed">
                 Adjust values the LLM detected as configurable. Removing a key inlines its value as a literal in the saved code.
               </p>
               <div className="space-y-3">
@@ -2035,8 +2397,8 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
                   <div key={cfg.key} className={`transition-opacity ${cfg.removed ? 'opacity-50' : ''}`}>
                     <div className="flex items-baseline justify-between gap-2 mb-1.5">
                       <div className="inline-flex items-baseline gap-2 min-w-0">
-                        <span className="text-[13px] font-semibold text-ink-900 truncate">{cfg.key}</span>
-                        <span className="text-[11px] text-ink-400 font-normal shrink-0">{cfg.type}</span>
+                        <span className="text-[0.8125rem] font-semibold text-ink-900 truncate">{cfg.key}</span>
+                        <span className="text-[0.6875rem] text-ink-400 font-normal shrink-0">{cfg.type}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -2048,10 +2410,10 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
                           const next = e.target.value;
                           setConfigurables(prev => prev.map((c, i) => i === idx ? { ...c, value: next } : c));
                         }}
-                        className="no-focus-ring flex-1 h-10 px-3 text-[13px] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors disabled:bg-paper-50 disabled:text-ink-400 disabled:cursor-not-allowed"
+                        className="no-focus-ring flex-1 h-10 px-3 text-[0.8125rem] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors disabled:bg-paper-50 disabled:text-ink-400 disabled:cursor-not-allowed"
                         aria-label={`Value for ${cfg.key}`}
                       />
-                      <label className="inline-flex items-center gap-2 cursor-pointer select-none text-[12px] text-ink-700 shrink-0">
+                      <label className="inline-flex items-center gap-2 cursor-pointer select-none text-[0.75rem] text-ink-700 shrink-0">
                         <input
                           type="checkbox"
                           checked={cfg.removed}
@@ -2072,13 +2434,13 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
 
           {/* Audit run frequency — mirrors Workflow Library > Configuration tab */}
           <div>
-            <label className="text-[12px] font-semibold text-ink-900 mb-2 inline-flex items-center gap-1.5">
+            <label className="text-[0.75rem] font-semibold text-ink-900 mb-2 inline-flex items-center gap-1.5">
               <Calendar size={12} className="text-brand-600" />
               Audit run frequency
             </label>
             <div className="rounded-xl border border-canvas-border bg-paper-50/40 p-4 grid grid-cols-2 gap-x-4 gap-y-4">
               <div>
-                <label className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Frequency</label>
+                <label className="text-[0.65625rem] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Frequency</label>
                 <div className="flex flex-wrap gap-1.5">
                   {(['Hourly', 'Daily', 'Weekly', 'Monthly'] as const).map(f => (
                     <button key={f} type="button" onClick={() => setFrequency(f)} className={pillCls(frequency === f)}>{f}</button>
@@ -2086,19 +2448,19 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
                 </div>
               </div>
               <div>
-                <label htmlFor="wf-run-time" className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Run Time</label>
+                <label htmlFor="wf-run-time" className="text-[0.65625rem] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Run Time</label>
                 <input
                   id="wf-run-time"
                   type="time"
                   value={runTime}
                   onChange={e => setRunTime(e.target.value)}
-                  className="no-focus-ring w-full h-9 px-3 rounded-lg border border-canvas-border hover:border-ink-300 bg-canvas-elevated text-[13px] text-ink-800 focus:border-brand-400 outline-none transition-colors"
+                  className="no-focus-ring w-full h-9 px-3 rounded-lg border border-canvas-border hover:border-ink-300 bg-canvas-elevated text-[0.8125rem] text-ink-800 focus:border-brand-400 outline-none transition-colors"
                 />
               </div>
 
               {frequency === 'Weekly' && (
                 <div className="col-span-2">
-                  <label className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Day of the week</label>
+                  <label className="text-[0.65625rem] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Day of the week</label>
                   <div className="flex flex-wrap gap-1.5">
                     {(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const).map(d => (
                       <button key={d} type="button" onClick={() => setDayOfWeek(d)} className={pillCls(dayOfWeek === d)}>{d}</button>
@@ -2109,18 +2471,18 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
 
               {frequency === 'Monthly' && (
                 <div>
-                  <label htmlFor="wf-monthly-date" className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Date</label>
+                  <label htmlFor="wf-monthly-date" className="text-[0.65625rem] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Date</label>
                   <DatePicker
                     id="wf-monthly-date"
                                         value={monthlyDate}
                     onChange={e => setMonthlyDate(e.target.value)}
-                    className="no-focus-ring w-full h-9 px-3 rounded-lg border border-canvas-border hover:border-ink-300 bg-canvas-elevated text-[13px] text-ink-800 focus:border-brand-400 outline-none transition-colors"
+                    className="no-focus-ring w-full h-9 px-3 rounded-lg border border-canvas-border hover:border-ink-300 bg-canvas-elevated text-[0.8125rem] text-ink-800 focus:border-brand-400 outline-none transition-colors"
                   />
                 </div>
               )}
 
               <div>
-                <label className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Trigger On</label>
+                <label className="text-[0.65625rem] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Trigger On</label>
                 <div className="flex flex-wrap gap-1.5">
                   {(['Schedule', 'Data Change', 'Manual'] as const).map(t => (
                     <button key={t} type="button" onClick={() => setTriggerOn(t)} className={pillCls(triggerOn === t)}>{t}</button>
@@ -2128,7 +2490,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
                 </div>
               </div>
               <div>
-                <label className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Retry on Failure</label>
+                <label className="text-[0.65625rem] font-semibold uppercase tracking-[0.06em] text-ink-500 block mb-1.5">Retry on Failure</label>
                 <div className="flex flex-wrap gap-1.5">
                   {(['Off', '1x', '3x', '5x'] as const).map(r => (
                     <button key={r} type="button" onClick={() => setRetry(r)} className={pillCls(retry === r)}>{r}</button>
@@ -2147,8 +2509,8 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
                   <div className="w-12 h-12 rounded-full bg-paper-50 flex items-center justify-center text-ink-400 mb-3">
                     <BarChart3 size={20} />
                   </div>
-                  <p className="text-[13px] font-semibold text-ink-800">Nothing to attach</p>
-                  <p className="text-[12px] text-ink-500 mt-1 max-w-[320px]">
+                  <p className="text-[0.8125rem] font-semibold text-ink-800">Nothing to attach</p>
+                  <p className="text-[0.75rem] text-ink-500 mt-1 max-w-[320px]">
                     This result has no KPIs, charts, or table columns to attach to the workflow yet.
                   </p>
                 </div>
@@ -2156,7 +2518,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
                 <>
                   {/* Step-2 header — global all/none + selection count */}
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-[11px] text-ink-500" aria-live="polite">
+                    <p className="text-[0.6875rem] text-ink-500" aria-live="polite">
                       {totalSelected === 0
                         ? 'Select at least one item to attach.'
                         : `${totalSelected} item${totalSelected === 1 ? '' : 's'} selected`}
@@ -2169,14 +2531,14 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
                           setAll(resultData.charts.map(c => c.id), true, setSelCharts);
                           setAll(resultData.table.columns, true, setSelCols);
                         }}
-                        className="text-[11px] font-medium text-brand-600 hover:text-brand-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+                        className="text-[0.6875rem] font-medium text-brand-600 hover:text-brand-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
                       >
                         Select all
                       </button>
                       <button
                         type="button"
                         onClick={() => { setSelKpis(new Set()); setSelCharts(new Set()); setSelCols(new Set()); }}
-                        className="text-[11px] font-medium text-ink-500 hover:text-ink-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+                        className="text-[0.6875rem] font-medium text-ink-500 hover:text-ink-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
                       >
                         Clear
                       </button>
@@ -2270,7 +2632,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
             <button
               type="button"
               onClick={() => setStep('details')}
-              className="inline-flex items-center h-9 px-3 rounded-lg text-[12px] font-medium text-ink-600 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center h-9 px-3 rounded-lg text-[0.75rem] font-medium text-ink-600 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <ChevronLeft size={13} className="mr-0.5" /> Back
             </button>
@@ -2278,7 +2640,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
           <div className="flex items-center gap-2">
             <button
               onClick={onCancel}
-              className="inline-flex items-center h-9 px-4 rounded-lg text-[13px] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center h-9 px-4 rounded-lg text-[0.8125rem] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               Cancel
             </button>
@@ -2286,7 +2648,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
               <button
                 onClick={() => canAdvance && setStep('pickWidgets')}
                 disabled={!canAdvance}
-                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 Next <ChevronRight size={13} strokeWidth={2.25} />
               </button>
@@ -2294,7 +2656,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
               <button
                 onClick={handleConfirm}
                 disabled={!canConfirm}
-                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <Save size={13} strokeWidth={2.25} /> Save & switch to workflow
               </button>
@@ -2369,11 +2731,11 @@ function InlineEditBubble({
           onKeyDown={onKey}
           rows={1}
           aria-label="Edit message"
-          className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-3.5 py-2.5 text-[15px] leading-[1.55] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]"
+          className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-3.5 py-2.5 text-[0.9375rem] leading-[1.55] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]"
         />
       </div>
       <div className="mt-2 flex items-start justify-between gap-3">
-        <div className="flex items-start gap-1.5 text-[12px] text-ink-500 leading-snug min-w-0 pt-1.5">
+        <div className="flex items-start gap-1.5 text-[0.75rem] text-ink-500 leading-snug min-w-0 pt-1.5">
           <Info size={13} className="shrink-0 mt-0.5 text-ink-400" aria-hidden="true" />
           <span>Saving will start a new conversation from here. Use the arrows below the message to switch between versions.</span>
         </div>
@@ -2381,7 +2743,7 @@ function InlineEditBubble({
           <button
             type="button"
             onClick={onCancel}
-            className="inline-flex items-center h-8 px-3 rounded-md text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:bg-canvas hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="inline-flex items-center h-8 px-3 rounded-md text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:bg-canvas hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             Cancel
           </button>
@@ -2389,7 +2751,7 @@ function InlineEditBubble({
             type="button"
             onClick={onSave}
             disabled={!canSave}
-            className="inline-flex items-center h-8 px-3.5 rounded-md text-[13px] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 disabled:bg-ink-300 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="inline-flex items-center h-8 px-3.5 rounded-md text-[0.8125rem] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 disabled:bg-ink-300 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             Save
           </button>
@@ -2833,7 +3195,7 @@ ${transcriptHtml}
               type="button"
               role="menuitem"
               onClick={() => { setOpen(false); handlePdf(); }}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.78125rem] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
             >
               <FileText size={13} className="text-ink-400 shrink-0" />
               <span>PDF</span>
@@ -2842,12 +3204,12 @@ ${transcriptHtml}
               type="button"
               role="menuitem"
               onClick={() => { setOpen(false); handleExcel(); }}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[0.78125rem] text-left text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus:outline-none focus-visible:bg-brand-50"
             >
               <FileSpreadsheet size={13} className="text-ink-400 shrink-0" />
               <span>Excel</span>
             </button>
-            <div className="border-t border-canvas-border/70 mt-1 pt-1 px-2.5 pb-1 text-[10.5px] text-ink-400 whitespace-nowrap">
+            <div className="border-t border-canvas-border/70 mt-1 pt-1 px-2.5 pb-1 text-[0.65625rem] text-ink-400 whitespace-nowrap">
               Full query result
             </div>
           </motion.div>
@@ -2932,8 +3294,13 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
   // Composer mode toggle — drives whether a Submit routes to query or workflow flow.
   // Default is query (toggle off); user opts into workflow build by toggling the pill on.
-  // When opened from an engagement's "Create new workflow" flow, start in workflow mode.
-  const [buildWorkflowMode, setBuildWorkflowMode] = useState(!!workflowEngagementContext);
+  // Start in workflow mode when opened from an engagement's "Create new workflow"
+  // flow, or via a new-tab deep link carrying ?compose=workflow (e.g. the Link
+  // Workflow modal's "Create Workflow" button).
+  const [buildWorkflowMode, setBuildWorkflowMode] = useState(
+    !!workflowEngagementContext ||
+    (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('compose') === 'workflow')
+  );
 
   // If we land here scoped to an engagement, ensure the composer is in workflow-build mode.
   useEffect(() => {
@@ -2942,24 +3309,15 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
   // ───────── Rotating placeholder (hero empty-state composer) ─────────
   // Typewriter effect: types each prompt character-by-character, holds
-  // for a beat, erases, pauses, then types the next. No fade or blur —
-  // the deliberate keystrokes are the animation. Reads as "AI is
-  // composing a thought." Pauses while the user is typing in the
-  // textarea. Resets when mode toggles.
+  // for a beat, then holds. One designed prompt per mode — matches the
+  // composer's placeholder copy. No fade or blur; the deliberate
+  // keystrokes are the animation. Pauses while the user is typing in
+  // the textarea. Resets when mode toggles.
   const queryPlaceholders = [
-    'Ask Ira about your audit data…',
-    'Find unusual journal entries in Q1…',
-    'Show me top vendor risk hotspots…',
-    'Investigate a P2P payment anomaly…',
-    'Summarize last quarter\'s findings…',
-    'Approvals above ₹1L without backup…',
+    'Ask a question or run an audit query',
   ];
   const workflowPlaceholders = [
-    'Ask Ira to build a workflow…',
-    'Design a duplicate-invoice detector…',
-    'Create a vendor master change monitor…',
-    'Build a three-way PO match flow…',
-    'Set up a SOX compliance checker…',
+    'Describe a workflow and let Ira do the rest',
   ];
   const placeholderPool = buildWorkflowMode ? workflowPlaceholders : queryPlaceholders;
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
@@ -3007,6 +3365,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }
 
     if (typingPhase === 'holding') {
+      // A single-prompt pool has nothing to rotate to — type it in once,
+      // then hold it static (matches the composer's designed placeholder).
+      if (placeholderPool.length <= 1) return;
       // 1.6s to read the full prompt before erasing.
       const id = window.setTimeout(() => setTypingPhase('erasing'), 1600);
       return () => window.clearTimeout(id);
@@ -3041,16 +3402,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // Dismissible state for the workflow-mode banner. Lock persists; banner
   // is just the one-time post-save notice the user can clear.
   const [lockedBannerDismissed, setLockedBannerDismissed] = useState(false);
-  // Captured tolerance/threshold config from the pre-modal clarification —
-  // drives the modal's prefilled name + description so the user sees their
-  // choices reflected before they commit to the workflow.
-  const saveWorkflowConfigRef = useRef<{ amount: string; date: string; threshold: string }>({
-    amount: '', date: '', threshold: '',
-  });
-  // Save-as-workflow pre-modal clarification — captures whether the saved
-  // workflow is exception-style (severity rules) or a KPI tracker
-  // (attention thresholds + cadence). Drives the configurable keys that
-  // pre-populate the Save modal's Configuration section.
+  // Save-as-workflow pre-modal clarification — captures the five answers
+  // (risk, population/period, frequency, output, configuration) that seed the
+  // Save modal's name, description, and Configuration section. `kind` is
+  // retained for the ref shape but the unified flow always uses 'exception'.
   const saveWorkflowAnswersRef = useRef<{
     kind: 'exception' | 'kpi';
     pairs: { question: string; answer: string }[];
@@ -3471,28 +3826,21 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setActiveArtifactTab('plan');
   };
 
-  // ─── Update an answer for the active clarification message ───
-  const updateClarificationAnswer = (msgId: string, qIndex: number, answer: string) => {
+  // ─── Update the answer set for a clarification question (multi-select) ───
+  const updateClarificationAnswer = (msgId: string, qIndex: number, answers: string[]) => {
     setMessages(prev => prev.map(m => {
       if (m.id !== msgId || m.richType !== 'clarification') return m;
-      const data = m.richData as unknown as ClarificationData;
+      const data = m.richData as unknown as QueryClarificationData;
       return {
         ...m,
-        richData: { ...data, answers: { ...data.answers, [qIndex]: answer } } as unknown as Record<string, unknown>,
+        richData: { ...data, answers: { ...data.answers, [qIndex]: answers } } as unknown as Record<string, unknown>,
       };
     }));
   };
 
-  // ─── Skip a single clarification question — sentinel '' marks "skipped but acknowledged" ───
-  const skipClarificationQuestion = (msgId: string, qIndex: number) => {
-    setMessages(prev => prev.map(m => {
-      if (m.id !== msgId || m.richType !== 'clarification') return m;
-      const data = m.richData as unknown as ClarificationData;
-      return {
-        ...m,
-        richData: { ...data, answers: { ...data.answers, [qIndex]: '' } } as unknown as Record<string, unknown>,
-      };
-    }));
+  // ─── Cancel a clarification — the corner ✕ dismisses the card; nothing runs ───
+  const cancelClarification = (msgId: string) => {
+    setMessages(prev => prev.filter(m => m.id !== msgId));
   };
 
   // ─── Submit the clarification — freeze it, drop a single user msg, start the run ───
@@ -3504,10 +3852,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     const flow: { purpose: 'audit-query' | 'save-workflow' } = { purpose: 'audit-query' };
     setMessages(prev => prev.map(m => {
       if (m.id !== msgId || m.richType !== 'clarification') return m;
-      const data = m.richData as unknown as ClarificationData;
+      const data = m.richData as unknown as QueryClarificationData;
       flow.purpose = data.purpose ?? 'audit-query';
       consolidated = data.questions
-        .map((q, qi) => ({ question: q.question, answer: data.answers[qi] }))
+        .map((q, qi) => ({ question: q.question, answer: (data.answers[qi] ?? []).join(', ') }))
         .filter(p => !!p.answer);
       return {
         ...m,
@@ -3531,20 +3879,12 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }, 80);
 
     if (flow.purpose === 'save-workflow') {
-      // Stash full answers for the new save-workflow clarification so the
-      // modal's Configuration section can pre-populate from them.
+      // Stash the five clarification answers (risk, population, frequency,
+      // output, configuration) so the modal can seed its name / description /
+      // Configuration section from them.
       saveWorkflowAnswersRef.current = {
         kind: saveWorkflowAnswersRef.current.kind,
         pairs: consolidated,
-      };
-      // Stash answers so the Save-as-Workflow modal's prefilled name/description
-      // echo them. Defaults match the question's "(current)" option.
-      const findAnswer = (kw: string) =>
-        consolidated.find(c => c.question.toLowerCase().includes(kw))?.answer ?? '';
-      saveWorkflowConfigRef.current = {
-        amount: findAnswer('amount') || '±₹1,000',
-        date: findAnswer('date') || '±3 days',
-        threshold: findAnswer('threshold') || '≥90%',
       };
       schedule(() => setShowSaveAsWfModal(true), 360);
       return;
@@ -3619,8 +3959,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       const questions = CLARIFICATION_STEPS.map(step => ({
         question: step.question,
         options: step.options,
+        multi: (step as { multi?: boolean }).multi,
       }));
-      const data: ClarificationData = {
+      const data: QueryClarificationData = {
         intro: "One quick check before I run. Pick what fits, or type your own.",
         questions,
         answers: {},
@@ -3892,89 +4233,71 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
   // of running an audit. The captured answers seed the modal's
   // Configuration section.
   const openSaveAsWorkflowModal = () => {
-    // Heuristic: scan the most recent user message for exception-style
-    // wording. If nothing matches, default to KPI tracker. Either set is
-    // 4 questions, so the card always reads the same shape.
-    const lastUserText = [...messages].reverse().find(m => m.role === 'user')?.text?.toLowerCase() || '';
-    const exceptionKeywords = ['duplicate', 'exception', 'anomal', 'outlier', 'fraud', 'mismatch', 'flag', 'irregular', 'missing'];
-    const kpiKeywords = ['kpi', 'metric', 'trend', 'rate', 'ratio', 'percentage', 'monitor', 'track'];
-    const isException = exceptionKeywords.some(k => lastUserText.includes(k));
-    const isKpi = !isException && kpiKeywords.some(k => lastUserText.includes(k));
-    const kind: 'exception' | 'kpi' = isKpi ? 'kpi' : 'exception';
+    // Five single-question clarifications captured inline before the modal
+    // opens, so the saved workflow ships as a governed control rather than a
+    // bare saved query: the risk it detects (+ assertion), the population /
+    // period it runs over, its cadence, the output each run renders (KPIs are
+    // part of the output), and which config stays adjustable vs locked. The
+    // existing clarification machinery auto-submits once the last answer
+    // lands; submitClarification (purpose 'save-workflow') then opens the
+    // modal, and the captured answers seed its name / description / config.
+    saveWorkflowAnswersRef.current = { kind: 'exception', pairs: [] };
 
-    // Reset; will be filled by submitClarification when the user submits.
-    saveWorkflowAnswersRef.current = { kind, pairs: [] };
-
-    const exceptionQuestions = [
+    const questions = [
       {
-        question: 'Which scenarios should this workflow flag as exceptions?',
+        // 1 — Risk & assertion: why the control exists.
+        question: 'What risk should this workflow detect?',
         options: [
-          'Same vendor + same amount within tolerance window',
-          'Same PO referenced more than once',
-          'Amount or date matches across two invoices',
-          'All of the above',
+          'Duplicate / overpayment to vendors — Occurrence & Accuracy',
+          'Fictitious or unauthorized vendor — Validity',
+          'Off-contract / unapproved spend — Validity',
+          'Price or quantity variance vs PO — Accuracy',
         ],
       },
       {
-        question: 'When should a row turn red (highest severity)?',
+        // 2 — Population & period: over what data each run executes.
+        question: 'What population and period should each run cover?',
         options: [
-          'Match ≥ 95% and amount ≥ ₹1,00,000',
-          'Match ≥ 90% (any amount)',
-          'Same vendor + exact amount + within 3 days',
-          'I’ll define this later',
+          'Full population (100%), since last run — by invoice & posting date',
+          'Full population (100%), current month',
+          'Full population (100%), current quarter',
+          'Monetary-unit sample, current quarter',
         ],
       },
       {
-        question: 'When should a row turn yellow (needs review)?',
+        // 3 — Frequency: how often it runs.
+        question: 'How often should this workflow run?',
         options: [
-          'Match 80–94%',
-          'Match 70–89% or unusual amount band',
-          'Cross-checks failed but match score is mid-range',
-          'Skip yellow — only red and green',
+          'Monthly, 2 days after period close',
+          'Continuous — on every new invoice batch',
+          'Weekly',
+          'Quarterly',
         ],
       },
       {
-        question: 'What happens to rows below your yellow threshold?',
+        // 4 — Output: what each run renders (KPIs are part of the output).
+        question: 'What should each run output?',
         options: [
-          'Auto-resolve as green (no action)',
-          'Show but de-prioritise',
-          'Hide from the exception list',
-          'Send to a low-priority queue',
+          'KPIs + Exception Register + trend chart',
+          'KPIs + Exception Register only',
+          'KPIs + summary-by-vendor table',
+          'Full pack — KPIs, register, reconciliation, aging & trend',
+        ],
+      },
+      {
+        // 5 — Configuration: which params stay adjustable vs locked.
+        question: 'Which values stay adjustable each run? Others lock behind re-certification.',
+        options: [
+          'Period, entity & recipients — tolerances & materiality locked',
+          'All detection thresholds adjustable',
+          'Everything locked — fixed control',
+          'Set a materiality floor first',
         ],
       },
     ];
 
-    const kpiQuestions = [
-      {
-        question: 'Which KPI should this workflow track?',
-        options: [
-          'Duplicates found (count)',
-          'Total flagged amount (₹)',
-          'Avg confidence score (%)',
-          'Vendors flagged (count)',
-        ],
-      },
-      {
-        question: 'What % change vs last run counts as needs attention?',
-        options: ['±5%', '±10%', '±20%', 'Any change'],
-      },
-      {
-        question: 'How often should this KPI refresh?',
-        options: ['Hourly', 'Daily', 'Weekly', 'On data change'],
-      },
-      {
-        question: 'Who should be notified when attention is needed?',
-        options: ['Me only', 'My team', 'Process owner', 'No one — just log it'],
-      },
-    ];
-
-    const questions = kind === 'kpi' ? kpiQuestions : exceptionQuestions;
-    const intro = kind === 'kpi'
-      ? 'Before I save this as a KPI tracker, help me lock in the alerting rules.'
-      : 'Before I save this as a workflow, help me define what counts as an exception.';
-
-    const data: ClarificationData = {
-      intro,
+    const data: QueryClarificationData = {
+      intro: 'Before I save this as a reusable control, let’s lock in five essentials — I’ve pre-filled my best guess from the analysis we just ran.',
       questions,
       answers: {},
       status: 'open',
@@ -3986,10 +4309,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
       role: 'assistant',
       text: '',
       thinking: [
-        kind === 'kpi'
-          ? 'Detected KPI-tracker intent from the query'
-          : 'Detected exception/anomaly intent from the query',
-        'Drafting 4 clarifications so the saved workflow carries explicit rules',
+        'Preparing to save this query as a governed workflow',
+        'Drafting 5 clarifications — risk, population, cadence, output, configuration',
       ],
       timestamp: new Date(),
       richType: 'clarification',
@@ -4016,9 +4337,28 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     setLockedBannerDismissed(false);
     setBuildWorkflowMode(true);
 
+    // Register the saved workflow at the top of the library so the toast can
+    // take the user straight to where it now sits.
+    const savedWfId = `lw-saved-${Date.now()}`;
+    const savedBp = BUSINESS_PROCESSES.find(b => b.id === data.bpId);
+    LIBRARY_WORKFLOWS.unshift({
+      id: savedWfId,
+      name: data.name,
+      description: data.description || data.name,
+      tags: ['Saved from chat'],
+      businessProcess: savedBp?.abbr || savedBp?.name || 'General',
+      controlId: 'CTRL-CHAT',
+      live: false,
+    });
+
     // Toast the save intent immediately so the user sees commit feedback
-    // independently of the canvas-flip animation.
-    addToast({ type: 'success', message: `Workflow draft "${data.name}" created.` });
+    // independently of the canvas-flip animation. Clicking it jumps to the
+    // workflow library where the new workflow now sits.
+    addToast({
+      type: 'success',
+      message: `Workflow draft "${data.name}" created.`,
+      action: { label: 'View in library', onClick: () => setView?.('workflow-library') },
+    });
 
     // Flip the right pane to workflow mode. App.tsx wraps the canvas in an
     // AnimatePresence Y-spin keyed on artifactMode, so this triggers the rotation.
@@ -4404,12 +4744,15 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
   const handleSend = () => {
     const trimmed = input.trim();
     if (!trimmed && files.length === 0) return;
-    let text = trimmed;
-    const attachmentLabels = [
-      ...attachedSources.map(s => s.kind === 'source' ? s.name : ''),
-      ...files.map(f => f.name),
-    ].filter(Boolean);
-    if (attachmentLabels.length > 0) text += `\n[Attached: ${attachmentLabels.join(', ')}]`;
+    const text = trimmed;
+    // Attachments ride as structured data on the message — rendered as chips
+    // above the bubble (matching the composer chips), not baked into the text.
+    const messageAttachments: ChatMessage['attachments'] = [
+      ...attachedSources
+        .filter((s): s is Extract<AttachmentSelection, { kind: 'source' }> => s.kind === 'source')
+        .map(s => ({ kind: 'source' as const, name: s.name, type: s.type })),
+      ...files.map(f => ({ kind: 'file' as const, name: f.name })),
+    ];
 
     // Workflow mode pill is on → ALWAYS start a workflow build. If a
     // previous workflow build is still hanging around (wfWorkflow set
@@ -4453,13 +4796,15 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     // If a clarification message is open, route the typed text to its first
     // unanswered question instead of starting a new chat turn.
     const openClarify = [...messages].reverse().find(
-      m => m.richType === 'clarification' && (m.richData as unknown as ClarificationData)?.status === 'open'
+      m => m.richType === 'clarification' && (m.richData as unknown as QueryClarificationData)?.status === 'open'
     );
     if (openClarify && trimmed) {
-      const data = openClarify.richData as unknown as ClarificationData;
-      const firstUnanswered = data.questions.findIndex((_, i) => !data.answers[i]);
+      const data = openClarify.richData as unknown as QueryClarificationData;
+      const firstUnanswered = data.questions.findIndex((_, i) => !(data.answers[i]?.length));
       if (firstUnanswered !== -1) {
-        updateClarificationAnswer(openClarify.id, firstUnanswered, trimmed);
+        const q = data.questions[firstUnanswered];
+        const cur = data.answers[firstUnanswered] ?? [];
+        updateClarificationAnswer(openClarify.id, firstUnanswered, q.multi ? [...cur, trimmed] : [trimmed]);
         setInput('');
         setFiles([]);
         setAttachedSources([]);
@@ -4468,7 +4813,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
       }
     }
 
-    setMessages(prev => [...prev, { id: `msg-${Date.now()}`, role: 'user', text, timestamp: new Date() }]);
+    setMessages(prev => [...prev, { id: `msg-${Date.now()}`, role: 'user', text, timestamp: new Date(), attachments: messageAttachments.length ? messageAttachments : undefined }]);
     setInput('');
     setFiles([]);
     setAttachedSources([]);
@@ -4518,7 +4863,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     // Esc while generating stops the stream — mirrors ChatGPT/Claude.
     // Esc while typing clears the textarea (only when there's content).
     if (e.key === 'Escape') {
-      if (isTyping) {
+      if (isGenerating) {
         e.preventDefault();
         stopGenerating();
       } else if (input.length > 0) {
@@ -4982,7 +5327,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
 
   // Most-recent open clarification — drives the docked picker at the bottom of the chat.
   const openClarification = [...messages].reverse().find(
-    m => m.richType === 'clarification' && (m.richData as unknown as ClarificationData)?.status === 'open'
+    m => m.richType === 'clarification' && (m.richData as unknown as QueryClarificationData)?.status === 'open'
   );
 
   // Most-recent open workflow clarify (initial + validate phases) — same docked
@@ -5029,7 +5374,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           <div style={{ width: CHAT_HISTORY_W }} className="h-full flex flex-col">
             {/* Header */}
             <div className="h-12 shrink-0 px-4 flex items-center justify-between border-b border-canvas-border">
-              <h3 className="text-[13px] font-semibold text-ink-900 tracking-tight">Chat history</h3>
+              <h3 className="text-[0.8125rem] font-semibold text-ink-900 tracking-tight">Chat history</h3>
               <button
                 type="button"
                 onClick={toggleChatHistory}
@@ -5047,7 +5392,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 type="button"
                 onClick={handleNewChatFromSidebar}
                 title="New chat (⌘⇧O)"
-                className="w-full inline-flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-medium text-ink-700 hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="w-full inline-flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-medium text-ink-700 hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <Plus size={14} strokeWidth={2.25} />
                 New chat
@@ -5079,13 +5424,13 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <MessageSquare size={12} strokeWidth={2.25} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className={`text-[13px] truncate tracking-tight ${
+                        <div className={`text-[0.8125rem] truncate tracking-tight ${
                           isActive ? 'font-semibold text-brand-800' : 'font-medium text-ink-900'
                         }`}>
                           {chat.title}
                         </div>
-                        <div className="text-[11.5px] text-ink-500 truncate mt-0.5">{chat.preview}</div>
-                        <div className="text-[11px] text-ink-400 mt-1 tabular-nums">{chat.timestamp}</div>
+                        <div className="text-[0.71875rem] text-ink-500 truncate mt-0.5">{chat.preview}</div>
+                        <div className="text-[0.6875rem] text-ink-400 mt-1 tabular-nums">{chat.timestamp}</div>
                       </div>
                     </div>
                   </motion.button>
@@ -5099,7 +5444,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 <button
                   type="button"
                   onClick={() => { toggleChatHistory(); setView('recents'); }}
-                  className="w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-md text-[12px] font-semibold text-ink-700 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-md text-[0.75rem] font-semibold text-ink-700 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Browse all in Recents
                   <ArrowRight size={12} strokeWidth={2.25} />
@@ -5152,14 +5497,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           </div>
 
           {pendingDashboard && (
-            <div className="shrink-0 mx-5 mb-2 px-4 py-2.5 bg-white/80 backdrop-blur-sm rounded-xl border border-brand-200 flex items-center justify-between gap-3 relative z-10">
+            <div className="shrink-0 mx-5 mb-2 px-4 py-2.5 bg-canvas-elevated rounded-xl border border-brand-200 flex items-center justify-between gap-3 relative z-10">
               <div className="flex items-center gap-2.5">
                 <div className="size-8 rounded-lg bg-brand-600 flex items-center justify-center">
                   <BarChart3 size={14} className="text-white" />
                 </div>
                 <div>
-                  <p className="text-[13px] font-semibold text-brand-900">Creating: {pendingDashboard.name}</p>
-                  <p className="text-[11px] text-brand-600">Run a query, then add results to your dashboard</p>
+                  <p className="text-[0.8125rem] font-semibold text-brand-900">Creating: {pendingDashboard.name}</p>
+                  <p className="text-[0.6875rem] text-brand-600">Run a query, then add results to your dashboard</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -5169,7 +5514,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     const mockFields = ['Date', 'Region', 'Category', 'Vendor Name', 'Invoice Amount (₹)', 'Status', 'Department', 'Quantity'];
                     onAddToDashboard?.(mockFields);
                   }}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold rounded-lg transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold rounded-lg transition-colors cursor-pointer"
                 >
                   <BarChart3 size={12} />
                   Add to Dashboard
@@ -5220,7 +5565,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   />
                 </motion.div>
 
-                <h1 className="text-[34px] font-medium tracking-[-0.02em] mb-3 text-ink-900/85">
+                <h1 className="text-[2.125rem] font-medium tracking-[-0.02em] mb-2 text-ink-900/85">
                   Audit smarter.{' '}
                   <TextShimmer as="span" className="font-bold" duration={3} spread={2}>
                     Not harder.
@@ -5230,9 +5575,9 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 2.5, duration: 0.6 }}
-                  className="text-[15px] text-ink-500"
+                  className="text-[0.9375rem] text-ink-500"
                 >
-                  Your AI copilot <span className="font-semibold text-[17px] text-ink-700 tracking-[-0.01em]">Ira</span> already knows what to look for. Just ask.
+                  Your AI copilot <span className="font-semibold text-[1.0625rem] text-ink-700 tracking-[-0.01em]">Ira</span> already knows what to look for. Just ask.
                 </motion.p>
               </div>
 
@@ -5242,7 +5587,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 {workflowEngagementContext && (
                   <div className="mb-3 flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-primary-xlight/50 border border-primary/15 text-left">
                     <Workflow size={15} className="text-primary shrink-0" />
-                    <span className="text-[13px] text-text-secondary">
+                    <span className="text-[0.8125rem] text-text-secondary">
                       Adding workflow for engagement — <span className="font-semibold text-primary">{workflowEngagementContext}</span>
                     </span>
                   </div>
@@ -5279,7 +5624,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       transition={{ duration: prefersReducedMotion ? 0 : 0.12, ease: [0.16, 1, 0.3, 1] }}
                       className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-brand-50/85 border-2 border-dashed border-brand-300 pointer-events-none"
                     >
-                      <div className="flex items-center gap-2 text-[13px] font-medium text-brand-700">
+                      <div className="flex items-center gap-2 text-[0.8125rem] font-medium text-brand-700">
                         <Paperclip size={14} />
                         <span>Drop to attach</span>
                       </div>
@@ -5295,9 +5640,9 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <div
                           key={`src-${i}`}
                           title={s.name}
-                          className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[12px] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
+                          className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[0.75rem] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
                         >
-                          <span className="text-[10px] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
+                          <span className="text-[0.625rem] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
                           <span className="truncate max-w-[10rem]">{s.name}</span>
                           <button
                             type="button"
@@ -5312,7 +5657,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       <div
                         key={`file-${i}`}
                         title={f.name}
-                        className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[12px] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
+                        className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[0.75rem] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
                       >
                         <FileText size={12} className="text-ink-500" />
                         <span className="truncate max-w-[6.25rem]">{f.name}</span>
@@ -5344,7 +5689,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     onPaste={handleComposerPaste}
                     aria-label="Message IRA"
                     autoFocus
-                    className="no-focus-ring relative z-10 w-full bg-transparent border-none outline-none resize-none px-4 pt-4 pb-2 text-[15px] leading-[1.55] tracking-[-0.005em] text-ink-800 min-h-[88px] max-h-[260px] text-left"
+                    className="no-focus-ring relative z-10 w-full bg-transparent border-none outline-none resize-none px-4 pt-4 pb-2 text-[0.9375rem] leading-[1.55] tracking-[-0.005em] text-ink-800 min-h-[88px] max-h-[260px] text-left"
                     rows={1}
                   />
                   {/* Typewriter placeholder overlay — renders typedText
@@ -5356,7 +5701,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       textarea caret. */}
                   {input.length === 0 && (
                     <div className="absolute top-4 left-4 right-4 h-[1.55em] pointer-events-none text-left">
-                      <span className="block text-[15px] leading-[1.55] tracking-[-0.005em] text-ink-400/85 truncate">
+                      <span className="block text-[0.9375rem] leading-[1.55] tracking-[-0.005em] text-ink-400/85 truncate">
                         {typedText}
                       </span>
                     </div>
@@ -5379,55 +5724,29 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   </button>
 
                   <div className="flex items-center gap-2">
-                    {/* Mode segmented control — soft selected-chip treatment
-                        so it doesn't compete with the Send CTA. */}
-                    <div
-                      role="radiogroup"
-                      aria-label="Composer mode"
-                      className="relative inline-flex items-center rounded-full bg-paper-100/90 p-1 shadow-[inset_0_0_0_1px_rgba(15,8,30,0.035)]"
+                    {/* Mode control — a single "Build a workflow" toggle.
+                        Off = ask/Query; on (lavender, filled icon) = workflow
+                        builder. Replaces the old Query/Workflow segments. */}
+                    <button
+                      type="button"
+                      onClick={() => setBuildWorkflowMode(v => !v)}
+                      aria-pressed={buildWorkflowMode}
+                      title={buildWorkflowMode
+                        ? 'Workflow builder is on — describe a workflow to build'
+                        : 'Switch to workflow builder'}
+                      className={`group inline-flex items-center gap-2 h-9 pl-1.5 pr-3.5 rounded-full text-[0.8125rem] font-semibold cursor-pointer select-none transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                        buildWorkflowMode
+                          ? 'bg-brand-50 text-brand-700 shadow-[inset_0_0_0_1px_rgba(106,18,205,0.35)]'
+                          : 'bg-white text-ink-600 shadow-[inset_0_0_0_1px_rgba(15,8,30,0.12)] hover:text-ink-800 hover:shadow-[inset_0_0_0_1px_rgba(15,8,30,0.20)]'
+                      }`}
                     >
-                      {/* Single shared highlight — slides between positions on toggle.
-                          Width matches a single button exactly so the slide is
-                          symmetric and the cream gaps on either side stay equal. */}
-                      <motion.span
-                        aria-hidden
-                        initial={false}
-                        animate={{ x: buildWorkflowMode ? 88 : 0 }}
-                        transition={prefersReducedMotion
-                          ? { duration: 0 }
-                          : { type: 'spring', stiffness: 480, damping: 40, mass: 0.55 }
-                        }
-                        className="absolute top-1 left-1 h-[28px] w-[88px] rounded-full bg-canvas-elevated shadow-[0_1px_2px_rgba(15,8,30,0.05),0_2px_6px_rgba(15,8,30,0.06)] pointer-events-none"
-                      />
-                      <motion.button
-                        type="button"
-                        role="radio"
-                        aria-checked={!buildWorkflowMode}
-                        onClick={() => setBuildWorkflowMode(false)}
-                        title="Ask Ira a one-off question"
-                        whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
-                        transition={{ type: 'spring', stiffness: 700, damping: 38 }}
-                        className={`relative z-10 inline-flex items-center justify-center h-[28px] w-[88px] rounded-full text-center text-[12.5px] tracking-[-0.005em] cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 transition-colors duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
-                          !buildWorkflowMode ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-700'
-                        }`}
-                      >
-                        Query
-                      </motion.button>
-                      <motion.button
-                        type="button"
-                        role="radio"
-                        aria-checked={buildWorkflowMode}
-                        onClick={() => setBuildWorkflowMode(true)}
-                        title="Build a re-runnable audit workflow"
-                        whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
-                        transition={{ type: 'spring', stiffness: 700, damping: 38 }}
-                        className={`relative z-10 inline-flex items-center justify-center h-[28px] w-[88px] rounded-full text-center text-[12.5px] tracking-[-0.005em] cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 transition-colors duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
-                          buildWorkflowMode ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-700'
-                        }`}
-                      >
-                        Workflow
-                      </motion.button>
-                    </div>
+                      <span className={`inline-flex items-center justify-center size-6 rounded-full transition-colors duration-200 ${
+                        buildWorkflowMode ? 'bg-primary text-white' : 'bg-paper-100 text-ink-400 group-hover:text-ink-500'
+                      }`}>
+                        <Workflow size={13} strokeWidth={2.25} />
+                      </span>
+                      Build a workflow
+                    </button>
 
                     {(input.trim() || files.length > 0 || attachedSources.length > 0) && (
                       <button
@@ -5479,10 +5798,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   // No w-[...] lock, no items-start (per the empty-state
                   // chip layout feedback memory).
                   <div className="pt-7 mx-auto flex flex-col items-center content-start gap-2.5">
-                    {[suggestions.slice(0, 3), suggestions.slice(3, 5)].map((row, rowIdx) => (
+                    {[suggestions.slice(0, 2), suggestions.slice(2, 5)].map((row, rowIdx) => (
                       <div key={rowIdx} className="flex items-center justify-center gap-2.5">
                         {row.map((label, i) => {
-                          const globalI = rowIdx * 3 + i;
+                          const globalI = rowIdx === 0 ? i : 2 + i;
                           return (
                             <motion.button
                               key={`empty-starter-${globalI}-${label}`}
@@ -5499,7 +5818,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 textareaRef.current?.focus();
                                 requestAnimationFrame(() => handleTextareaInput());
                               }}
-                              className="group inline-flex items-center gap-2 h-10 px-5 rounded-full border border-canvas-border bg-canvas-elevated text-[13px] font-medium tracking-[-0.005em] text-ink-800 shadow-[0_1px_2px_rgba(15,8,30,0.025)] hover:border-brand-300/60 hover:text-brand-700 hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(106,18,205,0.07)] transition-all duration-200 ease-out cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                              className="group inline-flex items-center gap-2 h-10 px-5 rounded-full border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-medium tracking-[-0.005em] text-ink-800 shadow-[0_1px_2px_rgba(15,8,30,0.025)] hover:border-brand-300/60 hover:text-brand-700 hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(106,18,205,0.07)] transition-all duration-200 ease-out cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                             >
                               <ModeIcon size={14} strokeWidth={1.75} className="shrink-0 text-ink-500 group-hover:text-brand-500 transition-colors duration-200" />
                               <span className="whitespace-nowrap">{label}</span>
@@ -5565,7 +5884,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   setEditingTitle(false);
                 }
               }}
-              className="max-w-[280px] sm:max-w-[340px] text-[16px] font-normal tracking-normal text-ink-900 bg-white border border-brand-200 rounded-md px-2 py-1 -mx-2 outline-none focus:ring-2 focus:ring-primary/20"
+              className="max-w-[280px] sm:max-w-[340px] text-[1rem] font-normal tracking-normal text-ink-900 bg-white border border-brand-200 rounded-md px-2 py-1 -mx-2 outline-none focus:ring-2 focus:ring-primary/20"
             />
           ) : (
             <button
@@ -5574,7 +5893,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               title="Click for history · Double-click to rename"
               aria-label="Chat history"
               aria-expanded={showChatHistory}
-              className="group flex items-center gap-2.5 max-w-[280px] sm:max-w-[340px] text-[16px] font-normal tracking-normal text-ink-900 hover:bg-brand-50 rounded-md px-2 py-1 -mx-2 transition-colors cursor-pointer"
+              className="group flex items-center gap-2.5 max-w-[280px] sm:max-w-[340px] text-[1rem] font-normal tracking-normal text-ink-900 hover:bg-brand-50 rounded-md px-2 py-1 -mx-2 transition-colors cursor-pointer"
             >
               <span className="truncate">{currentChatTitle || 'New chat'}</span>
               <motion.span
@@ -5633,8 +5952,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 <BarChart3 size={14} className="text-brand-700" />
               </div>
               <div className="min-w-0">
-                <p className="text-[13px] font-semibold text-ink-800 truncate">Creating: {pendingDashboard.name}</p>
-                <p className="text-[12px] text-ink-500">Run a query, then add results to your dashboard.</p>
+                <p className="text-[0.8125rem] font-semibold text-ink-800 truncate">Creating: {pendingDashboard.name}</p>
+                <p className="text-[0.75rem] text-ink-500">Run a query, then add results to your dashboard.</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -5719,13 +6038,13 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     {msg.richType === 'clarification' ? (
                       <div className="max-w-[66ch]">
                         {(msg.richData as unknown as ClarificationData).status === 'submitted' ? (
-                          <div className="text-[13px] text-ink-700 leading-relaxed">
+                          <div className="text-[0.8125rem] text-ink-700 leading-relaxed">
                             {(msg.richData as unknown as ClarificationData).purpose === 'save-workflow'
                               ? 'Got it. Saving as workflow with these settings.'
                               : 'Got it. Running with these inputs.'}
                           </div>
                         ) : (
-                          <div className="text-[15px] leading-[1.65] text-ink-800">
+                          <div className="text-[0.9375rem] leading-[1.65] text-ink-800">
                             {(msg.richData as unknown as ClarificationData).intro}
                           </div>
                         )}
@@ -5749,7 +6068,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       <div className="space-y-4 w-full">
                         {/* Body text */}
                         {msg.text && (
-                          <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">{renderAssistantText(msg.text)}</div>
+                          <div className="text-[0.9375rem] leading-[1.65] text-ink-800 max-w-[66ch]">{renderAssistantText(msg.text)}</div>
                         )}
 
                         {/* Affordance: link inline result to the auto-opened panel.
@@ -5788,7 +6107,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           columns={AUDIT_RESULT.table.columns}
                           rows={AUDIT_RESULT.table.rows}
                           totalRows={AUDIT_RESULT.table.totalRows}
-                          onOpen={() => addToast({ type: 'info', message: 'Opening full results in a new view…' })}
                           onDownload={() => addToast({ type: 'success', message: 'CSV download started.' })}
                         />
 
@@ -5962,7 +6280,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                               columns={seed.columns}
                               rows={seed.rows}
                               totalRows={seed.rows.length}
-                              onOpen={() => addToast({ type: 'info', message: 'Opening full results in a new view…' })}
                               onDownload={() => addToast({ type: 'success', message: 'CSV download started.' })}
                             />
                           </div>
@@ -5981,7 +6298,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         };
                         return (
                           <div>
-                            <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">
+                            <div className="text-[0.9375rem] leading-[1.65] text-ink-800 max-w-[66ch]">
                               {data.intro.split('**').map((part, i) =>
                                 i % 2 === 1 ? <strong key={i} className="font-semibold text-text">{part}</strong> : part
                               )}
@@ -6015,9 +6332,9 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                       }`}>
                                         {isSelected && <CheckCircle size={10} className="text-white" />}
                                       </div>
-                                      <span className="text-[12.5px] font-semibold">{opt.label}</span>
+                                      <span className="text-[0.78125rem] font-semibold">{opt.label}</span>
                                     </div>
-                                    <p className={`text-[11.5px] mt-1 ml-6 ${isSelected ? 'text-primary/80' : 'text-text-muted'}`}>{opt.detail}</p>
+                                    <p className={`text-[0.71875rem] mt-1 ml-6 ${isSelected ? 'text-primary/80' : 'text-text-muted'}`}>{opt.detail}</p>
                                   </button>
                                 );
                               })}
@@ -6026,19 +6343,19 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                               <div className="mt-3 flex items-center gap-2">
                                 <button
                                   onClick={() => submitCheckpoint(msg.id)}
-                                  className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[12px] font-semibold transition-colors cursor-pointer"
+                                  className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
                                 >
                                   <CheckCircle size={13} /> Confirm parameters
                                 </button>
                                 <button
                                   onClick={() => submitCheckpoint(msg.id)}
-                                  className="text-[12px] font-medium text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
+                                  className="text-[0.75rem] font-medium text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
                                 >
                                   Skip: keep all fixed
                                 </button>
                               </div>
                             ) : (
-                              <div className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] text-text-muted">
+                              <div className="mt-3 inline-flex items-center gap-1.5 text-[0.71875rem] text-text-muted">
                                 <CheckCircle size={12} className="text-primary" /> Parameters confirmed
                               </div>
                             )}
@@ -6050,12 +6367,12 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <div className="glass-card rounded-xl p-4 border border-primary/10 max-w-md">
                           <div className="flex items-center gap-2 mb-2">
                             <Save size={13} className="text-primary" />
-                            <span className="text-[12px] font-semibold text-text">Save Workflow</span>
+                            <span className="text-[0.75rem] font-semibold text-text">Save Workflow</span>
                           </div>
-                          <p className="text-[12px] text-text-muted mb-3">Ready to save this workflow to your library for recurring use?</p>
+                          <p className="text-[0.75rem] text-text-muted mb-3">Ready to save this workflow to your library for recurring use?</p>
                           <div className="flex gap-2">
                             <SaveWorkflowButton />
-                            <button className="px-3 py-2 text-[12px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-2 rounded-lg transition-colors cursor-pointer">
+                            <button className="px-3 py-2 text-[0.75rem] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-2 rounded-lg transition-colors cursor-pointer">
                               Continue editing
                             </button>
                           </div>
@@ -6071,7 +6388,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         // recap so the thread has a trace.
                         if (!done) return null;
                         return (
-                          <div className="text-[13px] text-ink-500 leading-relaxed max-w-[66ch]">
+                          <div className="text-[0.8125rem] text-ink-500 leading-relaxed max-w-[66ch]">
                             {data.phase === 'validate' ? 'Validation answers locked in.' : 'Clarifications locked in.'}
                           </div>
                         );
@@ -6221,8 +6538,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 <X size={14} className="text-risk" />
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="text-[13px] font-semibold text-ink-800">Couldn't finish that one</div>
-                                <p className="mt-1 text-[13px] text-ink-600 leading-relaxed">
+                                <div className="text-[0.8125rem] font-semibold text-ink-800">Couldn't finish that one</div>
+                                <p className="mt-1 text-[0.8125rem] text-ink-600 leading-relaxed">
                                   {data.message || "Something went wrong on our end."}
                                 </p>
                                 {data.retryQuery && (
@@ -6245,7 +6562,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           </div>
                         );
                       })()
-                    ) : msg.text ? (
+                    ) : (msg.text || (msg.role === 'user' && !!msg.attachments?.length)) ? (
                       msg.role === 'user' ? (
                         // Editorial margin-note — no pill, no fill, no chrome.
                         // Right-aligned italic prose anchored to the chat
@@ -6270,9 +6587,24 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           </AnimatePresence>
                         ) : (
                           <>
-                            <div className="px-4 py-2.5 rounded-2xl bg-brand-50 text-ink-800 text-[14px] leading-[1.6] whitespace-pre-wrap break-words">
-                              {msg.text}
-                            </div>
+                            {/* Attachment chips — above the bubble, right-aligned.
+                                Image-8 format: a light-purple pill with a document
+                                icon + filename (uniform; no type tag). */}
+                            {msg.attachments && msg.attachments.length > 0 && (
+                              <div className="flex flex-wrap justify-end gap-1.5 mb-1.5 max-w-full">
+                                {msg.attachments.map((a, i) => (
+                                  <div key={`att-${i}`} title={a.name} className="inline-flex items-center gap-1.5 bg-brand-50 text-brand-700 text-[0.8125rem] font-semibold px-2.5 py-1.5 rounded-lg max-w-full">
+                                    <FileText size={14} strokeWidth={2} className="shrink-0" />
+                                    <span className="truncate max-w-[14rem]">{a.name}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {msg.text && (
+                              <div className="px-4 py-2.5 rounded-2xl bg-brand-50 text-ink-800 text-[0.875rem] leading-[1.6] whitespace-pre-wrap break-words">
+                                {msg.text}
+                              </div>
+                            )}
                             {/* Below the pill: branch arrows + edit pencil.
                                 Arrows render only when the user has edited
                                 this message at least once (branches.length > 1).
@@ -6295,7 +6627,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                     >
                                       <ChevronLeft size={13} />
                                     </button>
-                                    <span className="px-0.5 text-[11px] tabular-nums font-medium text-ink-500" aria-live="polite">
+                                    <span className="px-0.5 text-[0.6875rem] tabular-nums font-medium text-ink-500" aria-live="polite">
                                       {current + 1} / {total}
                                     </span>
                                     <button
@@ -6320,7 +6652,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 >
                                   <Pencil size={13} />
                                 </button>
-                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/edit:opacity-100 transition-opacity z-10">
+                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/edit:opacity-100 transition-opacity z-10">
                                   Edit
                                 </span>
                               </span>
@@ -6340,7 +6672,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 >
                                   {bookmarkedMsgIds.has(msg.id) ? <BookmarkCheck size={13} /> : <Bookmark size={13} />}
                                 </button>
-                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/bookmark:opacity-100 transition-opacity z-10">
+                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/bookmark:opacity-100 transition-opacity z-10">
                                   {bookmarkedMsgIds.has(msg.id) ? 'Bookmarked, click to remove' : 'Bookmark'}
                                 </span>
                               </span>
@@ -6354,7 +6686,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 >
                                   {copiedMsgId === msg.id ? <Check size={13} /> : <Copy size={13} />}
                                 </button>
-                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/usercopy:opacity-100 transition-opacity z-10">
+                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/usercopy:opacity-100 transition-opacity z-10">
                                   {copiedMsgId === msg.id ? 'Copied' : 'Copy'}
                                 </span>
                               </span>
@@ -6363,10 +6695,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                   tooltip below (matches Claude's date-tooltip
                                   direction). */}
                               <span className="relative group/ts ml-1 inline-flex items-center opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 transition-opacity">
-                                <span className="text-[11px] tabular-nums text-ink-400 cursor-default">
+                                <span className="text-[0.6875rem] tabular-nums text-ink-400 cursor-default">
                                   {formatChatTime(msg.timestamp)}
                                 </span>
-                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/ts:opacity-100 transition-opacity z-10">
+                                <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/ts:opacity-100 transition-opacity z-10">
                                   {msg.timestamp.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                                 </span>
                               </span>
@@ -6380,7 +6712,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         // reads as conversation, not document. Any ```fenced```
                         // code segments are extracted into a CodeBlock toolbar
                         // panel by renderAssistantText.
-                        <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">
+                        <div className="text-[0.9375rem] leading-[1.65] text-ink-800 max-w-[66ch]">
                           {renderAssistantText(msg.text)}
                         </div>
                       )
@@ -6393,7 +6725,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         Renders only on assistant messages whose generation
                         was halted by the user via Esc / Stop. */}
                     {msg.role === 'assistant' && msg.stopped && (
-                      <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                      <div className="mt-2 flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500">
                         <Square size={9} className="text-ink-500" fill="currentColor" />
                         <span>Stopped</span>
                       </div>
@@ -6427,7 +6759,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           >
                             {copiedMsgId === msg.id ? <Check size={13} /> : <Copy size={13} />}
                           </button>
-                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/copy:opacity-100 transition-opacity z-10">
+                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/copy:opacity-100 transition-opacity z-10">
                             {copiedMsgId === msg.id ? 'Copied' : 'Copy'}
                           </span>
                         </span>
@@ -6447,7 +6779,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           >
                             <ThumbsUp size={13} />
                           </button>
-                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/up:opacity-100 transition-opacity z-10">
+                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/up:opacity-100 transition-opacity z-10">
                             Give positive feedback
                           </span>
                         </span>
@@ -6467,7 +6799,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           >
                             <ThumbsDown size={13} />
                           </button>
-                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/down:opacity-100 transition-opacity z-10">
+                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/down:opacity-100 transition-opacity z-10">
                             Give negative feedback
                           </span>
                         </span>
@@ -6483,7 +6815,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           >
                             <RotateCcw size={13} />
                           </button>
-                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[12px] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/retry:opacity-100 transition-opacity z-10">
+                          <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/retry:opacity-100 transition-opacity z-10">
                             Retry
                           </span>
                         </span>
@@ -6498,7 +6830,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
 
                     {/* "Thanks" confirmation after feedback submitted. */}
                     {msg.role === 'assistant' && feedbackSubmittedIds.has(msg.id) && (!feedbackPopover || feedbackPopover.msgId !== msg.id) && (
-                      <p className="mt-1.5 text-[11px] text-ink-400">Feedback sent. Thank you.</p>
+                      <p className="mt-1.5 text-[0.6875rem] text-ink-400">Feedback sent. Thank you.</p>
                     )}
                     </div>
 
@@ -6519,7 +6851,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           initial={{ opacity: 0, y: 6 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.35, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                          className="mb-2 text-[12px] font-medium tracking-normal text-ink-900"
+                          className="mb-2 text-[0.75rem] font-medium tracking-normal text-ink-900"
                         >
                           What next?
                         </motion.h3>
@@ -6566,7 +6898,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 scale: 0.985,
                                 transition: { type: 'spring', stiffness: 800, damping: 34, mass: 0.12 },
                               }}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] leading-tight cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[0.8125rem] leading-tight cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                                 isSelected
                                   ? 'bg-brand-50 text-brand-700 border border-brand-200'
                                   : 'bg-canvas-elevated text-ink-700 border border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
@@ -6606,7 +6938,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <div className="mb-2">
                           <div className="pl-3 border-l border-canvas-border space-y-1">
                             {thinkingSteps.map((step, i) => (
-                              <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="text-[12px] text-ink-500 flex items-center gap-1.5">
+                              <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="text-[0.75rem] text-ink-500 flex items-center gap-1.5">
                                 <div className={`w-1.5 h-1.5 rounded-full ${i === thinkingSteps.length - 1 ? 'bg-primary' : 'bg-brand-200'}`} />
                                 {step}
                               </motion.div>
@@ -6678,16 +7010,20 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           </AnimatePresence>
 
           {openClarification && (
-            // Audit-query clarification — Claude pattern: sits ABOVE the
-            // chat composer so the user can either pick an option or
-            // bypass the form and reply directly via the composer below.
+            // Audit-query clarification — Claude pattern: while a clarification
+            // is open the composer is hidden and this card is the single input
+            // surface (pick an option, or type your own answer in the card).
             <div className="mb-2">
-              <ClarificationBlock
-                data={openClarification.richData as unknown as ClarificationData}
-                onAnswer={(qi, ans) => updateClarificationAnswer(openClarification.id, qi, ans)}
+              <QueryClarificationCard
+                data={openClarification.richData as unknown as QueryClarificationData}
+                onSetAnswer={(qi, ans) => updateClarificationAnswer(openClarification.id, qi, ans)}
                 onSubmit={() => submitClarification(openClarification.id)}
-                onSkipAll={() => submitClarification(openClarification.id, true)}
-                onSkipCurrent={(qi) => skipClarificationQuestion(openClarification.id, qi)}
+                onCancel={() => cancelClarification(openClarification.id)}
+                onAttach={() => setShowDataPicker(true)}
+                attachedSources={attachedSources}
+                files={files}
+                onRemoveSource={(i) => setAttachedSources(prev => prev.filter((_, j) => j !== i))}
+                onRemoveFile={(i) => setFiles(prev => prev.filter((_, j) => j !== i))}
               />
             </div>
           )}
@@ -6710,7 +7046,9 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               />
             </div>
           )}
-          {(
+          {/* Composer is hidden while a query clarification is open — the
+              clarification card becomes the single input surface. */}
+          {!openClarification && (
             <>
               {/* Engagement context banner — shown when the workflow builder was
                   opened from a specific engagement's "Link Workflow → Create new"
@@ -6718,7 +7056,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               {workflowEngagementContext && (
                 <div className="mb-2 flex items-center gap-2.5 px-3 py-2 rounded-lg bg-primary-xlight/50 border border-primary/15">
                   <Workflow size={14} className="text-primary shrink-0" />
-                  <span className="text-[12.5px] text-text-secondary">
+                  <span className="text-[0.78125rem] text-text-secondary">
                     Adding workflow for engagement — <span className="font-semibold text-primary">{workflowEngagementContext}</span>
                   </span>
                 </div>
@@ -6739,11 +7077,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     className="overflow-hidden"
                   >
                     <div className="mb-2 flex items-center gap-2.5 px-1">
-                      <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-brand-700 uppercase tracking-[0.08em] shrink-0">
+                      <span className="inline-flex items-center gap-1.5 text-[0.71875rem] font-semibold text-brand-700 uppercase tracking-[0.08em] shrink-0">
                         <Lock size={11} strokeWidth={2.5} />
                         Workflow mode
                       </span>
-                      <span className="text-[12.5px] text-ink-500 flex-1 truncate">
+                      <span className="text-[0.78125rem] text-ink-500 flex-1 truncate">
                         Switched at save. Start a new chat for a query.
                       </span>
                     </div>
@@ -6773,7 +7111,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       transition={{ duration: prefersReducedMotion ? 0 : 0.12, ease: [0.16, 1, 0.3, 1] }}
                       className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-brand-50/85 border-2 border-dashed border-brand-300 pointer-events-none"
                     >
-                      <div className="flex items-center gap-2 text-[13px] font-medium text-brand-700">
+                      <div className="flex items-center gap-2 text-[0.8125rem] font-medium text-brand-700">
                         <Paperclip size={14} />
                         <span>Drop to attach</span>
                       </div>
@@ -6792,11 +7130,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <div
                           key={`src-${i}`}
                           title={s.kind === 'source' ? s.name : undefined}
-                          className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[12px] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
+                          className="flex items-center gap-1.5 bg-brand-50 text-ink-700 text-[0.75rem] px-2 py-1 rounded-md font-medium border border-brand-100 shrink-0 transition-colors duration-150 hover:border-brand-200"
                         >
                           {s.kind === 'source' && (
                             <>
-                              <span className="text-[10px] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
+                              <span className="text-[0.625rem] uppercase font-semibold tracking-[0.06em] text-ink-500">{s.type === 'database' ? 'DB' : s.type === 'api' ? 'API' : s.type === 'cloud' ? 'CLOUD' : s.type === 'session' ? 'SESS' : 'FILE'}</span>
                               <span className="truncate max-w-[10rem]">{s.name}</span>
                             </>
                           )}
@@ -6812,7 +7150,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <div
                           key={`file-${i}`}
                           title={f.name}
-                          className="flex items-center gap-2 bg-canvas-elevated text-ink-800 text-[13px] pl-2 pr-1.5 py-1.5 rounded-lg font-medium border border-canvas-border shrink-0 transition-colors duration-150 hover:border-brand-200"
+                          className="flex items-center gap-2 bg-canvas-elevated text-ink-800 text-[0.8125rem] pl-2 pr-1.5 py-1.5 rounded-lg font-medium border border-canvas-border shrink-0 transition-colors duration-150 hover:border-brand-200"
                         >
                           <span className="inline-flex items-center justify-center size-6 rounded bg-brand-50 text-brand-700 shrink-0">
                             <FileText size={13} />
@@ -6840,7 +7178,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     onPaste={handleComposerPaste}
                     placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Reply to Ira…'}
                     aria-label="Message IRA"
-                    className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-5 pt-4 pb-2 text-[15px] leading-[1.5] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]"
+                    className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-5 pt-4 pb-2 text-[0.9375rem] leading-[1.5] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]"
                     rows={1}
                   />
 
@@ -6862,46 +7200,39 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      {/* Mode is locked for any started thread — query chats
-                          must go through Save-as-workflow, workflow chats
-                          can't switch back to query. Either way: in-thread
-                          toggle is read-only. The hero-composer version
-                          (empty state) stays toggleable. */}
-                      {(() => {
-                        const modeLocked = true;
-                        const isWorkflow = buildWorkflowMode;
-                        return (
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={buildWorkflowMode}
-                            aria-label={lockedAsWorkflow ? 'Workflow mode (locked for this thread)' : 'Query mode (locked — use Save as workflow to convert)'}
-                            aria-disabled={modeLocked}
-                            title={
-                              lockedAsWorkflow
-                                ? 'Workflow mode — locked for this thread. Start a new chat for a query.'
-                                : 'Query mode — locked. Use Save as workflow to convert this chat.'
-                            }
-                            onClick={() => { /* locked; no-op */ }}
-                            className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full text-[13px] cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                              isWorkflow
-                                ? 'bg-canvas-elevated text-brand-700 font-semibold shadow-[0_1px_2px_rgba(15,8,30,0.08),inset_0_0_0_1px_rgba(106,18,205,0.18)]'
-                                : 'bg-paper-100 text-ink-500 font-medium'
-                            }`}
-                          >
-                            <Lock size={11} strokeWidth={2.5} className="shrink-0" />
-                            {isWorkflow ? 'Workflow' : 'Query'}
-                          </button>
-                        );
-                      })()}
+                      {/* Mode indicator — reflects this chat's mode (set when
+                          the chat started). Read-only in-thread: a query chat
+                          converts via "Save as workflow"; a workflow chat stays
+                          a workflow. Same look as the start composer's button. */}
+                      <div
+                        role="status"
+                        aria-label={buildWorkflowMode ? 'This chat is in workflow builder mode' : 'This chat is in Q&A mode'}
+                        title={buildWorkflowMode
+                          ? 'Workflow builder — set for this chat. Start a new chat to ask a question.'
+                          : 'Q&A — set for this chat. Use “Save as workflow” to convert it.'}
+                        className={`inline-flex items-center gap-1.5 h-7 pl-1.5 pr-2.5 rounded-full text-[0.75rem] font-medium select-none ${
+                          buildWorkflowMode
+                            ? 'bg-brand-50 text-brand-700'
+                            : 'bg-paper-100 text-ink-500'
+                        }`}
+                      >
+                        <span className={`inline-flex items-center justify-center size-5 rounded-full ${
+                          buildWorkflowMode ? 'bg-brand-100 text-brand-700' : 'bg-white text-ink-400'
+                        }`}>
+                          {buildWorkflowMode
+                            ? <Workflow size={11} strokeWidth={2.25} />
+                            : <MessageSquare size={11} strokeWidth={2.25} />}
+                        </span>
+                        {buildWorkflowMode ? 'Workflow' : 'Q&A'}
+                      </div>
 
-                      {isTyping ? (
+                      {isGenerating ? (
                         <button
                           type="button"
                           onClick={stopGenerating}
                           aria-label="Stop generating"
                           title="Stop generating (Esc)"
-                          className="inline-flex items-center justify-center size-8 rounded-lg bg-brand-700 text-white hover:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          className="inline-flex items-center justify-center size-8 rounded-lg bg-ink-900 text-white hover:bg-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                         >
                           <Square size={11} fill="currentColor" />
                         </button>
@@ -6926,15 +7257,15 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               keyboard-hint trio centered (Claude pattern). Otherwise the
               standard "may display inaccurate info" disclaimer. */}
           {openClarification ? (
-            <div className="mt-2 flex items-center justify-center gap-2 text-[12px] text-ink-400">
+            <div className="mt-2 flex items-center justify-center gap-2 text-[0.75rem] text-ink-400">
               <span><span className="text-ink-500">↑↓</span> to navigate</span>
               <span aria-hidden="true" className="text-canvas-border">·</span>
               <span><span className="text-ink-500">Enter</span> to select</span>
               <span aria-hidden="true" className="text-canvas-border">·</span>
-              <span>or type below</span>
+              <span>or type your own</span>
             </div>
           ) : (
-            <p className="mt-2 text-center text-[12px] leading-tight text-ink-300">
+            <p className="mt-2 text-center text-[0.75rem] leading-tight text-ink-400">
               Irame.ai may display inaccurate info, including about people, so double-check its responses.
             </p>
           )}
@@ -6946,53 +7277,52 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           so the prefilled name + description echo what the user just chose. */}
       <AnimatePresence>
         {showSaveAsWfModal && (() => {
-          const cfg = saveWorkflowConfigRef.current;
-          const dateShort = (cfg.date || '±3 days').replace(/\s*\(current\)\s*/i, '').trim();
-          const amountShort = (cfg.amount || '±₹1,000').replace(/\s*\(current\)\s*/i, '').trim();
-          const thresholdShort = (cfg.threshold || '≥90%').replace(/\s*\(current\)\s*/i, '').trim();
-          const defaultName = `Duplicate Invoice Detection: Q1 ${dateShort}`;
-          const defaultDescription = `Detects duplicate invoices in Q1 2026 with same vendor, ${amountShort} amount tolerance, and ${dateShort} date tolerance at ${thresholdShort} match threshold.`;
-          // Seed the LLM-detected configurable keys from the pre-modal
-          // clarification answers (exception scenarios + severity, or KPI
-          // metric + attention cadence). Falls back to legacy tolerance keys
-          // when no clarification answers were captured — e.g. the modal
-          // was opened directly from a deep-link or a test harness.
-          const amountDigits = (cfg.amount || '').replace(/[^\d]/g, '');
+          // Seed the modal's name / description / configurable keys from the
+          // five save-workflow clarification answers (risk, population/period,
+          // frequency, output, configuration). Each answer becomes a
+          // configurable key; name + description summarise the control. Falls
+          // back to legacy tolerance keys when no clarification answers were
+          // captured — e.g. the modal was opened from a deep-link or test
+          // harness.
           const clarif = saveWorkflowAnswersRef.current;
           const findAns = (kw: string): string =>
             clarif.pairs.find(p => p.question.toLowerCase().includes(kw.toLowerCase()))?.answer ?? '';
 
-          type ConfigEntry = { key: string; type: 'float' | 'int' | 'str' | 'list_str' | 'bool'; value: string };
-          let defaultConfigurables: ConfigEntry[] = [];
+          const riskAns = findAns('risk should this');
+          const popAns = findAns('population and period');
+          const freqAns = findAns('how often');
+          const outputAns = findAns('each run output');
+          const configAns = findAns('stay adjustable');
 
-          if (clarif.kind === 'kpi' && clarif.pairs.length > 0) {
-            const kpiName = findAns('which kpi');
-            const attentionAns = findAns('% change') || findAns('attention');
-            const attentionPct = (attentionAns.match(/\d+/)?.[0]) || '10';
-            const refresh = findAns('how often') || findAns('refresh');
-            const notify = findAns('notified');
-            defaultConfigurables = [
-              ...(kpiName ? [{ key: 'kpi_metric', type: 'str' as const, value: kpiName }] : []),
-              { key: 'attention_change_pct', type: 'float' as const, value: attentionPct },
-              ...(refresh ? [{ key: 'refresh_frequency', type: 'str' as const, value: refresh }] : []),
-              ...(notify ? [{ key: 'notify_audience', type: 'str' as const, value: notify }] : []),
-            ];
-          } else if (clarif.kind === 'exception' && clarif.pairs.length > 0) {
-            const scenarios = findAns('flagged as exceptions') || findAns('scenarios');
-            const redRule = findAns('turn red');
-            const yellowRule = findAns('turn yellow');
-            const belowYellow = findAns('below your yellow') || findAns('below');
-            defaultConfigurables = [
-              ...(scenarios ? [{ key: 'exception_scenarios', type: 'str' as const, value: scenarios }] : []),
-              ...(redRule ? [{ key: 'severity_red_rule', type: 'str' as const, value: redRule }] : []),
-              ...(yellowRule ? [{ key: 'severity_yellow_rule', type: 'str' as const, value: yellowRule }] : []),
-              ...(belowYellow ? [{ key: 'below_yellow_action', type: 'str' as const, value: belowYellow }] : []),
-            ];
-          }
+          // Risk text reads "<label> — <assertion>"; the label seeds a clean
+          // workflow name, the full answer seeds the description + a config key.
+          const riskShort = (riskAns.split('—')[0] || '').trim();
+          const defaultName =
+            /duplicate/i.test(riskAns) ? 'Duplicate Vendor Payment Detection'
+            : /fictitious|unauthor/i.test(riskAns) ? 'Unauthorized Vendor Detection'
+            : /off-contract/i.test(riskAns) ? 'Off-Contract Spend Detection'
+            : /variance/i.test(riskAns) ? 'PO Price/Quantity Variance Detection'
+            : 'Audit Workflow';
+          const defaultDescription = [
+            `Detects ${(riskShort || 'duplicate / overpayment to vendors').toLowerCase()}`,
+            popAns ? ` over ${popAns.toLowerCase()}` : '',
+            freqAns ? `. Runs ${freqAns.toLowerCase()}` : '',
+            outputAns ? `; outputs ${outputAns.toLowerCase()}` : '',
+            '.',
+          ].join('');
+
+          type ConfigEntry = { key: string; type: 'float' | 'int' | 'str' | 'list_str' | 'bool'; value: string };
+          let defaultConfigurables: ConfigEntry[] = [
+            ...(riskAns ? [{ key: 'control_risk', type: 'str' as const, value: riskAns }] : []),
+            ...(popAns ? [{ key: 'population_period', type: 'str' as const, value: popAns }] : []),
+            ...(freqAns ? [{ key: 'run_frequency', type: 'str' as const, value: freqAns }] : []),
+            ...(outputAns ? [{ key: 'output_artifacts', type: 'str' as const, value: outputAns }] : []),
+            ...(configAns ? [{ key: 'adjustable_config', type: 'str' as const, value: configAns }] : []),
+          ];
 
           if (defaultConfigurables.length === 0) {
             defaultConfigurables = [
-              { key: 'threshold_amount', type: 'float', value: amountDigits || '100000' },
+              { key: 'threshold_amount', type: 'float', value: '100000' },
               { key: 'quarter_match_keys', type: 'list_str', value: '1, q1, quarter1, qtr1' },
               { key: 'summary_top_n', type: 'int', value: '3' },
             ];
@@ -7047,10 +7377,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             >
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div>
-                  <h2 id="feedback-modal-title" className="text-[15px] font-semibold text-ink-800 mb-1">
+                  <h2 id="feedback-modal-title" className="text-[0.9375rem] font-semibold text-ink-800 mb-1">
                     {feedbackPopover.kind === 'up' ? 'What did you like about this response?' : 'What was unsatisfying about this response?'}
                   </h2>
-                  <p className="text-[12px] text-ink-500">Your feedback helps Ira improve. Optional.</p>
+                  <p className="text-[0.75rem] text-ink-500">Your feedback helps Ira improve. Optional.</p>
                 </div>
                 <button
                   type="button"
@@ -7065,7 +7395,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 <div className="mb-3">
                   <label
                     htmlFor="feedback-reason-trigger"
-                    className="block text-[11px] font-semibold text-ink-500 uppercase tracking-[0.08em] mb-1.5"
+                    className="block text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.08em] mb-1.5"
                   >
                     What type of issue do you wish to report?
                   </label>
@@ -7081,7 +7411,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       onClick={() => setFeedbackReasonOpen(o => !o)}
                       aria-haspopup="listbox"
                       aria-expanded={feedbackReasonOpen}
-                      className={`w-full flex items-center justify-between gap-2 bg-canvas-elevated border rounded-lg px-3 h-10 text-[13px] text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                      className={`w-full flex items-center justify-between gap-2 bg-canvas-elevated border rounded-lg px-3 h-10 text-[0.8125rem] text-left transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                         feedbackReasonOpen ? 'border-brand-400' : 'border-canvas-border hover:border-ink-300'
                       }`}
                     >
@@ -7124,7 +7454,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                   setFeedbackReason(r);
                                   setFeedbackReasonOpen(false);
                                 }}
-                                className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[13px] transition-colors cursor-pointer focus:outline-none ${
+                                className={`w-full flex items-center gap-2 px-3 h-9 text-left text-[0.8125rem] transition-colors cursor-pointer focus:outline-none ${
                                   isSelected
                                     ? 'bg-brand-50 text-brand-800 font-medium'
                                     : 'text-ink-800 hover:bg-brand-50/60 hover:text-ink-900'
@@ -7149,20 +7479,20 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 autoFocus
                 rows={4}
                 placeholder={feedbackPopover.kind === 'up' ? 'Was it accurate? Well-explained? Saved you time?' : 'Describe what was wrong (optional)'}
-                className="no-focus-ring w-full bg-canvas-elevated border border-canvas-border hover:border-ink-300 rounded-lg px-3 py-2.5 text-[13px] leading-[1.5] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors resize-none"
+                className="no-focus-ring w-full bg-canvas-elevated border border-canvas-border hover:border-ink-300 rounded-lg px-3 py-2.5 text-[0.8125rem] leading-[1.5] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors resize-none"
               />
               <div className="mt-4 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={cancelFeedback}
-                  className="inline-flex items-center h-9 px-3.5 rounded-lg text-[13px] font-medium text-ink-700 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center h-9 px-3.5 rounded-lg text-[0.8125rem] font-medium text-ink-700 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={submitFeedback}
-                  className="inline-flex items-center h-9 px-4 rounded-lg text-[13px] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center h-9 px-4 rounded-lg text-[0.8125rem] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Send feedback
                 </button>
@@ -7212,10 +7542,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   <AlertTriangle size={16} className="text-risk-700" />
                 </div>
                 <div>
-                  <h2 id="new-chat-confirm-title" className="text-[15px] font-semibold text-ink-900 mb-1">
+                  <h2 id="new-chat-confirm-title" className="text-[0.9375rem] font-semibold text-ink-900 mb-1">
                     Discard in-progress response?
                   </h2>
-                  <p id="new-chat-confirm-body" className="text-[12.5px] text-ink-500 leading-relaxed">
+                  <p id="new-chat-confirm-body" className="text-[0.78125rem] text-ink-500 leading-relaxed">
                     Ira is still generating. Starting a new chat will stop this response and clear the thread.
                   </p>
                 </div>
@@ -7224,7 +7554,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 <button
                   type="button"
                   onClick={() => setNewChatConfirmAfter(null)}
-                  className="inline-flex items-center h-9 px-3.5 rounded-lg text-[13px] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center h-9 px-3.5 rounded-lg text-[0.8125rem] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Keep generating
                 </button>
@@ -7235,7 +7565,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     newChatConfirmAfter?.();
                     setNewChatConfirmAfter(null);
                   }}
-                  className="inline-flex items-center h-9 px-4 rounded-lg text-[13px] font-semibold bg-risk text-white hover:bg-risk-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-risk/40"
+                  className="inline-flex items-center h-9 px-4 rounded-lg text-[0.8125rem] font-semibold bg-risk text-white hover:bg-risk-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-risk/40"
                 >
                   Discard & start new
                 </button>
@@ -7272,7 +7602,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               className="w-[28rem] max-w-[92vw] rounded-2xl bg-canvas-elevated border border-canvas-border p-5"
             >
               <div className="flex items-center justify-between mb-4">
-                <h2 id="shortcuts-title" className="text-[15px] font-semibold text-ink-800">Keyboard shortcuts</h2>
+                <h2 id="shortcuts-title" className="text-[0.9375rem] font-semibold text-ink-800">Keyboard shortcuts</h2>
                 <button
                   type="button"
                   onClick={() => setShowShortcutsModal(false)}
@@ -7293,10 +7623,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   { label: 'Edit last message (when composer empty)', keys: ['↑'] },
                 ].map(({ label, keys }) => (
                   <li key={label} className="flex items-center justify-between gap-4">
-                    <span className="text-[13px] text-ink-700">{label}</span>
+                    <span className="text-[0.8125rem] text-ink-700">{label}</span>
                     <span className="inline-flex items-center gap-1">
                       {keys.map((k, i) => (
-                        <kbd key={i} className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-md bg-canvas border border-canvas-border text-[11px] font-medium font-mono text-ink-700 tabular-nums">
+                        <kbd key={i} className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-md bg-canvas border border-canvas-border text-[0.6875rem] font-medium font-mono text-ink-700 tabular-nums">
                           {k}
                         </kbd>
                       ))}
@@ -7304,7 +7634,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   </li>
                 ))}
               </ul>
-              <p className="mt-4 text-[11px] text-ink-400">Cmd on Mac, Ctrl on Windows / Linux.</p>
+              <p className="mt-4 text-[0.6875rem] text-ink-400">Cmd on Mac, Ctrl on Windows / Linux.</p>
             </motion.div>
           </motion.div>
         )}
