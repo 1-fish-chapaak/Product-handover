@@ -420,6 +420,12 @@ export interface GrcException {
   /** Pending/decided request by the Risk Owner to move the action-plan due
    *  date. Requires auditor approval before `dueDate` is actually changed. */
   dueDateRevision?: GrcDueDateRevision;
+  /** Two-stage review lifecycle for an actionable management action plan:
+   *   'plan-review'       — RO submitted the plan; Auditor must Accept/Reject it
+   *   'in-progress'       — plan accepted; RO works on it, then marks complete
+   *   'completion-review' — RO marked complete (+ evidence); Auditor reviews outcome
+   *  Undefined for unclassified / non-actionable / already-reviewed cases. */
+  actionPhase?: 'plan-review' | 'in-progress' | 'completion-review';
 }
 
 /** A Risk Owner's request to revise an action-plan due date, gated on auditor
@@ -454,6 +460,15 @@ export interface GrcCaseDetail {
   actionDescription: string;
   actionStatus: GrcActionStatus;
   activityLog: GrcActivityEntry[];
+  /** Full list of action plans the Risk Owner submitted (synced to the Auditor's
+   *  review). `actionTitle`/`actionDescription`/`actionDueDate` mirror the first
+   *  plan for back-compat with older readers. */
+  actionPlans?: { name: string; details: string; dueDate: string }[];
+  /** Set when the Risk Owner marks the action complete — the note + evidence the
+   *  Auditor reviews before recording the implementation outcome. `selfAssessment`
+   *  is the Risk Owner's own read (Implemented / Partially Implemented) that the
+   *  Auditor sees and then confirms or overrides. */
+  completion?: { note: string; evidence: { name: string }[]; completedAt: string; selfAssessment?: 'Implemented' | 'Partially Implemented' };
 }
 export interface GrcBulkAction {
   id: string;

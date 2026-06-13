@@ -21,6 +21,7 @@ import {
   Check,
   Eye,
   ShieldCheck,
+  Wrench,
 } from 'lucide-react';
 import { ACTION_HUB_SUMMARY } from '../../data/mockData';
 import { ManageExceptionsLaunchButton } from '../reports/ManageExceptionsLaunchButton';
@@ -77,6 +78,14 @@ const STATUS_PILL: Record<QueryContext['status'], { bg: string; dot: string; tex
   'Closed':      { bg: 'bg-compliant-50', dot: 'bg-compliant',  text: 'text-compliant-700' },
   'In Progress': { bg: 'bg-mitigated-50', dot: 'bg-mitigated',  text: 'text-mitigated-700' },
   'Open':        { bg: 'bg-risk-50',      dot: 'bg-risk',       text: 'text-risk-700' },
+};
+
+// ─── Classification status shown against each management action plan. ───
+type Classification = 'Design Deficiency' | 'System Deficiency' | 'Procedural Non-Compliance';
+const CLASSIFICATION_PILL: Record<Classification, string> = {
+  'Design Deficiency': 'bg-high-50 text-high-700',
+  'System Deficiency': 'bg-risk-50 text-risk-700',
+  'Procedural Non-Compliance': 'bg-brand-50 text-brand-700',
 };
 
 // ─── Action plans (from the ATR format). Plan 1 is editable; 2 & 3 are static. ───
@@ -250,16 +259,18 @@ export default function GenerateATRModal({
   };
 
   // Action plans 2 & 3 (static) — plan 1 uses the editable state above.
-  const staticPlans: { n: number; due: string; priority: 'High' | 'Medium'; tone: PlanTone; text: string; evidence: string; verification: string }[] = [
+  const staticPlans: { n: number; due: string; tone: PlanTone; classification: Classification; text: string; actionTaken: string; evidence: string; verification: string }[] = [
     {
-      n: 2, due: 'Due 20 June 2026', priority: 'Medium', tone: 'implemented',
+      n: 2, due: 'Due 20 June 2026', tone: 'implemented', classification: 'Procedural Non-Compliance',
       text: "Redesign the vendor onboarding workflow in SAP to enforce a strict 'Maker-Checker' protocol. No vendor profile can be activated without second-level validation.",
+      actionTaken: 'Rebuilt the SAP vendor onboarding workflow so the maker can only submit and a separate checker must release before activation. Deployed to production after UAT sign-off.',
       evidence: 'UAT (User Acceptance Testing) report, workflow diagram in SAP, and sample of 3 newly activated vendors.',
       verification: 'Verified flow in SAP Production environment. Workflow functioning as expected.',
     },
     {
-      n: 3, due: 'Due 30 July 2026', priority: 'High', tone: 'partial',
+      n: 3, due: 'Due 30 July 2026', tone: 'partial', classification: 'Design Deficiency',
       text: 'Establish a centralized Vendor Onboarding Portal to capture all statutory documents digitally with automated validation.',
+      actionTaken: 'Launched the vendor onboarding portal with digital statutory-document capture and GSTN API validation. MCA validation is built but still under UAT.',
       evidence: 'Portal login credentials for testing, system user manual, and API integration evidence.',
       verification: 'Verified end-to-end portal workflow. Integration successfully validates credentials.',
     },
@@ -273,7 +284,7 @@ export default function GenerateATRModal({
   ];
 
   const renderActionPlan = (
-    plan: { n: number; due: string; priority: 'High' | 'Medium'; tone: PlanTone; evidence: string },
+    plan: { n: number; due: string; tone: PlanTone; classification?: Classification; actionTaken?: string; evidence: string },
     body: React.ReactNode,
     verification: React.ReactNode,
   ) => {
@@ -285,12 +296,13 @@ export default function GenerateATRModal({
           <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="inline-flex items-center h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded bg-brand-50 text-brand-700">Action Plan {plan.n}</span>
+              {plan.classification && (
+                <span className={`inline-flex items-center h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded-full ${CLASSIFICATION_PILL[plan.classification]}`}>
+                  {plan.classification}
+                </span>
+              )}
               <span className="inline-flex items-center gap-1.5 h-6 px-2.5 text-[0.6875rem] font-medium rounded-full bg-[#FAFAFB] border border-canvas-border text-ink-700">
                 <Calendar size={11} className="text-ink-500" /> {plan.due}
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-[0.6875rem] font-semibold text-ink-800">
-                <span className={`w-1.5 h-1.5 rounded-full ${plan.priority === 'High' ? 'bg-risk' : 'bg-mitigated'}`} />
-                {plan.priority} Priority
               </span>
             </div>
             <span className={`inline-flex items-center gap-1.5 h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded-full ${t.pill}`}>
@@ -301,8 +313,16 @@ export default function GenerateATRModal({
           {/* Plan body */}
           <div className="mb-4">{body}</div>
 
-          {/* Evidence + verification */}
+          {/* Action taken + evidence + verification */}
           <div className="grid grid-cols-[150px_1fr] gap-x-5 gap-y-3 items-start border-t border-dashed border-canvas-border pt-3">
+            {plan.actionTaken && (
+              <>
+                <div className="flex items-center gap-1.5 pt-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ink-500">
+                  <Wrench size={12} /> Action Taken
+                </div>
+                <p className="pt-1 text-[0.75rem] text-ink-800 leading-relaxed">{plan.actionTaken}</p>
+              </>
+            )}
             <div className="flex items-center gap-1.5 pt-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ink-500">
               <FileText size={12} /> Evidence
             </div>
@@ -421,7 +441,7 @@ export default function GenerateATRModal({
               {/* Action plans */}
               <div className="space-y-4">
                 {renderActionPlan(
-                  { n: 1, due: 'Due 15 May 2026', priority: 'High', tone: 'implemented', evidence: 'Security audit logs, configuration screenshots of SAP 2FA module, and signed monthly user access review report (April 2026).' },
+                  { n: 1, due: 'Due 15 May 2026', tone: 'implemented', classification: 'System Deficiency', actionTaken: 'Enabled RSA-token 2FA on the vendor-master authorization object for all 18 users with create/change rights; legacy password-only access disabled on 24 Apr 2026.', evidence: 'Security audit logs, configuration screenshots of SAP 2FA module, and signed monthly user access review report (April 2026).' },
                   <div className="rounded-[8px] bg-brand-50/60 px-3 py-2.5">
                     <EditableTextBox value={actionPlan} onChange={setActionPlan} rows={2} ariaLabel="Action Plan 1" />
                   </div>,

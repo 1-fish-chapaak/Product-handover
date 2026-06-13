@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'motion/react';
 import {
@@ -11,6 +11,7 @@ import {
   MoreVertical, Eye, EyeOff, Database, Search, PackageOpen, ExternalLink,
   MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
   Star, Layers, Check, CloudUpload, RefreshCw, Lock, WifiOff,
+  FileCheck2, FolderArchive,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
@@ -22,6 +23,9 @@ import AtrReportView from './AtrReportView';
 import type { AtrMeta, AtrObservation, AtrInsight, AtrReportData } from './atrTypes';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS } from '../../data/mockData';
+import { ATR_LIBRARY, EVIDENCE_LIBRARY, type AtrLibraryReport } from '../../data/atrLibrary';
+import AtrReportsLibrary from './AtrReportsLibrary';
+import EvidenceRepository from './EvidenceRepository';
 import { REPORT_QUERIES_ATR, type ReportQueryAtr } from '../../data/reportQueries';
 import { QUERY_SESSIONS, FAVOURITES } from '../../data/queryHistory';
 import { QUERY_GRAPHS, QUERY_TABLES, type QueryGraph, type QueryTable } from '../../data/queryGraphs';
@@ -86,6 +90,15 @@ function reportTagChip(tag: string): { classes: string; label: string } {
     return { classes: 'bg-brand-50 text-brand-700', label: tag };
   }
   return { classes: 'bg-paper-100 text-ink-600', label: tag };
+}
+
+/** Which of the three report types a generated report belongs to. ATR reports
+ *  carry atrData; SOX reports are identified by name; everything else is treated
+ *  as Internal Audit. Drives the segmented sub-tabs inside My Reports. */
+function reportKind(r: { name?: string; atrData?: unknown }): 'atr' | 'sox' | 'ia' {
+  if (r.atrData) return 'atr';
+  if (/\bsox\b/i.test(r.name ?? '')) return 'sox';
+  return 'ia';
 }
 
 type AttachedQuery = {
@@ -4835,7 +4848,17 @@ export default function ReportsView({
     if (typeof window === 'undefined') return 'my-reports';
     const t = new URLSearchParams(window.location.search).get('tab');
     if (t === 'shared-reports' || t === 'templates' || t === 'my-reports') return t;
+    // Legacy deep-links to the old top-level ATR / Evidence tabs now land in My Reports.
+    if (t === 'atr-reports' || t === 'evidence') return 'my-reports';
     return 'my-reports';
+  });
+  // Segmented sub-tabs inside My Reports: the 3 report types + the evidence repository.
+  const [reportType, setReportType] = useState<'atr' | 'sox' | 'ia' | 'evidence'>(() => {
+    if (typeof window === 'undefined') return 'ia';
+    const t = new URLSearchParams(window.location.search).get('tab');
+    if (t === 'evidence') return 'evidence';
+    if (t === 'atr-reports') return 'atr';
+    return 'ia';
   });
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [tagFilter, setTagFilter] = useState<string>('All');
@@ -4962,6 +4985,45 @@ export default function ReportsView({
       });
     }
   }, [generatedReports, addToast]);
+
+  // ── ATR library: the curated mock ATRs plus any the user generated (have atrData). ──
+  const allAtrs = useMemo<AtrLibraryReport[]>(() => {
+    const generated = generatedReports
+      .filter(r => r.atrData)
+      .map((r): AtrLibraryReport => ({
+        id: r.id,
+        templateId: r.templateId ?? 'rt-007',
+        name: r.name,
+        tag: 'Internal Audit',
+        generatedBy: r.generatedBy,
+        generatedAt: r.generatedAt,
+        status: r.status === 'final' ? 'final' : 'draft',
+        pages: r.pages ?? 1,
+        queries: r.queries ?? 0,
+        area: r.atrData!.meta.auditTitle ?? 'Custom ATR',
+        atrData: r.atrData!,
+      }));
+    return [...generated, ...ATR_LIBRARY];
+  }, [generatedReports]);
+  // Per-type counts for the My Reports sub-tab badges (ATR uses allAtrs).
+  const typeCounts = useMemo(() => {
+    let sox = 0, ia = 0;
+    generatedReports.forEach(r => {
+      const k = reportKind(r);
+      if (k === 'sox') sox++;
+      else if (k === 'ia') ia++;
+    });
+    return { sox, ia };
+  }, [generatedReports]);
+  const openAtr = useCallback((atr: AtrLibraryReport) => {
+    setViewingReport(atr as unknown as GeneratedReport);
+  }, []);
+  const openAtrById = useCallback((id: string) => {
+    const atr = allAtrs.find(a => a.id === id);
+    if (atr) setViewingReport(atr as unknown as GeneratedReport);
+    else addToast({ type: 'info', message: 'Source report is not in your library.' });
+  }, [allAtrs, addToast]);
+
   // Offline banner — listens to online/offline events.
   const [isOffline, setIsOffline] = useState(() =>
     typeof navigator !== 'undefined' && navigator.onLine === false,
@@ -4997,6 +5059,8 @@ export default function ReportsView({
     const report = generatedReports.find(r => r.id === focusReportId);
     if (report) {
       setActiveTab('my-reports');
+      const k = reportKind(report);
+      if (k === 'sox' || k === 'ia') setReportType(k);
       setViewingReport(report);
       setMissingFocusReport(false);
       onFocusReportConsumed?.();
@@ -5089,9 +5153,11 @@ export default function ReportsView({
 
   const filteredReports = (() => {
     const q = gridSearch.trim().toLowerCase();
+    // Only the SOX / IA sub-tabs render this list; scope reports to the active type.
+    const byType = generatedReports.filter(r => reportKind(r) === reportType);
     const byTag = tagFilter === 'All'
-      ? generatedReports
-      : generatedReports.filter(r => r.tag === tagFilter);
+      ? byType
+      : byType.filter(r => r.tag === tagFilter);
     return q ? byTag.filter(r => r.name.toLowerCase().includes(q)) : byTag;
   })();
 
@@ -5212,7 +5278,7 @@ export default function ReportsView({
           {/* Header */}
           <div className="mb-6">
             <div className="font-mono text-[11px] text-ink-500 mb-2 tracking-tight">
-              Reports · {activeTab === 'my-reports' ? 'My Reports' : activeTab === 'shared-reports' ? 'Shared Reports' : 'Templates'}
+              Reports · {activeTab === 'shared-reports' ? 'Shared Reports' : activeTab === 'templates' ? 'Templates' : `My Reports · ${reportType === 'atr' ? 'ATR' : reportType === 'sox' ? 'SOX' : reportType === 'ia' ? 'IA' : 'Evidence'}`}
             </div>
             <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">Reports</h1>
           </div>
@@ -5252,16 +5318,57 @@ export default function ReportsView({
           </div>
         </div>
 
+        {/* My Reports sub-tabs — segregated by report type (ATR · SOX · IA) plus
+            the linked evidence repository. */}
+        {activeTab === 'my-reports' && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-6">
+            {([
+              { key: 'ia', label: 'IA', icon: BookOpen, count: typeCounts.ia },
+              { key: 'atr', label: 'ATR', icon: FileCheck2, count: allAtrs.length },
+              { key: 'sox', label: 'SOX', icon: Shield, count: typeCounts.sox },
+              { key: 'evidence', label: 'Evidence', icon: FolderArchive, count: EVIDENCE_LIBRARY.length },
+            ] as const).map(seg => {
+              const SegIcon = seg.icon;
+              const active = reportType === seg.key;
+              return (
+                <button
+                  key={seg.key}
+                  onClick={() => setReportType(seg.key)}
+                  className={`h-9 px-3.5 inline-flex items-center gap-2 text-[13px] font-medium rounded-[10px] border transition-colors cursor-pointer ${
+                    active
+                      ? 'bg-brand-600 border-brand-600 text-white'
+                      : 'bg-white border-border-light text-ink-600 hover:border-primary/30 hover:text-text-secondary'
+                  }`}
+                >
+                  <SegIcon size={14} />
+                  {seg.label}
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${active ? 'bg-white/20 text-white' : 'bg-paper-50 text-ink-500'}`}>{seg.count}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ATR — every generated Action Taken Report, browsable */}
+        {activeTab === 'my-reports' && reportType === 'atr' && (
+          <AtrReportsLibrary atrs={allAtrs} onOpen={openAtr} />
+        )}
+
+        {/* Evidence — segregated repository, each item linked to its source ATR */}
+        {activeTab === 'my-reports' && reportType === 'evidence' && (
+          <EvidenceRepository onOpenSource={openAtrById} />
+        )}
+
         {/* My Reports — modern AI-SaaS table: minimal chrome, sentence-case
             headers, no grid lines, generous rows, very quiet hover. */}
-        {activeTab === 'my-reports' && viewMode === 'list' && isHydrating && (
+        {activeTab === 'my-reports' && (reportType === 'sox' || reportType === 'ia') && viewMode === 'list' && isHydrating && (
           <div className="flex-1 px-5 py-6 space-y-4" aria-hidden="true">
             {Array.from({ length: 6 }).map((_, i) => (
               <SkeletonRow key={i} />
             ))}
           </div>
         )}
-        {activeTab === 'my-reports' && viewMode === 'list' && !isHydrating && (
+        {activeTab === 'my-reports' && (reportType === 'sox' || reportType === 'ia') && viewMode === 'list' && !isHydrating && (
           <SmartTable
             className="flex-1"
             variant="modern"
@@ -5379,7 +5486,7 @@ export default function ReportsView({
           />
         )}
 
-        {activeTab === 'my-reports' && viewMode === 'grid' && (
+        {activeTab === 'my-reports' && (reportType === 'sox' || reportType === 'ia') && viewMode === 'grid' && (
           <div className="w-full flex-1">
             <div className="flex items-center justify-between gap-3 px-5 py-3">
               <div className="relative flex-1 max-w-xs">
