@@ -636,9 +636,9 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     workflowName: workflow.name,
     category: workflow.category,
     kpis: [
-      { label: 'Records Processed', value: '4,521' },
-      { label: 'Flags Raised', value: '8', note: '4 duplicate groups' },
-      { label: 'Execution Duration', value: '3.0s' },
+      { label: 'Records Processed', value: '4,521', note: 'Invoice register + vendor master' },
+      { label: 'Flags Raised', value: '8', note: '4 duplicate groups detected' },
+      { label: 'Execution Duration', value: '3.0s', note: '12% faster than avg' },
     ],
     resultTitle: 'Duplicate Invoice Matches',
     columns: ['Invoice #', 'Vendor', 'Amount', 'Dup. Group', 'Confidence'],

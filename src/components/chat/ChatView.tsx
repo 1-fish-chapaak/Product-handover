@@ -66,7 +66,7 @@ import type {
   ClarifyQuestion,
   UploadedFile,
 } from '../concierge-workflow-builder/types';
-import { type WorkflowRunSeed, buildWorkflowRunRecap } from '../workflow/workflowRunSeed';
+import { type WorkflowRunSeed, buildWorkflowRunRecapIntro } from '../workflow/workflowRunSeed';
 
 interface ChatMessage {
   id: string;
@@ -85,6 +85,11 @@ interface ChatMessage {
     | 'clarification'
     | 'save-workflow-prompt'
     | 'workflow-checkpoint'
+    // Recap of a completed Workflow Executor run, handed into the chat when the
+    // user clicks a follow-up. Renders the run's KPI cards + results table
+    // (richData = WorkflowRunSeed) so the thread mirrors the executor output
+    // rather than a flattened text summary.
+    | 'workflow-run-recap'
     | 'error'
     // Workflow-build rich types — render inside this same chat thread,
     // not in a separate journey body. Driven by ChatView state.
@@ -688,7 +693,7 @@ function FullscreenChartModal({
 const PREVIEW_ROW_COUNT = 9;
 
 function ResultsTable({
-  columns, rows, totalRows, onOpen, onDownload,
+  columns, rows, totalRows, onOpen, onDownload, title = 'Flagged duplicate pairs',
 }: {
   columns: string[];
   rows: string[][];
@@ -697,9 +702,16 @@ function ResultsTable({
    *  new tab. The fullscreen / expand path is handled locally. */
   onOpen: () => void;
   onDownload: () => void;
+  /** Card / fullscreen / new-tab heading. Defaults to the audit fixture's
+   *  "Flagged duplicate pairs"; the workflow-run recap passes the run's own
+   *  result title (e.g. "Duplicate Invoice Matches"). */
+  title?: string;
 }) {
   const [fullscreen, setFullscreen] = useState(false);
   const prefersReducedMotion = useReducedMotion();
+
+  // Filename-safe slug from the table title for CSV/Excel downloads.
+  const fileSlug = (title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'results');
 
   const openFullscreen = () => { setFullscreen(true); };
 
@@ -716,7 +728,7 @@ function ResultsTable({
     // surface.
     const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Flagged duplicate pairs · Auditify</title>
+<title>${esc(title)} · Auditify</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -743,7 +755,7 @@ function ResultsTable({
   <div class="card">
     <div class="card-header">
       <span class="dot" aria-hidden="true"></span>
-      <h1 class="title">Flagged duplicate pairs</h1>
+      <h1 class="title">${esc(title)}</h1>
       <span class="meta">· ${totalRows}</span>
     </div>
     <div style="overflow-x:auto">
@@ -792,7 +804,7 @@ function ResultsTable({
     const esc = (v: string) =>
       /["\n,]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
     const csv = [columns, ...rows].map(r => r.map(esc).join(',')).join('\n');
-    triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'flagged-duplicate-pairs.csv');
+    triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${fileSlug}.csv`);
     onDownload();
   };
 
@@ -813,7 +825,7 @@ function ResultsTable({
       const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
       triggerDownload(
         new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-        'flagged-duplicate-pairs.xlsx',
+        `${fileSlug}.xlsx`,
       );
       onDownload();
     } catch (err) {
@@ -847,7 +859,7 @@ function ResultsTable({
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-canvas-border/70">
           <div className="min-w-0 flex items-center gap-2">
             <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[13px] font-semibold text-ink-800 truncate">Flagged duplicate pairs</span>
+            <span className="text-[13px] font-semibold text-ink-800 truncate">{title}</span>
             <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -975,7 +987,7 @@ function ResultsTable({
       <AnimatePresence>
         {fullscreen && (
           <FullscreenTableModal
-            title="Flagged duplicate pairs"
+            title={title}
             columns={columns}
             rows={rows}
             totalRows={totalRows}
@@ -3244,7 +3256,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       {
         id: `msg-wfrun-recap-${base}`,
         role: 'assistant',
-        text: buildWorkflowRunRecap(seed),
+        text: buildWorkflowRunRecapIntro(seed),
+        richType: 'workflow-run-recap',
+        richData: seed as unknown as Record<string, unknown>,
         timestamp: new Date(),
       },
     ]);
@@ -5912,6 +5926,48 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           <KpiTile key={kpi.label} label={kpi.label} value={kpi.value} index={ki} />
                         ))}
                       </div>
+                    ) : msg.richType === 'workflow-run-recap' ? (
+                      // Replays a completed Workflow Executor run as the run's own
+                      // KPI cards + results table — same widgets the executor
+                      // output screen used — so the follow-up thread carries the
+                      // real output, not a flattened text summary. richData is the
+                      // WorkflowRunSeed handed across from the executor.
+                      (() => {
+                        const seed = msg.richData as unknown as WorkflowRunSeed;
+                        return (
+                          <div className="space-y-4 w-full">
+                            {msg.text && (
+                              <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">{renderAssistantText(msg.text)}</div>
+                            )}
+
+                            {/* KPI scoreboard — mirrors the executor's 3-up metric
+                                cards (Records / Flags / Duration), each with its
+                                note as the tile footer. */}
+                            <div role="list" aria-label="Run metrics" className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                              {seed.kpis.map((kpi, ki) => (
+                                <KpiTile
+                                  key={kpi.label}
+                                  label={kpi.label}
+                                  value={kpi.value}
+                                  index={ki}
+                                  footer={kpi.note ? <span className="text-[11.5px] text-ink-500">{kpi.note}</span> : undefined}
+                                />
+                              ))}
+                            </div>
+
+                            {/* Results table — same widget as the audit result,
+                                titled with the run's own result title. */}
+                            <ResultsTable
+                              title={seed.resultTitle}
+                              columns={seed.columns}
+                              rows={seed.rows}
+                              totalRows={seed.rows.length}
+                              onOpen={() => addToast({ type: 'info', message: 'Opening full results in a new view…' })}
+                              onDownload={() => addToast({ type: 'success', message: 'CSV download started.' })}
+                            />
+                          </div>
+                        );
+                      })()
                     ) : msg.richType === 'workflow-checkpoint' ? (
                       // Path 3 inline checkpoint: IRA asks which params to make
                       // configurable for the saved workflow. Multi-select chips,
