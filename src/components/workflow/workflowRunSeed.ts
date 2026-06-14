@@ -30,41 +30,13 @@ export interface WorkflowRunSeed {
 }
 
 /**
- * Build the assistant's opening recap of a completed run as markdown prose.
- *
- * The chat markdown pipeline (renderAssistantText) does NOT enable GFM, so
- * markdown tables won't render — we deliberately summarise as headings, a
- * KPI sentence, and a short highlight list instead of dumping a table the
- * user just saw on the previous screen.
+ * Short prose intro for the rich workflow-run recap. This does NOT flatten the
+ * metrics/rows into text — the chat renders the run's actual KPI cards and
+ * results table beneath this line (richType 'workflow-run-recap'), so the thread
+ * mirrors the executor output instead of a stripped-down summary.
  */
-export function buildWorkflowRunRecap(seed: WorkflowRunSeed): string {
-  const kpiSentence = seed.kpis
-    .map((k) => `**${k.value}** ${k.label.toLowerCase()}`)
-    .join(' · ');
-
-  // Surface the first few result rows as a scannable bullet list. We assume
-  // the first column is the primary identifier and the second is a label.
-  const previewRows = seed.rows.slice(0, 4);
-  const highlights = previewRows
-    .map((row) => {
-      const id = row[0] ?? '';
-      const rest = row.slice(1).filter(Boolean).join(' · ');
-      return `- \`${id}\`${rest ? ` — ${rest}` : ''}`;
-    })
-    .join('\n');
-
-  const more =
-    seed.rows.length > previewRows.length
-      ? `\n\n…and ${seed.rows.length - previewRows.length} more in **${seed.resultTitle}**.`
-      : '';
-
+export function buildWorkflowRunRecapIntro(seed: WorkflowRunSeed): string {
   return `## ${seed.workflowName} — run complete
 
-${kpiSentence}.
-
-Here are the top findings from **${seed.resultTitle}**:
-
-${highlights}${more}
-
-The full output, plan, and sources are on the previous screen. Ask me anything about these results and I'll dig in.`;
+Here's the full output from this run. Ask me anything about these results and I'll dig in.`;
 }

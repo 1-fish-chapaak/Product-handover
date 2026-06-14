@@ -67,7 +67,7 @@ import type {
   ClarifyQuestion,
   UploadedFile,
 } from '../concierge-workflow-builder/types';
-import { type WorkflowRunSeed, buildWorkflowRunRecap } from '../workflow/workflowRunSeed';
+import { type WorkflowRunSeed, buildWorkflowRunRecapIntro } from '../workflow/workflowRunSeed';
 
 interface ChatMessage {
   id: string;
@@ -89,6 +89,11 @@ interface ChatMessage {
     | 'clarification'
     | 'save-workflow-prompt'
     | 'workflow-checkpoint'
+    // Recap of a completed Workflow Executor run, handed into the chat when the
+    // user clicks a follow-up. Renders the run's KPI cards + results table
+    // (richData = WorkflowRunSeed) so the thread mirrors the executor output
+    // rather than a flattened text summary.
+    | 'workflow-run-recap'
     | 'error'
     // Workflow-build rich types — render inside this same chat thread,
     // not in a separate journey body. Driven by ChatView state.
@@ -859,90 +864,26 @@ function FullscreenChartModal({
 const PREVIEW_ROW_COUNT = 9;
 
 function ResultsTable({
-  columns, rows, totalRows, onOpen, onDownload,
+  columns, rows, totalRows, onDownload, title = 'Flagged duplicate pairs',
 }: {
   columns: string[];
   rows: string[][];
   totalRows: number;
-  /** Caller can fire side-effects (toast) when the table is opened in a
-   *  new tab. The fullscreen / expand path is handled locally. */
-  onOpen: () => void;
+  /** Caller can fire side-effects (toast) when a download starts. The
+   *  fullscreen / expand path is handled locally. */
   onDownload: () => void;
+  /** Card / fullscreen / new-tab heading. Defaults to the audit fixture's
+   *  "Flagged duplicate pairs"; the workflow-run recap passes the run's own
+   *  result title (e.g. "Duplicate Invoice Matches"). */
+  title?: string;
 }) {
   const [fullscreen, setFullscreen] = useState(false);
   const prefersReducedMotion = useReducedMotion();
 
-  const openFullscreen = () => { setFullscreen(true); };
+  // Filename-safe slug from the table title for CSV/Excel downloads.
+  const fileSlug = (title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'results');
 
-  // Standalone HTML page built from the data, opened in a fresh tab. Cells
-  // are HTML-escaped so user data can never inject markup; the page styles
-  // match the in-app table for visual continuity.
-  const handleOpenInNewTab = () => {
-    const esc = (s: string) => s.replace(/[&<>"']/g, c => (
-      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
-    ));
-    // Mirror the in-app card dimensions: same max-width (52.5rem), same
-    // rounded card chrome, same border + spacing tokens. Tab gets a clean
-    // centered card on the off-white canvas, identical to the embedded
-    // surface.
-    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Flagged duplicate pairs · Irame</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root { color-scheme: light; --ink-900:#1a1124; --ink-800:#3a2f4a; --ink-700:#52456a; --ink-500:#7b6f8c; --ink-400:#9d92ab; --canvas-border:#ebe7f0; --canvas-elevated:#ffffff; --paper-50:#faf9fc; --brand-600:#6a12cd; --brand-50:#f4edff; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; font-size: 13px; line-height: 1.5; color: var(--ink-800); background: var(--paper-50); -webkit-font-smoothing: antialiased; }
-  .wrap { max-width: min(1280px, calc(100% - 48px)); margin: 32px auto; padding: 0; }
-  .card { background: var(--canvas-elevated); border: 1px solid var(--canvas-border); border-radius: 16px; overflow: hidden; box-shadow: 0 1px 2px rgba(15,8,30,0.04); }
-  .card-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--canvas-border); }
-  .dot { width: 8px; height: 8px; border-radius: 2px; background: var(--brand-600); flex: 0 0 8px; }
-  .title { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink-800); }
-  .meta { color: var(--ink-400); font-size: 11px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead th { background: rgba(245,243,248,0.6); text-align: left; padding: 10px 16px; font-size: 11px; font-weight: 600; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--canvas-border); white-space: nowrap; }
-  thead th.num { text-align: left; }
-  tbody td { padding: 10px 16px; color: var(--ink-700); border-bottom: 1px solid rgba(235,231,240,0.6); white-space: nowrap; }
-  tbody tr:last-child td { border-bottom: none; }
-  tbody tr:hover { background: rgba(244,237,255,0.45); }
-  .num { font-variant-numeric: tabular-nums; }
-  .card-footer { padding: 8px 16px; border-top: 1px solid var(--canvas-border); font-size: 11px; color: var(--ink-500); font-variant-numeric: tabular-nums; }
-</style></head><body>
-<div class="wrap">
-  <div class="card">
-    <div class="card-header">
-      <span class="dot" aria-hidden="true"></span>
-      <h1 class="title">Flagged duplicate pairs</h1>
-      <span class="meta">· ${totalRows}</span>
-    </div>
-    <div style="overflow-x:auto">
-      <table>
-        <thead><tr>${columns.map((c, j) => `<th class="${j >= 3 ? 'num' : ''}">${esc(c)}</th>`).join('')}</tr></thead>
-        <tbody>${rows.map(r => `<tr>${r.map((c, j) => `<td class="${j >= 3 ? 'num' : ''}">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
-      </table>
-    </div>
-    <div class="card-footer">Showing ${rows.length} of ${totalRows}</div>
-  </div>
-</div>
-</body></html>`;
-    // Use a programmatic anchor click with target="_blank" — this opens
-    // in a new tab even when window.open is rerouted to the same tab by
-    // popup blockers, browser settings, or extensions. The anchor must be
-    // attached to the DOM before .click() for Safari to honor the target.
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-    onOpen();
-  };
+  const openFullscreen = () => { setFullscreen(true); };
 
   // CSV file built from the visible rows on click. Same blob-download
   // pattern as the SQL Copy/Download in the workspace panel — no server
@@ -963,7 +904,7 @@ function ResultsTable({
     const esc = (v: string) =>
       /["\n,]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
     const csv = [columns, ...rows].map(r => r.map(esc).join(',')).join('\n');
-    triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'flagged-duplicate-pairs.csv');
+    triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${fileSlug}.csv`);
     onDownload();
   };
 
@@ -984,7 +925,7 @@ function ResultsTable({
       const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
       triggerDownload(
         new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-        'flagged-duplicate-pairs.xlsx',
+        `${fileSlug}.xlsx`,
       );
       onDownload();
     } catch (err) {
@@ -1018,7 +959,7 @@ function ResultsTable({
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-canvas-border/70">
           <div className="min-w-0 flex items-center gap-2">
             <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">Flagged duplicate pairs</span>
+            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{title}</span>
             <span className="font-mono text-[0.6875rem] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1141,7 +1082,7 @@ function ResultsTable({
       <AnimatePresence>
         {fullscreen && (
           <FullscreenTableModal
-            title="Flagged duplicate pairs"
+            title={title}
             columns={columns}
             rows={rows}
             totalRows={totalRows}
@@ -3670,7 +3611,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       {
         id: `msg-wfrun-recap-${base}`,
         role: 'assistant',
-        text: buildWorkflowRunRecap(seed),
+        text: buildWorkflowRunRecapIntro(seed),
+        richType: 'workflow-run-recap',
+        richData: seed as unknown as Record<string, unknown>,
         timestamp: new Date(),
       },
     ]);
@@ -6164,7 +6107,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           columns={AUDIT_RESULT.table.columns}
                           rows={AUDIT_RESULT.table.rows}
                           totalRows={AUDIT_RESULT.table.totalRows}
-                          onOpen={() => addToast({ type: 'info', message: 'Opening full results in a new view…' })}
                           onDownload={() => addToast({ type: 'success', message: 'CSV download started.' })}
                         />
 
@@ -6302,6 +6244,47 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           <KpiTile key={kpi.label} label={kpi.label} value={kpi.value} index={ki} />
                         ))}
                       </div>
+                    ) : msg.richType === 'workflow-run-recap' ? (
+                      // Replays a completed Workflow Executor run as the run's own
+                      // KPI cards + results table — same widgets the executor
+                      // output screen used — so the follow-up thread carries the
+                      // real output, not a flattened text summary. richData is the
+                      // WorkflowRunSeed handed across from the executor.
+                      (() => {
+                        const seed = msg.richData as unknown as WorkflowRunSeed;
+                        return (
+                          <div className="space-y-4 w-full">
+                            {msg.text && (
+                              <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">{renderAssistantText(msg.text)}</div>
+                            )}
+
+                            {/* KPI scoreboard — mirrors the executor's 3-up metric
+                                cards (Records / Flags / Duration), each with its
+                                note as the tile footer. */}
+                            <div role="list" aria-label="Run metrics" className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                              {seed.kpis.map((kpi, ki) => (
+                                <KpiTile
+                                  key={kpi.label}
+                                  label={kpi.label}
+                                  value={kpi.value}
+                                  index={ki}
+                                  footer={kpi.note ? <span className="text-[11.5px] text-ink-500">{kpi.note}</span> : undefined}
+                                />
+                              ))}
+                            </div>
+
+                            {/* Results table — same widget as the audit result,
+                                titled with the run's own result title. */}
+                            <ResultsTable
+                              title={seed.resultTitle}
+                              columns={seed.columns}
+                              rows={seed.rows}
+                              totalRows={seed.rows.length}
+                              onDownload={() => addToast({ type: 'success', message: 'CSV download started.' })}
+                            />
+                          </div>
+                        );
+                      })()
                     ) : msg.richType === 'workflow-checkpoint' ? (
                       // Path 3 inline checkpoint: IRA asks which params to make
                       // configurable for the saved workflow. Multi-select chips,
