@@ -26,6 +26,7 @@ import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS } from '../../data/
 import { ATR_LIBRARY, EVIDENCE_LIBRARY, type AtrLibraryReport } from '../../data/atrLibrary';
 import AtrReportsLibrary from './AtrReportsLibrary';
 import EvidenceRepository from './EvidenceRepository';
+import { exportAtrWord } from './atrTemplate';
 import { REPORT_QUERIES_ATR, type ReportQueryAtr } from '../../data/reportQueries';
 import { QUERY_SESSIONS, FAVOURITES } from '../../data/queryHistory';
 import { QUERY_GRAPHS, QUERY_TABLES, type QueryGraph, type QueryTable } from '../../data/queryGraphs';
@@ -145,6 +146,9 @@ type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   /** Present when this report is a generated Action Taken Report (renders via
    *  AtrReportView instead of the standard template/query report layout). */
   atrData?: AtrReportData;
+  /** ATR-tab metadata for a saved ATR version. */
+  riskOwner?: string;
+  sourceReport?: string;
 };
 
 // Dummy user-created templates. Replace with real data when the create-custom-template flow lands.
@@ -3844,7 +3848,7 @@ function AddQueryModal({ open, onClose, onAttach }: {
 }
 
 // ─── Report View (with multiple queries) ───
-function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, initialTemplate, customTemplates = [], onAddQuery, onRemoveQuery, onUpdateDescription }: {
+function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, initialTemplate, customTemplates = [], onAddQuery, onRemoveQuery, onUpdateDescription, onSaveAtrVersion }: {
   report: GeneratedReport;
   onAddQuery: (reportId: string, query: AttachedQuery) => void;
   onRemoveQuery: (reportId: string, queryId: string) => void;
@@ -3855,6 +3859,8 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
   initialTemplate?: typeof REPORT_TEMPLATES[0] | null;
   customTemplates?: typeof REPORT_TEMPLATES[number][];
   onUpdateDescription?: (reportId: string, description: string) => void;
+  /** Save the Live ATR as a brand-new card in the ATR tab. */
+  onSaveAtrVersion?: (label: string, data: AtrReportData) => void;
 }) {
   const { addToast } = useToast();
   const { can } = useCan();
@@ -4754,11 +4760,11 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setAtrModalOpen(true)}
-                      title="Generate Action Taken Report"
+                      title="Open the live Action Taken Report"
                       className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-primary bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
                     >
                       <FileText size={14} />
-                      Generate ATR
+                      Live ATR
                     </button>
                     <button
                       onClick={() => setActivityLogOpen(true)}
@@ -4938,11 +4944,11 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                               <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => setAtrModalOpen(true)}
-                                  title="Generate Action Taken Report"
+                                  title="Open the live Action Taken Report"
                                   className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-primary bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent"
                                 >
                                   <FileText size={14} />
-                                  Generate ATR
+                                  Live ATR
                                 </button>
                                 <button
                                   onClick={() => setActivityLogOpen(true)}
@@ -5222,7 +5228,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
       {uploadReportOpen && <UploadReportModal onClose={() => setUploadReportOpen(false)} />}
 
       {/* Generate ATR — editable Action Taken Report preview (same as Action Hub) */}
-      {atrModalOpen && <GenerateATRModal onClose={() => setAtrModalOpen(false)} />}
+      {atrModalOpen && <GenerateATRModal onClose={() => setAtrModalOpen(false)} onSaveVersion={onSaveAtrVersion} />}
 
       {/* Confirm dialog — section delete from Contents */}
       <ConfirmDialog
@@ -5358,6 +5364,8 @@ export default function ReportsView({
         pages: r.pages ?? 1,
         queries: r.queries ?? 0,
         area: r.atrData!.meta.auditTitle ?? 'Custom ATR',
+        riskOwner: r.riskOwner,
+        sourceReport: r.sourceReport ?? r.name,
         atrData: r.atrData!,
       }));
     return [...generated, ...ATR_LIBRARY];
@@ -5380,6 +5388,32 @@ export default function ReportsView({
     if (atr) setViewingReport(atr as unknown as GeneratedReport);
     else addToast({ type: 'info', message: 'Source report is not in your library.' });
   }, [allAtrs, addToast]);
+
+  // Save Version (from the Live ATR modal) → snapshot as a brand-new ATR-tab card.
+  const saveAtrVersion = useCallback((label: string, data: AtrReportData) => {
+    const now = new Date();
+    const stamp = `${now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+    const base = data.meta.auditTitle ?? 'Action Taken Report';
+    const newReport = {
+      id: `gr-atr-${now.getTime()}`,
+      templateId: 'rt-007',
+      name: `${base} — ${label}`,
+      tag: 'Internal Audit' as const,
+      generatedBy: 'Karan Mehta',
+      generatedAt: stamp,
+      status: 'final' as const,
+      pages: Math.max(1, data.observations.length * 2),
+      queries: data.observations.length,
+      atrData: data,
+      riskOwner: 'Tushar Goel',
+      sourceReport: base,
+    } as unknown as GeneratedReport;
+    setGeneratedReports(prev => [newReport, ...prev]);
+    setViewingReport(null);
+    setActiveTab('my-reports');
+    setReportType('atr');
+    addToast({ type: 'success', message: `Saved “${label}” to the ATR tab.` });
+  }, [addToast]);
 
   // Offline banner — listens to online/offline events.
   const [isOffline, setIsOffline] = useState(() =>
@@ -5570,6 +5604,7 @@ export default function ReportsView({
         onAddQuery={addQueryToReport}
         onRemoveQuery={removeAttachedQuery}
         onUpdateDescription={updateReportDescription}
+        onSaveAtrVersion={saveAtrVersion}
       />
     );
   }
@@ -5684,7 +5719,12 @@ export default function ReportsView({
 
         {/* ATR — every generated Action Taken Report, browsable */}
         {activeTab === 'my-reports' && reportType === 'atr' && (
-          <AtrReportsLibrary atrs={allAtrs} onOpen={openAtr} />
+          <AtrReportsLibrary
+            atrs={allAtrs}
+            onOpen={openAtr}
+            onShare={onShare ? (atr) => onShare(atr.id) : undefined}
+            onDownload={(atr) => { exportAtrWord(atr.atrData.meta, atr.atrData.observations); addToast({ type: 'success', message: `Downloading “${atr.name}”.` }); }}
+          />
         )}
 
         {/* Evidence — segregated repository, each item linked to its source ATR */}

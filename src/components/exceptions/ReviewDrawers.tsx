@@ -17,6 +17,7 @@ import {
   Trash2,
   Check,
   Sparkles,
+  Hash,
 } from 'lucide-react';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
 import Gated from '../shared/Gated';
@@ -561,10 +562,22 @@ export function ReviewCaseDrawer({
 
             <div className="mb-4">
               <section className="border border-canvas-border rounded-[12px] p-4">
-                <SectionLabel>Classification</SectionLabel>
-                <Pill className={CLASSIFICATION_STYLE[exception.classification]}>
-                  {exception.classification}
-                </Pill>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <SectionLabel>Classification</SectionLabel>
+                    <Pill className={CLASSIFICATION_STYLE[exception.classification]}>
+                      {exception.classification}
+                    </Pill>
+                  </div>
+                  {exception.actionableId && (
+                    <div className="text-right">
+                      <SectionLabel>Actionable ID</SectionLabel>
+                      <span className="inline-flex items-center gap-1 font-mono font-semibold text-brand-700 text-[12.5px]">
+                        <Hash size={12} /> {exception.actionableId}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </section>
             </div>
 
@@ -963,6 +976,8 @@ export function ClassifyExceptionDrawer({
   exception,
   onClose,
   onSave,
+  actionableId,
+  scopeCount = 1,
 }: {
   exception: GrcException;
   onClose: () => void;
@@ -975,6 +990,11 @@ export function ClassifyExceptionDrawer({
     dueDate?: string;
     actionPlans?: { name: string; details: string; dueDate: string }[];
   }) => void;
+  /** Actionable ID assigned once an actionable classification is chosen — shown
+   *  while the management action plan is created. */
+  actionableId?: string;
+  /** How many linked cases this classify applies to (bulk) — the ID is shared. */
+  scopeCount?: number;
 }) {
   // Re-classifying a (rejected) case pre-fills the previous classification,
   // rationale and action plans so the Risk Owner can update them.
@@ -1153,6 +1173,18 @@ export function ClassifyExceptionDrawer({
             transition={{ duration: 0.15 }}
             className="border-t border-canvas-border pt-5 mb-5"
           >
+            {actionableId && (
+              <div className="mb-3 flex items-center justify-between gap-3 px-3 py-2.5 rounded-[10px] bg-brand-50/70 border border-brand-100">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Hash size={13} className="text-brand-600 shrink-0" />
+                  <span className="text-[11.5px] text-ink-600">Actionable ID</span>
+                  <span className="font-mono font-semibold text-brand-700 text-[12.5px]">{actionableId}</span>
+                </div>
+                <span className="text-[11px] text-ink-500 shrink-0">
+                  {scopeCount > 1 ? `Shared across ${scopeCount} linked cases` : 'Auto-generated'}
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between mb-3">
               <span className="text-[10.5px] uppercase tracking-wider font-semibold text-ink-500">
                 Management Action Plans
@@ -1786,6 +1818,148 @@ export function BulkReviewDueDateDrawer({
           </div>
         </section>
       </DrawerShell>
+    </>
+  );
+}
+
+// ─── Bulk-action Scope Chooser ───
+// Shown before a single action when the case belongs to a bulk group. Lets the
+// user apply the action to all linked cases, only this one, or a chosen subset.
+// Ineligible members (the action doesn't apply in their current state) are shown
+// disabled; the opened case is always selected.
+export interface ScopeCandidate {
+  id: string;
+  title: string;
+  eligible: boolean;
+  statusLabel: string;
+  isOpened: boolean;
+}
+
+export function BulkScopeChooser({
+  groupId,
+  groupTitle,
+  actionLabel,
+  openedId,
+  candidates,
+  onConfirm,
+  onClose,
+}: {
+  groupId: string;
+  groupTitle: string;
+  actionLabel: string;
+  openedId: string;
+  candidates: ScopeCandidate[];
+  onConfirm: (ids: string[]) => void;
+  onClose: () => void;
+}) {
+  const eligibleIds = useMemo(() => candidates.filter(c => c.eligible).map(c => c.id), [candidates]);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(eligibleIds));
+
+  const toggle = (id: string) => {
+    if (id === openedId) return; // opened case is always in scope
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const applyAll = () => setSelected(new Set(eligibleIds));
+  const onlyThis = () => setSelected(new Set([openedId]));
+
+  const chosen = candidates.filter(c => selected.has(c.id) && c.eligible);
+  const count = chosen.length;
+
+  return (
+    <>
+      <Overlay onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.98, y: 8 }}
+        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] max-w-[92vw] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col max-h-[82vh]"
+        role="dialog"
+        aria-label="Choose cases for this bulk action"
+      >
+        <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full"><LinkIcon size={11} /> Bulk</span>
+              <h2 className="font-display text-[19px] font-semibold text-ink-900 tracking-tight truncate">{actionLabel}</h2>
+            </div>
+            <p className="text-[12.5px] text-ink-500 leading-snug">
+              <span className="font-mono tabular-nums">ID: {groupId}</span> · {candidates.length} linked cases{groupTitle ? <> · <span className="text-ink-600">{groupTitle}</span></> : null}
+            </p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close">
+            <X size={16} />
+          </button>
+        </header>
+
+        <div className="px-6 pt-4 pb-2">
+          <p className="text-[12.5px] text-ink-600 leading-relaxed mb-3">
+            This case is part of a bulk action. Choose which linked cases this <span className="font-medium text-ink-800">{actionLabel.toLowerCase()}</span> applies to.
+          </p>
+          <div className="flex items-center gap-2 mb-1">
+            <button onClick={applyAll} className="h-8 px-3 text-[12px] font-medium rounded-[8px] border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 cursor-pointer transition-colors">
+              Apply to all ({eligibleIds.length})
+            </button>
+            <button onClick={onlyThis} className="h-8 px-3 text-[12px] font-medium rounded-[8px] border border-canvas-border bg-canvas-elevated text-ink-700 hover:border-brand-200 cursor-pointer transition-colors">
+              Only this case
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 pb-4">
+          <div className="border border-canvas-border rounded-[12px] divide-y divide-canvas-border overflow-hidden">
+            {candidates.map((c) => {
+              const checked = selected.has(c.id) && c.eligible;
+              const locked = c.isOpened; // opened is always on and cannot be toggled
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  disabled={!c.eligible || locked}
+                  onClick={() => toggle(c.id)}
+                  title={!c.eligible ? 'No action applies to this case in its current state' : locked ? 'The case you opened — always included' : undefined}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                    c.eligible ? (locked ? 'cursor-default' : 'cursor-pointer hover:bg-paper-50/70') : 'opacity-55 cursor-not-allowed'
+                  }`}
+                >
+                  <span className={`w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0 ${
+                    checked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-canvas-elevated border-canvas-border'
+                  }`}>
+                    {checked && <Check size={12} strokeWidth={3} />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-medium text-brand-700 text-[12.5px]">{c.id}</span>
+                      {c.isOpened && <span className="text-[10px] font-semibold text-ink-500 bg-[#F4F2F7] rounded-full px-1.5 h-4 inline-flex items-center">This case</span>}
+                    </div>
+                    <div className="text-[12px] text-ink-600 truncate mt-0.5">{c.title}</div>
+                  </div>
+                  <Pill className={c.eligible ? 'bg-mitigated-50 text-mitigated-700' : 'bg-[#EEEEF1] text-ink-500'}>{c.statusLabel}</Pill>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <footer className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center gap-2">
+          <button onClick={onClose} className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer">
+            Cancel
+          </button>
+          <button
+            onClick={() => count > 0 && onConfirm(chosen.map(c => c.id))}
+            disabled={count === 0}
+            className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+              count > 0 ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
+            }`}
+          >
+            Continue with {count} case{count === 1 ? '' : 's'}
+          </button>
+        </footer>
+      </motion.div>
     </>
   );
 }

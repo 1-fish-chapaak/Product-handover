@@ -591,9 +591,20 @@ function renderCell(
                 </span>
               )}
               {isBulk && (
-                <span className="inline-flex items-center h-5 px-2 text-[10px] font-medium bg-brand-50 text-brand-700 rounded-full">
-                  Bulk
-                </span>
+                ex.bulkId ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenActionable(ex.bulkId!)}
+                    title={`View the ${ex.bulkId} linked group`}
+                    className="inline-flex items-center h-5 px-2 text-[10px] font-medium bg-brand-50 text-brand-700 rounded-full hover:bg-brand-100 cursor-pointer transition-colors"
+                  >
+                    Bulk
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center h-5 px-2 text-[10px] font-medium bg-brand-50 text-brand-700 rounded-full">
+                    Bulk
+                  </span>
+                )
               )}
               {ex.dueDateRevision?.status === 'Pending' && (
                 <span
@@ -620,14 +631,15 @@ function renderCell(
       return <Pill className={COMBINED_REVIEW_STYLE[combined]}>{COMBINED_REVIEW_LABEL[combined]}</Pill>;
     }
     case 'actionableId':
-      return ex.bulkId ? (
-        <button
-          onClick={() => onOpenActionable(ex.bulkId!)}
-          className="inline-flex items-center h-6 px-2.5 text-[11.5px] font-mono bg-brand-50 text-brand-700 rounded-full hover:bg-brand-100 transition-colors cursor-pointer"
-          title={`Open ${ex.bulkId} group`}
+      // The Actionable ID is generated when the case is classified as actionable.
+      // (The linked bulk group is reachable via the "Bulk" chip on the ID column.)
+      return ex.actionableId ? (
+        <span
+          className="inline-flex items-center h-6 px-2.5 text-[11.5px] font-mono font-medium bg-brand-50 text-brand-700 rounded-full"
+          title={`Actionable ID ${ex.actionableId}`}
         >
-          {ex.bulkId}
-        </button>
+          {ex.actionableId}
+        </span>
       ) : (
         <span className="text-ink-400 text-[12.5px]">—</span>
       );
