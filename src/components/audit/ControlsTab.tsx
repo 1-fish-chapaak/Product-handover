@@ -214,8 +214,8 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
   const resultFor = (attrId: string): AttrResult =>
     attrResultOverride[attrId] ?? seedAttrResult(attrId, engagement.health);
 
-  const toggleAttrType = (attrId: string) =>
-    setAttrTypeOverride(prev => ({ ...prev, [attrId]: typeFor(attrId) === 'Automated' ? 'Self-assessed' : 'Automated' }));
+  const setAttrTypeKind = (attrId: string, t: AttrType) =>
+    setAttrTypeOverride(prev => ({ ...prev, [attrId]: t }));
   const setAttrResult = (attrId: string, result: AttrResult) =>
     setAttrResultOverride(prev => ({ ...prev, [attrId]: result }));
 
@@ -616,9 +616,10 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                                 </button>
                                 {/* Test method · result · test action · workflow link (linking preserved) */}
                                 <div className="shrink-0 mt-px flex items-center gap-1.5">
-                                  <TypeChip type={typeFor(attr.id)} onToggle={() => toggleAttrType(attr.id)} />
+                                  <TypeBox type={typeFor(attr.id)} onSet={(t) => setAttrTypeKind(attr.id, t)} />
                                   <ResultPill result={resultFor(attr.id)} />
                                   <TestButton type={typeFor(attr.id)} hasWorkflow={linkedWfs.length > 0} running={runningAttr.has(attr.id)} onClick={() => testAttribute(attr)} />
+                                  {typeFor(attr.id) === 'Automated' && (
                                   <Gated permission="racm_link_workflow" mode="disable" title="You don't have permission to link workflows">
                                   <button
                                     onClick={() => setMapAttr(attr)}
@@ -629,6 +630,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                                     {linkedWfs.length > 0 ? linkedWfs.length : 'Link'}
                                   </button>
                                   </Gated>
+                                  )}
                                   <button
                                     onClick={() => toggleAttr(attr.id)}
                                     aria-label={attrExpanded ? 'Collapse attribute' : 'Expand attribute'}
@@ -654,7 +656,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                                         remark={attrRemark[attr.id] ?? ''}
                                         running={runningAttr.has(attr.id)}
                                         linkedWorkflows={linkedFor(attr.id)}
-                                        onToggleType={() => toggleAttrType(attr.id)}
+                                        onSetType={(t) => setAttrTypeKind(attr.id, t)}
                                         onSetResult={(r) => setAttrResult(attr.id, r)}
                                         onRemark={(v) => setAttrRemark(prev => ({ ...prev, [attr.id]: v }))}
                                         onRunWorkflow={() => { const ids = ws.workflowIdsForAttribute(attr.id); if (ids[0] && onRunWorkflow) { onRunWorkflow(ids[0]); } else if (!ids[0]) { setMapAttr(attr); } }}
@@ -1026,17 +1028,28 @@ function KeyDot({ active }: { active: boolean }): JSX.Element {
 
 // ─── Per-attribute test method · result · test action ──────────────────────────
 
-function TypeChip({ type, onToggle }: { type: AttrType; onToggle: () => void }): JSX.Element {
-  const auto = type === 'Automated';
+/** Two-option box: Self-assessment ⇄ Automation. */
+function TypeBox({ type, onSet }: { type: AttrType; onSet: (t: AttrType) => void }): JSX.Element {
+  const opts: { v: AttrType; label: string; Icon: typeof WorkflowIcon }[] = [
+    { v: 'Self-assessed', label: 'Self-assessment', Icon: ClipboardList },
+    { v: 'Automated', label: 'Automation', Icon: WorkflowIcon },
+  ];
   return (
-    <button
-      onClick={onToggle}
-      title="Switch test method (Self-assessed ⇄ Automated)"
-      className={`inline-flex items-center gap-1 pl-1.5 pr-2 h-[22px] rounded-md border text-[0.65625rem] font-semibold cursor-pointer transition-colors ${auto ? 'bg-evidence-50 border-evidence-100 text-evidence-700 hover:bg-evidence-100' : 'bg-brand-50 border-brand-100 text-brand-700 hover:bg-brand-100'}`}
-    >
-      {auto ? <WorkflowIcon size={10} /> : <ClipboardList size={10} />}
-      {auto ? 'Automated' : 'Self-assessed'}
-    </button>
+    <div className="inline-flex items-center p-0.5 rounded-md border border-canvas-border bg-canvas/60">
+      {opts.map(o => {
+        const active = type === o.v;
+        return (
+          <button
+            key={o.v}
+            onClick={() => onSet(o.v)}
+            title={o.label}
+            className={`inline-flex items-center gap-1 px-2 h-[20px] rounded text-[0.65625rem] font-semibold transition-colors cursor-pointer ${active ? (o.v === 'Automated' ? 'bg-evidence-50 text-evidence-700' : 'bg-brand-50 text-brand-700') : 'text-ink-400 hover:text-ink-600'}`}
+          >
+            <o.Icon size={10} /> {o.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1056,7 +1069,7 @@ function ResultPill({ result }: { result: AttrResult }): JSX.Element {
 
 function TestButton({ type, hasWorkflow, running, onClick }: { type: AttrType; hasWorkflow: boolean; running: boolean; onClick: () => void }): JSX.Element {
   const auto = type === 'Automated';
-  const label = auto ? (hasWorkflow ? 'Test' : 'Link workflow') : 'Self-assess';
+  const label = auto ? (hasWorkflow ? 'Run' : 'Link workflow') : 'Self-assess';
   const Icon = running ? Loader2 : auto ? (hasWorkflow ? Play : Link2) : ClipboardList;
   return (
     <button
@@ -1075,14 +1088,14 @@ function TestButton({ type, hasWorkflow, running, onClick }: { type: AttrType; h
 
 function AttrTestPanel({
   type, result, remark, running, linkedWorkflows,
-  onToggleType, onSetResult, onRemark, onRunWorkflow, onRunInline, onLink,
+  onSetType, onSetResult, onRemark, onRunWorkflow, onRunInline, onLink,
 }: {
   type: AttrType;
   result: AttrResult;
   remark: string;
   running: boolean;
   linkedWorkflows: LinkedWorkflow[];
-  onToggleType: () => void;
+  onSetType: (t: AttrType) => void;
   onSetResult: (r: AttrResult) => void;
   onRemark: (v: string) => void;
   onRunWorkflow: () => void;
@@ -1098,60 +1111,67 @@ function AttrTestPanel({
           {auto ? <WorkflowIcon size={13} className="text-evidence-600" /> : <ClipboardList size={13} className="text-brand-600" />}
           {auto ? 'Automated test' : 'Self-assessment'}
         </span>
-        <button onClick={onToggleType} className="text-[0.6875rem] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors">
-          Switch to {auto ? 'self-assessed' : 'automated'}
-        </button>
+        <TypeBox type={type} onSet={onSetType} />
       </div>
       <div className="p-3.5 space-y-3">
         {auto ? (
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="text-[0.75rem] text-ink-600">
-              {hasWf ? (
-                <span className="inline-flex items-center gap-1.5">
-                  Tested by <span className="font-semibold text-brand-700">{linkedWorkflows[0]!.name}</span>
-                  {linkedWorkflows.length > 1 && <span className="text-ink-400">+{linkedWorkflows.length - 1}</span>}
-                </span>
-              ) : (
-                <span className="text-ink-500">No workflow linked yet — link or build one to automate this test.</span>
-              )}
+          <>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-[0.75rem] text-ink-600">
+                {hasWf ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    Tested by <span className="font-semibold text-brand-700">{linkedWorkflows[0]!.name}</span>
+                    {linkedWorkflows.length > 1 && <span className="text-ink-400">+{linkedWorkflows.length - 1}</span>}
+                  </span>
+                ) : (
+                  <span className="text-ink-500">No workflow linked — Pass/Fail comes from the workflow run, so link or build one.</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {hasWf ? (
+                  <>
+                    <button onClick={onRunWorkflow} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-canvas-border bg-white text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer transition-colors">
+                      <Play size={13} /> Open executor
+                    </button>
+                    <button onClick={onRunInline} disabled={running} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-500 cursor-pointer transition-colors disabled:opacity-60">
+                      {running ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />} Run &amp; record
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={onLink} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-500 cursor-pointer transition-colors">
+                    <Link2 size={13} /> Link or build workflow
+                  </button>
+                )}
+              </div>
             </div>
+            {/* Automated result is read-only — it reflects the latest workflow run. */}
             <div className="flex items-center gap-2">
-              {hasWf ? (
-                <>
-                  <button onClick={onRunWorkflow} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-canvas-border bg-white text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer transition-colors">
-                    <Play size={13} /> Open executor
-                  </button>
-                  <button onClick={onRunInline} disabled={running} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-500 cursor-pointer transition-colors disabled:opacity-60">
-                    {running ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />} Run &amp; record
-                  </button>
-                </>
-              ) : (
-                <button onClick={onLink} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-500 cursor-pointer transition-colors">
-                  <Link2 size={13} /> Link or build workflow
-                </button>
-              )}
+              <span className="text-[0.6875rem] uppercase tracking-wider font-semibold text-ink-500">Result</span>
+              <ResultPill result={result} />
+              <span className="text-[0.6875rem] text-ink-400">from workflow run</span>
             </div>
-          </div>
+          </>
         ) : (
-          <p className="text-[0.75rem] text-ink-500">Confirm whether the control operated as intended this period, attach evidence below, and record your result.</p>
+          <>
+            <p className="text-[0.75rem] text-ink-500">Confirm whether the control operated as intended this period, attach evidence below, and record your result.</p>
+            {/* Manual result — self-assessment only. */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[0.6875rem] uppercase tracking-wider font-semibold text-ink-500">Result</span>
+              <button
+                onClick={() => onSetResult(result === 'Pass' ? 'Not tested' : 'Pass')}
+                className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-[0.75rem] font-semibold cursor-pointer transition-colors ${result === 'Pass' ? 'bg-compliant-50 border-compliant-700 text-compliant-700' : 'border-canvas-border text-ink-600 hover:border-compliant-700/40 hover:text-compliant-700'}`}
+              >
+                <CheckCircle2 size={14} /> Pass
+              </button>
+              <button
+                onClick={() => onSetResult(result === 'Fail' ? 'Not tested' : 'Fail')}
+                className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-[0.75rem] font-semibold cursor-pointer transition-colors ${result === 'Fail' ? 'bg-risk-50 border-risk-700 text-risk-700' : 'border-canvas-border text-ink-600 hover:border-risk-700/40 hover:text-risk-700'}`}
+              >
+                <XCircle size={14} /> Fail
+              </button>
+            </div>
+          </>
         )}
-
-        {/* Result capture — Pass / Fail (click the active one again to clear). */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[0.6875rem] uppercase tracking-wider font-semibold text-ink-500">Result</span>
-          <button
-            onClick={() => onSetResult(result === 'Pass' ? 'Not tested' : 'Pass')}
-            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-[0.75rem] font-semibold cursor-pointer transition-colors ${result === 'Pass' ? 'bg-compliant-50 border-compliant-700 text-compliant-700' : 'border-canvas-border text-ink-600 hover:border-compliant-700/40 hover:text-compliant-700'}`}
-          >
-            <CheckCircle2 size={14} /> Pass
-          </button>
-          <button
-            onClick={() => onSetResult(result === 'Fail' ? 'Not tested' : 'Fail')}
-            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-[0.75rem] font-semibold cursor-pointer transition-colors ${result === 'Fail' ? 'bg-risk-50 border-risk-700 text-risk-700' : 'border-canvas-border text-ink-600 hover:border-risk-700/40 hover:text-risk-700'}`}
-          >
-            <XCircle size={14} /> Fail
-          </button>
-        </div>
 
         <textarea
           value={remark}
