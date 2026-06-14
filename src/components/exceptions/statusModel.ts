@@ -136,6 +136,70 @@ export function exceptionActionsFor(
   return actions;
 }
 
+// ─── Actionable ID generation ──────────────────────────────────────────────
+// An exception classified as an actionable type gets an Actionable ID — the
+// identifier its management action plan is tracked under. IDs are sequential
+// (ACT-0001, ACT-0002, …); cases classified together in one bulk action share
+// a single ID. nextActionableId returns the next free ID given the live set.
+export function nextActionableId(items: { actionableId?: string }[]): string {
+  let max = 0;
+  for (const it of items) {
+    const n = it.actionableId ? parseInt(it.actionableId.replace(/\D/g, ''), 10) : NaN;
+    if (!Number.isNaN(n) && n > max) max = n;
+  }
+  return `ACT-${String(max + 1).padStart(4, '0')}`;
+}
+
+// ─── Bulk-action scope eligibility ─────────────────────────────────────────
+// When a single action is taken on an exception that belongs to a bulk group,
+// the scope chooser offers the linked cases. A linked member is only offered if
+// the same action validly applies to it right now — these predicates decide that,
+// reusing exceptionActionsFor so the rules never drift from the table CTAs.
+export type DrawerActionType =
+  | 'classify' | 'classification' | 'action' | 'complete' | 'requestDueDate' | 'reviewDueDate';
+
+const ACTION_FAMILY: ExceptionActionKind[] = ['reviewPlan', 'reviewAction', 'review'];
+
+/** The auditor 'action'-drawer stage a case is currently at, or null. Lets the
+ *  scope chooser only group members that are at the SAME stage as the opened case
+ *  (so one Accept/Reject can't be misapplied across plan- vs completion-review). */
+function auditorActionStage(ex: GrcException): ExceptionActionKind | null {
+  return exceptionActionsFor(ex, 'auditor').find(a => ACTION_FAMILY.includes(a.kind))?.kind ?? null;
+}
+
+/** Is `member` a valid target for `type` right now, for the given persona?
+ *  `opened` (the case the user clicked) is only used to phase-match the 'action'
+ *  drawer so the same decision applies cleanly to every selected member. */
+export function isMemberEligibleForDrawer(
+  member: GrcException,
+  type: DrawerActionType,
+  role: 'risk-owner' | 'auditor',
+  opened?: GrcException,
+): boolean {
+  switch (type) {
+    case 'classify':
+      return exceptionActionsFor(member, 'risk-owner').some(a => a.kind === 'classify' || a.kind === 'reclassify');
+    case 'classification':
+      return exceptionActionsFor(member, 'auditor').some(a => a.kind === 'reviewClassification');
+    case 'action': {
+      const memberStage = auditorActionStage(member);
+      const openedStage = opened ? auditorActionStage(opened) : null;
+      return memberStage !== null && (openedStage === null || memberStage === openedStage);
+    }
+    case 'complete':
+      return exceptionActionsFor(member, 'risk-owner').some(a => a.kind === 'markComplete');
+    case 'requestDueDate':
+      return role === 'risk-owner'
+        && ACTIONABLE_CLASSIFICATIONS.has(member.classification)
+        && !!member.dueDate
+        && member.dueDateRevision?.status !== 'Pending';
+    case 'reviewDueDate':
+      return role === 'auditor' && member.dueDateRevision?.status === 'Pending';
+    default:
+      return false;
+  }
+}
+
 /**
  * Derive the case Status from its classification and action-review state.
  * Returns the stored enum value ('Under Review' shows as 'In-Progress').

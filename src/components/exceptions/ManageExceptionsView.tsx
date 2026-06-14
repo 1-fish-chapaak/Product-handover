@@ -15,8 +15,8 @@ import {
   CalendarClock,
   Workflow,
 } from 'lucide-react';
-import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, type GrcException, type GrcExceptionSeverity, type GrcActivityEntry, type GrcExceptionClassification, type GrcReviewStatus, type GrcDueDateRevision, type GrcActionStatus, type GrcCaseDetail } from '../../data/mockData';
-import { deriveStatus, requiresActionPlan, type ExceptionActionKind } from './statusModel';
+import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, GRC_BULK_ACTIONS, type GrcException, type GrcExceptionSeverity, type GrcActivityEntry, type GrcExceptionClassification, type GrcReviewStatus, type GrcDueDateRevision, type GrcActionStatus, type GrcCaseDetail } from '../../data/mockData';
+import { deriveStatus, requiresActionPlan, isMemberEligibleForDrawer, nextActionableId, type ExceptionActionKind, type DrawerActionType } from './statusModel';
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
 import { QUERY_TABLES } from '../../data/queryGraphs';
 import type { ExceptionRole } from '../../hooks/useAppState';
@@ -32,6 +32,8 @@ import {
   ReviewDueDateDrawer,
   BulkRequestDueDateDrawer,
   BulkReviewDueDateDrawer,
+  BulkScopeChooser,
+  type ScopeCandidate,
 } from './ReviewDrawers';
 import ActionHubView, { CircularProgress } from './ActionHubView';
 import GenerateATRModal from './GenerateATRModal';
@@ -49,14 +51,22 @@ import AssignmentModal from './workflow/AssignmentModal';
 import WorkflowAssignButton from './workflow/WorkflowAssignButton';
 import type { Assignment } from './workflow/workflowTypes';
 
+// `scopeIds` is the set of cases the action applies to — always includes
+// `exceptionId` (the opened/primary case that drives the drawer's content).
+// Defaults to `[exceptionId]` for non-bulk cases (today's single-case behavior).
 type DrawerState =
-  | { type: 'classification'; exceptionId: string }
-  | { type: 'action'; exceptionId: string }
-  | { type: 'classify'; exceptionId: string }
-  | { type: 'complete'; exceptionId: string }
-  | { type: 'requestDueDate'; exceptionId: string }
-  | { type: 'reviewDueDate'; exceptionId: string }
+  | { type: DrawerActionType; exceptionId: string; scopeIds: string[] }
   | null;
+
+// Human label per action — used in the bulk scope chooser header.
+const ACTION_LABEL: Record<DrawerActionType, string> = {
+  classify: 'Classify',
+  classification: 'Review Classification',
+  action: 'Review',
+  complete: 'Mark Action Complete',
+  requestDueDate: 'Request Date Change',
+  reviewDueDate: 'Review Date Change',
+};
 
 interface ManageExceptionsViewProps {
   role: ExceptionRole;
@@ -228,10 +238,11 @@ function deriveExceptionsFromOutputTable(
     const flags: Array<'Overdue' | 'Bulk'> = [];
     let bulkId: string | undefined;
     let dueDate: string | undefined;
-    if (i % 3 === 0) {
-      flags.push('Bulk');
-      bulkId = i % 6 === 0 ? 'ACT001' : 'ACT002';
-    }
+    // Two demoable bulk groups so the scope chooser has genuinely linked cases:
+    //   ACT002 — two unclassified cases (the Risk Owner can classify them together)
+    //   ACT001 — two classified cases awaiting plan review (the Auditor reviews them together)
+    if (i === 0 || i === 5) { flags.push('Bulk'); bulkId = 'ACT002'; }
+    else if (i === 2 || i === 3) { flags.push('Bulk'); bulkId = 'ACT001'; }
     if (i % 5 === 0) {
       // Past due date so the dynamic Overdue chip renders via the dueDate path.
       dueDate = '2026-04-15';
@@ -280,6 +291,13 @@ function deriveExceptionsFromOutputTable(
       };
     }
 
+    // Seed an Actionable ID for the pre-classified actionable rows. The two
+    // ACT001-bundled rows (i=2,3) share one ID, mirroring a bulk classification.
+    let actionableId: string | undefined;
+    if (requiresActionPlan(classification)) {
+      actionableId = (i === 2 || i === 3) ? 'ACT-0002' : i === 1 ? 'ACT-0001' : i === 4 ? 'ACT-0003' : undefined;
+    }
+
     return {
       id: `EXC${String(i + 1).padStart(3, '0')}`,
       riskCategory,
@@ -296,6 +314,7 @@ function deriveExceptionsFromOutputTable(
       title: labelCol >= 0 ? `Case — ${row[labelCol]}` : `Case ${row[0]}`,
       flags: flags.length ? flags : undefined,
       bulkId,
+      actionableId,
       dueDate,
       dueDateRevision,
     };
@@ -341,6 +360,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
   const [atrModalOpen, setAtrModalOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [drawer, setDrawer] = useState<DrawerState>(null);
+  // When a single action targets a case in a bulk group, the chooser asks which
+  // linked cases to apply it to before the action drawer opens.
+  const [scopeChooser, setScopeChooser] = useState<
+    { type: DrawerActionType; exceptionId: string; candidates: ScopeCandidate[] } | null
+  >(null);
   const [bulkModalId, setBulkModalId] = useState<string | null>(null);
   const [sampleModalOpen, setSampleModalOpen] = useState(false);
   const [sampleCountLeft, setSampleCountLeft] = useState(5);
@@ -409,27 +433,54 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     [drawer, exceptions],
   );
 
-  // Shared action dispatcher — opens the same drawer the Exceptions-table CTAs
-  // open, so the Action Hub deep-dive and the Exceptions tab perform identical,
-  // recorded actions (the drawer's onDecision persists + logs activity).
+  const persona: 'risk-owner' | 'auditor' = role === 'risk-owner' ? 'risk-owner' : 'auditor';
+
+  const statusLabelFor = (ex: GrcException) => (ex.status === 'Under Review' ? 'In-Progress' : ex.status);
+  // Suffix appended to each case's activity log when an action spans a bulk group.
+  const bulkSuffix = (n: number) => (n > 1 ? ` · applied to ${n} linked cases` : '');
+
+  // ── Bulk-action funnel ──────────────────────────────────────────────────
+  // Every single action routes through beginAction. If the case belongs to a
+  // bulk group with more than one applicable member, the scope chooser opens
+  // first; otherwise the action drawer opens directly on just this case.
+  const openDrawerWithScope = (type: DrawerActionType, ex: GrcException, ids: string[]) => {
+    const scopeIds = ids.includes(ex.id) ? ids : [ex.id, ...ids];
+    setScopeChooser(null);
+    setDrawer({ type, exceptionId: ex.id, scopeIds });
+  };
+
+  const beginAction = (type: DrawerActionType, ex: GrcException) => {
+    // Resolve the group from the LIVE exceptions sharing this bulkId — robust to
+    // both the default mock and query-derived rows (whose bulkId assignment may
+    // differ from the static GRC_BULK_ACTIONS.caseIds).
+    const members = ex.bulkId ? exceptions.filter(e => e.bulkId === ex.bulkId) : [];
+    // No group, or a singleton group → act on this case alone.
+    if (members.length <= 1) { openDrawerWithScope(type, ex, [ex.id]); return; }
+
+    const candidates: ScopeCandidate[] = members.map(m => ({
+      id: m.id,
+      title: m.title,
+      isOpened: m.id === ex.id,
+      eligible: m.id === ex.id || isMemberEligibleForDrawer(m, type, persona, ex),
+      statusLabel: statusLabelFor(m),
+    }));
+    const eligibleCount = candidates.filter(c => c.eligible).length;
+    // Only the opened case applies → no chooser needed.
+    if (eligibleCount <= 1) { openDrawerWithScope(type, ex, [ex.id]); return; }
+
+    setScopeChooser({ type, exceptionId: ex.id, candidates });
+  };
+
+  // Shared action dispatcher — the Action Hub deep-dive and the Exceptions tab
+  // perform identical, recorded actions. Funnels through beginAction so the bulk
+  // scope chooser applies in both surfaces.
   const runExceptionAction = (kind: ExceptionActionKind, ex: GrcException) => {
-    switch (kind) {
-      case 'classify':
-      case 'reclassify':
-        setDrawer({ type: 'classify', exceptionId: ex.id });
-        break;
-      case 'markComplete':
-        setDrawer({ type: 'complete', exceptionId: ex.id });
-        break;
-      case 'reviewClassification':
-        setDrawer({ type: 'classification', exceptionId: ex.id });
-        break;
-      case 'reviewPlan':
-      case 'reviewAction':
-      case 'review':
-        setDrawer({ type: 'action', exceptionId: ex.id });
-        break;
-    }
+    const type: DrawerActionType =
+      kind === 'classify' || kind === 'reclassify' ? 'classify'
+      : kind === 'markComplete' ? 'complete'
+      : kind === 'reviewClassification' ? 'classification'
+      : 'action'; // reviewPlan | reviewAction | review
+    beginAction(type, ex);
   };
 
   const stats = useMemo(() => {
@@ -735,16 +786,15 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               onOpenClassification={(ex) => {
                 // Risk Owner gets the editable classify drawer to classify (Unclassified)
                 // or re-classify a rejected case; otherwise a read-only view.
-                if (role === 'risk-owner' && (ex.classification === 'Unclassified' || ex.actionReview === 'Rejected')) {
-                  setDrawer({ type: 'classify', exceptionId: ex.id });
-                } else {
-                  setDrawer({ type: 'classification', exceptionId: ex.id });
-                }
+                const t: DrawerActionType = (role === 'risk-owner' && (ex.classification === 'Unclassified' || ex.actionReview === 'Rejected'))
+                  ? 'classify'
+                  : 'classification';
+                beginAction(t, ex);
               }}
-              onOpenAction={(ex) => setDrawer({ type: 'action', exceptionId: ex.id })}
-              onMarkComplete={(ex) => setDrawer({ type: 'complete', exceptionId: ex.id })}
-              onRequestDueDate={(ex) => setDrawer({ type: 'requestDueDate', exceptionId: ex.id })}
-              onReviewDueDate={(ex) => setDrawer({ type: 'reviewDueDate', exceptionId: ex.id })}
+              onOpenAction={(ex) => beginAction('action', ex)}
+              onMarkComplete={(ex) => beginAction('complete', ex)}
+              onRequestDueDate={(ex) => beginAction('requestDueDate', ex)}
+              onReviewDueDate={(ex) => beginAction('reviewDueDate', ex)}
               onOpenActionable={(bulkId) => setBulkModalId(bulkId)}
               onAssign={(ex) => {
                 setSingleAssignCase(ex);
@@ -846,48 +896,62 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
       )}
 
       <AnimatePresence>
-        {drawer?.type === 'classify' && drawerException && (
+        {drawer?.type === 'classify' && drawerException && (() => {
+          const clScope = drawer.scopeIds;
+          // The Actionable ID this classify will use: reuse one already on a scoped
+          // case (keeps re-classify stable; a bulk set shares one), else the next free.
+          const existingActionableId = drawerException.actionableId
+            ?? clScope.map(id => exceptions.find(e => e.id === id)?.actionableId).find(Boolean);
+          const plannedActionableId = existingActionableId ?? nextActionableId(exceptions);
+          return (
           <ClassifyExceptionDrawer
             key="classify-drawer"
             exception={drawerException}
+            actionableId={plannedActionableId}
+            scopeCount={clScope.length}
             onClose={() => setDrawer(null)}
             onSave={(payload) => {
               const classification = payload.classification as GrcException['classification'];
               const nowIso = new Date().toISOString();
               const actionable = requiresActionPlan(classification);
-              const isReclassify = drawerException.classification !== 'Unclassified';
               const plans = actionable ? (payload.actionPlans ?? []) : [];
               const first = plans[0];
-
-              // ── Sync the Risk Owner's inputs into the shared case detail so the
-              //    Auditor's Review Action drawer shows exactly what was entered. ──
-              const existing = GRC_CASE_DETAILS[drawerException.id];
-              const detail: GrcCaseDetail = existing ?? {
-                classificationJustification: '', actionTitle: '', actionDueDate: '',
-                actionDescription: '', actionStatus: 'Pending', activityLog: [],
-              };
-              detail.classificationJustification = payload.comment ? `"${payload.comment}"` : detail.classificationJustification;
-              detail.actionPlans = actionable ? plans : undefined;
-              detail.actionTitle = actionable ? (first?.name || 'Action plan') : 'No action required · documented rationale';
-              detail.actionDescription = actionable ? (first?.details || '') : '';
-              detail.actionDueDate = actionable && first?.dueDate ? `Due ${fmtDue(first.dueDate)}` : '';
-              detail.actionStatus = 'Pending';
-              // Activity log — one entry per slide-panel action (synced to both personas).
+              const scope = drawer?.scopeIds ?? [drawerException.id];
+              // Actionable → all scoped cases share the planned Actionable ID; non-actionable clears it.
+              const assignedActionableId = actionable ? plannedActionableId : undefined;
               const planNote = actionable
                 ? ` · submitted ${plans.length} management action plan${plans.length === 1 ? '' : 's'} for review${first?.dueDate ? ` · due ${fmtDue(first.dueDate)}` : ''}`
                 : ' · no action plan required';
-              detail.activityLog = [{
-                id: `act-cls-${drawerException.id}-${Date.now()}`,
-                author: 'You',
-                role: 'Risk Owner',
-                timestamp: fmtStamp(nowIso),
-                message: `${isReclassify ? 'Re-classified' : 'Classified'} as ${classification}${planNote}`,
-                comment: payload.comment || undefined,
-              }, ...detail.activityLog];
-              GRC_CASE_DETAILS[drawerException.id] = detail;
+
+              // ── Sync the Risk Owner's inputs into each scoped case's detail so the
+              //    Auditor's Review Action drawer shows exactly what was entered. ──
+              scope.forEach(id => {
+                const target = exceptions.find(e => e.id === id);
+                if (!target) return;
+                const isReclassify = target.classification !== 'Unclassified';
+                const detail: GrcCaseDetail = GRC_CASE_DETAILS[id] ?? {
+                  classificationJustification: '', actionTitle: '', actionDueDate: '',
+                  actionDescription: '', actionStatus: 'Pending', activityLog: [],
+                };
+                detail.classificationJustification = payload.comment ? `"${payload.comment}"` : detail.classificationJustification;
+                detail.actionPlans = actionable ? plans : undefined;
+                detail.actionTitle = actionable ? (first?.name || 'Action plan') : 'No action required · documented rationale';
+                detail.actionDescription = actionable ? (first?.details || '') : '';
+                detail.actionDueDate = actionable && first?.dueDate ? `Due ${fmtDue(first.dueDate)}` : '';
+                detail.actionStatus = 'Pending';
+                detail.activityLog = [{
+                  id: `act-cls-${id}-${Date.now()}`,
+                  author: 'You',
+                  role: 'Risk Owner',
+                  timestamp: fmtStamp(nowIso),
+                  message: `${isReclassify ? 'Re-classified' : 'Classified'} as ${classification}${assignedActionableId ? ` · ${assignedActionableId}` : ''}${planNote}${bulkSuffix(scope.length)}`,
+                  comment: payload.comment || undefined,
+                }, ...detail.activityLog];
+                GRC_CASE_DETAILS[id] = detail;
+              });
 
               updateExceptions(prev => prev.map(e =>
-                e.id === drawerException.id
+                scope.includes(e.id)
                   ? {
                       ...e,
                       severity: payload.severity,
@@ -898,19 +962,24 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                       // non-actionable cases have no plan stage.
                       actionPhase: actionable ? ('plan-review' as const) : undefined,
                       status: deriveStatus(classification, 'Pending', 'Pending'),
+                      actionableId: assignedActionableId,
                       dueDate: (actionable && first?.dueDate) ? first.dueDate : (payload.dueDate ?? e.dueDate),
                       lastUpdated: nowIso.slice(0, 10),
                     }
                   : e
               ));
-              logEvent({ action: 'Update', description: `${isReclassify ? 'Re-classified' : 'Classified'} ${drawerException.id} as ${classification}`, module: 'Exceptions', entity: 'Exception' });
-              addToast({ type: 'success', message: actionable
-                ? (isReclassify ? 'Re-classified — management action plan sent to the Auditor.' : 'Classified — management action plan sent to the Auditor for review.')
-                : 'Classified — sent to the Auditor for review.' });
+              const isReclassify = drawerException.classification !== 'Unclassified';
+              logEvent({ action: 'Update', description: `${isReclassify ? 'Re-classified' : 'Classified'} ${scope.length > 1 ? `${scope.length} linked cases` : drawerException.id} as ${classification}${assignedActionableId ? ` (${assignedActionableId})` : ''}`, module: 'Exceptions', entity: 'Exception' });
+              addToast({ type: 'success', message: scope.length > 1
+                ? `Classified ${scope.length} linked cases as ${classification}${assignedActionableId ? ` · ${assignedActionableId}` : ''} — sent to the Auditor.`
+                : actionable
+                  ? (isReclassify ? `Re-classified — action plan ${assignedActionableId} sent to the Auditor.` : `Classified — action plan ${assignedActionableId} sent to the Auditor for review.`)
+                  : 'Classified — sent to the Auditor for review.' });
               setDrawer(null);
             }}
           />
-        )}
+          );
+        })()}
         {drawer?.type === 'requestDueDate' && drawerException && (
           <RequestDueDateDrawer
             key="request-duedate-drawer"
@@ -918,13 +987,13 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             onClose={() => setDrawer(null)}
             onSubmit={({ revisedDueDate, reason }) => {
               const nowIso = new Date().toISOString();
-              const prev = drawerException.dueDate;
+              const scope = drawer?.scopeIds ?? [drawerException.id];
               updateExceptions(list => list.map(e =>
-                e.id === drawerException.id
+                scope.includes(e.id)
                   ? {
                       ...e,
                       dueDateRevision: {
-                        previousDueDate: prev ?? '',
+                        previousDueDate: e.dueDate ?? '', // each case keeps its own previous date
                         revisedDueDate,
                         reason,
                         status: 'Pending' as const,
@@ -935,18 +1004,22 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                     }
                   : e
               ));
-              const detail = GRC_CASE_DETAILS[drawerException.id];
-              if (detail) {
+              scope.forEach(id => {
+                const target = exceptions.find(e => e.id === id);
+                const detail = GRC_CASE_DETAILS[id];
+                if (!detail) return;
                 detail.activityLog = [{
-                  id: `act-dd-req-${drawerException.id}-${Date.now()}`,
+                  id: `act-dd-req-${id}-${Date.now()}`,
                   author: 'You',
                   role: 'Risk Owner',
                   timestamp: fmtStamp(nowIso),
-                  message: `Requested revised due date: ${fmtDue(prev)} → ${fmtDue(revisedDueDate)}`,
+                  message: `Requested revised due date: ${fmtDue(target?.dueDate)} → ${fmtDue(revisedDueDate)}${bulkSuffix(scope.length)}`,
                   comment: reason,
                 }, ...detail.activityLog];
-              }
-              addToast({ type: 'success', message: 'Revised due date request sent to the auditor for approval.' });
+              });
+              addToast({ type: 'success', message: scope.length > 1
+                ? `Revised due date requested for ${scope.length} linked cases — sent to the auditor.`
+                : 'Revised due date request sent to the auditor for approval.' });
               setDrawer(null);
             }}
           />
@@ -958,10 +1031,10 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             onClose={() => setDrawer(null)}
             onDecision={(decision, comment) => {
               const nowIso = new Date().toISOString();
-              const rev = drawerException.dueDateRevision;
               const approved = decision === 'approve';
+              const scope = drawer?.scopeIds ?? [drawerException.id];
               updateExceptions(list => list.map(e => {
-                if (e.id !== drawerException.id || !e.dueDateRevision) return e;
+                if (!scope.includes(e.id) || !e.dueDateRevision) return e;
                 return {
                   ...e,
                   dueDate: approved ? e.dueDateRevision.revisedDueDate : e.dueDate,
@@ -975,22 +1048,27 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   lastUpdated: nowIso.slice(0, 10),
                 };
               }));
-              const detail = GRC_CASE_DETAILS[drawerException.id];
-              if (detail && rev) {
+              scope.forEach(id => {
+                const target = exceptions.find(e => e.id === id);
+                const rev = target?.dueDateRevision; // each case applies its own revision dates
+                const detail = GRC_CASE_DETAILS[id];
+                if (!detail || !rev) return;
                 detail.activityLog = [{
-                  id: `act-dd-dec-${drawerException.id}-${Date.now()}`,
+                  id: `act-dd-dec-${id}-${Date.now()}`,
                   author: 'You',
                   role: 'Auditor',
                   timestamp: fmtStamp(nowIso),
-                  message: approved
+                  message: (approved
                     ? `Approved revised due date → ${fmtDue(rev.revisedDueDate)}`
-                    : `Rejected revised due date request (stays ${fmtDue(rev.previousDueDate)})`,
+                    : `Rejected revised due date request (stays ${fmtDue(rev.previousDueDate)})`) + bulkSuffix(scope.length),
                   comment: comment || undefined,
                 }, ...detail.activityLog];
-              }
+              });
               addToast({
                 type: approved ? 'success' : 'info',
-                message: approved ? 'Revised due date approved and applied.' : 'Revised due date request rejected.',
+                message: scope.length > 1
+                  ? (approved ? `Revised due dates approved for ${scope.length} linked cases.` : `Revised due date requests rejected for ${scope.length} linked cases.`)
+                  : (approved ? 'Revised due date approved and applied.' : 'Revised due date request rejected.'),
               });
               setDrawer(null);
             }}
@@ -1016,33 +1094,39 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               const approved = decision === 'approve';
               const actionable = requiresActionPlan(drawerException.classification);
               const phase = drawerException.actionPhase;
-              const detail = GRC_CASE_DETAILS[drawerException.id];
-              const pushLog = (message: string) => {
-                if (!detail) return;
-                detail.activityLog = [{
-                  id: `act-rev-${drawerException.id}-${Date.now()}`,
-                  author: 'You', role: 'Auditor', timestamp: fmtStamp(nowIso), message,
-                  comment: comment || undefined,
-                }, ...detail.activityLog];
+              const scope = drawer?.scopeIds ?? [drawerException.id];
+              const scopeLabel = scope.length > 1 ? `${scope.length} linked cases` : drawerException.id;
+              // One decision applies to every scoped case (eligibility kept them in the same stage).
+              const pushLogAll = (message: string) => {
+                scope.forEach(id => {
+                  const d = GRC_CASE_DETAILS[id];
+                  if (!d) return;
+                  d.activityLog = [{
+                    id: `act-rev-${id}-${Date.now()}`,
+                    author: 'You', role: 'Auditor', timestamp: fmtStamp(nowIso),
+                    message: message + bulkSuffix(scope.length),
+                    comment: comment || undefined,
+                  }, ...d.activityLog];
+                });
               };
 
               // ── Stage 1 · Plan review — Auditor accepts/rejects the management action plan ──
               if (actionable && phase === 'plan-review') {
                 if (approved) {
-                  updateExceptions(list => list.map(e => e.id === drawerException.id
+                  updateExceptions(list => list.map(e => scope.includes(e.id)
                     ? { ...e, actionPhase: 'in-progress' as const, status: deriveStatus(e.classification, 'Pending', 'Pending'), lastUpdated: nowIso.slice(0, 10) }
                     : e));
-                  pushLog('Accepted the management action plan — Risk Owner to implement before the due date.');
-                  addToast({ type: 'success', message: 'Management action plan accepted — handed back to the Risk Owner.' });
+                  pushLogAll('Accepted the management action plan — Risk Owner to implement before the due date.');
+                  addToast({ type: 'success', message: scope.length > 1 ? `Plan accepted for ${scope.length} linked cases — handed back to the Risk Owner.` : 'Management action plan accepted — handed back to the Risk Owner.' });
                 } else {
-                  if (detail) detail.actionStatus = 'Discrepancy';
-                  updateExceptions(list => list.map(e => e.id === drawerException.id
+                  scope.forEach(id => { const d = GRC_CASE_DETAILS[id]; if (d) d.actionStatus = 'Discrepancy'; });
+                  updateExceptions(list => list.map(e => scope.includes(e.id)
                     ? { ...e, actionReview: 'Rejected' as const, actionPhase: undefined, status: deriveStatus(e.classification, 'Rejected', 'Discrepancy'), lastUpdated: nowIso.slice(0, 10) }
                     : e));
-                  pushLog('Rejected the management action plan — reopened for the Risk Owner to revise.');
-                  addToast({ type: 'info', message: 'Plan rejected — reopened for the Risk Owner.' });
+                  pushLogAll('Rejected the management action plan — reopened for the Risk Owner to revise.');
+                  addToast({ type: 'info', message: scope.length > 1 ? `Plan rejected for ${scope.length} linked cases — reopened for the Risk Owner.` : 'Plan rejected — reopened for the Risk Owner.' });
                 }
-                logEvent({ action: 'Update', description: `Plan review ${drawerException.id}: ${approved ? 'Accepted' : 'Rejected'}`, module: 'Exceptions', entity: 'Exception' });
+                logEvent({ action: 'Update', description: `Plan review ${scopeLabel}: ${approved ? 'Accepted' : 'Rejected'}`, module: 'Exceptions', entity: 'Exception' });
                 setDrawer(null);
                 return;
               }
@@ -1052,19 +1136,19 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               const newActionStatus: GrcActionStatus = approved
                 ? (actionable ? (implementation ?? 'Implemented') : 'Implemented')
                 : 'Discrepancy';
-              if (detail) detail.actionStatus = newActionStatus;
+              scope.forEach(id => { const d = GRC_CASE_DETAILS[id]; if (d) d.actionStatus = newActionStatus; });
               // Partially implemented → stays with the Risk Owner to finish; otherwise the stage is done.
               const nextPhase = (approved && actionable && implementation === 'Partially Implemented') ? ('in-progress' as const) : undefined;
-              updateExceptions(list => list.map(e => e.id === drawerException.id
+              updateExceptions(list => list.map(e => scope.includes(e.id)
                 ? { ...e, actionReview, actionPhase: nextPhase, status: deriveStatus(e.classification, actionReview, newActionStatus), lastUpdated: nowIso.slice(0, 10) }
                 : e));
-              pushLog(approved
+              pushLogAll(approved
                 ? (actionable ? `Reviewed the completed action — ${implementation ?? 'Implemented'}` : 'Approved the classification — no action plan required')
                 : (actionable ? 'Marked the completed action as Discrepancy — reopened for the Risk Owner' : 'Rejected the classification — back to the Risk Owner'));
-              logEvent({ action: 'Update', description: `Reviewed ${drawerException.id}: ${approved ? (implementation ?? 'Approved') : 'Rejected'}`, module: 'Exceptions', entity: 'Exception' });
-              addToast({ type: approved ? 'success' : 'info', message: approved
-                ? (nextPhase ? 'Marked partially implemented — back to the Risk Owner to finish.' : 'Action review approved — case closed.')
-                : 'Reopened for the Risk Owner.' });
+              logEvent({ action: 'Update', description: `Reviewed ${scopeLabel}: ${approved ? (implementation ?? 'Approved') : 'Rejected'}`, module: 'Exceptions', entity: 'Exception' });
+              addToast({ type: approved ? 'success' : 'info', message: scope.length > 1
+                ? (approved ? (nextPhase ? `Partially implemented — ${scope.length} linked cases back to the Risk Owner.` : `Action review approved for ${scope.length} linked cases.`) : `Reopened ${scope.length} linked cases for the Risk Owner.`)
+                : (approved ? (nextPhase ? 'Marked partially implemented — back to the Risk Owner to finish.' : 'Action review approved — case closed.') : 'Reopened for the Risk Owner.') });
               setDrawer(null);
             }}
             onViewBulk={(bulkId) => setBulkModalId(bulkId)}
@@ -1077,27 +1161,49 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             onClose={() => setDrawer(null)}
             onSubmit={({ note, evidence, implementation, comment }) => {
               const nowIso = new Date().toISOString();
-              const detail = GRC_CASE_DETAILS[drawerException.id];
-              if (detail) {
+              const scope = drawer?.scopeIds ?? [drawerException.id];
+              const evNote = evidence.length ? ` · ${evidence.length} evidence file${evidence.length === 1 ? '' : 's'} attached` : '';
+              scope.forEach(id => {
+                const detail = GRC_CASE_DETAILS[id];
+                if (!detail) return;
                 detail.completion = { note, evidence, completedAt: fmtStamp(nowIso), selfAssessment: implementation };
                 detail.activityLog = [{
-                  id: `act-done-${drawerException.id}-${Date.now()}`,
+                  id: `act-done-${id}-${Date.now()}`,
                   author: 'You',
                   role: 'Risk Owner',
                   timestamp: fmtStamp(nowIso),
-                  message: `Reported the action as ${implementation}${evidence.length ? ` · ${evidence.length} evidence file${evidence.length === 1 ? '' : 's'} attached` : ''} — submitted to the Auditor for review.`,
+                  message: `Reported the action as ${implementation}${evNote} — submitted to the Auditor for review${bulkSuffix(scope.length)}`,
                   comment: comment || note || undefined,
                 }, ...detail.activityLog];
-              }
-              updateExceptions(list => list.map(e => e.id === drawerException.id
+              });
+              updateExceptions(list => list.map(e => scope.includes(e.id)
                 ? { ...e, actionPhase: 'completion-review' as const, status: deriveStatus(e.classification, 'Pending', 'Pending'), lastUpdated: nowIso.slice(0, 10) }
                 : e));
-              logEvent({ action: 'Update', description: `Marked ${drawerException.id} action complete — Risk Owner reports ${implementation}`, module: 'Exceptions', entity: 'Exception' });
-              addToast({ type: 'success', message: `Submitted to the Auditor for review — you reported "${implementation}".` });
+              logEvent({ action: 'Update', description: `Marked ${scope.length > 1 ? `${scope.length} linked cases` : drawerException.id} action complete — Risk Owner reports ${implementation}`, module: 'Exceptions', entity: 'Exception' });
+              addToast({ type: 'success', message: scope.length > 1
+                ? `Submitted ${scope.length} linked cases to the Auditor — you reported "${implementation}".`
+                : `Submitted to the Auditor for review — you reported "${implementation}".` });
               setDrawer(null);
             }}
           />
         )}
+        {scopeChooser && (() => {
+          const opened = exceptions.find(e => e.id === scopeChooser.exceptionId);
+          if (!opened || !opened.bulkId) return null;
+          const group = GRC_BULK_ACTIONS[opened.bulkId];
+          return (
+            <BulkScopeChooser
+              key="scope-chooser"
+              groupId={opened.bulkId}
+              groupTitle={group?.title ?? ''}
+              actionLabel={ACTION_LABEL[scopeChooser.type]}
+              openedId={opened.id}
+              candidates={scopeChooser.candidates}
+              onClose={() => setScopeChooser(null)}
+              onConfirm={(ids) => openDrawerWithScope(scopeChooser.type, opened, ids)}
+            />
+          );
+        })()}
         {bulkModalId && (
           <BulkActionGroupModal
             key="bulk-modal"
