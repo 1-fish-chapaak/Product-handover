@@ -47,10 +47,11 @@ import type { LibraryWorkflow } from '../workflow/WorkflowLibraryView';
 import LinkWorkflowModal from './LinkWorkflowModal';
 import { EngagementWorkspaceProvider, useEngagementWorkspace } from './engagementWorkspace';
 import ActionTrailReportModal from './ActionTrailReportModal';
+import ControlTestingWorkspace from '../control-testing/ControlTestingWorkspace';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type TabId = 'overview' | 'racm' | 'controls' | 'workflows' | 'evidence' | 'exceptions' | 'trail' | 'working-paper' | 'config';
+type TabId = 'overview' | 'racm' | 'controls' | 'control-testing' | 'workflows' | 'evidence' | 'exceptions' | 'trail' | 'working-paper' | 'config';
 
 interface Props {
   engagementId: string;
@@ -75,6 +76,7 @@ const TAB_META: Record<TabId, { icon: React.ElementType; chip: string }> = {
   overview:        { icon: LayoutDashboard, chip: 'bg-blue-50 text-blue-600' },
   racm:            { icon: Table2,          chip: 'bg-violet-50 text-violet-600' },
   controls:        { icon: ShieldCheck,     chip: 'bg-emerald-50 text-emerald-600' },
+  'control-testing': { icon: ListChecks,    chip: 'bg-indigo-50 text-indigo-600' },
   workflows:       { icon: Workflow,        chip: 'bg-cyan-50 text-cyan-600' },
   evidence:        { icon: FolderOpen,      chip: 'bg-amber-50 text-amber-600' },
   exceptions:      { icon: AlertTriangle,   chip: 'bg-rose-50 text-rose-600' },
@@ -87,12 +89,12 @@ function tabsForType(type: EngType): { id: TabId; label: string; icon: React.Ele
   const mk = (id: TabId, label: string) => ({ id, label, icon: TAB_META[id].icon });
   switch (type) {
     case 'Automation':
-      return [mk('overview', 'Overview'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
+      return [mk('overview', 'Overview'), mk('control-testing', 'Control Testing'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Compliance':
       // Workflows tab removed — attribute→workflow mapping now lives inline on the Controls tab.
-      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('evidence', 'Evidence'), mk('working-paper', 'Working Paper'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
+      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('control-testing', 'Control Testing'), mk('evidence', 'Evidence'), mk('working-paper', 'Working Paper'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Internal Audit':
-      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('working-paper', 'Audit Report'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
+      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('control-testing', 'Control Testing'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('working-paper', 'Audit Report'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
   }
 }
 
@@ -517,6 +519,11 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 onCreateWorkflow={() => onCreateWorkflowForEngagement?.(eng.name)}
                 onTestEvidence={(controlId) => { setEvidenceTarget(controlId); setActiveTab('evidence'); }}
               />
+            )}
+
+            {/* ═══ CONTROL TESTING (all types) — CSA → independent audit loop ═══ */}
+            {activeTab === 'control-testing' && (
+              <ControlTestingWorkspace engagementName={eng.name} />
             )}
 
             {/* ═══ WORKFLOWS (all types) — grouped by sub-process accordion ═══ */}
