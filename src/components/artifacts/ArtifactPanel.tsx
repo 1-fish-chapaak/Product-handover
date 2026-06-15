@@ -27,6 +27,10 @@ interface ArtifactPanelProps {
    *  Used by the "Edit assumptions" action on the Plan tab so users adjust
    *  the run via natural language instead of an inline editor. */
   onComposeInChat?: (draft: string) => void;
+  /** Optional override for the Plan tab body. When provided, it replaces the
+   *  default (chat) PlanTab — used by the Workflow Executor to show that
+   *  workflow's own plan while reusing the rest of this QnA workspace. */
+  planSlot?: React.ReactNode;
 }
 
 // Counts must match PLAN_STEPS.length and QUERY_SOURCES.length defined below.
@@ -1096,7 +1100,7 @@ function HighlightToolbar({ scopeRef }: { scopeRef: React.RefObject<HTMLDivEleme
   );
 }
 
-export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpenInKnowledgeHub, onComposeInChat, onShareResults }: ArtifactPanelProps) {
+export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpenInKnowledgeHub, onComposeInChat, onShareResults, planSlot }: ArtifactPanelProps) {
   const contentRef = useRef<HTMLDivElement | null>(null);
   return (
     <motion.div
@@ -1212,7 +1216,7 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
             exit={{ opacity: 0, y: -5 }}
             transition={{ duration: 0.15 }}
           >
-            {activeTab === 'plan' && <PlanTab onComposeInChat={onComposeInChat} />}
+            {activeTab === 'plan' && (planSlot ?? <PlanTab onComposeInChat={onComposeInChat} />)}
             {activeTab === 'code' && <CodeTab />}
             {activeTab === 'sources' && <SourcesTab onOpenInKnowledgeHub={onOpenInKnowledgeHub} onComposeInChat={onComposeInChat} />}
           </motion.div>
