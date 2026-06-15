@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
 import { motion } from 'motion/react';
-import { AlertTriangle, ArrowRight, Clock, FileWarning, Inbox, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Clock, Download, FileWarning, Inbox, ShieldCheck, Sparkles } from 'lucide-react';
 import { useIcfr } from './store';
+import { useToast } from '../shared/Toast';
+import { downloadIcfrWorkingPaper } from './icfrWorkingPaper';
 import { controlConclusion, courtFor, engagementProgress, formatINR, severityOf } from './helpers';
 import { Bar, ConclusionPill, CourtBadge, NatureChip, SeverityPill, StagePill } from './parts';
 import { cn } from '../../lib/cn';
@@ -9,11 +11,23 @@ import type { Control } from './types';
 
 export default function CommandCenter() {
   const { eng, role, openControl, setView } = useIcfr();
+  const { addToast } = useToast();
   const p = useMemo(() => engagementProgress(eng), [eng]);
+  const exportWp = () => { downloadIcfrWorkingPaper(eng); addToast({ type: 'success', title: 'Working paper exported', message: `Working_Paper_ICFR_${eng.code}.xlsx` }); };
 
   const needsYou = eng.controls.filter(c => courtFor(c, eng.tasks) === role && c.stage !== 'signed-off');
   const waiting = eng.controls.filter(c => courtFor(c, eng.tasks) === 'risk-owner');
   const reviewNotes = eng.tasks.filter(t => t.assigneeRole === 'auditor' && t.status === 'open');
+
+  const next = (() => {
+    const due = needsYou.find(c => c.stage === 'evidence-received' || c.stage === 'tod' || c.stage === 'toe');
+    if (due) return { text: `Continue testing ${due.id} — ${due.description}`, run: () => openControl(due.id) };
+    const ns = eng.controls.find(c => c.stage === 'not-started');
+    if (ns) return { text: `Request PBC for ${ns.id}`, run: () => openControl(ns.id) };
+    if (reviewNotes[0]) return { text: `Clear a review note on ${reviewNotes[0].controlId}`, run: () => openControl(reviewNotes[0]!.controlId) };
+    if (eng.deficiencies.length) return { text: `Evaluate ${eng.deficiencies.length} deficiency${eng.deficiencies.length === 1 ? '' : 'ies'}`, run: () => setView('deficiencies') };
+    return null;
+  })();
 
   return (
     <div className="space-y-5">
@@ -24,10 +38,19 @@ export default function CommandCenter() {
           <p className="text-[13px] text-ink-500 mt-0.5">{eng.entity} · {eng.framework} · {eng.periodStart} – {eng.periodEnd}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={exportWp} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-brand-600 text-white text-[13px] font-semibold hover:bg-brand-500 cursor-pointer transition-colors"><Download size={14} /> Working paper</button>
           <button onClick={() => setView('scope')} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[13px] font-semibold text-ink-700 hover:border-brand-300 cursor-pointer transition-colors">Scope & materiality</button>
           <button onClick={() => setView('deficiencies')} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[13px] font-semibold text-ink-700 hover:border-brand-300 cursor-pointer transition-colors"><FileWarning size={14} /> Deficiencies <span className="tabular-nums text-risk-700">{eng.deficiencies.length}</span></button>
         </div>
       </div>
+
+      {/* next best action (FTUE guidance) */}
+      {next && (
+        <button onClick={next.run} className="w-full flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50/50 px-4 py-3 hover:bg-brand-50 cursor-pointer transition-colors group text-left">
+          <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-brand-800 min-w-0"><Sparkles size={15} className="text-brand-600 shrink-0" /> <span className="truncate">Next: {next.text}</span></span>
+          <ArrowRight size={16} className="text-brand-600 group-hover:translate-x-0.5 transition-transform shrink-0" />
+        </button>
+      )}
 
       {/* progress strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

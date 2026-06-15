@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, RefreshCw } from 'lucide-react';
 import { IcfrProvider, useIcfr } from './store';
 import { RoleSwitcher } from './parts';
 import CommandCenter from './CommandCenter';
@@ -8,7 +8,7 @@ import RiskOwnerPortal from './RiskOwnerPortal';
 import { DeficienciesView, ScopeView } from './extraViews';
 
 function Inner({ onBack }: { onBack?: () => void }) {
-  const { eng, role, view, setRole } = useIcfr();
+  const { eng, role, view, setRole, togglePeriod } = useIcfr();
 
   const body = role === 'risk-owner'
     ? <RiskOwnerPortal />
@@ -28,7 +28,7 @@ function Inner({ onBack }: { onBack?: () => void }) {
               <span className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center"><ShieldCheck size={16} className="text-white" /></span>
               <span className="font-mono text-[12px] font-semibold text-ink-700">{eng.code}</span>
               <span className="text-[13px] font-semibold text-ink-900 truncate">{eng.name}</span>
-              <span className="text-[11px] font-semibold text-brand-700 bg-brand-50 px-2 h-5 inline-flex items-center rounded-full">{eng.period}</span>
+              <button onClick={togglePeriod} title="Switch period — Interim ⇄ Year-end (roll-forward)" className="text-[11px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 px-2 h-5 inline-flex items-center gap-1 rounded-full cursor-pointer transition-colors">{eng.period}<RefreshCw size={10} /></button>
             </span>
           </div>
           <RoleSwitcher role={role} onChange={setRole} />

@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowLeft, CheckCircle2, XCircle, Lock, Bot, FlaskConical, ClipboardCheck,
-  Database, Shuffle, ShieldCheck, FileWarning, User, Clock, ArrowRight,
+  Database, Shuffle, ShieldCheck, FileWarning, User, Clock, ArrowRight, Download, ShieldQuestion,
 } from 'lucide-react';
 import { useIcfr } from './store';
+import { useToast } from '../shared/Toast';
+import { downloadControlWorkingPaper } from './icfrWorkingPaper';
 import { attributeEffective, controlConclusion, courtFor, formatINR } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, ResultChip, StagePill } from './parts';
 import { cn } from '../../lib/cn';
@@ -12,6 +14,7 @@ import type { Attribute, Control, TestResult } from './types';
 
 export default function ControlWorkspace() {
   const { eng, selectedControlId, back, recordTod, recordToe, setStage } = useIcfr();
+  const { addToast } = useToast();
   const control = eng.controls.find(c => c.id === selectedControlId);
   const [selAttrId, setSelAttrId] = useState(control?.attributes[0]?.id ?? '');
   useEffect(() => { setSelAttrId(control?.attributes[0]?.id ?? ''); }, [control?.id, control?.attributes]);
@@ -90,18 +93,23 @@ export default function ControlWorkspace() {
         </AnimatePresence>
       )}
 
+      <ReviewSection control={control} />
+
       {/* conclude / deficiency */}
       <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex items-center justify-between gap-3 flex-wrap">
         <div className="text-[12.5px] text-ink-600 inline-flex items-center gap-2">
           <StagePill stage={control.stage} />
           {def && <span className="inline-flex items-center gap-1.5 text-risk-700"><FileWarning size={14} /> {def.description}</span>}
         </div>
-        {concl === 'Effective' && control.stage !== 'signed-off' && control.stage !== 'in-review' && (
-          <button onClick={() => setStage(control.id, 'in-review')} className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-brand-600 text-white text-[13px] font-semibold hover:bg-brand-500 cursor-pointer transition-colors">Send to reviewer <ArrowRight size={15} /></button>
-        )}
-        {concl === 'Ineffective' && (
-          <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-risk-700"><FileWarning size={15} /> Raised as a deficiency — see Deficiencies</span>
-        )}
+        <div className="flex items-center gap-2">
+          <button onClick={() => { downloadControlWorkingPaper(eng, control); addToast({ type: 'success', message: `Working_Paper_${control.id}.xlsx` }); }} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-canvas-border text-[13px] font-semibold text-ink-700 hover:border-brand-300 cursor-pointer transition-colors"><Download size={14} /> Working paper</button>
+          {concl === 'Effective' && control.stage !== 'signed-off' && control.stage !== 'in-review' && (
+            <button onClick={() => setStage(control.id, 'in-review')} className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-brand-600 text-white text-[13px] font-semibold hover:bg-brand-500 cursor-pointer transition-colors">Send to reviewer <ArrowRight size={15} /></button>
+          )}
+          {concl === 'Ineffective' && (
+            <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-risk-700"><FileWarning size={15} /> Raised as a deficiency</span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -179,6 +187,52 @@ function PassFail({ current, onPass, onFail, failLabel }: { current: TestResult;
       <button onClick={onPass} className={cn('inline-flex items-center gap-1.5 h-9 px-4 rounded-lg text-[13px] font-semibold border transition-colors cursor-pointer', current === 'Pass' ? 'bg-compliant-50 border-compliant-700 text-compliant-700' : 'border-canvas-border text-ink-600 hover:border-compliant-700/40 hover:text-compliant-700')}><CheckCircle2 size={15} /> Pass</button>
       <button onClick={onFail} className={cn('inline-flex items-center gap-1.5 h-9 px-4 rounded-lg text-[13px] font-semibold border transition-colors cursor-pointer', current === 'Fail' ? 'bg-risk-50 border-risk-700 text-risk-700' : 'border-canvas-border text-ink-600 hover:border-risk-700/40 hover:text-risk-700')}><XCircle size={15} /> {failLabel}</button>
     </div>
+  );
+}
+
+// ─── Review section (role-aware) ─────────────────────────────────────────────────
+
+function ReviewSection({ control }: { control: Control }) {
+  const { eng, role, raiseReviewNote, signOff, clearTask } = useIcfr();
+  const { addToast } = useToast();
+  const [draft, setDraft] = useState('');
+  const notes = eng.tasks.filter(t => t.controlId === control.id && t.type === 'review-note');
+  const open = notes.filter(t => t.status === 'open');
+  const concl = controlConclusion(control);
+
+  if (role === 'risk-owner') return null;
+  if (role === 'auditor' && open.length === 0) return null;
+  if (role === 'reviewer' && concl !== 'Effective' && concl !== 'Ineffective' && control.stage !== 'in-review' && control.stage !== 'signed-off') return null;
+
+  const doSignOff = () => {
+    const ok = signOff(control.id);
+    addToast({ type: ok ? 'success' : 'warning', title: ok ? 'Control signed off' : 'Open notes remain', message: ok ? `${control.id} signed off.` : 'Resolve the open review notes first.' });
+  };
+  const addNote = () => { if (!draft.trim()) return; raiseReviewNote(control.id, draft.trim()); setDraft(''); addToast({ type: 'info', message: 'Review note sent to the preparer' }); };
+
+  return (
+    <section className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
+      <header className="px-4 py-3 border-b border-canvas-border flex items-center justify-between">
+        <h3 className="inline-flex items-center gap-2 text-[13px] font-semibold text-ink-800"><ShieldQuestion size={15} className="text-evidence-600" /> Review {role === 'reviewer' ? '· you' : ''}</h3>
+        {control.stage === 'signed-off' && <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Signed off</span>}
+      </header>
+      <div className="p-4 space-y-3">
+        {notes.length === 0 && role === 'reviewer' && <p className="text-[12.5px] text-ink-500">No review notes. Add one for the preparer, or sign off.</p>}
+        {notes.map(n => (
+          <div key={n.id} className={cn('rounded-lg border px-3 py-2 flex items-start justify-between gap-3', n.status === 'open' ? 'border-mitigated-700/30 bg-mitigated-50/40' : 'border-canvas-border bg-paper-50/40')}>
+            <div className="min-w-0"><div className="text-[12.5px] text-ink-800">{n.thread[n.thread.length - 1]?.text ?? n.detail}</div><div className="text-[11px] text-ink-400 mt-0.5">{n.raisedBy} · {n.status === 'open' ? 'open' : 'cleared'}</div></div>
+            {role === 'auditor' && n.status === 'open' && <button onClick={() => { clearTask(n.id); addToast({ type: 'success', message: 'Review note cleared' }); }} className="shrink-0 inline-flex items-center gap-1 h-7 px-2.5 rounded-md bg-compliant-700 text-white text-[12px] font-semibold cursor-pointer">Clear</button>}
+          </div>
+        ))}
+        {role === 'reviewer' && control.stage !== 'signed-off' && (
+          <div className="flex items-center gap-2">
+            <input value={draft} onChange={e => setDraft(e.target.value)} placeholder="Add a review note for the preparer…" className="flex-1 h-9 px-3 rounded-lg border border-canvas-border text-[12.5px] focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+            <button onClick={addNote} className="h-9 px-3 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-700 hover:border-brand-300 cursor-pointer transition-colors">Add note</button>
+            <button onClick={doSignOff} disabled={open.length > 0 || concl !== 'Effective'} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-500 cursor-pointer disabled:bg-brand-100 disabled:text-brand-300 disabled:cursor-not-allowed inline-flex items-center gap-1.5 transition-colors"><ShieldCheck size={14} /> Sign off</button>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 

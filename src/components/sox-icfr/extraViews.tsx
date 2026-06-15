@@ -5,8 +5,10 @@ import { SeverityPill } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
 
+const MW_INDICATORS = ['Restatement', 'Senior-mgmt fraud', 'Material misstatement ICFR missed', 'Ineffective governance'];
+
 export function DeficienciesView() {
-  const { eng, back, openControl } = useIcfr();
+  const { eng, back, openControl, updateDeficiency } = useIcfr();
   const M = eng.materiality;
   return (
     <div className="space-y-4">
@@ -38,13 +40,34 @@ export function DeficienciesView() {
                 <p className="text-[13px] text-ink-800 leading-relaxed">{d.description}</p>
                 <p className="text-[12px] text-ink-500 mt-1"><span className="font-semibold">Root cause:</span> {d.rootCause}</p>
 
-                {/* the computed severity derivation */}
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2 text-[12px]">
-                  <Cell label="Likelihood" value={d.likelihood} tone={isReasonablyPossible(d.likelihood) ? 'text-mitigated-700' : 'text-ink-700'} />
-                  <Cell label="Magnitude" value={`${formatINR(d.magnitude)} ${material ? '≥' : '<'} materiality`} tone={material ? 'text-risk-700' : 'text-ink-700'} />
-                  <Cell label="MW indicators" value={d.mwIndicators.length ? d.mwIndicators.join(', ') : 'None'} tone={d.mwIndicators.length ? 'text-risk-700' : 'text-ink-700'} />
+                {/* editable severity inputs — recomputed live */}
+                <div className="mt-3 rounded-lg border border-canvas-border p-3 space-y-2.5">
+                  <div className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Severity inputs — recomputed live</div>
+                  <div className="flex items-center gap-2 flex-wrap text-[12px]">
+                    <span className="text-ink-500 w-[120px]">Likelihood</span>
+                    {(['Remote', 'Reasonably possible', 'Probable'] as const).map(l => (
+                      <button key={l} onClick={() => updateDeficiency(d.id, { likelihood: l })} className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', d.likelihood === l ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{l}</button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 text-[12px]">
+                    <span className="text-ink-500 w-[120px]">Magnitude ₹</span>
+                    <input type="number" value={d.magnitude} onChange={e => updateDeficiency(d.id, { magnitude: Number(e.target.value) || 0 })} className="h-8 w-44 px-2.5 rounded-md border border-canvas-border text-[12.5px] tabular-nums focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+                    <span className={cn('text-[11.5px]', material ? 'text-risk-700 font-semibold' : 'text-ink-400')}>{material ? '≥' : '<'} materiality {formatINR(M)}</span>
+                  </div>
+                  <div className="flex items-start gap-2 text-[12px] flex-wrap">
+                    <span className="text-ink-500 w-[120px] mt-1">MW indicators</span>
+                    {MW_INDICATORS.map(ind => { const on = d.mwIndicators.includes(ind); return <button key={ind} onClick={() => updateDeficiency(d.id, { mwIndicators: on ? d.mwIndicators.filter(x => x !== ind) : [...d.mwIndicators, ind] })} className={cn('h-7 px-2.5 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors', on ? 'bg-risk-50 border-risk-700/40 text-risk-700' : 'border-canvas-border text-ink-500 hover:bg-paper-50')}>{ind}</button>; })}
+                  </div>
+                  <div className="flex items-center gap-2 text-[12px] flex-wrap">
+                    <span className="text-ink-500 w-[120px]">Compensating control</span>
+                    <select value={d.compensatingControlId ?? ''} onChange={e => updateDeficiency(d.id, { compensatingControlId: e.target.value || undefined })} className="h-8 px-2.5 rounded-md border border-canvas-border text-[12px] bg-white cursor-pointer focus:outline-none focus:border-brand-300">
+                      <option value="">None</option>
+                      {eng.controls.filter(c => c.id !== d.controlId).map(c => <option key={c.id} value={c.id}>{c.id}</option>)}
+                    </select>
+                    {d.compensatingControlId && <span className="text-ink-400 text-[11px]">caps severity — never clears the deficiency</span>}
+                  </div>
+                  <p className="text-[12px] text-ink-600 pt-2 border-t border-canvas-border">→ {d.likelihood} × {formatINR(d.magnitude)} (vs {formatINR(M)}){d.mwIndicators.length ? ' + MW indicator' : ''} ⇒ <span className="font-bold text-ink-800">{sev}</span></p>
                 </div>
-                <p className="text-[11.5px] text-ink-400 mt-1.5">→ {d.likelihood} × {formatINR(d.magnitude)} (vs {formatINR(M)}) ⇒ <span className="font-semibold text-ink-600">{sev}</span></p>
 
                 {/* remediation (tracked; does not lower severity) */}
                 <div className="mt-3 rounded-lg border border-canvas-border bg-paper-50/50 px-3 py-2.5">
