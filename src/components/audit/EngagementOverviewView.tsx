@@ -61,6 +61,8 @@ interface Props {
   onLaunchWorkflowBuilder?: (seedPrompt: string) => void;
   /** Open a workflow's detail page (same route the Workflow Library uses). */
   onOpenWorkflow?: (libraryWorkflowId: string) => void;
+  /** Open the Workflow Executor for a workflow (used to test an automated control attribute). */
+  onRunWorkflow?: (workflowId: string) => void;
   /** Launch the Ask IRA workflow-builder chat scoped to this engagement. */
   onCreateWorkflowForEngagement?: (engagementName: string) => void;
 }
@@ -223,7 +225,7 @@ function healthTier(pct: number): { bar: string; text: string } {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function EngagementDetailView({ engagementId, onBack, onOpenExecution, onOpenRacmFullEditor, onLaunchWorkflowBuilder, onOpenWorkflow, onCreateWorkflowForEngagement }: Props) {
+export default function EngagementDetailView({ engagementId, onBack, onOpenExecution, onOpenRacmFullEditor, onLaunchWorkflowBuilder, onOpenWorkflow, onRunWorkflow, onCreateWorkflowForEngagement }: Props) {
   const { addToast } = useToast();
   const { openShare } = useShare();
   const engagement = useMemo(() => ENGAGEMENTS.find(e => e.id === engagementId), [engagementId]);
@@ -516,6 +518,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 engagement={eng}
                 onCreateWorkflow={() => onCreateWorkflowForEngagement?.(eng.name)}
                 onTestEvidence={(controlId) => { setEvidenceTarget(controlId); setActiveTab('evidence'); }}
+                onRunWorkflow={onRunWorkflow}
               />
             )}
 

@@ -1,8 +1,6 @@
-import { useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Share2, Download, FileText, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Share2, Download } from 'lucide-react';
 import AtrDocument from './AtrDocument';
-import GenerateATRModal from '../exceptions/GenerateATRModal';
 import type { AtrReportData } from './atrTypes';
 import { useToast } from '../shared/Toast';
 
@@ -16,41 +14,14 @@ interface AtrReport {
 }
 
 /** Saved-ATR report page. Renders the generated Action Taken Report (the same
- *  content shown in the preview); the document's own banner is the single header
- *  and carries the Manage Exceptions + Generate ATR CTAs. */
+ *  content shown in the preview); the document's own banner is the sole header. */
 export default function AtrReportView({ report, onBack, onShare }: {
   report: AtrReport;
   onBack: () => void;
   onShare?: () => void;
 }) {
   const { addToast } = useToast();
-  const [atrModalOpen, setAtrModalOpen] = useState(false);
   const { meta, observations, insights } = report.atrData;
-
-  const openManageExceptions = () => {
-    const url = `${window.location.pathname}?view=manage-exceptions&from=Q01`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
-  // CTAs live inside the document banner (white pills on the purple header).
-  const headerActions = (
-    <>
-      <button
-        onClick={openManageExceptions}
-        title="Review & classify exceptions · opens in a new tab"
-        className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.18)]"
-      >
-        <ShieldAlert size={14} /> Manage Exceptions
-      </button>
-      <button
-        onClick={() => setAtrModalOpen(true)}
-        title="Generate Action Taken Report"
-        className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.18)]"
-      >
-        <FileText size={14} /> Generate ATR
-      </button>
-    </>
-  );
 
   return (
     <motion.div
@@ -82,11 +53,9 @@ export default function AtrReportView({ report, onBack, onShare }: {
 
         {/* The report document — its banner is the sole header. */}
         <div className="pb-10">
-          <AtrDocument meta={meta} observations={observations} insights={insights} headerActions={headerActions} maxWidthClass="max-w-none" />
+          <AtrDocument meta={meta} observations={observations} insights={insights} maxWidthClass="max-w-none" />
         </div>
       </div>
-
-      {atrModalOpen && <GenerateATRModal onClose={() => setAtrModalOpen(false)} />}
     </motion.div>
   );
 }

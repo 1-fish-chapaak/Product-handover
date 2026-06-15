@@ -16,6 +16,8 @@ import {
   Plus,
   Trash2,
   Check,
+  Sparkles,
+  Hash,
 } from 'lucide-react';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
 import Gated from '../shared/Gated';
@@ -40,11 +42,37 @@ const CLASSIFICATION_STYLE: Record<GrcExceptionClassification, string> = {
   'False Positive':            'bg-[#EEEEF1] text-ink-600',
 };
 
-const SEVERITY_STYLE: Record<GrcExceptionSeverity, string> = {
-  High:   'bg-high-50 text-high-700',
-  Medium: 'bg-mitigated-50 text-mitigated-700',
-  Low:    'bg-compliant-50 text-compliant-700',
-};
+// ─── Suggested (auto-typed, editable) decision message ────────────────────
+// When a decision/outcome is chosen, the comment auto-fills with a relatable
+// message the user can edit before submitting. Manual edits are preserved: the
+// field only re-fills while it's empty or still holds the previous suggestion.
+function useSuggestedMessage(suggested: string, value: string, setValue: (v: string) => void) {
+  const lastRef = useRef('');
+  useEffect(() => {
+    if (suggested && (value.trim() === '' || value === lastRef.current)) setValue(suggested);
+    lastRef.current = suggested;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggested]);
+  return () => { setValue(suggested); lastRef.current = suggested; };
+}
+
+// A clickable chip that re-applies the suggested message to the comment field.
+function SuggestedChip({ message, onApply }: { message: string; onApply: () => void }) {
+  if (!message) return null;
+  return (
+    <button
+      type="button"
+      onClick={onApply}
+      title="Use this suggested message"
+      className="group/sc w-full text-left mb-2 inline-flex items-start gap-1.5 px-2.5 py-1.5 bg-brand-50/70 border border-brand-100 rounded-[8px] text-[11.5px] text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+    >
+      <Sparkles size={12} className="mt-[1px] shrink-0 text-brand-500" />
+      <span className="leading-snug">
+        <span className="font-semibold">Suggested:</span> {message}
+      </span>
+    </button>
+  );
+}
 
 // Combined Action Review status — folds the auditor decision and the
 // implementation outcome into a single label.
@@ -75,6 +103,13 @@ const COMBINED_REVIEW_LABEL: Record<CombinedActionReview, string> = {
 };
 
 const NO_PLAN_CLASSIFICATIONS = new Set<string>(['Business as Usual', 'False Positive']);
+
+// Action-plan due date (ISO YYYY-MM-DD) → "25 Jun 2026".
+const fmtPlanDate = (iso: string) => {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+};
 
 // Legacy mock data sometimes stores 'Implemented' in actionReview — normalise.
 function normaliseActionReview(v: string): ActionReviewBase {
@@ -361,11 +396,7 @@ export function ReviewClassificationDrawer({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 mb-5">
-          <section className="border border-canvas-border rounded-[12px] p-4">
-            <SectionLabel>Severity</SectionLabel>
-            <Pill className={SEVERITY_STYLE[exception.severity]}>{exception.severity}</Pill>
-          </section>
+        <div className="mb-5">
           <section className="border border-canvas-border rounded-[12px] p-4">
             <SectionLabel>Classification</SectionLabel>
             <Pill className={CLASSIFICATION_STYLE[exception.classification]}>
@@ -410,33 +441,73 @@ export function ReviewCaseDrawer({
 }: {
   exception: GrcException;
   onClose: () => void;
-  onDecision: (decision: 'approve' | 'reject') => void;
+  onDecision: (
+    decision: 'approve' | 'reject',
+    payload: { implementation: 'Implemented' | 'Partially Implemented' | null; comment: string },
+  ) => void;
   onViewBulk: (bulkId: string) => void;
   role?: 'risk-owner' | 'auditor';
 }) {
-  const { can } = useCan();
   const detail = GRC_CASE_DETAILS[exception.id];
   const bulk = exception.bulkId ? GRC_BULK_ACTIONS[exception.bulkId] : null;
   const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
   const [implementation, setImplementation] = useState<'Implemented' | 'Partially Implemented' | null>(null);
   const [comment, setComment] = useState('');
 
-  // "Case Reviewed" mode — Auditor opened a case that's already past pending review,
-  // so the decision UI is hidden and only a comment box remains.
   const isAuditor = role === 'auditor';
-  const isViewMode = isAuditor && (exception.actionReview !== 'Pending' || exception.classification === 'Unclassified');
+  const actionable = ACTIONABLE_CLASSIFICATIONS.has(exception.classification);
+  const phase = exception.actionPhase;
 
-  // Submit is enabled only when (a) a decision is chosen and (b) for Approve, an implementation
-  // outcome is selected. Reject auto-implies Discrepancy so no extra choice required.
+  // The Auditor's review has two stages for an actionable plan, plus a single
+  // classification review for non-actionable cases:
+  //   plan-review       → Accept / Reject the management action plan
+  //   completion-review → review the completed work + implementation outcome
+  //   classification    → Approve / Reject (Business as Usual / False Positive)
+  // A classified, not-yet-reviewed actionable case with no explicit phase (legacy
+  // data) defaults to the plan-review stage.
+  const isPlanReview = isAuditor && actionable && (phase === 'plan-review' || (!phase && exception.actionReview === 'Pending' && exception.classification !== 'Unclassified'));
+  const isCompletionReview = isAuditor && actionable && phase === 'completion-review';
+  const isClassReview = isAuditor && !actionable && exception.actionReview === 'Pending' && exception.classification !== 'Unclassified';
+  const needsDecision = isPlanReview || isCompletionReview || isClassReview;
+  // Anything else (Risk Owner viewing, or an already-decided case) is read-only.
+  const isViewMode = !needsDecision;
+
+  const completion = detail?.completion;
+
+  // Submit is enabled when a decision is chosen — and, for a completion Approve,
+  // an implementation outcome is selected.
   const canSubmit = isViewMode
     ? true
-    : decision === 'reject' || (decision === 'approve' && implementation !== null);
+    : decision === 'reject' || (decision === 'approve' && (!isCompletionReview || implementation !== null));
+
+  // Auto-typed, editable message that reflects the chosen decision/outcome.
+  const suggested = (() => {
+    if (isViewMode || !decision) return '';
+    if (isPlanReview) {
+      return decision === 'approve'
+        ? 'Management action plan is well-scoped and appropriate — accepted for implementation.'
+        : 'Management action plan needs revision before it can be accepted. Please refine and resubmit.';
+    }
+    if (isCompletionReview) {
+      if (decision === 'reject') return 'A discrepancy was identified in the completed action — reopening for the Risk Owner to address.';
+      if (implementation === 'Implemented') return 'Action is fully implemented in the system and verified against the evidence provided.';
+      if (implementation === 'Partially Implemented') return 'Action is partially implemented — the verified portion is accepted; remaining items to be closed by the Risk Owner.';
+      return '';
+    }
+    if (isClassReview) {
+      return decision === 'approve'
+        ? 'Classification reviewed and approved — no action plan required.'
+        : 'Classification not accepted — reopening for the Risk Owner to re-assess.';
+    }
+    return '';
+  })();
+  const applySuggested = useSuggestedMessage(suggested, comment, setComment);
 
   return (
     <>
       <Overlay onClick={onClose} />
       <DrawerShell
-        title={isViewMode ? 'Case Reviewed' : 'Review Case'}
+        title={isPlanReview ? 'Review Management Action Plan' : isCompletionReview ? 'Review Completed Action' : isClassReview ? 'Review Classification' : 'Case Details'}
         onClose={onClose}
         footer={
           <>
@@ -449,11 +520,13 @@ export function ReviewCaseDrawer({
             <button
               onClick={() => {
                 if (isViewMode) { onClose(); return; }
-                if (!can('exc_resolve')) return; // resolve permission gates the action decision
-                if (canSubmit && decision) onDecision(decision);
+                // The action review is the Auditor's decision (the Risk Owner
+                // classifies; the Auditor approves/rejects).
+                if (!isAuditor) return;
+                if (canSubmit && decision) onDecision(decision, { implementation, comment });
               }}
-              disabled={!canSubmit || (!isViewMode && !can('exc_resolve'))}
-              title={!isViewMode && !can('exc_resolve') ? "You don't have permission to resolve exceptions" : undefined}
+              disabled={!canSubmit || (!isViewMode && !isAuditor)}
+              title={!isViewMode && !isAuditor ? 'Only the Auditor can submit a review decision' : undefined}
               className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
                 canSubmit
                   ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
@@ -487,38 +560,96 @@ export function ReviewCaseDrawer({
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="mb-4">
               <section className="border border-canvas-border rounded-[12px] p-4">
-                <SectionLabel>Severity</SectionLabel>
-                <Pill className={SEVERITY_STYLE[exception.severity]}>{exception.severity}</Pill>
-              </section>
-              <section className="border border-canvas-border rounded-[12px] p-4">
-                <SectionLabel>Classification</SectionLabel>
-                <Pill className={CLASSIFICATION_STYLE[exception.classification]}>
-                  {exception.classification}
-                </Pill>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <SectionLabel>Classification</SectionLabel>
+                    <Pill className={CLASSIFICATION_STYLE[exception.classification]}>
+                      {exception.classification}
+                    </Pill>
+                  </div>
+                  {exception.actionableId && (
+                    <div className="text-right">
+                      <SectionLabel>Actionable ID</SectionLabel>
+                      <span className="inline-flex items-center gap-1 font-mono font-semibold text-brand-700 text-[12.5px]">
+                        <Hash size={12} /> {exception.actionableId}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </section>
             </div>
 
             {detail && (
               <section className="border border-canvas-border rounded-[12px] p-4 mb-4">
-                <SectionLabel>Action Submitted</SectionLabel>
-                <h3 className="text-[14px] font-semibold text-ink-900 mb-1.5 leading-snug">
-                  <FileText size={14} className="inline mr-1.5 text-ink-500 -mt-0.5" />
-                  {detail.actionTitle}
-                </h3>
-                <div className="inline-flex items-center gap-1.5 text-[12px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
-                  <Calendar size={11} />
-                  {detail.actionDueDate}
-                </div>
-                <p className="text-[12.5px] text-ink-700 leading-relaxed">{detail.actionDescription}</p>
+                <SectionLabel>{detail.actionPlans && detail.actionPlans.length > 1 ? `Management Action Plans · ${detail.actionPlans.length}` : 'Management Action Plan'}</SectionLabel>
+                {detail.actionPlans && detail.actionPlans.length > 0 ? (
+                  <div className="space-y-3">
+                    {detail.actionPlans.map((p, i) => (
+                      <div key={i} className={i > 0 ? 'pt-3 border-t border-canvas-border' : ''}>
+                        <h3 className="text-[14px] font-semibold text-ink-900 mb-1.5 leading-snug">
+                          <FileText size={14} className="inline mr-1.5 text-ink-500 -mt-0.5" />
+                          {p.name || `Management Action Plan ${i + 1}`}
+                        </h3>
+                        {p.dueDate && (
+                          <div className="inline-flex items-center gap-1.5 text-[12px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
+                            <Calendar size={11} />
+                            Due {fmtPlanDate(p.dueDate)}
+                          </div>
+                        )}
+                        {p.details && <p className="text-[12.5px] text-ink-700 leading-relaxed">{p.details}</p>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    <h3 className="text-[14px] font-semibold text-ink-900 mb-1.5 leading-snug">
+                      <FileText size={14} className="inline mr-1.5 text-ink-500 -mt-0.5" />
+                      {detail.actionTitle}
+                    </h3>
+                    {detail.actionDueDate && (
+                      <div className="inline-flex items-center gap-1.5 text-[12px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
+                        <Calendar size={11} />
+                        {detail.actionDueDate}
+                      </div>
+                    )}
+                    <p className="text-[12.5px] text-ink-700 leading-relaxed">{detail.actionDescription}</p>
+                  </>
+                )}
+              </section>
+            )}
+
+            {/* Completion review — the Risk Owner's completion note + evidence. */}
+            {isCompletionReview && completion && (
+              <section className="border border-compliant/40 bg-compliant-50/40 rounded-[12px] p-4 mb-4">
+                <SectionLabel>Risk Owner — Action Completed</SectionLabel>
+                {completion.selfAssessment && (
+                  <div className="mb-2.5">
+                    <span className="text-[11px] text-ink-500 mr-1.5">Risk Owner reports:</span>
+                    <Pill className={completion.selfAssessment === 'Implemented' ? 'bg-compliant-50 text-compliant-700 border border-compliant/40' : 'bg-mitigated-50 text-mitigated-700 border border-mitigated/40'}>
+                      {completion.selfAssessment}
+                    </Pill>
+                  </div>
+                )}
+                <p className="text-[12.5px] text-ink-700 leading-relaxed">{completion.note}</p>
+                {completion.evidence.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2.5">
+                    {completion.evidence.map((ev, i) => (
+                      <span key={i} className="inline-flex items-center gap-1.5 h-7 px-2.5 bg-white border border-canvas-border rounded-full text-[11.5px] text-ink-700">
+                        <Paperclip size={11} className="text-brand-600" /> {ev.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {completion.completedAt && <p className="text-[11px] text-ink-400 mt-2">Marked complete on {completion.completedAt}</p>}
               </section>
             )}
 
             <section className="border border-canvas-border rounded-[12px] p-4">
               <SectionLabel>Auditor Decision</SectionLabel>
 
-              {/* Approve / Reject toggle — hidden in Case Reviewed (view) mode */}
+              {/* Accept/Reject (plan) or Approve/Reject (completion / classification) */}
               {!isViewMode && (
                 <div className="mb-4">
                   <label className="block text-[12.5px] font-medium text-ink-800 mb-2">
@@ -534,7 +665,7 @@ export function ReviewCaseDrawer({
                       }`}
                     >
                       <CheckCircle2 size={14} />
-                      Approve
+                      {isPlanReview ? 'Accept Plan' : 'Approve'}
                     </button>
                     <button
                       onClick={() => { setDecision('reject'); setImplementation(null); }}
@@ -545,14 +676,17 @@ export function ReviewCaseDrawer({
                       }`}
                     >
                       <XCircle size={14} />
-                      Reject
+                      {isPlanReview ? 'Reject Plan' : 'Reject'}
                     </button>
                   </div>
+                  {isPlanReview && decision === 'approve' && (
+                    <p className="text-[11.5px] text-ink-500 mt-2 leading-snug">The Risk Owner will implement this plan, then submit evidence of completion for your final review.</p>
+                  )}
                 </div>
               )}
 
-              {/* Approve → mandatory implementation outcome */}
-              {!isViewMode && decision === 'approve' && (
+              {/* Completion Approve → mandatory implementation outcome */}
+              {isCompletionReview && decision === 'approve' && (
                 <motion.div
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -583,7 +717,7 @@ export function ReviewCaseDrawer({
                 </motion.div>
               )}
 
-              {/* Reject → Discrepancy auto-applied */}
+              {/* Reject → reopen at the Risk Owner's end (Discrepancy on completion). */}
               {!isViewMode && decision === 'reject' && (
                 <motion.div
                   initial={{ opacity: 0, y: -4 }}
@@ -591,17 +725,22 @@ export function ReviewCaseDrawer({
                   transition={{ duration: 0.15 }}
                   className="mb-4 p-3 bg-risk-50 border border-risk/40 rounded-[8px]"
                 >
-                  <div className="flex items-center gap-2 text-[12.5px] font-semibold text-risk-700 mb-1">
-                    <Pill className="bg-risk-50 text-risk-700 border border-risk/40">Discrepancy</Pill>
-                  </div>
+                  {isCompletionReview && (
+                    <div className="flex items-center gap-2 text-[12.5px] font-semibold text-risk-700 mb-1">
+                      <Pill className="bg-risk-50 text-risk-700 border border-risk/40">Discrepancy</Pill>
+                    </div>
+                  )}
                   <p className="text-[12px] text-risk-700 leading-snug">
-                    On submit, the case will reopen at the Risk Owner's end for further action.
+                    {isPlanReview
+                      ? "On submit, the management action plan is rejected and the case reopens for the Risk Owner to revise and resubmit."
+                      : "On submit, the case will reopen at the Risk Owner's end for further action."}
                   </p>
                 </motion.div>
               )}
 
               <div>
                 <label className="block text-[12.5px] font-medium text-ink-800 mb-2">Comment</label>
+                {!isViewMode && <SuggestedChip message={suggested} onApply={applySuggested} />}
                 <div className="relative">
                   <textarea
                     value={comment}
@@ -634,6 +773,180 @@ export function ReviewCaseDrawer({
   );
 }
 
+// ─── Mark Action Complete Drawer (Risk Owner) ───
+// After the Auditor accepts the plan, the Risk Owner implements it and submits a
+// completion note + evidence; this moves the case to the Auditor's completion review.
+export function CompleteActionDrawer({
+  exception,
+  onClose,
+  onSubmit,
+}: {
+  exception: GrcException;
+  onClose: () => void;
+  onSubmit: (payload: { note: string; evidence: { name: string }[]; implementation: 'Implemented' | 'Partially Implemented'; comment: string }) => void;
+}) {
+  const detail = GRC_CASE_DETAILS[exception.id];
+  const [implementation, setImplementation] = useState<'Implemented' | 'Partially Implemented' | null>(detail?.completion?.selfAssessment ?? null);
+  const [note, setNote] = useState(detail?.completion?.note ?? '');     // Action Taken — manual, no auto-fill
+  const [comment, setComment] = useState('');
+  const [evidence, setEvidence] = useState<{ name: string }[]>(detail?.completion?.evidence ?? []);
+  const fileRef = useRef<HTMLInputElement>(null);
+  // Risk Owner describes the action (manual) and reports how it landed.
+  const canSubmit = note.trim().length > 0 && implementation !== null;
+
+  // Once a status is picked, the Comment box auto-fills with an editable message.
+  const suggested = implementation === 'Implemented'
+    ? 'The management action plan has been fully implemented in the system. Evidence is attached for the Auditor’s review.'
+    : implementation === 'Partially Implemented'
+      ? 'The management action plan has been partially implemented. The remaining items are in progress; interim evidence is attached for review.'
+      : '';
+  const applySuggested = useSuggestedMessage(suggested, comment, setComment);
+
+  const addFiles = (files: FileList | null) => {
+    if (!files) return;
+    const incoming = Array.from(files).map(f => ({ name: f.name }));
+    setEvidence(prev => [...prev, ...incoming.filter(n => !prev.some(p => p.name === n.name))]);
+  };
+
+  return (
+    <>
+      <Overlay onClick={onClose} />
+      <DrawerShell
+        title="Mark Action Complete"
+        onClose={onClose}
+        footer={
+          <>
+            <button
+              onClick={onClose}
+              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => canSubmit && implementation && onSubmit({ note: note.trim(), evidence, implementation, comment: comment.trim() })}
+              disabled={!canSubmit}
+              className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+                canSubmit ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
+              }`}
+            >
+              <CheckCircle2 size={14} />
+              Submit for Review
+            </button>
+          </>
+        }
+      >
+        <>
+          <p className="text-[12.5px] text-ink-600 leading-relaxed mb-4">
+            Confirm the management action plan has been completed. Use the attach icon to add evidence as proof — the Auditor will review and record the outcome.
+          </p>
+
+          {detail && (detail.actionPlans?.length || detail.actionTitle) && (
+            <section className="border border-canvas-border rounded-[12px] p-4 mb-4">
+              <SectionLabel>Management Action Plan</SectionLabel>
+              {(detail.actionPlans && detail.actionPlans.length > 0 ? detail.actionPlans : [{ name: detail.actionTitle, details: detail.actionDescription, dueDate: '' }]).map((p, i) => (
+                <div key={i} className={i > 0 ? 'pt-2.5 mt-2.5 border-t border-canvas-border' : ''}>
+                  <h3 className="text-[13.5px] font-semibold text-ink-900 leading-snug">
+                    <FileText size={13} className="inline mr-1.5 text-ink-500 -mt-0.5" />
+                    {p.name || `Management Action Plan ${i + 1}`}
+                  </h3>
+                  {p.dueDate && (
+                    <span className="inline-flex items-center gap-1.5 text-[11.5px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mt-1.5">
+                      <Calendar size={11} /> Due {fmtPlanDate(p.dueDate)}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </section>
+          )}
+
+          {/* Action Taken — the Risk Owner describes what was done (manual). */}
+          <div className="mb-4">
+            <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+              Action Taken <span className="text-risk">*</span>
+            </label>
+            <div className="relative">
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Describe the action you completed before the due date…"
+                rows={4}
+                className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+              />
+              <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                title="Attach evidence"
+                aria-label="Attach evidence"
+                className="absolute bottom-2 right-2 w-7 h-7 flex items-center justify-center text-ink-400 hover:text-brand-700 cursor-pointer"
+              >
+                <Paperclip size={14} />
+              </button>
+            </div>
+            {evidence.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {evidence.map((ev) => (
+                  <span key={ev.name} className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1 bg-brand-50 border border-brand-200 rounded-full text-[11.5px] text-brand-700">
+                    <Paperclip size={11} /> {ev.name}
+                    <button onClick={() => setEvidence(prev => prev.filter(e => e.name !== ev.name))} className="w-5 h-5 rounded-full flex items-center justify-center hover:bg-white/70 cursor-pointer"><X size={11} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Implementation Status — Risk Owner reports how it landed, after Action Taken. */}
+          <div className="mb-4">
+            <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+              Implementation Status <span className="text-risk">*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {(['Implemented', 'Partially Implemented'] as const).map((status) => {
+                const selected = implementation === status;
+                return (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => setImplementation(status)}
+                    className={`h-10 text-[12.5px] font-medium rounded-[8px] border transition-colors cursor-pointer ${
+                      selected
+                        ? (status === 'Implemented' ? 'bg-compliant-50 border-compliant text-compliant-700' : 'bg-mitigated-50 border-mitigated text-mitigated-700')
+                        : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-200'
+                    }`}
+                  >
+                    {status}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11.5px] text-ink-500 mt-2 leading-snug">The Auditor reviews your evidence and confirms the final outcome.</p>
+          </div>
+
+          {/* Comment — always shown; the suggested chip appears once a status is
+              chosen and pre-fills an editable message. */}
+          <div className="mb-4">
+            <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Comment</label>
+            <SuggestedChip message={suggested} onApply={applySuggested} />
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Add a note for the Auditor…"
+              rows={3}
+              className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+            />
+          </div>
+
+          {detail && (
+            <div className="mt-5">
+              <ActivityTimeline entries={detail.activityLog} />
+            </div>
+          )}
+        </>
+      </DrawerShell>
+    </>
+  );
+}
+
 // ─── Classify Exception Drawer (Risk Owner) ───
 const CLASSIFY_OPTIONS: string[] = [
   'Business as Usual',
@@ -659,16 +972,12 @@ interface ActionPlanDraft {
   dueDate: string;
 }
 
-const SEVERITY_TONE: Record<GrcExceptionSeverity, { base: string; active: string }> = {
-  High:   { base: 'text-ink-700', active: 'bg-high-50 border-high text-high-700' },
-  Medium: { base: 'text-ink-700', active: 'bg-mitigated-50 border-mitigated text-mitigated-700' },
-  Low:    { base: 'text-ink-700', active: 'bg-compliant-50 border-compliant text-compliant-700' },
-};
-
 export function ClassifyExceptionDrawer({
   exception,
   onClose,
   onSave,
+  actionableId,
+  scopeCount = 1,
 }: {
   exception: GrcException;
   onClose: () => void;
@@ -681,13 +990,30 @@ export function ClassifyExceptionDrawer({
     dueDate?: string;
     actionPlans?: { name: string; details: string; dueDate: string }[];
   }) => void;
+  /** Actionable ID assigned once an actionable classification is chosen — shown
+   *  while the management action plan is created. */
+  actionableId?: string;
+  /** How many linked cases this classify applies to (bulk) — the ID is shared. */
+  scopeCount?: number;
 }) {
-  const [severity, setSeverity] = useState<GrcExceptionSeverity>(exception.severity);
-  const [classification, setClassification] = useState<string>('');
-  const [comment, setComment] = useState('');
-  const [actionPlans, setActionPlans] = useState<ActionPlanDraft[]>([
-    { id: 'ap-1', name: '', details: '', dueDate: '' },
-  ]);
+  // Re-classifying a (rejected) case pre-fills the previous classification,
+  // rationale and action plans so the Risk Owner can update them.
+  const reclassDetail = GRC_CASE_DETAILS[exception.id];
+  const isReclassify = exception.classification !== 'Unclassified';
+  // Severity is AI-assigned and no longer editable in the panel — carried through as-is.
+  const severity = exception.severity;
+  const [classification, setClassification] = useState<string>(isReclassify ? exception.classification : '');
+  const [comment, setComment] = useState(
+    isReclassify && reclassDetail?.classificationJustification
+      ? reclassDetail.classificationJustification.replace(/^"|"$/g, '')
+      : '',
+  );
+  const [actionPlans, setActionPlans] = useState<ActionPlanDraft[]>(() => {
+    if (isReclassify && reclassDetail?.actionPlans?.length) {
+      return reclassDetail.actionPlans.map((p, i) => ({ id: `ap-${i + 1}`, name: p.name, details: p.details, dueDate: p.dueDate }));
+    }
+    return [{ id: 'ap-1', name: '', details: '', dueDate: '' }];
+  });
   const [expandedPlan, setExpandedPlan] = useState<string>('ap-1');
   const [classificationOpen, setClassificationOpen] = useState(false);
   const classificationRef = useRef<HTMLDivElement>(null);
@@ -727,13 +1053,15 @@ export function ClassifyExceptionDrawer({
   const requiresActionPlan = ACTIONABLE_CLASSIFICATIONS.has(classification);
 
   const canSave = useMemo(() => {
-    if (!classification || !comment.trim()) return false;
+    // Comment is optional — only classification (and an action plan when the
+    // classification requires one) are mandatory.
+    if (!classification) return false;
     if (requiresActionPlan) {
       if (actionPlans.length === 0) return false;
       if (actionPlans.some(p => !p.name.trim() || !p.details.trim() || !p.dueDate)) return false;
     }
     return true;
-  }, [classification, comment, requiresActionPlan, actionPlans]);
+  }, [classification, requiresActionPlan, actionPlans]);
 
   return (
     <>
@@ -776,27 +1104,6 @@ export function ClassifyExceptionDrawer({
           </>
         }
       >
-        <div className="mb-5">
-          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Severity</label>
-          <div className="grid grid-cols-3 gap-2">
-            {(['High', 'Medium', 'Low'] as const).map((s) => {
-              const selected = severity === s;
-              const tone = SEVERITY_TONE[s];
-              return (
-                <button
-                  key={s}
-                  onClick={() => setSeverity(s)}
-                  className={`h-10 text-[13px] font-medium rounded-[8px] border transition-colors cursor-pointer ${
-                    selected ? tone.active : `bg-canvas-elevated border-canvas-border ${tone.base} hover:border-brand-200`
-                  }`}
-                >
-                  {s}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         <div className="mb-5">
           <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
             Classification <span className="text-risk">*</span>
@@ -866,9 +1173,21 @@ export function ClassifyExceptionDrawer({
             transition={{ duration: 0.15 }}
             className="border-t border-canvas-border pt-5 mb-5"
           >
+            {actionableId && (
+              <div className="mb-3 flex items-center justify-between gap-3 px-3 py-2.5 rounded-[10px] bg-brand-50/70 border border-brand-100">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Hash size={13} className="text-brand-600 shrink-0" />
+                  <span className="text-[11.5px] text-ink-600">Actionable ID</span>
+                  <span className="font-mono font-semibold text-brand-700 text-[12.5px]">{actionableId}</span>
+                </div>
+                <span className="text-[11px] text-ink-500 shrink-0">
+                  {scopeCount > 1 ? `Shared across ${scopeCount} linked cases` : 'Auto-generated'}
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between mb-3">
               <span className="text-[10.5px] uppercase tracking-wider font-semibold text-ink-500">
-                Action Plans
+                Management Action Plans
                 <span className="ml-1.5 normal-case tracking-normal text-ink-400 tabular-nums">· {actionPlans.length}</span>
               </span>
               <button
@@ -899,7 +1218,7 @@ export function ClassifyExceptionDrawer({
                           {idx + 1}
                         </span>
                         <span className="flex-1 min-w-0 truncate text-[13px] font-semibold text-ink-800">
-                          {plan.name.trim() || `Action Plan ${idx + 1}`}
+                          {plan.name.trim() || `Management Action Plan ${idx + 1}`}
                         </span>
                         {plan.dueDate && (
                           <span className="hidden sm:inline-flex items-center gap-1 h-6 px-2 text-[11px] text-brand-700 bg-brand-50 rounded-full shrink-0 tabular-nums">
@@ -1003,7 +1322,7 @@ export function ClassifyExceptionDrawer({
 
         <div className="mb-5">
           <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
-            Comment <span className="text-risk">*</span>
+            Comment <span className="text-[11px] font-normal text-ink-400">(optional)</span>
           </label>
           <div className="relative">
             <textarea
@@ -1023,26 +1342,10 @@ export function ClassifyExceptionDrawer({
           </div>
         </div>
 
-        <section className="border border-canvas-border rounded-[12px] p-4">
-          <SectionLabel>Activity Log</SectionLabel>
-          <div className="flex gap-3">
-            <div className="shrink-0 w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center">
-              <User size={13} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-3 mb-0.5">
-                <div className="text-[12.5px] text-ink-800">
-                  <span className="font-semibold">Ira</span>{' '}
-                  <span className="text-ink-500">(AI)</span>
-                </div>
-                <span className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">18 Apr 2026, 18:00</span>
-              </div>
-              <p className="text-[12.5px] text-ink-700 leading-snug">
-                Exception flagged by Ira (AI) with <span className="font-semibold text-brand-700 tabular-nums">94%</span> confidence
-              </p>
-            </div>
-          </div>
-        </section>
+        {/* Synced activity log — every action by either persona shows here. */}
+        <div className="mt-1">
+          <ActivityTimeline entries={reclassDetail?.activityLog ?? []} />
+        </div>
       </DrawerShell>
     </>
   );
@@ -1134,7 +1437,7 @@ export function RequestDueDateDrawer({
         }
       >
         <div className="mb-5">
-          <SectionLabel>Action Plan</SectionLabel>
+          <SectionLabel>Management Action Plan</SectionLabel>
           <h3 className="text-[14px] font-semibold text-ink-900 leading-snug">{exception.title}</h3>
         </div>
 
@@ -1248,7 +1551,7 @@ export function ReviewDueDateDrawer({
         }
       >
         <div className="mb-5">
-          <SectionLabel>Action Plan</SectionLabel>
+          <SectionLabel>Management Action Plan</SectionLabel>
           <h3 className="text-[14px] font-semibold text-ink-900 leading-snug">{exception.title}</h3>
         </div>
 
@@ -1519,6 +1822,148 @@ export function BulkReviewDueDateDrawer({
   );
 }
 
+// ─── Bulk-action Scope Chooser ───
+// Shown before a single action when the case belongs to a bulk group. Lets the
+// user apply the action to all linked cases, only this one, or a chosen subset.
+// Ineligible members (the action doesn't apply in their current state) are shown
+// disabled; the opened case is always selected.
+export interface ScopeCandidate {
+  id: string;
+  title: string;
+  eligible: boolean;
+  statusLabel: string;
+  isOpened: boolean;
+}
+
+export function BulkScopeChooser({
+  groupId,
+  groupTitle,
+  actionLabel,
+  openedId,
+  candidates,
+  onConfirm,
+  onClose,
+}: {
+  groupId: string;
+  groupTitle: string;
+  actionLabel: string;
+  openedId: string;
+  candidates: ScopeCandidate[];
+  onConfirm: (ids: string[]) => void;
+  onClose: () => void;
+}) {
+  const eligibleIds = useMemo(() => candidates.filter(c => c.eligible).map(c => c.id), [candidates]);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(eligibleIds));
+
+  const toggle = (id: string) => {
+    if (id === openedId) return; // opened case is always in scope
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const applyAll = () => setSelected(new Set(eligibleIds));
+  const onlyThis = () => setSelected(new Set([openedId]));
+
+  const chosen = candidates.filter(c => selected.has(c.id) && c.eligible);
+  const count = chosen.length;
+
+  return (
+    <>
+      <Overlay onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.98, y: 8 }}
+        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] max-w-[92vw] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col max-h-[82vh]"
+        role="dialog"
+        aria-label="Choose cases for this bulk action"
+      >
+        <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full"><LinkIcon size={11} /> Bulk</span>
+              <h2 className="font-display text-[19px] font-semibold text-ink-900 tracking-tight truncate">{actionLabel}</h2>
+            </div>
+            <p className="text-[12.5px] text-ink-500 leading-snug">
+              <span className="font-mono tabular-nums">ID: {groupId}</span> · {candidates.length} linked cases{groupTitle ? <> · <span className="text-ink-600">{groupTitle}</span></> : null}
+            </p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close">
+            <X size={16} />
+          </button>
+        </header>
+
+        <div className="px-6 pt-4 pb-2">
+          <p className="text-[12.5px] text-ink-600 leading-relaxed mb-3">
+            This case is part of a bulk action. Choose which linked cases this <span className="font-medium text-ink-800">{actionLabel.toLowerCase()}</span> applies to.
+          </p>
+          <div className="flex items-center gap-2 mb-1">
+            <button onClick={applyAll} className="h-8 px-3 text-[12px] font-medium rounded-[8px] border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 cursor-pointer transition-colors">
+              Apply to all ({eligibleIds.length})
+            </button>
+            <button onClick={onlyThis} className="h-8 px-3 text-[12px] font-medium rounded-[8px] border border-canvas-border bg-canvas-elevated text-ink-700 hover:border-brand-200 cursor-pointer transition-colors">
+              Only this case
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 pb-4">
+          <div className="border border-canvas-border rounded-[12px] divide-y divide-canvas-border overflow-hidden">
+            {candidates.map((c) => {
+              const checked = selected.has(c.id) && c.eligible;
+              const locked = c.isOpened; // opened is always on and cannot be toggled
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  disabled={!c.eligible || locked}
+                  onClick={() => toggle(c.id)}
+                  title={!c.eligible ? 'No action applies to this case in its current state' : locked ? 'The case you opened — always included' : undefined}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                    c.eligible ? (locked ? 'cursor-default' : 'cursor-pointer hover:bg-paper-50/70') : 'opacity-55 cursor-not-allowed'
+                  }`}
+                >
+                  <span className={`w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0 ${
+                    checked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-canvas-elevated border-canvas-border'
+                  }`}>
+                    {checked && <Check size={12} strokeWidth={3} />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-medium text-brand-700 text-[12.5px]">{c.id}</span>
+                      {c.isOpened && <span className="text-[10px] font-semibold text-ink-500 bg-[#F4F2F7] rounded-full px-1.5 h-4 inline-flex items-center">This case</span>}
+                    </div>
+                    <div className="text-[12px] text-ink-600 truncate mt-0.5">{c.title}</div>
+                  </div>
+                  <Pill className={c.eligible ? 'bg-mitigated-50 text-mitigated-700' : 'bg-[#EEEEF1] text-ink-500'}>{c.statusLabel}</Pill>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <footer className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center gap-2">
+          <button onClick={onClose} className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer">
+            Cancel
+          </button>
+          <button
+            onClick={() => count > 0 && onConfirm(chosen.map(c => c.id))}
+            disabled={count === 0}
+            className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+              count > 0 ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
+            }`}
+          >
+            Continue with {count} case{count === 1 ? '' : 's'}
+          </button>
+        </footer>
+      </motion.div>
+    </>
+  );
+}
+
 // ─── Bulk Action Group Modal ───
 export function BulkActionGroupModal({
   bulkId,
@@ -1568,7 +2013,6 @@ export function BulkActionGroupModal({
               <thead>
                 <tr className="bg-[#FAFAFB] border-b border-canvas-border text-left text-ink-500 uppercase tracking-wider">
                   <th className="px-4 py-3 font-medium text-[10.5px]">Exception ID</th>
-                  <th className="px-4 py-3 font-medium text-[10.5px]">Severity</th>
                   <th className="px-4 py-3 font-medium text-[10.5px]">Classification</th>
                   <th className="px-4 py-3 font-medium text-[10.5px]">Action Review Status</th>
                 </tr>
@@ -1582,9 +2026,6 @@ export function BulkActionGroupModal({
                     <tr key={c.id} className="border-b border-canvas-border last:border-b-0">
                       <td className="px-4 py-3 align-middle">
                         <span className="font-mono font-medium text-brand-700 text-[12.5px]">{c.id}</span>
-                      </td>
-                      <td className="px-4 py-3 align-middle">
-                        <Pill className={SEVERITY_STYLE[c.severity]}>{c.severity}</Pill>
                       </td>
                       <td className="px-4 py-3 align-middle">
                         <Pill className={CLASSIFICATION_STYLE[c.classification]}>{c.classification}</Pill>

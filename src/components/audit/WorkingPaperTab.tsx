@@ -9,6 +9,8 @@ import Gated from '../shared/Gated';
 import type { Engagement } from '../../data/engagements';
 import { racmRowsForProcess, type RACMRow } from '../../data/racm';
 import { CURRENT_USER, PEOPLE } from '../../data/grc-domain';
+import { useEngagementWorkspace } from './engagementWorkspace';
+import { buildWpControls, downloadWorkingPaper, downloadControlWorkingPaper } from './workingPaper';
 
 interface Props {
   engagement: Engagement;
@@ -94,6 +96,35 @@ export default function WorkingPaperTab({ engagement }: Props) {
   const racmRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
   const papers = useMemo(() => racmRows.map((r, i) => deriveControlPaper(r, engagement, i)), [racmRows, engagement]);
 
+  // Working-paper rows (.xlsx) — built from the shared engagement workspace so the
+  // controls/attributes match the Controls tab. Excel, not PDF.
+  const ws = useEngagementWorkspace();
+  const wpToday = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const riskByControl = useMemo(() => {
+    const m = new Map<string, string>();
+    racmRows.forEach(r => { if (!m.has(r.controlId)) m.set(r.controlId, r.riskDescription); });
+    return m;
+  }, [racmRows]);
+  const wpControls = useMemo(() => buildWpControls(ws.controls, {
+    health: engagement.health,
+    owner: engagement.owner,
+    testedOn: wpToday,
+    linkedWorkflows: (id) => ws.workflowIdsForAttribute(id).map(wid => ({ id: wid, name: ws.workflows.find(w => w.id === wid)?.name ?? wid })),
+    riskForControl: (id) => riskByControl.get(id),
+  }), [ws, engagement.health, engagement.owner, wpToday, riskByControl]);
+  const wpById = useMemo(() => new Map(wpControls.map(c => [c.controlId, c])), [wpControls]);
+  const wpMeta = { preparedBy: engagement.owner, reviewedBy: 'Pending reviewer sign-off', preparedOn: wpToday };
+  const downloadConsolidated = () => {
+    downloadWorkingPaper(engagement, wpControls, wpMeta);
+    addToast({ type: 'success', title: 'Working paper exported', message: `Working_Paper_${engagement.code}.xlsx · ${wpControls.length} controls` });
+  };
+  const downloadOne = (controlId: string) => {
+    const c = wpById.get(controlId);
+    if (!c) return;
+    downloadControlWorkingPaper(engagement, c, wpMeta);
+    addToast({ type: 'success', message: `Working_Paper_${controlId}.xlsx downloaded` });
+  };
+
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [showExportModal, setShowExportModal] = useState(false);
 
@@ -160,9 +191,10 @@ export default function WorkingPaperTab({ engagement }: Props) {
           <button
             onClick={() => setShowExportModal(true)}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
+            title="Preview & download the consolidated working paper (.xlsx)"
           >
             <Download size={13} />
-            Export as PDF
+            Export working paper
           </button>
           {!reviewSubmitted && (
             <Gated permission="eng_edit" mode="disable" title="You don't have permission to submit for review">
@@ -312,6 +344,15 @@ export default function WorkingPaperTab({ engagement }: Props) {
                             <span className="text-[0.75rem] text-text-muted">— recorded by {signOffChain[0].who.name}</span>
                           </div>
                         </Field>
+                        <div className="pt-1">
+                          <button
+                            onClick={() => downloadOne(paper.row.controlId)}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-canvas-border bg-white hover:border-brand-300 hover:text-brand-700 text-[0.75rem] font-semibold text-ink-700 transition-colors cursor-pointer"
+                            title="Download this control's working paper (.xlsx)"
+                          >
+                            <Download size={13} /> Download working paper (Excel)
+                          </button>
+                        </div>
                       </div>
                     </motion.div>
                   )}
@@ -384,7 +425,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
               <header className="shrink-0 px-6 py-4 border-b border-canvas-border flex items-center justify-between">
                 <div>
                   <h2 className="text-[0.9375rem] font-bold text-text">Export {title} · Preview</h2>
-                  <p className="text-[0.75rem] text-text-muted mt-0.5">Formatted output sent to your downloads folder.</p>
+                  <p className="text-[0.75rem] text-text-muted mt-0.5">Excel workbook (.xlsx) — Index · Control Summary · Attribute Testing · Exceptions.</p>
                 </div>
                 <button onClick={() => setShowExportModal(false)} className="w-8 h-8 rounded-full text-ink-500 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer">
                   <X size={16} />
@@ -430,14 +471,11 @@ export default function WorkingPaperTab({ engagement }: Props) {
               <footer className="shrink-0 px-6 py-3 border-t border-canvas-border bg-canvas flex items-center justify-end gap-3">
                 <button onClick={() => setShowExportModal(false)} className="px-4 py-2 rounded-lg border border-canvas-border text-[0.75rem] font-medium text-ink-600 hover:bg-canvas transition-colors cursor-pointer">Cancel</button>
                 <button
-                  onClick={() => {
-                    setShowExportModal(false);
-                    addToast({ message: `Generating ${engagement.code}-${titleShort}.pdf …`, type: 'success' });
-                  }}
+                  onClick={() => { setShowExportModal(false); downloadConsolidated(); }}
                   className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <Download size={13} />
-                  Download PDF
+                  Download (Excel)
                 </button>
               </footer>
             </motion.div>
