@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, Plus, Activity, Eye,
-  Zap, Shield, RefreshCw, Sparkles, TrendingUp, TrendingDown,
+  Zap, Shield, RefreshCw, Sparkles, Loader2, TrendingUp, TrendingDown,
   Clock, Lightbulb, ArrowRight, Play, Check, X, ChevronDown,
   FileText, Bot, Copy, Trash2, Edit3
 } from 'lucide-react';
@@ -330,12 +330,12 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
                     <button
                       onClick={handleBulkRun}
                       disabled={bulkRunning}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary to-primary-medium hover:from-primary-hover hover:to-primary disabled:opacity-70 text-white rounded-xl text-[0.8125rem] font-semibold transition-all cursor-pointer shadow-md"
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-primary hover:bg-primary-hover disabled:opacity-70 text-white rounded-xl text-[0.8125rem] font-semibold transition-all cursor-pointer shadow-md"
                     >
                       {bulkRunning ? (
                         <>
                           <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
-                            <Sparkles size={15} />
+                            <Loader2 size={15} />
                           </motion.div>
                           Running {selectedWfs.size} workflows...
                         </>

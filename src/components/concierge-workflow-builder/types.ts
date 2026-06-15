@@ -46,7 +46,7 @@ export interface WorkflowDraft {
   output: OutputSpec;
 }
 
-export type UploadedFile = { name: string; size: number; linkedSource?: boolean };
+export type UploadedFile = { name: string; size: number; linkedSource?: boolean; path?: string };
 export type JourneyFiles = Record<string, UploadedFile[]>;
 
 export interface ClarifyQuestion {

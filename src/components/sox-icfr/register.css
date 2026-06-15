@@ -1,0 +1,138 @@
+/* ── SOX / ICFR v2 — register (workhorse) + dossier (signature) ───────────────────
+   The signature lives in the working-paper vernacular: the tickmark and the W/P
+   cross-reference. Everything else is kept quiet and dense so it scales to 100s. */
+
+.sox-book-ui {
+  --paper-rule: color-mix(in srgb, var(--color-ink-900) 9%, transparent);
+  --paper-rule-strong: color-mix(in srgb, var(--color-ink-900) 16%, transparent);
+}
+
+/* ── The tickmark — the auditor's mark ──────────────────────────────────────────── */
+.sox-tick {
+  border-radius: 5px;
+  line-height: 1;
+  transform: rotate(-7deg);
+  border: 1.5px solid currentColor;
+}
+.sox-tick-ok { color: var(--color-compliant-700); background: color-mix(in srgb, var(--color-compliant-50) 70%, transparent); }
+.sox-tick-ko { color: var(--color-risk-700); background: color-mix(in srgb, var(--color-risk-50) 70%, transparent); }
+.sox-tick-none { color: var(--color-ink-300); border-style: dashed; transform: none; }
+
+/* ── W/P cross-reference — the ledger index mark ────────────────────────────────── */
+.wp-ref {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-700);
+  padding: 1px 6px;
+  border: 1px solid var(--paper-rule-strong);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-paper-50) 60%, transparent);
+  white-space: nowrap;
+}
+
+/* ── Register table ─────────────────────────────────────────────────────────────── */
+.reg-wrap { border: 1px solid var(--color-canvas-border); border-radius: 14px; overflow: hidden; background: var(--color-canvas-elevated); }
+.reg-head {
+  position: sticky; top: 0; z-index: 5;
+  background: color-mix(in srgb, var(--color-canvas-elevated) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--paper-rule-strong);
+}
+.reg-head th {
+  text-align: left; font-weight: 600; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--color-ink-400); padding: 9px 12px; white-space: nowrap;
+}
+.reg-row { border-bottom: 1px solid var(--paper-rule); cursor: pointer; transition: background .12s; }
+.reg-row:hover { background: color-mix(in srgb, var(--color-brand-50) 45%, transparent); }
+.reg-row:focus-visible { outline: 2px solid var(--color-brand-500); outline-offset: -2px; background: color-mix(in srgb, var(--color-brand-50) 55%, transparent); }
+.reg-row.sel { background: color-mix(in srgb, var(--color-brand-50) 70%, transparent); }
+.reg-row td { padding: 9px 12px; vertical-align: middle; font-size: 12.5px; color: var(--color-ink-700); }
+.reg-row td.tight { padding-top: 7px; padding-bottom: 7px; }
+.reg-group-row td {
+  background: color-mix(in srgb, var(--color-ink-900) 3.5%, transparent);
+  border-bottom: 1px solid var(--paper-rule-strong);
+  border-top: 1px solid var(--paper-rule-strong);
+  font-weight: 700; font-size: 11.5px; color: var(--color-ink-700);
+  padding: 7px 12px; position: sticky; top: 33px; z-index: 4;
+}
+.reg-dense .reg-row td { padding-top: 5px; padding-bottom: 5px; font-size: 12px; }
+
+/* tiny track meter in a register cell */
+.cell-track { display: inline-flex; align-items: center; gap: 7px; }
+.meter { width: 46px; height: 5px; border-radius: 99px; background: var(--color-paper-100); overflow: hidden; }
+.meter > span { display: block; height: 100%; border-radius: 99px; }
+
+/* ── saved-view + filter chips ──────────────────────────────────────────────────── */
+.view-chip {
+  display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 11px; border-radius: 8px;
+  font-size: 12px; font-weight: 600; cursor: pointer; transition: all .12s; white-space: nowrap;
+  border: 1px solid var(--color-canvas-border); color: var(--color-ink-600); background: var(--color-canvas-elevated);
+}
+.view-chip:hover { color: var(--color-ink-900); border-color: var(--paper-rule-strong); }
+.view-chip.on { background: var(--color-brand-600); border-color: var(--color-brand-600); color: #fff; }
+.filter-pill {
+  display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px; border-radius: 8px;
+  font-size: 12px; font-weight: 600; cursor: pointer; transition: all .12s;
+  border: 1px solid var(--color-canvas-border); color: var(--color-ink-600); background: var(--color-canvas-elevated);
+}
+.filter-pill.on { background: color-mix(in srgb, var(--color-brand-50) 80%, transparent); border-color: var(--color-brand-200); color: var(--color-brand-700); }
+
+/* ── Dossier — the leadsheet ────────────────────────────────────────────────────── */
+.leadsheet {
+  background: var(--color-canvas-elevated);
+  border: 1px solid var(--color-canvas-border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.leadsheet-head {
+  padding: 18px 22px 16px;
+  border-bottom: 2px solid var(--color-ink-900);
+  position: relative;
+  background:
+    linear-gradient(color-mix(in srgb, var(--color-paper-50) 50%, transparent), transparent);
+}
+.leadsheet-head::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -5px; height: 1px; background: var(--color-ink-900); opacity: 0.35;
+}
+.leadsheet-title { font-family: var(--font-display, 'Source Serif 4', serif); font-weight: 600; letter-spacing: -0.01em; }
+.leadsheet-stamp {
+  font-family: var(--font-mono, monospace); font-weight: 700; font-size: 12px; letter-spacing: 0.06em;
+  color: var(--color-ink-700); border: 1.5px solid var(--paper-rule-strong); border-radius: 6px;
+  padding: 5px 9px; text-align: center; line-height: 1.3; background: color-mix(in srgb, var(--color-paper-50) 50%, transparent);
+}
+
+/* the two independent tracks */
+.track { border: 1px solid var(--color-canvas-border); border-radius: 14px; overflow: hidden; background: var(--color-canvas-elevated); }
+.track-head { padding: 13px 16px; border-bottom: 1px solid var(--paper-rule); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.track-design .track-head { background: color-mix(in srgb, var(--color-brand-50) 38%, transparent); }
+.track-operating .track-head { background: color-mix(in srgb, var(--color-evidence-50) 42%, transparent); }
+.track-num { font-family: var(--font-mono, monospace); font-weight: 700; font-size: 11px; color: var(--color-ink-400); }
+
+/* document checklist row */
+.doc-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--paper-rule); }
+.doc-row + .doc-row { margin-top: 6px; }
+
+/* step / leadsheet ruled list */
+.step-row { padding: 11px 12px; border-radius: 10px; border: 1px solid var(--paper-rule); background: var(--color-canvas-elevated); }
+.step-row + .step-row { margin-top: 7px; }
+.step-row.fail { border-color: color-mix(in srgb, var(--color-risk-500) 35%, transparent); background: color-mix(in srgb, var(--color-risk-50) 30%, transparent); }
+.step-row.pass { border-color: color-mix(in srgb, var(--color-compliant-500) 26%, transparent); }
+
+/* override marker */
+.override-tag {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em;
+  color: var(--color-high-700); background: color-mix(in srgb, var(--color-high-50) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-high-500) 30%, transparent); border-radius: 5px; padding: 1px 6px;
+}
+
+/* discussion rail */
+.disc-bubble { border: 1px solid var(--paper-rule); border-radius: 11px; padding: 10px 12px; background: var(--color-canvas-elevated); }
+.disc-bubble.auditor { border-left: 3px solid var(--color-info-400, var(--color-brand-400)); }
+.disc-bubble.reviewer { border-left: 3px solid var(--color-evidence-500); }
+.disc-bubble.risk-owner { border-left: 3px solid var(--color-mitigated-500); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sox-book-ui * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}

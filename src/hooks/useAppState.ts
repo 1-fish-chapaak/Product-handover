@@ -30,6 +30,7 @@ export type View =
   | 'programs'
   // Engagements
   | 'engagements'
+  | 'sox-icfr'
   | 'engagement-overview'
   | 'engagement-case-management'
   | 'my-queue'
@@ -75,7 +76,7 @@ export type View =
 
 export type ChatMode = 'chat' | 'workflow';
 export type ExceptionRole = 'risk-owner' | 'auditor';
-export type ArtifactTab = 'plan' | 'code' | 'sources' | 'output' | 'flow' | 'preview';
+export type ArtifactTab = 'plan' | 'code' | 'sources' | 'output' | 'flow' | 'preview' | 'history';
 export type ArtifactMode = 'query' | 'workflow';
 export type ExecutionPanel = 'working-paper' | 'workflow-execution' | 'traceability' | null;
 
@@ -524,7 +525,7 @@ export function useAppState() {
 
   // Hand off a prompt with the "Build a workflow" intent. Routes to the
   // dedicated WorkflowBuilderJourney view (Stepper + StepWritePrompt +
-  // AIAssistantPanel + ClarificationPanel etc.) and seeds the initial
+  // AIAssistantPanel + ConciergeClarificationStage etc.) and seeds the initial
   // prompt so the journey can skip Step 1 and land on clarification when
   // a non-empty prompt is provided. Empty string opens the journey at
   // Step 1.

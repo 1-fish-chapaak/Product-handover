@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Sparkles, Plus, FileText, Clock, Workflow, Play, Settings2 } from 'lucide-react';
+import { Plus, FileText, Clock, Workflow, Play, Settings2, ListChecks } from 'lucide-react';
 import { WORKFLOWS } from '../../data/mockData';
 import { SAMPLE_WORKFLOWS } from './sampleWorkflows';
 
@@ -37,7 +37,7 @@ export default function StepWritePrompt({
           style={{ fontFamily: 'var(--font-display)' }}
         >
           <span className="text-ink-900">Audit smarter. </span>
-          <span className="bg-gradient-to-r from-brand-600 to-evidence bg-clip-text text-transparent">
+          <span className="text-brand-700">
             Not harder.
           </span>
         </h1>
@@ -88,7 +88,7 @@ export default function StepWritePrompt({
                   : 'bg-brand-100 text-brand-300 cursor-not-allowed',
               ].join(' ')}
             >
-              <Sparkles size={13} />
+              <Play size={13} />
               Audit on Chat
             </button>
           </div>
@@ -141,7 +141,7 @@ export default function StepWritePrompt({
                       {w.inputs.length} inputs
                     </span>
                     <span className="inline-flex items-center gap-1">
-                      <Sparkles size={11} />
+                      <ListChecks size={11} />
                       {w.steps.length} steps
                     </span>
                   </div>
@@ -188,7 +188,7 @@ export default function StepWritePrompt({
                       Last run {w.lastRun}
                     </span>
                     <span className="inline-flex items-center gap-1">
-                      <Sparkles size={11} />
+                      <Play size={11} />
                       {w.runs} runs
                     </span>
                     <span className="inline-flex items-center gap-1">

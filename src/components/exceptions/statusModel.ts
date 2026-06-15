@@ -72,9 +72,9 @@ export function combineActionReview(
   return 'Approved (Implemented)';
 }
 
-// 'Under Review' is the stored value; it renders as 'In-Progress' in the UI.
+// A classified case awaiting the auditor's decision renders as 'Pending Review'.
 export const COMBINED_REVIEW_LABEL: Record<CombinedActionReview, string> = {
-  'Pending':                          'Under Review',
+  'Pending':                          'Pending Review',
   'Approved (Implemented)':           'Approved (Implemented)',
   'Approved (Partially Implemented)': 'Approved (Partially Implemented)',
   'Rejected (Discrepancy)':           'Rejected (Discrepancy)',

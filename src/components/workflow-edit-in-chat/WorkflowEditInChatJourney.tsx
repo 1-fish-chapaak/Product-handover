@@ -6,6 +6,7 @@ import { SAMPLE_WORKFLOWS } from '../concierge-workflow-builder/sampleWorkflows'
 import type { JourneyFiles, RunResult, StepSpec } from '../concierge-workflow-builder/types';
 import EditClarificationStage from './EditClarificationStage';
 import EditChatPanel from './EditChatPanel';
+import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
 import type {
   EditChatMessage,
   EditClarificationStep,
@@ -115,9 +116,32 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
   // DataSourcePanel to auto-jump to Output Config (and Preview once revealed).
   const [editResult, setEditResult] = useState<RunResult | null>(null);
   const [validateClarify, setValidateClarify] = useState<{
-    index: number;
     answers: Record<string, string>;
   } | null>(null);
+
+  // Attach (+) wiring for the shared clarification card — mirrors chat's
+  // DataPickerModal: 'source' picks land in attachedSources, 'upload' picks
+  // become stub File objects in attachFiles.
+  const [showDataPicker, setShowDataPicker] = useState(false);
+  const [attachedSources, setAttachedSources] = useState<AttachmentSelection[]>([]);
+  const [attachFiles, setAttachFiles] = useState<File[]>([]);
+  const handleDataPickerConfirm = useCallback((selections: AttachmentSelection[]) => {
+    const sources = selections.filter((s) => s.kind === 'source');
+    const uploads = selections.filter((s) => s.kind === 'upload');
+    if (sources.length > 0) setAttachedSources((prev) => [...prev, ...sources]);
+    if (uploads.length > 0) {
+      const stubs = uploads.map((u) => new File([''], u.name, { type: 'application/octet-stream' }));
+      setAttachFiles((prev) => [...prev, ...stubs]);
+    }
+    setShowDataPicker(false);
+  }, []);
+  const attachProps = {
+    onAttach: () => setShowDataPicker(true),
+    attachedSources,
+    files: attachFiles,
+    onRemoveSource: (i: number) => setAttachedSources((prev) => prev.filter((_, j) => j !== i)),
+    onRemoveFile: (i: number) => setAttachFiles((prev) => prev.filter((_, j) => j !== i)),
+  };
 
   // Hydrate the right-side workspace from the canonical Vendor Contract
   // Compliance sample so it ships with the same Folders / Files / Plan /
@@ -229,7 +253,7 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
         text: "Before I kick off the run, I've spotted a couple of ambiguities. Pick what fits below.",
       },
     ]);
-    setValidateClarify({ index: 0, answers: {} });
+    setValidateClarify({ answers: {} });
   }, []);
 
   const finishValidateClarifications = useCallback(
@@ -285,41 +309,43 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
     [draft],
   );
 
-  const handleClarifyAnswer = useCallback(
-    (questionId: string, answer: string) => {
-      // Echo the answer as a user bubble.
-      setMessages((prev) => [
-        ...prev,
-        { id: nextMsgId(), role: 'user', text: answer },
-      ]);
-      // Side effects must live outside the setState updater so React StrictMode's
-      // double-invoke of the updater doesn't fire them twice.
-      if (!validateClarify) return;
-      const nextAnswers = { ...validateClarify.answers, [questionId]: answer };
-      const nextIdx = validateClarify.index + 1;
-      if (nextIdx >= VALIDATE_QUESTIONS.length) {
-        setValidateClarify(null);
-        finishValidateClarifications(nextAnswers);
-      } else {
-        setValidateClarify({ index: nextIdx, answers: nextAnswers });
-      }
-    },
-    [validateClarify, finishValidateClarifications],
-  );
-
-  const handleClarifySkip = useCallback(
-    () => {
-      if (!validateClarify) return;
-      const nextIdx = validateClarify.index + 1;
-      if (nextIdx >= VALIDATE_QUESTIONS.length) {
-        setValidateClarify(null);
-        finishValidateClarifications(validateClarify.answers);
-      } else {
-        setValidateClarify({ ...validateClarify, index: nextIdx });
-      }
-    },
-    [validateClarify, finishValidateClarifications],
-  );
+  // Validate-step clarification mapped onto the shared chat Q&A card. Answers
+  // are keyed by question id; the card navigates internally (Back / Next /
+  // Done) and submits all at once, then the run kicks off. ✕ cancels the set.
+  const validateClarifyCard = validateClarify
+    ? (() => {
+        const answersArr: Record<number, string[]> = {};
+        VALIDATE_QUESTIONS.forEach((q, i) => {
+          const a = validateClarify.answers[q.id];
+          if (a) answersArr[i] = [a];
+        });
+        return {
+          data: {
+            intro: '',
+            questions: VALIDATE_QUESTIONS.map((q) => ({ question: q.title, options: q.options })),
+            answers: answersArr,
+            status: 'open' as const,
+          },
+          onSetAnswer: (qi: number, ans: string[]) => {
+            setValidateClarify((prev) => {
+              if (!prev) return prev;
+              const id = VALIDATE_QUESTIONS[qi].id;
+              const next = { ...prev.answers };
+              if (ans[0]) next[id] = ans[0];
+              else delete next[id];
+              return { answers: next };
+            });
+          },
+          onSubmit: () => {
+            const a = validateClarify.answers;
+            setValidateClarify(null);
+            finishValidateClarifications(a);
+          },
+          onCancel: () => setValidateClarify(null),
+          ...attachProps,
+        };
+      })()
+    : null;
 
   const handleViewPreview = useCallback(() => {
     setPreviewRevealed(true);
@@ -341,6 +367,12 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
           steps={CLARIFICATION_STEPS}
           onBack={onBack}
           onComplete={handleClarificationsComplete}
+          {...attachProps}
+        />
+        <DataPickerModal
+          open={showDataPicker}
+          onClose={() => setShowDataPicker(false)}
+          onConfirm={handleDataPickerConfirm}
         />
       </div>
     );
@@ -369,17 +401,7 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
           editResult={editResult}
           onSaveEdits={handleSaveEdits}
           editsSaved={editsSaved}
-          inlineClarify={
-            validateClarify
-              ? {
-                  questions: VALIDATE_QUESTIONS,
-                  index: validateClarify.index,
-                  stepLabel: 'Step 4 · Validate Workflow',
-                }
-              : null
-          }
-          onClarifyAnswer={handleClarifyAnswer}
-          onClarifySkip={handleClarifySkip}
+          clarify={validateClarifyCard}
         />
 
         {/* Use the AI Concierge builder's own DataSourcePanel so the
@@ -394,6 +416,11 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
           previewRevealed={previewRevealed}
         />
       </div>
+      <DataPickerModal
+        open={showDataPicker}
+        onClose={() => setShowDataPicker(false)}
+        onConfirm={handleDataPickerConfirm}
+      />
     </div>
   );
 }
