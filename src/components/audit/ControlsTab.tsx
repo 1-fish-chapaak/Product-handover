@@ -10,7 +10,7 @@ import {
   Shield, ChevronRight, Sparkles, Search, Upload, X, Plus,
   FileText, Image as ImageIcon, FileSpreadsheet, Check, AlertCircle,
   Link2, Workflow as WorkflowIcon, ClipboardList,
-  CheckCircle2, Circle, FlaskConical,
+  CheckCircle2, Circle, FlaskConical, Play, Loader2, XCircle,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import Gated from '../shared/Gated';
@@ -21,6 +21,7 @@ import { attrCode, type ControlAttribute } from '../../data/racm';
 import { OWNER_NAMES, PEOPLE } from '../../data/grc-domain';
 import { useEngagementWorkspace } from './engagementWorkspace';
 import { useCan } from '../../context/CurrentUserContext';
+import ControlTestJourney from './ControlTestJourney';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,10 +31,16 @@ interface Props {
   onCreateWorkflow?: () => void;
   /** Jump to the Evidence tab with this control opened at Attribute Testing. */
   onTestEvidence?: (controlId: string) => void;
+  /** Open the Workflow Executor for an attribute's linked workflow (automated test). */
+  onRunWorkflow?: (workflowId: string) => void;
 }
 
-type ControlStatus = 'Effective' | 'In Test' | 'Failed' | 'Pending';
+type ControlStatus = 'Not tested' | 'In test' | 'Pass' | 'Fail';
 type StatusFilter = 'All' | ControlStatus;
+/** Per-attribute test method — a control may be hybrid (mix of both). */
+type AttrType = 'Self-assessed' | 'Automated';
+/** Per-attribute test result. */
+type AttrResult = 'Not tested' | 'Pass' | 'Fail';
 type FrequencyFilter = 'All' | 'Daily' | 'Weekly' | 'Monthly' | 'Quarterly' | 'Annual' | 'Event-driven';
 type WorkflowStatus = 'Active' | 'Draft' | 'Paused';
 type EvidenceKind = 'PDF' | 'IMG' | 'XLSX';
@@ -49,19 +56,19 @@ interface ManualWorkflowOption { id: string; name: string; status: WorkflowStatu
 
 // ─── Static lookups ───────────────────────────────────────────────────────────
 
-const STATUS_PILLS: StatusFilter[] = ['All', 'Effective', 'In Test', 'Failed', 'Pending'];
+const STATUS_PILLS: StatusFilter[] = ['All', 'Not tested', 'In test', 'Pass', 'Fail'];
 const FREQ_OPTIONS: FrequencyFilter[] = ['All', 'Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annual', 'Event-driven'];
 const SAMPLE_METHODS: SampleMethod[] = ['Random', 'Statistical', 'Business-rule', 'Manual upload'];
 const SAMPLE_RESULTS: SampleResult[] = ['Pass', 'Fail', 'Pending'];
 
 const CONTROL_STATUS_CLS: Record<ControlStatus, string> = {
-  Effective: 'bg-compliant-50 text-compliant-700 border-compliant-50',
-  'In Test': 'bg-evidence-50 text-evidence-700 border-evidence-100',
-  Failed:    'bg-risk-50 text-risk-700 border-risk-50',
-  Pending:   'bg-draft-50 text-draft-700 border-canvas-border',
+  'Not tested': 'bg-draft-50 text-draft-700 border-canvas-border',
+  'In test':    'bg-evidence-50 text-evidence-700 border-evidence-100',
+  Pass:         'bg-compliant-50 text-compliant-700 border-compliant-50',
+  Fail:         'bg-risk-50 text-risk-700 border-risk-50',
 };
 const CONTROL_STATUS_DOT: Record<ControlStatus, string> = {
-  Effective: 'bg-compliant', 'In Test': 'bg-evidence-600', Failed: 'bg-risk', Pending: 'bg-draft',
+  'Not tested': 'bg-draft', 'In test': 'bg-evidence-600', Pass: 'bg-compliant', Fail: 'bg-risk',
 };
 const WORKFLOW_STATUS_DOT: Record<WorkflowStatus, string> = {
   Active: 'bg-compliant', Draft: 'bg-draft', Paused: 'bg-mitigated-500',
@@ -93,21 +100,27 @@ function hash(s: string): number {
   return h;
 }
 
-function statusForControl(controlId: string, engagementHealth: number): ControlStatus {
-  // Use health as a soft prior — healthier engagements skew toward Effective.
-  const h = hash(controlId);
-  const r = h % 100;
-  if (engagementHealth === 0) {
-    // Not started — almost everything is Pending or In Test.
-    return r < 70 ? 'Pending' : 'In Test';
-  }
-  const effectiveCut = Math.min(82, engagementHealth);
-  const inTestCut = effectiveCut + 10;
-  const failedCut = inTestCut + 5;
-  if (r < effectiveCut) return 'Effective';
-  if (r < inTestCut) return 'In Test';
-  if (r < failedCut) return 'Failed';
-  return 'Pending';
+/** Deterministic seed so attributes carry stable demo results until edited. */
+function seedAttrResult(attributeId: string, engagementHealth: number): AttrResult {
+  const r = hash(attributeId) % 100;
+  if (engagementHealth === 0) return r < 82 ? 'Not tested' : r < 93 ? 'Pass' : 'Fail';
+  const testedCut = Math.min(90, engagementHealth + 8); // healthier → more tested
+  if (r >= testedCut) return 'Not tested';
+  return r % 8 === 0 ? 'Fail' : 'Pass'; // ~1 in 8 tested attributes fail
+}
+
+/** Default test method: Automated when a workflow is linked, else a stable mix. */
+function seedAttrType(attributeId: string, hasWorkflow: boolean): AttrType {
+  if (hasWorkflow) return 'Automated';
+  return hash(`${attributeId}:type`) % 2 === 0 ? 'Automated' : 'Self-assessed';
+}
+
+/** Roll a control's status up from its attributes' results. */
+function rollupStatus(results: AttrResult[]): ControlStatus {
+  const tested = results.filter(r => r !== 'Not tested');
+  if (results.length === 0 || tested.length === 0) return 'Not tested';
+  if (tested.length < results.length) return 'In test';
+  return tested.some(r => r === 'Fail') ? 'Fail' : 'Pass';
 }
 
 function workingPaperFor(attributeId: string): WorkingPaperStatus {
@@ -144,8 +157,8 @@ function kindForFile(name: string): EvidenceKind {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ControlsTab({ engagement, onCreateWorkflow, onTestEvidence }: Props): JSX.Element {
-  const { addToast } = useToast();
+export default function ControlsTab({ engagement, onCreateWorkflow, onTestEvidence, onRunWorkflow }: Props): JSX.Element {
+  const { addToast, updateToast } = useToast();
   const { can } = useCan();
   const ws = useEngagementWorkspace();
   const controls = ws.controls;
@@ -177,11 +190,19 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
   const [expandedAttrIds, setExpandedAttrIds] = useState<Set<string>>(() => new Set());
   const [draftAttr, setDraftAttr] = useState<Record<string, string>>({});
   const [addControlOpen, setAddControlOpen] = useState(false);
+  // Control test journey (population → sampling → AI validation → working paper).
+  const [journeyControlId, setJourneyControlId] = useState<string | null>(null);
 
   // ── Per-attribute data stores
   const [evidence, setEvidence] = useState<Record<string, EvidenceFile[]>>({});
   const [samples, setSamples] = useState<Record<string, Sample[]>>({});
   const [sampleMethods, setSampleMethods] = useState<Record<string, SampleMethod>>({});
+
+  // ── Per-attribute test method + result + remark (Not tested → Pass/Fail). Seeded, editable.
+  const [attrTypeOverride, setAttrTypeOverride] = useState<Record<string, AttrType>>({});
+  const [attrResultOverride, setAttrResultOverride] = useState<Record<string, AttrResult>>({});
+  const [attrRemark, setAttrRemark] = useState<Record<string, string>>({});
+  const [runningAttr, setRunningAttr] = useState<Set<string>>(() => new Set());
 
   // ── Popover state
   const [aiPopover, setAiPopover] = useState<{ attributeId: string | null }>({ attributeId: null });
@@ -190,12 +211,51 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
   // ── Bullet-level "map workflow" modal — the attribute currently being mapped.
   const [mapAttr, setMapAttr] = useState<ControlAttribute | null>(null);
 
-  // ── Per-control statuses (memoised; deterministic per engagement)
+  // ── Per-attribute effective test method + result (override falls back to a stable seed).
+  const typeFor = (attrId: string): AttrType =>
+    attrTypeOverride[attrId] ?? seedAttrType(attrId, ws.workflowIdsForAttribute(attrId).length > 0);
+  const resultFor = (attrId: string): AttrResult =>
+    attrResultOverride[attrId] ?? seedAttrResult(attrId, engagement.health);
+
+  const setAttrTypeKind = (attrId: string, t: AttrType) =>
+    setAttrTypeOverride(prev => ({ ...prev, [attrId]: t }));
+  const setAttrResult = (attrId: string, result: AttrResult) =>
+    setAttrResultOverride(prev => ({ ...prev, [attrId]: result }));
+
+  // The per-attribute "Test" action: open the executor (automated + linked workflow),
+  // prompt to link/build (automated + unlinked), and always open the row so the
+  // self-assessment / result capture is visible.
+  const testAttribute = (attr: ControlAttribute) => {
+    const linked = ws.workflowIdsForAttribute(attr.id);
+    if (typeFor(attr.id) === 'Automated') {
+      if (linked.length === 0) { setMapAttr(attr); return; }
+      if (onRunWorkflow) { onRunWorkflow(linked[0]!); addToast({ type: 'info', message: 'Opening the workflow executor…' }); }
+      else addToast({ type: 'info', message: 'Run the linked workflow to test this attribute' });
+    }
+    setExpandedAttrIds(prev => new Set(prev).add(attr.id));
+  };
+
+  // Simulate a workflow run inline and record its Pass/Fail on the attribute.
+  const runAndRecord = (attr: ControlAttribute) => {
+    const linked = ws.workflowIdsForAttribute(attr.id);
+    if (linked.length === 0) { setMapAttr(attr); return; }
+    setRunningAttr(prev => new Set(prev).add(attr.id));
+    const id = addToast({ type: 'loading', message: 'Running workflow…' });
+    window.setTimeout(() => {
+      const r: AttrResult = hash(`${attr.id}:run`) % 5 === 0 ? 'Fail' : 'Pass';
+      setAttrResult(attr.id, r);
+      setRunningAttr(prev => { const n = new Set(prev); n.delete(attr.id); return n; });
+      updateToast(id, { type: r === 'Pass' ? 'success' : 'warning', message: `Tested via workflow → ${r}` });
+    }, 900);
+  };
+
+  // ── Per-control statuses — rolled up from the attributes' results.
   const controlStatuses = useMemo(() => {
     const m = new Map<string, ControlStatus>();
-    controls.forEach(c => m.set(c.controlId, statusForControl(c.controlId, engagement.health)));
+    controls.forEach(c => m.set(c.controlId, rollupStatus(c.attributes.map(a => resultFor(a.id)))));
     return m;
-  }, [controls, engagement.health]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controls, attrResultOverride, engagement.health]);
 
   // ── Distinct sub-processes for chip set
   const subProcesses = useMemo(() => {
@@ -225,30 +285,19 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
     });
   }, [controls, controlStatuses, keyOnly, subProcessFilter, frequencyFilter, selectedStatus, search]);
 
-  // ── KPI derivations
+  // ── KPI derivations — counts of the rolled-up control statuses.
   const kpis = useMemo(() => {
-    const total = controls.length;
-    const healthFactor = engagement.health / 100;
-    const tested = total === 0 ? 0 : Math.min(total, Math.round(total * (healthFactor + 0.05)));
-    const effective = Math.min(tested, Math.round(total * healthFactor));
-    const failed = Math.min(total, engagement.openIssues ?? 0);
-    const pending = Math.max(0, total - tested);
-
-    // Coverage is "% of controls that have at least one attribute with local entries".
-    const attrIdsByControl = new Map<string, string[]>();
-    controls.forEach(c => attrIdsByControl.set(c.controlId, c.attributes.map(a => a.id)));
-    const controlsWithEvidence = controls.filter(c => {
-      const ids = attrIdsByControl.get(c.controlId) ?? [];
-      return ids.some(id => (evidence[id]?.length ?? 0) > 0);
-    }).length;
-    const controlsWithSamples = controls.filter(c => {
-      const ids = attrIdsByControl.get(c.controlId) ?? [];
-      return ids.some(id => (samples[id]?.length ?? 0) > 0);
-    }).length;
-    const evidenceCoverage = total === 0 ? 0 : Math.round((controlsWithEvidence / total) * 100);
-    const sampleCoverage = total === 0 ? 0 : Math.round((controlsWithSamples / total) * 100);
-    return { total, tested, effective, failed, pending, evidenceCoverage, sampleCoverage };
-  }, [controls, engagement.health, engagement.openIssues, evidence, samples]);
+    let notTested = 0, inTest = 0, pass = 0, fail = 0;
+    controls.forEach(c => {
+      switch (controlStatuses.get(c.controlId) ?? 'Not tested') {
+        case 'Not tested': notTested += 1; break;
+        case 'In test':    inTest += 1; break;
+        case 'Pass':       pass += 1; break;
+        case 'Fail':       fail += 1; break;
+      }
+    });
+    return { total: controls.length, notTested, inTest, pass, fail };
+  }, [controls, controlStatuses]);
 
   // ── Mutators
   const toggleExpand = (controlId: string) => setExpandedControlIds(prev => {
@@ -363,6 +412,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
     setSearch('');
   };
 
+
   // ─── Empty state ───────────────────────────────────────────────────────────
   if (controls.length === 0) {
     return (
@@ -401,10 +451,10 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
       {/* ─── KPI strip (5 tiles) — evidence/sample KPIs moved to the Evidence tab ─── */}
       <div className="grid grid-cols-5 gap-3">
         <KpiTile label="Total Controls" value={kpis.total}     tone="text-ink-800" />
-        <KpiTile label="Tested"         value={kpis.tested}    tone="text-ink-800" />
-        <KpiTile label="Effective"      value={kpis.effective} tone="text-compliant-700" />
-        <KpiTile label="Failed"         value={kpis.failed}    tone="text-risk-700" />
-        <KpiTile label="Pending"        value={kpis.pending}   tone="text-mitigated-700" />
+        <KpiTile label="Not tested"     value={kpis.notTested} tone="text-ink-500" />
+        <KpiTile label="In test"        value={kpis.inTest}    tone="text-evidence-700" />
+        <KpiTile label="Pass"           value={kpis.pass}      tone="text-compliant-700" />
+        <KpiTile label="Fail"           value={kpis.fail}      tone="text-risk-700" />
       </div>
 
       {/* ─── Filter row ─── */}
@@ -498,7 +548,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
         )}
 
         {filteredControls.map(c => {
-          const status = controlStatuses.get(c.controlId) ?? 'Pending';
+          const status = controlStatuses.get(c.controlId) ?? 'Not tested';
           const expanded = expandedControlIds.has(c.controlId);
           return (
             <div
@@ -536,20 +586,18 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                     <div className="p-4 space-y-4">
                       <div className="flex items-center justify-between gap-3">
                         <h4 className="text-[0.75rem] font-bold uppercase tracking-wider text-ink-600">Attributes</h4>
-                        {onTestEvidence && (
-                          <Gated permission="racm_edit" mode="disable" title="You don't have permission to test controls">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            leftIcon={<FlaskConical size={13} />}
-                            onClick={() => onTestEvidence(c.controlId)}
-                            className="shrink-0"
-                            title="Open this control in the Evidence tab to upload evidence and test samples"
-                          >
-                            Test evidence
-                          </Button>
-                          </Gated>
-                        )}
+                        <Gated permission="racm_edit" mode="disable" title="You don't have permission to test controls">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          leftIcon={<FlaskConical size={13} />}
+                          onClick={() => setJourneyControlId(c.controlId)}
+                          className="shrink-0"
+                          title="Test this control — upload population, sample, attribute evidence, working paper"
+                        >
+                          Test evidence
+                        </Button>
+                        </Gated>
                       </div>
                       {/* Attributes as a clean bullet list — click a bullet to expand its full detail. */}
                       <div className="space-y-1.5">
@@ -568,44 +616,31 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                                   <span className="font-mono text-[0.65625rem] font-semibold text-brand-700 shrink-0 mt-0.5">{attrCode(attr.id)}</span>
                                   <span className="text-[0.78125rem] text-ink-800 leading-snug flex-1 min-w-0">{attr.description}</span>
                                 </button>
-                                {/* Inline workflow mapping — linked workflow chips + a clearly visible link control. */}
-                                <div className="shrink-0 mt-px flex items-center gap-1.5 flex-wrap justify-end max-w-[260px]">
-                                  {linkedWfs.map(w => (
-                                    <span
-                                      key={w.id}
-                                      title={w.name}
-                                      className="inline-flex items-center gap-1 pl-1.5 pr-0.5 h-[22px] rounded-md bg-brand-50 border border-brand-100 text-[0.65625rem] font-semibold text-brand-700"
-                                    >
-                                      <WorkflowIcon size={10} className="shrink-0" />
-                                      <span className="font-mono">{w.code}</span>
-                                      <Gated permission="racm_unmap" mode="disable" title="You don't have permission to unlink workflows">
-                                      <button
-                                        onClick={() => unlinkWorkflow(attr.id, w.id)}
-                                        className="p-0.5 rounded hover:bg-brand-100 text-brand-600 hover:text-brand-800 cursor-pointer transition-colors"
-                                        aria-label={`Unlink ${w.code}`}
-                                      >
-                                        <X size={10} />
-                                      </button>
-                                      </Gated>
-                                    </span>
-                                  ))}
+                                {/* Test method · result · test action · workflow link (linking preserved) */}
+                                <div className="shrink-0 mt-px flex items-center gap-1.5">
+                                  <TypeBox type={typeFor(attr.id)} onSet={(t) => setAttrTypeKind(attr.id, t)} />
+                                  <ResultPill result={resultFor(attr.id)} />
+                                  <TestButton type={typeFor(attr.id)} hasWorkflow={linkedWfs.length > 0} running={runningAttr.has(attr.id)} onClick={() => testAttribute(attr)} />
+                                  {typeFor(attr.id) === 'Automated' && (
                                   <Gated permission="racm_link_workflow" mode="disable" title="You don't have permission to link workflows">
                                   <button
                                     onClick={() => setMapAttr(attr)}
-                                    className="inline-flex items-center gap-1 px-2 h-[22px] rounded-md border border-dashed border-canvas-border bg-white text-[0.65625rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40 cursor-pointer transition-colors"
+                                    title={linkedWfs.map(w => w.name).join(', ') || 'Link or build a workflow'}
+                                    className={`inline-flex items-center gap-1 px-2 h-[22px] rounded-md border text-[0.65625rem] font-semibold cursor-pointer transition-colors ${linkedWfs.length > 0 ? 'bg-brand-50 border-brand-100 text-brand-700 hover:bg-brand-100' : 'border-dashed border-canvas-border bg-white text-ink-600 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40'}`}
                                   >
-                                    <Link2 size={11} className="shrink-0" />
-                                    {linkedWfs.length > 0 ? 'Map' : 'Link workflow'}
+                                    <WorkflowIcon size={11} className="shrink-0" />
+                                    {linkedWfs.length > 0 ? linkedWfs.length : 'Link'}
                                   </button>
                                   </Gated>
+                                  )}
+                                  <button
+                                    onClick={() => toggleAttr(attr.id)}
+                                    aria-label={attrExpanded ? 'Collapse attribute' : 'Expand attribute'}
+                                    className="shrink-0 mt-0.5 cursor-pointer"
+                                  >
+                                    <ChevronRight size={14} className={`text-ink-400 transition-transform duration-200 ${attrExpanded ? 'rotate-90' : ''}`} />
+                                  </button>
                                 </div>
-                                <button
-                                  onClick={() => toggleAttr(attr.id)}
-                                  aria-label={attrExpanded ? 'Collapse attribute' : 'Expand attribute'}
-                                  className="shrink-0 mt-0.5 cursor-pointer"
-                                >
-                                  <ChevronRight size={14} className={`text-ink-400 transition-transform duration-200 ${attrExpanded ? 'rotate-90' : ''}`} />
-                                </button>
                               </div>
                               <AnimatePresence initial={false}>
                                 {attrExpanded && (
@@ -616,7 +651,20 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                                     transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
                                     className="overflow-hidden border-t border-canvas-border bg-canvas/30"
                                   >
-                                    <div className="p-3">
+                                    <div className="p-3 space-y-3">
+                                      <AttrTestPanel
+                                        type={typeFor(attr.id)}
+                                        result={resultFor(attr.id)}
+                                        remark={attrRemark[attr.id] ?? ''}
+                                        running={runningAttr.has(attr.id)}
+                                        linkedWorkflows={linkedFor(attr.id)}
+                                        onSetType={(t) => setAttrTypeKind(attr.id, t)}
+                                        onSetResult={(r) => setAttrResult(attr.id, r)}
+                                        onRemark={(v) => setAttrRemark(prev => ({ ...prev, [attr.id]: v }))}
+                                        onRunWorkflow={() => { const ids = ws.workflowIdsForAttribute(attr.id); if (ids[0] && onRunWorkflow) { onRunWorkflow(ids[0]); } else if (!ids[0]) { setMapAttr(attr); } }}
+                                        onRunInline={() => runAndRecord(attr)}
+                                        onLink={() => setMapAttr(attr)}
+                                      />
                                       <AttributeBlock
                                         compact
                                         attribute={attr}
@@ -711,6 +759,12 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
             onCreate={createWorkflow}
             onClose={() => setMapAttr(null)}
           />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {journeyControlId && (
+          <ControlTestJourney engagement={engagement} controlId={journeyControlId} onClose={() => setJourneyControlId(null)} />
         )}
       </AnimatePresence>
     </div>
@@ -977,6 +1031,165 @@ function KpiTile({ label, value, tone }: { label: string; value: number | string
 function KeyDot({ active }: { active: boolean }): JSX.Element {
   return (
     <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-brand-600' : 'bg-ink-300'}`} />
+  );
+}
+
+// ─── Per-attribute test method · result · test action ──────────────────────────
+
+/** Two-option box: Self-assessment ⇄ Automation. */
+function TypeBox({ type, onSet }: { type: AttrType; onSet: (t: AttrType) => void }): JSX.Element {
+  const opts: { v: AttrType; label: string; Icon: typeof WorkflowIcon }[] = [
+    { v: 'Self-assessed', label: 'Self-assessment', Icon: ClipboardList },
+    { v: 'Automated', label: 'Automation', Icon: WorkflowIcon },
+  ];
+  return (
+    <div className="inline-flex items-center p-0.5 rounded-md border border-canvas-border bg-canvas/60">
+      {opts.map(o => {
+        const active = type === o.v;
+        return (
+          <button
+            key={o.v}
+            onClick={() => onSet(o.v)}
+            title={o.label}
+            className={`inline-flex items-center gap-1 px-2 h-[20px] rounded text-[0.65625rem] font-semibold transition-colors cursor-pointer ${active ? (o.v === 'Automated' ? 'bg-evidence-50 text-evidence-700' : 'bg-brand-50 text-brand-700') : 'text-ink-400 hover:text-ink-600'}`}
+          >
+            <o.Icon size={10} /> {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const ATTR_RESULT_CLS: Record<AttrResult, string> = {
+  'Not tested': 'bg-draft-50 text-draft-700 border-canvas-border',
+  Pass:         'bg-compliant-50 text-compliant-700 border-compliant-50',
+  Fail:         'bg-risk-50 text-risk-700 border-risk-50',
+};
+function ResultPill({ result }: { result: AttrResult }): JSX.Element {
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 h-[22px] rounded-md border text-[0.65625rem] font-semibold ${ATTR_RESULT_CLS[result]}`}>
+      {result === 'Pass' ? <CheckCircle2 size={10} /> : result === 'Fail' ? <XCircle size={10} /> : <Circle size={9} />}
+      {result}
+    </span>
+  );
+}
+
+function TestButton({ type, hasWorkflow, running, onClick }: { type: AttrType; hasWorkflow: boolean; running: boolean; onClick: () => void }): JSX.Element {
+  const auto = type === 'Automated';
+  const label = auto ? (hasWorkflow ? 'Run' : 'Link workflow') : 'Self-assess';
+  const Icon = running ? Loader2 : auto ? (hasWorkflow ? Play : Link2) : ClipboardList;
+  return (
+    <button
+      onClick={onClick}
+      disabled={running}
+      title={auto ? (hasWorkflow ? 'Run the linked workflow' : 'Link or build a workflow to automate this test') : 'Open self-assessment'}
+      className="inline-flex items-center gap-1 px-2 h-[22px] rounded-md bg-brand-600 text-white text-[0.65625rem] font-semibold hover:bg-brand-500 cursor-pointer transition-colors disabled:opacity-60"
+    >
+      <Icon size={11} className={running ? 'animate-spin' : ''} />
+      {label}
+    </button>
+  );
+}
+
+// ─── Expanded attribute: self-assessment / automated-test capture ──────────────
+
+function AttrTestPanel({
+  type, result, remark, running, linkedWorkflows,
+  onSetType, onSetResult, onRemark, onRunWorkflow, onRunInline, onLink,
+}: {
+  type: AttrType;
+  result: AttrResult;
+  remark: string;
+  running: boolean;
+  linkedWorkflows: LinkedWorkflow[];
+  onSetType: (t: AttrType) => void;
+  onSetResult: (r: AttrResult) => void;
+  onRemark: (v: string) => void;
+  onRunWorkflow: () => void;
+  onRunInline: () => void;
+  onLink: () => void;
+}): JSX.Element {
+  const auto = type === 'Automated';
+  const hasWf = linkedWorkflows.length > 0;
+  return (
+    <div className="rounded-xl border border-canvas-border bg-white overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-canvas-border bg-canvas/50">
+        <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-700">
+          {auto ? <WorkflowIcon size={13} className="text-evidence-600" /> : <ClipboardList size={13} className="text-brand-600" />}
+          {auto ? 'Automated test' : 'Self-assessment'}
+        </span>
+        <TypeBox type={type} onSet={onSetType} />
+      </div>
+      <div className="p-3.5 space-y-3">
+        {auto ? (
+          <>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-[0.75rem] text-ink-600">
+                {hasWf ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    Tested by <span className="font-semibold text-brand-700">{linkedWorkflows[0]!.name}</span>
+                    {linkedWorkflows.length > 1 && <span className="text-ink-400">+{linkedWorkflows.length - 1}</span>}
+                  </span>
+                ) : (
+                  <span className="text-ink-500">No workflow linked — Pass/Fail comes from the workflow run, so link or build one.</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {hasWf ? (
+                  <>
+                    <button onClick={onRunWorkflow} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-canvas-border bg-white text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer transition-colors">
+                      <Play size={13} /> Open executor
+                    </button>
+                    <button onClick={onRunInline} disabled={running} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-500 cursor-pointer transition-colors disabled:opacity-60">
+                      {running ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />} Run &amp; record
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={onLink} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-500 cursor-pointer transition-colors">
+                    <Link2 size={13} /> Link or build workflow
+                  </button>
+                )}
+              </div>
+            </div>
+            {/* Automated result is read-only — it reflects the latest workflow run. */}
+            <div className="flex items-center gap-2">
+              <span className="text-[0.6875rem] uppercase tracking-wider font-semibold text-ink-500">Result</span>
+              <ResultPill result={result} />
+              <span className="text-[0.6875rem] text-ink-400">from workflow run</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-[0.75rem] text-ink-500">Confirm whether the control operated as intended this period, attach evidence below, and record your result.</p>
+            {/* Manual result — self-assessment only. */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[0.6875rem] uppercase tracking-wider font-semibold text-ink-500">Result</span>
+              <button
+                onClick={() => onSetResult(result === 'Pass' ? 'Not tested' : 'Pass')}
+                className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-[0.75rem] font-semibold cursor-pointer transition-colors ${result === 'Pass' ? 'bg-compliant-50 border-compliant-700 text-compliant-700' : 'border-canvas-border text-ink-600 hover:border-compliant-700/40 hover:text-compliant-700'}`}
+              >
+                <CheckCircle2 size={14} /> Pass
+              </button>
+              <button
+                onClick={() => onSetResult(result === 'Fail' ? 'Not tested' : 'Fail')}
+                className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-[0.75rem] font-semibold cursor-pointer transition-colors ${result === 'Fail' ? 'bg-risk-50 border-risk-700 text-risk-700' : 'border-canvas-border text-ink-600 hover:border-risk-700/40 hover:text-risk-700'}`}
+              >
+                <XCircle size={14} /> Fail
+              </button>
+            </div>
+          </>
+        )}
+
+        <textarea
+          value={remark}
+          onChange={e => onRemark(e.target.value)}
+          rows={2}
+          placeholder={auto ? 'Reviewer note (optional)…' : 'Remark — describe what you checked and any exceptions…'}
+          className="w-full px-3 py-2 text-[0.75rem] border border-canvas-border rounded-lg bg-white text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/15 resize-none"
+        />
+      </div>
+    </div>
   );
 }
 

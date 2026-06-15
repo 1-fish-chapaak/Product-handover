@@ -233,7 +233,7 @@ export default function PlanPanel({
   );
 }
 
-function PlanSection({ workflow }: { workflow: WorkflowDraft | null }) {
+export function PlanSection({ workflow }: { workflow: WorkflowDraft | null }) {
   if (!workflow) {
     return (
       <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-4">

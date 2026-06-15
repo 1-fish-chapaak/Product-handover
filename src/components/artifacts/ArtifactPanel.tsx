@@ -4,11 +4,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   X, ChevronDown, FileCode, PanelRightClose,
   Database, BarChart3, Sparkles, Copy, Download,
-  AlertTriangle, LayoutDashboard, Wand2, HelpCircle,
+  AlertTriangle, Wand2, HelpCircle,
   Check, Pencil, Search, ListChecks, MessageSquare, Share2,
 } from 'lucide-react';
 import type { ArtifactTab } from '../../hooks/useAppState';
-import OutputConfigTab from './OutputConfigTab';
 import Gated from '../shared/Gated';
 import { useToast } from '../shared/Toast';
 import { KpiTile } from '../shared/KpiTile';
@@ -28,6 +27,10 @@ interface ArtifactPanelProps {
    *  Used by the "Edit assumptions" action on the Plan tab so users adjust
    *  the run via natural language instead of an inline editor. */
   onComposeInChat?: (draft: string) => void;
+  /** Optional override for the Plan tab body. When provided, it replaces the
+   *  default (chat) PlanTab — used by the Workflow Executor to show that
+   *  workflow's own plan while reusing the rest of this QnA workspace. */
+  planSlot?: React.ReactNode;
 }
 
 // Counts must match PLAN_STEPS.length and QUERY_SOURCES.length defined below.
@@ -35,7 +38,6 @@ const TABS: { id: ArtifactTab; label: string; icon: React.ElementType; count?: n
   { id: 'plan', label: 'Plan', icon: Sparkles, count: 5 },
   { id: 'code', label: 'Code', icon: FileCode },
   { id: 'sources', label: 'Sources', icon: Database, count: 5 },
-  { id: 'output', label: 'Output', icon: LayoutDashboard },
 ];
 
 function CollapsibleSection({ title, icon: Icon, defaultOpen = true, children, actions }: { title: string; icon: React.ElementType; defaultOpen?: boolean; children: React.ReactNode; actions?: React.ReactNode }) {
@@ -1098,7 +1100,7 @@ function HighlightToolbar({ scopeRef }: { scopeRef: React.RefObject<HTMLDivEleme
   );
 }
 
-export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpenInKnowledgeHub, onComposeInChat, onShareResults }: ArtifactPanelProps) {
+export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpenInKnowledgeHub, onComposeInChat, onShareResults, planSlot }: ArtifactPanelProps) {
   const contentRef = useRef<HTMLDivElement | null>(null);
   return (
     <motion.div
@@ -1214,10 +1216,9 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
             exit={{ opacity: 0, y: -5 }}
             transition={{ duration: 0.15 }}
           >
-            {activeTab === 'plan' && <PlanTab onComposeInChat={onComposeInChat} />}
+            {activeTab === 'plan' && (planSlot ?? <PlanTab onComposeInChat={onComposeInChat} />)}
             {activeTab === 'code' && <CodeTab />}
             {activeTab === 'sources' && <SourcesTab onOpenInKnowledgeHub={onOpenInKnowledgeHub} onComposeInChat={onComposeInChat} />}
-            {activeTab === 'output' && <OutputConfigTab />}
           </motion.div>
         </AnimatePresence>
         <HighlightToolbar scopeRef={contentRef} />

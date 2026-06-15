@@ -524,7 +524,7 @@ export function useAppState() {
 
   // Hand off a prompt with the "Build a workflow" intent. Routes to the
   // dedicated WorkflowBuilderJourney view (Stepper + StepWritePrompt +
-  // AIAssistantPanel + ClarificationPanel etc.) and seeds the initial
+  // AIAssistantPanel + ConciergeClarificationStage etc.) and seeds the initial
   // prompt so the journey can skip Step 1 and land on clarification when
   // a non-empty prompt is provided. Empty string opens the journey at
   // Step 1.

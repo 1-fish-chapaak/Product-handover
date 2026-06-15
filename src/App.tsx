@@ -664,6 +664,10 @@ function AppInner() {
                 link: { view: 'workflow-detail', ref: { kind: 'workflow', id: workflowId } },
               }));
             }}
+            // Right-workspace actions — same destinations as the QnA workspace.
+            onShareResults={() => setShowShareModal(true, { type: 'workflow-output', id: 'result-1' })}
+            onOpenInKnowledgeHub={() => setView('knowledge-hub')}
+            onComposeInChat={(draft) => { setChatComposerDraft(draft); setView('chat'); }}
           />
         );
 
@@ -848,6 +852,7 @@ function AppInner() {
             })}
             onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
             onOpenWorkflow={(id) => setSelectedWorkflow(id, 'runs')}
+            onRunWorkflow={(id) => openWorkflowExecutor(id)}
             onCreateWorkflowForEngagement={startWorkflowForEngagement}
           />
         );
