@@ -21,6 +21,7 @@ import { attrCode, type ControlAttribute } from '../../data/racm';
 import { OWNER_NAMES, PEOPLE } from '../../data/grc-domain';
 import { useEngagementWorkspace } from './engagementWorkspace';
 import { useCan } from '../../context/CurrentUserContext';
+import ControlTestJourney from './ControlTestJourney';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -189,6 +190,8 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
   const [expandedAttrIds, setExpandedAttrIds] = useState<Set<string>>(() => new Set());
   const [draftAttr, setDraftAttr] = useState<Record<string, string>>({});
   const [addControlOpen, setAddControlOpen] = useState(false);
+  // Control test journey (population → sampling → AI validation → working paper).
+  const [journeyControlId, setJourneyControlId] = useState<string | null>(null);
 
   // ── Per-attribute data stores
   const [evidence, setEvidence] = useState<Record<string, EvidenceFile[]>>({});
@@ -583,20 +586,32 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                     <div className="p-4 space-y-4">
                       <div className="flex items-center justify-between gap-3">
                         <h4 className="text-[0.75rem] font-bold uppercase tracking-wider text-ink-600">Attributes</h4>
-                        {onTestEvidence && (
+                        <div className="flex items-center gap-2 shrink-0">
                           <Gated permission="racm_edit" mode="disable" title="You don't have permission to test controls">
                           <Button
-                            variant="secondary"
+                            variant="primary"
                             size="sm"
-                            leftIcon={<FlaskConical size={13} />}
-                            onClick={() => onTestEvidence(c.controlId)}
-                            className="shrink-0"
-                            title="Open this control in the Evidence tab to upload evidence and test samples"
+                            leftIcon={<Play size={13} />}
+                            onClick={() => setJourneyControlId(c.controlId)}
+                            title="Run the full test journey — population → sampling → AI validation → working paper"
                           >
-                            Test evidence
+                            Run test
                           </Button>
                           </Gated>
-                        )}
+                          {onTestEvidence && (
+                            <Gated permission="racm_edit" mode="disable" title="You don't have permission to test controls">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              leftIcon={<FlaskConical size={13} />}
+                              onClick={() => onTestEvidence(c.controlId)}
+                              title="Open this control in the Evidence tab to upload evidence and test samples"
+                            >
+                              Test evidence
+                            </Button>
+                            </Gated>
+                          )}
+                        </div>
                       </div>
                       {/* Attributes as a clean bullet list — click a bullet to expand its full detail. */}
                       <div className="space-y-1.5">
@@ -758,6 +773,12 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
             onCreate={createWorkflow}
             onClose={() => setMapAttr(null)}
           />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {journeyControlId && (
+          <ControlTestJourney engagement={engagement} controlId={journeyControlId} onClose={() => setJourneyControlId(null)} />
         )}
       </AnimatePresence>
     </div>
