@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search,
-  Sparkles,
+  Plus,
   Upload,
   Play,
   ChevronLeft,
@@ -151,8 +151,6 @@ export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
   },
 ];
 
-const TOTAL_PAGES = 144;
-
 export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow, onRunWorkflow, processFilter }: Props) {
   const { can } = useCan();
   const { addToast } = useToast();
@@ -207,6 +205,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
   const bulkEligible = useMemo(() => filtered.filter(w => !w.singleRunOnly), [filtered]);
   const allVisibleSelected = bulkEligible.length > 0 && bulkEligible.every(w => selectedIds.has(w.id));
   const someVisibleSelected = bulkEligible.some(w => selectedIds.has(w.id));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
 
   const toggleSelect = (id: string) => {
     const wf = LIBRARY_WORKFLOWS.find(w => w.id === id);
@@ -337,7 +336,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                 onClick={() => onCreateWorkflow?.()}
                 className="flex items-center gap-2 px-4 h-10 rounded-md bg-primary-xlight text-primary border border-primary/15 text-[0.8125rem] font-semibold hover:bg-primary/10 transition-colors cursor-pointer"
               >
-                <Sparkles size={14} />
+                <Plus size={14} />
                 Create Workflow
               </button>
             )}
@@ -383,7 +382,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                       checked={allVisibleSelected}
                       indeterminate={!allVisibleSelected && someVisibleSelected}
                       onChange={toggleSelectAllVisible}
-                      ariaLabel="Select all workflows on this page"
+                      ariaLabel="Select all workflows"
                     />
                   </th>
                 )}
@@ -439,7 +438,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                   </td>
                 </tr>
               ) : (
-                filtered.map(wf => {
+                filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage).map(wf => {
                   const isSelected = selectedIds.has(wf.id);
                   return (
                     // ORIG tr className (hover was bg-surface-2/50):
@@ -627,7 +626,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
           </div>
 
           <div className="flex items-center gap-4">
-            <span className="text-[0.8125rem] text-text-secondary">Page {page} of {TOTAL_PAGES}</span>
+            <span className="text-[0.8125rem] text-text-secondary">Page {page} of {totalPages}</span>
             <div className="flex items-center gap-1">
               <PaginationButton onClick={() => setPage(1)} disabled={page === 1}>
                 <ChevronsLeft size={14} />
@@ -635,10 +634,10 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
               <PaginationButton onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
                 <ChevronLeft size={14} />
               </PaginationButton>
-              <PaginationButton onClick={() => setPage(p => Math.min(TOTAL_PAGES, p + 1))} disabled={page === TOTAL_PAGES}>
+              <PaginationButton onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
                 <ChevronRight size={14} />
               </PaginationButton>
-              <PaginationButton onClick={() => setPage(TOTAL_PAGES)} disabled={page === TOTAL_PAGES}>
+              <PaginationButton onClick={() => setPage(totalPages)} disabled={page === totalPages}>
                 <ChevronsRight size={14} />
               </PaginationButton>
             </div>

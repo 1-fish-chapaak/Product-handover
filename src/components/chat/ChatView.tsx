@@ -1287,10 +1287,12 @@ function ThinkingTrail({ summary, steps, defaultOpen = false }: {
 function WorkflowOutputPreviewCard({
   onConfirm,
   onViewWorkspace,
+  onRevise,
 }: {
   workflow: WorkflowDraft;
   onConfirm: () => void;
   onViewWorkspace: () => void;
+  onRevise: () => void;
 }) {
   // Full reconciliation spec — exact KPI / Chart / Table content the
   // user supplied, rendered through the platform's audit-result prose
@@ -1339,14 +1341,24 @@ function WorkflowOutputPreviewCard({
           <PanelRightOpen size={13} />
           View Workspace
         </button>
-        <button
-          type="button"
-          onClick={onConfirm}
-          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.78125rem] font-semibold px-3.5 py-1.5 transition-colors cursor-pointer"
-        >
-          <CheckCircle size={13} />
-          Approve &amp; Run
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.78125rem] font-semibold px-3.5 py-1.5 transition-colors cursor-pointer"
+          >
+            <CheckCircle size={13} />
+            Approve &amp; Run
+          </button>
+          <button
+            type="button"
+            onClick={onRevise}
+            className="inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50 text-ink-800 text-[0.78125rem] font-semibold px-3.5 py-1.5 transition-colors cursor-pointer"
+          >
+            <Pencil size={13} />
+            Revise
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1706,7 +1718,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
               className="no-focus-ring w-full h-10 px-3 text-[0.8125rem] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors"
               placeholder="e.g., Duplicate Invoice Detection: Q1 ±3 days"
             />
-            <p className="text-[0.6875rem] text-ink-500 mt-1">IRA pre-filled this from your query. Edit if needed.</p>
+            <p className="text-[0.6875rem] text-ink-500 mt-1">Ira pre-filled this from your query. Edit if needed.</p>
           </div>
 
           {/* Two-column row: BP + Sub-process (custom dropdowns matching app theme) */}
@@ -1850,7 +1862,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
               className="no-focus-ring w-full px-3 py-2 text-[0.8125rem] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors resize-none"
               placeholder="One-line summary of what this workflow does."
             />
-            <p className="text-[0.6875rem] text-ink-500 mt-1">Optional. IRA pre-filled this from your query.</p>
+            <p className="text-[0.6875rem] text-ink-500 mt-1">Optional. Ira pre-filled this from your query.</p>
           </div>
 
           {/* Configuration — LLM-detected configurable keys. Removing a key
@@ -2750,6 +2762,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   const [wfRunning, setWfRunning] = useState(false);
   const [wfResult, setWfResult] = useState<RunResult | null>(null);
   const [wfSaved, setWfSaved] = useState(false);
+  // "Revise" on the plan preview → plan-refine mode: the next message is
+  // treated as feedback that updates the plan rather than a new build.
+  const [wfRefiningPlan, setWfRefiningPlan] = useState(false);
   const [wfMapExpanded, setWfMapExpanded] = useState<string | null>(null);
   const [wfSaveModalOpen, setWfSaveModalOpen] = useState(false);
   const [wfUploadModalOpen, setWfUploadModalOpen] = useState(false);
@@ -4210,6 +4225,25 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     const trimmed = input.trim();
     if (!trimmed && files.length === 0) return;
     const text = trimmed;
+
+    // Plan-refine mode (user clicked "Revise" on the plan preview): the next
+    // message is feedback that updates the plan — not a new build or query.
+    // Record it, acknowledge, then re-show the (updated) plan preview.
+    if (wfRefiningPlan && trimmed) {
+      setMessages(m => [...m, { id: `msg-${Date.now()}`, role: 'user', text: trimmed, timestamp: new Date() }]);
+      setInput('');
+      setFiles([]);
+      setAttachedSources([]);
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      setWfRefiningPlan(false);
+      setIsTyping(true);
+      window.setTimeout(() => {
+        setIsTyping(false);
+        wfPushAssistant('Updated the plan with your changes.');
+        wfPushCard('workflow-map');
+      }, 900);
+      return;
+    }
     // Attachments ride as structured data on the message — rendered as chips
     // above the bubble (matching the composer chips), not baked into the text.
     const messageAttachments: ChatMessage['attachments'] = [
@@ -4687,6 +4721,9 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
 
   // Picker → composer: source picks become labelled chips; fresh uploads
   // become a stub File so the existing `files` chip rendering picks them up.
+  // The picker is seeded with the CURRENT selection (initialSourceIds/initialFiles)
+  // and returns the full edited set, so we REPLACE rather than append — unchecking
+  // a previously-attached item in the modal removes it from the composer too.
   const handleDataPickerConfirm = (selections: AttachmentSelection[]) => {
     // Exhaustive over AttachmentSelection.kind. 'connect-db' is a Knowledge Hub-
     // only variant and unreachable here (chat opens the picker without `mode`,
@@ -4701,13 +4738,18 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
         case 'connect-db': /* not reachable in chat mode; intentionally ignored */ break;
       }
     }
-    if (sources.length > 0) setAttachedSources(prev => [...prev, ...sources]);
-    if (uploads.length > 0) {
-      const stubFiles = uploads.map(u => new File([''], u.name, { type: 'application/octet-stream' }));
-      setFiles(prev => [...prev, ...stubFiles]);
-    }
+    // REPLACE (not append): the modal was seeded with the current selection and
+    // returns the full edited set. Reuse each upload's File (real bytes for fresh
+    // drops; a stub for picker uploads) so removing in the modal removes here too.
+    setAttachedSources(sources);
+    setFiles(uploads.map(u => u.file ?? new File([''], u.name, { type: 'application/octet-stream' })));
     setShowDataPicker(false);
-    addToast({ type: 'success', message: `Attached ${selections.length} ${selections.length === 1 ? 'item' : 'items'}.` });
+    addToast({
+      type: 'success',
+      message: selections.length > 0
+        ? `Attached ${selections.length} ${selections.length === 1 ? 'item' : 'items'}.`
+        : 'Attachments cleared.',
+    });
   };
 
   const handleTextareaInput = () => {
@@ -5048,8 +5090,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 </motion.p>
               </div>
 
-              {/* Row 2 — input composer, the vertical centerpiece. */}
-              <div>
+              {/* Row 2 — input composer, the vertical centerpiece. min-w-0 lets
+                  this grid cell shrink to the 840px track so the attachment chip
+                  row's overflow-x-auto actually clips/scrolls instead of widening
+                  the whole composer past the column. */}
+              <div className="min-w-0">
                 {/* Engagement context banner — workflow builder opened from an engagement's Link → Create new flow. */}
                 {workflowEngagementContext && (
                   <div className="mb-3 flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-primary-xlight/50 border border-primary/15 text-left">
@@ -5154,7 +5199,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     onChange={e => { setInput(e.target.value); handleTextareaInput(); }}
                     onKeyDown={handleKeyDown}
                     onPaste={handleComposerPaste}
-                    aria-label="Message IRA"
+                    aria-label="Message Ira"
                     autoFocus
                     className="no-focus-ring relative z-10 w-full bg-transparent border-none outline-none resize-none px-4 pt-4 pb-2 text-[0.9375rem] leading-[1.55] tracking-[-0.005em] text-ink-800 min-h-[88px] max-h-[260px] text-left"
                     rows={1}
@@ -5334,6 +5379,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           open={showDataPicker}
           onClose={() => setShowDataPicker(false)}
           onConfirm={handleDataPickerConfirm}
+          initialSourceIds={attachedSources.flatMap(s => s.kind === 'source' ? [s.sourceId] : [])}
+          initialFiles={files}
         />
       </>
     );
@@ -5748,7 +5795,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         return (
                           <div className="space-y-4 w-full">
                             {msg.text && (
-                              <div className="text-[15px] leading-[1.65] text-ink-800 max-w-[66ch]">{renderAssistantText(msg.text)}</div>
+                              <div className="text-[0.9375rem] leading-[1.65] text-ink-800 max-w-[66ch]">{renderAssistantText(msg.text)}</div>
                             )}
 
                             {/* KPI scoreboard — mirrors the executor's 3-up metric
@@ -5761,7 +5808,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                   label={kpi.label}
                                   value={kpi.value}
                                   index={ki}
-                                  footer={kpi.note ? <span className="text-[11.5px] text-ink-500">{kpi.note}</span> : undefined}
+                                  footer={kpi.note ? <span className="text-[0.71875rem] text-ink-500">{kpi.note}</span> : undefined}
                                 />
                               ))}
                             </div>
@@ -5938,6 +5985,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             }, 2200);
                           }}
                           onViewWorkspace={() => { setArtifactMode("workflow"); setShowArtifacts(true); }}
+                          onRevise={() => setWfRefiningPlan(true)}
                         />
                       ) : null
                     ) : msg.richType === 'workflow-review' ? (
@@ -6486,6 +6534,26 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             messages column's true 52.5rem width so both surfaces span
             edge-to-edge identically. px-4 retained on mobile only. */}
         <div className="shrink-0 pb-2 max-w-[52.5rem] mx-auto w-full px-4 sm:px-0">
+          {/* Plan-refine banner — shown after "Revise" on the plan preview.
+              The next message updates the plan; Cancel exits with no change. */}
+          {wfRefiningPlan && (
+            <div className="mb-2 flex items-center gap-2.5 px-1">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[0.8125rem] font-semibold text-amber-700 shrink-0">
+                <Pencil size={12} />
+                Refining plan
+              </span>
+              <span className="flex-1 min-w-0 text-[0.8125rem] text-ink-500 truncate">
+                Type your feedback — the next message updates this plan.
+              </span>
+              <button
+                type="button"
+                onClick={() => setWfRefiningPlan(false)}
+                className="shrink-0 text-[0.8125rem] font-medium text-ink-500 hover:text-ink-800 underline underline-offset-2 cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
           {/* Legacy phase-based workflow clarification — now rendered through the
               shared QueryClarificationCard so it matches the chat Q&A flow. */}
           <AnimatePresence>
@@ -6715,7 +6783,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     onKeyDown={handleKeyDown}
                     onPaste={handleComposerPaste}
                     placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Reply to Ira…'}
-                    aria-label="Message IRA"
+                    aria-label="Message Ira"
                     className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-5 pt-4 pb-2 text-[0.9375rem] leading-[1.5] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]"
                     rows={1}
                   />
@@ -7183,6 +7251,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
         open={showDataPicker}
         onClose={() => setShowDataPicker(false)}
         onConfirm={handleDataPickerConfirm}
+        initialSourceIds={attachedSources.flatMap(s => s.kind === 'source' ? [s.sourceId] : [])}
+        initialFiles={files}
       />
 
       {/* Workflow build — upload modal (auto-opens once at Step 2 / Upload) */}

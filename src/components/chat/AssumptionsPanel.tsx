@@ -64,7 +64,7 @@ export default function AssumptionsPanel({
         {/* Assumptions list */}
         <div className="mb-4">
           <p className="text-[0.75rem] font-semibold text-ink-500 mb-2">
-            IRA will assume
+            Ira will assume
           </p>
           <div className="space-y-2">
             {assumptions.map((assumption, idx) => (

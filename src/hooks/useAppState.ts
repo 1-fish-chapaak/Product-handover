@@ -76,7 +76,7 @@ export type View =
 
 export type ChatMode = 'chat' | 'workflow';
 export type ExceptionRole = 'risk-owner' | 'auditor';
-export type ArtifactTab = 'plan' | 'code' | 'sources' | 'output' | 'flow' | 'preview';
+export type ArtifactTab = 'plan' | 'code' | 'sources' | 'output' | 'flow' | 'preview' | 'history';
 export type ArtifactMode = 'query' | 'workflow';
 export type ExecutionPanel = 'working-paper' | 'workflow-execution' | 'traceability' | null;
 

@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
 async function openClarification(page: Page) {
   await page.goto('/?view=chat');
   await enterWorkspace(page);
-  await page.getByRole('textbox', { name: 'Message IRA' }).fill('Find duplicate invoices in Q1');
+  await page.getByRole('textbox', { name: 'Message Ira' }).fill('Find duplicate invoices in Q1');
   await page.getByRole('button', { name: 'Send message' }).click();
   await expect(page.getByText('Question 1 of 4')).toBeVisible({ timeout: 6000 });
 }
