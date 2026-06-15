@@ -81,9 +81,9 @@ const COMBINED_REVIEW_STYLE: Record<CombinedActionReview, string> = {
   'Approved':                         'bg-compliant-50 text-compliant-700',
   'Rejected':                         'bg-risk-50 text-risk-700',
 };
-// Display label — 'Pending' (no auditor decision yet) renders as 'Under Review'.
+// Display label — 'Pending' (no auditor decision yet) renders as 'Pending Review'.
 const COMBINED_REVIEW_LABEL: Record<CombinedActionReview, string> = {
-  'Pending':                          'Under Review',
+  'Pending':                          'Pending Review',
   'Approved (Implemented)':           'Approved (Implemented)',
   'Approved (Partially Implemented)': 'Approved (Partially Implemented)',
   'Rejected (Discrepancy)':           'Rejected (Discrepancy)',

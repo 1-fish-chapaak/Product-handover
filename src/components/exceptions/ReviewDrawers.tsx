@@ -94,7 +94,7 @@ const COMBINED_REVIEW_STYLE: Record<CombinedActionReview, string> = {
   'Rejected':                         'bg-risk-50 text-risk-700',
 };
 const COMBINED_REVIEW_LABEL: Record<CombinedActionReview, string> = {
-  'Pending':                          'Under Review',
+  'Pending':                          'Pending Review',
   'Approved (Implemented)':           'Approved (Implemented)',
   'Approved (Partially Implemented)': 'Approved (Partially Implemented)',
   'Rejected (Discrepancy)':           'Rejected (Discrepancy)',
@@ -476,9 +476,12 @@ export function ReviewCaseDrawer({
 
   // Submit is enabled when a decision is chosen — and, for a completion Approve,
   // an implementation outcome is selected.
+  // Reviewing the Action Taken (completion review) requires a comment — it is
+  // captured in the Action Taken Report.
+  const completionCommentOk = !isCompletionReview || comment.trim().length > 0;
   const canSubmit = isViewMode
     ? true
-    : decision === 'reject' || (decision === 'approve' && (!isCompletionReview || implementation !== null));
+    : (decision === 'reject' || (decision === 'approve' && (!isCompletionReview || implementation !== null))) && completionCommentOk;
 
   // Auto-typed, editable message that reflects the chosen decision/outcome.
   const suggested = (() => {
@@ -739,13 +742,15 @@ export function ReviewCaseDrawer({
               )}
 
               <div>
-                <label className="block text-[12.5px] font-medium text-ink-800 mb-2">Comment</label>
+                <label className="block text-[12.5px] font-medium text-ink-800 mb-2">
+                  Comment {isCompletionReview && <span className="text-risk">*</span>}
+                </label>
                 {!isViewMode && <SuggestedChip message={suggested} onApply={applySuggested} />}
                 <div className="relative">
                   <textarea
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
-                    placeholder="Add a review comment..."
+                    placeholder={isCompletionReview ? 'Add your review comment (required)…' : 'Add a review comment...'}
                     rows={4}
                     className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
                   />
@@ -758,6 +763,11 @@ export function ReviewCaseDrawer({
                     <Paperclip size={14} />
                   </button>
                 </div>
+                {isCompletionReview && (
+                  <p className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-brand-700">
+                    <FileText size={12} className="shrink-0" /> This comment will be captured in the Action Taken Report (ATR).
+                  </p>
+                )}
               </div>
             </section>
 
