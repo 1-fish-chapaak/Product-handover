@@ -30,6 +30,7 @@ export type View =
   | 'programs'
   // Engagements
   | 'engagements'
+  | 'sox-icfr'
   | 'engagement-overview'
   | 'engagement-case-management'
   | 'my-queue'
