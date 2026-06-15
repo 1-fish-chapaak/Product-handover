@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, ShieldCheck, RefreshCw } from 'lucide-react';
+import './bookshelf.css';
 import { IcfrProvider, useIcfr } from './store';
 import { RoleSwitcher } from './parts';
 import CommandCenter from './CommandCenter';
@@ -20,7 +21,7 @@ function Inner({ onBack }: { onBack?: () => void }) {
     : <CommandCenter />;
 
   return (
-    <div className="h-full overflow-y-auto bg-canvas">
+    <div className="sox-book-ui h-full overflow-y-auto bg-canvas">
       {/* top bar */}
       <div className="sticky top-0 z-20 bg-canvas/85 backdrop-blur border-b border-canvas-border">
         <div className="max-w-[1180px] mx-auto px-6 h-14 flex items-center justify-between gap-4">
