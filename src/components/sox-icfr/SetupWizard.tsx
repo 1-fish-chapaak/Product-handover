@@ -11,7 +11,7 @@ import type { IcfrEngagement } from './types';
 const STEPS = ['Engagement', 'Materiality', 'Scope', 'RACM', 'Owners', 'Review'] as const;
 type Step = number;
 const FRAMEWORKS = ['SOX 404 / ICFR', 'IFC (India)', 'JSOX', 'Internal'];
-const PROCESSES = ['P2P', 'O2C', 'R2R'];
+const PROCESSES = ['Order to Cash', 'Record to Report', 'Treasury'];
 const PEOPLE = ['Rohit Sharma', 'Anita Rao', 'Sneha Joshi', 'Karan Mehta', 'Priya Nair'];
 
 export default function SetupWizard() {
@@ -44,7 +44,7 @@ export default function SetupWizard() {
       materiality, performanceMateriality: pm, preparer: 'You · Auditor', reviewer: 'Reviewer',
       accounts: TEMPLATE_ACCOUNTS.map(a => ({ ...a, inScope: scope[a.id] ?? a.inScope })),
       controls: controls.map(c => ({ ...c, owner: owners[c.id] ?? c.owner })),
-      deficiencies: [], tasks: [],
+      deficiencies: [], tasks: [], discussions: [],
     };
     createEngagement(eng);
     addToast({ type: 'success', title: 'Engagement created', message: `${eng.name} · ${eng.controls.length} controls scoped` });
@@ -54,7 +54,7 @@ export default function SetupWizard() {
 
   return (
     <div className="max-w-[820px] mx-auto space-y-5">
-      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Command center</button>
+      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Control register</button>
       <div>
         <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>New ICFR engagement</h1>
         <p className="text-[13px] text-ink-500 mt-0.5">Scope it once — materiality, accounts, RACM, owners — then test.</p>
