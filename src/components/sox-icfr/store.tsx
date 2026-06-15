@@ -3,7 +3,7 @@ import { seedIcfrEngagement } from './mockData';
 import { controlConclusion } from './helpers';
 import type { Attribute, Control, Deficiency, HandoffTask, IcfrEngagement, Role, Stage, TestResult } from './types';
 
-type View = 'command' | 'control' | 'portal' | 'deficiencies' | 'scope';
+type View = 'command' | 'control' | 'portal' | 'deficiencies' | 'scope' | 'setup';
 
 interface IcfrCtx {
   eng: IcfrEngagement;
@@ -24,6 +24,8 @@ interface IcfrCtx {
   signOff: (controlId: string) => boolean;
   updateDeficiency: (id: string, patch: Partial<Deficiency>) => void;
   togglePeriod: () => void;
+  rollForward: () => void;
+  createEngagement: (eng: IcfrEngagement) => void;
 }
 
 const Ctx = createContext<IcfrCtx | null>(null);
@@ -119,11 +121,29 @@ export function IcfrProvider({ children, initialRole = 'auditor' }: { children: 
     setEng(prev => ({ ...prev, period: prev.period === 'Interim' ? 'Year-end' : 'Interim' }));
   }, []);
 
+  const rollForward = useCallback(() => {
+    setEng(prev => ({
+      ...prev,
+      period: 'Year-end',
+      controls: prev.controls.map(c => {
+        const eff = controlConclusion(c) === 'Effective';
+        if (!eff) return c;
+        if (c.nature === 'Automated') return { ...c, benchmarked: true }; // benchmark — keep interim result
+        // manual effective → reset TOE for roll-forward testing
+        return { ...c, benchmarked: false, stage: 'toe' as Stage, conclusion: 'In progress', attributes: c.attributes.map(a => ({ ...a, toe: { ...a.toe, result: 'Not tested', testedBy: null, testedAt: null } })) };
+      }),
+    }));
+  }, []);
+
+  const createEngagement = useCallback<IcfrCtx['createEngagement']>((newEng) => {
+    setEng(newEng); setSelectedControlId(null); setView('command');
+  }, []);
+
   const value = useMemo<IcfrCtx>(() => ({
     eng, role, view, selectedControlId,
     setRole: changeRole, setView, openControl, back,
-    recordTod, recordToe, setStage, submitTask, clearTask, raiseReviewNote, signOff, updateDeficiency, togglePeriod,
-  }), [eng, role, view, selectedControlId, changeRole, openControl, back, recordTod, recordToe, setStage, submitTask, clearTask, raiseReviewNote, signOff, updateDeficiency, togglePeriod]);
+    recordTod, recordToe, setStage, submitTask, clearTask, raiseReviewNote, signOff, updateDeficiency, togglePeriod, rollForward, createEngagement,
+  }), [eng, role, view, selectedControlId, changeRole, openControl, back, recordTod, recordToe, setStage, submitTask, clearTask, raiseReviewNote, signOff, updateDeficiency, togglePeriod, rollForward, createEngagement]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

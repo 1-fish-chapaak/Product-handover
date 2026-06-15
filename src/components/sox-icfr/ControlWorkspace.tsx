@@ -199,6 +199,8 @@ function ReviewSection({ control }: { control: Control }) {
   const notes = eng.tasks.filter(t => t.controlId === control.id && t.type === 'review-note');
   const open = notes.filter(t => t.status === 'open');
   const concl = controlConclusion(control);
+  const [reviewed, setReviewed] = useState<Set<string>>(new Set());
+  const allReviewed = control.attributes.every(a => reviewed.has(a.id));
 
   if (role === 'risk-owner') return null;
   if (role === 'auditor' && open.length === 0) return null;
@@ -217,7 +219,23 @@ function ReviewSection({ control }: { control: Control }) {
         {control.stage === 'signed-off' && <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Signed off</span>}
       </header>
       <div className="p-4 space-y-3">
-        {notes.length === 0 && role === 'reviewer' && <p className="text-[12.5px] text-ink-500">No review notes. Add one for the preparer, or sign off.</p>}
+        {role === 'reviewer' && control.stage !== 'signed-off' && (
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-ink-400 font-semibold mb-1.5">Attribute review · annotate each before sign-off</div>
+            <div className="rounded-lg border border-canvas-border divide-y divide-canvas-border">
+              {control.attributes.map(a => {
+                const ok = reviewed.has(a.id);
+                return (
+                  <div key={a.id} className="flex items-center justify-between gap-2 px-3 py-2 text-[12px]">
+                    <span className="inline-flex items-center gap-2 min-w-0"><span className="font-mono text-[11px] text-ink-500">{a.code}</span><span className="text-ink-700 truncate">{a.description}</span></span>
+                    <button onClick={() => setReviewed(prev => { const n = new Set(prev); if (n.has(a.id)) n.delete(a.id); else n.add(a.id); return n; })} className={cn('shrink-0 inline-flex items-center gap-1 h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', ok ? 'bg-compliant-50 border-compliant-700 text-compliant-700' : 'border-canvas-border text-ink-500 hover:border-compliant-700/40')}><CheckCircle2 size={12} /> {ok ? 'Reviewed' : 'Mark reviewed'}</button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {notes.length === 0 && role === 'reviewer' && <p className="text-[12.5px] text-ink-500">Add a review note for the preparer, or sign off when every attribute is reviewed.</p>}
         {notes.map(n => (
           <div key={n.id} className={cn('rounded-lg border px-3 py-2 flex items-start justify-between gap-3', n.status === 'open' ? 'border-mitigated-700/30 bg-mitigated-50/40' : 'border-canvas-border bg-paper-50/40')}>
             <div className="min-w-0"><div className="text-[12.5px] text-ink-800">{n.thread[n.thread.length - 1]?.text ?? n.detail}</div><div className="text-[11px] text-ink-400 mt-0.5">{n.raisedBy} · {n.status === 'open' ? 'open' : 'cleared'}</div></div>
@@ -228,7 +246,7 @@ function ReviewSection({ control }: { control: Control }) {
           <div className="flex items-center gap-2">
             <input value={draft} onChange={e => setDraft(e.target.value)} placeholder="Add a review note for the preparer…" className="flex-1 h-9 px-3 rounded-lg border border-canvas-border text-[12.5px] focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
             <button onClick={addNote} className="h-9 px-3 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-700 hover:border-brand-300 cursor-pointer transition-colors">Add note</button>
-            <button onClick={doSignOff} disabled={open.length > 0 || concl !== 'Effective'} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-500 cursor-pointer disabled:bg-brand-100 disabled:text-brand-300 disabled:cursor-not-allowed inline-flex items-center gap-1.5 transition-colors"><ShieldCheck size={14} /> Sign off</button>
+            <button onClick={doSignOff} disabled={open.length > 0 || concl !== 'Effective' || !allReviewed} title={!allReviewed ? 'Mark every attribute reviewed first' : open.length > 0 ? 'Clear open notes first' : undefined} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-500 cursor-pointer disabled:bg-brand-100 disabled:text-brand-300 disabled:cursor-not-allowed inline-flex items-center gap-1.5 transition-colors"><ShieldCheck size={14} /> Sign off</button>
           </div>
         )}
       </div>

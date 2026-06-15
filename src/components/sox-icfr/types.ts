@@ -120,6 +120,8 @@ export interface Control {
   attributes: Attribute[];
   stage: Stage;
   conclusion: Conclusion;
+  /** Year-end roll-forward: automated control benchmarked from interim (no full re-test). */
+  benchmarked?: boolean;
   population?: Population;
   sampling?: Sampling;
 }
