@@ -364,7 +364,10 @@ export default function DataSourcePanel({
     });
   };
 
-  // Auto-jump to Preview tab once the user explicitly reveals the preview.
+  // Preview tab is hidden (commented out of the bar), so its auto-jump
+  // effects are disabled too — they'd otherwise navigate to a tab that no
+  // longer exists. Restore alongside the Preview tab entry below.
+  /*
   const previewJumpedRef = useRef(false);
   useEffect(() => {
     if (previewRevealed && !previewJumpedRef.current) {
@@ -387,6 +390,7 @@ export default function DataSourcePanel({
     }
     if (!result) resultLandedRef.current = false;
   }, [result, previewRevealed]);
+  */
 
   // Auto-select the right-side tab based on the journey step. Each step
   // transition fires once — the user can still switch tabs manually after.
@@ -526,7 +530,8 @@ export default function DataSourcePanel({
   const outputBadge = String(visibleColumnCount);
   const outputTone: 'ok' | 'warn' | 'idle' =
     visibleColumnCount > 0 ? 'ok' : 'idle';
-  const previewTone: 'ok' | 'warn' | 'idle' = result ? 'ok' : 'idle';
+  // Preview tab is commented out of the bar below; previewTone unused for now.
+  // const previewTone: 'ok' | 'warn' | 'idle' = result ? 'ok' : 'idle';
 
   const TABS: {
     id: PanelTab;
@@ -538,7 +543,8 @@ export default function DataSourcePanel({
     { id: 'input', label: 'Sources', badge: inputBadge, tone: inputTone, icon: Database },
     { id: 'plan', label: 'Plan', badge: planBadge, tone: planTone, icon: ListChecks },
     { id: 'code', label: 'Code', tone: 'idle', icon: Code2 },
-    { id: 'preview', label: 'Preview', tone: previewTone, icon: Eye },
+    // Preview tab hidden per design — commented out (restore to bring it back).
+    // { id: 'preview', label: 'Preview', tone: previewTone, icon: Eye },
   ];
 
   const totalColumnsInUse = workflow.inputs.reduce(

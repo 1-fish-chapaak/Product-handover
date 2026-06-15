@@ -2374,6 +2374,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                 setActiveTab={setWsTab}
                 onClose={() => setRightOpen(false)}
                 planSlot={<PlanSection workflow={workflow} />}
+                showHistory
                 onShareResults={onShareResults}
                 onOpenInKnowledgeHub={onOpenInKnowledgeHub}
                 onComposeInChat={onComposeInChat}

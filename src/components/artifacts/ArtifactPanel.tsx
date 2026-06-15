@@ -6,6 +6,7 @@ import {
   Database, BarChart3, Copy, Download,
   AlertTriangle, Wand2, HelpCircle,
   Check, Pencil, Search, ListChecks, MessageSquare, Share2,
+  History as HistoryIcon, Clock,
 } from 'lucide-react';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import Gated from '../shared/Gated';
@@ -31,6 +32,10 @@ interface ArtifactPanelProps {
    *  default (chat) PlanTab — used by the Workflow Executor to show that
    *  workflow's own plan while reusing the rest of this QnA workspace. */
   planSlot?: React.ReactNode;
+  /** Executor-only: when true, appends a "History" tab showing this
+   *  workflow's past runs. Chat Q&A reuses this panel without it, so the
+   *  tab (and the run-history view) never appear there. */
+  showHistory?: boolean;
 }
 
 // Counts must match PLAN_STEPS.length and QUERY_SOURCES.length defined below.
@@ -1100,8 +1105,116 @@ function HighlightToolbar({ scopeRef }: { scopeRef: React.RefObject<HTMLDivEleme
   );
 }
 
-export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpenInKnowledgeHub, onComposeInChat, onShareResults, planSlot }: ArtifactPanelProps) {
+// Executor-only run history. The Workflow Executor passes showHistory to
+// surface this; chat Q&A reuses ArtifactPanel without it, so the tab and
+// this view never appear there. Mock data — production reads the run log.
+interface WorkflowRun {
+  id: string;
+  startedAt: string;
+  status: 'success' | 'failed';
+  records: number | null;
+  flagged: number | null;
+  durationMs: number | null;
+  trigger: string;
+  failReason?: string;
+}
+
+const RUN_HISTORY: WorkflowRun[] = [
+  { id: '#1248', startedAt: 'Jun 14, 2026 · 09:00', status: 'success', records: 1204388, flagged: 9,  durationMs: 312, trigger: 'Scheduled · daily 09:00' },
+  { id: '#1247', startedAt: 'Jun 13, 2026 · 09:00', status: 'success', records: 1198742, flagged: 7,  durationMs: 298, trigger: 'Scheduled · daily 09:00' },
+  { id: '#1246', startedAt: 'Jun 12, 2026 · 09:00', status: 'failed',  records: null,    flagged: null, durationMs: null, trigger: 'Scheduled · daily 09:00', failReason: 'Source timeout' },
+  { id: '#1245', startedAt: 'Jun 11, 2026 · 14:33', status: 'success', records: 1191005, flagged: 12, durationMs: 305, trigger: 'Manual · A. Jain' },
+  { id: '#1244', startedAt: 'Jun 11, 2026 · 09:00', status: 'success', records: 1187560, flagged: 8,  durationMs: 289, trigger: 'Scheduled · daily 09:00' },
+  { id: '#1243', startedAt: 'Jun 10, 2026 · 09:00', status: 'success', records: 1180233, flagged: 6,  durationMs: 294, trigger: 'Scheduled · daily 09:00' },
+];
+
+function RunHistoryTab() {
+  const total = RUN_HISTORY.length;
+  const succeeded = RUN_HISTORY.filter(r => r.status === 'success').length;
+  const failed = total - succeeded;
+  const fmt = (n: number) => n.toLocaleString('en-IN');
+  return (
+    <div className="space-y-3 pt-4">
+      {/* Summary line */}
+      <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-[0.75rem] text-ink-500">
+        <HistoryIcon size={13} className="text-ink-400" />
+        <span><span className="font-semibold text-ink-700 tabular-nums">{total}</span> runs</span>
+        <span className="text-ink-300" aria-hidden>·</span>
+        <span className="text-compliant-700 font-medium tabular-nums">{succeeded} succeeded</span>
+        {failed > 0 && (
+          <>
+            <span className="text-ink-300" aria-hidden>·</span>
+            <span className="text-risk-700 font-medium tabular-nums">{failed} failed</span>
+          </>
+        )}
+        <span className="text-ink-300" aria-hidden>·</span>
+        <span>last 7 days</span>
+      </div>
+
+      {/* Run list */}
+      <ul className="space-y-2" role="list">
+        {RUN_HISTORY.map((run, i) => {
+          const ok = run.status === 'success';
+          return (
+            <motion.li
+              key={run.id}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.03 + i * 0.03, duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              className="group rounded-xl border border-canvas-border bg-canvas-elevated px-3.5 py-3 flex items-center gap-3 transition-[border-color,box-shadow] duration-200 hover:border-brand-200 hover:shadow-[0_8px_22px_-14px_rgba(15,8,30,0.18)]"
+            >
+              {/* Status */}
+              <span
+                className={`inline-flex items-center justify-center size-7 rounded-lg shrink-0 ${ok ? 'bg-compliant-50 text-compliant-700' : 'bg-risk-50 text-risk-700'}`}
+                aria-hidden
+              >
+                {ok ? <Check size={14} strokeWidth={2.75} /> : <X size={14} strokeWidth={2.75} />}
+              </span>
+
+              {/* Run id + timestamp */}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[0.8125rem] font-semibold text-ink-900 tabular-nums">Run {run.id}</span>
+                  <span className={`inline-flex items-center h-[18px] px-1.5 rounded-full text-[0.6875rem] font-semibold ${ok ? 'bg-compliant-50 text-compliant-700' : 'bg-risk-50 text-risk-700'}`}>
+                    {ok ? 'Success' : 'Failed'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5 text-[0.75rem] text-ink-500 min-w-0">
+                  <Clock size={11} className="text-ink-400 shrink-0" />
+                  <span className="tabular-nums shrink-0">{run.startedAt}</span>
+                  <span className="text-ink-300 shrink-0" aria-hidden>·</span>
+                  <span className="truncate">{run.trigger}</span>
+                </div>
+              </div>
+
+              {/* Metrics */}
+              <div className="text-right shrink-0">
+                {ok ? (
+                  <>
+                    <div className="text-[0.8125rem] font-semibold text-ink-900 tabular-nums">{fmt(run.records!)}</div>
+                    <div className="text-[0.6875rem] text-ink-500 tabular-nums">
+                      {run.flagged} flagged · {(run.durationMs! / 1000).toFixed(1)}s
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-[0.75rem] text-risk-700 font-medium">{run.failReason}</div>
+                )}
+              </div>
+            </motion.li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpenInKnowledgeHub, onComposeInChat, onShareResults, planSlot, showHistory }: ArtifactPanelProps) {
   const contentRef = useRef<HTMLDivElement | null>(null);
+  // Executor appends a History tab; chat Q&A (no showHistory) keeps the base set.
+  const tabs: { id: ArtifactTab; label: string; icon: React.ElementType; count?: number }[] =
+    showHistory
+      ? [...TABS, { id: 'history', label: 'History', icon: HistoryIcon, count: RUN_HISTORY.length }]
+      : TABS;
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -1120,7 +1233,7 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
           aria-label="Workspace"
           className="relative flex items-end gap-0.5 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {TABS.map(tab => {
+          {tabs.map(tab => {
             const isActive = activeTab === tab.id;
             return (
               <motion.button
@@ -1219,6 +1332,7 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
             {activeTab === 'plan' && (planSlot ?? <PlanTab onComposeInChat={onComposeInChat} />)}
             {activeTab === 'code' && <CodeTab />}
             {activeTab === 'sources' && <SourcesTab onOpenInKnowledgeHub={onOpenInKnowledgeHub} onComposeInChat={onComposeInChat} />}
+            {activeTab === 'history' && <RunHistoryTab />}
           </motion.div>
         </AnimatePresence>
         <HighlightToolbar scopeRef={contentRef} />
