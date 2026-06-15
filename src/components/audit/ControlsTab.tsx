@@ -10,18 +10,17 @@ import {
   Shield, ChevronRight, Sparkles, Search, Upload, X, Plus,
   FileText, Image as ImageIcon, FileSpreadsheet, Check, AlertCircle,
   Link2, Workflow as WorkflowIcon, ClipboardList,
-  CheckCircle2, Circle, FlaskConical, Play, Loader2, XCircle, Download,
+  CheckCircle2, Circle, FlaskConical, Play, Loader2, XCircle,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import Gated from '../shared/Gated';
 import { Button } from '../shared/Button';
 import ListPlaceholder from '../shared/ListPlaceholder';
 import type { Engagement } from '../../data/engagements';
-import { attrCode, racmRowsForProcess, type ControlAttribute } from '../../data/racm';
+import { attrCode, type ControlAttribute } from '../../data/racm';
 import { OWNER_NAMES, PEOPLE } from '../../data/grc-domain';
 import { useEngagementWorkspace } from './engagementWorkspace';
 import { useCan } from '../../context/CurrentUserContext';
-import { downloadWorkingPaper, type WpAttribute, type WpControl } from './workingPaper';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -153,16 +152,6 @@ function kindForFile(name: string): EvidenceKind {
   if (lower.endsWith('.pdf')) return 'PDF';
   if (lower.endsWith('.xlsx') || lower.endsWith('.xls') || lower.endsWith('.csv')) return 'XLSX';
   return 'IMG';
-}
-
-// SOX assertions cycled deterministically per attribute for the working paper.
-const SOX_ASSERTIONS = ['Completeness', 'Accuracy', 'Existence / Occurrence', 'Cut-off', 'Valuation', 'Rights & Obligations', 'Presentation'];
-
-function deriveCtrlType(methods: AttrType[]): string {
-  const hasAuto = methods.includes('Automated');
-  const hasSelf = methods.includes('Self-assessed');
-  if (hasAuto && hasSelf) return 'Hybrid';
-  return hasAuto ? 'Automated' : 'Self-assessed';
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -420,55 +409,6 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
     setSearch('');
   };
 
-  // ── Download the SOX working paper (.xlsx) from the live control/attribute results.
-  const downloadWp = () => {
-    const riskByControl = new Map<string, string>();
-    racmRowsForProcess(engagement.process).forEach(r => {
-      if (!riskByControl.has(r.controlId)) riskByControl.set(r.controlId, r.riskDescription);
-    });
-    const testedOn = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-    const wpControls: WpControl[] = controls.map(c => {
-      const attrs: WpAttribute[] = c.attributes.map(a => {
-        const method = typeFor(a.id);
-        const result = resultFor(a.id);
-        const wfNames = ws.workflowIdsForAttribute(a.id)
-          .map(id => ws.workflows.find(w => w.id === id)?.name)
-          .filter((n): n is string => !!n)
-          .join(', ');
-        return {
-          controlId: c.controlId,
-          attrId: attrCode(a.id),
-          description: a.description,
-          assertion: SOX_ASSERTIONS[hash(a.id) % SOX_ASSERTIONS.length]!,
-          method,
-          workflow: method === 'Automated' ? (wfNames || '—') : '—',
-          result,
-          remark: (attrRemark[a.id] ?? '').trim() || (result === 'Fail' ? 'Exception noted during testing — see ATR' : ''),
-          testedBy: result === 'Not tested' ? '—' : method === 'Automated' ? 'IRA · workflow' : engagement.owner,
-          testedOn: result === 'Not tested' ? '—' : testedOn,
-        };
-      });
-      return {
-        controlId: c.controlId,
-        description: c.description,
-        risk: riskByControl.get(c.controlId) ?? `Risk of error or fraud in ${c.subProcess}`,
-        subProcess: c.subProcess,
-        type: deriveCtrlType(c.attributes.map(a => typeFor(a.id))),
-        frequency: c.frequency,
-        isKey: c.isKey,
-        owner: engagement.owner,
-        status: controlStatuses.get(c.controlId) ?? 'Not tested',
-        attributes: attrs,
-      };
-    });
-    downloadWorkingPaper(engagement, wpControls, {
-      preparedBy: engagement.owner,
-      reviewedBy: 'Pending reviewer sign-off',
-      preparedOn: testedOn,
-    });
-    const attrCount = wpControls.reduce((n, c) => n + c.attributes.length, 0);
-    addToast({ type: 'success', title: 'Working paper exported', message: `Working_Paper_${engagement.code}.xlsx · ${controls.length} controls · ${attrCount} attributes` });
-  };
 
   // ─── Empty state ───────────────────────────────────────────────────────────
   if (controls.length === 0) {
@@ -579,16 +519,11 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
       {/* ─── Controls list ─── */}
       <div className="flex items-center justify-between mb-2.5">
         <span className="text-[0.75rem] font-semibold text-ink-600">{filteredControls.length} control{filteredControls.length === 1 ? '' : 's'}</span>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" leftIcon={<Download size={13} />} onClick={downloadWp} title="Download the SOX working paper (.xlsx) — summary, attribute testing, exceptions">
-            Working paper
-          </Button>
-          <Gated permission="ctrl_create" mode="disable" title="You don't have permission to create controls">
-          <Button variant="primary" size="sm" leftIcon={<Plus size={13} />} onClick={() => setAddControlOpen(true)}>
-            New control
-          </Button>
-          </Gated>
-        </div>
+        <Gated permission="ctrl_create" mode="disable" title="You don't have permission to create controls">
+        <Button variant="primary" size="sm" leftIcon={<Plus size={13} />} onClick={() => setAddControlOpen(true)}>
+          New control
+        </Button>
+        </Gated>
       </div>
       <div className="space-y-2.5">
         {filteredControls.length === 0 && (
