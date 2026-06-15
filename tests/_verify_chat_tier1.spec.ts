@@ -58,7 +58,7 @@ test('Fix 4 — in-chat composer shows a read-only mode indicator (after clarifi
   await page.goto('/?view=chat');
   await enterWorkspace(page);
 
-  await page.getByRole('textbox', { name: 'Message IRA' }).fill('What were our top vendor risks last quarter?');
+  await page.getByRole('textbox', { name: 'Message Ira' }).fill('What were our top vendor risks last quarter?');
   await page.getByRole('button', { name: 'Send message' }).click();
   // The clarification hides the composer; answer it so the composer returns.
   await answerClarification(page);
@@ -74,7 +74,7 @@ test('Composer is hidden while a clarification is open (single input surface)', 
   await page.goto('/?view=chat');
   await enterWorkspace(page);
 
-  await page.getByRole('textbox', { name: 'Message IRA' }).fill('Find duplicate invoices in Q1');
+  await page.getByRole('textbox', { name: 'Message Ira' }).fill('Find duplicate invoices in Q1');
   await page.getByRole('button', { name: 'Send message' }).click();
   await expect(page.getByText('Question 1 of 4')).toBeVisible({ timeout: 6000 });
 
@@ -87,7 +87,7 @@ test('Fix 1 — Stop stays visible during the audit loader, then leaves a Stoppe
   await page.goto('/?view=chat');
   await enterWorkspace(page);
 
-  await page.getByRole('textbox', { name: 'Message IRA' }).fill('Find duplicate invoices in Q1');
+  await page.getByRole('textbox', { name: 'Message Ira' }).fill('Find duplicate invoices in Q1');
   await page.getByRole('button', { name: 'Send message' }).click();
   await answerClarification(page);
 

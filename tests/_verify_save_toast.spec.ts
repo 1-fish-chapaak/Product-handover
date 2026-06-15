@@ -26,7 +26,7 @@ async function answerClarification(page: Page, max = 8) {
 test('save-as-workflow toast → View in library lands on the saved workflow', async ({ page }) => {
   await page.goto('/?view=chat');
   await enterWorkspace(page);
-  await page.getByRole('textbox', { name: 'Message IRA' }).fill('Find duplicate invoices in Q1');
+  await page.getByRole('textbox', { name: 'Message Ira' }).fill('Find duplicate invoices in Q1');
   await page.getByRole('button', { name: 'Send message' }).click();
   await answerClarification(page);
   await page.getByText('Flagged duplicate pairs').waitFor({ timeout: 20000 });
@@ -62,7 +62,7 @@ test('save-as-workflow toast → View in library lands on the saved workflow', a
 
   // Click it → redirected to the workflow library (chat composer gone).
   await viewInLib.click();
-  await expect(page.getByRole('textbox', { name: 'Message IRA' })).toHaveCount(0, { timeout: 6000 });
+  await expect(page.getByRole('textbox', { name: 'Message Ira' })).toHaveCount(0, { timeout: 6000 });
   // Dismiss the toast so the saved name can ONLY match a real library row,
   // not the toast text — proves the workflow actually sits in the library.
   await page.getByRole('button', { name: 'Dismiss' }).click().catch(() => {});

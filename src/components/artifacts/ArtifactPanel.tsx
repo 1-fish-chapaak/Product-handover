@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X, ChevronDown, FileCode, PanelRightClose,
-  Database, BarChart3, Sparkles, Copy, Download,
+  Database, BarChart3, Copy, Download,
   AlertTriangle, Wand2, HelpCircle,
   Check, Pencil, Search, ListChecks, MessageSquare, Share2,
 } from 'lucide-react';
@@ -35,7 +35,7 @@ interface ArtifactPanelProps {
 
 // Counts must match PLAN_STEPS.length and QUERY_SOURCES.length defined below.
 const TABS: { id: ArtifactTab; label: string; icon: React.ElementType; count?: number }[] = [
-  { id: 'plan', label: 'Plan', icon: Sparkles, count: 5 },
+  { id: 'plan', label: 'Plan', icon: ListChecks, count: 5 },
   { id: 'code', label: 'Code', icon: FileCode },
   { id: 'sources', label: 'Sources', icon: Database, count: 5 },
 ];
@@ -182,7 +182,7 @@ function PlanTab({
           className="w-full flex items-center gap-3 px-4 py-3 hover:bg-paper-50/40 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-inset"
         >
           <div className="size-7 rounded-lg bg-brand-50 ring-1 ring-inset ring-brand-100 flex items-center justify-center shrink-0">
-            <Sparkles size={13} className="text-brand-600" />
+            <ListChecks size={13} className="text-brand-600" />
           </div>
           <div className="flex-1 min-w-0 text-left">
             <h3 className="text-[0.75rem] font-semibold text-ink-900 leading-tight tracking-tight">Query Execution Plan</h3>

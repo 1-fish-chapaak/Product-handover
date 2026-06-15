@@ -26,7 +26,7 @@ test('graph gains a CSV/Excel download; table loses Open + View all, Download is
   await page.goto('/?view=chat');
   await enterWorkspace(page);
 
-  await page.getByRole('textbox', { name: 'Message IRA' }).fill('Find duplicate invoices in Q1');
+  await page.getByRole('textbox', { name: 'Message Ira' }).fill('Find duplicate invoices in Q1');
   await page.getByRole('button', { name: 'Send message' }).click();
   await answerClarification(page);
 

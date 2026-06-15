@@ -25,8 +25,6 @@ import {
   GripVertical,
   Eye,
   EyeOff,
-  Sparkles,
-  Workflow as WorkflowIcon,
   Code2,
   Copy,
   ListChecks,
@@ -157,7 +155,7 @@ function describeColumn(name: string): string {
   return COLUMN_DESCRIPTIONS[name] ?? 'Source field';
 }
 
-type PanelTab = 'input' | 'plan' | 'preview';
+type PanelTab = 'input' | 'plan' | 'code' | 'preview';
 
 const STEP_BADGE: Record<
   StepSpec['type'],
@@ -342,7 +340,8 @@ export default function DataSourcePanel({
   const [expandedInputCardIds, setExpandedInputCardIds] = useState<Set<string>>(new Set());
   const [expandedInputFolderIds, setExpandedInputFolderIds] = useState<Set<string>>(new Set());
   const [referencesOpen, setReferencesOpen] = useState(false);
-  const [codeOpen, setCodeOpen] = useState(false);
+  const [foldersOpen, setFoldersOpen] = useState(true);
+  const [filesOpen, setFilesOpen] = useState(true);
   const [outputColumns, setOutputColumns] = useState<OutputColumn[]>(DEFAULT_OUTPUT_COLUMNS);
   const [acceptedSuggestions, setAcceptedSuggestions] = useState<Set<string>>(
     () => new Set(['variance']),
@@ -536,8 +535,9 @@ export default function DataSourcePanel({
     tone: 'ok' | 'warn' | 'idle';
     icon: typeof Database;
   }[] = [
-    { id: 'input', label: 'Input Config', badge: inputBadge, tone: inputTone, icon: Database },
-    { id: 'plan', label: 'Plan', badge: planBadge, tone: planTone, icon: Sparkles },
+    { id: 'input', label: 'Sources', badge: inputBadge, tone: inputTone, icon: Database },
+    { id: 'plan', label: 'Plan', badge: planBadge, tone: planTone, icon: ListChecks },
+    { id: 'code', label: 'Code', tone: 'idle', icon: Code2 },
     { id: 'preview', label: 'Preview', tone: previewTone, icon: Eye },
   ];
 
@@ -622,20 +622,27 @@ export default function DataSourcePanel({
         {tab === 'input' && (
           <div>
             {/* Folders section */}
-            <div className="flex items-center gap-2 mb-3 px-1">
+            <button
+              type="button"
+              onClick={() => setFoldersOpen((v) => !v)}
+              aria-expanded={foldersOpen}
+              className="w-full flex items-center gap-2 mb-3 px-1 rounded-md cursor-pointer text-left hover:bg-brand-50/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
               <div className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
                 <FolderClosed size={14} />
               </div>
-              <span className="text-[13px] font-semibold text-ink-800 flex-1 min-w-0 truncate">
+              <span className="text-[13px] font-semibold text-ink-800 flex-1 min-w-0 truncate text-left">
                 Folders
               </span>
               <span className="text-[12px] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
                 {INPUT_FILE_FOLDERS.length} folder{INPUT_FILE_FOLDERS.length === 1 ? '' : 's'}
               </span>
-            </div>
+              <ChevronDown size={16} className={`text-ink-400 shrink-0 transition-transform duration-150 ${foldersOpen ? '' : '-rotate-90'}`} />
+            </button>
 
             {/* Folder rows — same shape as the Files section: primary row
                 + footer with file-count + Open / Chat actions. */}
+            {foldersOpen && (
             <div
               className="grid gap-3 mb-4"
               style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))' }}
@@ -738,23 +745,31 @@ export default function DataSourcePanel({
                 );
               })}
             </div>
+            )}
 
             {/* Files section */}
-            <div className="flex items-center gap-2 mb-3 px-1">
+            <button
+              type="button"
+              onClick={() => setFilesOpen((v) => !v)}
+              aria-expanded={filesOpen}
+              className="w-full flex items-center gap-2 mb-3 px-1 rounded-md cursor-pointer text-left hover:bg-brand-50/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
               <div className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
                 <Database size={14} />
               </div>
-              <span className="text-[13px] font-semibold text-ink-800 flex-1 min-w-0 truncate">
+              <span className="text-[13px] font-semibold text-ink-800 flex-1 min-w-0 truncate text-left">
                 Files
               </span>
               <span className="text-[12px] font-semibold text-brand-700 rounded-full bg-brand-50 px-2 py-0.5 shrink-0">
                 {workflow.inputs.length} source{workflow.inputs.length === 1 ? '' : 's'}
               </span>
-            </div>
+              <ChevronDown size={16} className={`text-ink-400 shrink-0 transition-transform duration-150 ${filesOpen ? '' : '-rotate-90'}`} />
+            </button>
 
             {/* Input source rows — match the query SourcesTab card shape:
                 primary row (icon + name + meta + format badge) on top, a
                 footer with "Using N of M: cols…" + Pick + Chat actions. */}
+            {filesOpen && (
             <div
               className="grid gap-3 mb-4"
               style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))' }}
@@ -848,6 +863,7 @@ export default function DataSourcePanel({
                 );
               })}
             </div>
+            )}
           </div>
         )}
 
@@ -1022,9 +1038,8 @@ export default function DataSourcePanel({
 
         {tab === 'plan' && (
           <div className="flex flex-col gap-3">
-            {/* Tab intro — title + summary chip + Workflow|Code segmented
-                control. Replaces the floating left-aligned toggle so the
-                Plan tab leads with a clear hierarchy. */}
+            {/* Plan intro — title + summary. Code now has its own top-level
+                tab, so the Workflow/Code toggle has been removed. */}
             <div className="flex items-center gap-2 px-1">
               <div className="min-w-0 flex-1">
                 <div className="text-[14px] font-semibold tracking-tight text-ink-900 leading-tight">
@@ -1033,40 +1048,6 @@ export default function DataSourcePanel({
                 <div className="text-[12px] text-ink-500 mt-0.5">
                   {workflow.steps.length} step{workflow.steps.length === 1 ? '' : 's'} · {workflow.inputs.length} source{workflow.inputs.length === 1 ? '' : 's'} · {totalColumnsInUse} column{totalColumnsInUse === 1 ? '' : 's'} in use
                 </div>
-              </div>
-              <div
-                role="radiogroup"
-                aria-label="Plan view"
-                className="inline-flex items-center rounded-full bg-canvas p-0.5 border border-canvas-border shrink-0"
-              >
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={!codeOpen}
-                  onClick={() => setCodeOpen(false)}
-                  className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[12px] font-semibold transition-colors cursor-pointer ${
-                    !codeOpen
-                      ? 'bg-brand-600 text-white'
-                      : 'text-ink-500 hover:text-ink-800'
-                  }`}
-                >
-                  <WorkflowIcon size={11} />
-                  Workflow
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={codeOpen}
-                  onClick={() => setCodeOpen(true)}
-                  className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[12px] font-semibold transition-colors cursor-pointer ${
-                    codeOpen
-                      ? 'bg-brand-600 text-white'
-                      : 'text-ink-500 hover:text-ink-800'
-                  }`}
-                >
-                  <Code2 size={11} />
-                  Code
-                </button>
               </div>
             </div>
 
@@ -1137,20 +1118,11 @@ export default function DataSourcePanel({
               )}
             </div>
 
-            {codeOpen ? (
-              /* Generated code view — matches the query CodeTab's
-                 CollapsibleSection chrome (header row with icon + title +
-                 chevron, dark code block with Copy/Download icon buttons
-                 anchored top-right). */
-              <CodeSection code={SAMPLE_CODE_LINES.join('\n')} filename="workflow.py" />
-            ) : (
-              /* Steps card — wraps the step list in the same chrome as
-                 References + Generated Code so the Plan tab reads as
-                 three cohesive sections (Plan intro, References, Steps). */
-              <div className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]">
+            {/* Steps card — the generated code now lives in its own Code tab. */}
+            <div className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]">
                 <div className="flex items-center px-4 py-3">
                   <div className="flex-1 flex items-center gap-2 text-[14px] font-semibold tracking-tight text-ink-900">
-                    <Sparkles size={14} className="text-primary shrink-0" />
+                    <ListChecks size={14} className="text-primary shrink-0" />
                     <span className="flex-1 text-left">Steps</span>
                     <span className="text-[12px] font-normal text-ink-500">
                       {workflow.steps.length} total
@@ -1204,7 +1176,11 @@ export default function DataSourcePanel({
                   })}
                 </ul>
               </div>
-            )}
+          </div>
+        )}
+        {tab === 'code' && (
+          <div className="flex flex-col gap-3">
+            <CodeSection code={SAMPLE_CODE_LINES.join('\n')} filename="workflow.py" />
           </div>
         )}
       </div>

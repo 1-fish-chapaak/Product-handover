@@ -30,7 +30,7 @@ test('attached source shows as a chip above the message, no [Attached:] text', a
   await expect(page.getByText(name).first()).toBeVisible({ timeout: 4000 });
 
   // Type a message and send.
-  await page.getByRole('textbox', { name: 'Message IRA' }).fill('Purchase Price Variance & Open PO Ageing');
+  await page.getByRole('textbox', { name: 'Message Ira' }).fill('Purchase Price Variance & Open PO Ageing');
   await page.getByRole('button', { name: 'Send message' }).click();
 
   // The sent message: chip is present above the bubble, and the old
