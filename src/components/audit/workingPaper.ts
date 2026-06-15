@@ -11,6 +11,7 @@
  */
 import * as XLSX from 'xlsx';
 import type { Engagement } from '../../data/engagements';
+import { attrCode } from '../../data/racm';
 
 export interface WpAttribute {
   controlId: string;
@@ -134,4 +135,160 @@ export function downloadWorkingPaper(engagement: Engagement, controls: WpControl
   XLSX.utils.book_append_sheet(wb, exSheet, 'Exceptions');
 
   XLSX.writeFile(wb, `Working_Paper_${engagement.code}.xlsx`);
+}
+
+// ─── Shared assembly (same seeds the Controls tab uses) ───────────────────────────
+
+export type AttrType = 'Self-assessed' | 'Automated';
+export type AttrResult = 'Not tested' | 'Pass' | 'Fail';
+
+function hash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+/** Deterministic per-attribute result seed (mirrors ControlsTab). */
+export function seedAttrResult(attributeId: string, engagementHealth: number): AttrResult {
+  const r = hash(attributeId) % 100;
+  if (engagementHealth === 0) return r < 82 ? 'Not tested' : r < 93 ? 'Pass' : 'Fail';
+  const testedCut = Math.min(90, engagementHealth + 8);
+  if (r >= testedCut) return 'Not tested';
+  return r % 8 === 0 ? 'Fail' : 'Pass';
+}
+
+/** Default method: Automated if a workflow is linked, else a stable mix. */
+export function seedAttrType(attributeId: string, hasWorkflow: boolean): AttrType {
+  if (hasWorkflow) return 'Automated';
+  return hash(`${attributeId}:type`) % 2 === 0 ? 'Automated' : 'Self-assessed';
+}
+
+export function rollupStatus(results: AttrResult[]): WpControl['status'] {
+  const tested = results.filter(r => r !== 'Not tested');
+  if (results.length === 0 || tested.length === 0) return 'Not tested';
+  if (tested.length < results.length) return 'In test';
+  return tested.some(r => r === 'Fail') ? 'Fail' : 'Pass';
+}
+
+function deriveCtrlType(methods: AttrType[]): string {
+  const hasAuto = methods.includes('Automated');
+  const hasSelf = methods.includes('Self-assessed');
+  if (hasAuto && hasSelf) return 'Hybrid';
+  return hasAuto ? 'Automated' : 'Self-assessed';
+}
+
+const SOX_ASSERTIONS = ['Completeness', 'Accuracy', 'Existence / Occurrence', 'Cut-off', 'Valuation', 'Rights & Obligations', 'Presentation'];
+
+interface WsCtrlLike {
+  controlId: string;
+  description: string;
+  subProcess: string;
+  isKey: boolean;
+  frequency: string;
+  attributes: { id: string; description: string }[];
+}
+
+export interface WpBuildOpts {
+  health: number;
+  owner: string;
+  testedOn: string;
+  linkedWorkflows: (attrId: string) => { id: string; name: string }[];
+  riskForControl: (controlId: string) => string | undefined;
+  /** Optional live overrides (Controls tab passes these; the tab uses seeds). */
+  method?: (attrId: string) => AttrType;
+  result?: (attrId: string) => AttrResult;
+  remark?: (attrId: string) => string;
+}
+
+/** Build the working-paper rows from engagement workspace controls. */
+export function buildWpControls(controls: WsCtrlLike[], opts: WpBuildOpts): WpControl[] {
+  return controls.map(c => {
+    const attrs: WpAttribute[] = c.attributes.map(a => {
+      const links = opts.linkedWorkflows(a.id);
+      const method = opts.method?.(a.id) ?? seedAttrType(a.id, links.length > 0);
+      const result = opts.result?.(a.id) ?? seedAttrResult(a.id, opts.health);
+      const customRemark = (opts.remark?.(a.id) ?? '').trim();
+      return {
+        controlId: c.controlId,
+        attrId: attrCode(a.id),
+        description: a.description,
+        assertion: SOX_ASSERTIONS[hash(a.id) % SOX_ASSERTIONS.length]!,
+        method,
+        workflow: method === 'Automated' ? (links.map(w => w.name).join(', ') || '—') : '—',
+        result,
+        remark: customRemark || (result === 'Fail' ? 'Exception noted during testing — see ATR' : ''),
+        testedBy: result === 'Not tested' ? '—' : method === 'Automated' ? 'IRA · workflow' : opts.owner,
+        testedOn: result === 'Not tested' ? '—' : opts.testedOn,
+      };
+    });
+    return {
+      controlId: c.controlId,
+      description: c.description,
+      risk: opts.riskForControl(c.controlId) ?? `Risk of error or fraud in ${c.subProcess}`,
+      subProcess: c.subProcess,
+      type: deriveCtrlType(attrs.map(a => a.method)),
+      frequency: c.frequency,
+      isKey: c.isKey,
+      owner: opts.owner,
+      status: rollupStatus(attrs.map(a => a.result)),
+      attributes: attrs,
+    };
+  });
+}
+
+/** Per-control working paper: Control cover + Attribute Testing (+ Exceptions if any). */
+export function downloadControlWorkingPaper(engagement: Engagement, control: WpControl, meta: WpMeta): void {
+  const wb = XLSX.utils.book_new();
+  const tested = control.attributes.filter(a => a.result !== 'Not tested').length;
+  const pass = control.attributes.filter(a => a.result === 'Pass').length;
+  const fail = control.attributes.filter(a => a.result === 'Fail').length;
+  const conclusion = control.status === 'Pass' ? 'Effective' : control.status === 'Fail' ? 'Ineffective' : control.status === 'In test' ? 'In progress' : 'Not started';
+
+  const cover = XLSX.utils.aoa_to_sheet([
+    ['Control Testing Working Paper'],
+    [],
+    ['Engagement', `${engagement.name} (${engagement.code})`],
+    ['Framework', engagement.framework],
+    ['Period', `${engagement.periodStart} – ${engagement.periodEnd}`],
+    [],
+    ['Control ID', control.controlId],
+    ['Control', control.description],
+    ['Risk', control.risk],
+    ['Sub-process', control.subProcess],
+    ['Type', control.type],
+    ['Frequency', control.frequency],
+    ['Key control', control.isKey ? 'Yes' : 'No'],
+    ['Owner', control.owner],
+    [],
+    ['Attributes', control.attributes.length],
+    ['Tested', tested],
+    ['Pass', pass],
+    ['Fail', fail],
+    ['Conclusion', conclusion],
+    [],
+    ['Prepared by', meta.preparedBy],
+    ['Reviewed by', meta.reviewedBy],
+    ['Date', meta.preparedOn],
+    ['W/P reference', `WP-${control.controlId}`],
+  ]);
+  cover['!cols'] = [{ wch: 16 }, { wch: 74 }];
+  cover['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+  XLSX.utils.book_append_sheet(wb, cover, 'Control');
+
+  const attrHeader = ['Attribute ID', 'Attribute / Test Step', 'Assertion', 'Test Method', 'Linked Workflow', 'Result', 'Remark / Exception', 'Tested By', 'Date'];
+  const attrRows: (string | number)[][] = control.attributes.map(a => [a.attrId, a.description, a.assertion, a.method, a.workflow, a.result, a.remark, a.testedBy, a.testedOn]);
+  const attrSheet = XLSX.utils.aoa_to_sheet([attrHeader, ...attrRows]);
+  attrSheet['!cols'] = autofit([attrHeader, ...attrRows]);
+  XLSX.utils.book_append_sheet(wb, attrSheet, 'Attribute Testing');
+
+  const failed = control.attributes.filter(a => a.result === 'Fail');
+  if (failed.length > 0) {
+    const exHeader = ['Attribute ID', 'Exception', 'Severity', 'Owner', 'Status', 'Management Action'];
+    const exRows: (string | number)[][] = failed.map(a => [a.attrId, a.remark || 'Exception noted', control.isKey ? 'Significant Deficiency' : 'Control Deficiency', control.owner, 'Open', 'Remediation pending — ATR raised']);
+    const exSheet = XLSX.utils.aoa_to_sheet([exHeader, ...exRows]);
+    exSheet['!cols'] = autofit([exHeader, ...exRows]);
+    XLSX.utils.book_append_sheet(wb, exSheet, 'Exceptions');
+  }
+
+  XLSX.writeFile(wb, `Working_Paper_${control.controlId}.xlsx`);
 }
