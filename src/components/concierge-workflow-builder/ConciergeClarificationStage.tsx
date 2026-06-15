@@ -1,14 +1,14 @@
-import { useState } from 'react';
 import { ArrowLeft, ChevronRight } from 'lucide-react';
-import type { EditClarificationStep } from './types';
 import QueryClarificationCard, { type QueryClarificationData } from '../chat/QueryClarificationCard';
 import type { AttachmentSelection } from '../chat/DataPickerModal';
 
 interface Props {
-  steps: EditClarificationStep[];
+  data: QueryClarificationData;
+  onSetAnswer: (qIndex: number, answers: string[]) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
   onBack: () => void;
-  onComplete: (answers: Record<number, string>) => void;
-  // Attach (+) wiring, shared from the journey so the card matches chat.
+  // Attach (+) wiring — shared from the journey so the card matches chat.
   onAttach: () => void;
   attachedSources: AttachmentSelection[];
   files: File[];
@@ -17,31 +17,25 @@ interface Props {
 }
 
 /**
- * Full-page clarification stage shown before the edit editor opens. The page
- * chrome (breadcrumb + hero) is unchanged; the docked card is now the shared
- * QueryClarificationCard so it matches the chat Q&A flow exactly — per-question
+ * Full-page clarification stage shown before the AI Concierge starts building.
+ * Mirrors the edit-in-chat clarify stage (breadcrumb + hero) but docks the
+ * shared QueryClarificationCard so the Concierge build clarify matches the chat
+ * Q&A, in-chat builder, and edit-in-chat flows exactly — per-question
  * single/multi pick, Back / Next / Done, type-your-own, "+" attach, no skip
  * (answering is required; the corner ✕ exits back to the concierge).
  */
-export default function EditClarificationStage({
-  steps,
+export default function ConciergeClarificationStage({
+  data,
+  onSetAnswer,
+  onSubmit,
+  onCancel,
   onBack,
-  onComplete,
   onAttach,
   attachedSources,
   files,
   onRemoveSource,
   onRemoveFile,
 }: Props) {
-  const [answers, setAnswers] = useState<Record<number, string[]>>({});
-
-  const data: QueryClarificationData = {
-    intro: '',
-    questions: steps.map((s) => ({ question: s.question, options: s.options })),
-    answers,
-    status: 'open',
-  };
-
   return (
     <div className="flex flex-col h-full bg-canvas">
       {/* Top breadcrumb */}
@@ -63,7 +57,7 @@ export default function EditClarificationStage({
           Asking a few clarifying questions
         </div>
         <h1 className="font-serif text-[2.25rem] tracking-tight text-ink-900 leading-[1.15]">
-          One quick check before I edit.{' '}
+          One quick check before I run.{' '}
           <span className="text-ink-500 italic">Pick what fits, or type your own.</span>
         </h1>
       </div>
@@ -75,16 +69,9 @@ export default function EditClarificationStage({
       <div className="shrink-0 px-4 sm:px-6 pb-5 max-w-3xl mx-auto w-full">
         <QueryClarificationCard
           data={data}
-          onSetAnswer={(qi, ans) => setAnswers((prev) => ({ ...prev, [qi]: ans }))}
-          onSubmit={() => {
-            const flat: Record<number, string> = {};
-            steps.forEach((_, i) => {
-              const a = answers[i]?.[0];
-              if (a) flat[i] = a;
-            });
-            onComplete(flat);
-          }}
-          onCancel={onBack}
+          onSetAnswer={onSetAnswer}
+          onSubmit={onSubmit}
+          onCancel={onCancel}
           onAttach={onAttach}
           attachedSources={attachedSources}
           files={files}
