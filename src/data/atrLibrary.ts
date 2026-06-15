@@ -18,6 +18,10 @@ export interface AtrLibraryReport {
   queries: number;
   /** Audit area used to group/segregate. */
   area: string;
+  /** Risk owner accountable for the remediation — drives the ATR-tab filter. */
+  riskOwner?: string;
+  /** The source report / engagement this ATR was generated from. */
+  sourceReport?: string;
   atrData: AtrReportData;
 }
 
@@ -28,11 +32,13 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
     name: 'FY26 Q1 — Procure-to-Pay Controls ATR',
     tag: 'Internal Audit',
     generatedBy: 'Karan Mehta',
-    generatedAt: 'Mar 22, 2026',
+    generatedAt: 'Mar 22, 2026, 16:40',
     status: 'final',
     pages: 14,
     queries: 3,
     area: 'Procure-to-Pay',
+    riskOwner: 'Tushar Goel',
+    sourceReport: 'FY26 Q1 — P2P Duplicate Invoice Review',
     atrData: {
       meta: {
         reportId: 'ATR-P2P-FY26Q1',
@@ -45,6 +51,7 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
       observations: [
         {
           title: 'Duplicate invoice payments to vendors',
+          exceptions: 7,
           process: 'Accounts Payable',
           description: 'Three-way match was not enforced before payment release for 7 vendors, allowing duplicate invoices to be paid.',
           riskSummary: 'Financial loss from overpayment; weakened payment controls.',
@@ -52,11 +59,12 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
           risk: 'High',
           status: 'Closed',
           actionPlans: [
-            { text: 'Configure ERP to enforce PO/GRN/Invoice match before payment.', dueDate: '30 Apr 2026', status: 'Implemented', actionTaken: 'Enabled the mandatory three-way match in SAP MM for all PO-based invoices; tolerance set to 0% on quantity and 2% on price. Re-ran the 7 flagged duplicate invoices — all now block at posting.', evidence: 'P2P_3way_match_config.pdf', verification: 'Auditor verified configuration in production.' },
+            { title: 'Enforce three-way match in ERP', text: 'Configure ERP to enforce PO/GRN/Invoice match before payment.', dueDate: '30 Apr 2026', status: 'Implemented', actionTaken: 'Enabled the mandatory three-way match in SAP MM for all PO-based invoices; tolerance set to 0% on quantity and 2% on price. Re-ran the 7 flagged duplicate invoices — all now block at posting.', evidence: 'P2P_3way_match_config.pdf', verification: 'Auditor verified configuration in production.' },
           ],
         },
         {
           title: 'Vendor master data changes without approval',
+          exceptions: 5,
           process: 'Vendor Management',
           description: 'Vendor bank-detail changes were processed without a maker-checker approval trail.',
           riskSummary: 'Risk of fraudulent payment redirection.',
@@ -64,12 +72,15 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
           risk: 'Medium',
           status: 'In Progress',
           actionPlans: [
-            { text: 'Enforce maker-checker workflow for all vendor master changes.', dueDate: '15 May 2026', status: 'Partially Implemented', actionTaken: 'Configured a second-level approval step in the vendor master change workflow for bank-detail fields. Roll-out complete for the Finance SSC; plant-level approvers still being onboarded.', evidence: 'Vendor_master_change_log.xlsx' },
+            { title: 'Maker-checker on vendor master changes', text: 'Enforce maker-checker workflow for all vendor master changes.', dueDate: '15 May 2026', status: 'Partially Implemented', actionTaken: 'Configured a second-level approval step in the vendor master change workflow for bank-detail fields. Roll-out complete for the Finance SSC; plant-level approvers still being onboarded.', evidence: 'Vendor_master_change_log.xlsx' },
           ],
         },
       ],
       insights: [
-        { title: 'Control automation reduces exposure', body: 'Automating the three-way match closed the highest-value gap in the cycle.' },
+        { title: 'Control automation reduces exposure', body: 'Automating the three-way match closed the highest-value gap in the cycle — the 7 flagged duplicate invoices now hard-block at posting, removing the recurring overpayment risk at source.' },
+        { title: 'Vendor-master maker-checker needs full coverage', body: 'The maker-checker control is live in Finance Shared Services, but plant-level approvers are still being onboarded. Until rollout completes, bank-detail changes at the plants remain a residual fraud exposure.' },
+        { title: 'Pursue recovery of confirmed overpayments', body: 'Beyond prevention, Finance should raise debit notes against the affected vendors for the duplicate amounts already paid and track recovery to closure alongside the new controls.' },
+        { title: 'Recommended follow-up', body: 'Schedule a Q2 FY26 follow-up to confirm plant-level maker-checker adoption and re-test the three-way match on a fresh sample of high-value invoices.' },
       ],
     },
   },
@@ -79,11 +90,13 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
     name: 'FY26 Q1 — IT General Controls ATR',
     tag: 'Internal Audit',
     generatedBy: 'Priya Mehta',
-    generatedAt: 'Mar 18, 2026',
+    generatedAt: 'Mar 18, 2026, 11:05',
     status: 'draft',
     pages: 11,
     queries: 2,
     area: 'IT General Controls',
+    riskOwner: 'Priya Mehta',
+    sourceReport: 'FY26 Q1 — IT General Controls Review',
     atrData: {
       meta: {
         reportId: 'ATR-ITGC-FY26Q1',
@@ -96,6 +109,7 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
       observations: [
         {
           title: 'MFA bypass on executive accounts',
+          exceptions: 6,
           process: 'Identity & Access',
           description: 'MFA bypass was configured at the system level for 6 C-suite accounts without Security Committee approval.',
           riskSummary: 'Account takeover risk for privileged users.',
@@ -103,11 +117,12 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
           risk: 'High',
           status: 'In Progress',
           actionPlans: [
-            { text: 'Remove MFA bypass and enforce FIDO2 hardware keys for executives.', dueDate: '05 May 2026', status: 'Partially Implemented', actionTaken: 'Revoked the system-level MFA bypass on all 6 C-suite accounts and issued FIDO2 hardware keys. 4 of 6 executives enrolled; 2 pending key collection while travelling.', evidence: 'MFA_enforcement_screenshots.png', verification: 'Pending re-test by IT audit.' },
+            { title: 'FIDO2 hardware keys for executives', text: 'Remove MFA bypass and enforce FIDO2 hardware keys for executives.', dueDate: '05 May 2026', status: 'Partially Implemented', actionTaken: 'Revoked the system-level MFA bypass on all 6 C-suite accounts and issued FIDO2 hardware keys. 4 of 6 executives enrolled; 2 pending key collection while travelling.', evidence: 'MFA_enforcement_screenshots.png', verification: 'Pending re-test by IT audit.' },
           ],
         },
         {
           title: 'Privileged access reviews not performed',
+          exceptions: 3,
           process: 'Access Governance',
           description: 'Quarterly privileged access recertification was overdue for the AP module.',
           riskSummary: 'Excessive standing access; SoD violations.',
@@ -115,12 +130,15 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
           risk: 'Medium',
           status: 'Open',
           actionPlans: [
-            { text: 'Run Q1 privileged access recertification and remediate exceptions.', dueDate: '20 May 2026', status: 'Pending', actionTaken: 'Access extract for the AP module pulled and circulated to data owners; recertification campaign scheduled to open 12 May 2026. No revocations actioned yet.', evidence: 'Access_review_Q1.csv' },
+            { title: 'Privileged access recertification', text: 'Run Q1 privileged access recertification and remediate exceptions.', dueDate: '20 May 2026', status: 'Pending', actionTaken: 'Access extract for the AP module pulled and circulated to data owners; recertification campaign scheduled to open 12 May 2026. No revocations actioned yet.', evidence: 'Access_review_Q1.csv' },
           ],
         },
       ],
       insights: [
-        { title: 'Privileged access is the recurring theme', body: 'Both findings trace back to weak privileged-access governance.' },
+        { title: 'Privileged access is the recurring theme', body: 'Both findings trace back to weak privileged-access governance — exception-based MFA bypass and an overdue recertification of standing access to the AP module.' },
+        { title: 'Executive MFA enrolment must be completed', body: 'FIDO2 keys are enforced and 4 of 6 C-suite accounts are enrolled; the remaining 2 are pending key collection. Until all six are live, the system-level bypass risk is only partially mitigated.' },
+        { title: 'Calendarise privileged-access recertification', body: 'The quarterly recertification lapsed because it relied on a manual trigger. Embedding it as a scheduled, owner-assigned campaign with auto-escalation would stop the control from going overdue again.' },
+        { title: 'Recommended follow-up', body: 'IT Audit to re-test in 30 days to confirm 100% executive MFA enrolment and the closure of the first completed recertification cycle.' },
       ],
     },
   },
@@ -130,11 +148,13 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
     name: 'FY26 — Order-to-Cash Revenue ATR',
     tag: 'Internal Audit',
     generatedBy: 'Neha Joshi',
-    generatedAt: 'Feb 28, 2026',
+    generatedAt: 'Feb 28, 2026, 09:20',
     status: 'final',
     pages: 9,
     queries: 2,
     area: 'Order-to-Cash',
+    riskOwner: 'Deepak Bansal',
+    sourceReport: 'FY26 — Order-to-Cash Revenue Review',
     atrData: {
       meta: {
         reportId: 'ATR-O2C-FY26',
@@ -147,6 +167,7 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
       observations: [
         {
           title: 'Revenue recognised before delivery confirmation',
+          exceptions: 4,
           process: 'Revenue Recognition',
           description: 'Revenue was recognised on 4 orders prior to a confirmed proof of delivery.',
           riskSummary: 'Revenue cut-off misstatement.',
@@ -154,11 +175,12 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
           risk: 'High',
           status: 'Closed',
           actionPlans: [
-            { text: 'Block revenue posting until POD is attached in the system.', dueDate: '10 Mar 2026', status: 'Implemented', actionTaken: 'Added a system hard-stop that prevents the billing document from posting unless a proof-of-delivery is attached. Validated against the 4 flagged orders — all now hold until POD upload.', evidence: 'Revenue_cutoff_testing.xlsx', verification: 'Re-performed; control effective.' },
+            { title: 'Block revenue posting without POD', text: 'Block revenue posting until POD is attached in the system.', dueDate: '10 Mar 2026', status: 'Implemented', actionTaken: 'Added a system hard-stop that prevents the billing document from posting unless a proof-of-delivery is attached. Validated against the 4 flagged orders — all now hold until POD upload.', evidence: 'Revenue_cutoff_testing.xlsx', verification: 'Re-performed; control effective.' },
           ],
         },
         {
           title: 'Orders processed beyond approved credit limit',
+          exceptions: 3,
           process: 'Credit Management',
           description: 'Sales orders were released above the approved customer credit limit without escalation.',
           riskSummary: 'Increased receivables default risk.',
@@ -166,12 +188,15 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
           risk: 'Medium',
           status: 'Closed',
           actionPlans: [
-            { text: 'Add a hard credit-limit block with manager override logging.', dueDate: '15 Feb 2026', status: 'Implemented', actionTaken: 'Enabled the SAP credit-management hard block at the sales-order stage; any override now requires a credit-manager release that is logged with user, timestamp and reason. Tested with 3 over-limit orders.', evidence: 'Credit_limit_override_log.pdf' },
+            { title: 'Hard credit-limit block with override log', text: 'Add a hard credit-limit block with manager override logging.', dueDate: '15 Feb 2026', status: 'Implemented', actionTaken: 'Enabled the SAP credit-management hard block at the sales-order stage; any override now requires a credit-manager release that is logged with user, timestamp and reason. Tested with 3 over-limit orders.', evidence: 'Credit_limit_override_log.pdf' },
           ],
         },
       ],
       insights: [
-        { title: 'Cycle is well controlled post-remediation', body: 'Both findings are remediated and re-tested as effective.' },
+        { title: 'Cycle is well controlled post-remediation', body: 'Both findings are remediated and re-tested as effective — revenue now posts only against an attached proof of delivery, and over-limit orders are hard-blocked with logged manager overrides.' },
+        { title: 'Revenue cut-off discipline restored', body: 'The 4 orders that drove early recognition were re-validated; the system hold removes the period-end cut-off misstatement risk that originally triggered the observation.' },
+        { title: 'Override logging enables continuous monitoring', body: 'Credit-limit overrides are now captured with user, timestamp and reason. Revenue Operations should review the override log monthly to catch any pattern of limit circumvention early.' },
+        { title: 'Recommended follow-up', body: 'A light-touch Q3 FY26 review is recommended to confirm the controls remain effective and that the monthly override-log review is operating as designed.' },
       ],
     },
   },

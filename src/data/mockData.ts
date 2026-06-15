@@ -410,6 +410,11 @@ export interface GrcException {
   lastUpdated: string;
   flags?: Array<'Overdue' | 'Bulk'>;
   bulkId?: string;
+  /** Auto-generated when the exception is classified as an actionable type
+   *  (Design/System Deficiency, Procedural Non-Compliance) — the identifier the
+   *  management action plan is tracked under. Cases classified together in a bulk
+   *  action share one Actionable ID. Undefined for unclassified / non-actionable. */
+  actionableId?: string;
   title: string;
   assignedTo?: { name: string; initials: string };
   /** Full list of bulk-assigned users; `assignedTo` remains the primary (first) for back-compat readers. */

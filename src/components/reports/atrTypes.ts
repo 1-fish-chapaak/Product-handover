@@ -16,6 +16,8 @@ export type AtrActionStatus =
   | 'Not Due';
 
 export interface AtrActionPlan {
+  /** Short title for the management action plan. */
+  title?: string;
   /** Recommendation / management action plan text. */
   text: string;
   dueDate?: string;                 // ISO or free text (e.g. "30 Jun 2026")
@@ -40,6 +42,8 @@ export interface AtrObservation {
   classification?: AtrClassification;
   risk?: AtrRisk;
   status?: AtrObservationStatus;
+  /** Number of underlying flagged exceptions that roll up into this observation. */
+  exceptions?: number;
   actionPlans: AtrActionPlan[];
 }
 
@@ -55,6 +59,8 @@ export interface AtrMeta {
   preparedBy?: string;
   generatedOn?: string;
   auditEntity?: string;
+  /** Optional override for the Total Exceptions KPI (else summed from observations). */
+  totalExceptions?: number;
 }
 
 /** Everything needed to re-render a generated ATR as a saved report. Stored on

@@ -855,6 +855,7 @@ function AppInner() {
             })}
             onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
             onOpenWorkflow={(id) => setSelectedWorkflow(id, 'runs')}
+            onRunWorkflow={(id) => openWorkflowExecutor(id)}
             onCreateWorkflowForEngagement={startWorkflowForEngagement}
           />
         );
