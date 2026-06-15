@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'motion/react';
 import FloatingLines from '../shared/FloatingLines';
+import ListToolbar, { ToolbarChips, ToolbarSelect, ToolbarViewToggle } from '../shared/ListToolbar';
 import {
   FileText, FileSpreadsheet, Shield, AlertTriangle, CheckCircle2, BarChart3,
   TrendingUp, Download, Share2, ArrowRight, ArrowLeft, ChevronDown,
@@ -16,7 +17,6 @@ import {
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
-import { ChromaGrid, handleChromaCardMove } from './ChromaGrid';
 import { ManageExceptionsLaunchButton } from './ManageExceptionsLaunchButton';
 import UploadReportModal from './UploadReportModal';
 import GenerateATRModal from '../exceptions/GenerateATRModal';
@@ -97,7 +97,33 @@ function reportTagChip(tag: string): { classes: string; label: string } {
 /** Which of the three report types a generated report belongs to. ATR reports
  *  carry atrData; SOX reports are identified by name; everything else is treated
  *  as Internal Audit. Drives the segmented sub-tabs inside My Reports. */
-function reportKind(r: { name?: string; atrData?: unknown }): 'atr' | 'sox' | 'ia' {
+// Report framework/type classification.
+//
+// A report's type is resolved from the most authoritative signal available,
+// in priority order:
+//   1. an explicit `kind` field stored on the report at creation time;
+//   2. the originating template (templateId → kind) — stable across renames;
+//   3. ATR payload presence;
+//   4. a name match — LAST resort, only for orphan reports with no template.
+// Name is deliberately last so renaming a report can never silently
+// reclassify it (the old behaviour keyed entirely off the name string).
+const TEMPLATE_KIND: Record<string, 'atr' | 'sox' | 'ia'> = {
+  'rt-007': 'atr',
+  'rt-001': 'sox',
+  'rt-internal-audit': 'ia',
+};
+// Derive the kind for a freshly created report from its template. Stored as the
+// report's explicit `kind` so the classification is frozen at creation.
+function templateKind(t?: { id?: string; name?: string } | null): 'atr' | 'sox' | 'ia' {
+  if (t?.id && TEMPLATE_KIND[t.id]) return TEMPLATE_KIND[t.id];
+  const name = (t?.name ?? '').toLowerCase();
+  if (/\batr\b|action taken/.test(name)) return 'atr';
+  if (/\bsox\b/.test(name)) return 'sox';
+  return 'ia';
+}
+function reportKind(r: { name?: string; atrData?: unknown; kind?: 'atr' | 'sox' | 'ia'; templateId?: string }): 'atr' | 'sox' | 'ia' {
+  if (r.kind) return r.kind;
+  if (r.templateId && TEMPLATE_KIND[r.templateId]) return TEMPLATE_KIND[r.templateId];
   if (r.atrData) return 'atr';
   if (/\bsox\b/i.test(r.name ?? '')) return 'sox';
   return 'ia';
@@ -138,6 +164,9 @@ export type WorkflowResult = {
 export type BulkAuditAestheticVariant = 'editorial';
 
 type GeneratedReport = typeof GENERATED_REPORTS[number] & {
+  /** Authoritative report framework/type, frozen at creation. Preferred over
+   *  any name- or template-based inference (see `reportKind`). */
+  kind?: 'atr' | 'sox' | 'ia';
   isEmpty?: boolean;
   attachedQueries?: AttachedQuery[];
   /** Queries the Generate wizard baked into this report — when present, the
@@ -4928,16 +4957,16 @@ export default function ReportsView({
     return 'my-reports';
   });
   // Segmented sub-tabs inside My Reports: the 3 report types + the evidence repository.
-  const [reportType, setReportType] = useState<'atr' | 'sox' | 'ia' | 'evidence'>(() => {
-    if (typeof window === 'undefined') return 'ia';
+  const [reportType, setReportType] = useState<'all' | 'atr' | 'sox' | 'ia' | 'evidence'>(() => {
+    if (typeof window === 'undefined') return 'all';
     const t = new URLSearchParams(window.location.search).get('tab');
     if (t === 'evidence') return 'evidence';
     if (t === 'atr-reports') return 'atr';
-    return 'ia';
+    return 'all';
   });
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [allSearch, setAllSearch] = useState('');
   const [tagFilter, setTagFilter] = useState<string>('All');
-  const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [gridSearch, setGridSearch] = useState('');
   const [sharedGridSearch, setSharedGridSearch] = useState('');
   const [viewingReport, setViewingReport] = useState<GeneratedReport | null>(null);
@@ -5101,6 +5130,78 @@ export default function ReportsView({
     else addToast({ type: 'info', message: 'Source report is not in your library.' });
   }, [allAtrs, addToast]);
 
+  // ── Unified "All" feed ──────────────────────────────────────────────────
+  // The All chip merges every artefact across the four types into one list:
+  // IA + SOX generated reports, ATRs (allAtrs), and Evidence files. Each row
+  // is normalised to a common shape carrying its own open/download/share
+  // closures so a single SmartTable can route a click to the right action.
+  type UnifiedKind = 'ia' | 'sox' | 'atr' | 'evidence';
+  type UnifiedRow = {
+    id: string;
+    kind: UnifiedKind;
+    name: string;
+    meta: string;
+    date: string;
+    sortDate: number;
+    open: () => void;
+    download?: () => void;
+    shareId?: string;
+  };
+  const allReportsUnified = useMemo<UnifiedRow[]>(() => {
+    const ts = (d?: string) => { const t = d ? Date.parse(d) : NaN; return Number.isNaN(t) ? 0 : t; };
+    const rows: UnifiedRow[] = [];
+    // IA + SOX live reports (ATR-kind reports are surfaced via allAtrs below).
+    generatedReports.forEach(r => {
+      const k = reportKind(r);
+      if (k !== 'sox' && k !== 'ia') return;
+      rows.push({
+        id: r.id, kind: k, name: r.name,
+        meta: `${r.queries ?? 0} ${Number(r.queries) === 1 ? 'query' : 'queries'}`,
+        date: r.generatedAt, sortDate: ts(r.generatedAt),
+        open: () => setViewingReport(r),
+        download: () => startReportDownload(addToast, updateToast, r.name),
+        shareId: r.id,
+      });
+    });
+    // ATRs.
+    allAtrs.forEach(a => {
+      rows.push({
+        id: a.id, kind: 'atr', name: a.name,
+        meta: a.area, date: a.generatedAt, sortDate: ts(a.generatedAt),
+        open: () => openAtr(a),
+        download: () => { exportAtrWord(a.atrData.meta, a.atrData.observations); addToast({ type: 'success', message: `Downloading “${a.name}”.` }); },
+        shareId: a.id,
+      });
+    });
+    // Evidence files — open routes to the ATR they back.
+    EVIDENCE_LIBRARY.forEach(e => {
+      rows.push({
+        id: e.id, kind: 'evidence', name: e.name,
+        meta: `${e.area} · ${e.size}`, date: e.uploadedAt, sortDate: ts(e.uploadedAt),
+        open: () => openAtrById(e.atrId),
+        download: () => addToast({ type: 'success', message: `Downloading “${e.name}”.` }),
+      });
+    });
+    return rows.sort((a, b) => b.sortDate - a.sortDate);
+  }, [generatedReports, allAtrs, addToast, updateToast, openAtr, openAtrById]);
+  const allReportsFiltered = useMemo(() => {
+    const q = allSearch.trim().toLowerCase();
+    return q ? allReportsUnified.filter(r => r.name.toLowerCase().includes(q)) : allReportsUnified;
+  }, [allReportsUnified, allSearch]);
+  const filteredShared = useMemo(() => {
+    const q = sharedGridSearch.trim().toLowerCase();
+    return q
+      ? SHARED_REPORTS.filter(r => r.name.toLowerCase().includes(q) || r.sharedBy.toLowerCase().includes(q) || r.sharedWith.toLowerCase().includes(q))
+      : SHARED_REPORTS;
+  }, [sharedGridSearch]);
+  // Type chip styling per kind — leans on existing semantic tokens.
+  const UNIFIED_KIND_META: Record<UnifiedKind, { label: string; icon: React.ElementType; classes: string; iconClass: string }> = {
+    ia:       { label: 'IA',       icon: BookOpen,     classes: 'bg-brand-50 text-brand-700',         iconClass: 'text-brand-600' },
+    atr:      { label: 'ATR',      icon: FileCheck2,   classes: 'bg-info-50 text-info-700',           iconClass: 'text-info-700' },
+    sox:      { label: 'SOX',      icon: Shield,       classes: 'bg-mitigated-50 text-mitigated-700', iconClass: 'text-mitigated-700' },
+    evidence: { label: 'Evidence', icon: FolderArchive, classes: 'bg-paper-100 text-ink-600',          iconClass: 'text-ink-500' },
+  };
+
   // Report names are unique. `reportNameTaken` checks (case-insensitive) and
   // `uniqueReportName` suffixes a base name ((2), (3)…) until it's free — used
   // by every auto-named creation path; the New-report modal validates instead.
@@ -5123,6 +5224,7 @@ export default function ReportsView({
     const newReport = {
       id: `gr-atr-${now.getTime()}`,
       templateId: 'rt-007',
+      kind: 'atr' as const,
       name: uniqueReportName(`${base} — ${label}`),
       tag: 'Internal Audit' as const,
       generatedBy: 'Karan Mehta',
@@ -5278,6 +5380,7 @@ export default function ReportsView({
     const newReport: GeneratedReport = {
       id: `gr-gen-${Date.now()}`,
       templateId: rt.id,
+      kind: templateKind(rt),
       name: uniqueReportName(`${rt.name} — ${today}`),
       tag: 'Internal Audit',
       generatedBy: 'You',
@@ -5337,33 +5440,6 @@ export default function ReportsView({
   })();
 
   const TAG_FILTER_OPTIONS = ['All', 'Internal Audit', 'Bulk Audit'];
-
-  const TagFilterDropdown = () => (
-    <div className="relative">
-      <button
-        onClick={() => setShowTagDropdown(p => !p)}
-        className="h-7 flex items-center gap-1.5 px-2.5 text-[11px] font-medium text-ink-700 bg-paper-50 border border-canvas-border hover:border-brand-200 transition-colors cursor-pointer rounded-[8px]"
-      >
-        {tagFilter === 'All' ? 'All Tags' : tagFilter}
-        <ChevronDown size={12} className={`text-text-muted transition-transform ${showTagDropdown ? 'rotate-180' : ''}`} />
-      </button>
-      {showTagDropdown && (
-        <div className="absolute left-0 top-full mt-1 w-40 bg-canvas-elevated shadow-lg border border-canvas-border z-50 py-2 rounded-lg">
-          <div className="px-1.5">
-            {TAG_FILTER_OPTIONS.map(t => (
-              <button
-                key={t}
-                onClick={() => { setTagFilter(t); setShowTagDropdown(false); }}
-                className={`w-full text-left px-2.5 py-1.5 rounded-md text-[12.5px] cursor-pointer transition-colors ${tagFilter === t ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-paper-50'}`}
-              >
-                {t === 'All' ? 'All Tags' : t}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
 
   const ActionTooltip = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <span className="relative group/tt inline-flex">
@@ -5480,7 +5556,7 @@ export default function ReportsView({
                 ? <>Reports teammates have shared with you — open, review, or download any of them.</>
                 : activeTab === 'templates'
                 ? <>Reusable, query-driven templates <span className="font-medium text-brand-700">IRA</span> uses to turn engagement data into a finished report.</>
-                : <>Every report <span className="font-medium text-brand-700">IRA</span> has generated for you, organized by type — ATR, SOX, IA, and the evidence they cite.</>}
+                : <>Every report <span className="font-medium text-brand-700">IRA</span> has generated, organized by type — ATR, SOX, IA, and evidence.</>}
             </p>
           </motion.div>
 
@@ -5532,39 +5608,132 @@ export default function ReportsView({
             group: a light track holding pills, the active one a white pill with a
             springing layoutId background + brand text and plain tabular counts. */}
         {activeTab === 'my-reports' && (
-          <div className="mb-6 inline-flex items-center gap-1 p-1.5 rounded-lg border border-canvas-border/60 bg-canvas-elevated/40 w-fit max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {([
-              { key: 'ia', label: 'IA', icon: BookOpen, count: typeCounts.ia },
-              { key: 'atr', label: 'ATR', icon: FileCheck2, count: allAtrs.length },
-              { key: 'sox', label: 'SOX', icon: Shield, count: typeCounts.sox },
-              { key: 'evidence', label: 'Evidence', icon: FolderArchive, count: EVIDENCE_LIBRARY.length },
-            ] as const).map(seg => {
-              const SegIcon = seg.icon;
-              const active = reportType === seg.key;
-              return (
-                <button
-                  key={seg.key}
-                  onClick={() => setReportType(seg.key)}
-                  className={`shrink-0 relative inline-flex items-center gap-2.5 px-3.5 h-9 rounded-lg text-[0.875rem] transition-colors cursor-pointer ${
-                    active ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-800'
-                  }`}
-                >
-                  {active && (
-                    <motion.div
-                      layoutId="reports-type-pill-bg"
-                      className="absolute inset-0 bg-canvas-elevated rounded-lg shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)] border border-canvas-border"
-                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                    />
-                  )}
-                  <span className="relative z-10 flex items-center gap-2">
-                    <SegIcon size={15} className={active ? 'text-brand-600' : 'text-ink-400'} />
-                    <span>{seg.label}</span>
-                    <span className={`tabular-nums font-bold text-[0.8125rem] ${active ? 'text-brand-700' : 'text-ink-400'}`}>{seg.count}</span>
-                  </span>
-                </button>
-              );
-            })}
+          <div className="mb-6">
+            <ToolbarChips
+              layoutId="reports-type-pill-bg"
+              value={reportType}
+              onChange={setReportType}
+              options={[
+                { key: 'all', label: 'All', icon: Layers, count: allReportsUnified.length },
+                { key: 'ia', label: 'IA', icon: BookOpen, count: typeCounts.ia },
+                { key: 'atr', label: 'ATR', icon: FileCheck2, count: allAtrs.length },
+                { key: 'sox', label: 'SOX', icon: Shield, count: typeCounts.sox },
+                { key: 'evidence', label: 'Evidence', icon: FolderArchive, count: EVIDENCE_LIBRARY.length },
+              ]}
+            />
           </div>
+        )}
+
+        {/* All — unified feed merging IA + SOX + ATR + Evidence into one list.
+            A Type column tags each row; clicking routes to its own open action. */}
+        {activeTab === 'my-reports' && reportType === 'all' && (
+          <>
+          <ListToolbar
+            search={allSearch}
+            onSearch={setAllSearch}
+            searchPlaceholder="Search all reports…"
+            trailing={<ToolbarViewToggle mode={viewMode} onChange={setViewMode} />}
+          />
+          {viewMode === 'grid' ? (
+            allReportsFiltered.length === 0 ? (
+              <EmptyState
+                icon={Layers}
+                title={allSearch ? 'No reports match your search.' : 'No reports yet'}
+                body={allSearch ? 'Try a different search term.' : 'Reports, ATRs, and evidence you generate will all appear here.'}
+                size="compact"
+              />
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-6">
+                {allReportsFiltered.map((row) => {
+                  const m = UNIFIED_KIND_META[row.kind];
+                  return (
+                    <div
+                      key={row.id}
+                      onClick={() => row.open()}
+                      className="group text-left bg-canvas-elevated border border-canvas-border rounded-[14px] p-5 flex flex-col gap-3 cursor-pointer hover:border-brand-300 hover:shadow-[0_4px_16px_-8px_rgba(106,18,205,0.18)] transition-all min-h-[150px]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <h3 className="text-[15px] font-semibold leading-snug tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2 min-w-0" title={row.name}>{row.name}</h3>
+                        <div className="flex items-center gap-0.5 -mt-1 -mr-1 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                          {row.download && <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); row.download!(); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>}
+                          {row.shareId && can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: row.shareId!, anchor: rectFromEvent(e) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
+                          <ActionTooltip label="Open"><button onClick={(e) => { e.stopPropagation(); row.open(); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Open"><ArrowRight size={14} /></button></ActionTooltip>
+                        </div>
+                      </div>
+                      <div className="mt-auto pt-3 border-t border-canvas-border flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono text-[11px] tabular-nums text-ink-500 truncate">{row.meta}</span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] shrink-0 ${m.classes}`}>{m.label}</span>
+                        </div>
+                        <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">{row.date}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+          <SmartTable
+            className="flex-1"
+            variant="modern"
+            searchable={false}
+            showSortHint
+            data={allReportsFiltered as unknown as Record<string, unknown>[]}
+            keyField="id"
+            paginated
+            pageSize={20}
+            hideResultCount
+            emptyContent={
+              <EmptyState
+                icon={Layers}
+                title={allSearch ? 'No reports match your search.' : 'No reports yet'}
+                body={allSearch ? 'Try a different search term.' : 'Reports, ATRs, and evidence you generate will all appear here.'}
+                size="compact"
+              />
+            }
+            columns={[
+              { key: 'index', label: 'No.', width: '52px', sortable: false, render: (_item, i) => (
+                <span className="font-mono text-[11px] text-text-muted tabular-nums">{String(i + 1).padStart(2, '0')}</span>
+              )},
+              { key: 'name', label: 'Report', render: (item) => {
+                const m = UNIFIED_KIND_META[item.kind as UnifiedKind];
+                return (
+                  <div className="cursor-pointer min-w-0" onClick={() => (item as unknown as UnifiedRow).open()}>
+                    <div className="flex items-baseline gap-2 min-w-0 flex-wrap">
+                      {(() => {
+                        const n = String(item.name);
+                        const truncated = n.length > 100 ? n.slice(0, 100) + '…' : n;
+                        return (
+                          <span className="relative group/nt inline-flex min-w-0" title={n.length > 100 ? n : undefined}>
+                            <span className="text-[16px] font-semibold tracking-[-0.005em] text-ink-800 truncate hover:text-primary transition-colors">{truncated}</span>
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[11px] text-text-muted font-mono tabular-nums shrink-0">{String(item.meta)}</span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] ${m.classes}`}>{m.label}</span>
+                    </div>
+                  </div>
+                );
+              }},
+              { key: 'date', label: 'Date', width: '150px', render: (item) => (
+                <span className="font-mono text-[12px] tabular-nums text-text-secondary">{String(item.date)}</span>
+              )},
+              { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => {
+                const row = item as unknown as UnifiedRow;
+                return (
+                  <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                    {row.download && <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); row.download!(); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>}
+                    {row.shareId && can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: row.shareId!, anchor: rectFromEvent(e) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
+                    <ActionTooltip label="Open"><button onClick={(e) => { e.stopPropagation(); row.open(); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Open"><ArrowRight size={14} /></button></ActionTooltip>
+                  </div>
+                );
+              }},
+            ]}
+          />
+          )}
+          </>
         )}
 
         {/* ATR — every generated Action Taken Report, browsable */}
@@ -5574,16 +5743,36 @@ export default function ReportsView({
             onOpen={openAtr}
             onShare={onShare ? (atr) => onShare(atr.id) : undefined}
             onDownload={(atr) => { exportAtrWord(atr.atrData.meta, atr.atrData.observations); addToast({ type: 'success', message: `Downloading “${atr.name}”.` }); }}
+            view={viewMode}
+            onViewChange={setViewMode}
           />
         )}
 
         {/* Evidence — segregated repository, each item linked to its source ATR */}
         {activeTab === 'my-reports' && reportType === 'evidence' && (
-          <EvidenceRepository onOpenSource={openAtrById} />
+          <EvidenceRepository onOpenSource={openAtrById} view={viewMode} onViewChange={setViewMode} />
         )}
 
         {/* My Reports — modern AI-SaaS table: minimal chrome, sentence-case
             headers, no grid lines, generous rows, very quiet hover. */}
+        {activeTab === 'my-reports' && (reportType === 'sox' || reportType === 'ia') && (
+          <ListToolbar
+            search={gridSearch}
+            onSearch={setGridSearch}
+            searchPlaceholder="Search reports…"
+            trailing={
+              <>
+                <ToolbarSelect
+                  label="Tag"
+                  value={tagFilter}
+                  onChange={setTagFilter}
+                  options={TAG_FILTER_OPTIONS.map(t => ({ value: t, label: t === 'All' ? 'All tags' : t }))}
+                />
+                <ToolbarViewToggle mode={viewMode} onChange={setViewMode} />
+              </>
+            }
+          />
+        )}
         {activeTab === 'my-reports' && (reportType === 'sox' || reportType === 'ia') && viewMode === 'list' && isHydrating && (
           <div className="flex-1 px-5 py-6 space-y-4" aria-hidden="true">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -5595,12 +5784,10 @@ export default function ReportsView({
           <SmartTable
             className="flex-1"
             variant="modern"
-            searchBg="bg-paper-50"
+            searchable={false}
             showSortHint
             data={filteredReports as unknown as Record<string, unknown>[]}
             keyField="id"
-            searchPlaceholder="Search reports..."
-            searchKeys={['name', 'generatedBy']}
             paginated
             pageSize={20}
             hideResultCount
@@ -5612,50 +5799,27 @@ export default function ReportsView({
                 size="compact"
               />
             ) : (
-              ({ search, clearSearch }) => (
-                <div className="flex flex-col items-center gap-2 py-2 text-center">
-                  <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
-                    <Search size={20} className="text-ink-400" />
-                  </div>
-                  <div className="text-[13px] font-medium text-ink-700">
-                    {tagFilter !== 'All' && search
-                      ? `No reports match "${search}" in "${tagFilter}".`
-                      : tagFilter !== 'All'
-                        ? `No reports match the "${tagFilter}" filter.`
-                        : 'No reports match your search.'}
-                  </div>
-                  <div className="flex items-center gap-3 mt-1">
-                    {tagFilter !== 'All' && (
-                      <button
-                        type="button"
-                        onClick={() => setTagFilter('All')}
-                        className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer"
-                      >
-                        Clear filter
-                      </button>
-                    )}
-                    {search && (
-                      <button
-                        type="button"
-                        onClick={clearSearch}
-                        className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer"
-                      >
-                        Clear search
-                      </button>
-                    )}
-                  </div>
+              <div className="flex flex-col items-center gap-2 py-2 text-center">
+                <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
+                  <Search size={20} className="text-ink-400" />
                 </div>
-              )
-            )}
-            headerExtra={
-              <div className="flex items-center gap-2">
-                <TagFilterDropdown />
-                <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
-                  <button onClick={() => setViewMode('list')} className="p-1.5 rounded-[8px] bg-white shadow-sm text-primary cursor-pointer" title="List view"><List size={16} /></button>
-                  <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-[8px] text-text-muted hover:text-text-secondary cursor-pointer" title="Grid view"><LayoutGrid size={16} /></button>
+                <div className="text-[13px] font-medium text-ink-700">
+                  {tagFilter !== 'All' && gridSearch
+                    ? `No reports match "${gridSearch}" in "${tagFilter}".`
+                    : tagFilter !== 'All'
+                      ? `No reports match the "${tagFilter}" filter.`
+                      : 'No reports match your search.'}
+                </div>
+                <div className="flex items-center gap-3 mt-1">
+                  {tagFilter !== 'All' && (
+                    <button type="button" onClick={() => setTagFilter('All')} className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer">Clear filter</button>
+                  )}
+                  {gridSearch && (
+                    <button type="button" onClick={() => setGridSearch('')} className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer">Clear search</button>
+                  )}
                 </div>
               </div>
-            }
+            )}
             columns={[
               { key: 'index', label: 'No.', width: '52px', sortable: false, render: (_item, i) => (
                 <span className="font-mono text-[11px] text-text-muted tabular-nums">
@@ -5711,32 +5875,6 @@ export default function ReportsView({
 
         {activeTab === 'my-reports' && (reportType === 'sox' || reportType === 'ia') && viewMode === 'grid' && (
           <div className="w-full flex-1">
-            <div className="flex items-center justify-between gap-3 px-5 py-3">
-              <div className="relative flex-1 max-w-xs">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                <input
-                  value={gridSearch}
-                  onChange={e => setGridSearch(e.target.value)}
-                  placeholder="Search reports..."
-                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-paper-50 text-[12px] rounded-[8px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
-                />
-                {gridSearch && (
-                  <button
-                    onClick={() => setGridSearch('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary cursor-pointer"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <TagFilterDropdown />
-                <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
-                  <button onClick={() => setViewMode('list')} className="p-1.5 rounded-[8px] text-text-muted hover:text-text-secondary cursor-pointer" title="List view"><List size={16} /></button>
-                  <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-[8px] bg-white shadow-sm text-primary cursor-pointer" title="Grid view"><LayoutGrid size={16} /></button>
-                </div>
-              </div>
-            </div>
             {filteredReports.length === 0 ? (
               generatedReports.length === 0 ? (
                 <div className="px-6 py-12">
@@ -5781,26 +5919,25 @@ export default function ReportsView({
                 </div>
               )
             ) : (
-            <ChromaGrid className="w-full p-5 grid grid-cols-3 gap-4 items-start" radius={320} damping={0.45} fadeOut={0.6}>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-6">
               {filteredReports.map((r, i) => (
                   <motion.div
                     key={r.id}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                    className="chroma-card-lite bg-white border border-border-light rounded-[12px] p-6 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[168px]"
-                    onMouseMove={handleChromaCardMove}
+                    className="group text-left bg-canvas-elevated border border-canvas-border rounded-[14px] p-5 flex flex-col gap-3 cursor-pointer hover:border-brand-300 hover:shadow-[0_4px_16px_-8px_rgba(106,18,205,0.18)] transition-all min-h-[150px]"
                     onClick={() => setViewingReport(r)}
                   >
-                    <div className="flex items-start justify-between gap-3 mb-2.5">
-                      <h3 className="text-[16px] font-semibold leading-[1.3] tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2 min-w-0" title={r.name}>{r.name}</h3>
-                      <div className="flex items-center gap-0.5 -mt-1.5 -mr-1.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="text-[15px] font-semibold leading-snug tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2 min-w-0" title={r.name}>{r.name}</h3>
+                      <div className="flex items-center gap-0.5 -mt-1 -mr-1 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                         <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
                         {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: r.id, anchor: rectFromEvent(e) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
                         <ActionTooltip label="Delete"><button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
                       </div>
                     </div>
-                    <div className="mt-auto pt-3.5 border-t border-border-light/70 flex items-center justify-between gap-2">
+                    <div className="mt-auto pt-3 border-t border-canvas-border flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="font-mono text-[11px] tabular-nums text-ink-500 shrink-0">{r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}</span>
                         {r.tag && (
@@ -5813,23 +5950,29 @@ export default function ReportsView({
                     </div>
                   </motion.div>
               ))}
-            </ChromaGrid>
+            </div>
             )}
           </div>
         )}
 
         {/* Shared Reports — same modern table variant so tab switching
             doesn't change the visual grammar. */}
+        {activeTab === 'shared-reports' && (
+          <ListToolbar
+            search={sharedGridSearch}
+            onSearch={setSharedGridSearch}
+            searchPlaceholder="Search shared reports…"
+            trailing={<ToolbarViewToggle mode={viewMode} onChange={setViewMode} />}
+          />
+        )}
         {activeTab === 'shared-reports' && viewMode === 'list' && (
           <SmartTable
             className="flex-1"
             variant="modern"
-            searchBg="bg-paper-50"
+            searchable={false}
             showSortHint
-            data={SHARED_REPORTS as unknown as Record<string, unknown>[]}
+            data={filteredShared as unknown as Record<string, unknown>[]}
             keyField="id"
-            searchPlaceholder="Search shared reports..."
-            searchKeys={['name', 'sharedBy', 'sharedWith']}
             paginated
             pageSize={20}
             hideResultCount
@@ -5840,32 +5983,16 @@ export default function ReportsView({
                 body="Reports shared with you by your team will appear here."
               />
             ) : (
-              ({ search, clearSearch }) => (
-                <div className="flex flex-col items-center gap-2 py-2 text-center">
-                  <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
-                    <Search size={20} className="text-ink-400" />
-                  </div>
-                  <div className="text-[13px] font-medium text-ink-700">
-                    No shared reports match your search.
-                  </div>
-                  {search && (
-                    <button
-                      type="button"
-                      onClick={clearSearch}
-                      className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer mt-1"
-                    >
-                      Clear search
-                    </button>
-                  )}
+              <div className="flex flex-col items-center gap-2 py-2 text-center">
+                <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
+                  <Search size={20} className="text-ink-400" />
                 </div>
-              )
-            )}
-            headerExtra={
-              <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
-                <button onClick={() => setViewMode('list')} className="p-1.5 rounded-[8px] bg-white shadow-sm text-primary cursor-pointer" title="List view"><List size={16} /></button>
-                <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-[8px] text-text-muted hover:text-text-secondary cursor-pointer" title="Grid view"><LayoutGrid size={16} /></button>
+                <div className="text-[13px] font-medium text-ink-700">No shared reports match your search.</div>
+                {sharedGridSearch && (
+                  <button type="button" onClick={() => setSharedGridSearch('')} className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer mt-1">Clear search</button>
+                )}
               </div>
-            }
+            )}
             columns={[
               { key: 'index', label: 'No.', width: '52px', sortable: false, render: (_item, i) => (
                 <span className="font-mono text-[11px] text-text-muted tabular-nums">
@@ -5902,39 +6029,9 @@ export default function ReportsView({
         )}
 
         {activeTab === 'shared-reports' && viewMode === 'grid' && (() => {
-          const q = sharedGridSearch.trim().toLowerCase();
-          const filteredSharedReports = q
-            ? SHARED_REPORTS.filter(r =>
-                r.name.toLowerCase().includes(q) ||
-                r.sharedBy.toLowerCase().includes(q) ||
-                r.sharedWith.toLowerCase().includes(q)
-              )
-            : SHARED_REPORTS;
+          const filteredSharedReports = filteredShared;
           return (
           <div className="w-full flex-1">
-            <div className="flex items-center justify-between gap-3 px-5 py-3">
-              <div className="relative flex-1 max-w-xs">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                <input
-                  value={sharedGridSearch}
-                  onChange={e => setSharedGridSearch(e.target.value)}
-                  placeholder="Search shared reports..."
-                  className="w-full pl-8 pr-8 py-1.5 border border-border bg-paper-50 text-[12px] rounded-[8px] outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
-                />
-                {sharedGridSearch && (
-                  <button
-                    onClick={() => setSharedGridSearch('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary cursor-pointer"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center gap-0.5 p-0.5 bg-paper-50 rounded-[8px]">
-                <button onClick={() => setViewMode('list')} className="p-1.5 rounded-[8px] text-text-muted hover:text-text-secondary cursor-pointer" title="List view"><List size={16} /></button>
-                <button onClick={() => setViewMode('grid')} className="p-1.5 rounded-[8px] bg-white shadow-sm text-primary cursor-pointer" title="Grid view"><LayoutGrid size={16} /></button>
-              </div>
-            </div>
             {filteredSharedReports.length === 0 ? (
               SHARED_REPORTS.length === 0 ? (
                 <div className="px-6 py-12">
@@ -5964,24 +6061,23 @@ export default function ReportsView({
                 </div>
               )
             ) : (
-            <ChromaGrid className="w-full p-5 grid grid-cols-3 gap-4 items-start" radius={320} damping={0.45} fadeOut={0.6}>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-6">
               {filteredSharedReports.map((r, i) => (
                 <motion.div
                   key={r.id}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                  className="chroma-card-lite bg-white border border-border-light rounded-[12px] p-6 hover:border-primary/30 transition-colors group cursor-pointer flex flex-col min-h-[168px]"
-                  onMouseMove={handleChromaCardMove}
+                  className="group text-left bg-canvas-elevated border border-canvas-border rounded-[14px] p-5 flex flex-col gap-3 cursor-pointer hover:border-brand-300 hover:shadow-[0_4px_16px_-8px_rgba(106,18,205,0.18)] transition-all min-h-[150px]"
                 >
-                  <div className="flex items-start justify-between gap-3 mb-2.5">
-                    <h3 className="text-[16px] font-semibold leading-[1.3] tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2 min-w-0" title={r.name}>{r.name}</h3>
-                    <div className="flex items-center gap-0.5 -mt-1.5 -mr-1.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="text-[15px] font-semibold leading-snug tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2 min-w-0" title={r.name}>{r.name}</h3>
+                    <div className="flex items-center gap-0.5 -mt-1 -mr-1 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                       <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
                       {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: r.id, anchor: rectFromEvent(e) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
                     </div>
                   </div>
-                  <div className="mt-auto pt-3.5 border-t border-border-light/70 flex items-center justify-between gap-2">
+                  <div className="mt-auto pt-3 border-t border-canvas-border flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="font-mono text-[11px] tabular-nums text-ink-500 shrink-0">{r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}</span>
                       <div className="flex items-center gap-1.5 min-w-0">
@@ -5995,7 +6091,7 @@ export default function ReportsView({
                   </div>
                 </motion.div>
               ))}
-            </ChromaGrid>
+            </div>
             )}
           </div>
           );
@@ -6185,6 +6281,7 @@ export default function ReportsView({
             const newReport: GeneratedReport = {
               id: `gr-atr-${Date.now()}`,
               templateId: 'rt-007',
+              kind: 'atr',
               name,
               tag: 'Internal Audit',
               generatedBy: 'You',
@@ -6305,6 +6402,7 @@ export default function ReportsView({
                       const newReport: GeneratedReport = {
                         id: `gr-gen-${Date.now()}`,
                         templateId: template.id,
+                        kind: templateKind(template),
                         name: newReportName.trim(),
                         tag: tagFromTemplate,
                         generatedBy: 'You',
