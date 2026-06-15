@@ -178,3 +178,15 @@ export const ICFR_ENGAGEMENT: IcfrEngagement = {
 export function seedIcfrEngagement(): IcfrEngagement {
   return JSON.parse(JSON.stringify(ICFR_ENGAGEMENT)) as IcfrEngagement;
 }
+
+/** Fresh, untested controls for a process — the RACM template the setup wizard imports. */
+export function racmTemplate(process: string): Control[] {
+  return ICFR_ENGAGEMENT.controls.filter(c => c.process === process).map(c => ({
+    ...c,
+    stage: 'not-started', conclusion: 'Not started', benchmarked: false,
+    population: undefined, sampling: undefined,
+    attributes: c.attributes.map(a => attr({ code: a.code, description: a.description, assertion: a.assertion, precision: a.precision, tod: tod('Not tested'), toe: toe('Not tested', { procedures: a.toe.procedures }) })),
+  }));
+}
+
+export const TEMPLATE_ACCOUNTS = ICFR_ENGAGEMENT.accounts;

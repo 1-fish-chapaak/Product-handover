@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { motion } from 'motion/react';
-import { AlertTriangle, ArrowRight, Clock, Download, FileWarning, Inbox, ShieldCheck, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Clock, Download, FileWarning, Inbox, ShieldCheck, Sparkles, Plus, RefreshCw } from 'lucide-react';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
 import { downloadIcfrWorkingPaper } from './icfrWorkingPaper';
@@ -10,10 +10,11 @@ import { cn } from '../../lib/cn';
 import type { Control } from './types';
 
 export default function CommandCenter() {
-  const { eng, role, openControl, setView } = useIcfr();
+  const { eng, role, openControl, setView, rollForward } = useIcfr();
   const { addToast } = useToast();
   const p = useMemo(() => engagementProgress(eng), [eng]);
   const exportWp = () => { downloadIcfrWorkingPaper(eng); addToast({ type: 'success', title: 'Working paper exported', message: `Working_Paper_ICFR_${eng.code}.xlsx` }); };
+  const doRollForward = () => { rollForward(); addToast({ type: 'success', title: 'Rolled forward to year-end', message: 'Automated controls benchmarked from interim; manual controls reset for roll-forward testing.' }); };
 
   const needsYou = eng.controls.filter(c => courtFor(c, eng.tasks) === role && c.stage !== 'signed-off');
   const waiting = eng.controls.filter(c => courtFor(c, eng.tasks) === 'risk-owner');
@@ -37,9 +38,11 @@ export default function CommandCenter() {
           <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>{eng.name}</h1>
           <p className="text-[13px] text-ink-500 mt-0.5">{eng.entity} · {eng.framework} · {eng.periodStart} – {eng.periodEnd}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <button onClick={() => setView('setup')} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[13px] font-semibold text-ink-700 hover:border-brand-300 cursor-pointer transition-colors"><Plus size={14} /> New engagement</button>
+          {eng.period === 'Interim' && <button onClick={doRollForward} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[13px] font-semibold text-ink-700 hover:border-brand-300 cursor-pointer transition-colors"><RefreshCw size={14} /> Roll forward</button>}
           <button onClick={exportWp} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-brand-600 text-white text-[13px] font-semibold hover:bg-brand-500 cursor-pointer transition-colors"><Download size={14} /> Working paper</button>
-          <button onClick={() => setView('scope')} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[13px] font-semibold text-ink-700 hover:border-brand-300 cursor-pointer transition-colors">Scope & materiality</button>
+          <button onClick={() => setView('scope')} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[13px] font-semibold text-ink-700 hover:border-brand-300 cursor-pointer transition-colors">Scope</button>
           <button onClick={() => setView('deficiencies')} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[13px] font-semibold text-ink-700 hover:border-brand-300 cursor-pointer transition-colors"><FileWarning size={14} /> Deficiencies <span className="tabular-nums text-risk-700">{eng.deficiencies.length}</span></button>
         </div>
       </div>
@@ -118,6 +121,7 @@ function ControlRow({ c, onOpen, eng }: { c: Control; onOpen: () => void; eng: R
       <span className="text-[13px] text-ink-800 flex-1 min-w-0 truncate">{c.description}</span>
       {c.isKey && <span className="text-[9.5px] font-bold uppercase tracking-wide text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded shrink-0">Key</span>}
       <span className="shrink-0 hidden md:block"><NatureChip nature={c.nature} /></span>
+      {c.benchmarked && <span className="shrink-0 hidden md:inline-flex items-center text-[9.5px] font-bold uppercase tracking-wide text-evidence-700 bg-evidence-50 px-1.5 py-0.5 rounded">Benchmarked</span>}
       <span className="shrink-0 hidden lg:block"><StagePill stage={c.stage} /></span>
       {def ? <span className="shrink-0"><SeverityPill s={severityOf(def, eng.materiality)} /></span> : <span className="shrink-0"><ConclusionPill c={concl} /></span>}
       <span className="shrink-0 w-[88px] flex justify-end"><CourtBadge court={court} /></span>

@@ -6,6 +6,7 @@ import CommandCenter from './CommandCenter';
 import ControlWorkspace from './ControlWorkspace';
 import RiskOwnerPortal from './RiskOwnerPortal';
 import { DeficienciesView, ScopeView } from './extraViews';
+import SetupWizard from './SetupWizard';
 
 function Inner({ onBack }: { onBack?: () => void }) {
   const { eng, role, view, setRole, togglePeriod } = useIcfr();
@@ -15,6 +16,7 @@ function Inner({ onBack }: { onBack?: () => void }) {
     : view === 'control' ? <ControlWorkspace />
     : view === 'deficiencies' ? <DeficienciesView />
     : view === 'scope' ? <ScopeView />
+    : view === 'setup' ? <SetupWizard />
     : <CommandCenter />;
 
   return (
