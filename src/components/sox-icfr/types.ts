@@ -1,47 +1,38 @@
-// ─── SOX / ICFR — canonical model ─────────────────────────────────────────────
+// ─── SOX / ICFR — model v2 ────────────────────────────────────────────────────
 //
-// A control-testing engine embedded in an engagement. Framework-agnostic: the
-// framework (SOX 404 / IFC) is metadata; what you test is the internal control,
-// per-attribute, across Test of Design (TOD) and Test of Operating Effectiveness
-// (TOE). All attributes pass both → control Effective.
-//
-// Grounded in the KPMG ICFR handbook: TOD vs TOE, precision / criteria for
-// investigation, no fixed sample sizes (documented basis), deficiency severity
-// = likelihood × magnitude vs materiality, MW indicators, aggregation.
+// Test of Design (TOD) and Test of Operating Effectiveness (TOE) are INDEPENDENT
+// tracks on a control — tested separately, each with its own required documents,
+// steps, manual override, and conclusion. The control conclusion rolls up from
+// both. Discussions are role-tagged threads anchored to a control or a track.
 
 export type Role = 'auditor' | 'reviewer' | 'risk-owner';
+export const ROLE_LABEL: Record<Role, string> = { auditor: 'Auditor', reviewer: 'Reviewer', 'risk-owner': 'Risk Owner' };
 
 export type Assertion =
   | 'Completeness' | 'Accuracy' | 'Existence / Occurrence'
   | 'Cut-off' | 'Valuation' | 'Rights & Obligations' | 'Presentation';
 
-export type Nature = 'Manual' | 'Automated';
+export type Nature = 'Manual' | 'Automated' | 'IT-dependent';
 export type ControlType = 'Preventive' | 'Detective';
 export type Frequency = 'Annual' | 'Quarterly' | 'Monthly' | 'Weekly' | 'Daily' | 'Recurring' | 'Ad-hoc';
 
 export type TestResult = 'Pass' | 'Fail' | 'Not tested';
-/** TOE evidence procedure — inquiry can never be the SOLE procedure (handbook p250). */
 export type TestProcedure = 'Inspection' | 'Reperformance' | 'Observation' | 'Inquiry';
-
+export type TrackConclusion = 'Effective' | 'Ineffective' | 'Not tested';
+export type TrackStatus = 'Not started' | 'In progress' | 'Concluded';
 export type Conclusion = 'Effective' | 'Ineffective' | 'In progress' | 'Not started';
 
-/** Where the control sits in its lifecycle. */
-export type Stage =
-  | 'not-started'
-  | 'pbc-requested'      // evidence requested from the risk owner
-  | 'evidence-received'
-  | 'tod'               // test of design in progress
-  | 'toe'               // test of operating effectiveness in progress
-  | 'concluded'
-  | 'remediation'       // deficiency being remediated by the owner
-  | 'in-review'
-  | 'signed-off';
-
-/** Whose court the ball is in — the async "baton". */
 export type Court = 'auditor' | 'risk-owner' | 'reviewer' | 'none';
-
 export type Likelihood = 'Remote' | 'Reasonably possible' | 'Probable';
 export type Severity = 'Deficiency' | 'Significant Deficiency' | 'Material Weakness';
+
+/** A manual override of a computed/automated result, with who/why. */
+export interface Override {
+  result: TestResult | 'Effective' | 'Ineffective';
+  by: string;
+  at: string;
+  rationale: string;
+}
 
 export interface EvidenceFile {
   id: string;
@@ -51,56 +42,78 @@ export interface EvidenceFile {
   uploadedAt: string;
 }
 
-export interface PhaseRecord {
+// ─── Design track (TOD) ─────────────────────────────────────────────────────────
+
+export type DesignDocKind = 'Process narrative' | 'Flowchart' | 'Walkthrough' | 'Control description' | 'Policy / SOP';
+export type DocStatus = 'Received' | 'Requested' | 'Missing';
+export interface DesignDoc {
+  id: string;
+  kind: DesignDocKind;
+  name: string;
+  status: DocStatus;
+  uploadedBy?: string;
+  at?: string;
+}
+/** A design consideration assessed in the walkthrough. */
+export interface DesignPoint {
+  id: string;
+  text: string;
   result: TestResult;
-  note: string;
+}
+export interface DesignTrack {
+  documents: DesignDoc[];
+  points: DesignPoint[];
+  conclusion: TrackConclusion;
+  override?: Override;
   testedBy: string | null;
   testedAt: string | null;
 }
 
-export interface ToeRecord extends PhaseRecord {
-  /** Procedures applied — must include more than Inquiry to conclude Pass. */
-  procedures: TestProcedure[];
-  /** Per-sample pass/fail for the manual path (empty for automated). */
-  sampleResults: { sampleId: string; result: TestResult }[];
-  /** For the automated path: the workflow run this TOE is drawn from. */
-  workflowRunRef?: string;
-}
+// ─── Operating track (TOE) ──────────────────────────────────────────────────────
 
-export interface Attribute {
+export type OperatingMethod = 'Automated' | 'Manual';
+export interface OperatingStep {
   id: string;
-  code: string;            // e.g. "P2P-C-01.1"
-  description: string;     // the reperformable procedure
+  code: string;
+  description: string;
   assertion: Assertion;
-  /** Criteria for investigation / precision — what makes it testable. */
   precision: string;
-  tod: PhaseRecord;
-  toe: ToeRecord;
+  procedures: TestProcedure[];
+  result: TestResult;
+  override?: Override;
 }
-
-export interface Sample {
-  id: string;
-  ref: string;
-}
-
+export interface Sample { id: string; ref: string; result: TestResult; }
 export interface Sampling {
-  /** Documented basis — NOT just a number (handbook: no fixed sizes). */
   basis: string;
   method: 'Random' | 'Statistical' | 'Targeted' | 'Full population';
   size: number;
   samples: Sample[];
 }
-
 export interface Population {
   source: string;
   count: number;
-  /** Completeness tie-out — sampling cannot address completeness on its own. */
   tieOut: string;
   evidence: EvidenceFile[];
 }
+export interface OperatingTrack {
+  method: OperatingMethod;
+  workflowId?: string;
+  workflowName?: string;
+  workflowRunRef?: string;
+  population?: Population;
+  sampling?: Sampling;
+  steps: OperatingStep[];
+  conclusion: TrackConclusion;
+  override?: Override;
+  testedBy: string | null;
+  testedAt: string | null;
+}
+
+// ─── Control ─────────────────────────────────────────────────────────────────────
 
 export interface Control {
-  id: string;              // "P2P-C-01"
+  id: string;
+  wpRef: string;            // working-paper cross-reference (the signature)
   description: string;
   process: string;
   subProcess: string;
@@ -108,33 +121,37 @@ export interface Control {
   type: ControlType;
   frequency: Frequency;
   isKey: boolean;
-  /** Control-level precision / "would" objective. */
   precision: string;
-  owner: string;           // the risk / control owner (1st line)
+  owner: string;
   riskId: string;
   riskDescription: string;
   assertions: Assertion[];
-  /** Automated controls draw TOE from this CCM workflow. */
-  workflowId?: string;
-  workflowName?: string;
-  attributes: Attribute[];
-  stage: Stage;
-  conclusion: Conclusion;
-  /** Year-end roll-forward: automated control benchmarked from interim (no full re-test). */
-  benchmarked?: boolean;
-  population?: Population;
-  sampling?: Sampling;
+  design: DesignTrack;
+  operating: OperatingTrack;
 }
 
-export type TaskType = 'pbc' | 'query' | 'exception' | 'remediation' | 'review-note';
-export type TaskStatus = 'open' | 'submitted' | 'cleared';
+// ─── Discussions (role-tagged threads) ──────────────────────────────────────────
 
-export interface TaskComment {
+export type DiscussionAnchor = 'control' | 'design' | 'operating';
+export interface DiscussionComment {
+  id: string;
   by: string;
+  role: Role;
   at: string;
   text: string;
 }
+export interface Discussion {
+  id: string;
+  controlId: string;
+  anchor: DiscussionAnchor;
+  resolved: boolean;
+  comments: DiscussionComment[];
+}
 
+// ─── Handoffs, deficiencies, scope, engagement ───────────────────────────────────
+
+export type TaskType = 'pbc' | 'query' | 'remediation';
+export type TaskStatus = 'open' | 'submitted' | 'cleared';
 export interface HandoffTask {
   id: string;
   type: TaskType;
@@ -147,73 +164,35 @@ export interface HandoffTask {
   dueLabel: string;
   overdue: boolean;
   status: TaskStatus;
-  thread: TaskComment[];
 }
 
 export interface Deficiency {
   id: string;
   controlId: string;
-  attributeId?: string;
-  kind: 'design' | 'operating';
+  track: 'design' | 'operating';
   description: string;
   rootCause: string;
   likelihood: Likelihood;
-  /** Potential misstatement (₹). Floor = actual error. */
   magnitude: number;
   mwIndicators: string[];
   compensatingControlId?: string;
   aggregationGroup?: string;
-  remediation: {
-    action: string;
-    date: string | null;
-    owner: string;
-    status: 'Open' | 'In progress' | 'Done';
-    result: TestResult;
-  };
+  remediation: { action: string; date: string | null; owner: string; status: 'Open' | 'In progress' | 'Done' };
 }
 
 export interface SignificantAccount {
-  id: string;
-  name: string;
-  balance: number;
-  inScope: boolean;
-  assertions: Assertion[];
+  id: string; name: string; balance: number; inScope: boolean; assertions: Assertion[];
 }
 
 export interface IcfrEngagement {
-  id: string;
-  code: string;
-  name: string;
-  entity: string;
-  framework: string;       // "SOX 404 / ICFR"
-  periodStart: string;
-  periodEnd: string;
-  period: 'Interim' | 'Year-end';
-  /** Overall + performance materiality (₹). */
-  materiality: number;
-  performanceMateriality: number;
-  preparer: string;
-  reviewer: string;
+  id: string; code: string; name: string; entity: string; framework: string;
+  periodStart: string; periodEnd: string; period: 'Interim' | 'Year-end';
+  materiality: number; performanceMateriality: number; preparer: string; reviewer: string;
   accounts: SignificantAccount[];
   controls: Control[];
   deficiencies: Deficiency[];
   tasks: HandoffTask[];
+  discussions: Discussion[];
 }
 
-export const STAGE_LABEL: Record<Stage, string> = {
-  'not-started': 'Not started',
-  'pbc-requested': 'PBC requested',
-  'evidence-received': 'Evidence received',
-  tod: 'Test of Design',
-  toe: 'Operating effectiveness',
-  concluded: 'Concluded',
-  remediation: 'Remediation',
-  'in-review': 'In review',
-  'signed-off': 'Signed off',
-};
-
-export const ROLE_LABEL: Record<Role, string> = {
-  auditor: 'Auditor',
-  reviewer: 'Reviewer',
-  'risk-owner': 'Risk Owner',
-};
+export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'Policy / SOP'];

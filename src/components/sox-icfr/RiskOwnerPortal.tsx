@@ -5,11 +5,9 @@ import { cn } from '../../lib/cn';
 import type { HandoffTask, TaskType } from './types';
 
 const TASK_META: Record<TaskType, { label: string; Icon: typeof Upload; tone: string; action: string }> = {
-  pbc: { label: 'Evidence request', Icon: Upload, tone: 'text-evidence-700 bg-evidence-50', action: 'Upload' },
+  pbc: { label: 'Document request', Icon: Upload, tone: 'text-evidence-700 bg-evidence-50', action: 'Provide documents' },
   remediation: { label: 'Remediation', Icon: FileWarning, tone: 'text-high-700 bg-high-50', action: 'Mark done' },
   query: { label: 'Question', Icon: MessageSquare, tone: 'text-brand-700 bg-brand-50', action: 'Respond' },
-  exception: { label: 'Exception', Icon: FileWarning, tone: 'text-risk-700 bg-risk-50', action: 'Explain' },
-  'review-note': { label: 'Review note', Icon: ClipboardList, tone: 'text-ink-600 bg-paper-100', action: 'Open' },
 };
 
 export default function RiskOwnerPortal() {
@@ -52,7 +50,7 @@ export default function RiskOwnerPortal() {
                   </div>
                   <div className="text-[14px] font-semibold text-ink-900 leading-snug">{t.title}</div>
                   <div className="text-[12.5px] text-ink-600 mt-0.5 leading-relaxed">{t.detail}</div>
-                  {t.thread.length > 0 && <div className="mt-2 text-[12px] text-ink-500 bg-paper-50/60 border border-canvas-border rounded-lg px-3 py-1.5">“{t.thread[t.thread.length - 1]!.text}” — {t.thread[t.thread.length - 1]!.by}</div>}
+                  <div className="mt-2 text-[11.5px] text-ink-400">Raised by {t.raisedBy}</div>
                   <div className="flex items-center gap-2 mt-3">
                     <button onClick={() => act(t)} className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-brand-600 text-white text-[13px] font-semibold hover:bg-brand-500 cursor-pointer transition-colors"><m.Icon size={14} /> {m.action}</button>
                     <button className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-canvas-border text-[13px] font-semibold text-ink-600 hover:border-brand-300 cursor-pointer transition-colors"><MessageSquare size={14} /> Comment</button>

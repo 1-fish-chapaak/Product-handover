@@ -12,7 +12,7 @@ export function DeficienciesView() {
   const M = eng.materiality;
   return (
     <div className="space-y-4">
-      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Command center</button>
+      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Control register</button>
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Deficiencies</h1>
@@ -58,7 +58,7 @@ export function DeficienciesView() {
                   <div className="inline-flex items-center gap-2">
                     <span className="font-mono text-[12px] font-semibold text-ink-600">{d.id}</span>
                     <button onClick={() => openControl(d.controlId)} className="font-mono text-[12px] text-brand-700 hover:underline cursor-pointer">{d.controlId}</button>
-                    <Pill tone={d.kind === 'design' ? 'mitigated' : 'evidence'}>{d.kind === 'design' ? 'Design' : 'Operating'}</Pill>
+                    <Pill tone={d.track === 'design' ? 'mitigated' : 'evidence'}>{d.track === 'design' ? 'Design' : 'Operating'}</Pill>
                   </div>
                   <SeverityPill s={sev} />
                 </div>
@@ -118,7 +118,7 @@ export function ScopeView() {
   const keyControls = eng.controls.filter(c => c.isKey).length;
   return (
     <div className="space-y-4">
-      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Command center</button>
+      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Control register</button>
       <div>
         <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Scope & materiality</h1>
         <p className="text-[13px] text-ink-500 mt-0.5">Materiality drives which accounts &amp; assertions are in scope, and which key controls we test.</p>

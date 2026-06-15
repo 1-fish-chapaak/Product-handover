@@ -1,111 +1,98 @@
 import type {
-  Attribute, Conclusion, Control, Court, Deficiency, HandoffTask,
-  IcfrEngagement, Likelihood, Role, Severity,
+  Conclusion, Control, Court, Deficiency, DesignTrack, HandoffTask, IcfrEngagement,
+  Likelihood, OperatingTrack, Role, Severity, TrackConclusion,
 } from './types';
 
-// ─── Deficiency severity (handbook §9.5: likelihood × magnitude vs materiality) ──
+// ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
 
-/** Reasonable possibility = more than remote. */
-export function isReasonablyPossible(l: Likelihood): boolean {
-  return l !== 'Remote';
-}
-
-/**
- * Computed severity. MW indicators force a material weakness. Otherwise:
- *   not reasonably possible            → Deficiency
- *   magnitude ≥ materiality            → Material Weakness
- *   magnitude ≥ significant band (20%) → Significant Deficiency  (configurable)
- *   else                               → Deficiency
- * Remediation after the assessment date must NOT lower this.
- */
-export function computeSeverity(
-  likelihood: Likelihood,
-  magnitude: number,
-  materiality: number,
-  mwIndicators: string[],
-  significantBand = 0.2,
-): Severity {
+export function isReasonablyPossible(l: Likelihood): boolean { return l !== 'Remote'; }
+export function computeSeverity(likelihood: Likelihood, magnitude: number, materiality: number, mwIndicators: string[], band = 0.2): Severity {
   if (mwIndicators.length > 0) return 'Material Weakness';
   if (!isReasonablyPossible(likelihood)) return 'Deficiency';
   if (magnitude >= materiality) return 'Material Weakness';
-  if (magnitude >= materiality * significantBand) return 'Significant Deficiency';
+  if (magnitude >= materiality * band) return 'Significant Deficiency';
   return 'Deficiency';
 }
-
 export function severityOf(d: Deficiency, materiality: number): Severity {
   return computeSeverity(d.likelihood, d.magnitude, materiality, d.mwIndicators);
 }
 
-// ─── Attribute + control roll-up ─────────────────────────────────────────────────
+// ─── Track + control conclusions (override wins) ─────────────────────────────────
 
-/** An attribute is concluded effective only when BOTH TOD and TOE pass. */
-export function attributeEffective(a: Attribute): boolean {
-  return a.tod.result === 'Pass' && a.toe.result === 'Pass';
+export function trackResult(t: DesignTrack | OperatingTrack): TrackConclusion {
+  if (t.override) return t.override.result === 'Effective' ? 'Effective' : 'Ineffective';
+  return t.conclusion;
 }
-
-export function attributeFailed(a: Attribute): boolean {
-  return a.tod.result === 'Fail' || a.toe.result === 'Fail';
+export function designStarted(c: Control): boolean {
+  return !!c.design.override || c.design.conclusion !== 'Not tested'
+    || c.design.documents.some(d => d.status === 'Received') || c.design.points.some(p => p.result !== 'Not tested');
 }
-
-/** Roll a control up from its attributes (TOD gates TOE). */
+export function operatingStarted(c: Control): boolean {
+  return !!c.operating.override || c.operating.conclusion !== 'Not tested'
+    || !!c.operating.population || c.operating.steps.some(s => s.result !== 'Not tested');
+}
 export function controlConclusion(c: Control): Conclusion {
-  const attrs = c.attributes;
-  if (attrs.length === 0) return 'Not started';
-  if (attrs.some(attributeFailed)) return 'Ineffective';
-  if (attrs.every(attributeEffective)) return 'Effective';
-  const anyTested = attrs.some(a => a.tod.result !== 'Not tested' || a.toe.result !== 'Not tested');
-  return anyTested ? 'In progress' : 'Not started';
+  const d = trackResult(c.design); const o = trackResult(c.operating);
+  if (d === 'Ineffective' || o === 'Ineffective') return 'Ineffective';
+  if (d === 'Effective' && o === 'Effective') return 'Effective';
+  return designStarted(c) || operatingStarted(c) ? 'In progress' : 'Not started';
 }
 
-// ─── Baton — whose court is the ball in ──────────────────────────────────────────
+// ─── Track progress ──────────────────────────────────────────────────────────────
+
+export function designProgress(c: Control) {
+  const docs = c.design.documents;
+  return {
+    docsReceived: docs.filter(d => d.status === 'Received').length,
+    docsTotal: docs.length,
+    docsMissing: docs.filter(d => d.status !== 'Received').length,
+    pointsPass: c.design.points.filter(p => p.result === 'Pass').length,
+    pointsTotal: c.design.points.length,
+  };
+}
+export function operatingProgress(c: Control) {
+  const s = c.operating.steps;
+  return {
+    tested: s.filter(x => x.result !== 'Not tested').length,
+    passed: s.filter(x => x.result === 'Pass').length,
+    failed: s.filter(x => x.result === 'Fail').length,
+    total: s.length,
+  };
+}
+
+// ─── Baton — whose court ─────────────────────────────────────────────────────────
 
 export function courtFor(c: Control, tasks: HandoffTask[]): Court {
-  if (c.stage === 'signed-off') return 'none';
-  const open = tasks.filter(t => t.controlId === c.id && t.status === 'open');
-  if (open.some(t => t.assigneeRole === 'risk-owner')) return 'risk-owner';
-  if (c.stage === 'remediation') return 'risk-owner';
-  if (c.stage === 'in-review' || open.some(t => t.assigneeRole === 'reviewer')) return 'reviewer';
+  if (tasks.some(t => t.controlId === c.id && t.assigneeRole === 'risk-owner' && t.status === 'open')) return 'risk-owner';
+  const concl = controlConclusion(c);
+  if (concl === 'Effective' || concl === 'Ineffective') return 'reviewer';
   return 'auditor';
 }
 
 // ─── Engagement progress ─────────────────────────────────────────────────────────
 
-export interface Progress {
-  total: number;
-  todDone: number;
-  toeDone: number;
-  concluded: number;
-  effective: number;
-  deficient: number;
-  waitingOnOwner: number;
-}
-
-export function engagementProgress(eng: IcfrEngagement): Progress {
+export function engagementProgress(eng: IcfrEngagement) {
   const cs = eng.controls;
-  const todDone = cs.filter(c => c.attributes.length > 0 && c.attributes.every(a => a.tod.result !== 'Not tested')).length;
-  const toeDone = cs.filter(c => c.attributes.length > 0 && c.attributes.every(a => a.toe.result !== 'Not tested')).length;
   const concl = cs.map(controlConclusion);
   return {
     total: cs.length,
-    todDone,
-    toeDone,
-    concluded: concl.filter(c => c === 'Effective' || c === 'Ineffective').length,
-    effective: concl.filter(c => c === 'Effective').length,
-    deficient: concl.filter(c => c === 'Ineffective').length,
+    designDone: cs.filter(c => trackResult(c.design) !== 'Not tested').length,
+    operatingDone: cs.filter(c => trackResult(c.operating) !== 'Not tested').length,
+    effective: concl.filter(x => x === 'Effective').length,
+    ineffective: concl.filter(x => x === 'Ineffective').length,
+    inProgress: concl.filter(x => x === 'In progress').length,
     waitingOnOwner: cs.filter(c => courtFor(c, eng.tasks) === 'risk-owner').length,
   };
 }
 
-// ─── Role queues ─────────────────────────────────────────────────────────────────
-
-/** Tasks assigned to a role that still need action. */
 export function tasksForRole(eng: IcfrEngagement, role: Role): HandoffTask[] {
   return eng.tasks.filter(t => t.assigneeRole === role && t.status === 'open');
 }
-
-/** Controls whose baton is currently with this role. */
-export function controlsInCourt(eng: IcfrEngagement, role: Role): Control[] {
-  return eng.controls.filter(c => courtFor(c, eng.tasks) === role);
+export function discussionsFor(eng: IcfrEngagement, controlId: string) {
+  return eng.discussions.filter(d => d.controlId === controlId);
+}
+export function openDiscussionCount(eng: IcfrEngagement, controlId: string): number {
+  return discussionsFor(eng, controlId).filter(d => !d.resolved).length;
 }
 
 export function formatINR(n: number): string {
