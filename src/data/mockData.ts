@@ -559,7 +559,7 @@ const DEFAULT_ACTIVITY: GrcActivityEntry[] = [
     author: 'Priya Mehta',
     role: 'Auditor',
     timestamp: '21 Apr 2026, 18:00',
-    message: 'Accepted action. Marked Under Review pending implementation verification',
+    message: 'Accepted action — marked Pending Review, awaiting implementation verification',
     comment: 'Action plan is comprehensive. Monitoring the completion of the decommission ticket by Nov 30.',
   },
   {
@@ -745,7 +745,7 @@ export const ACTION_HUB_TIMELINE: ActionHubEvent[] = [
   { id: 'ev-03', date: '22 Apr 2026', time: '18:00', relative: '1 day ago',     actor: 'Priya Mehta', role: 'Auditor',    message: 'Rejected. Discrepancy raised',                                     exceptionId: 'EXC012', comment: '"The submitted action does not adequately address the regulatory notification requirement under GDPR Article 33."' },
   { id: 'ev-04', date: '22 Apr 2026', time: '18:00', relative: '1 day ago',     actor: 'Arun Singh',  role: 'Risk Owner', message: 'Classified as Design Deficiency',                                  exceptionId: 'EXC014', comment: '"Change management system does not enforce CAB approval before production deployments."' },
 
-  { id: 'ev-05', date: '21 Apr 2026', time: '18:00', relative: '2 days ago',    actor: 'Priya Mehta', role: 'Auditor',    message: 'Accepted action. Marked Under Review pending implementation verification', exceptionId: 'EXC001', comment: '"Action plan is comprehensive. Monitoring the completion of the decommission ticket by Nov 30."' },
+  { id: 'ev-05', date: '21 Apr 2026', time: '18:00', relative: '2 days ago',    actor: 'Priya Mehta', role: 'Auditor',    message: 'Accepted action — marked Pending Review, awaiting implementation verification', exceptionId: 'EXC001', comment: '"Action plan is comprehensive. Monitoring the completion of the decommission ticket by Nov 30."' },
   { id: 'ev-06', date: '21 Apr 2026', time: '18:00', relative: '2 days ago',    actor: 'Sunita Rao',  role: 'Risk Owner', message: 'Classified as Procedural Non-Compliance',                          exceptionId: 'EXC005', comment: '"The DSR process lacks automation and escalation rules."' },
   { id: 'ev-07', date: '21 Apr 2026', time: '18:00', relative: '2 days ago',    actor: 'Ira (AI)',    role: 'Ira (AI)',   message: 'Exception flagged by Ira (AI) with 72% confidence',                exceptionId: 'EXC013' },
 
