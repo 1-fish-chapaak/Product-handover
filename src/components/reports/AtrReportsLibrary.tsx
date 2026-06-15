@@ -1,18 +1,20 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { FileText, Calendar, ClipboardList, ListChecks, Paperclip, FolderOpen, Eye, Download, Share2, User } from 'lucide-react';
+import { FileText, FolderOpen, Download, Share2 } from 'lucide-react';
 import { type AtrLibraryReport, EVIDENCE_LIBRARY } from '../../data/atrLibrary';
 import ListToolbar, { ToolbarSelect, ToolbarFilterMenu, ToolbarViewToggle } from '../shared/ListToolbar';
 import SmartTable from '../shared/SmartTable';
+import ReportCard from '../shared/ReportCard';
+import { type Tone } from '../shared/StatusBadge';
+import { ReportPill } from './ReportPill';
+import { reportDisplayName } from './reportName';
 
-const AREA_TONE: Record<string, string> = {
-  'Procure-to-Pay':      'bg-brand-50 text-brand-700',
-  'IT General Controls': 'bg-evidence-50 text-evidence-700',
-  'Order-to-Cash':       'bg-mitigated-50 text-mitigated-700',
-};
-const STATUS_TONE: Record<string, string> = {
-  final: 'bg-compliant-50 text-compliant-700',
-  draft: 'bg-[#F4F2F7] text-ink-600',
+// Audit-area → design-system tone (StatusBadge §7.10.4). Used by both the grid
+// card eyebrow tint and the list Type chips so the colour vocabulary matches.
+const AREA_TONE_MAP: Record<string, Tone> = {
+  'Procure-to-Pay':      'info',
+  'IT General Controls': 'evidence',
+  'Order-to-Cash':       'mitigated',
 };
 
 const DATE_RANGES: { key: string; label: string; days: number }[] = [
@@ -30,29 +32,6 @@ function parseAtrDate(s: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function Stat({ icon: Icon, value, label }: { icon: React.ElementType; value: number; label: string }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <Icon size={13} className="text-ink-400 shrink-0" />
-      <span className="text-[12.5px] font-semibold text-ink-800 tabular-nums">{value}</span>
-      <span className="text-[11.5px] text-ink-500">{label}</span>
-    </div>
-  );
-}
-
-function ActionIcon({ icon: Icon, label, onClick }: { icon: React.ElementType; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={e => { e.stopPropagation(); onClick(); }}
-      title={label}
-      aria-label={label}
-      className="w-8 h-8 rounded-[8px] flex items-center justify-center text-ink-500 hover:text-primary hover:bg-primary-xlight cursor-pointer transition-colors"
-    >
-      <Icon size={15} />
-    </button>
-  );
-}
 
 export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, view, onViewChange }: {
   atrs: AtrLibraryReport[];
@@ -151,9 +130,11 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
           {activeFilters && <button onClick={clearAll} className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer">Clear all filters</button>}
         </div>
       ) : view === 'list' ? (
+        <div className="flex-1 rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-hidden">
         <SmartTable
-          className="flex-1"
+          className=""
           variant="modern"
+          dense
           searchable={false}
           showSortHint
           data={filtered as unknown as Record<string, unknown>[]}
@@ -162,87 +143,69 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
           pageSize={20}
           hideResultCount
           columns={[
-            { key: 'index', label: 'No.', width: '52px', sortable: false, render: (_item, i) => (
-              <span className="font-mono text-[11px] text-text-muted tabular-nums">{String(i + 1).padStart(2, '0')}</span>
+            { key: 'index', label: 'No.', width: '56px', sortable: false, render: (_item, i) => (
+              <span className="font-mono text-[11.5px] text-text-muted tabular-nums">{String(i + 1).padStart(2, '0')}</span>
             )},
-            { key: 'name', label: 'Report', render: (item) => {
+            { key: 'name', label: 'Report', truncate: true, render: (item) => {
               const atr = item as unknown as AtrLibraryReport;
               const plans = atr.atrData.observations.reduce((n, o) => n + o.actionPlans.length, 0);
               return (
-                <div className="cursor-pointer min-w-0" onClick={() => onOpen(atr)}>
-                  <div className="text-[16px] font-semibold tracking-[-0.005em] text-ink-800 truncate hover:text-primary transition-colors" title={atr.name}>{atr.name}</div>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${STATUS_TONE[atr.status]}`}>{atr.status}</span>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${AREA_TONE[atr.area] ?? 'bg-paper-50 text-ink-600'}`}>{atr.area}</span>
-                    <span className="text-[11px] text-text-muted font-mono tabular-nums">{atr.atrData.observations.length} obs · {plans} plans · {evidenceCount[atr.id] ?? 0} evidence</span>
+                <div className="flex items-center gap-3 cursor-pointer min-w-0" onClick={() => onOpen(atr)}>
+                  <span className="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center bg-brand-50 text-brand-700">
+                    <FileText size={16} strokeWidth={1.75} aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[14.5px] font-semibold tracking-[-0.006em] text-ink-900 truncate group-hover:text-primary transition-colors" title={reportDisplayName(atr.name)}>{reportDisplayName(atr.name)}</div>
+                    <div className="mt-0.5 text-[11.5px] text-text-muted truncate">{atr.atrData.observations.length} obs · {plans} plans · {evidenceCount[atr.id] ?? 0} evidence</div>
                   </div>
                 </div>
               );
             }},
-            { key: 'generatedAt', label: 'Generated', width: '150px', render: (item) => (
-              <span className="font-mono text-[12px] tabular-nums text-text-secondary">{String((item as unknown as AtrLibraryReport).generatedAt)}</span>
+            { key: 'area', label: 'Area', width: '180px', render: (item) => {
+              const atr = item as unknown as AtrLibraryReport;
+              return <ReportPill tone={AREA_TONE_MAP[atr.area] ?? 'draft'}>{atr.area}</ReportPill>;
+            }},
+            { key: 'status', label: 'Status', width: '128px', render: (item) => {
+              const atr = item as unknown as AtrLibraryReport;
+              return <ReportPill tone={atr.status === 'final' ? 'compliant' : 'draft'}>{atr.status === 'final' ? 'Final' : 'Draft'}</ReportPill>;
+            }},
+            { key: 'generatedAt', label: 'Generated', width: '150px', align: 'right', render: (item) => (
+              <span className="font-mono text-[12px] tabular-nums text-text-muted whitespace-nowrap">{String((item as unknown as AtrLibraryReport).generatedAt)}</span>
             )},
             { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => {
               const atr = item as unknown as AtrLibraryReport;
               return (
-                <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  <button title="View" onClick={(e) => { e.stopPropagation(); onOpen(atr); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="View"><Eye size={14} /></button>
-                  {onDownload && <button title="Download" onClick={(e) => { e.stopPropagation(); onDownload(atr); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button>}
-                  {onShare && <button title="Share" onClick={(e) => { e.stopPropagation(); onShare(atr); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button>}
+                <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                  {onDownload && <button title="Download" onClick={(e) => { e.stopPropagation(); onDownload(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button>}
+                  {onShare && <button title="Share" onClick={(e) => { e.stopPropagation(); onShare(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button>}
                 </div>
               );
             }},
           ]}
         />
+        </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map(atr => {
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 pb-6">
+          {filtered.map((atr, i) => {
             const plans = atr.atrData.observations.reduce((n, o) => n + o.actionPlans.length, 0);
+            const ev = evidenceCount[atr.id] ?? 0;
             return (
-              <div
+              <ReportCard
                 key={atr.id}
+                index={i}
+                icon={FileText}
+                iconClass="bg-info-50 text-info-700"
+                eyebrow="ATR"
+                title={reportDisplayName(atr.name)}
+                description={`${atr.atrData.meta.auditEntity} — ${atr.atrData.meta.auditPeriod}`}
+                pills={[atr.status === 'final' ? 'Final' : 'Draft', `${atr.atrData.observations.length} observations`, `${plans} action plans`, `${ev} evidence`]}
+                footerRight={<span className="font-mono text-[11px] tabular-nums text-ink-400">{atr.generatedAt}</span>}
                 onClick={() => onOpen(atr)}
-                className="group text-left bg-canvas-elevated border border-canvas-border rounded-[14px] p-5 flex flex-col gap-4 cursor-pointer hover:border-brand-300 hover:shadow-[0_4px_16px_-8px_rgba(106,18,205,0.18)] transition-all"
-              >
-                {/* Header: icon + title (with area subtitle) and status */}
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><FileText size={18} /></div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="text-[14.5px] font-semibold text-ink-900 leading-snug line-clamp-2 min-w-0 group-hover:text-primary transition-colors" title={atr.name}>{atr.name}</h3>
-                      <span className={`inline-flex items-center h-5 px-2 text-[10px] font-semibold rounded-full capitalize shrink-0 ${STATUS_TONE[atr.status]}`}>{atr.status}</span>
-                    </div>
-                    <div className="mt-1 text-[12px] text-ink-500 truncate" title={atr.area}>{atr.area}</div>
-                  </div>
-                </div>
-
-                {/* Meta */}
-                <div className="space-y-1.5 text-[12px] text-ink-500">
-                  <div className="flex items-center gap-1.5"><Calendar size={12} className="text-ink-400 shrink-0" /> {atr.atrData.meta.auditPeriod}</div>
-                  <div className="flex items-center gap-1.5 truncate"><FolderOpen size={12} className="text-ink-400 shrink-0" /> <span className="truncate">{atr.atrData.meta.auditEntity}</span></div>
-                  {atr.riskOwner && <div className="flex items-center gap-1.5"><User size={12} className="text-ink-400 shrink-0" /> <span className="truncate">Risk owner · {atr.riskOwner}</span></div>}
-                </div>
-
-                {/* Stats */}
-                <div className="flex items-center gap-4 flex-wrap">
-                  <Stat icon={ClipboardList} value={atr.atrData.observations.length} label="observations" />
-                  <Stat icon={ListChecks} value={plans} label="action plans" />
-                  <Stat icon={Paperclip} value={evidenceCount[atr.id] ?? 0} label="evidence" />
-                </div>
-
-                {/* Footer: Generated by + date/time, and per-row actions */}
-                <div className="mt-auto pt-3 border-t border-canvas-border flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-[11.5px] text-ink-600 truncate">Generated by <span className="font-medium text-ink-700">{atr.generatedBy}</span></div>
-                    <div className="text-[11px] text-ink-400 tabular-nums">{atr.generatedAt}</div>
-                  </div>
-                  <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                    <ActionIcon icon={Eye} label="View" onClick={() => onOpen(atr)} />
-                    {onDownload && <ActionIcon icon={Download} label="Download" onClick={() => onDownload(atr)} />}
-                    {onShare && <ActionIcon icon={Share2} label="Share" onClick={() => onShare(atr)} />}
-                  </div>
-                </div>
-              </div>
+                actions={<>
+                  {onDownload && <button title="Download" onClick={(e) => { e.stopPropagation(); onDownload(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button>}
+                  {onShare && <button title="Share" onClick={(e) => { e.stopPropagation(); onShare(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button>}
+                </>}
+              />
             );
           })}
         </div>

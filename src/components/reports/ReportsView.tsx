@@ -1,8 +1,11 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'motion/react';
 import FloatingLines from '../shared/FloatingLines';
-import ListToolbar, { ToolbarChips, ToolbarSelect, ToolbarViewToggle } from '../shared/ListToolbar';
+import ListToolbar, { ToolbarChips, ToolbarSelect, ToolbarFilterMenu, ToolbarViewToggle } from '../shared/ListToolbar';
+import ColumnFilter from '../shared/ColumnFilter';
+import ReportCard from '../shared/ReportCard';
+import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, FileSpreadsheet, Shield, AlertTriangle, CheckCircle2, BarChart3,
   TrendingUp, Download, Share2, ArrowRight, ArrowLeft, ChevronDown,
@@ -23,7 +26,7 @@ import GenerateATRModal from '../exceptions/GenerateATRModal';
 import AtrReportView from './AtrReportView';
 import type { AtrMeta, AtrObservation, AtrInsight, AtrReportData } from './atrTypes';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS } from '../../data/mockData';
+import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS, GENERATED_REPORTS_KEY } from '../../data/mockData';
 import { ATR_LIBRARY, EVIDENCE_LIBRARY, type AtrLibraryReport } from '../../data/atrLibrary';
 import AtrReportsLibrary from './AtrReportsLibrary';
 import EvidenceRepository from './EvidenceRepository';
@@ -34,7 +37,9 @@ import { QUERY_GRAPHS, QUERY_TABLES, type QueryGraph, type QueryTable } from '..
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { SectionHeader, Checkbox, KpiPreviewRow, TablePreviewRow } from '../chat/WidgetPickerParts';
 import { setAll, toggleIn } from '../chat/widgetPickerHelpers';
-import { StatusBadge } from '../shared/StatusBadge';
+import { type Tone } from '../shared/StatusBadge';
+import { ReportPill } from './ReportPill';
+import { reportDisplayName } from './reportName';
 import SmartTable from '../shared/SmartTable';
 import { useToast, type ToastType } from '../shared/Toast';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
@@ -81,18 +86,6 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 // Observation attachment type + helpers live in AddObservationModal.
 
-// Report tag chip — maps the freeform tag string to the GRC semantic
-// palette instead of one-off hex pairs. Keeps the colour vocabulary the
-// same one used everywhere else in the product.
-function reportTagChip(tag: string): { classes: string; label: string } {
-  if (tag === 'Internal Audit') {
-    return { classes: 'bg-evidence-50 text-evidence-700', label: tag };
-  }
-  if (tag === 'Bulk Audit') {
-    return { classes: 'bg-brand-50 text-brand-700', label: tag };
-  }
-  return { classes: 'bg-paper-100 text-ink-600', label: tag };
-}
 
 /** Which of the three report types a generated report belongs to. ATR reports
  *  carry atrData; SOX reports are identified by name; everything else is treated
@@ -128,6 +121,7 @@ function reportKind(r: { name?: string; atrData?: unknown; kind?: 'atr' | 'sox' 
   if (/\bsox\b/i.test(r.name ?? '')) return 'sox';
   return 'ia';
 }
+
 
 type AttachedQuery = {
   id: string;
@@ -174,6 +168,8 @@ type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   generatedQueries?: GeneratedQueryDef[];
   /** Executive-summary rollup composed from generatedQueries at generate time. */
   execSummary?: string;
+  /** Audit coverage window stated on the cover (e.g. "FY26 Q2"), set in the wizard. */
+  reportPeriod?: string;
   /** The template's advertised sections, baked at generate time so the report
    *  delivers the structure the template card promises (rendered as editable
    *  note blocks around the query body). */
@@ -801,6 +797,31 @@ function TemplateEditor({ template, onClose, onCancel, isCopy = false, onSaveCop
     }, 320);
   };
 
+  // Live preview is rendered at a fixed "page" width so the cover title sits on
+  // one line, then scaled down to fit the preview pane (matching the real
+  // report page proportions). offsetHeight is pre-transform, so the wrapper
+  // height = naturalHeight * scale keeps surrounding layout correct.
+  const PREVIEW_DOC_W = 780;
+  const previewWrapRef = useRef<HTMLDivElement>(null);
+  const previewDocRef = useRef<HTMLDivElement>(null);
+  const [previewScale, setPreviewScale] = useState(1);
+  const [previewHeight, setPreviewHeight] = useState<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    const wrap = previewWrapRef.current;
+    const doc = previewDocRef.current;
+    if (!wrap || !doc) return;
+    const recompute = () => {
+      const scale = Math.min(1, wrap.clientWidth / PREVIEW_DOC_W);
+      setPreviewScale(scale);
+      setPreviewHeight(doc.offsetHeight * scale);
+    };
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    ro.observe(wrap);
+    ro.observe(doc);
+    return () => ro.disconnect();
+  }, [sections, copyName, brand, theme, headerText, footerText, isCopy]);
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }} className="fixed inset-0 z-[70] flex items-center justify-center" onClick={attemptClose}>
       <div className="absolute inset-0 bg-ink-900/50 backdrop-blur-[2px]" />
@@ -906,56 +927,90 @@ function TemplateEditor({ template, onClose, onCancel, isCopy = false, onSaveCop
             <input value={footerText} onChange={e => setFooterText(e.target.value)} className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
           </div>
             </div>
-
-            {/* Live-preview hint — anchors the lower half of the settings pane */}
-            <div className="mt-auto px-7 pb-6 pt-2">
-              <div className="flex items-start gap-2.5 rounded-[10px] border border-border-light bg-surface-2/60 px-3.5 py-3">
-                <Sparkles size={14} className="text-brand-600 mt-px shrink-0" />
-                <p className="text-[11.5px] text-text-secondary leading-relaxed">
-                  Brand, theme, header and footer style the cover of every report built from this template; the sections on the right set its structure (drag to reorder, or add new ones there). Saving stores it as a custom template.
-                </p>
-              </div>
-            </div>
           </div>
 
-          {/* Right pane — section list (flat, no card chrome) */}
-          <div ref={sectionsRef} tabIndex={-1} className="flex-1 min-w-0 overflow-y-auto px-7 py-6 flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <label className="flex items-center gap-2 text-[12px] font-semibold text-text"><FileText size={14} /> Report Sections</label>
-              <span className="text-[11px] text-text-muted tabular-nums">{sections.length} {sections.length === 1 ? 'section' : 'sections'}</span>
-            </div>
-            {sections.length === 0 ? (
-              <div className="rounded-[8px] border border-dashed border-border-light px-3 py-7 text-center">
-                <p className="text-[12px] text-text-muted">No sections yet — add one below to build the report.</p>
-              </div>
-            ) : (
-              <Reorder.Group axis="y" values={sections} onReorder={setSections} className="border-y border-border-light divide-y divide-border-light">
-                {sections.map((section, i) => (
-                  <TemplateSectionRow
-                    key={section.name}
-                    section={section}
-                    index={i}
-                    onDelete={() => setSections(prev => prev.filter(s => s.name !== section.name))}
-                  />
-                ))}
-              </Reorder.Group>
-            )}
-            {/* Add section — required for from-scratch templates (save needs ≥1 section) */}
-            <div className="mt-3 flex items-center gap-2">
-              <input
-                value={newSectionName}
-                onChange={e => setNewSectionName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSection(); } }}
-                placeholder="Add a section…"
-                className="flex-1 h-9 px-3 rounded-[8px] border border-border-light text-[12.5px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
-              />
-              <button
-                onClick={addSection}
-                disabled={!newSectionName.trim()}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-primary bg-white border border-border-light hover:border-primary/40 rounded-[8px] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          {/* Right pane — live report preview (matches the generated report chrome) */}
+          <div className="flex-1 min-w-0 overflow-y-auto bg-surface-2/40 pb-6">
+            <div ref={previewWrapRef} className="relative w-full" style={{ height: previewHeight }}>
+              <div
+                ref={previewDocRef}
+                style={{ width: PREVIEW_DOC_W, transform: `scale(${previewScale})`, transformOrigin: 'top left' }}
+                className="overflow-hidden border-b border-border-light bg-white shadow-[0_8px_28px_rgba(15,8,30,0.10)]"
               >
-                <Plus size={13} /> Add
-              </button>
+                <ReportBrandBanner
+                  title={(isCopy ? copyName : template.name) || 'Untitled Template'}
+                  brand={brand || 'IRAME.AI'}
+                  gradient={TEMPLATE_THEME_GRADIENT[theme]}
+                  headerText={headerText}
+                >
+                  <p className="text-white/90 text-[1.125rem] mt-2">{template.desc || 'Custom report template'}</p>
+                  <p className="text-white/80 text-[1rem] mt-3 font-medium">Prepared by {brand || 'Irame'} · {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+                </ReportBrandBanner>
+                <div className="px-9 py-6">
+                  <div className="text-[0.9375rem] font-semibold uppercase tracking-[0.14em] text-text-muted mb-4">Contents</div>
+                  {sections.length === 0 ? (
+                    <p className="text-[1.0625rem] text-text-muted italic">Add sections below to outline the report.</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {sections.map((section, i) => (
+                        <div key={section.name} className="flex items-baseline gap-3">
+                          <span className="shrink-0 w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[0.9375rem] font-bold flex items-center justify-center tabular-nums">{i + 1}</span>
+                          <span className="text-[1.0625rem] font-semibold text-ink-900 leading-snug">{section.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {footerText && (
+                  <div className="px-9 py-3 border-t border-border-light bg-surface-2/40">
+                    <p className="text-[0.9375rem] text-text-muted">{footerText}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Section editor — defines the report's structure (drag to reorder) */}
+            <div ref={sectionsRef} tabIndex={-1} className="px-6 pt-6">
+              <div className="rounded-[12px] border border-border-light bg-white p-5 shadow-[0_1px_2px_rgba(15,8,30,0.04)]">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="flex items-center gap-2 text-[13px] font-semibold text-ink-900"><FileText size={15} className="text-brand-600" /> Report Sections</label>
+                  <span className="inline-flex items-center h-6 px-2.5 rounded-full bg-surface-2 text-[12px] font-medium text-text-muted tabular-nums">{sections.length} {sections.length === 1 ? 'section' : 'sections'}</span>
+                </div>
+                {sections.length === 0 ? (
+                  <div className="rounded-[10px] border border-dashed border-border-light bg-surface-2/30 px-4 py-7 text-center">
+                    <FileText size={20} className="mx-auto text-ink-300 mb-2" />
+                    <p className="text-[13px] font-medium text-text">No sections yet</p>
+                    <p className="text-[12px] text-text-muted mt-0.5">Add a section below to build the report outline.</p>
+                  </div>
+                ) : (
+                  <Reorder.Group axis="y" values={sections} onReorder={setSections} className="border-y border-border-light divide-y divide-border-light">
+                    {sections.map((section, i) => (
+                      <TemplateSectionRow
+                        key={section.name}
+                        section={section}
+                        index={i}
+                        onDelete={() => setSections(prev => prev.filter(s => s.name !== section.name))}
+                      />
+                    ))}
+                  </Reorder.Group>
+                )}
+                <div className="mt-4 flex items-center gap-2">
+                  <input
+                    value={newSectionName}
+                    onChange={e => setNewSectionName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSection(); } }}
+                    placeholder="Add a section…"
+                    className="flex-1 h-10 px-3.5 rounded-[8px] border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                  />
+                  <button
+                    onClick={addSection}
+                    disabled={!newSectionName.trim()}
+                    className="inline-flex items-center gap-1.5 h-10 px-4 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Plus size={15} /> Add
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -2236,7 +2291,7 @@ function ContentsRow({
         </button>
       )}
       {!isEditing && (
-        <div className="shrink-0 flex items-center gap-0.5 opacity-0 group-hover/crow:opacity-100 transition-opacity">
+        <div className="shrink-0 flex items-center gap-1.5 opacity-0 group-hover/crow:opacity-100 transition-opacity">
           <button
             onClick={(e) => { e.stopPropagation(); onStartEdit(); }}
             aria-label="Rename section"
@@ -4198,7 +4253,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
             {/* Empty-state Cover — ATR-style banner, simpler body */}
             <div className="rounded-[12px] overflow-hidden mb-5 border border-border-light bg-white">
               <ReportBrandBanner
-                title={report.name}
+                title={reportDisplayName(report.name)}
                 actions={!isReadOnly && (
                   <>
                     {isAtrReport && (
@@ -4229,27 +4284,18 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                   <span className="text-white/70">{report.generatedAt}</span>
                   <span className="text-white/30 mx-0.5">|</span>
                   <span className="text-white/70">{reportTemplate?.sections.length ?? 0} {reportTemplate?.sections.length === 1 ? 'section' : 'sections'}</span>
-                  {report.tag && (() => {
-                    const TagIcon = report.tag === 'Internal Audit' ? Shield : report.tag === 'Bulk Audit' ? Layers : Share2;
-                    return (
-                      <span
-                        className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-[8px]"
-                        style={{
-                          background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
-                          color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
-                        }}
-                      >
-                        <TagIcon size={12} aria-hidden="true" />
-                        {report.tag}
-                      </span>
-                    );
-                  })()}
+                  {report.tag === 'Bulk Audit' && (
+                    <span className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-full bg-mitigated-50 text-mitigated-700">
+                      Bulk Audit
+                    </span>
+                  )}
                 </div>
               </ReportBrandBanner>
               <div className="px-9 py-6 grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
                 <ReportMetaCell label="Report ID" value={report.id?.toUpperCase()} />
                 <ReportMetaCell label="Template" value={reportTemplate?.name} />
                 <ReportMetaCell label="Report Type" value={report.tag ?? 'Internal Audit'} />
+                <ReportMetaCell label="Audit Period" value={report.reportPeriod} />
                 <ReportMetaCell label="Prepared By" value={report.generatedBy} />
                 <ReportMetaCell label="Generated On" value={report.generatedAt} />
               </div>
@@ -4400,7 +4446,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
             {/* Report Cover — ATR-style banner with attached metadata grid */}
             <div className="rounded-[12px] overflow-hidden mb-5 border border-border-light bg-white">
               <ReportBrandBanner
-                title={report.name}
+                title={reportDisplayName(report.name)}
                 actions={
                   <>
                     <button
@@ -4439,6 +4485,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                 <ReportMetaCell label="Report ID" value={report.id?.toUpperCase()} />
                 <ReportMetaCell label="Template" value={appliedTemplate.name} />
                 <ReportMetaCell label="Scope" value={`${activeQueries.length} ${activeQueries.length === 1 ? 'query' : 'queries'}`} />
+                <ReportMetaCell label="Audit Period" value={report.reportPeriod} />
                 <ReportMetaCell label="Prepared By" value={report.generatedBy} />
                 <ReportMetaCell label="Generated On" value={report.generatedAt} />
                 <ReportMetaCell label="Report Type" value={report.tag ?? 'Internal Audit'} />
@@ -4597,7 +4644,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                     return [
                       <Reorder.Item {...sectionProps} key={`${section.id}-item`}>
                         <ReportBrandBanner
-                          title={report.name}
+                          title={reportDisplayName(report.name)}
                           className="rounded-t-[12px]"
                           brand={report.brand}
                           headerText={report.headerText}
@@ -4630,15 +4677,9 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                             <span className="text-white/70">{report.generatedAt}</span>
                             <span className="text-white/30 mx-0.5">|</span>
                             <span className="text-white/70">{scopeLabel}</span>
-                            {report.tag && (
-                              <span
-                                className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-[8px]"
-                                style={{
-                                  background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
-                                  color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
-                                }}
-                              >
-                                {report.tag}
+                            {report.tag === 'Bulk Audit' && (
+                              <span className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-full bg-mitigated-50 text-mitigated-700">
+                                Bulk Audit
                               </span>
                             )}
                           </div>
@@ -4648,6 +4689,7 @@ function ReportView({ report, onBack, onShare, onManageExceptions, onOpenQuery, 
                         <ReportMetaCell label="Report ID" value={report.id?.toUpperCase()} />
                         <ReportMetaCell label="Report Type" value={report.tag ?? 'Internal Audit'} />
                         <ReportMetaCell label="Scope" value={scopeLabel} />
+                        <ReportMetaCell label="Audit Period" value={report.reportPeriod} />
                         <ReportMetaCell label="Prepared By" value={report.generatedBy} />
                         <ReportMetaCell label="Generated On" value={report.generatedAt} />
                         <ReportMetaCell label="Template" value={reportTemplate?.name} />
@@ -4966,6 +5008,9 @@ export default function ReportsView({
   });
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [allSearch, setAllSearch] = useState('');
+  // Type filter for the All feed — a framework (SOX / IA / ATR / Evidence) or the
+  // cross-cutting Bulk Audit engagement style.
+  const [allTypeFilter, setAllTypeFilter] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState<string>('All');
   const [gridSearch, setGridSearch] = useState('');
   const [sharedGridSearch, setSharedGridSearch] = useState('');
@@ -4973,6 +5018,19 @@ export default function ReportsView({
   // ATR template "Generate" opens the Generate-ATR-from-Observations wizard.
   const [atrWizardOpen, setAtrWizardOpen] = useState(false);
   const [reportToDelete, setReportToDelete] = useState<{ id: string; name: string } | null>(null);
+  // Multi-select for the My Reports list — checkbox-on-tile + floating bulk bar,
+  // mirroring the Knowledge Hub data-source selection pattern.
+  const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(() => new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const isSelectingReports = selectedReportIds.size > 0;
+  const toggleReportSelect = (id: string) => setSelectedReportIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const clearReportSelection = () => setSelectedReportIds(new Set());
+  // Drop any selection when the user leaves the current report list.
+  useEffect(() => { setSelectedReportIds(new Set()); }, [reportType, activeTab, viewMode]);
   const [editingTemplate, setEditingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const [editingAsCopy, setEditingAsCopy] = useState(false);
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
@@ -5043,7 +5101,6 @@ export default function ReportsView({
     addCustomTemplate({ ...t, name });
     addToast({ type: 'success', message: `Template "${name}" saved to Custom templates.` });
   };
-  const GENERATED_REPORTS_KEY = 'irame.reports.generatedReports.v7';
   const [hydrationFailed, setHydrationFailed] = useState(false);
   const [generatedReports, setGeneratedReports] = useState<GeneratedReport[]>(() => {
     try {
@@ -5114,7 +5171,8 @@ export default function ReportsView({
   // Per-type counts for the My Reports sub-tab badges (ATR uses allAtrs).
   const typeCounts = useMemo(() => {
     let sox = 0, ia = 0;
-    generatedReports.forEach(r => {
+    generatedReports.forEach(r => { // My Reports = only reports I generated
+      if (r.generatedBy !== 'You') return;
       const k = reportKind(r);
       if (k === 'sox') sox++;
       else if (k === 'ia') ia++;
@@ -5140,34 +5198,54 @@ export default function ReportsView({
     id: string;
     kind: UnifiedKind;
     name: string;
-    meta: string;
+    /** Bulk Audit engagement style — the meaningful "type" axis within a framework. */
+    bulk: boolean;
+    description: string;
+    pills: string[];
     date: string;
     sortDate: number;
     open: () => void;
     download?: () => void;
     shareId?: string;
+    del?: () => void;
+  };
+  // Card content derived once so the All feed and the per-type tabs render the
+  // same description + chips for any given item.
+  const reportDesc = (r: GeneratedReport) =>
+    r.description || r.execSummary || `Generated by ${r.generatedBy} on ${r.generatedAt}.`;
+  const reportPills = (r: GeneratedReport) =>
+    // Pure meta only. Bulk Audit is shown as its own Type pill, not a meta chip.
+    [`${r.queries ?? 0} ${Number(r.queries) === 1 ? 'query' : 'queries'}`,
+      r.pages ? `${r.pages} pages` : null].filter(Boolean) as string[];
+  const atrDesc = (a: AtrLibraryReport) => `${a.atrData.meta.auditEntity} — ${a.atrData.meta.auditPeriod}`;
+  const atrPills = (a: AtrLibraryReport) => {
+    const plans = a.atrData.observations.reduce((n, o) => n + o.actionPlans.length, 0);
+    return [a.status === 'final' ? 'Final' : 'Draft', `${a.atrData.observations.length} observations`, `${plans} action plans`];
   };
   const allReportsUnified = useMemo<UnifiedRow[]>(() => {
     const ts = (d?: string) => { const t = d ? Date.parse(d) : NaN; return Number.isNaN(t) ? 0 : t; };
     const rows: UnifiedRow[] = [];
     // IA + SOX live reports (ATR-kind reports are surfaced via allAtrs below).
     generatedReports.forEach(r => {
+      if (r.generatedBy !== 'You') return;
       const k = reportKind(r);
       if (k !== 'sox' && k !== 'ia') return;
       rows.push({
-        id: r.id, kind: k, name: r.name,
-        meta: `${r.queries ?? 0} ${Number(r.queries) === 1 ? 'query' : 'queries'}`,
+        id: r.id, kind: k, name: r.name, bulk: r.tag === 'Bulk Audit',
+        description: reportDesc(r), pills: reportPills(r),
         date: r.generatedAt, sortDate: ts(r.generatedAt),
         open: () => setViewingReport(r),
         download: () => startReportDownload(addToast, updateToast, r.name),
         shareId: r.id,
+        del: () => setReportToDelete({ id: r.id, name: r.name }),
       });
     });
     // ATRs.
     allAtrs.forEach(a => {
       rows.push({
-        id: a.id, kind: 'atr', name: a.name,
-        meta: a.area, date: a.generatedAt, sortDate: ts(a.generatedAt),
+        id: a.id, kind: 'atr', name: a.name, bulk: false,
+        description: atrDesc(a), pills: atrPills(a),
+        date: a.generatedAt, sortDate: ts(a.generatedAt),
         open: () => openAtr(a),
         download: () => { exportAtrWord(a.atrData.meta, a.atrData.observations); addToast({ type: 'success', message: `Downloading “${a.name}”.` }); },
         shareId: a.id,
@@ -5176,18 +5254,45 @@ export default function ReportsView({
     // Evidence files — open routes to the ATR they back.
     EVIDENCE_LIBRARY.forEach(e => {
       rows.push({
-        id: e.id, kind: 'evidence', name: e.name,
-        meta: `${e.area} · ${e.size}`, date: e.uploadedAt, sortDate: ts(e.uploadedAt),
+        id: e.id, kind: 'evidence', name: e.name, bulk: false,
+        description: `Backs: ${e.observation}`, pills: [e.type, e.size, e.area],
+        date: e.uploadedAt, sortDate: ts(e.uploadedAt),
         open: () => openAtrById(e.atrId),
         download: () => addToast({ type: 'success', message: `Downloading “${e.name}”.` }),
       });
     });
     return rows.sort((a, b) => b.sortDate - a.sortDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generatedReports, allAtrs, addToast, updateToast, openAtr, openAtrById]);
+  const KIND_FULL_LABEL: Record<UnifiedKind, string> = {
+    ia: 'Internal Audit',
+    sox: 'SOX Compliance',
+    atr: 'Action Taken Report',
+    evidence: 'Evidence',
+  };
+  // Design-system tones (StatusBadge §7.10.4) for the framework Type chips.
+  // SOX = Evidence Blue and Internal = brand mirror the canonical FrameworkBadge.
+  const KIND_TONE: Record<UnifiedKind, Tone> = {
+    ia: 'info',
+    sox: 'evidence',
+    atr: 'mitigated',
+    evidence: 'draft',
+  };
   const allReportsFiltered = useMemo(() => {
     const q = allSearch.trim().toLowerCase();
-    return q ? allReportsUnified.filter(r => r.name.toLowerCase().includes(q)) : allReportsUnified;
-  }, [allReportsUnified, allSearch]);
+    let rows = allReportsUnified;
+    if (allTypeFilter.length) rows = rows.filter(r =>
+      allTypeFilter.includes(KIND_FULL_LABEL[r.kind]) || (r.bulk && allTypeFilter.includes('Bulk Audit')));
+    return q ? rows.filter(r => r.name.toLowerCase().includes(q)) : rows;
+  }, [allReportsUnified, allSearch, allTypeFilter, KIND_FULL_LABEL]);
+  // Type-filter options: 'All', each framework present in the feed, then the
+  // cross-cutting Bulk Audit option (only when bulk reports exist).
+  const allTypeOptions = useMemo(() => {
+    const kinds = Array.from(new Set(allReportsUnified.map(r => KIND_FULL_LABEL[r.kind])));
+    const opts = [...kinds];
+    if (allReportsUnified.some(r => r.bulk)) opts.push('Bulk Audit');
+    return opts;
+  }, [allReportsUnified, KIND_FULL_LABEL]);
   const filteredShared = useMemo(() => {
     const q = sharedGridSearch.trim().toLowerCase();
     return q
@@ -5196,12 +5301,12 @@ export default function ReportsView({
   }, [sharedGridSearch]);
   // Type chip styling per kind — leans on existing semantic tokens.
   const UNIFIED_KIND_META: Record<UnifiedKind, { label: string; icon: React.ElementType; classes: string; iconClass: string }> = {
-    ia:       { label: 'IA',       icon: BookOpen,     classes: 'bg-brand-50 text-brand-700',         iconClass: 'text-brand-600' },
+    ia:       { label: 'Internal Audit', icon: BookOpen,     classes: 'bg-brand-50 text-brand-700',         iconClass: 'text-brand-600' },
     atr:      { label: 'ATR',      icon: FileCheck2,   classes: 'bg-info-50 text-info-700',           iconClass: 'text-info-700' },
     sox:      { label: 'SOX',      icon: Shield,       classes: 'bg-mitigated-50 text-mitigated-700', iconClass: 'text-mitigated-700' },
     evidence: { label: 'Evidence', icon: FolderArchive, classes: 'bg-paper-100 text-ink-600',          iconClass: 'text-ink-500' },
   };
-
+  // Full type names for the unified "All" list's Type column (no abbreviations).
   // Report names are unique. `reportNameTaken` checks (case-insensitive) and
   // `uniqueReportName` suffixes a base name ((2), (3)…) until it's free — used
   // by every auto-named creation path; the New-report modal validates instead.
@@ -5381,7 +5486,7 @@ export default function ReportsView({
       id: `gr-gen-${Date.now()}`,
       templateId: rt.id,
       kind: templateKind(rt),
-      name: uniqueReportName(`${rt.name} — ${today}`),
+      name: uniqueReportName(payload.reportName?.trim() || `${payload.reportPeriod} ${rt.name}`),
       tag: 'Internal Audit',
       generatedBy: 'You',
       generatedAt: today,
@@ -5391,6 +5496,7 @@ export default function ReportsView({
       generatedQueries: payload.queries,
       workflowResults: payload.workflows.length ? payload.workflows : undefined,
       execSummary: payload.execSummary,
+      reportPeriod: payload.reportPeriod,
       templateSections: rt.sections,
       // Carry the template's Customize branding onto the report chrome.
       brand: rt.brand,
@@ -5431,8 +5537,8 @@ export default function ReportsView({
 
   const filteredReports = (() => {
     const q = gridSearch.trim().toLowerCase();
-    // Only the SOX / IA sub-tabs render this list; scope reports to the active type.
-    const byType = generatedReports.filter(r => reportKind(r) === reportType);
+    // Only the SOX / IA sub-tabs render this list; scope to my own reports of the active type.
+    const byType = generatedReports.filter(r => r.generatedBy === 'You' && reportKind(r) === reportType);
     const byTag = tagFilter === 'All'
       ? byType
       : byType.filter(r => r.tag === tagFilter);
@@ -5449,6 +5555,64 @@ export default function ReportsView({
       </span>
     </span>
   );
+
+  // Canonical "Report" name cell shared by every list-view table (All · SOX · IA
+  // · Shared) so the lists never drift: brand tile + type icon, 14.5px name with
+  // a quiet secondary subline. Hover affordances only when the row is openable.
+  const ReportNameCell = ({ icon: Icon, name, subline, onClick, selectable, selected, isSelecting, onToggleSelect }: { icon: React.ElementType; name: string; subline?: React.ReactNode; onClick?: () => void; selectable?: boolean; selected?: boolean; isSelecting?: boolean; onToggleSelect?: () => void }) => {
+    const display = reportDisplayName(name);
+    const truncated = display.length > 100 ? display.slice(0, 100) + '…' : display;
+    const clickable = Boolean(onClick) || Boolean(selectable);
+    // While selecting, a plain row click toggles selection instead of opening.
+    const handleClick = () => { if (selectable && isSelecting) onToggleSelect?.(); else onClick?.(); };
+    return (
+      <div className={`flex items-center gap-3 min-w-0 ${clickable ? 'cursor-pointer' : ''}`} onClick={handleClick}>
+        <span className="relative shrink-0 w-9 h-9 flex items-center justify-center text-brand-700">
+          {/* Type tile — present at rest, fades out so the checkbox sits cleanly on the row bg. */}
+          <span aria-hidden="true" className={`absolute inset-0 rounded-lg bg-brand-50 flex items-center justify-center transition-opacity duration-150 ${selectable ? (selected || isSelecting ? 'opacity-0' : 'opacity-100 group-hover:opacity-0') : 'opacity-100'}`}>
+            <Icon size={16} strokeWidth={1.75} />
+          </span>
+          {selectable && (
+            <span
+              role="checkbox"
+              aria-checked={selected}
+              aria-label={selected ? `Deselect ${display}` : `Select ${display}`}
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); onToggleSelect?.(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); onToggleSelect?.(); } }}
+              className={`relative w-4 h-4 rounded-[5px] border flex items-center justify-center transition-opacity duration-150 cursor-pointer ${
+                selected
+                  ? 'bg-brand-600 border-brand-600 text-white opacity-100'
+                  : isSelecting
+                    ? 'bg-paper-0 border-ink-300 opacity-100 hover:border-brand-500'
+                    : 'bg-paper-0 border-ink-300 opacity-0 group-hover:opacity-100 hover:border-brand-500'
+              }`}
+            >
+              {selected && <Check size={11} strokeWidth={3} />}
+            </span>
+          )}
+        </span>
+        <div className="min-w-0">
+          <div className={`text-[14.5px] font-semibold tracking-[-0.006em] text-ink-900 truncate transition-colors ${clickable ? 'group-hover:text-primary' : ''}`} title={display.length > 100 ? display : undefined}>{truncated}</div>
+          {subline && <div className="mt-0.5 text-[11.5px] text-text-muted truncate">{subline}</div>}
+        </div>
+      </div>
+    );
+  };
+
+  // Full, un-abbreviated type label for a list row's Type column.
+  // Canonical bordered tone pill (StatusBadge §7.10.4) for every Type/category chip.
+  const TYPE_PILL = (label: string, tone: Tone) => <ReportPill tone={tone}>{label}</ReportPill>;
+  // Bulk Audit — indigo bordered chip, distinct from the kind chips
+  // (IA=brand/purple, ATR=blue, SOX=amber) so it stands out as the
+  // cross-cutting engagement type.
+  const BULK_PILL = (
+    <span className="inline-flex items-center px-2.5 h-6 rounded-full border border-mitigated/30 bg-mitigated-50 text-mitigated-700 text-[0.75rem] font-semibold whitespace-nowrap">
+      Bulk Audit
+    </span>
+  );
+  // Muted placeholder for the Type column when a row has no special type.
+  const TYPE_DASH = <span className="text-[12px] text-ink-300">—</span>;
 
 
   if (viewingReport) {
@@ -5494,41 +5658,27 @@ export default function ReportsView({
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
+    <div className="reports-focus-noring h-full flex flex-col overflow-hidden bg-white bg-mesh-gradient relative">
       {isOffline && (
         <div
           role="status"
           aria-live="assertive"
-          className="bg-mitigated-50 text-mitigated-800 border-y border-mitigated-200 px-4 h-8 flex items-center gap-2 text-[12px]"
+          className="bg-mitigated-50 text-mitigated-800 border-y border-mitigated-200 px-4 h-8 flex items-center gap-2 text-[12px] shrink-0"
         >
           <WifiOff size={14} aria-hidden="true" />
           <span>You're offline — recent changes will sync once you reconnect.</span>
         </div>
       )}
-      {missingFocusReport && (
-        <div className="px-[124px] py-12">
-          <EmptyState
-            icon={AlertTriangle}
-            title="Report not found"
-            body="It may have been deleted or moved. Return to the reports list."
-            action={
-              <button
-                onClick={() => setMissingFocusReport(false)}
-                className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-              >
-                <ArrowLeft size={14} /> Back to reports
-              </button>
-            }
-          />
-        </div>
-      )}
-      <div className="reports-focus-noring px-6 lg:px-12 xl:px-[124px] py-8 relative flex flex-col min-h-full">
+      {/* Fixed header strip — the title + main tabs stay pinned; only the
+          content region below scrolls, matching the Admin / Knowledge Hub
+          recipe (h-full flex-col shell, header shrink-0, content flex-1). */}
+      <div className="px-6 lg:px-12 xl:px-[124px] pt-8 shrink-0">
         {/* Header + Tabs share a single full-bleed strip — bg-canvas-elevated
             extends past the page's responsive horizontal/top insets via
             matching negative margins so the strip reads as the page's header
             section, separate from the content below. FloatingLines paints
             ambient texture behind the type (Knowledge Hub's recipe). */}
-        <div className="bg-canvas-elevated -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-8 pt-8 mb-6 border-b border-canvas-border relative overflow-hidden">
+        <div className="bg-canvas-elevated -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-8 pt-8 border-b border-canvas-border relative overflow-hidden">
           {/* Ambient FloatingLines — top + bottom waves only (no middle wave
               where the H1 sits), low opacity so it reads as texture. */}
           <FloatingLines
@@ -5553,10 +5703,10 @@ export default function ReportsView({
             <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">Reports</h1>
             <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">
               {activeTab === 'shared-reports'
-                ? <>Reports teammates have shared with you — open, review, or download any of them.</>
+                ? <>Reports your team shared with you. Open, review, or download any of them.</>
                 : activeTab === 'templates'
-                ? <>Reusable, query-driven templates <span className="font-medium text-brand-700">IRA</span> uses to turn engagement data into a finished report.</>
-                : <>Every report <span className="font-medium text-brand-700">IRA</span> has generated, organized by type — ATR, SOX, IA, and evidence.</>}
+                ? <>Query-driven templates <span className="font-medium text-brand-700">IRA</span> uses to turn engagement data into a finished report.</>
+                : <>Every report <span className="font-medium text-brand-700">IRA</span> has generated, grouped by type across ATR, SOX, IA, and evidence.</>}
             </p>
           </motion.div>
 
@@ -5586,9 +5736,6 @@ export default function ReportsView({
                 <span className="flex items-center gap-2">
                   <TabIcon size={14} />
                   {tab.label}
-                  <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full ${
-                    isActive ? 'bg-brand-100 text-brand-700' : 'bg-paper-50 text-ink-500'
-                  }`}>{tab.count}</span>
                 </span>
                 {isActive && (
                   <motion.div
@@ -5602,6 +5749,33 @@ export default function ReportsView({
           })}
           </motion.div>
         </div>
+      </div>
+
+      {/* Scrolling content region — the header strip above is fixed; everything
+          here scrolls on its own, so pagination sits at the bottom of the list
+          (not the page) exactly like the Admin / Knowledge Hub tables. */}
+      <div className="px-6 lg:px-12 xl:px-[124px] pb-8 flex-1 min-h-0 overflow-y-auto relative">
+        {/* Top inset lives on this inner wrapper, not the scroll container, so a
+            pinned column header's sticky `top-0` reaches the true top of the
+            scroll region and rows can't leak through padding above it. */}
+        <div className="pt-6">
+        {missingFocusReport && (
+          <div className="pb-6">
+            <EmptyState
+              icon={AlertTriangle}
+              title="Report not found"
+              body="It may have been deleted or moved. Return to the reports list."
+              action={
+                <button
+                  onClick={() => setMissingFocusReport(false)}
+                  className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                >
+                  <ArrowLeft size={14} /> Back to reports
+                </button>
+              }
+            />
+          </div>
+        )}
 
         {/* My Reports sub-tabs — segregated by report type (ATR · SOX · IA) plus
             the linked evidence repository. Styled as Knowledge Hub's filter-chip
@@ -5615,7 +5789,7 @@ export default function ReportsView({
               onChange={setReportType}
               options={[
                 { key: 'all', label: 'All', icon: Layers, count: allReportsUnified.length },
-                { key: 'ia', label: 'IA', icon: BookOpen, count: typeCounts.ia },
+                { key: 'ia', label: 'Internal Audit', icon: BookOpen, count: typeCounts.ia },
                 { key: 'atr', label: 'ATR', icon: FileCheck2, count: allAtrs.length },
                 { key: 'sox', label: 'SOX', icon: Shield, count: typeCounts.sox },
                 { key: 'evidence', label: 'Evidence', icon: FolderArchive, count: EVIDENCE_LIBRARY.length },
@@ -5632,106 +5806,129 @@ export default function ReportsView({
             search={allSearch}
             onSearch={setAllSearch}
             searchPlaceholder="Search all reports…"
-            trailing={<ToolbarViewToggle mode={viewMode} onChange={setViewMode} />}
+            trailing={
+              <>
+                <ColumnFilter
+                  variant="button"
+                  selectIndicator="checkbox"
+                  label="Type"
+                  options={allTypeOptions}
+                  value={allTypeFilter}
+                  onChange={setAllTypeFilter}
+                  align="end"
+                />
+                <ToolbarViewToggle mode={viewMode} onChange={setViewMode} />
+              </>
+            }
           />
           {viewMode === 'grid' ? (
             allReportsFiltered.length === 0 ? (
               <EmptyState
                 icon={Layers}
-                title={allSearch ? 'No reports match your search.' : 'No reports yet'}
-                body={allSearch ? 'Try a different search term.' : 'Reports, ATRs, and evidence you generate will all appear here.'}
+                title={allSearch || allTypeFilter.length > 0 ? 'No reports match your filters.' : 'No reports yet'}
+                body={allSearch || allTypeFilter.length > 0 ? 'Try a different search or type.' : 'Reports, ATRs, and evidence you generate will all appear here.'}
                 size="compact"
               />
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-6">
-                {allReportsFiltered.map((row) => {
+              <InfiniteCardGrid
+                items={allReportsFiltered}
+                resetKey={`all-${allTypeFilter}-${allSearch}`}
+                renderItem={(row, i) => {
                   const m = UNIFIED_KIND_META[row.kind];
                   return (
-                    <div
+                    <ReportCard
                       key={row.id}
+                      index={i}
+                      icon={m.icon}
+                      iconClass={m.classes}
+                      eyebrow={m.label}
+                      title={reportDisplayName(row.name)}
+                      description={row.description}
+                      pills={row.bulk ? ['Bulk Audit', ...row.pills] : row.pills}
+                      footerRight={<span className="font-mono text-[11px] tabular-nums text-ink-400">{row.date}</span>}
                       onClick={() => row.open()}
-                      className="group text-left bg-canvas-elevated border border-canvas-border rounded-[14px] p-5 flex flex-col gap-3 cursor-pointer hover:border-brand-300 hover:shadow-[0_4px_16px_-8px_rgba(106,18,205,0.18)] transition-all min-h-[150px]"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <h3 className="text-[15px] font-semibold leading-snug tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2 min-w-0" title={row.name}>{row.name}</h3>
-                        <div className="flex items-center gap-0.5 -mt-1 -mr-1 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                          {row.download && <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); row.download!(); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>}
-                          {row.shareId && can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: row.shareId!, anchor: rectFromEvent(e) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
-                          <ActionTooltip label="Open"><button onClick={(e) => { e.stopPropagation(); row.open(); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Open"><ArrowRight size={14} /></button></ActionTooltip>
-                        </div>
-                      </div>
-                      <div className="mt-auto pt-3 border-t border-canvas-border flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-[11px] tabular-nums text-ink-500 truncate">{row.meta}</span>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] shrink-0 ${m.classes}`}>{m.label}</span>
-                        </div>
-                        <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">{row.date}</span>
-                      </div>
-                    </div>
+                      selectable={Boolean(row.del)}
+                      selected={selectedReportIds.has(row.id)}
+                      isSelecting={isSelectingReports}
+                      onToggleSelect={() => toggleReportSelect(row.id)}
+                      actions={<>
+                        {row.download && <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); row.download!(); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>}
+                        {row.shareId && can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: row.shareId!, anchor: rectFromEvent(e) }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
+                        {row.del && <ActionTooltip label="Delete"><button onClick={(e) => { e.stopPropagation(); row.del!(); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-risk-200 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>}
+                      </>}
+                    />
                   );
-                })}
-              </div>
+                }}
+              />
             )
           ) : (
+          <div className="flex-1 rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-clip">
           <SmartTable
-            className="flex-1"
+            className=""
             variant="modern"
+            dense
             searchable={false}
             showSortHint
             data={allReportsFiltered as unknown as Record<string, unknown>[]}
             keyField="id"
             paginated
             pageSize={20}
+            stickyHeader
+            stickyHeaderTop="top-0"
             hideResultCount
             emptyContent={
               <EmptyState
                 icon={Layers}
-                title={allSearch ? 'No reports match your search.' : 'No reports yet'}
-                body={allSearch ? 'Try a different search term.' : 'Reports, ATRs, and evidence you generate will all appear here.'}
+                title={allSearch || allTypeFilter.length > 0 ? 'No reports match your filters.' : 'No reports yet'}
+                body={allSearch || allTypeFilter.length > 0 ? 'Try a different search or type.' : 'Reports, ATRs, and evidence you generate will all appear here.'}
                 size="compact"
               />
             }
             columns={[
-              { key: 'index', label: 'No.', width: '52px', sortable: false, render: (_item, i) => (
-                <span className="font-mono text-[11px] text-text-muted tabular-nums">{String(i + 1).padStart(2, '0')}</span>
+              { key: 'index', label: 'No.', width: '56px', sortable: false, render: (_item, i) => (
+                <span className="font-mono text-[11.5px] text-text-muted tabular-nums">{String(i + 1).padStart(2, '0')}</span>
               )},
-              { key: 'name', label: 'Report', render: (item) => {
-                const m = UNIFIED_KIND_META[item.kind as UnifiedKind];
+              { key: 'name', label: 'Report', truncate: true, render: (item) => {
+                const row = item as unknown as UnifiedRow;
                 return (
-                  <div className="cursor-pointer min-w-0" onClick={() => (item as unknown as UnifiedRow).open()}>
-                    <div className="flex items-baseline gap-2 min-w-0 flex-wrap">
-                      {(() => {
-                        const n = String(item.name);
-                        const truncated = n.length > 100 ? n.slice(0, 100) + '…' : n;
-                        return (
-                          <span className="relative group/nt inline-flex min-w-0" title={n.length > 100 ? n : undefined}>
-                            <span className="text-[16px] font-semibold tracking-[-0.005em] text-ink-800 truncate hover:text-primary transition-colors">{truncated}</span>
-                          </span>
-                        );
-                      })()}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-[11px] text-text-muted font-mono tabular-nums shrink-0">{String(item.meta)}</span>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] ${m.classes}`}>{m.label}</span>
-                    </div>
+                  <ReportNameCell
+                    icon={UNIFIED_KIND_META[item.kind as UnifiedKind].icon}
+                    name={String(item.name)}
+                    subline={(item.pills as string[] | undefined)?.join(' · ')}
+                    onClick={() => row.open()}
+                    selectable={Boolean(row.del)}
+                    selected={selectedReportIds.has(String(item.id))}
+                    isSelecting={isSelectingReports}
+                    onToggleSelect={() => toggleReportSelect(String(item.id))}
+                  />
+                );
+              }},
+              { key: 'kind', label: 'Type', width: '220px', render: (item) => {
+                const k = item.kind as UnifiedKind;
+                return (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {(item as unknown as UnifiedRow).bulk
+                      ? BULK_PILL
+                      : TYPE_PILL(KIND_FULL_LABEL[k], KIND_TONE[k])}
                   </div>
                 );
               }},
-              { key: 'date', label: 'Date', width: '150px', render: (item) => (
-                <span className="font-mono text-[12px] tabular-nums text-text-secondary">{String(item.date)}</span>
+              { key: 'date', label: 'Generated', width: '150px', align: 'right', render: (item) => (
+                <span className="font-mono text-[12px] tabular-nums text-text-muted whitespace-nowrap">{String(item.date)}</span>
               )},
               { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => {
                 const row = item as unknown as UnifiedRow;
                 return (
-                  <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                    {row.download && <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); row.download!(); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>}
-                    {row.shareId && can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: row.shareId!, anchor: rectFromEvent(e) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
-                    <ActionTooltip label="Open"><button onClick={(e) => { e.stopPropagation(); row.open(); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Open"><ArrowRight size={14} /></button></ActionTooltip>
+                  <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                    {row.download && <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); row.download!(); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>}
+                    {row.shareId && can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: row.shareId!, anchor: rectFromEvent(e) }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
+                    {row.del && <ActionTooltip label="Delete"><button onClick={(e) => { e.stopPropagation(); row.del!(); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-risk-200 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>}
                   </div>
                 );
               }},
             ]}
           />
+          </div>
           )}
           </>
         )}
@@ -5762,12 +5959,18 @@ export default function ReportsView({
             searchPlaceholder="Search reports…"
             trailing={
               <>
-                <ToolbarSelect
-                  label="Tag"
-                  value={tagFilter}
-                  onChange={setTagFilter}
-                  options={TAG_FILTER_OPTIONS.map(t => ({ value: t, label: t === 'All' ? 'All tags' : t }))}
-                />
+                <ToolbarFilterMenu
+                  activeCount={tagFilter !== 'All' ? 1 : 0}
+                  onClear={() => setTagFilter('All')}
+                >
+                  <ToolbarSelect
+                    block
+                    label="Tag"
+                    value={tagFilter}
+                    onChange={setTagFilter}
+                    options={TAG_FILTER_OPTIONS.map(t => ({ value: t, label: t === 'All' ? 'All tags' : t }))}
+                  />
+                </ToolbarFilterMenu>
                 <ToolbarViewToggle mode={viewMode} onChange={setViewMode} />
               </>
             }
@@ -5781,15 +5984,19 @@ export default function ReportsView({
           </div>
         )}
         {activeTab === 'my-reports' && (reportType === 'sox' || reportType === 'ia') && viewMode === 'list' && !isHydrating && (
+          <div className="flex-1 rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-clip">
           <SmartTable
-            className="flex-1"
+            className=""
             variant="modern"
+            dense
             searchable={false}
             showSortHint
             data={filteredReports as unknown as Record<string, unknown>[]}
             keyField="id"
             paginated
             pageSize={20}
+            stickyHeader
+            stickyHeaderTop="top-0"
             hideResultCount
             emptyContent={generatedReports.length === 0 ? (
               <EmptyState
@@ -5821,56 +6028,44 @@ export default function ReportsView({
               </div>
             )}
             columns={[
-              { key: 'index', label: 'No.', width: '52px', sortable: false, render: (_item, i) => (
-                <span className="font-mono text-[11px] text-text-muted tabular-nums">
-                  {String(i + 1).padStart(2, '0')}
-                </span>
+              { key: 'index', label: 'No.', width: '56px', sortable: false, render: (_item, i) => (
+                <span className="font-mono text-[11.5px] text-text-muted tabular-nums">{String(i + 1).padStart(2, '0')}</span>
               )},
-              { key: 'name', label: 'Report', render: (item) => {
-                return (
-                  <div className="cursor-pointer min-w-0" onClick={() => {
-                    const report = generatedReports.find(r => r.id === item.id);
-                    if (report) setViewingReport(report);
-                  }}>
-                    <div className="flex items-baseline gap-2 min-w-0 flex-wrap">
-                      {(() => {
-                        const n = String(item.name);
-                        const truncated = n.length > 100 ? n.slice(0, 100) + '…' : n;
-                        return (
-                          <span className="relative group/nt inline-flex min-w-0" title={n.length > 100 ? n : undefined}>
-                            <span className="text-[16px] font-semibold tracking-[-0.005em] text-ink-800 truncate hover:text-primary transition-colors">{truncated}</span>
-                            {n.length > 100 && (
-                              <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 px-3 py-2 bg-ink-900 text-white text-[11px] font-normal leading-snug rounded-[8px] max-w-[480px] whitespace-normal break-words opacity-0 group-hover/nt:opacity-100 transition-opacity z-50 shadow-lg">
-                                {n}
-                              </span>
-                            )}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-[11px] text-text-muted font-mono tabular-nums shrink-0">{String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'}</span>
-                      {Boolean(item.tag) && (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] ${reportTagChip(String(item.tag)).classes}`}>
-                          {String(item.tag)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              }},
-              { key: 'generatedAt', label: 'Generated', width: '150px', render: (item) => (
-                <span className="font-mono text-[12px] tabular-nums text-text-secondary">{String(item.generatedAt)}</span>
+              { key: 'name', label: 'Report', truncate: true, render: (item) => (
+                <ReportNameCell
+                  icon={UNIFIED_KIND_META[reportType].icon}
+                  name={String(item.name)}
+                  subline={item.generatedBy && String(item.generatedBy) !== 'You' ? `By ${String(item.generatedBy)}` : undefined}
+                  onClick={() => { const report = generatedReports.find(r => r.id === item.id); if (report) setViewingReport(report); }}
+                  selectable
+                  selected={selectedReportIds.has(String(item.id))}
+                  isSelecting={isSelectingReports}
+                  onToggleSelect={() => toggleReportSelect(String(item.id))}
+                />
+              )},
+              // Type only distinguishes Bulk Audit from a plain report; when the
+              // whole list is one kind it's a column of dashes, so drop it.
+              ...(filteredReports.some(r => r.tag === 'Bulk Audit') ? [{
+                key: 'tag', label: 'Type', width: '150px', sortable: false, render: (item: Record<string, unknown>) => (
+                  item.tag === 'Bulk Audit' ? BULK_PILL : TYPE_DASH
+                ),
+              }] : []),
+              { key: 'queries', label: 'Queries', width: '104px', align: 'right', render: (item) => (
+                <span className="font-mono text-[12.5px] tabular-nums text-text-secondary">{String(item.queries)}</span>
+              )},
+              { key: 'generatedAt', label: 'Generated', width: '150px', align: 'right', render: (item) => (
+                <span className="font-mono text-[12px] tabular-nums text-text-muted whitespace-nowrap">{String(item.generatedAt)}</span>
               )},
               { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => (
-                <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, String(item.name)); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                  {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: String(item.id), anchor: rectFromEvent(e) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
-                  <ActionTooltip label="Delete"><button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: String(item.id), name: String(item.name) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
+                <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                  <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, String(item.name)); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: String(item.id), anchor: rectFromEvent(e) }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
+                  <ActionTooltip label="Delete"><button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: String(item.id), name: String(item.name) }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-risk-200 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
                 </div>
               )},
             ]}
           />
+          </div>
         )}
 
         {activeTab === 'my-reports' && (reportType === 'sox' || reportType === 'ia') && viewMode === 'grid' && (
@@ -5919,38 +6114,36 @@ export default function ReportsView({
                 </div>
               )
             ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-6">
-              {filteredReports.map((r, i) => (
-                  <motion.div
+            <InfiniteCardGrid
+              items={filteredReports}
+              resetKey={`my-${reportType}-${tagFilter}-${gridSearch}`}
+              renderItem={(r, i) => {
+                const m = UNIFIED_KIND_META[reportKind(r)];
+                return (
+                  <ReportCard
                     key={r.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                    className="group text-left bg-canvas-elevated border border-canvas-border rounded-[14px] p-5 flex flex-col gap-3 cursor-pointer hover:border-brand-300 hover:shadow-[0_4px_16px_-8px_rgba(106,18,205,0.18)] transition-all min-h-[150px]"
+                    index={i}
+                    icon={m.icon}
+                    iconClass={m.classes}
+                    eyebrow={m.label}
+                    title={reportDisplayName(r.name)}
+                    description={reportDesc(r)}
+                    pills={r.tag === 'Bulk Audit' ? ['Bulk Audit', ...reportPills(r)] : reportPills(r)}
+                    footerRight={<span className="font-mono text-[11px] tabular-nums text-ink-400">{r.generatedAt}</span>}
                     onClick={() => setViewingReport(r)}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <h3 className="text-[15px] font-semibold leading-snug tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2 min-w-0" title={r.name}>{r.name}</h3>
-                      <div className="flex items-center gap-0.5 -mt-1 -mr-1 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                        <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                        {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: r.id, anchor: rectFromEvent(e) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
-                        <ActionTooltip label="Delete"><button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 rounded-[8px] transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
-                      </div>
-                    </div>
-                    <div className="mt-auto pt-3 border-t border-canvas-border flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="font-mono text-[11px] tabular-nums text-ink-500 shrink-0">{r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}</span>
-                        {r.tag && (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.1em] ${reportTagChip(r.tag).classes}`}>
-                            {r.tag}
-                          </span>
-                        )}
-                      </div>
-                      <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">{r.generatedAt}</span>
-                    </div>
-                  </motion.div>
-              ))}
-            </div>
+                    selectable
+                    selected={selectedReportIds.has(r.id)}
+                    isSelecting={isSelectingReports}
+                    onToggleSelect={() => toggleReportSelect(r.id)}
+                    actions={<>
+                      <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                      {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: r.id, anchor: rectFromEvent(e) }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
+                      <ActionTooltip label="Delete"><button onClick={(e) => { e.stopPropagation(); setReportToDelete({ id: r.id, name: r.name }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-risk-200 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer" aria-label="Delete"><Trash2 size={14} /></button></ActionTooltip>
+                    </>}
+                  />
+                );
+              }}
+            />
             )}
           </div>
         )}
@@ -5966,9 +6159,11 @@ export default function ReportsView({
           />
         )}
         {activeTab === 'shared-reports' && viewMode === 'list' && (
+          <div className="flex-1 rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-clip">
           <SmartTable
-            className="flex-1"
+            className=""
             variant="modern"
+            dense
             searchable={false}
             showSortHint
             data={filteredShared as unknown as Record<string, unknown>[]}
@@ -5994,38 +6189,40 @@ export default function ReportsView({
               </div>
             )}
             columns={[
-              { key: 'index', label: 'No.', width: '52px', sortable: false, render: (_item, i) => (
-                <span className="font-mono text-[11px] text-text-muted tabular-nums">
-                  {String(i + 1).padStart(2, '0')}
-                </span>
+              { key: 'index', label: 'No.', width: '56px', sortable: false, render: (_item, i) => (
+                <span className="font-mono text-[11.5px] text-text-muted tabular-nums">{String(i + 1).padStart(2, '0')}</span>
               )},
-              { key: 'name', label: 'Report', render: (item) => (
-                <div className="min-w-0">
-                  <div className="text-[16px] font-semibold tracking-[-0.005em] text-ink-800 truncate">{String(item.name)}</div>
-                  <div className="text-[11px] text-text-muted font-mono tabular-nums mt-1">
-                    {String(item.queries)} {Number(item.queries) === 1 ? 'query' : 'queries'}
-                  </div>
-                </div>
+              { key: 'name', label: 'Report', truncate: true, render: (item) => (
+                <ReportNameCell
+                  icon={FileText}
+                  name={String(item.name)}
+                  subline={`${String(item.queries)} ${Number(item.queries) === 1 ? 'query' : 'queries'}`}
+                />
               )},
-              { key: 'sharedBy', label: 'Shared by', render: (item) => (
+              { key: 'kind', label: 'Type', width: '180px', render: (item) => {
+                const k = (item.kind as UnifiedKind) ?? 'ia';
+                return TYPE_PILL(KIND_FULL_LABEL[k], KIND_TONE[k]);
+              }},
+              { key: 'sharedBy', label: 'Shared by', width: '220px', render: (item) => (
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-[9px] font-semibold flex items-center justify-center">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-[9px] font-semibold flex items-center justify-center shrink-0">
                     {String(item.sharedBy).split(' ').map((n: string) => n[0]).join('')}
                   </div>
-                  <span className="text-text-secondary text-[12px]">{String(item.sharedBy)}</span>
+                  <span className="text-text-secondary text-[12px] truncate">{String(item.sharedBy)}</span>
                 </div>
               )},
-              { key: 'sharedAt', label: 'Shared', width: '150px', render: (item) => (
-                <span className="font-mono text-[12px] tabular-nums text-text-secondary">{String(item.sharedAt)}</span>
+              { key: 'sharedAt', label: 'Shared', width: '150px', align: 'right', render: (item) => (
+                <span className="font-mono text-[12px] tabular-nums text-text-muted whitespace-nowrap">{String(item.sharedAt)}</span>
               )},
               { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
-                <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, String(item.name)); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                  {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: String(item.id), anchor: rectFromEvent(e) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
+                <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                  <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, String(item.name)); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: String(item.id), anchor: rectFromEvent(e) }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
                 </div>
               )},
             ]}
           />
+          </div>
         )}
 
         {activeTab === 'shared-reports' && viewMode === 'grid' && (() => {
@@ -6061,37 +6258,31 @@ export default function ReportsView({
                 </div>
               )
             ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-6">
-              {filteredSharedReports.map((r, i) => (
-                <motion.div
+            <InfiniteCardGrid
+              items={filteredSharedReports}
+              resetKey={`shared-${sharedGridSearch}`}
+              renderItem={(r, i) => {
+                const k = ((r as { kind?: string }).kind as UnifiedKind) ?? 'ia';
+                const m = UNIFIED_KIND_META[k];
+                return (
+                <ReportCard
                   key={r.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                  className="group text-left bg-canvas-elevated border border-canvas-border rounded-[14px] p-5 flex flex-col gap-3 cursor-pointer hover:border-brand-300 hover:shadow-[0_4px_16px_-8px_rgba(106,18,205,0.18)] transition-all min-h-[150px]"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="text-[15px] font-semibold leading-snug tracking-[-0.005em] text-ink-800 group-hover:text-primary transition-colors line-clamp-2 min-w-0" title={r.name}>{r.name}</h3>
-                    <div className="flex items-center gap-0.5 -mt-1 -mr-1 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                      <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
-                      {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: r.id, anchor: rectFromEvent(e) }); }} className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-primary hover:bg-primary-xlight rounded-[8px] transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
-                    </div>
-                  </div>
-                  <div className="mt-auto pt-3 border-t border-canvas-border flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-mono text-[11px] tabular-nums text-ink-500 shrink-0">{r.queries} {Number(r.queries) === 1 ? 'query' : 'queries'}</span>
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold bg-primary/10 text-primary shrink-0 tabular-nums">
-                          {r.sharedBy.split(' ').map(n => n[0]).join('')}
-                        </div>
-                        <span className="text-[12px] text-ink-600 truncate">{r.sharedBy}</span>
-                      </div>
-                    </div>
-                    <span className="font-mono text-[11px] tabular-nums text-ink-400 shrink-0">{r.sharedAt}</span>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+                  index={i}
+                  icon={m.icon}
+                  iconClass={m.classes}
+                  eyebrow={KIND_FULL_LABEL[k]}
+                  title={r.name}
+                  description={`Shared by ${r.sharedBy} with ${r.sharedWith}.`}
+                  pills={[`${r.queries} ${Number(r.queries) === 1 ? 'query' : 'queries'}`, r.sharedWith]}
+                  footerRight={<span className="font-mono text-[11px] tabular-nums text-ink-400">{r.sharedAt}</span>}
+                  actions={<>
+                    <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                    {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: r.id, anchor: rectFromEvent(e) }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
+                  </>}
+                />
+                );
+              }}
+            />
             )}
           </div>
           );
@@ -6174,7 +6365,7 @@ export default function ReportsView({
           return (
             <div className="space-y-10">
               <section>
-                <h2 className="font-display text-[20px] font-[420] tracking-tight text-ink-900 leading-[1.2] mb-4">Standard templates</h2>
+                <h2 className="text-[20px] font-semibold tracking-tight text-ink-900 leading-[1.2] mb-4">Standard templates</h2>
                 <div className="grid grid-cols-3 gap-4">
                   {REPORT_TEMPLATES.map((rt, i) => renderCard(rt, i, false))}
                 </div>
@@ -6182,7 +6373,7 @@ export default function ReportsView({
 
               <section>
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-display text-[20px] font-[420] tracking-tight text-ink-900 leading-[1.2]">Custom templates</h2>
+                  <h2 className="text-[20px] font-semibold tracking-tight text-ink-900 leading-[1.2]">Custom templates</h2>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setShowUploadModal(true)}
@@ -6214,6 +6405,7 @@ export default function ReportsView({
             </div>
           );
         })()}
+        </div>
       </div>
 
       {/* Generate-from-template wizard */}
@@ -6277,7 +6469,7 @@ export default function ReportsView({
             }))}
           onAddToReport={(meta: AtrMeta, observations: AtrObservation[], insights: AtrInsight[]) => {
             const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-            const name = uniqueReportName(meta.auditTitle ? `ATR — ${meta.auditTitle}` : `Action Taken Report — ${today}`);
+            const name = uniqueReportName(meta.auditTitle ? meta.auditTitle : 'Action Taken Report');
             const newReport: GeneratedReport = {
               id: `gr-atr-${Date.now()}`,
               templateId: 'rt-007',
@@ -6504,6 +6696,74 @@ export default function ReportsView({
                   return next;
                 });
               },
+            } : undefined,
+          });
+        }}
+      />
+
+      {/* Floating bulk-action bar for multi-selected reports — mirrors the
+          Knowledge Hub data-source bulk bar (dark pill, N selected · Remove · ✕). */}
+      <AnimatePresence>
+        {isSelectingReports && (
+          <motion.div
+            key="reports-bulk-bar"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+            role="toolbar"
+            aria-label="Bulk actions for selected reports"
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 pl-4 pr-2 py-2 rounded-lg bg-brand-900 text-white shadow-[0_8px_28px_rgb(15_8_30_/_0.28)] ring-1 ring-white/10"
+          >
+            <span className="text-[0.8125rem] font-semibold tabular-nums text-white">{selectedReportIds.size} selected</span>
+            <div className="w-px h-5 bg-white/10 mx-1" aria-hidden />
+            <button
+              type="button"
+              onClick={() => setBulkDeleteOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-[0.8125rem] font-medium cursor-pointer transition-colors text-risk-300 hover:text-white hover:bg-risk-700"
+            >
+              <Trash2 size={14} /> Remove
+            </button>
+            <div className="w-px h-5 bg-white/10 mx-1" aria-hidden />
+            <button
+              type="button"
+              onClick={clearReportSelection}
+              aria-label="Cancel selection"
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-white/70 hover:text-white hover:bg-white/10 cursor-pointer transition-colors"
+            >
+              <X size={15} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onClose={() => setBulkDeleteOpen(false)}
+        title={`Delete ${selectedReportIds.size} ${selectedReportIds.size === 1 ? 'report' : 'reports'}?`}
+        description={<>This will remove <span className="font-semibold text-text">{selectedReportIds.size} {selectedReportIds.size === 1 ? 'report' : 'reports'}</span> from My Reports. You can undo this from the toast for a few seconds.</>}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          const ids = new Set(selectedReportIds);
+          // Snapshot removed reports with their positions so Undo restores all.
+          const snapshots = generatedReports
+            .map((r, i) => ({ r, i }))
+            .filter(({ r }) => ids.has(r.id));
+          setGeneratedReports(prev => prev.filter(r => !ids.has(r.id)));
+          setBulkDeleteOpen(false);
+          clearReportSelection();
+          addToast({
+            type: 'success',
+            message: `${ids.size} ${ids.size === 1 ? 'report' : 'reports'} deleted.`,
+            action: snapshots.length ? {
+              label: 'Undo',
+              onClick: () => setGeneratedReports(prev => {
+                const next = [...prev];
+                snapshots.forEach(({ r, i }) => {
+                  if (!next.some(x => x.id === r.id)) next.splice(Math.min(i, next.length), 0, r);
+                });
+                return next;
+              }),
             } : undefined,
           });
         }}

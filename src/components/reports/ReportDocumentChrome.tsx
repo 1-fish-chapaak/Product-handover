@@ -106,7 +106,7 @@ export function ReportBrandBanner({ title, actions, children, className = '', br
             <div className="w-8 h-8 rounded-[8px] bg-white/15 flex items-center justify-center"><Sparkles size={15} /></div>
             <div className="leading-none">
               <div className="text-[0.8125rem] font-bold tracking-wide uppercase">{brand || 'IRAME.AI'}</div>
-              <div className="text-[0.5rem] font-semibold tracking-[0.22em] text-white/70 mt-0.5">AUDIT INTELLIGENCE</div>
+              <div className="text-[0.75rem] font-semibold tracking-[0.22em] text-white/90 mt-0.5">AUDIT INTELLIGENCE</div>
             </div>
           </div>
           <h1 className="text-[1.75rem] font-bold tracking-tight leading-tight mb-1">{title}</h1>
@@ -114,7 +114,7 @@ export function ReportBrandBanner({ title, actions, children, className = '', br
         </div>
         <div className="shrink-0 flex flex-col items-end gap-2">
           {headerText && (
-            <span className="text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-white/75 print:text-white/90">{headerText}</span>
+            <span className="text-[0.75rem] font-semibold uppercase tracking-[0.12em] text-white/90">{headerText}</span>
           )}
           {actions && <div className="flex items-center gap-2 print:hidden">{actions}</div>}
         </div>

@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import {
   X, FileText, Search, Check, Minus, ArrowRight, ArrowLeft,
-  Loader2, GripVertical, Sparkles, Settings, Workflow,
+  Loader2, GripVertical, Sparkles, Settings, Workflow, CalendarRange, ChevronDown, ArrowLeftRight,
 } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import ColumnFilter from '../shared/ColumnFilter';
@@ -19,11 +19,21 @@ import {
 import type { WorkflowResult } from './ReportsView';
 
 export type WizardCreatePayload = {
+  /** Report title shown on the cover. */
+  reportName: string;
   /** Ordered, arranged query blocks. */
   queries: GeneratedQueryDef[];
   /** Ordered workflow result blocks (Bulk Audit sources). */
   workflows: WorkflowResult[];
   execSummary: string;
+  /** Audit coverage window stated on the report cover (e.g. "FY26 Q2"). */
+  reportPeriod: string;
+};
+
+/** Sensible default coverage window — the current fiscal quarter. */
+const currentPeriod = () => {
+  const now = new Date();
+  return `FY${String(now.getFullYear()).slice(-2)} Q${Math.floor(now.getMonth() / 3) + 1}`;
 };
 
 const sevChip = (sev: string) =>
@@ -49,11 +59,41 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
   const [sevFilters, setSevFilters] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<'All' | 'Queries' | 'Bulk Audit'>('All');
   const [selected, setSelected] = useState<PickableQuery[]>([]);
-  const [dupNotice, setDupNotice] = useState<string | null>(null);
   const [ordered, setOrdered] = useState<GeneratedQueryDef[]>([]);
   const [orderedWorkflows, setOrderedWorkflows] = useState<WorkflowResult[]>([]);
   const [execSummary, setExecSummary] = useState('');
   const [summaryEdited, setSummaryEdited] = useState(false);
+  const [reportName, setReportName] = useState(() => `${currentPeriod()} ${template.name}`);
+  const [reportPeriod, setReportPeriod] = useState(currentPeriod);
+  const [periodMenuOpen, setPeriodMenuOpen] = useState(false);
+  const periodRef = useRef<HTMLDivElement>(null);
+
+  // Quick-pick coverage windows so most users never have to type a period.
+  // The input stays editable for a custom range; this just seeds the common ones.
+  const periodOptions = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const q = Math.floor(now.getMonth() / 3) + 1;
+    const fy = String(y).slice(-2);
+    const prevQ = q === 1 ? 4 : q - 1;
+    const prevQfy = q === 1 ? String(y - 1).slice(-2) : fy;
+    return [
+      { label: 'This quarter', value: `FY${fy} Q${q}` },
+      { label: 'Last quarter', value: `FY${prevQfy} Q${prevQ}` },
+      { label: 'This fiscal year', value: `FY${fy}` },
+      { label: 'Last fiscal year', value: `FY${String(y - 1).slice(-2)}` },
+    ];
+  }, []);
+
+  // Close the period menu on an outside click.
+  useEffect(() => {
+    if (!periodMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (periodRef.current && !periodRef.current.contains(e.target as Node)) setPeriodMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [periodMenuOpen]);
   const [isCreating, setIsCreating] = useState(false);
   const [confirmAbandon, setConfirmAbandon] = useState(false);
 
@@ -83,15 +123,13 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
   }, [sources, search, sevFilters, typeFilter]);
 
   const toggle = (item: PickableQuery) => {
-    setDupNotice(null);
     setSelected(prev => {
       const exact = prev.find(p => p.uid === item.uid);
       if (exact) return prev.filter(p => p.uid !== item.uid);
+      // Same underlying query already picked from another source — swap the
+      // selection onto the clicked row (drop the old one, keep its position).
       const sameKey = prev.find(p => p.key === item.key);
-      if (sameKey) {
-        setDupNotice('Same underlying query already added — it\'s included once.');
-        return prev;
-      }
+      if (sameKey) return prev.map(p => (p.key === item.key ? item : p));
       return [...prev, item];
     });
   };
@@ -99,7 +137,6 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
   // Report group header checkbox: all selected → drop the report's queries;
   // otherwise add every query in the report not already covered.
   const toggleReportGroup = (items: PickableQuery[]) => {
-    setDupNotice(null);
     setSelected(prev => {
       const selCount = items.filter(i => prev.some(p => p.uid === i.uid)).length;
       if (selCount === items.length) {
@@ -137,9 +174,11 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
     if (isCreating) return;
     setIsCreating(true);
     const payload: WizardCreatePayload = {
+      reportName: reportName.trim() || template.name,
       queries: ordered,
       workflows: orderedWorkflows,
       execSummary: execSummary.trim() || summaryFallback(),
+      reportPeriod: reportPeriod.trim() || currentPeriod(),
     };
     window.setTimeout(() => onCreate(payload), 650);
   };
@@ -254,7 +293,8 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
                 );
                 const rowState = (item: PickableQuery) => {
                   const isSelected = selected.some(p => p.uid === item.uid);
-                  return { isSelected, keyTaken: !isSelected && selected.some(p => p.key === item.key) };
+                  const takenBy = isSelected ? undefined : selected.find(p => p.key === item.key);
+                  return { isSelected, keyTaken: !!takenBy, takenFrom: takenBy?.sourceLabel };
                 };
                 const sevPill = (severity: PickableQuery['severity']) => (
                   <span className={`shrink-0 inline-flex items-center h-6 px-2 rounded-full border text-[11px] font-semibold ${sevChip(severity)}`}>
@@ -297,23 +337,24 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
                             </button>
                             <div className="divide-y divide-border-light/70">
                               {items.map(item => {
-                                const { isSelected, keyTaken } = rowState(item);
+                                const { isSelected, keyTaken, takenFrom } = rowState(item);
                                 return (
                                   <button
                                     key={item.uid}
                                     onClick={() => toggle(item)}
-                                    className={`w-full flex items-center gap-3 pl-5 pr-3.5 py-2.5 text-left transition-colors cursor-pointer ${isSelected ? 'bg-primary/[0.04]' : keyTaken ? 'bg-paper-50/60 opacity-60' : 'bg-white hover:bg-canvas'}`}
+                                    className={`w-full flex items-center gap-3 pl-5 pr-3.5 py-2.5 text-left transition-colors cursor-pointer ${isSelected ? 'bg-primary/[0.04]' : 'bg-white hover:bg-canvas'}`}
                                   >
                                     {checkbox(isSelected ? 'on' : 'off')}
                                     <span className="flex-1 min-w-0">
                                       <span className="block text-[13px] font-medium text-text truncate">{item.label}</span>
-                                      {item.kind === 'workflow' ? (
-                                        <span className="block text-[11px] text-text-muted truncate">
-                                          {keyTaken ? 'Already added' : item.wfMeta}
+                                      {keyTaken ? (
+                                        <span className="flex items-center gap-1 text-[11px] text-brand-600 truncate">
+                                          <ArrowLeftRight size={11} className="shrink-0" />
+                                          Selected in {takenFrom} — click to swap
                                         </span>
-                                      ) : keyTaken && (
-                                        <span className="block text-[11px] text-text-muted truncate">Already added</span>
-                                      )}
+                                      ) : item.kind === 'workflow' ? (
+                                        <span className="block text-[11px] text-text-muted truncate">{item.wfMeta}</span>
+                                      ) : null}
                                     </span>
                                     {sevPill(item.severity)}
                                   </button>
@@ -339,16 +380,6 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
                 </button>
               ) : <span />}
               <div className="flex items-center gap-3">
-                <AnimatePresence>
-                  {dupNotice && (
-                    <motion.span
-                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      className="text-[11px] text-mitigated-700"
-                    >
-                      {dupNotice}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
                 <span className="text-[12px] text-text-muted">
                   {selectedSummary}
                 </span>
@@ -365,18 +396,97 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
         ) : (
           <>
             {/* Step 2 — preview */}
-            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4 bg-[#F4F2F7]/60">
-              <div className="bg-white rounded-[12px] border border-border-light p-4">
-                <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2">
-                  <Sparkles size={13} className="text-primary" /> Executive Summary — rolled up from your selection
-                </label>
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5 bg-[#F4F2F7]/60">
+              {/* Report setup — flat layout (no card chrome) to stay compact. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <label htmlFor="report-name" className="text-[12px] font-semibold text-ink-900 shrink-0">Report name</label>
+                      <span className="text-ink-300 shrink-0" aria-hidden="true">·</span>
+                      <span className="text-[12px] text-ink-400 truncate">Shown as the report title.</span>
+                    </div>
+                    <input
+                      id="report-name"
+                      value={reportName}
+                      onChange={e => setReportName(e.target.value)}
+                      placeholder={`${currentPeriod()} ${template.name}`}
+                      className="w-full h-10 px-3.5 rounded-[8px] border border-border-light bg-white text-[12.5px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <label htmlFor="report-period" className="text-[12px] font-semibold text-ink-900 shrink-0">Audit period</label>
+                      <span className="text-ink-300 shrink-0" aria-hidden="true">·</span>
+                      <span className="text-[12px] text-ink-400 truncate">Preset or custom range.</span>
+                    </div>
+                    <div className="relative" ref={periodRef}>
+                      <CalendarRange size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                      <input
+                        id="report-period"
+                        value={reportPeriod}
+                        onChange={e => setReportPeriod(e.target.value)}
+                        onFocus={() => setPeriodMenuOpen(false)}
+                        placeholder="e.g. FY26 Q2"
+                        className="w-full h-10 pl-9 pr-10 rounded-[8px] border border-border-light bg-white text-[12.5px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                      />
+                      <button
+                        type="button"
+                        aria-label="Choose a preset period"
+                        aria-expanded={periodMenuOpen}
+                        onClick={() => setPeriodMenuOpen(o => !o)}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 w-7 h-7 rounded-[6px] flex items-center justify-center text-text-muted hover:text-text hover:bg-canvas transition-colors cursor-pointer"
+                      >
+                        <ChevronDown size={15} className={`transition-transform ${periodMenuOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      <AnimatePresence>
+                        {periodMenuOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.12, ease: [0.2, 0, 0, 1] }}
+                            className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 rounded-[8px] border border-border-light bg-white shadow-lg py-1"
+                            role="listbox"
+                          >
+                            {periodOptions.map(o => {
+                              const active = reportPeriod.trim() === o.value;
+                              return (
+                                <button
+                                  key={o.value}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={active}
+                                  onClick={() => { setReportPeriod(o.value); setPeriodMenuOpen(false); }}
+                                  className={`w-full flex items-center justify-between gap-3 px-3 h-9 text-left transition-colors cursor-pointer ${active ? 'bg-primary/[0.04]' : 'hover:bg-canvas'}`}
+                                >
+                                  <span className={`text-[12.5px] ${active ? 'text-primary font-medium' : 'text-text'}`}>{o.label}</span>
+                                  <span className="flex items-center gap-2 shrink-0">
+                                    <span className="font-mono text-[11px] tabular-nums text-text-muted">{o.value}</span>
+                                    {active && <Check size={13} className="text-primary" />}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                </div>
+
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <label htmlFor="exec-summary" className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-900 shrink-0">
+                    <Sparkles size={13} className="text-primary" /> Executive summary
+                  </label>
+                  <span className="text-ink-300 shrink-0" aria-hidden="true">·</span>
+                  <span className="text-[12px] text-ink-400 truncate">Rolled up from your selection. Editable now and after generation; regenerates unless you've edited it.</span>
+                </div>
                 <textarea
+                  id="exec-summary"
                   value={execSummary}
                   onChange={e => { setExecSummary(e.target.value); setSummaryEdited(true); }}
                   rows={4}
-                  className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[12.5px] leading-relaxed text-text-secondary resize-none focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                  className="w-full px-3.5 py-3 rounded-[8px] border border-border-light bg-white text-[12.5px] leading-relaxed text-text-secondary resize-none focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                 />
-                <p className="text-[11px] text-text-muted mt-1.5">Editable now and after generation. Regenerates from your selection unless you've edited it.</p>
               </div>
 
               {ordered.length > 0 && (

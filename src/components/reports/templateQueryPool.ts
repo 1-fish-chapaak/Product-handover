@@ -257,9 +257,13 @@ export function composeExecSummary(templateName: string, defs: GeneratedQueryDef
   const sevNote = high > 0
     ? `${high} of ${defs.length} ${defs.length === 1 ? 'query is' : 'queries are'} high severity`
     : `${defs.length} ${defs.length === 1 ? 'query' : 'queries'} reviewed, none high severity`;
-  const leads = defs.slice(0, 3).map(d => {
-    const first = d.summary.split('. ')[0].trim();
-    return first.endsWith('.') ? first : `${first}.`;
-  });
+  // Lead sentences from the first few queries — deduped so repeated/identical
+  // summaries (common when several queries share a source) don't echo.
+  const leads = [...new Set(
+    defs.map(d => {
+      const first = d.summary.split('. ')[0].trim();
+      return first.endsWith('.') ? first : `${first}.`;
+    }),
+  )].slice(0, 3);
   return `This report covers ${defs.length} audit ${defs.length === 1 ? 'query' : 'queries'} (${sevNote}). ${leads.join(' ')}`;
 }

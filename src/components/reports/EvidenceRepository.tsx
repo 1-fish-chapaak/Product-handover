@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { FileText, FileSpreadsheet, FileImage, ChevronDown, ExternalLink, Download, FolderOpen, ShieldCheck } from 'lucide-react';
 import { EVIDENCE_LIBRARY, type EvidenceItem, type EvidenceType } from '../../data/atrLibrary';
 import ListToolbar, { ToolbarSelect, ToolbarViewToggle } from '../shared/ListToolbar';
+import ReportCard from '../shared/ReportCard';
 
 const TYPE_META: Record<EvidenceType, { icon: React.ElementType; bg: string; fg: string }> = {
   PDF:  { icon: FileText,        bg: 'bg-risk-50',      fg: 'text-risk-700' },
@@ -130,32 +131,24 @@ export default function EvidenceRepository({ onOpenSource, view, onViewChange }:
         </div>
       ) : view === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-6">
-          {filtered.map(item => {
+          {filtered.map((item, i) => {
             const t = TYPE_META[item.type];
-            const Icon = t.icon;
             return (
-              <div
+              <ReportCard
                 key={item.id}
+                index={i}
+                icon={t.icon}
+                iconClass="bg-evidence-50 text-evidence-700"
+                eyebrow={item.type}
+                title={item.name}
+                description={`Backs: ${item.observation}`}
+                pills={[item.type, item.size, item.area]}
+                footerRight={<span className="font-mono text-[11px] tabular-nums text-ink-400">{item.uploadedAt}</span>}
                 onClick={() => onOpenSource(item.atrId)}
-                className="group text-left bg-canvas-elevated border border-canvas-border rounded-[14px] p-5 flex flex-col gap-3 cursor-pointer hover:border-brand-300 hover:shadow-[0_4px_16px_-8px_rgba(106,18,205,0.18)] transition-all"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className={`w-9 h-9 rounded-[9px] ${t.bg} ${t.fg} flex items-center justify-center shrink-0`}><Icon size={17} /></div>
-                  <span className={`inline-flex items-center h-5 px-1.5 text-[9.5px] font-bold rounded ${t.bg} ${t.fg}`}>{item.type}</span>
-                </div>
-                <h3 className="text-[14px] font-semibold text-ink-900 leading-snug truncate" title={item.name}>{item.name}</h3>
-                <div className="text-[11.5px] text-ink-500 line-clamp-2">Backs: <span className="text-ink-700">{item.observation}</span></div>
-                <div className="mt-auto pt-3 border-t border-canvas-border">
-                  <div className="text-[11.5px] text-ink-600 truncate">{item.area}</div>
-                  <div className="flex items-center justify-between gap-2 mt-1">
-                    <span className="text-[11px] text-ink-400 truncate">{item.uploadedAt} · {item.size}</span>
-                    <div className="flex items-center gap-0.5 shrink-0">
-                      <button onClick={(e) => { e.stopPropagation(); onOpenSource(item.atrId); }} title="Open the source ATR report" className="inline-flex items-center gap-1 h-7 px-2 text-[11px] font-semibold text-primary hover:bg-primary-xlight rounded-[8px] cursor-pointer transition-colors">View source <ExternalLink size={10} /></button>
-                      <button title="Download" onClick={(e) => e.stopPropagation()} className="w-7 h-7 rounded-[8px] flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-paper-50 cursor-pointer"><Download size={13} /></button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                actions={
+                  <button title="Download" onClick={(e) => e.stopPropagation()} className="w-7 h-7 rounded-[8px] flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-paper-50 cursor-pointer" aria-label="Download"><Download size={14} /></button>
+                }
+              />
             );
           })}
         </div>

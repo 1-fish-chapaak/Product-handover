@@ -11,7 +11,7 @@ import { VIEW_PERMISSIONS } from './data/rbac';
 import EmptyState from './components/shared/EmptyState';
 import LoginView from './components/auth/LoginView';
 import { Lock } from 'lucide-react';
-import { GENERATED_REPORTS } from './data/mockData';
+import { GENERATED_REPORTS, GENERATED_REPORTS_KEY } from './data/mockData';
 import Sidebar from './components/sidebar/Sidebar';
 import ChatView from './components/chat/ChatView';
 import ArtifactPanel from './components/artifacts/ArtifactPanel';
@@ -549,7 +549,7 @@ function AppInner() {
                     queries: 1,
                   };
                   try {
-                    const key = 'irame.reports.generatedReports.v7';
+                    const key = GENERATED_REPORTS_KEY;
                     const raw = localStorage.getItem(key);
                     const arr = raw ? JSON.parse(raw) : [];
                     if (Array.isArray(arr) && !arr.some((r: { id: string }) => r.id === newReport.id)) {
