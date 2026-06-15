@@ -36,6 +36,7 @@ import ReportBuilder from './components/reports/ReportBuilder';
 import AuditPlanningView from './components/audit/AuditPlanningView';
 import AuditPlanningPage from './components/audit/AuditPlanningPage';
 import EngagementsView from './components/audit/EngagementsView';
+import SoxIcfrApp from './components/sox-icfr/SoxIcfrApp';
 import EngagementOverviewView from './components/audit/EngagementOverviewView';
 import ClosedCaseSamplingView from './components/audit/ClosedCaseSamplingView';
 import MyQueueView from './components/audit/MyQueueView';
@@ -824,6 +825,9 @@ function AppInner() {
             existingTemplateNames={[...REPORT_TEMPLATES.map(t => t.name), ...customTemplates.map(t => t.name)]}
           />
         );
+
+      case 'sox-icfr':
+        return <SoxIcfrApp onBack={() => setView('engagements')} />;
 
       case 'engagements':
         return (
