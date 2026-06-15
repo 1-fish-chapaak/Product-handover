@@ -17,7 +17,6 @@ import {
   SEED, INTEGRATED_TYPES, TYPE_META, formatDate,
   type DataSource,
 } from '../data-sources/sources';
-import { useDialogA11y } from './useModalA11y';
 
 // ─── Selected attachment shape ───────────────────────────────────────────────
 // Three flavours of selection:
@@ -73,7 +72,7 @@ export default function DataPickerModal({
   onConfirm,
   defaultTab = 'upload',
   title = 'Add data',
-  confirmLabel = 'Add',
+  confirmLabel = 'Attach',
   mode = 'chat',
   attachHint,
 }: Props) {
@@ -94,15 +93,9 @@ export default function DataPickerModal({
   // Guards Attach while uploads are still in flight (in-flight files won't be
   // added) — shows a confirm first.
   const [confirmAttach, setConfirmAttach] = useState(false);
-  // Confirm before removing an item (upload or selected source) from the combined
-  // list on the Upload tab. Holds what's pending removal, or null.
-  const [pendingRemoval, setPendingRemoval] = useState<{ kind: 'upload' | 'source'; id: string; name: string } | null>(null);
   // True while the confirm handler is running (building entries / persisting).
   // Drives the button's loading state so a large batch doesn't look frozen.
   const [submitting, setSubmitting] = useState(false);
-  // The Choose files / Choose folder buttons live in the tab row, but the file
-  // inputs live inside UploadPanel — it registers these triggers so the buttons work.
-  const uploadTriggersRef = useRef<{ chooseFiles: () => void; chooseFolder: () => void } | null>(null);
 
   // Reset transient state when the modal opens fresh. The starting tab is
   // caller-controlled (defaults to Upload, which is the chat default).
@@ -115,7 +108,6 @@ export default function DataPickerModal({
       setCombinedName('');
       setConfirmClose(false);
       setConfirmAttach(false);
-      setPendingRemoval(null);
       setSubmitting(false);
     }
   }, [open, defaultTab]);
@@ -139,12 +131,6 @@ export default function DataPickerModal({
       .filter(d => !search || d.name.toLowerCase().includes(search.toLowerCase()) || d.subtype.toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [tab, search]);
-
-  // All currently-selected existing sources (across every tab) — shown alongside
-  // fresh uploads in the combined list on the Upload tab.
-  const selectedSources = SEED.filter(s => selectedSourceIds.has(s.id));
-  // Upload tab is in its default (empty) state when nothing has been picked yet.
-  const uploadEmpty = pendingUploads.length === 0 && selectedSources.length === 0;
 
   // Only fully-validated, fully-uploaded files count toward the Attach total —
   // in-flight files aren't attachable yet, and errored files never are.
@@ -236,20 +222,10 @@ export default function DataPickerModal({
     else void handleConfirm();
   };
 
-  // Accessibility: focus-trap + Escape-to-close + body scroll-lock, matching the
-  // other chat modals (AddToDashboard/Report). Cmd/Ctrl+Enter triggers Attach.
-  // Escape routes through requestClose so the in-flight-upload guard still fires —
-  // but is suppressed while a nested confirm dialog is open (it owns Escape).
-  const dialogRef = useDialogA11y(
-    open,
-    () => { if (!confirmClose && !confirmAttach && !pendingRemoval) requestClose(); },
-    { onReturn: requestConfirm },
-  );
-
   return (
     <AnimatePresence>
       {open && (
-        <div className="kh-no-focus-ring fixed inset-0 z-50 flex items-center justify-center">
+        <div className="kh-no-focus-ring fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="dpicker-title">
           <motion.div
             key="backdrop"
             initial={{ opacity: 0 }}
@@ -260,10 +236,6 @@ export default function DataPickerModal({
             onClick={requestClose}
           />
           <motion.div
-            ref={dialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="dpicker-title"
             initial={{ opacity: 0, y: 12, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.98 }}
@@ -272,16 +244,31 @@ export default function DataPickerModal({
               mode === 'kh-add' ? 'h-[680px]' : 'h-[600px]'
             }`}
           >
-            {/* Header — title + close on their own row. */}
-            <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-paper-200">
-              <h2 id="dpicker-title" className="text-[0.9375rem] font-semibold text-ink-800">{title}</h2>
-              <button
-                onClick={requestClose}
-                className="p-1.5 text-ink-500 hover:text-ink-800 rounded-md hover:bg-brand-50 transition-colors cursor-pointer shrink-0"
-                aria-label="Close picker"
-              >
-                <X size={16} />
-              </button>
+            {/* Header — title + (search) + close. Search is suppressed in kh-add mode. */}
+            <div className="flex items-center gap-3 px-5 py-3 border-b border-paper-200">
+              <h2 id="dpicker-title" className="text-[0.9375rem] font-semibold text-ink-800 shrink-0">{title}</h2>
+              {mode === 'chat' && (
+                <div className="relative flex-1 max-w-md ml-2">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+                  <input
+                    type="text"
+                    placeholder={tab === 'upload' ? 'Drop files below to upload…' : 'Search sources…'}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    disabled={tab === 'upload'}
+                    className="w-full pl-9 pr-3 h-9 rounded-md border border-border-light bg-white text-[0.8125rem] text-text placeholder:text-text-muted/60 focus:outline-none focus:border-primary disabled:bg-canvas disabled:text-text-muted transition-colors"
+                  />
+                </div>
+              )}
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  onClick={requestClose}
+                  className="p-1.5 text-ink-500 hover:text-ink-800 rounded-md hover:bg-brand-50 transition-colors cursor-pointer"
+                  aria-label="Close picker"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
 
             {/* Tabs row */}
@@ -294,13 +281,13 @@ export default function DataPickerModal({
                     key={t.id}
                     onClick={() => setTab(t.id)}
                     className={`relative flex items-center gap-1.5 px-3.5 h-10 text-[0.75rem] font-medium transition-colors cursor-pointer ${
-                      isActive ? 'text-primary' : 'text-ink-500 hover:text-ink-800'
+                      isActive ? 'text-primary' : 'text-text-muted hover:text-text'
                     }`}
                   >
                     <Icon size={13} />
                     {t.label}
                     {t.id !== 'upload' && t.id !== 'connect' && (
-                      <span className={`tabular-nums text-[0.6875rem] ${isActive ? 'text-primary' : 'text-ink-400'}`}>
+                      <span className={`tabular-nums text-[0.6875rem] ${isActive ? 'text-primary' : 'text-text-muted/60'}`}>
                         {tabCounts[t.id]}
                       </span>
                     )}
@@ -314,46 +301,7 @@ export default function DataPickerModal({
                   </button>
                 );
               })}
-              {/* Upload actions on the tab row — only once something is picked. The
-                  default (empty) state keeps its centered buttons in the drop zone. */}
-              {tab === 'upload' && !uploadEmpty && (
-                <div className="ml-auto flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => uploadTriggersRef.current?.chooseFiles()}
-                    className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
-                  >
-                    <Upload size={13} />
-                    Choose files
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => uploadTriggersRef.current?.chooseFolder()}
-                    className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-paper-200 bg-white text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
-                  >
-                    <Folder size={13} />
-                    Choose folder
-                  </button>
-                </div>
-              )}
             </div>
-
-            {/* Search — sits directly below the tabs (it filters the active
-                tab's list). Chat mode, data tabs only; the Upload tab has none. */}
-            {mode === 'chat' && tab !== 'upload' && (
-              <div className="px-5 py-3">
-                <div className="relative">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-                  <input
-                    type="text"
-                    placeholder="Search sources…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 h-9 rounded-md border border-paper-200 bg-white text-[0.8125rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 transition-colors"
-                  />
-                </div>
-              </div>
-            )}
 
             {/* Body — tab-aware. The Connect tab renders its own panel + footer. */}
             {tab === 'connect' ? (
@@ -368,9 +316,6 @@ export default function DataPickerModal({
                 <UploadPanel
                   pendingUploads={pendingUploads}
                   setPendingUploads={setPendingUploads}
-                  selectedSources={selectedSources}
-                  onRequestRemove={(item) => setPendingRemoval(item)}
-                  triggersRef={uploadTriggersRef}
                   mode={mode}
                 />
               ) : (
@@ -435,11 +380,11 @@ export default function DataPickerModal({
                 <button
                   onClick={requestConfirm}
                   disabled={totalSelected === 0 || submitting || errorCount > 0}
-                  className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 disabled:bg-paper-200 disabled:text-ink-400 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 disabled:bg-brand-600/40 disabled:text-white disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
                 >
                   {submitting
-                    ? <><Loader2 size={13} className="animate-spin" /> Adding…</>
-                    : <><Plus size={13} /> {totalSelected > 0 ? `${confirmLabel} ${totalSelected}` : confirmLabel}</>}
+                    ? <><Loader2 size={13} className="animate-spin" /> {mode === 'kh-add' ? 'Adding…' : 'Attaching…'}</>
+                    : <>{mode === 'kh-add' ? <Plus size={13} /> : <Check size={13} />} {totalSelected > 0 ? `${confirmLabel} ${totalSelected}` : confirmLabel}</>}
                 </button>
               </div>
             </div>
@@ -481,24 +426,6 @@ export default function DataPickerModal({
             onConfirm={() => { setConfirmAttach(false); handleConfirm(); }}
             onClose={() => setConfirmAttach(false)}
           />
-
-          <ConfirmationModal
-            open={!!pendingRemoval}
-            title="Remove this item?"
-            description={pendingRemoval ? <>“{pendingRemoval.name}” will be removed from your selection.</> : null}
-            confirmLabel="Remove"
-            cancelLabel="Keep"
-            tone="destructive"
-            onConfirm={() => {
-              const pr = pendingRemoval;
-              if (pr) {
-                if (pr.kind === 'upload') setPendingUploads(prev => prev.filter(u => u.localId !== pr.id));
-                else setSelectedSourceIds(prev => { const next = new Set(prev); next.delete(pr.id); return next; });
-              }
-              setPendingRemoval(null);
-            }}
-            onClose={() => setPendingRemoval(null)}
-          />
         </div>
       )}
     </AnimatePresence>
@@ -520,8 +447,8 @@ function SourceList({ sources, selectedIds, onToggle, search, showRequestIntegra
   if (sources.length === 0) {
     return (
       <div className="text-center py-16 px-6">
-        <Search size={24} className="mx-auto text-ink-400 mb-3" />
-        <p className="text-[0.8125rem] text-ink-500">
+        <Search size={24} className="mx-auto text-text-muted/60 mb-3" />
+        <p className="text-[0.8125rem] text-text-muted">
           {search ? `No sources match "${search}".` : 'No sources available.'}
         </p>
         {showRequestIntegration && !search && (
@@ -552,17 +479,17 @@ function SourceList({ sources, selectedIds, onToggle, search, showRequestIntegra
       </ul>
 
       {showRequestIntegration && (
-        <div className="px-5 py-4 border-t border-paper-200 bg-paper-50 flex items-center justify-between">
+        <div className="px-5 py-4 border-t border-border-light bg-surface-2/60 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
-            <Mail size={13} className="text-ink-500 shrink-0" />
-            <span className="text-[0.75rem] text-ink-500 truncate">
+            <Mail size={13} className="text-text-muted shrink-0" />
+            <span className="text-[0.75rem] text-text-muted truncate">
               Need another source? IT can wire it up.
             </span>
           </div>
           <a
             href="mailto:support@irame.ai?subject=Database%20integration%20request"
             onClick={onRequestIntegration}
-            className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-paper-200 bg-white text-[0.75rem] font-semibold text-ink-600 hover:border-brand-300 transition-colors cursor-pointer shrink-0"
+            className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-border-light bg-white text-[0.75rem] font-semibold text-text-secondary hover:border-primary-light transition-colors cursor-pointer shrink-0"
           >
             <Plus size={12} />
             Request a DB integration
@@ -583,17 +510,15 @@ function SourceRow({ source, selected, onToggle }: { source: DataSource; selecte
         type="button"
         onClick={onToggle}
         className={`w-full flex items-center gap-3 px-5 py-3 text-left transition-colors cursor-pointer ${
-          selected ? 'bg-primary-xlight' : 'hover:bg-paper-50'
+          selected ? 'bg-primary-xlight' : 'hover:bg-surface-2'
         }`}
         aria-pressed={selected}
       >
-        {/* Checkbox — mirrors the shared DS Checkbox (src/components/shared/Checkbox.tsx)
-            so multi-select looks identical to the rest of the app. Kept as a div, not
-            the shared <button> component, because the whole row is itself a button. */}
-        <div className={`w-4 h-4 rounded-[5px] border flex items-center justify-center shrink-0 transition-colors ${
-          selected ? 'bg-brand-600 border-brand-600' : 'bg-canvas-elevated border-canvas-border'
+        {/* Checkbox */}
+        <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-all ${
+          selected ? 'bg-primary border-primary' : 'bg-white border-border-light'
         }`}>
-          {selected && <Check size={11} className="text-white" strokeWidth={3} />}
+          {selected && <Check size={11} className="text-white" />}
         </div>
 
         {/* Brand icon tile — same flat lavender frame everywhere */}
@@ -603,16 +528,16 @@ function SourceRow({ source, selected, onToggle }: { source: DataSource; selecte
 
         {/* Name + meta */}
         <div className="flex-1 min-w-0">
-          <div className={`text-[0.8125rem] font-medium truncate ${selected ? 'text-primary' : 'text-ink-800'}`}>
+          <div className={`text-[0.8125rem] font-medium truncate ${selected ? 'text-primary' : 'text-text'}`}>
             {source.name}
           </div>
-          <div className="text-[0.6875rem] text-ink-500 mt-0.5 tabular-nums truncate">
-            {source.subtype} <span className="text-ink-400">· {formatDate(source.createdAt)}</span>
+          <div className="text-[0.6875rem] text-text-muted mt-0.5 tabular-nums truncate">
+            {source.subtype} <span className="text-text-muted/60">· {formatDate(source.createdAt)}</span>
           </div>
         </div>
 
         {/* Type label pill (subtle, right-aligned) */}
-        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[0.75rem] font-semibold text-ink-600 bg-paper-100">
+        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[0.75rem] font-semibold text-text-muted bg-surface-2">
           {typeLabel}
         </span>
       </button>
@@ -628,14 +553,6 @@ type PendingUpload = { localId: string; name: string; sizeBytes: number; progres
 interface UploadPanelProps {
   pendingUploads: PendingUpload[];
   setPendingUploads: React.Dispatch<React.SetStateAction<PendingUpload[]>>;
-  // Existing sources the user has ticked on the data tabs — shown alongside fresh
-  // uploads in one combined list so every pick sits in one place.
-  selectedSources: DataSource[];
-  // Ask the parent to confirm + remove an item (upload or source) from the list.
-  onRequestRemove: (item: { kind: 'upload' | 'source'; id: string; name: string }) => void;
-  // The tab-row Choose files / Choose folder buttons (rendered by the parent) call
-  // into these — UploadPanel owns the file inputs, so it registers the triggers.
-  triggersRef: React.MutableRefObject<{ chooseFiles: () => void; chooseFolder: () => void } | null>;
   // Knowledge Hub restricts to data-source types; chat composer accepts anything
   // the user wants to attach to a message (preserving the original chat UX).
   mode: 'chat' | 'kh-add';
@@ -715,7 +632,7 @@ function walkEntry(entry: Entry, prefix: string, out: Array<{ file: File; path: 
   return Promise.resolve();
 }
 
-function UploadPanel({ pendingUploads, setPendingUploads, selectedSources, onRequestRemove, triggersRef, mode }: UploadPanelProps) {
+function UploadPanel({ pendingUploads, setPendingUploads, mode }: UploadPanelProps) {
   const { addToast } = useToast();
   const prefersReducedMotion = useReducedMotion();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -727,16 +644,6 @@ function UploadPanel({ pendingUploads, setPendingUploads, selectedSources, onReq
   // leak and keep calling setState after unmount.
   const intervalsRef = useRef<number[]>([]);
   useEffect(() => () => { intervalsRef.current.forEach(clearInterval); intervalsRef.current = []; }, []);
-
-  // Expose the file/folder pickers to the parent so the tab-row buttons can
-  // trigger them (the hidden inputs live here in UploadPanel).
-  useEffect(() => {
-    triggersRef.current = {
-      chooseFiles: () => fileInputRef.current?.click(),
-      chooseFolder: () => folderInputRef.current?.click(),
-    };
-    return () => { triggersRef.current = null; };
-  }, [triggersRef]);
 
   // Wrong-extension files are filtered before they ever queue — tell the user
   // rather than dropping them silently.
@@ -850,76 +757,102 @@ function UploadPanel({ pendingUploads, setPendingUploads, selectedSources, onReq
     }
   };
 
-  // The drop zone fills the body only while nothing is picked yet. As soon as any
-  // file is uploaded OR any existing source is selected, it collapses to a compact
-  // bar (Choose files / Choose folder) with the combined list below it.
-  const empty = pendingUploads.length === 0 && selectedSources.length === 0;
-  const totalItems = pendingUploads.length + selectedSources.length;
+  const removeUpload = (id: string) => {
+    setPendingUploads(prev => prev.filter(u => u.localId !== id));
+  };
+
+  // Collapse the drop zone to the compact "Drop more files" bar only past a few
+  // files — for a small batch keep the full drop zone so it still reads as the
+  // primary affordance. The uploads list shows whenever there's at least one.
+  const compact = pendingUploads.length > 4;
 
   return (
-    <div
-      className="flex flex-col min-h-0 h-full px-6 py-3 gap-3"
-      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-      onDragLeave={() => setIsDragging(false)}
-      onDrop={handleDrop}
-    >
-      {/* Hidden inputs — the Choose files / Choose folder buttons now live in the
-          tab row (rendered by DataPickerModal) and trigger these via triggersRef. */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        {...(mode === 'kh-add' ? { accept: KH_ALLOWED_ACCEPT } : {})}
-        className="hidden"
-        onChange={(e) => { handleFileInput(e.target.files); e.target.value = ''; }}
-      />
-      <input
-        ref={folderInputRef}
-        type="file"
-        multiple
-        {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
-        className="hidden"
-        onChange={(e) => { handleFolderInput(e.target.files); e.target.value = ''; }}
-      />
-
-      {empty && (
-        // Default (empty) drop zone — fills the body with the centered pick buttons. Untouched.
-        <div className={`flex-1 flex flex-col items-center justify-center text-center rounded-xl border-2 border-dashed transition-colors px-6 py-7 ${
+    <div className="flex flex-col min-h-0 h-full px-6 py-3 gap-3">
+      {/* Drop zone */}
+      <div
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+        className={`shrink-0 rounded-xl border-2 border-dashed transition-colors ${
           isDragging ? 'border-brand-600 bg-brand-50' : 'border-paper-200 bg-canvas'
-        }`}>
-          <Upload size={24} className={`mb-2 ${isDragging ? 'text-brand-600' : 'text-ink-400'}`} />
-          <p className="text-[0.875rem] text-ink-700 font-medium">Drop files or a folder here</p>
-          <p className="text-[0.75rem] text-ink-500 mt-1">or pick from your computer</p>
-          <div className="inline-flex items-center gap-2 mt-3">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-2 px-4 h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
-            >
-              <Upload size={14} />
-              Choose files
-            </button>
-            <button
-              onClick={() => folderInputRef.current?.click()}
-              className="inline-flex items-center gap-2 px-4 h-10 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.8125rem] font-semibold transition-colors cursor-pointer"
-            >
-              <Folder size={14} />
-              Choose folder
-            </button>
+        } ${compact ? 'px-4 py-2.5' : 'text-center px-6 py-7'}`}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          {...(mode === 'kh-add' ? { accept: KH_ALLOWED_ACCEPT } : {})}
+          className="hidden"
+          onChange={(e) => { handleFileInput(e.target.files); e.target.value = ''; }}
+        />
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+          className="hidden"
+          onChange={(e) => { handleFolderInput(e.target.files); e.target.value = ''; }}
+        />
+        {compact ? (
+          // Compact bar once several files are queued — frees the modal height for the list.
+          <div className="flex items-center justify-between gap-3">
+            <span className="inline-flex items-center gap-2 text-[0.8125rem] text-ink-600 min-w-0">
+              <Upload size={15} className={`shrink-0 ${isDragging ? 'text-brand-600' : 'text-ink-400'}`} />
+              <span className="truncate">Drop more files here, or</span>
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
+              >
+                <Upload size={13} />
+                Choose files
+              </button>
+              <button
+                onClick={() => folderInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
+              >
+                <Folder size={13} />
+                Choose folder
+              </button>
+            </div>
           </div>
-          {mode === 'kh-add' && (
-            <p className="text-[0.6875rem] text-ink-400 mt-3">{KH_ALLOWED_LABEL}</p>
-          )}
-        </div>
-      )}
+        ) : (
+          <>
+            <Upload size={24} className={`mx-auto mb-2 ${isDragging ? 'text-brand-600' : 'text-ink-400'}`} />
+            <p className="text-[0.875rem] text-ink-700 font-medium">Drop files or a folder here</p>
+            <p className="text-[0.75rem] text-ink-500 mt-1">or pick from your computer</p>
+            <div className="inline-flex items-center gap-2 mt-3">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-2 px-4 h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
+              >
+                <Upload size={14} />
+                Choose files
+              </button>
+              <button
+                onClick={() => folderInputRef.current?.click()}
+                className="inline-flex items-center gap-2 px-4 h-10 rounded-md border border-paper-200 bg-paper-0 text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.8125rem] font-semibold transition-colors cursor-pointer"
+              >
+                <Folder size={14} />
+                Choose folder
+              </button>
+            </div>
+            {mode === 'kh-add' && (
+              <p className="text-[0.6875rem] text-ink-400 mt-3">{KH_ALLOWED_LABEL}</p>
+            )}
+          </>
+        )}
+      </div>
 
-      {/* Combined list — every picked item in one place: fresh uploads AND the
-          existing sources ticked on the data tabs. Each row is removable (the
-          parent confirms first). Folder uploads keep their path tag inline. */}
-      {!empty && (
-        <div className={`flex-1 min-h-0 flex flex-col rounded-lg border bg-white overflow-hidden transition-colors ${isDragging ? 'border-brand-600 ring-2 ring-brand-200' : 'border-paper-200'}`}>
+      {/* Pending uploads list — flat across modes. Folder uploads keep their
+          path tag inline. The Combine input above only renders in kh-add when
+          2+ loose files are queued. */}
+      {pendingUploads.length > 0 && (
+        <div className="flex-1 min-h-0 flex flex-col rounded-lg border border-paper-200 bg-white overflow-hidden">
           <div className="shrink-0 px-4 py-2 border-b border-paper-200 bg-canvas flex items-center justify-between">
             <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500">
-              Selected &amp; uploaded · {totalItems}
+              Uploads · {pendingUploads.length}
             </span>
             {(() => {
               const inFlight = pendingUploads.filter(u => u.status === 'validating' || u.status === 'uploading').length;
@@ -950,36 +883,13 @@ function UploadPanel({ pendingUploads, setPendingUploads, selectedSources, onReq
                 <PendingFileRow
                   key={u.localId}
                   upload={u}
-                  onRemove={(id) => onRequestRemove({ kind: 'upload', id, name: u.name })}
+                  onRemove={removeUpload}
                   indent={false}
                   idx={idx}
                   reduced={!!prefersReducedMotion}
                 />
               ))}
             </AnimatePresence>
-            {/* Selected existing sources — static rows, removable (un-ticks the source). */}
-            {selectedSources.map(s => {
-              const { icon: Icon, label: typeLabel } = TYPE_META[s.type];
-              return (
-                <li key={`src-${s.id}`} className="flex items-center gap-3 py-3 px-4">
-                  <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 bg-brand-50 text-brand-700">
-                    <Icon size={13} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[0.8125rem] truncate text-ink-800">{s.name}</div>
-                    <div className="text-[0.6875rem] text-ink-500 mt-0.5 truncate">{s.subtype} · {formatDate(s.createdAt)}</div>
-                  </div>
-                  <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[0.75rem] font-semibold text-ink-600 bg-paper-100">{typeLabel}</span>
-                  <button
-                    onClick={() => onRequestRemove({ kind: 'source', id: s.id, name: s.name })}
-                    className="p-1.5 text-ink-400 hover:text-risk hover:bg-canvas rounded-md transition-colors cursor-pointer shrink-0"
-                    aria-label={`Remove ${s.name}`}
-                  >
-                    <X size={13} />
-                  </button>
-                </li>
-              );
-            })}
           </ul>
         </div>
       )}

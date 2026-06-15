@@ -664,10 +664,6 @@ function AppInner() {
                 link: { view: 'workflow-detail', ref: { kind: 'workflow', id: workflowId } },
               }));
             }}
-            // Right-workspace actions — same destinations as the QnA workspace.
-            onShareResults={() => setShowShareModal(true, { type: 'workflow-output', id: 'result-1' })}
-            onOpenInKnowledgeHub={() => setView('knowledge-hub')}
-            onComposeInChat={(draft) => { setChatComposerDraft(draft); setView('chat'); }}
           />
         );
 
