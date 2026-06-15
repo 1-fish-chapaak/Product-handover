@@ -69,7 +69,7 @@ import type {
 } from '../concierge-workflow-builder/types';
 import { type WorkflowRunSeed, buildWorkflowRunRecapIntro } from '../workflow/workflowRunSeed';
 
-export interface ChatMessage {
+interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
@@ -267,7 +267,7 @@ const AUDIT_FOLLOWUPS = [
   'Cross-check against vendor master changes in the same window',
 ];
 
-export interface ChatViewProps {
+interface ChatViewProps {
   showChatHistory: boolean;
   toggleChatHistory: () => void;
   setShowArtifacts: (v: boolean) => void;
@@ -349,13 +349,6 @@ export interface ChatViewProps {
   onViewReport?: (reportId: string) => void;
   /** When set, shows an "Adding workflow for engagement — <name>" banner above the composer. */
   workflowEngagementContext?: string | null;
-  /** Tab mode: initial conversation for this tab (restored from storage, or
-   *  pre-loaded from a saved chat). When provided, ChatView seeds messages from
-   *  it and skips the selectedChatId auto-load (the tab manager owns loading). */
-  initialMessages?: ChatMessage[];
-  /** Tab mode: reports message changes up so the tab manager can persist this
-   *  tab's conversation to localStorage. */
-  onMessagesChange?: (messages: ChatMessage[]) => void;
 }
 
 // Step labels for the subtle inline audit loader. The artifact panel renders
@@ -2690,7 +2683,7 @@ ${transcriptHtml}
   );
 }
 
-export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext, initialMessages, onMessagesChange }: ChatViewProps) {
+export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext }: ChatViewProps) {
   const { addToast } = useToast();
   const { can } = useCan();
   const prefersReducedMotion = useReducedMotion();
@@ -2708,10 +2701,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowBuilderSeedPrompt]);
-  const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessages ?? []);
-  // Tab mode: report message changes up so the tab manager (ChatTabsView) can
-  // persist this tab's conversation to localStorage.
-  useEffect(() => { onMessagesChange?.(messages); }, [messages, onMessagesChange]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   // Tracks the saved-conversation id that is currently loaded — drives the
   // active row highlight in the chat-history sidebar. Cleared by resetChat
   // and by sending the first message in a fresh thread.
@@ -3270,13 +3260,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // Always clear the selection after the effect runs — even when the id has
   // no matching CHAT_CONVERSATIONS entry — so a stale id never sticks.
   useEffect(() => {
-    // Tab mode owns conversation loading via initialMessages — skip the
-    // selectedChatId auto-load when the tab manager seeded this thread.
-    if (initialMessages) return;
     if (!selectedChatId) return;
     loadChatById(selectedChatId);
     onChatLoaded?.();
-  }, [selectedChatId, loadChatById, onChatLoaded, initialMessages]);
+  }, [selectedChatId, loadChatById, onChatLoaded]);
 
   // ─── Query Clarification Complete Handler ───
   // ─── Start the audit run as ONE IRA message that hosts the loader inline ───
