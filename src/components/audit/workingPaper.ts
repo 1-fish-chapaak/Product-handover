@@ -236,15 +236,21 @@ export function buildWpControls(controls: WsCtrlLike[], opts: WpBuildOpts): WpCo
   });
 }
 
-/** Per-control working paper: Control cover + Attribute Testing (+ Exceptions if any). */
-export function downloadControlWorkingPaper(engagement: Engagement, control: WpControl, meta: WpMeta): void {
+export interface WpSampling {
+  population: number;
+  method: string;
+  samples: { ref: string; result: 'Pass' | 'Fail' }[];
+}
+
+/** Per-control working paper: Control cover + Attribute Testing (+ Sampling, + Exceptions if any). */
+export function downloadControlWorkingPaper(engagement: Engagement, control: WpControl, meta: WpMeta, sampling?: WpSampling): void {
   const wb = XLSX.utils.book_new();
   const tested = control.attributes.filter(a => a.result !== 'Not tested').length;
   const pass = control.attributes.filter(a => a.result === 'Pass').length;
   const fail = control.attributes.filter(a => a.result === 'Fail').length;
   const conclusion = control.status === 'Pass' ? 'Effective' : control.status === 'Fail' ? 'Ineffective' : control.status === 'In test' ? 'In progress' : 'Not started';
 
-  const cover = XLSX.utils.aoa_to_sheet([
+  const coverRows: (string | number)[][] = [
     ['Control Testing Working Paper'],
     [],
     ['Engagement', `${engagement.name} (${engagement.code})`],
@@ -259,6 +265,17 @@ export function downloadControlWorkingPaper(engagement: Engagement, control: WpC
     ['Frequency', control.frequency],
     ['Key control', control.isKey ? 'Yes' : 'No'],
     ['Owner', control.owner],
+  ];
+  if (sampling) {
+    coverRows.push(
+      [],
+      ['Population', sampling.population],
+      ['Sample method', sampling.method],
+      ['Sample size', sampling.samples.length],
+      ['Samples passed', sampling.samples.filter(s => s.result === 'Pass').length],
+    );
+  }
+  coverRows.push(
     [],
     ['Attributes', control.attributes.length],
     ['Tested', tested],
@@ -270,7 +287,8 @@ export function downloadControlWorkingPaper(engagement: Engagement, control: WpC
     ['Reviewed by', meta.reviewedBy],
     ['Date', meta.preparedOn],
     ['W/P reference', `WP-${control.controlId}`],
-  ]);
+  );
+  const cover = XLSX.utils.aoa_to_sheet(coverRows);
   cover['!cols'] = [{ wch: 16 }, { wch: 74 }];
   cover['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
   XLSX.utils.book_append_sheet(wb, cover, 'Control');
@@ -280,6 +298,14 @@ export function downloadControlWorkingPaper(engagement: Engagement, control: WpC
   const attrSheet = XLSX.utils.aoa_to_sheet([attrHeader, ...attrRows]);
   attrSheet['!cols'] = autofit([attrHeader, ...attrRows]);
   XLSX.utils.book_append_sheet(wb, attrSheet, 'Attribute Testing');
+
+  if (sampling && sampling.samples.length > 0) {
+    const sHeader = ['Sample Ref', 'Result'];
+    const sRows: (string | number)[][] = sampling.samples.map(s => [s.ref, s.result]);
+    const sSheet = XLSX.utils.aoa_to_sheet([sHeader, ...sRows]);
+    sSheet['!cols'] = autofit([sHeader, ...sRows]);
+    XLSX.utils.book_append_sheet(wb, sSheet, 'Sampling');
+  }
 
   const failed = control.attributes.filter(a => a.result === 'Fail');
   if (failed.length > 0) {

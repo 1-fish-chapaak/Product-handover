@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, type MouseEvent as ReactMouseEvent } from 'react';
 import DatePicker from '../shared/DatePicker';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -8,10 +8,12 @@ import {
   ChevronDown, ChevronUp, X, Database, Search, Check,
   TrendingUp, Users, Percent, CalendarDays, Pencil, AlertCircle,
   Link2, RefreshCw, Info, Wand2, Upload, Folder, ScanLine,
-  Sparkles, ArrowUp, Layers, Plus,
+  Sparkles, ArrowUp, Layers, Plus, PanelRightClose,
 } from 'lucide-react';
 import type { WorkflowRunSeed } from './workflowRunSeed';
-import PlanPanel, { type ExecutorParameters } from '../concierge-workflow-builder/PlanPanel';
+import { PlanSection, type ExecutorParameters } from '../concierge-workflow-builder/PlanPanel';
+import ArtifactPanel from '../artifacts/ArtifactPanel';
+import type { ArtifactTab } from '../../hooks/useAppState';
 import { seedAlignments } from '../concierge-workflow-builder/mockApi';
 import type {
   WorkflowDraft,
@@ -36,6 +38,11 @@ interface WorkflowExecutorProps {
    *  App.tsx routes this into chat, seeding the run as conversation history
    *  (via `seed`) and auto-submitting `query`. */
   onFollowUp?: (query: string, seed: WorkflowRunSeed) => void;
+  /** Right-workspace actions — mirror the QnA workspace. App.tsx wires these
+   *  to the same destinations chat uses (Share modal, Knowledge Hub, chat). */
+  onShareResults?: () => void;
+  onOpenInKnowledgeHub?: (sourceName: string) => void;
+  onComposeInChat?: (draft: string) => void;
 }
 
 type ExecutionPhase = 'idle' | 'running' | 'complete';
@@ -537,7 +544,7 @@ function ConfidenceChip({ value }: { value: number }) {
 
 // ─── Main Component ──────────────────────────────────────
 
-export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, onFollowUp }: WorkflowExecutorProps) {
+export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, onFollowUp, onShareResults, onOpenInKnowledgeHub, onComposeInChat }: WorkflowExecutorProps) {
   const { can } = useCan();
   const { addToast } = useToast();
   // Most workflow IDs resolve to the AP duplicate-detection mock. The PDF
@@ -624,6 +631,42 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
 
   // Right panel
   const [rightOpen, setRightOpen] = useState(true);
+  // Right workspace (QnA-style: Plan / Code / Sources). Plan shows this
+  // workflow's plan; Code & Sources reuse the chat ArtifactPanel content.
+  const [wsTab, setWsTab] = useState<ArtifactTab>('plan');
+  // Draggable workspace width, remembered across visits (matches the chat panel).
+  const [wsPx, setWsPx] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem('wf-executor-workspace-px');
+      const n = raw ? parseFloat(raw) : 420;
+      return Number.isFinite(n) && n >= 320 ? n : 420;
+    } catch { return 420; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('wf-executor-workspace-px', String(wsPx)); } catch { /* ignore */ }
+  }, [wsPx]);
+  const startWsDrag = useCallback((e: ReactMouseEvent) => {
+    e.preventDefault();
+    // Width of the split row = the resize handle's parent (no ref needed).
+    const containerW = (e.currentTarget.parentElement as HTMLElement | null)?.offsetWidth ?? window.innerWidth;
+    const startX = e.clientX;
+    const startWidth = wsPx;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    const onMove = (ev: globalThis.MouseEvent) => {
+      const delta = ev.clientX - startX;
+      const maxPx = Math.max(320, containerW - 480); // keep the main column ≥ 480px
+      setWsPx(Math.max(320, Math.min(maxPx, startWidth - delta)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [wsPx]);
 
   // Follow-up composer (output screen) — free-form question about the run.
   const [followUpInput, setFollowUpInput] = useState('');
@@ -1008,13 +1051,8 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
         </button>
       </header>
 
-      <div
-        className="flex-1 min-h-0 grid transition-[grid-template-columns] duration-300"
-        style={{
-          gridTemplateColumns: rightOpen ? '1fr 340px' : '1fr 48px',
-        }}
-      >
-        <main className="min-h-0 overflow-y-auto bg-canvas">
+      <div className="flex-1 min-h-0 flex overflow-hidden">
+        <main className="flex-1 min-w-0 overflow-y-auto bg-canvas">
           <div className="max-w-[900px] mx-auto px-6 py-6">
             {/* Workflow header */}
             <motion.section
@@ -2315,13 +2353,44 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
           </div>
         </main>
 
-        <PlanPanel
-          workflow={workflow}
-          step={2}
-          open={rightOpen}
-          onToggleOpen={() => setRightOpen((v) => !v)}
-          visibleTabs={['plan']}
-        />
+        {/* Right workspace — same panel as the QnA chat (Plan / Code / Sources),
+            with this workflow's plan injected into the Plan tab. Open by
+            default, drag-to-resize, collapsible to a thin strip. */}
+        {rightOpen ? (
+          <>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize workspace"
+              onMouseDown={startWsDrag}
+              className="group relative w-px shrink-0 cursor-col-resize bg-canvas-border z-10"
+            >
+              <span className="absolute inset-y-0 -left-1.5 -right-1.5" />
+              <span aria-hidden="true" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-10 rounded-full bg-canvas-border group-hover:bg-brand-300 transition-colors" />
+            </div>
+            <div className="h-full min-w-0 border-l border-canvas-border" style={{ width: `${wsPx}px`, flex: '0 0 auto' }}>
+              <ArtifactPanel
+                activeTab={wsTab}
+                setActiveTab={setWsTab}
+                onClose={() => setRightOpen(false)}
+                planSlot={<PlanSection workflow={workflow} />}
+                onShareResults={onShareResults}
+                onOpenInKnowledgeHub={onOpenInKnowledgeHub}
+                onComposeInChat={onComposeInChat}
+              />
+            </div>
+          </>
+        ) : (
+          <button
+            type="button"
+            title="Open workspace"
+            aria-label="Open workspace"
+            onClick={() => setRightOpen(true)}
+            className="w-12 shrink-0 h-full border-l border-canvas-border bg-canvas-elevated flex items-start justify-center pt-3 text-ink-400 hover:text-ink-700 hover:bg-canvas transition-colors cursor-pointer"
+          >
+            <PanelRightClose size={15} className="rotate-180" />
+          </button>
+        )}
       </div>
 
       {/* Shared chat data picker — opened by the "Add Files" CTA. */}
