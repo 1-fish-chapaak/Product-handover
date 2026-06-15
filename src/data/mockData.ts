@@ -1,3 +1,5 @@
+import type { WorkflowResult } from "../components/reports/ReportsView";
+
 // ─── Business Processes ───
 export const BUSINESS_PROCESSES = [
   { id: "p2p", name: "Procure to Pay", abbr: "P2P", color: "#6a12cd", risks: 9, controls: 24, coverage: 72, sops: 2, workflows: 5 },
@@ -144,8 +146,7 @@ export const REPORT_TEMPLATES = [
     { name: 'Scope & Objectives', icon: 'file-text' },
     { name: 'Testing Methodology', icon: 'file-text' },
     { name: 'Control Testing Results', icon: 'check-circle' },
-    { name: 'Deficiency Analysis', icon: 'alert-triangle' },
-    { name: 'Remediation Status', icon: 'shield' },
+    { name: 'Detailed Description', icon: 'alert-triangle' },
     { name: 'Appendix', icon: 'file-text' },
   ]},
   { id: "rt-007", name: "ATR Report", desc: "Action Taken Report with query-wise summary, closure status, key insights, auditor comments, and sign-off", category: "Audit", icon: "clipboard-check", sections: [
@@ -202,7 +203,7 @@ export const REPORT_TEMPLATES = [
 // Mock workflow results seeded onto the demo Bulk Audit report (gr-002) so
 // the report opens with workflow cards, severity chips, and an output table
 // even without running a fresh Bulk Run from Workflow Library.
-const SEED_BULK_AUDIT_WORKFLOWS = [
+export const SEED_BULK_AUDIT_WORKFLOWS: WorkflowResult[] = [
   {
     id: 'wfr-seed-1',
     workflowId: 'WF-001',

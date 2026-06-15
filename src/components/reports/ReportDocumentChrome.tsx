@@ -77,30 +77,47 @@ export function ReportMetaCell({ label, value }: { label: string; value?: string
   );
 }
 
-export function ReportBrandBanner({ title, actions, children, className = '' }: {
+export function ReportBrandBanner({ title, actions, children, className = '', brand, gradient, headerText }: {
   title: string;
   /** CTAs rendered top-right on the banner, like the ATR document. */
   actions?: React.ReactNode;
   /** Description / byline content rendered under the title. */
   children?: React.ReactNode;
   className?: string;
+  /** Brand name shown as the banner eyebrow. Defaults to IRAME.AI. */
+  brand?: string;
+  /** [from, to] gradient override (from the template's chosen theme). */
+  gradient?: [string, string];
+  /** Confidentiality / header line stamped top-right (from the template). */
+  headerText?: string;
 }) {
+  const gradStyle = gradient
+    ? { backgroundImage: `linear-gradient(to bottom right, ${gradient[0]}, ${gradient[1]})` }
+    : undefined;
   return (
-    <div className={`relative px-9 py-7 bg-gradient-to-br from-brand-700 to-brand-600 text-white overflow-hidden ${className}`}>
+    <div
+      className={`relative px-9 py-7 text-white overflow-hidden ${gradient ? '' : 'bg-gradient-to-br from-brand-700 to-brand-600'} ${className}`}
+      style={gradStyle}
+    >
       <div className="absolute -right-6 -top-10 w-48 h-48 rounded-full bg-white/5" aria-hidden="true" />
       <div className="relative flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2.5 mb-4">
             <div className="w-8 h-8 rounded-[8px] bg-white/15 flex items-center justify-center"><Sparkles size={15} /></div>
             <div className="leading-none">
-              <div className="text-[0.8125rem] font-bold tracking-wide">IRAME.AI</div>
+              <div className="text-[0.8125rem] font-bold tracking-wide uppercase">{brand || 'IRAME.AI'}</div>
               <div className="text-[0.5rem] font-semibold tracking-[0.22em] text-white/70 mt-0.5">AUDIT INTELLIGENCE</div>
             </div>
           </div>
           <h1 className="text-[1.75rem] font-bold tracking-tight leading-tight mb-1">{title}</h1>
           {children}
         </div>
-        {actions && <div className="shrink-0 flex items-center gap-2 print:hidden">{actions}</div>}
+        <div className="shrink-0 flex flex-col items-end gap-2">
+          {headerText && (
+            <span className="text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-white/75 print:text-white/90">{headerText}</span>
+          )}
+          {actions && <div className="flex items-center gap-2 print:hidden">{actions}</div>}
+        </div>
       </div>
     </div>
   );

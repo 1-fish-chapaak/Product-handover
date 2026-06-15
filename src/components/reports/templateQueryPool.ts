@@ -1,15 +1,16 @@
-// Pickable query catalog for the Generate-from-template wizard.
+// Query content + helpers for the Generate-from-template wizard.
 //
-// Reuses the rich query content in REPORT_QUERIES_ATR — the same content the
-// report view renders for its query cards — so a wizard-generated report is
-// indistinguishable from a hand-assembled one. The same underlying query can
-// be reachable from three places (a report it's attached to, an Ask IRA chat,
-// a workflow run); rows are deduped by `key` when selected.
+// The wizard's picker is built entirely from the user's live reports (see
+// ReportsView's wizardSources) — there is no static catalog. This module owns
+// the rich-content lookup (defForKey), the workflow→query projection, and the
+// demo-report key map that backfills the seeded reports which ship without
+// baked query content. Reuses REPORT_QUERIES_ATR so a wizard-generated report
+// is indistinguishable from a hand-assembled one.
 
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
-import { QUERY_SESSIONS } from '../../data/queryHistory';
+import type { WorkflowResult } from './ReportsView';
 
-export type QuerySource = 'report' | 'ira' | 'workflow';
+export type QuerySource = 'report';
 
 /** Structural twin of ReportsView's QueryShape — a fully renderable query block. */
 export type GeneratedQueryDef = {
@@ -29,20 +30,25 @@ export type GeneratedQueryDef = {
 export type PickableQuery = {
   /** Unique per picker row: `${source}:${key}`. */
   uid: string;
-  /** Rich-content key in REPORT_QUERIES_ATR — the dedupe unit across sources. */
+  /** Dedupe unit — a query key (REPORT_QUERIES_ATR) or `wf:<workflowId>`. */
   key: string;
   /** Short display title for the picker row. */
   label: string;
   source: QuerySource;
-  /** Where it comes from — report name, chat prompt, or workflow name. */
+  /** Where it comes from — the report this query/workflow lives in. */
   sourceLabel: string;
   risk: string;
   severity: 'High' | 'Medium' | 'Low';
-  /** Workflow-tab rows only: the run that produced this result query. */
-  wfId?: string;
+  /** Row kind. A 'workflow' row carries a WorkflowResult instead of a query key. */
+  kind: 'query' | 'workflow';
+  /** Workflow rows only — the run carried into the report as a result block. */
+  workflow?: WorkflowResult;
+  /** Workflow rows only — the meta line (WF id · process · N flagged records). */
   wfMeta?: string;
-  /** Recent Chats rows only: the QUERY_SESSIONS time bucket (TODAY / YESTERDAY / …). */
-  chatGroup?: string;
+  /** Query rows sourced from a live report carry their full def directly (no
+   *  REPORT_QUERIES_ATR lookup by key). Set for dynamic rows; unset for the
+   *  static catalog (which resolves via defForKey). */
+  def?: GeneratedQueryDef;
 };
 
 // Per-key presentation data (risk bucket + KPI tiles + sparkline). Mirrors the
@@ -135,78 +141,36 @@ const KEY_META: Record<string, KeyMeta> = {
   },
 };
 
-const pick = (
-  key: string,
-  source: QuerySource,
-  sourceLabel: string,
-  label: string,
-): PickableQuery => ({
-  uid: `${source}:${key}`,
-  key,
-  label,
-  source,
-  sourceLabel,
-  risk: KEY_META[key].risk,
-  severity: KEY_META[key].severity,
-});
-
-// Recent Chats derives from QUERY_SESSIONS — the canonical history every
-// picker shows (Add Query modal, dashboard AddDataModal). Only prompts that
-// map to rich query content are offerable; the rest can't become a block.
-const CHAT_PROMPT_TO_KEY: Record<string, string> = {
-  'Detect duplicate invoice entries across vendors': 'Q01',
-  'Show unauthorized vendor master changes — last 90 days': 'Q02',
-  'Risk identification across P2P, O2C, R2R, S2C processes': 'RA01',
-  'Mitigation strategy effectiveness — partially mitigated high risks': 'RA02',
-  'Control testing results — effectiveness across 87 controls': 'CE01',
-  'Workflow execution performance — runs and accuracy': 'WA01',
-  'Exception trend analysis — flagged vs resolved': 'WA02',
-  'Board-level GRC posture summary': 'EX01',
-};
-const chatPool = (): PickableQuery[] =>
-  QUERY_SESSIONS.flatMap(g =>
-    g.items
-      .filter(p => CHAT_PROMPT_TO_KEY[p] && KEY_META[CHAT_PROMPT_TO_KEY[p]])
-      .map(p => ({ ...pick(CHAT_PROMPT_TO_KEY[p], 'ira', p, p), chatGroup: g.group }))
-  );
-
-// Workflow-tab row: label = workflow name, sourceLabel = the result query it
-// contributes (kept so search still matches on query text).
-const pickWf = (
-  key: string,
-  name: string,
-  queryTitle: string,
-  wfId: string,
-  wfMeta: string,
-): PickableQuery => ({
-  ...pick(key, 'workflow', queryTitle, name),
-  wfId,
-  wfMeta,
-});
-
-/** Everything the wizard can offer, grouped by the picker's three tabs. */
-export const QUERY_POOL: Record<QuerySource, PickableQuery[]> = {
-  report: [
-    pick('Q01', 'report', 'FY26 Q1 SOX Compliance Report', 'Duplicate invoice entries by vendor, date, and amount'),
-    pick('Q02', 'report', 'FY26 Q1 SOX Compliance Report', 'Unauthorized vendor master changes — last 90 days'),
-    pick('RA01', 'report', 'P2P Risk Assessment — March 2026', 'Risk identification across P2P, O2C, R2R, S2C'),
-    pick('RA02', 'report', 'P2P Risk Assessment — March 2026', 'Mitigation strategy effectiveness — high risks'),
-    pick('CE01', 'report', 'Workflow Performance — Feb 2026', 'Control testing results across 87 controls'),
-  ],
-  ira: chatPool(),
-  workflow: [
-    // Only workflows with a finished run that produced query results appear
-    // here (mirrors WORKFLOWS in mockData: id/type/lastRun/runs). Picking one
-    // adds the result query from its latest finished run; picking more than
-    // one rolls the selection into a bulk audit (the wizard appends the
-    // cross-workflow rollup, BULK_ROLLUP_KEY, at Continue).
-    pickWf('Q01', 'Duplicate Invoice Detector', 'Duplicate invoice entries by vendor, date, and amount', 'WF-001', 'Detection · Last run Mar 18, 2026 · 12 runs'),
-    pickWf('Q02', 'Vendor Master Change Monitor', 'Unauthorized vendor master changes — last 90 days', 'WF-002', 'Monitoring · Last run Mar 20, 2026 · 8 runs'),
-  ],
+/** Demo (seed) reports → the rich-content query keys they surface in the
+ *  picker. User-generated reports carry their own `generatedQueries`, so they
+ *  need no entry here; this only backfills the seeded demo reports that ship
+ *  without baked query content. Keyed by report id. (gr-002 is a Bulk Audit —
+ *  it surfaces its workflow runs instead, so it has no key list.) */
+export const DEMO_REPORT_QUERY_KEYS: Record<string, string[]> = {
+  'gr-001': ['Q01', 'Q02'],
+  'gr-003': ['CE01', 'WA01', 'WA02'],
+  'gr-004': ['RA01', 'RA02', 'EX01'],
 };
 
-/** Cross-workflow rollup appended when 2+ workflows are selected (= bulk audit). */
-export const BULK_ROLLUP_KEY = 'WA01';
+/** Project a workflow run into a query-shaped def — used only for counting and
+ *  composed prose (exec summary, template note sections); the report body still
+ *  renders the workflow as its own result block, not a query card. */
+export function workflowToQueryDef(w: WorkflowResult): GeneratedQueryDef {
+  const n = w.outputTable?.rows.length ?? 0;
+  return {
+    id: w.workflowId,
+    risk: w.businessProcess ?? 'Workflow',
+    severity: w.severity,
+    title: w.name,
+    summary: w.findings[0] ?? `${w.name} flagged ${n} ${n === 1 ? 'record' : 'records'}.`,
+    findings: w.findings,
+    observations: w.observations,
+    answer: '',
+    addedBy: 'Workflow',
+    kpis: [],
+    chartData: [],
+  };
+}
 
 /** Materialize a rich-content key into a fully renderable query block.
  *  Used by the wizard (via toGeneratedQuery) and by empty drafts when
@@ -230,8 +194,10 @@ export function defForKey(key: string, addedBy = 'You'): GeneratedQueryDef | nul
   };
 }
 
-/** Materialize a picker row into a fully renderable query block. */
+/** Materialize a picker row into a fully renderable query block. Dynamic rows
+ *  carry their own def; static catalog rows resolve via the rich-content key. */
 export function toGeneratedQuery(item: PickableQuery, addedBy: string): GeneratedQueryDef {
+  if (item.def) return { ...item.def, addedBy };
   return defForKey(item.key, addedBy)!;
 }
 
@@ -267,7 +233,7 @@ export function composeSectionContent(sectionName: string, defs: GeneratedQueryD
     return 'Design and operating effectiveness were assessed for each area in scope. Testing combined AI-assisted full-population scans with rule-based exception detection; flagged records are grouped into cases for auditor validation, and evidence is retained against each query.';
   if (/testing results|quer(y|ies)|findings/i.test(sectionName))
     return `${n} ${qWord} executed${high > 0 ? ` — ${high} returned high-severity results` : ''}. Detailed results follow.`;
-  if (/deficienc/i.test(sectionName))
+  if (/deficienc|detailed description/i.test(sectionName))
     return high > 0
       ? `${high} of ${n} ${qWord} surfaced high-severity exceptions requiring classification (deficiency / significant deficiency / material weakness). See the query results above for affected records.`
       : 'No high-severity exceptions surfaced by the attached queries. Classify any residual items during review.';

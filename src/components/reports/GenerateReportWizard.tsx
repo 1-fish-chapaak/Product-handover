@@ -1,52 +1,57 @@
 // Generate-from-template wizard — the ATR wizard pattern generalized to every
-// template. Step 1 assembles queries from three sources (freely mixable,
-// deduped by underlying query); Step 2 previews the template's arrangement
-// with an editable executive-summary rollup. Create hands a payload back to
-// ReportsView, which owns report construction and state.
+// template. Step 1 assembles the report body from the queries (and, for Bulk
+// Audit sources, the workflow runs) that live in the user's reports; Step 2
+// previews the arrangement with an editable executive-summary rollup. Create
+// hands a payload back to ReportsView, which owns report construction.
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import {
-  X, FileText, MessageSquare, Workflow, Search, Check, Minus, ArrowRight, ArrowLeft,
-  Loader2, GripVertical, Sparkles, BookOpen, Settings,
+  X, FileText, Search, Check, Minus, ArrowRight, ArrowLeft,
+  Loader2, GripVertical, Sparkles, Settings, Workflow,
 } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import ColumnFilter from '../shared/ColumnFilter';
 import {
-  QUERY_POOL, toGeneratedQuery, arrangeForTemplate, composeExecSummary,
-  defForKey, BULK_ROLLUP_KEY,
-  type PickableQuery, type QuerySource, type GeneratedQueryDef,
+  toGeneratedQuery, arrangeForTemplate, composeExecSummary, workflowToQueryDef,
+  type PickableQuery, type GeneratedQueryDef,
 } from './templateQueryPool';
+import type { WorkflowResult } from './ReportsView';
 
 export type WizardCreatePayload = {
-  /** Ordered, arranged query blocks — always at least one. */
+  /** Ordered, arranged query blocks. */
   queries: GeneratedQueryDef[];
+  /** Ordered workflow result blocks (Bulk Audit sources). */
+  workflows: WorkflowResult[];
   execSummary: string;
 };
-
-const SOURCE_TABS: { id: QuerySource; label: string; icon: React.ElementType; desc: string }[] = [
-  { id: 'report', label: 'Reports', icon: BookOpen, desc: 'The most used source — take single queries or a whole generated report.' },
-  { id: 'ira', label: 'Recent Chats', icon: MessageSquare, desc: 'Queries you asked IRA, the AI assistant, in recent chats.' },
-  { id: 'workflow', label: 'Workflows', icon: Workflow, desc: 'Workflows that finished a run with query results. 2+ make a bulk audit.' },
-];
 
 const sevChip = (sev: string) =>
   sev === 'High' ? 'text-risk-700 bg-risk-50 border-risk-200'
   : sev === 'Medium' ? 'text-mitigated-700 bg-mitigated-50 border-mitigated-200'
   : 'text-compliant-700 bg-compliant-50 border-compliant-200';
 
-export default function GenerateReportWizard({ template, onClose, onCreate, onCustomize }: {
+export default function GenerateReportWizard({ template, onClose, onCreate, onCustomize, suppressed = false, sources = [] }: {
   template: { id: string; name: string; desc: string };
   onClose: () => void;
   onCreate: (payload: WizardCreatePayload) => void;
-  /** Opens the template editor instead — closes the wizard. */
+  /** Opens the template editor on top — the wizard stays mounted, suppressed. */
   onCustomize?: () => void;
+  /** Hidden + inert while the template editor is stacked above it, so the
+   *  wizard's selections survive the round-trip. */
+  suppressed?: boolean;
+  /** The full pickable pool — rows derived from the user's live reports
+   *  (newest first). There is no static catalog. */
+  sources?: PickableQuery[];
 }) {
   const [step, setStep] = useState<1 | 2>(1);
-  const [sourceTab, setSourceTab] = useState<QuerySource>('report');
   const [search, setSearch] = useState('');
+  const [sevFilters, setSevFilters] = useState<string[]>([]);
+  const [typeFilter, setTypeFilter] = useState<'All' | 'Queries' | 'Bulk Audit'>('All');
   const [selected, setSelected] = useState<PickableQuery[]>([]);
   const [dupNotice, setDupNotice] = useState<string | null>(null);
   const [ordered, setOrdered] = useState<GeneratedQueryDef[]>([]);
+  const [orderedWorkflows, setOrderedWorkflows] = useState<WorkflowResult[]>([]);
   const [execSummary, setExecSummary] = useState('');
   const [summaryEdited, setSummaryEdited] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -58,17 +63,24 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
     if (selected.length > 0) setConfirmAbandon(true);
     else onClose();
   };
-  useFocusTrap(containerRef, true, attemptClose);
+  useFocusTrap(containerRef, !suppressed, attemptClose);
+
+  // Make the wizard fully `inert` (out of the tab order) once the suppress
+  // fade-out finishes — set by the panel's onAnimationComplete. Cleared the
+  // instant we un-suppress so the fade-in is interactive again.
+  const [suppressedSettled, setSuppressedSettled] = useState(false);
+  useEffect(() => { if (!suppressed) setSuppressedSettled(false); }, [suppressed]);
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const list = QUERY_POOL[sourceTab];
-    if (!q) return list;
-    return list.filter(r =>
-      r.label.toLowerCase().includes(q) ||
-      r.sourceLabel.toLowerCase().includes(q)
-    );
-  }, [sourceTab, search]);
+    return sources.filter(r => {
+      const typeLabel = r.kind === 'workflow' ? 'Bulk Audit' : 'Queries';
+      if (typeFilter !== 'All' && typeLabel !== typeFilter) return false;
+      if (sevFilters.length && !sevFilters.includes(r.severity)) return false;
+      if (!q) return true;
+      return r.label.toLowerCase().includes(q) || r.sourceLabel.toLowerCase().includes(q);
+    });
+  }, [sources, search, sevFilters, typeFilter]);
 
   const toggle = (item: PickableQuery) => {
     setDupNotice(null);
@@ -77,16 +89,15 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
       if (exact) return prev.filter(p => p.uid !== item.uid);
       const sameKey = prev.find(p => p.key === item.key);
       if (sameKey) {
-        const from = SOURCE_TABS.find(t => t.id === sameKey.source)?.label ?? sameKey.source;
-        setDupNotice(`Same underlying query already added from ${from} — it's included once.`);
+        setDupNotice('Same underlying query already added — it\'s included once.');
         return prev;
       }
       return [...prev, item];
     });
   };
 
-  // Reports-tab group header checkbox: all selected → drop the report's
-  // queries; otherwise add every query not already covered from elsewhere.
+  // Report group header checkbox: all selected → drop the report's queries;
+  // otherwise add every query in the report not already covered.
   const toggleReportGroup = (items: PickableQuery[]) => {
     setDupNotice(null);
     setSelected(prev => {
@@ -97,56 +108,69 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
       const additions = items.filter(i =>
         !prev.some(p => p.uid === i.uid) && !prev.some(p => p.key === i.key)
       );
-      if (additions.length < items.length - selCount) {
-        setDupNotice('Some queries were already added from another source — each is included once.');
-      }
       return [...prev, ...additions];
     });
   };
 
-  // 2+ workflows selected = a bulk audit: the cross-workflow rollup query is
-  // appended at Continue (unless the same query is already in the selection).
-  const wfSelectedCount = selected.filter(s => s.source === 'workflow').length;
-  const isBulkAudit = wfSelectedCount >= 2;
-
   const goPreview = () => {
-    let picked = selected.map(s => toGeneratedQuery(s, 'You'));
-    if (isBulkAudit && !selected.some(s => s.key === BULK_ROLLUP_KEY)) {
-      const rollup = defForKey(BULK_ROLLUP_KEY, 'You');
-      if (rollup) picked = [...picked, rollup];
+    const queryDefs = arrangeForTemplate(
+      template.id,
+      selected.filter(s => s.kind === 'query').map(s => toGeneratedQuery(s, 'You')),
+    );
+    const workflows = selected.filter(s => s.kind === 'workflow').map(s => s.workflow!);
+    setOrdered(queryDefs);
+    setOrderedWorkflows(workflows);
+    // Exec summary rolls up both kinds — workflows are projected to query-shaped
+    // defs purely for the count/severity prose; the body still renders them as
+    // workflow result blocks.
+    if (!summaryEdited) {
+      const combined = [...queryDefs, ...workflows.map(workflowToQueryDef)];
+      setExecSummary(composeExecSummary(template.name, combined));
     }
-    const defs = arrangeForTemplate(template.id, picked);
-    setOrdered(defs);
-    if (!summaryEdited) setExecSummary(composeExecSummary(template.name, defs));
     setStep(2);
   };
+
+  const summaryFallback = () =>
+    composeExecSummary(template.name, [...ordered, ...orderedWorkflows.map(workflowToQueryDef)]);
 
   const handleCreate = () => {
     if (isCreating) return;
     setIsCreating(true);
     const payload: WizardCreatePayload = {
       queries: ordered,
-      execSummary: execSummary.trim() || composeExecSummary(template.name, ordered),
+      workflows: orderedWorkflows,
+      execSummary: execSummary.trim() || summaryFallback(),
     };
     window.setTimeout(() => onCreate(payload), 650);
   };
 
   const selectedKeyCount = selected.length;
+  const selWfCount = selected.filter(s => s.kind === 'workflow').length;
+  const selQCount = selectedKeyCount - selWfCount;
+  const selectedSummary =
+    selWfCount === 0 ? `${selQCount} ${selQCount === 1 ? 'query' : 'queries'} selected`
+    : selQCount === 0 ? `${selWfCount} ${selWfCount === 1 ? 'workflow' : 'workflows'} selected`
+    : `${selQCount} ${selQCount === 1 ? 'query' : 'queries'} · ${selWfCount} ${selWfCount === 1 ? 'workflow' : 'workflows'} selected`;
 
   return (
     <>
       <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        transition={{ duration: 0.15 }}
-        className="fixed inset-0 bg-ink-900/50 backdrop-blur-[2px] z-50"
+        initial={{ opacity: 0 }} animate={{ opacity: suppressed ? 0 : 1 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }}
+        className={`fixed inset-0 bg-ink-900/50 backdrop-blur-[2px] z-50 ${suppressed ? 'pointer-events-none' : ''}`}
         onClick={attemptClose}
       />
       <motion.div
         ref={containerRef}
-        initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
-        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[840px] max-w-[94vw] h-[78vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col"
+        initial={{ opacity: 0, scale: 0.98, y: 8 }}
+        animate={suppressed ? { opacity: 0, scale: 0.96, y: 0 } : { opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.98, y: 8 }}
+        transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
+        onAnimationComplete={() => { if (suppressed) setSuppressedSettled(true); }}
+        className={`fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[840px] max-w-[94vw] h-[78vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col ${suppressed ? 'pointer-events-none' : ''}`}
         role="dialog" aria-modal="true" aria-label={`Generate ${template.name}`}
+        aria-hidden={suppressed}
+        inert={suppressedSettled}
       >
         {/* Title bar */}
         <header className="shrink-0 px-6 py-3 flex items-center justify-between gap-4 border-b border-canvas-border">
@@ -172,33 +196,9 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
 
         {step === 1 ? (
           <>
-            {/* Source tabs — same underline pattern as the Reports page tabs */}
-            <div className="shrink-0 px-6 pt-1 flex items-end border-b border-border-light">
-              {SOURCE_TABS.map(t => {
-                const Icon = t.icon;
-                const active = sourceTab === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => setSourceTab(t.id)}
-                    className={`px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors cursor-pointer ${active ? 'border-primary text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Icon size={14} />
-                      {t.label}
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${active ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{QUERY_POOL[t.id].length}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Active-source caption + search */}
-            <div className="shrink-0 px-6 pt-3 pb-1 flex items-center justify-between gap-4">
-              <p className="text-[12px] text-text-muted truncate min-w-0">
-                {SOURCE_TABS.find(t => t.id === sourceTab)?.desc}
-              </p>
-              <div className="relative w-[240px] shrink-0">
+            {/* Search + severity filter */}
+            <div className="shrink-0 px-6 pt-4 pb-1 border-t border-border-light flex items-center justify-between gap-3">
+              <div className="relative w-[260px] shrink-0">
                 <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
                 <input
                   value={search}
@@ -207,13 +207,43 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
                   className="w-full h-8 pl-8 pr-3 rounded-[8px] border border-border-light text-[12px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                 />
               </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Type — a content-kind switch (single choice, always visible) */}
+                <div className="inline-flex items-center rounded-[8px] border border-border-light bg-paper-50/60 p-0.5" role="tablist" aria-label="Filter by type">
+                  {(['All', 'Queries', 'Bulk Audit'] as const).map(t => {
+                    const active = typeFilter === t;
+                    return (
+                      <button
+                        key={t}
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => setTypeFilter(t)}
+                        className={`h-7 px-2.5 rounded-[6px] text-[12px] font-medium whitespace-nowrap transition-colors cursor-pointer ${active ? 'bg-white text-primary shadow-[0_1px_2px_rgba(15,8,30,0.08)]' : 'text-text-secondary hover:text-text'}`}
+                      >
+                        {t}
+                      </button>
+                    );
+                  })}
+                </div>
+                <ColumnFilter
+                  label="Severity"
+                  options={['High', 'Medium', 'Low']}
+                  value={sevFilters}
+                  onChange={setSevFilters}
+                  variant="button"
+                  selectIndicator="checkbox"
+                  align="end"
+                />
+              </div>
             </div>
 
             {/* Query rows */}
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-3">
               {rows.length === 0 ? (
                 <div className="h-full flex items-center justify-center">
-                  <p className="text-[13px] text-text-muted">No queries match “{search}”.</p>
+                  <p className="text-[13px] text-text-muted">
+                    No items match {search ? `“${search}”` : 'your filters'}.
+                  </p>
                 </div>
               ) : (() => {
                 const checkbox = (state: 'on' | 'off' | 'some') => (
@@ -234,8 +264,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
 
                 // Reports — queries grouped under the report they live in;
                 // the header checkbox takes or drops the whole report.
-                if (sourceTab === 'report') {
-                  const groups: [string, PickableQuery[]][] = [];
+                const groups: [string, PickableQuery[]][] = [];
                   rows.forEach(r => {
                     const g = groups.find(([name]) => name === r.sourceLabel);
                     if (g) g[1].push(r); else groups.push([r.sourceLabel, [r]]);
@@ -245,6 +274,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
                       {groups.map(([name, items]) => {
                         const selCount = items.filter(i => selected.some(p => p.uid === i.uid)).length;
                         const groupState = selCount === items.length ? 'on' : selCount > 0 ? 'some' : 'off';
+                        const isWfGroup = items.every(i => i.kind === 'workflow');
                         return (
                           <div key={name} className="border border-border-light rounded-[12px] bg-white overflow-hidden">
                             <button
@@ -253,8 +283,16 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
                             >
                               {checkbox(groupState)}
                               <span className="flex-1 min-w-0 text-[13px] font-semibold text-ink-900 truncate">{name}</span>
+                              {isWfGroup && (
+                                <span
+                                  className="shrink-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-full border border-brand-200 bg-brand-50 text-[10px] font-semibold text-brand-700"
+                                  title="A Bulk Audit — these rows are completed workflow runs"
+                                >
+                                  <Workflow size={10} /> Bulk Audit
+                                </span>
+                              )}
                               <span className="font-mono text-[11px] tabular-nums text-ink-500 shrink-0">
-                                {items.length} {items.length === 1 ? 'query' : 'queries'}
+                                {items.length} {isWfGroup ? (items.length === 1 ? 'workflow' : 'workflows') : (items.length === 1 ? 'query' : 'queries')}
                               </span>
                             </button>
                             <div className="divide-y divide-border-light/70">
@@ -269,8 +307,12 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
                                     {checkbox(isSelected ? 'on' : 'off')}
                                     <span className="flex-1 min-w-0">
                                       <span className="block text-[13px] font-medium text-text truncate">{item.label}</span>
-                                      {keyTaken && (
-                                        <span className="block text-[11px] text-text-muted truncate">Already added from another source</span>
+                                      {item.kind === 'workflow' ? (
+                                        <span className="block text-[11px] text-text-muted truncate">
+                                          {keyTaken ? 'Already added' : item.wfMeta}
+                                        </span>
+                                      ) : keyTaken && (
+                                        <span className="block text-[11px] text-text-muted truncate">Already added</span>
                                       )}
                                     </span>
                                     {sevPill(item.severity)}
@@ -283,81 +325,6 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
                       })}
                     </div>
                   );
-                }
-
-                // Recent Chats — identical to the platform's Add Query picker:
-                // TODAY / YESTERDAY / … buckets, plain prompt rows, selection
-                // shown by the brand border (no checkbox).
-                if (sourceTab === 'ira') {
-                  const buckets: [string, PickableQuery[]][] = [];
-                  rows.forEach(r => {
-                    const g = buckets.find(([name]) => name === (r.chatGroup ?? ''));
-                    if (g) g[1].push(r); else buckets.push([r.chatGroup ?? '', [r]]);
-                  });
-                  return (
-                    <div className="space-y-4">
-                      {buckets.map(([name, items]) => (
-                        <div key={name || 'ungrouped'}>
-                          {name && <div className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2">{name}</div>}
-                          <div className="space-y-2">
-                            {items.map(item => {
-                              const { isSelected, keyTaken } = rowState(item);
-                              return (
-                                <button
-                                  key={item.uid}
-                                  onClick={() => toggle(item)}
-                                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-[12px] border transition-all cursor-pointer text-left ${
-                                    isSelected ? 'border-brand-500 bg-brand-50' : keyTaken ? 'border-canvas-border bg-canvas-elevated opacity-60' : 'border-canvas-border bg-canvas-elevated hover:border-brand-200'
-                                  }`}
-                                >
-                                  {checkbox(isSelected ? 'on' : 'off')}
-                                  <span className={`flex-1 min-w-0 truncate text-[13px] ${isSelected ? 'text-brand-700 font-medium' : 'text-ink-700'}`}>{item.sourceLabel}</span>
-                                  {keyTaken && <span className="text-[11px] text-ink-400 shrink-0">Already added</span>}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                }
-
-                // Workflows — flat list + eligibility footnote.
-                return (
-                  <div className="space-y-1.5">
-                    {rows.map(item => {
-                      const { isSelected, keyTaken } = rowState(item);
-                      return (
-                        <button
-                          key={item.uid}
-                          onClick={() => toggle(item)}
-                          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] border text-left transition-colors cursor-pointer ${isSelected ? 'border-primary/40 bg-primary/[0.04]' : keyTaken ? 'border-border-light bg-paper-50/60 opacity-60' : 'border-border-light bg-white hover:bg-canvas'}`}
-                        >
-                          {checkbox(isSelected ? 'on' : 'off')}
-                          <span className="flex-1 min-w-0">
-                            <span className="block text-[13px] font-medium text-text truncate">{item.label}</span>
-                            <span className="block text-[11px] text-text-muted truncate">
-                              {keyTaken ? 'Already added from another source' : (
-                                <>
-                                  <span className="font-mono tabular-nums text-ink-500">{item.wfId}</span>
-                                  {' · '}{item.wfMeta}
-                                </>
-                              )}
-                            </span>
-                          </span>
-                          {sevPill(item.severity)}
-                        </button>
-                      );
-                    })}
-                    {!search && (
-                      <p className="px-1 pt-2 text-[11px] text-text-muted leading-relaxed">
-                        Workflows without a finished run that produced query results aren’t listed.
-                        Selecting more than one workflow rolls them into a bulk audit.
-                      </p>
-                    )}
-                  </div>
-                );
               })()}
             </div>
 
@@ -382,18 +349,8 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
                     </motion.span>
                   )}
                 </AnimatePresence>
-                <AnimatePresence>
-                  {isBulkAudit && (
-                    <motion.span
-                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      className="text-[11px] font-medium text-brand-700"
-                    >
-                      Bulk audit — a cross-workflow rollup will be added.
-                    </motion.span>
-                  )}
-                </AnimatePresence>
                 <span className="text-[12px] text-text-muted">
-                  {selectedKeyCount} {selectedKeyCount === 1 ? 'query' : 'queries'} selected
+                  {selectedSummary}
                 </span>
                 <button
                   onClick={goPreview}
@@ -411,7 +368,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4 bg-[#F4F2F7]/60">
               <div className="bg-white rounded-[12px] border border-border-light p-4">
                 <label className="flex items-center gap-2 text-[12px] font-semibold text-text mb-2">
-                  <Sparkles size={13} className="text-primary" /> Executive Summary — rolled up from your queries
+                  <Sparkles size={13} className="text-primary" /> Executive Summary — rolled up from your selection
                 </label>
                 <textarea
                   value={execSummary}
@@ -419,32 +376,65 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
                   rows={4}
                   className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[12.5px] leading-relaxed text-text-secondary resize-none focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                 />
-                <p className="text-[11px] text-text-muted mt-1.5">Editable now and after generation. Regenerates from queries unless you've edited it.</p>
+                <p className="text-[11px] text-text-muted mt-1.5">Editable now and after generation. Regenerates from your selection unless you've edited it.</p>
               </div>
 
-              <div className="bg-white rounded-[12px] border border-border-light p-4">
-                <div className="flex items-center justify-between mb-2.5">
-                  <label className="text-[12px] font-semibold text-text">Query order — drag to rearrange</label>
-                  <span className="text-[11px] text-text-muted">{ordered.length} {ordered.length === 1 ? 'query' : 'queries'}</span>
+              {ordered.length > 0 && (
+                <div className="bg-white rounded-[12px] border border-border-light p-4">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <label className="text-[12px] font-semibold text-text">Query order — drag to rearrange</label>
+                    <span className="text-[11px] text-text-muted">{ordered.length} {ordered.length === 1 ? 'query' : 'queries'}</span>
+                  </div>
+                  <Reorder.Group axis="y" values={ordered} onReorder={setOrdered} as="div" className="space-y-1.5">
+                    {ordered.map((q, i) => (
+                      <Reorder.Item key={q.id} value={q} as="div"
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-[10px] border border-border-light bg-white cursor-grab active:cursor-grabbing"
+                      >
+                        <GripVertical size={14} className="text-ink-300 shrink-0" />
+                        <span className="text-[10px] font-bold text-primary/60 w-5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-[12.5px] font-medium text-text truncate">{q.title}</span>
+                          <span className="block text-[11px] text-text-muted truncate">{q.risk}</span>
+                        </span>
+                        <span className={`shrink-0 inline-flex items-center h-6 px-2 rounded-full border text-[11px] font-semibold ${sevChip(q.severity)}`}>
+                          {q.severity}
+                        </span>
+                      </Reorder.Item>
+                    ))}
+                  </Reorder.Group>
                 </div>
-                <Reorder.Group axis="y" values={ordered} onReorder={setOrdered} as="div" className="space-y-1.5">
-                  {ordered.map((q, i) => (
-                    <Reorder.Item key={q.id} value={q} as="div"
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-[10px] border border-border-light bg-white cursor-grab active:cursor-grabbing"
-                    >
-                      <GripVertical size={14} className="text-ink-300 shrink-0" />
-                      <span className="text-[10px] font-bold text-primary/60 w-5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-[12.5px] font-medium text-text truncate">{q.title}</span>
-                        <span className="block text-[11px] text-text-muted truncate">{q.risk}</span>
-                      </span>
-                      <span className={`shrink-0 inline-flex items-center h-6 px-2 rounded-full border text-[11px] font-semibold ${sevChip(q.severity)}`}>
-                        {q.severity}
-                      </span>
-                    </Reorder.Item>
-                  ))}
-                </Reorder.Group>
-              </div>
+              )}
+
+              {orderedWorkflows.length > 0 && (
+                <div className="bg-white rounded-[12px] border border-border-light p-4">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <label className="flex items-center gap-1.5 text-[12px] font-semibold text-text">
+                      <Workflow size={13} className="text-brand-600" /> Workflow results — drag to rearrange
+                    </label>
+                    <span className="text-[11px] text-text-muted">{orderedWorkflows.length} {orderedWorkflows.length === 1 ? 'workflow' : 'workflows'}</span>
+                  </div>
+                  <Reorder.Group axis="y" values={orderedWorkflows} onReorder={setOrderedWorkflows} as="div" className="space-y-1.5">
+                    {orderedWorkflows.map((w, i) => {
+                      const n = w.outputTable?.rows.length ?? 0;
+                      return (
+                        <Reorder.Item key={w.id} value={w} as="div"
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-[10px] border border-border-light bg-white cursor-grab active:cursor-grabbing"
+                        >
+                          <GripVertical size={14} className="text-ink-300 shrink-0" />
+                          <span className="text-[10px] font-bold text-brand-600/60 w-5 shrink-0">{String(ordered.length + i + 1).padStart(2, '0')}</span>
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-[12.5px] font-medium text-text truncate">{w.name}</span>
+                            <span className="block text-[11px] text-text-muted truncate font-mono tabular-nums">{w.workflowId} · {w.businessProcess ?? '—'} · {n} flagged {n === 1 ? 'record' : 'records'}</span>
+                          </span>
+                          <span className={`shrink-0 inline-flex items-center h-6 px-2 rounded-full border text-[11px] font-semibold ${sevChip(w.severity)}`}>
+                            {w.severity}
+                          </span>
+                        </Reorder.Item>
+                      );
+                    })}
+                  </Reorder.Group>
+                </div>
+              )}
             </div>
 
             {/* Footer */}
@@ -481,7 +471,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
               >
                 <h3 className="text-[14px] font-semibold text-text mb-1">Discard selection?</h3>
                 <p className="text-[12px] text-text-secondary leading-relaxed mb-4">
-                  You've picked {selectedKeyCount} {selectedKeyCount === 1 ? 'query' : 'queries'}. Closing the wizard will discard them.
+                  You've picked {selectedSummary.replace(' selected', '')}. Closing the wizard will discard them.
                 </p>
                 <div className="flex justify-end gap-2">
                   <button
