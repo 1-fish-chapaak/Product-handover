@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { X, Plus, FileText, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { AttachmentSelection } from './DataPickerModal';
 
@@ -40,6 +40,12 @@ export default function QueryClarificationCard({
   const inputRef = useRef<HTMLInputElement>(null);
   const customInputRef = useRef(customInput);
   customInputRef.current = customInput;
+  // Pin the whole card to the tallest question seen so its height never changes
+  // as you step Next/Back. We measure the rendered height and keep the running
+  // max; shorter questions are floored to it, and a flex spacer tucks the slack
+  // below the answers (above the Back/Next row).
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [pinnedHeight, setPinnedHeight] = useState(0);
 
   const safeIndex = Math.min(viewIndex, total - 1);
   const viewQ = total > 0 ? data.questions[safeIndex] : null;
@@ -48,6 +54,13 @@ export default function QueryClarificationCard({
   const answeredCurrent = selected.length > 0;
   const isLast = safeIndex === total - 1;
   const canBack = safeIndex > 0;
+
+  // Fixed height — reserve the answer area to fit the question with the most
+  // options, so the card stays one height across the whole set (it never jumps
+  // as you step Next/Back). Shorter questions just pad the bottom; nothing
+  // scrolls. ~2.5rem per option row (py-2.5 + one line of 0.875rem text).
+  const maxOptionCount = Math.max(...data.questions.map(q => q.options.length), 1);
+  const answerAreaMinHeight = `${maxOptionCount * 2.5}rem`;
 
   // Render the question's options plus any selected custom answers (typed via
   // "Type something else") so those show up as checked rows too.
@@ -100,7 +113,8 @@ export default function QueryClarificationCard({
     }
   }
 
-  // Keyboard: ↑/↓ highlight, 1-9 / Enter toggle, Esc cancels.
+  // Keyboard: ↑/↓ highlight, 1-9 toggle, Enter picks the highlight then
+  // advances (Next / Done), Esc cancels.
   useEffect(() => {
     if (data.status === 'submitted' || !viewQ) return;
     const handler = (e: KeyboardEvent) => {
@@ -109,7 +123,14 @@ export default function QueryClarificationCard({
       const inOurInput = active === inputRef.current;
       if (e.key === 'ArrowDown') { if (inMainTextarea) return; e.preventDefault(); setHighlighted(h => Math.min(h + 1, optionCount - 1)); }
       else if (e.key === 'ArrowUp') { if (inMainTextarea) return; e.preventDefault(); setHighlighted(h => Math.max(h - 1, 0)); }
-      else if (e.key === 'Enter' && !inMainTextarea && !inOurInput) { e.preventDefault(); if (displayOptions[highlighted]) toggleOption(displayOptions[highlighted]); }
+      // Smart Enter: if nothing is picked yet, Enter ticks the highlighted
+      // answer (keeps keyboard selection); once an answer is picked, Enter
+      // advances — Next, or Done on the last question.
+      else if (e.key === 'Enter' && !inMainTextarea && !inOurInput) {
+        e.preventDefault();
+        if (answeredCurrent) { if (isLast) done(); else goNext(); }
+        else if (displayOptions[highlighted]) { toggleOption(displayOptions[highlighted]); }
+      }
       else if (e.key === 'Escape') { if (inMainTextarea) return; e.preventDefault(); if (inOurInput) { setCustomInput(''); } else { onCancel(); } }
       else if (/^[1-9]$/.test(e.key) && !inMainTextarea && !inOurInput) { const n = parseInt(e.key, 10) - 1; if (n < optionCount) { e.preventDefault(); toggleOption(displayOptions[n]); } }
     };
@@ -118,6 +139,16 @@ export default function QueryClarificationCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlighted, safeIndex, optionCount, data.status, isMulti, selected]);
 
+  // Measure after layout (pre-paint, so no flicker) and grow the pinned floor to
+  // the tallest question. minHeight is a floor, so a taller question still grows
+  // the card (and the floor); shorter ones hold the max via the spacer.
+  useLayoutEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    const h = el.offsetHeight;
+    setPinnedHeight(prev => (h > prev ? h : prev));
+  }, [safeIndex, optionCount, isMulti, attachedSources.length, files.length]);
+
   if (data.status === 'submitted') {
     return <div className="text-[0.8125rem] text-ink-700 leading-relaxed">Got it. Running with these inputs.</div>;
   }
@@ -125,7 +156,11 @@ export default function QueryClarificationCard({
 
   return (
     <div className="space-y-2.5">
-      <div className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
+      <div
+        ref={cardRef}
+        style={pinnedHeight ? { minHeight: `${pinnedHeight}px` } : undefined}
+        className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden flex flex-col"
+      >
         {/* Header — question count + close on top, then the question */}
         <div className="px-5 pt-3.5 pb-3">
           <div className="flex items-center justify-between gap-3 mb-2">
@@ -145,7 +180,11 @@ export default function QueryClarificationCard({
         </div>
 
         {/* Options — checkbox rows */}
-        <div role={isMulti ? 'group' : 'radiogroup'} aria-label={viewQ.question} className="py-1">
+        <div role={isMulti ? 'group' : 'radiogroup'} aria-label={viewQ.question} className="py-1 flex-1 flex flex-col">
+          {/* Reserve the answer area for the question with the most options so
+              option-count differences don't move the answers; the card-level
+              pin + spacer below absorb any remaining (wording-length) slack. */}
+          <div style={{ minHeight: answerAreaMinHeight }}>
           {displayOptions.map((opt, idx) => {
             const isChecked = selected.includes(opt);
             const isHighlighted = highlighted === idx;
@@ -178,6 +217,7 @@ export default function QueryClarificationCard({
               </button>
             );
           })}
+          </div>
 
           {/* Attachments added via the + below — these ride along with the answers */}
           {(attachedSources.length > 0 || files.length > 0) && (
@@ -220,6 +260,10 @@ export default function QueryClarificationCard({
               ))}
             </div>
           )}
+
+          {/* Spacer — tucks the pinned-height slack below the answers so the
+              Back/Next row stays at the bottom and the card holds one size. */}
+          <div className="flex-1" aria-hidden="true" />
 
           {/* Input row — the only input while a clarification is open (the chat
               composer is hidden). "+" attaches data/files; typing adds a custom

@@ -69,7 +69,7 @@ import type {
 } from '../concierge-workflow-builder/types';
 import { type WorkflowRunSeed, buildWorkflowRunRecap } from '../workflow/workflowRunSeed';
 
-interface ChatMessage {
+export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
@@ -262,7 +262,7 @@ const AUDIT_FOLLOWUPS = [
   'Cross-check against vendor master changes in the same window',
 ];
 
-interface ChatViewProps {
+export interface ChatViewProps {
   showChatHistory: boolean;
   toggleChatHistory: () => void;
   setShowArtifacts: (v: boolean) => void;
@@ -344,6 +344,13 @@ interface ChatViewProps {
   onViewReport?: (reportId: string) => void;
   /** When set, shows an "Adding workflow for engagement — <name>" banner above the composer. */
   workflowEngagementContext?: string | null;
+  /** Tab mode: initial conversation for this tab (restored from storage, or
+   *  pre-loaded from a saved chat). When provided, ChatView seeds messages from
+   *  it and skips the selectedChatId auto-load (the tab manager owns loading). */
+  initialMessages?: ChatMessage[];
+  /** Tab mode: reports message changes up so the tab manager can persist this
+   *  tab's conversation to localStorage. */
+  onMessagesChange?: (messages: ChatMessage[]) => void;
 }
 
 // Step labels for the subtle inline audit loader. The artifact panel renders
@@ -2742,7 +2749,7 @@ ${transcriptHtml}
   );
 }
 
-export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext }: ChatViewProps) {
+export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext, initialMessages, onMessagesChange }: ChatViewProps) {
   const { addToast } = useToast();
   const { can } = useCan();
   const prefersReducedMotion = useReducedMotion();
@@ -2760,7 +2767,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowBuilderSeedPrompt]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessages ?? []);
+  // Tab mode: report message changes up so the tab manager (ChatTabsView) can
+  // persist this tab's conversation to localStorage.
+  useEffect(() => { onMessagesChange?.(messages); }, [messages, onMessagesChange]);
   // Tracks the saved-conversation id that is currently loaded — drives the
   // active row highlight in the chat-history sidebar. Cleared by resetChat
   // and by sending the first message in a fresh thread.
@@ -3317,10 +3327,13 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // Always clear the selection after the effect runs — even when the id has
   // no matching CHAT_CONVERSATIONS entry — so a stale id never sticks.
   useEffect(() => {
+    // Tab mode owns conversation loading via initialMessages — skip the
+    // selectedChatId auto-load when the tab manager seeded this thread.
+    if (initialMessages) return;
     if (!selectedChatId) return;
     loadChatById(selectedChatId);
     onChatLoaded?.();
-  }, [selectedChatId, loadChatById, onChatLoaded]);
+  }, [selectedChatId, loadChatById, onChatLoaded, initialMessages]);
 
   // ─── Query Clarification Complete Handler ───
   // ─── Start the audit run as ONE IRA message that hosts the loader inline ───
@@ -5235,29 +5248,55 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   </button>
 
                   <div className="flex items-center gap-2">
-                    {/* Mode control — a single "Build a workflow" toggle.
-                        Off = ask/Query; on (lavender, filled icon) = workflow
-                        builder. Replaces the old Query/Workflow segments. */}
-                    <button
-                      type="button"
-                      onClick={() => setBuildWorkflowMode(v => !v)}
-                      aria-pressed={buildWorkflowMode}
-                      title={buildWorkflowMode
-                        ? 'Workflow builder is on — describe a workflow to build'
-                        : 'Switch to workflow builder'}
-                      className={`group inline-flex items-center gap-2 h-9 pl-1.5 pr-3.5 rounded-full text-[0.8125rem] font-semibold cursor-pointer select-none transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                        buildWorkflowMode
-                          ? 'bg-brand-50 text-brand-700 shadow-[inset_0_0_0_1px_rgba(106,18,205,0.35)]'
-                          : 'bg-white text-ink-600 shadow-[inset_0_0_0_1px_rgba(15,8,30,0.12)] hover:text-ink-800 hover:shadow-[inset_0_0_0_1px_rgba(15,8,30,0.20)]'
-                      }`}
+                    {/* Mode control — Query / Workflow segmented toggle with a
+                        sliding indicator (motion layoutId) + per-mode icons.
+                        Query = ask Ira a question and get an answer; Workflow =
+                        build a re-runnable audit workflow. The white pill glides
+                        between segments on switch (respects reduced-motion).
+                        Arrow/Home/End move between segments (ARIA radio pattern);
+                        roving tabindex keeps the group to one tab stop. */}
+                    <div
+                      role="radiogroup"
+                      aria-label="Composer mode"
+                      onKeyDown={(e) => {
+                        if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
+                        e.preventDefault();
+                        const toWorkflow = e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'End';
+                        setBuildWorkflowMode(toWorkflow);
+                        const radios = e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+                        radios[toWorkflow ? 1 : 0]?.focus();
+                      }}
+                      className="relative inline-flex items-center rounded-full bg-paper-100 p-0.5 shadow-[inset_0_0_0_1px_rgba(15,8,30,0.06)]"
                     >
-                      <span className={`inline-flex items-center justify-center size-6 rounded-full transition-colors duration-200 ${
-                        buildWorkflowMode ? 'bg-primary text-white' : 'bg-paper-100 text-ink-400 group-hover:text-ink-500'
-                      }`}>
-                        <Workflow size={13} strokeWidth={2.25} />
-                      </span>
-                      Build a workflow
-                    </button>
+                      {[
+                        { key: 'query', label: 'Query', Icon: Sparkles, active: !buildWorkflowMode, title: 'Query — ask Ira a question, get an answer' },
+                        { key: 'workflow', label: 'Workflow', Icon: Workflow, active: buildWorkflowMode, title: 'Workflow — build a re-runnable audit workflow' },
+                      ].map((m) => (
+                        <button
+                          key={m.key}
+                          type="button"
+                          role="radio"
+                          aria-checked={m.active}
+                          tabIndex={m.active ? 0 : -1}
+                          onClick={() => setBuildWorkflowMode(m.key === 'workflow')}
+                          title={m.title}
+                          className={`relative z-10 inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[0.8125rem] transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                            m.active ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-800'
+                          }`}
+                        >
+                          {m.active && (
+                            <motion.span
+                              layoutId="composer-mode-indicator"
+                              aria-hidden="true"
+                              className="absolute inset-0 -z-10 rounded-full bg-canvas-elevated shadow-[0_1px_2px_rgba(15,8,30,0.10),0_2px_6px_-2px_rgba(15,8,30,0.10),inset_0_0_0_1px_rgba(106,18,205,0.22)]"
+                              transition={prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 440, damping: 36 }}
+                            />
+                          )}
+                          <m.Icon size={14} strokeWidth={2.25} className={`shrink-0 transition-colors duration-200 ${m.active ? 'text-brand-600' : 'text-ink-400'}`} />
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
 
                     {(input.trim() || files.length > 0 || attachedSources.length > 0) && (
                       <button
