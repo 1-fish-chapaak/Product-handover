@@ -10,13 +10,15 @@ import { useEffect, useRef, useState, type ElementType } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, Reorder, useDragControls } from 'motion/react';
 import { ArrowLeft, Download, History, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2, GripVertical, Edit3, StickyNote } from 'lucide-react';
-import FloatingLines from '../shared/FloatingLines';
-import { useToast, type ToastType } from '../shared/Toast';
+import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import EmptyState from '../shared/EmptyState';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { KpiCountUp } from '../shared/KpiTile';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
+import { ReportBrandBanner, ReportMetaCell, ReportNumberedHeading, ReportKpiTiles } from './ReportDocumentChrome';
+import { statTone } from './reportTones';
+import { exportReportWord, exportReportPpt, exportReportPdf, exportReportHtml, exportBulkAuditExcel } from './reportExport';
+import type { DownloadPreviewSection } from './ReportDownloadModal';
 import { REPORT_TEMPLATES } from '../../data/mockData';
 import type { WorkflowResult } from './ReportsView';
 import AddObservationModal, {
@@ -79,10 +81,13 @@ type Report = {
 
 export function BulkAuditVariantView({
   report,
+  templates = REPORT_TEMPLATES,
   onBack,
   onShare,
 }: {
   report: Report;
+  /** Options listed in the Apply Template dropdown (standard + custom). */
+  templates?: typeof REPORT_TEMPLATES[number][];
   onBack: () => void;
   onShare?: () => void;
 }) {
@@ -223,6 +228,65 @@ export function BulkAuditVariantView({
   const allFailed = successfulWorkflows.length === 0 && failedWorkflows.length > 0;
   const totals = computeTotals(successfulWorkflows);
 
+  // Real exports — same composers as standard reports, so the downloaded
+  // document mirrors the on-screen ATR-style layout.
+  const handleExport = (ext: 'pdf' | 'doc' | 'ppt' | 'html' | 'xlsx') => {
+    if (ext === 'xlsx') {
+      exportBulkAuditExcel(report.name, successfulWorkflows);
+      addToast({ type: 'success', message: `${report.name}.xlsx downloaded.` });
+      return;
+    }
+    const sections: DownloadPreviewSection[] = [
+      {
+        id: 'bulk-exec-summary',
+        kind: 'summary',
+        title: 'Executive Summary',
+        content: `This audit returned ${totals.records} flagged records across ${totals.workflows} ${totals.workflows === 1 ? 'workflow' : 'workflows'}. High-severity items should be triaged first; the remainder are queued for AP review.`,
+        stats: bulkSummaryStats(totals).map(s => ({ label: s.label, value: s.value, accent: statTone(s.color).hex })),
+      },
+      ...successfulWorkflows.map(w => ({
+        id: w.id,
+        kind: 'workflow' as const,
+        title: `Workflow · ${w.workflowId}`,
+        workflowId: w.workflowId,
+        workflowName: w.name,
+        severity: w.severity,
+        summary: resultSummary(w),
+        findings: w.findings,
+        observations: w.observations,
+      })),
+      ...observations.map(o => ({
+        id: o.id,
+        kind: 'observation' as const,
+        title: o.title,
+        obsId: o.obsId,
+        description: o.description,
+      })),
+    ];
+    const ctx = {
+      reportName: report.name,
+      reportTag: report.tag,
+      reportId: report.id?.toUpperCase(),
+      generatedBy: report.generatedBy,
+      generatedAt: report.generatedAt,
+      sections,
+    };
+    if (ext === 'doc') {
+      exportReportWord(ctx);
+      addToast({ type: 'success', message: `${report.name}.doc downloaded.` });
+    } else if (ext === 'ppt') {
+      exportReportPpt(ctx);
+      addToast({ type: 'success', message: `${report.name}.ppt downloaded.` });
+    } else if (ext === 'html') {
+      exportReportHtml(ctx);
+      addToast({ type: 'success', message: `${report.name}.html downloaded.` });
+    } else if (exportReportPdf(ctx)) {
+      addToast({ type: 'info', message: 'Opening print dialog — choose “Save as PDF”.' });
+    } else {
+      addToast({ type: 'error', message: 'Pop-up blocked — allow pop-ups to export the PDF.' });
+    }
+  };
+
   const handleOpenWorkflow = (w: WorkflowResult) => {
     addToast({ type: 'info', message: `Opening ${w.workflowId} — ${w.name}…` });
   };
@@ -264,7 +328,7 @@ export function BulkAuditVariantView({
       transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
       className="h-full overflow-y-auto bg-surface-2"
     >
-      <BulkReportHeader onBack={onBack} onShare={onShare} reportName={report.name} />
+      <BulkReportHeader onBack={onBack} onShare={onShare} onExport={handleExport} templates={templates} />
       {allFailed ? (
         <AllFailedEmpty report={report} failedWorkflows={failedWorkflows} />
       ) : (
@@ -503,24 +567,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   Executive: 'text-indigo-600 bg-indigo-50',
 };
 
-// Simulated report download — a 'loading' toast that resolves to 'success'
-// after a short "preparing" delay. No real file is produced (the prototype's
-// report exports are all mock).
-function startReportDownload(
-  addToast: (t: { type: ToastType; message: string }) => string,
-  updateToast: (id: string, patch: { type: ToastType; message: string }) => void,
-  reportName: string,
-  ext = 'pdf',
-) {
-  const file = `${reportName}.${ext}`;
-  const id = addToast({ type: 'loading', message: `Preparing ${file}…` });
-  window.setTimeout(() => {
-    updateToast(id, { type: 'success', message: `${file} downloaded.` });
-  }, 1800);
-}
-
 // ─── Apply Template Dropdown ───
-function ApplyTemplateDropdown({ onSelect, onClose }: { onSelect: (template: typeof REPORT_TEMPLATES[0]) => void; onClose: () => void }) {
+function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, onSelect, onClose }: { templates?: typeof REPORT_TEMPLATES[number][]; activeId?: string | null; onSelect: (template: typeof REPORT_TEMPLATES[0]) => void; onClose: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: -5, scale: 0.97 }}
@@ -532,21 +580,24 @@ function ApplyTemplateDropdown({ onSelect, onClose }: { onSelect: (template: typ
         <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">Select Template</span>
       </div>
       <div className="max-h-[260px] overflow-y-auto p-1.5">
-        {REPORT_TEMPLATES.map(rt => {
+        {templates.map(rt => {
           const Icon = ICON_MAP[rt.icon] || FileText;
+          const isActive = rt.id === activeId;
           return (
             <button
               key={rt.id}
               onClick={() => { onSelect(rt); onClose(); }}
-              className="w-full text-left px-3 py-2.5 rounded-[8px] hover:bg-primary-xlight transition-colors cursor-pointer flex items-center gap-2.5"
+              aria-current={isActive || undefined}
+              className={`w-full text-left px-3 py-2.5 rounded-[8px] transition-colors cursor-pointer flex items-center gap-2.5 ${isActive ? 'bg-primary-xlight' : 'hover:bg-primary-xlight'}`}
             >
               <div className={`p-1.5 rounded-[8px] ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
                 <Icon size={12} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[12px] font-medium text-text truncate">{rt.name}</div>
+                <div className={`text-[12px] truncate ${isActive ? 'font-semibold text-primary' : 'font-medium text-text'}`}>{rt.name}</div>
                 <div className="text-[10px] text-text-muted">{rt.category}</div>
               </div>
+              {isActive && <Check size={14} className="shrink-0 text-primary" />}
             </button>
           );
         })}
@@ -559,12 +610,14 @@ function ApplyTemplateDropdown({ onSelect, onClose }: { onSelect: (template: typ
 // internal audit report header. Apply Template is a UX match here: a bulk audit
 // report has a fixed editorial layout, so applying a template animates + toasts
 // without swapping sections.
-function BulkReportHeader({ onBack, onShare, reportName }: {
+function BulkReportHeader({ onBack, onShare, onExport, templates = REPORT_TEMPLATES }: {
   onBack: () => void;
   onShare?: () => void;
-  reportName: string;
+  onExport: (ext: 'pdf' | 'doc' | 'ppt' | 'html' | 'xlsx') => void;
+  /** Options listed in the Apply Template dropdown (standard + custom). */
+  templates?: typeof REPORT_TEMPLATES[number][];
 }) {
-  const { addToast, updateToast } = useToast();
+  const { addToast } = useToast();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
@@ -581,7 +634,7 @@ function BulkReportHeader({ onBack, onShare, reportName }: {
 
   return (
     <>
-      <div className="mx-auto px-8 pt-6 pb-4 max-w-[1100px]">
+      <div className="px-[124px] pt-8 pb-4">
         <div className="flex items-center justify-between gap-4">
           <button
             onClick={onBack}
@@ -619,6 +672,8 @@ function BulkReportHeader({ onBack, onShare, reportName }: {
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowApplyTemplate(false)} />
                     <ApplyTemplateDropdown
+                      templates={templates}
+                      activeId={appliedTemplate?.id ?? null}
                       onSelect={handleApplyTemplate}
                       onClose={() => setShowApplyTemplate(false)}
                     />
@@ -644,16 +699,17 @@ function BulkReportHeader({ onBack, onShare, reportName }: {
                 <Download size={14} /> Download <ChevronDown size={12} className={`transition-transform ${showDownloadDropdown ? 'rotate-180' : ''}`} />
               </button>
               {showDownloadDropdown && (
-                <div className="absolute right-0 top-full mt-1 bg-white border border-border-light shadow-xl z-50 py-1 w-36 rounded-[8px]">
-                  {[
-                    { label: 'PDF', ext: 'pdf' },
-                    { label: 'Word (DOC)', ext: 'doc' },
-                    { label: 'PowerPoint', ext: 'ppt' },
-                    { label: 'Excel', ext: 'xlsx' },
-                  ].map(({ label, ext }) => (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-border-light shadow-xl z-50 py-1 w-48 rounded-[8px]">
+                  {([
+                    { label: 'Download as PDF', ext: 'pdf' },
+                    { label: 'Download as DOCX', ext: 'doc' },
+                    { label: 'Download as PPTX', ext: 'ppt' },
+                    { label: 'Download as HTML', ext: 'html' },
+                    { label: 'Download as Excel', ext: 'xlsx' },
+                  ] as const).map(({ label, ext }) => (
                     <button
                       key={ext}
-                      onClick={() => { startReportDownload(addToast, updateToast, reportName, ext); setShowDownloadDropdown(false); }}
+                      onClick={() => { onExport(ext); setShowDownloadDropdown(false); }}
                       className="w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary transition-colors cursor-pointer"
                     >
                       {label}
@@ -702,16 +758,13 @@ function AllFailedEmpty({ report, failedWorkflows }: {
   failedWorkflows: WorkflowResult[];
 }) {
   return (
-    <div className="mx-auto px-8 pt-2 pb-24 max-w-[1100px]">
-      {/* Cover — same purple gradient as the editorial layout, but slimmer */}
-      <div className="relative rounded-[12px] overflow-hidden bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
-        <div className="relative z-10 px-8 py-7">
-          <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
-          <p className="text-white/65 text-[13px] leading-snug">
-            All {failedWorkflows.length} {failedWorkflows.length === 1 ? 'workflow' : 'workflows'} failed during this run.
-          </p>
-        </div>
-      </div>
+    <div className="px-[124px] pt-2 pb-24">
+      {/* Cover — same ATR-style banner as the editorial layout, but slimmer */}
+      <ReportBrandBanner title={report.name} className="rounded-[12px]">
+        <p className="text-white/65 text-[13px] leading-snug">
+          All {failedWorkflows.length} {failedWorkflows.length === 1 ? 'workflow' : 'workflows'} failed during this run.
+        </p>
+      </ReportBrandBanner>
 
       {/* Empty-state body */}
       <div className="bg-white border border-border-light rounded-[12px] mt-5 p-10 text-center">
@@ -766,66 +819,60 @@ function EditorialLayout({
 }) {
   const { addToast } = useToast();
   return (
-    <div className="mx-auto px-8 pt-2 pb-24 max-w-[1100px]">
-      {/* Cover — rounded top only so the white body below attaches cleanly */}
-      <div className="relative rounded-t-2xl overflow-hidden bg-gradient-to-br from-[#3b0b72] to-[#6a12cd]">
-        <div className="absolute inset-0 z-0" style={{ maskImage: 'linear-gradient(to right, transparent 35%, white 70%)', WebkitMaskImage: 'linear-gradient(to right, transparent 35%, white 70%)' }}>
-          <FloatingLines
-            enabledWaves={['top', 'middle']}
-            lineCount={6}
-            lineDistance={6}
-            bendRadius={4}
-            bendStrength={-0.3}
-            interactive={true}
-            parallax={false}
-            color="#e879f9"
-            opacity={0.3}
-          />
-        </div>
-        <div className="relative z-10 px-8 py-7">
-          <h1 className="text-2xl font-bold text-white tracking-tight mb-1">{report.name}</h1>
-          {report.pages != null && (
-            <p className="text-white/65 text-[13px] leading-snug mb-3">
-              {totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'} · {totals.records} flagged records
-            </p>
+    <div className="px-[124px] pt-2 pb-24">
+      {/* Cover — ATR-style brand banner, rounded top only so the white body below attaches cleanly */}
+      <ReportBrandBanner
+        title={report.name}
+        className="rounded-t-[12px]"
+        actions={
+          <button
+            onClick={() => addToast({ type: 'info', message: 'Activity log coming soon for bulk audit.' })}
+            title="View this report's activity log"
+            aria-label="View report activity log"
+            className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/80 bg-white/10 border border-white/20 hover:bg-white/20 hover:text-white transition-colors cursor-pointer"
+          >
+            <History size={16} />
+          </button>
+        }
+      >
+        {report.pages != null && (
+          <p className="text-white/65 text-[13px] leading-snug mb-3">
+            {totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'} · {totals.records} flagged records
+          </p>
+        )}
+        <div className="flex items-center gap-2 text-[13px] flex-wrap">
+          <span className="font-semibold text-white">{report.generatedBy}</span>
+          <span className="text-white/30 mx-0.5">|</span>
+          <span className="text-white/70">{report.generatedAt}</span>
+          <span className="text-white/30 mx-0.5">|</span>
+          <span className="text-white/70">
+            {totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}
+          </span>
+          {report.tag && (
+            <span
+              className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-[8px]"
+              style={{
+                background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
+                color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
+              }}
+            >
+              {report.tag}
+            </span>
           )}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-[13px]">
-              <span className="font-semibold text-white">{report.generatedBy}</span>
-              <span className="text-white/30 mx-0.5">|</span>
-              <span className="text-white/70">{report.generatedAt}</span>
-              <span className="text-white/30 mx-0.5">|</span>
-              <span className="text-white/70">
-                {totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}
-              </span>
-              {report.tag && (
-                <span
-                  className="inline-flex items-center px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-[8px]"
-                  style={{
-                    background: report.tag === 'Internal Audit' ? '#FFE8F6' : '#FFFAEB',
-                    color: report.tag === 'Internal Audit' ? '#BF2E84' : '#A74108',
-                  }}
-                >
-                  {report.tag}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => addToast({ type: 'info', message: 'Activity log coming soon for bulk audit.' })}
-                title="View this report's activity log"
-                aria-label="View report activity log"
-                className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/80 bg-white/10 border border-white/20 hover:bg-white/20 hover:text-white transition-colors cursor-pointer"
-              >
-                <History size={16} />
-              </button>
-            </div>
-          </div>
         </div>
+      </ReportBrandBanner>
+
+      {/* Metadata grid — attached below the banner, ATR proportions */}
+      <div className="bg-white border-x border-b border-border-light px-9 py-6 grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
+        <ReportMetaCell label="Report ID" value={report.id?.toUpperCase()} />
+        <ReportMetaCell label="Report Type" value={report.tag ?? 'Bulk Audit'} />
+        <ReportMetaCell label="Scope" value={`${totals.workflows} ${totals.workflows === 1 ? 'workflow' : 'workflows'} · ${totals.records} flagged records`} />
+        <ReportMetaCell label="Prepared By" value={report.generatedBy} />
+        <ReportMetaCell label="Generated On" value={report.generatedAt} />
       </div>
 
       {/* Editorial body — white card attached to the header (no gap) */}
-      <article className="bg-white border-x border-b border-border-light rounded-b-2xl px-8 py-8">
+      <article className="bg-white border-x border-b border-border-light rounded-b-[12px] px-8 py-8">
         <EditorialContents
           workflows={workflows}
           observations={observations}
@@ -1131,32 +1178,23 @@ function BulkContentsRow<T extends { id: string }>({
   );
 }
 
-function EditorialSummary({ totals }: { totals: Totals }) {
-  const stats = [
+// The four exec-summary stats for a bulk audit — shared by the on-screen KPI
+// tiles and the export composers.
+function bulkSummaryStats(totals: Totals) {
+  return [
     { label: 'Workflows Run', value: String(totals.workflows), icon: Layers, color: 'text-brand-700 bg-brand-50' },
     { label: 'Records Flagged', value: String(totals.records), icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
+    { label: 'High Severity', value: String(totals.high), icon: Shield, color: 'text-risk-700 bg-risk-50' },
+    { label: 'Medium Severity', value: String(totals.medium), icon: TrendingUp, color: 'text-mitigated-700 bg-mitigated-50' },
   ];
+}
 
+function EditorialSummary({ totals }: { totals: Totals }) {
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-10 pb-5 border-b border-ink-900/15">
-        {stats.map((stat, si) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 10, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 18, mass: 0.7, delay: 0.08 + si * 0.08 }}
-            className="flex items-center gap-3"
-          >
-            <div className={`p-2 rounded-[8px] ${stat.color}`}><stat.icon size={16} /></div>
-            <div>
-              <div className="text-xl font-bold text-text leading-none mb-1">
-                <KpiCountUp value={stat.value} delay={120 + si * 80} />
-              </div>
-              <div className="text-[11px] text-text-muted tracking-wide">{stat.label}</div>
-            </div>
-          </motion.div>
-        ))}
+    <div>
+      <ReportNumberedHeading n={1} title="Executive Summary" subtitle="Overall workflow result rollup" />
+      <div className="pb-5 border-b border-ink-900/15 mb-5">
+        <ReportKpiTiles stats={bulkSummaryStats(totals)} animate />
       </div>
       <p className="text-[15px] leading-[1.75] text-text">
         This audit returned <strong className="font-semibold text-ink-900">{totals.records} flagged records</strong> across{' '}
@@ -1195,6 +1233,7 @@ function EditorialWorkflowStatus({ workflows, failedWorkflows, auditDate }: {
   if (allRows.length === 0) return null;
   return (
     <div>
+      <ReportNumberedHeading n={2} title="Workflow Status" subtitle="All runs attempted in this audit" />
       <table className="w-full border-collapse text-[13px]">
         <thead>
           <tr>

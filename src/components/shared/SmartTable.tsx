@@ -9,6 +9,11 @@ export interface Column<T> {
   sortable?: boolean;
   align?: 'left' | 'center' | 'right';
   width?: string;
+  /** Let this (flexible) column shrink and truncate its content instead of
+   *  forcing the table wider than its container. Applies `max-width: 0` to the
+   *  cell so an inner `truncate` element ellipsizes rather than pushing the
+   *  table into horizontal scroll. Use on the single fluid column. */
+  truncate?: boolean;
   render?: (item: T, index: number) => ReactNode;
 }
 
@@ -53,6 +58,10 @@ interface SmartTableProps<T extends Record<string, unknown>> {
   // sentence-case muted labels, generous rows, no vertical grid lines,
   // very quiet hover. The opposite of a spreadsheet.
   variant?: 'default' | 'modern';
+  /** Compact row rhythm for the 'modern' variant — trades the generous py-4
+   *  rows for a tighter py-2.5, matching the platform's dense list views
+   *  (EvidenceRepository / DataSources). No effect on the 'default' variant. */
+  dense?: boolean;
   hideResultCount?: boolean;
   /** Background utility class for the search input. Defaults to 'bg-white';
    *  pass e.g. 'bg-paper-50' to match an adjacent filter control. */
@@ -103,6 +112,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
   animateRows = true,
   rowReveal = 'fade',
   variant = 'default',
+  dense = false,
   hideResultCount = false,
   searchBg = 'bg-white',
   showSortHint = false,
@@ -226,7 +236,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                   key={col.key}
                   className={[
                     isModern
-                      ? `py-3 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-text-muted ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
+                      ? `${dense ? 'py-2.5' : 'py-3'} text-[10.5px] font-semibold uppercase tracking-[0.08em] text-text-muted ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
                       : 'px-4 py-2.5 font-semibold text-text-secondary',
                     alignClass(col.align),
                     col.sortable !== false ? 'cursor-pointer select-none hover:text-text-secondary transition-colors' : '',
@@ -234,6 +244,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                     // sticky toolbar via `stickyHeaderTop`. Each cell carries the
                     // header fill so scrolled rows don't show through.
                     stickyHeader ? `sticky ${stickyHeaderTop} z-10 ${isModern ? 'bg-white' : 'bg-surface-2'}` : '',
+                    col.truncate ? 'max-w-0' : '',
                   ].filter(Boolean).join(' ')}
                   style={col.width ? { width: col.width } : undefined}
                   onClick={() => col.sortable !== false && handleSort(col.key)}
@@ -325,10 +336,11 @@ export default function SmartTable<T extends Record<string, unknown>>({
                         key={col.key}
                         className={[
                           isModern
-                            ? `py-4 ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
+                            ? `${dense ? 'py-2.5' : 'py-4'} ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
                             : 'px-4 py-3',
                           // Opt-in selected-row accent: a left brand bar carried by the first cell.
                           ci === 0 && selected ? 'shadow-[inset_3px_0_0_#6A12CD]' : '',
+                          col.truncate ? 'max-w-0' : '',
                           alignClass(col.align),
                         ].filter(Boolean).join(' ')}
                       >

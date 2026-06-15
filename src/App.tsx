@@ -11,7 +11,7 @@ import { VIEW_PERMISSIONS } from './data/rbac';
 import EmptyState from './components/shared/EmptyState';
 import LoginView from './components/auth/LoginView';
 import { Lock } from 'lucide-react';
-import { GENERATED_REPORTS } from './data/mockData';
+import { GENERATED_REPORTS, GENERATED_REPORTS_KEY } from './data/mockData';
 import Sidebar from './components/sidebar/Sidebar';
 import ChatView from './components/chat/ChatView';
 import ArtifactPanel from './components/artifacts/ArtifactPanel';
@@ -259,20 +259,26 @@ function AppInner() {
   }, []); // run once on mount
   type CustomTemplate = typeof CUSTOM_TEMPLATES[number];
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
+  // The old demo seeds — filtered out of any previously persisted blob so the
+  // Custom section only ever shows templates the user actually created.
+  const DEMO_TEMPLATE_IDS = new Set(['ct-custom-01', 'ct-custom-02', 'ct-003', 'ct-004', 'ct-005', 'ct-006']);
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>(() => {
     try {
       const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed as CustomTemplate[];
+        if (Array.isArray(parsed)) {
+          return (parsed as CustomTemplate[]).filter(t => !DEMO_TEMPLATE_IDS.has(t.id));
+        }
       }
     } catch { /* ignore */ }
-    return CUSTOM_TEMPLATES;
+    return [];
   });
   useEffect(() => {
     try { localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(customTemplates)); } catch { /* ignore */ }
   }, [customTemplates]);
   const addCustomTemplate = (t: CustomTemplate) => setCustomTemplates(prev => [t, ...prev]);
+  const removeCustomTemplate = (id: string) => setCustomTemplates(prev => prev.filter(t => t.id !== id));
 
   useEffect(() => {
     if (mainScrollRef.current) {
@@ -543,7 +549,7 @@ function AppInner() {
                     queries: 1,
                   };
                   try {
-                    const key = 'irame.reports.generatedReports.v7';
+                    const key = GENERATED_REPORTS_KEY;
                     const raw = localStorage.getItem(key);
                     const arr = raw ? JSON.parse(raw) : [];
                     if (Array.isArray(arr) && !arr.some((r: { id: string }) => r.id === newReport.id)) {
@@ -801,6 +807,7 @@ function AppInner() {
             }}
             customTemplates={customTemplates}
             onAddCustomTemplate={addCustomTemplate}
+            onRemoveCustomTemplate={removeCustomTemplate}
             focusReportId={focusReportId}
             onFocusReportConsumed={() => setFocusReportId(null)}
           />

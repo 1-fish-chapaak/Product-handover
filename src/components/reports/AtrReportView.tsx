@@ -30,7 +30,7 @@ export default function AtrReportView({ report, onBack, onShare }: {
       transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
       className="report-printable h-full overflow-y-auto bg-surface-2"
     >
-      <div className="mx-auto px-8 py-6 max-w-6xl">
+      <div className="px-[124px] py-8">
         {/* Top bar */}
         <div className="flex items-center justify-between mb-5 flex-wrap gap-2 print:hidden">
           <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-primary transition-colors cursor-pointer">

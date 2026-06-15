@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, ChevronUp, X, FileText, LayersPlus, Check } from 'lucide-react';
 import { useToast } from './Toast';
+import { GENERATED_REPORTS_KEY } from '../../data/mockData';
 
 type BulkRunWorkflow = { id: string; name: string; businessProcess?: string };
 
@@ -131,7 +132,7 @@ export function BulkRunProgressProvider({ children }: { children: React.ReactNod
       // Persist so ReportsView picks it up on next mount even if it isn't
       // currently rendered.
       try {
-        const key = 'irame.reports.generatedReports.v7';
+        const key = GENERATED_REPORTS_KEY;
         const raw = localStorage.getItem(key);
         const arr = raw ? JSON.parse(raw) : [];
         if (Array.isArray(arr) && !arr.some((r: { id: string }) => r.id === newReport.id)) {
