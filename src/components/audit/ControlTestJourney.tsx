@@ -15,11 +15,11 @@ import { attrCode, racmRowsForProcess } from '../../data/racm';
 import { useEngagementWorkspace } from './engagementWorkspace';
 import { buildWpControls, downloadControlWorkingPaper, type WpControl } from './workingPaper';
 
-type Step = 'population' | 'sampling' | 'validation' | 'paper';
+type Step = 'population' | 'sampling' | 'evidence' | 'paper';
 const STEPS: { id: Step; label: string; Icon: typeof Upload }[] = [
   { id: 'population', label: 'Population', Icon: Database },
   { id: 'sampling', label: 'Sampling', Icon: Shuffle },
-  { id: 'validation', label: 'AI validation', Icon: Bot },
+  { id: 'evidence', label: 'Attribute evidence', Icon: ListChecks },
   { id: 'paper', label: 'Working paper', Icon: FileCheck2 },
 ];
 
@@ -49,6 +49,8 @@ export default function ControlTestJourney({ engagement, controlId, onClose }: {
   const [sampleSize, setSampleSize] = useState(25);
   const [samples, setSamples] = useState<{ ref: string }[]>([]);
   const [sampling, setSampling] = useState(false);
+  const [uploadingEvidence, setUploadingEvidence] = useState(false);
+  const [evidenceUploaded, setEvidenceUploaded] = useState(false);
   const [validating, setValidating] = useState(false);
   const [validated, setValidated] = useState(0);
   const [validationDone, setValidationDone] = useState(false);
@@ -88,7 +90,8 @@ export default function ControlTestJourney({ engagement, controlId, onClose }: {
       const rows = Array.from({ length: sampleSize }, (_, i) => ({ ref: `${seg}-${String((hash(control.controlId) % 90) + i + 1).padStart(3, '0')}` }));
       setSamples(rows);
       setSampling(false);
-      // re-running sampling invalidates a prior validation
+      // re-running sampling invalidates prior evidence + validation
+      setEvidenceUploaded(false);
       setValidationDone(false);
       setValidated(0);
     }, 850);
@@ -112,6 +115,17 @@ export default function ControlTestJourney({ engagement, controlId, onClose }: {
     }, 110);
   };
 
+  const bulkUploadEvidence = () => {
+    setUploadingEvidence(true);
+    const id = addToast({ type: 'loading', message: `Uploading evidence for ${attrs.length} attribute${attrs.length === 1 ? '' : 's'}…` });
+    window.setTimeout(() => {
+      setUploadingEvidence(false);
+      setEvidenceUploaded(true);
+      updateToast(id, { type: 'success', title: 'Evidence attached', message: `${attrs.length * samples.length} files across ${attrs.length} attribute${attrs.length === 1 ? '' : 's'}` });
+      runValidation();
+    }, 1000);
+  };
+
   const downloadPaper = () => {
     if (!wpControl) return;
     const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -127,7 +141,7 @@ export default function ControlTestJourney({ engagement, controlId, onClose }: {
   const canContinue =
     step === 'population' ? population != null :
     step === 'sampling' ? samples.length > 0 :
-    step === 'validation' ? validationDone :
+    step === 'evidence' ? validationDone :
     true;
 
   const goNext = () => { const i = STEPS.findIndex(s => s.id === step); if (i < STEPS.length - 1) setStep(STEPS[i + 1]!.id); };
@@ -224,36 +238,47 @@ export default function ControlTestJourney({ engagement, controlId, onClose }: {
                 </Section>
               )}
 
-              {step === 'validation' && (
-                <Section title="AI validation" hint={`IRA validates each of the ${samples.length} samples against ${attrs.length} attribute${attrs.length === 1 ? '' : 's'}.`}>
-                  {!validationDone && !validating && (
-                    <button onClick={runValidation} className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-500 cursor-pointer transition-colors">
-                      <Sparkles size={14} /> Run AI validation
+              {step === 'evidence' && (
+                <Section title="Attribute evidence" hint={`Bulk-upload evidence for each attribute across the ${samples.length} samples — IRA then validates it.`}>
+                  {!evidenceUploaded && !uploadingEvidence && (
+                    <button onClick={bulkUploadEvidence} className="w-full rounded-xl border-2 border-dashed border-canvas-border hover:border-brand-300 bg-paper-50/40 py-8 flex flex-col items-center gap-2 cursor-pointer transition-colors">
+                      <Upload size={20} className="text-brand-600" />
+                      <span className="text-[0.8125rem] font-semibold text-ink-700">Bulk upload evidence</span>
+                      <span className="text-[0.6875rem] text-ink-400">{attrs.length} attribute{attrs.length === 1 ? '' : 's'} × {samples.length} samples</span>
                     </button>
                   )}
-                  {validating && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-[0.8125rem] text-ink-700 font-medium"><Bot size={15} className="text-brand-600 animate-pulse" /> Validating {validated} / {samples.length}…</div>
+                  {uploadingEvidence && (
+                    <div className="flex items-center gap-2 text-[0.8125rem] text-ink-700 font-medium py-2"><Loader2 size={15} className="text-brand-600 animate-spin" /> Uploading evidence…</div>
+                  )}
+                  {evidenceUploaded && validating && (
+                    <div className="space-y-2 mb-3">
+                      <div className="flex items-center gap-2 text-[0.8125rem] text-ink-700 font-medium"><Bot size={15} className="text-brand-600 animate-pulse" /> IRA validating evidence · {validated} / {samples.length}…</div>
                       <div className="h-2 rounded-full bg-paper-100 overflow-hidden"><div className="h-full bg-brand-500 transition-all duration-150" style={{ width: `${(validated / Math.max(1, samples.length)) * 100}%` }} /></div>
                     </div>
                   )}
-                  {validationDone && (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 rounded-lg bg-compliant-50 border border-compliant-700/20 px-3.5 py-3">
-                        <CheckCircle2 size={18} className="text-compliant-700 shrink-0" />
-                        <div>
-                          <div className="text-[0.875rem] font-bold text-compliant-700">All {samples.length} samples passed · 0 exceptions</div>
-                          <div className="text-[0.6875rem] text-ink-500 inline-flex items-center gap-1"><Sparkles size={11} className="text-brand-500" /> IRA confidence 96% · no deviations detected</div>
+                  {evidenceUploaded && validationDone && (
+                    <div className="flex items-center gap-2 rounded-lg bg-compliant-50 border border-compliant-700/20 px-3.5 py-3 mb-3">
+                      <CheckCircle2 size={18} className="text-compliant-700 shrink-0" />
+                      <div>
+                        <div className="text-[0.875rem] font-bold text-compliant-700">All {samples.length} samples passed · 0 exceptions</div>
+                        <div className="text-[0.6875rem] text-ink-500 inline-flex items-center gap-1"><Sparkles size={11} className="text-brand-500" /> IRA confidence 96% · evidence complete, no deviations</div>
+                      </div>
+                    </div>
+                  )}
+                  {(uploadingEvidence || evidenceUploaded) && (
+                    <div className="rounded-lg border border-canvas-border divide-y divide-canvas-border">
+                      {attrs.map(a => (
+                        <div key={a.id} className="flex items-center justify-between gap-2 px-3 py-2 text-[0.75rem]">
+                          <span className="inline-flex items-center gap-2 min-w-0"><span className="font-mono text-[0.6875rem] text-ink-500">{attrCode(a.id)}</span><span className="text-ink-700 truncate">{a.description}</span></span>
+                          <span className="shrink-0">
+                            {validationDone
+                              ? <span className="inline-flex items-center gap-1 text-compliant-700 font-semibold"><CheckCircle2 size={12} /> {samples.length} files · Pass</span>
+                              : validating
+                                ? <span className="inline-flex items-center gap-1 text-ink-500"><Loader2 size={11} className="animate-spin" /> Validating…</span>
+                                : <span className="inline-flex items-center gap-1 text-ink-500"><FileSpreadsheet size={11} /> {samples.length} files</span>}
+                          </span>
                         </div>
-                      </div>
-                      <div className="rounded-lg border border-canvas-border divide-y divide-canvas-border">
-                        {attrs.map(a => (
-                          <div key={a.id} className="flex items-center justify-between gap-2 px-3 py-2 text-[0.75rem]">
-                            <span className="inline-flex items-center gap-2 min-w-0"><span className="font-mono text-[0.6875rem] text-ink-500">{attrCode(a.id)}</span><span className="text-ink-700 truncate">{a.description}</span></span>
-                            <span className="inline-flex items-center gap-1 text-compliant-700 font-semibold shrink-0"><CheckCircle2 size={12} /> {samples.length}/{samples.length}</span>
-                          </div>
-                        ))}
-                      </div>
+                      ))}
                     </div>
                   )}
                 </Section>
