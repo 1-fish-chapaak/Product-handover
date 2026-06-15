@@ -1,27 +1,30 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, ShieldCheck, RefreshCw } from 'lucide-react';
+import './register.css';
 import { IcfrProvider, useIcfr } from './store';
 import { RoleSwitcher } from './parts';
-import CommandCenter from './CommandCenter';
-import ControlWorkspace from './ControlWorkspace';
+import ControlRegister from './ControlRegister';
+import ControlDossier from './ControlDossier';
 import RiskOwnerPortal from './RiskOwnerPortal';
 import { DeficienciesView, ScopeView } from './extraViews';
+import SetupWizard from './SetupWizard';
 
 function Inner({ onBack }: { onBack?: () => void }) {
   const { eng, role, view, setRole, togglePeriod } = useIcfr();
 
   const body = role === 'risk-owner'
     ? <RiskOwnerPortal />
-    : view === 'control' ? <ControlWorkspace />
+    : view === 'dossier' ? <ControlDossier />
     : view === 'deficiencies' ? <DeficienciesView />
     : view === 'scope' ? <ScopeView />
-    : <CommandCenter />;
+    : view === 'setup' ? <SetupWizard />
+    : <ControlRegister />;
 
   return (
-    <div className="h-full overflow-y-auto bg-canvas">
+    <div className="sox-book-ui h-full overflow-y-auto bg-canvas">
       {/* top bar */}
-      <div className="sticky top-0 z-20 bg-canvas/85 backdrop-blur border-b border-canvas-border">
-        <div className="max-w-[1180px] mx-auto px-6 h-14 flex items-center justify-between gap-4">
+      <div className="sticky top-0 z-30 bg-canvas/85 backdrop-blur border-b border-canvas-border">
+        <div className="max-w-[1320px] mx-auto px-6 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             {onBack && <button onClick={onBack} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={15} /></button>}
             <span className="inline-flex items-center gap-2">
@@ -35,7 +38,7 @@ function Inner({ onBack }: { onBack?: () => void }) {
         </div>
       </div>
 
-      <div className="max-w-[1180px] mx-auto px-6 py-6">
+      <div className="max-w-[1320px] mx-auto px-6 py-6">
         <AnimatePresence mode="wait">
           <motion.div key={`${role}-${view}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
             {body}

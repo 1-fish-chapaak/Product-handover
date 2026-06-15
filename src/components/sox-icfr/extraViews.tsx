@@ -1,6 +1,6 @@
 import { ArrowLeft, FileWarning, Target, ShieldCheck, AlertTriangle, RotateCcw } from 'lucide-react';
 import { useIcfr } from './store';
-import { formatINR, isReasonablyPossible, severityOf } from './helpers';
+import { computeSeverity, formatINR, severityOf } from './helpers';
 import { SeverityPill } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
@@ -12,13 +12,38 @@ export function DeficienciesView() {
   const M = eng.materiality;
   return (
     <div className="space-y-4">
-      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Command center</button>
+      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Control register</button>
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Deficiencies</h1>
           <p className="text-[13px] text-ink-500 mt-0.5">Severity is computed: likelihood × magnitude vs materiality ({formatINR(M)}), with MW indicators. Remediation never lowers it.</p>
         </div>
       </div>
+
+      {(() => {
+        const LRANK: Record<string, number> = { Remote: 0, 'Reasonably possible': 1, Probable: 2 };
+        const LBYR = ['Remote', 'Reasonably possible', 'Probable'] as const;
+        const groups = new Map<string, typeof eng.deficiencies>();
+        eng.deficiencies.forEach(d => { const k = d.aggregationGroup ?? 'Ungrouped'; groups.set(k, [...(groups.get(k) ?? []), d]); });
+        const agg = Array.from(groups.entries()).filter(([, ds]) => ds.length > 1);
+        if (!agg.length) return null;
+        return (
+          <div className="space-y-2">
+            <h2 className="text-[12px] font-semibold text-ink-500 uppercase tracking-wide">Aggregation — individually-minor deficiencies combine by commonality</h2>
+            {agg.map(([group, ds]) => {
+              const sum = ds.reduce((n, d) => n + d.magnitude, 0);
+              const lk = LBYR[Math.max(...ds.map(d => LRANK[d.likelihood] ?? 0))]!;
+              const mw = Array.from(new Set(ds.flatMap(d => d.mwIndicators)));
+              return (
+                <div key={group} className="rounded-xl border border-mitigated-700/30 bg-mitigated-50/30 px-4 py-3 flex items-center justify-between gap-3">
+                  <div className="text-[12.5px] text-ink-700"><span className="font-semibold">{group}</span> · {ds.length} deficiencies · combined {formatINR(sum)} (vs {formatINR(M)})</div>
+                  <SeverityPill s={computeSeverity(lk, sum, M, mw)} />
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {eng.deficiencies.length === 0 ? (
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-12 text-center text-ink-500">No deficiencies — all tested controls effective.</div>
@@ -33,7 +58,7 @@ export function DeficienciesView() {
                   <div className="inline-flex items-center gap-2">
                     <span className="font-mono text-[12px] font-semibold text-ink-600">{d.id}</span>
                     <button onClick={() => openControl(d.controlId)} className="font-mono text-[12px] text-brand-700 hover:underline cursor-pointer">{d.controlId}</button>
-                    <Pill tone={d.kind === 'design' ? 'mitigated' : 'evidence'}>{d.kind === 'design' ? 'Design' : 'Operating'}</Pill>
+                    <Pill tone={d.track === 'design' ? 'mitigated' : 'evidence'}>{d.track === 'design' ? 'Design' : 'Operating'}</Pill>
                   </div>
                   <SeverityPill s={sev} />
                 </div>
@@ -93,7 +118,7 @@ export function ScopeView() {
   const keyControls = eng.controls.filter(c => c.isKey).length;
   return (
     <div className="space-y-4">
-      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Command center</button>
+      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Control register</button>
       <div>
         <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Scope & materiality</h1>
         <p className="text-[13px] text-ink-500 mt-0.5">Materiality drives which accounts &amp; assertions are in scope, and which key controls we test.</p>
