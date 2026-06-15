@@ -39,10 +39,14 @@ const combinedOf = (ex: GrcException): CombinedActionReview => combineActionRevi
 const statusOf = (ex: GrcException) => ex.status ?? deriveStatus(ex.classification, ex.actionReview, actionStatusOf(ex));
 
 const isClassified = (ex: GrcException) => ex.classification !== 'Unclassified';
-const hasActionPlan = (ex: GrcException) => requiresActionPlan(ex.classification); // actionable → a management action plan exists
-const isActionTaken = (ex: GrcException) => !!completionOf(ex) || actionStatusOf(ex) === 'Implemented' || actionStatusOf(ex) === 'Partially Implemented';
-// Auditor finished the review: a terminal decision and not sitting in an active phase.
-const isReviewComplete = (ex: GrcException) => isClassified(ex) && ex.actionReview !== 'Pending' && !ex.actionPhase;
+// Only Design/System Deficiency & Procedural Non-Compliance need a management action
+// plan → the ATR pipeline (plan → action → review) runs over these alone. Business
+// as Usual / False Positive are closed at classification and need no action plan.
+const isActionable = (ex: GrcException) => isClassified(ex) && requiresActionPlan(ex.classification);
+const hasActionPlan = isActionable; // an actionable, classified exception carries a management action plan
+const isActionTaken = (ex: GrcException) => isActionable(ex) && (!!completionOf(ex) || actionStatusOf(ex) === 'Implemented' || actionStatusOf(ex) === 'Partially Implemented');
+// Auditor finished reviewing the action: a terminal decision and not sitting in an active phase.
+const isReviewComplete = (ex: GrcException) => isActionable(ex) && ex.actionReview !== 'Pending' && !ex.actionPhase;
 const isOverdue = (ex: GrcException) => {
   if (ex.flags?.includes('Overdue')) return true;
   if (!ex.dueDate || statusOf(ex) === 'Closed') return false;
@@ -55,9 +59,9 @@ const PRESETS: Record<string, { title: string; subtitle: string; filter: (ex: Gr
   total:          { title: 'All Exceptions',           subtitle: 'Every flagged exception in this case set',        filter: () => true },
   classified:     { title: 'Exceptions Classified',    subtitle: 'A Risk Owner has assigned a classification',      filter: isClassified },
   unclassified:   { title: 'Unclassified',             subtitle: 'Awaiting a Risk Owner classification',            filter: (ex) => !isClassified(ex) },
-  actionPlan:     { title: 'Management Action Plan',   subtitle: 'A management action plan has been submitted',     filter: hasActionPlan },
-  actionTaken:    { title: 'Action Taken',             subtitle: 'Risk Owner completed the action & added evidence', filter: isActionTaken },
-  reviewComplete: { title: 'Auditor Review Complete',  subtitle: 'The Auditor has finished reviewing the case',     filter: isReviewComplete },
+  actionPlan:     { title: 'Management Action Plan',   subtitle: 'Actionable cases (deficiencies & non-compliance) with a management action plan', filter: hasActionPlan },
+  actionTaken:    { title: 'Action Taken',             subtitle: 'Actionable cases where the Risk Owner completed the action & added evidence', filter: isActionTaken },
+  reviewComplete: { title: 'Auditor Review Complete',  subtitle: 'Actionable cases whose completed action the Auditor has reviewed', filter: isReviewComplete },
   open:           { title: 'Open',                     subtitle: 'No action yet, or reopened after a rejection',    filter: (ex) => statusOf(ex) === 'Open' },
   inProgress:     { title: 'In-Progress',              subtitle: 'Classified and moving through the review flow',   filter: (ex) => statusOf(ex) === 'Under Review' },
   closed:         { title: 'Closed',                   subtitle: 'Reviewed and resolved',                           filter: (ex) => statusOf(ex) === 'Closed' },
@@ -67,6 +71,10 @@ const PRESETS: Record<string, { title: string; subtitle: string; filter: (ex: Gr
   discrepancy:    { title: 'Discrepancy',              subtitle: 'Rejected — reopened at the Risk Owner',           filter: (ex) => combinedOf(ex) === 'Rejected (Discrepancy)' },
   overdue:        { title: 'Overdue',                  subtitle: 'Past the action due date and not yet closed',     filter: isOverdue },
 };
+
+// Drill-downs that are about management action plans → segregate by Actionable ID
+// (the plan), then deep dive into a case.
+const ACTIONABLE_DRILLDOWNS = new Set(['actionPlan', 'actionTaken', 'reviewComplete', 'pendingReview', 'implemented', 'partial', 'discrepancy']);
 
 // ── Shared UI atoms ──
 export function CircularProgress({ pct, size = 64, stroke = 5, label }: { pct: number; size?: number; stroke?: number; label?: React.ReactNode }) {
@@ -94,30 +102,29 @@ const TONE: Record<Tone, { iconBg: string; icon: string; value: string; bar: str
   ink:       { iconBg: 'bg-[#F4F2F7]',     icon: 'text-ink-600',       value: 'text-ink-900',       bar: 'bg-ink-400',       ring: 'group-hover:border-brand-300' },
 };
 
-// Journey stage tile (compact funnel step)
-function StageCard({ icon: Icon, label, count, total, tone, onClick }: {
-  icon: React.ElementType; label: string; count: number; total: number; tone: Tone; onClick: () => void;
+// Journey stage tile (compact funnel step). `denom` is the meaningful baseline for
+// this stage — the funnel narrows: total → classified → actionable → actionable.
+function StageCard({ icon: Icon, label, sublabel, count, denom, tone, onClick }: {
+  icon: React.ElementType; label: string; sublabel: string; count: number; denom: number; tone: Tone; onClick: () => void;
 }) {
   const t = TONE[tone];
-  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+  const pct = denom > 0 ? Math.round((count / denom) * 100) : 0;
   return (
-    <button onClick={onClick} title={`${label} — ${count} of ${total}`} className={`group text-left bg-canvas-elevated border border-canvas-border rounded-[12px] px-3.5 py-3 flex flex-col gap-2 cursor-pointer transition-colors ${t.ring}`}>
+    <button onClick={onClick} title={`${label} — ${count} of ${denom} (${sublabel})`} className={`group text-left bg-canvas-elevated border border-canvas-border rounded-[12px] px-3.5 py-3 flex flex-col gap-2 cursor-pointer transition-colors ${t.ring}`}>
       <div className="flex items-center gap-2.5">
         <div className={`w-8 h-8 rounded-[9px] ${t.iconBg} ${t.icon} flex items-center justify-center shrink-0`}><Icon size={15} strokeWidth={1.9} /></div>
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-1">
             <span className={`text-[1.375rem] leading-none font-semibold tabular-nums ${t.value}`}>{count}</span>
-            <span className="text-[0.6875rem] text-ink-400 tabular-nums">/ {total}</span>
+            <span className="text-[0.6875rem] text-ink-400 tabular-nums">/ {denom}</span>
           </div>
         </div>
         <ArrowRight size={13} className="text-ink-300 group-hover:text-ink-600 group-hover:translate-x-0.5 transition-all shrink-0" />
       </div>
       <div className="text-[0.75rem] font-medium text-ink-700 leading-snug">{label}</div>
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-[4px] rounded-full bg-canvas-border overflow-hidden">
-          <div className={`h-full rounded-full ${t.bar} transition-all duration-500`} style={{ width: `${pct}%` }} />
-        </div>
-        <span className="text-[0.625rem] text-ink-400 tabular-nums shrink-0">{pct}%</span>
+      <div className="text-[0.625rem] text-ink-400 leading-snug -mt-1">{sublabel}</div>
+      <div className="h-[4px] rounded-full bg-canvas-border overflow-hidden">
+        <div className={`h-full rounded-full ${t.bar} transition-all duration-500`} style={{ width: `${pct}%` }} />
       </div>
     </button>
   );
@@ -251,6 +258,7 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
       total,
       classified: count(isClassified),
       unclassified: count(ex => !isClassified(ex)),
+      actionable: count(isActionable),
       actionPlan: count(hasActionPlan),
       actionTaken: count(isActionTaken),
       reviewComplete: count(isReviewComplete),
@@ -275,13 +283,19 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
     [openPreset, exceptions],
   );
 
-  const readinessPct = m.total > 0 ? Math.round((m.reviewComplete / m.total) * 100) : 0;
+  // ATR readiness tracks the actionable pipeline: an ATR can be issued once every
+  // actionable exception's action has been reviewed by the Auditor.
+  const readinessPct = m.actionable > 0
+    ? Math.round((m.reviewComplete / m.actionable) * 100)
+    : (m.total > 0 && m.unclassified === 0 ? 100 : 0);
 
+  // Funnel narrows: of all exceptions → classified → (actionable need a plan) →
+  // action taken → reviewed. Each stage's denominator is its meaningful baseline.
   const stages = [
-    { key: 'classified',     icon: Tag,           label: 'Exceptions Classified',   count: m.classified,     tone: 'brand' as Tone },
-    { key: 'actionPlan',     icon: ClipboardList, label: 'Management Action Plan',   count: m.actionPlan,     tone: 'evidence' as Tone },
-    { key: 'actionTaken',    icon: Wrench,        label: 'Action Taken',            count: m.actionTaken,    tone: 'mitigated' as Tone },
-    { key: 'reviewComplete', icon: ShieldCheck,   label: 'Auditor Review Complete', count: m.reviewComplete, tone: 'compliant' as Tone },
+    { key: 'classified',     icon: Tag,           label: 'Exceptions Classified',   sublabel: 'of all exceptions',          count: m.classified,     denom: m.total,      tone: 'brand' as Tone },
+    { key: 'actionPlan',     icon: ClipboardList, label: 'Management Action Plan',   sublabel: 'of classified need a plan',  count: m.actionable,     denom: m.classified, tone: 'evidence' as Tone },
+    { key: 'actionTaken',    icon: Wrench,        label: 'Action Taken',            sublabel: 'of action plans',            count: m.actionTaken,    denom: m.actionable, tone: 'mitigated' as Tone },
+    { key: 'reviewComplete', icon: ShieldCheck,   label: 'Auditor Review Complete', sublabel: 'of action plans',            count: m.reviewComplete, denom: m.actionable, tone: 'compliant' as Tone },
   ];
 
   return (
@@ -291,26 +305,33 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
         {/* ── ATR Readiness — the journey toward issuing the Audit-to-Record ── */}
         <section className="mb-5 rounded-[14px] border border-canvas-border bg-gradient-to-br from-brand-50/50 via-canvas-elevated to-canvas-elevated px-5 py-4">
           <div className="flex items-center gap-3.5 mb-4">
-            <CircularProgress pct={readinessPct} size={48} stroke={5} />
+            <CircularProgress pct={readinessPct} size={52} stroke={5} label={m.actionable > 0 ? <span className="text-[0.8125rem] font-bold tabular-nums">{m.reviewComplete}/{m.actionable}</span> : <span className="text-[0.75rem] font-semibold text-ink-400">—</span>} />
             <div className="min-w-0">
               <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-none">ATR Readiness</h2>
               <p className="text-[0.75rem] text-ink-500 mt-1 leading-snug">
-                {m.reviewComplete} of {m.total} cases fully reviewed · ATR issues once every case clears the Auditor's review.
+                {m.actionable > 0
+                  ? <>{m.reviewComplete} of {m.actionable} action plan{m.actionable === 1 ? '' : 's'} reviewed · an ATR can be issued once every action plan is reviewed by the Auditor.</>
+                  : <>No action plans yet — classify exceptions as a deficiency or non-compliance to start the ATR pipeline.</>}
               </p>
             </div>
           </div>
 
-          {/* Journey funnel — Classify → Plan → Action → Review */}
+          {/* Journey funnel — Classify → Management Action Plan → Action Taken → Auditor Review */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] items-stretch gap-2.5">
             {stages.map((st, i) => (
               <div key={st.key} className="contents">
-                <StageCard icon={st.icon} label={st.label} count={st.count} total={m.total} tone={st.tone} onClick={() => openDrawer(st.key)} />
+                <StageCard icon={st.icon} label={st.label} sublabel={st.sublabel} count={st.count} denom={st.denom} tone={st.tone} onClick={() => openDrawer(st.key)} />
                 {i < stages.length - 1 && (
                   <div className="hidden lg:flex items-center justify-center text-ink-300"><ChevronRight size={16} /></div>
                 )}
               </div>
             ))}
           </div>
+
+          {/* Self-explanatory note on the pipeline + the BAU/False Positive carve-out */}
+          <p className="text-[0.6875rem] text-ink-500 mt-3 leading-snug">
+            A Management Action Plan, the Action Taken, and the Auditor's review are required to issue an ATR — and apply only to <span className="font-medium text-ink-700">Design / System Deficiency</span> and <span className="font-medium text-ink-700">Procedural Non-Compliance</span>. <span className="font-medium text-ink-700">Business as Usual</span> and <span className="font-medium text-ink-700">False Positive</span> are closed at classification and need no action plan.
+          </p>
         </section>
 
         {/* ── Overdue strip ── */}
@@ -359,7 +380,7 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
         )}
 
         {/* ── Per-case status & journey detail ── */}
-        <ExceptionStatusTracker exceptions={exceptions} />
+        <ExceptionStatusTracker exceptions={exceptions} role={role} onAction={onAction} />
       </div>
 
       <AnimatePresence>
@@ -371,6 +392,9 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
             exceptions={presetExceptions}
             onClose={() => setOpenPresetKey(null)}
             onSelectException={setDetailEx}
+            groupByActionable={openPresetKey ? ACTIONABLE_DRILLDOWNS.has(openPresetKey) : false}
+            role={role}
+            onAction={(kind, ex) => { setOpenPresetKey(null); onAction?.(kind, ex); }}
           />
         )}
       </AnimatePresence>
