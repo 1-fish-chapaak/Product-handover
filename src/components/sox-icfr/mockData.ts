@@ -1,6 +1,6 @@
 import type {
-  Assertion, Control, DesignDoc, DesignPoint, DesignTrack, Deficiency, Discussion, DocStatus,
-  HandoffTask, IcfrEngagement, Nature, OperatingStep, OperatingTrack, Sampling, SignificantAccount,
+  Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, Deficiency, Discussion, DocStatus,
+  EvidenceFile, HandoffTask, IcfrEngagement, Nature, OperatingStep, OperatingTrack, Sampling, SignificantAccount,
   TestProcedure, TrackConclusion,
 } from './types';
 
@@ -13,8 +13,13 @@ let _p = 0;
 const point = (text: string, result: DesignPoint['result'] = 'Pass'): DesignPoint => ({ id: `dp${++_p}`, text, result });
 
 let _s = 0;
-const step = (code: string, description: string, assertion: Assertion, precision: string, procedures: TestProcedure[], result: OperatingStep['result'] = 'Not tested'): OperatingStep =>
-  ({ id: `os${++_s}`, code, description, assertion, precision, procedures, result });
+const step = (code: string, description: string, assertion: Assertion, precision: string, procedures: TestProcedure[], result: OperatingStep['result'] = 'Not tested', extra: Partial<OperatingStep> = {}): OperatingStep =>
+  ({ id: `os${++_s}`, code, description, assertion, precision, procedures, result, ...extra });
+
+let _f = 0;
+const file = (name: string, by = 'Risk Owner', kind: EvidenceFile['kind'] = 'PDF'): EvidenceFile => ({ id: `f${++_f}`, name, kind, uploadedBy: by, uploadedAt: '12 Apr' });
+const wf = (id: string, name: string, runRef?: string): Partial<OperatingStep> => ({ workflowId: id, workflowName: name, workflowRunRef: runRef });
+const attest = (note: string, by: string, files: string[]): Partial<OperatingStep> => ({ attestation: { note, by, role: 'risk-owner', at: '12 Apr', evidence: files.map(f => file(f, by)) } as Attestation });
 
 const designTrack = (conclusion: TrackConclusion, documents: DesignDoc[], points: DesignPoint[], testedBy: string | null = null): DesignTrack =>
   ({ documents, points, conclusion, testedBy: conclusion !== 'Not tested' ? (testedBy ?? 'A. Mehta · Auditor') : null, testedAt: conclusion !== 'Not tested' ? '14 Apr' : null });
@@ -29,10 +34,9 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
   testedAt: conclusion !== 'Not tested' ? '16 Apr' : null,
 });
 
-const autoTrack = (conclusion: TrackConclusion, steps: OperatingStep[], workflowId: string, workflowName: string, runRef?: string): OperatingTrack => ({
-  method: 'Automated', workflowId, workflowName, workflowRunRef: runRef,
-  steps, conclusion,
-  testedBy: conclusion !== 'Not tested' ? 'CCM workflow' : null,
+const autoTrack = (conclusion: TrackConclusion, steps: OperatingStep[]): OperatingTrack => ({
+  method: 'Automated', steps, conclusion,
+  testedBy: conclusion !== 'Not tested' ? 'CCM workflows' : null,
   testedAt: conclusion !== 'Not tested' ? '16 Apr' : null,
 });
 
@@ -60,9 +64,9 @@ const DETAILED: Control[] = [
       point('Change log is retained and immutable.'),
     ]),
     operating: autoTrack('Effective', [
-      step('A1', 'Bank-detail change is blocked until a distinct second user approves.', 'Existence / Occurrence', 'Per change', ['Reperformance', 'Inspection'], 'Pass'),
-      step('A2', 'Approver identity differs from requester on every change in period.', 'Rights & Obligations', 'Per change', ['Reperformance'], 'Pass'),
-    ], 'wf-vendor-dual', 'Vendor bank-change dual control', 'run #4821 · 312/312 changes'),
+      step('A1', 'Bank-detail change is blocked until a distinct second user approves.', 'Existence / Occurrence', 'Per change', ['Reperformance', 'Inspection'], 'Pass', wf('wf-vendor-block', 'Vendor bank-change block', 'run #4821 · 312/312 changes')),
+      step('A2', 'Approver identity differs from requester on every change in period.', 'Rights & Obligations', 'Per change', ['Reperformance'], 'Pass', wf('wf-vendor-segregation', 'Approver-segregation check', 'run #4821 · 0 conflicts')),
+    ]),
   },
   {
     id: 'P2P-C-02', wpRef: 'P-02', description: 'Purchase orders are approved per the delegation-of-authority matrix before release.',
@@ -80,9 +84,9 @@ const DETAILED: Control[] = [
       point('System enforces tier by PO value (not advisory).'),
     ]),
     operating: manualTrack('Not tested', [
-      step('B1', 'PO approved at the tier matching its value per the DoA matrix.', 'Existence / Occurrence', 'Per PO', ['Inspection', 'Reperformance'], 'Pass'),
-      step('B2', 'Approver held the delegated authority on the approval date.', 'Existence / Occurrence', 'Per PO', ['Inspection'], 'Pass'),
-      step('B3', 'No release before approval timestamp.', 'Accuracy', 'Per PO', ['Reperformance'], 'Not tested'),
+      step('B1', 'PO approved at the tier matching its value per the DoA matrix.', 'Existence / Occurrence', 'Per PO', ['Inspection', 'Reperformance'], 'Pass', attest('Approval screenshots for all 25 sampled POs attached; each shows the correct tier per the DoA matrix.', 'S. Iyer · Procurement', ['PO-approvals-sample.pdf', 'DoA-matrix-FY26.xlsx'])),
+      step('B2', 'Approver held the delegated authority on the approval date.', 'Existence / Occurrence', 'Per PO', ['Inspection'], 'Pass', attest('Delegation register extract confirms authority held on each approval date.', 'S. Iyer · Procurement', ['delegation-register.pdf'])),
+      step('B3', 'No release before approval timestamp.', 'Accuracy', 'Per PO', ['Reperformance'], 'Not tested', wf('wf-po-release-timing', 'PO release-timing check', undefined)),
     ], sampling(25, '25 items — daily manual control, moderate reliance (handbook — no fixed minimum, judgment documented).', 'Random'), 2640),
   },
   {
@@ -120,9 +124,9 @@ const DETAILED: Control[] = [
       point('Check is active across all company codes in scope.'),
     ]),
     operating: autoTrack('Ineffective', [
-      step('D1', 'Exact-match duplicate postings are blocked.', 'Existence / Occurrence', 'Per posting', ['Reperformance'], 'Pass'),
-      step('D2', 'Near-duplicates (trailing-space / leading-zero reference variants) are blocked.', 'Existence / Occurrence', 'Per posting', ['Reperformance', 'Inspection'], 'Fail'),
-    ], 'wf-dup-invoice', 'Duplicate-invoice detection', 'run #4822 · 4 variant duplicates posted'),
+      step('D1', 'Exact-match duplicate postings are blocked.', 'Existence / Occurrence', 'Per posting', ['Reperformance'], 'Pass', wf('wf-dup-exact', 'Exact-match duplicate block', 'run #4822 · 0 exact duplicates')),
+      step('D2', 'Near-duplicates (trailing-space / leading-zero reference variants) are blocked.', 'Existence / Occurrence', 'Per posting', ['Reperformance', 'Inspection'], 'Fail', wf('wf-dup-variant', 'Reference-variant duplicate block', 'run #4822 · 4 variant duplicates posted')),
+    ]),
   },
   {
     id: 'P2P-C-05', wpRef: 'P-05', description: 'Manual journals to AP control account are reviewed and approved by the Financial Controller.',
@@ -208,13 +212,17 @@ function generate(): Control[] {
         doc('Walkthrough', `Walkthrough — ${sp.process}.pdf`, designConcluded ? 'Received' : pat === 5 ? 'Requested' : 'Missing'),
       ];
       const points: DesignPoint[] = [point('Control addresses the stated risk and assertion.', designConcluded ? 'Pass' : 'Not tested'), point('Control operates at sufficient precision.', designConcluded ? 'Pass' : 'Not tested')];
+      const evidenced = operating === 'Effective';
+      const stepExtra = (k: number): Partial<OperatingStep> => nature === 'Automated'
+        ? wf(`wf-${sp.prefix.toLowerCase()}-${idx}-${k}`, `${title} — check ${k}`, evidenced ? `run #${5000 + n}` : undefined)
+        : evidenced ? attest(`Evidence for attribute ${k} of "${title.toLowerCase()}" attached and reviewed.`, sp.owner, [`${sp.prefix}-attr${k}.pdf`]) : {};
       const opSteps: OperatingStep[] = [
-        step(`${n}.1`, `${title} — primary attribute tested.`, 'Accuracy', nature === 'Automated' ? 'Per transaction' : 'Per item', nature === 'Automated' ? ['Reperformance'] : ['Inspection', 'Reperformance'], operating === 'Effective' ? 'Pass' : 'Not tested'),
-        step(`${n}.2`, `${title} — exceptions handled per policy.`, 'Existence / Occurrence', 'Per exception', ['Inspection'], operating === 'Effective' ? 'Pass' : 'Not tested'),
+        step(`${n}.1`, `${title} — primary attribute tested.`, 'Accuracy', nature === 'Automated' ? 'Per transaction' : 'Per item', nature === 'Automated' ? ['Reperformance'] : ['Inspection', 'Reperformance'], evidenced ? 'Pass' : 'Not tested', stepExtra(1)),
+        step(`${n}.2`, `${title} — exceptions handled per policy.`, 'Existence / Occurrence', 'Per exception', ['Inspection'], evidenced ? 'Pass' : 'Not tested', stepExtra(2)),
       ];
       const op = nature === 'Automated'
-        ? autoTrack(operating, opSteps, `wf-${sp.prefix.toLowerCase()}-${idx}`, `${title} — CCM`, operating === 'Effective' ? `run #${5000 + n}` : undefined)
-        : manualTrack(operating, opSteps, operating === 'Effective' ? sampling(25, 'Standard sample — moderate reliance.', 'Random') : undefined, operating === 'Effective' ? 2000 + n * 7 : 0);
+        ? autoTrack(operating, opSteps)
+        : manualTrack(operating, opSteps, evidenced ? sampling(25, 'Standard sample — moderate reliance.', 'Random') : undefined, evidenced ? 2000 + n * 7 : 0);
       out.push({
         id: `${sp.prefix}-C-${String(idx + 1).padStart(2, '0')}`, wpRef: `${sp.wp}-${String(idx + 1).padStart(2, '0')}`,
         description: desc + '.', process: sp.process, subProcess: sp.subs[i % sp.subs.length],

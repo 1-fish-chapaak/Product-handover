@@ -72,6 +72,16 @@ export interface DesignTrack {
 // ─── Operating track (TOE) ──────────────────────────────────────────────────────
 
 export type OperatingMethod = 'Automated' | 'Manual';
+/** A first-line self-attestation against one attribute: text + uploaded evidence. */
+export interface Attestation {
+  note: string;
+  evidence: EvidenceFile[];
+  by: string;
+  role: Role;
+  at: string;
+}
+/** One attribute (test step). Each attribute is evidenced independently — by its
+ *  own linked workflow, or by self-attestation with text + uploaded evidence. */
 export interface OperatingStep {
   id: string;
   code: string;
@@ -79,6 +89,10 @@ export interface OperatingStep {
   assertion: Assertion;
   precision: string;
   procedures: TestProcedure[];
+  workflowId?: string;
+  workflowName?: string;
+  workflowRunRef?: string;
+  attestation?: Attestation;
   result: TestResult;
   override?: Override;
 }
@@ -96,10 +110,7 @@ export interface Population {
   evidence: EvidenceFile[];
 }
 export interface OperatingTrack {
-  method: OperatingMethod;
-  workflowId?: string;
-  workflowName?: string;
-  workflowRunRef?: string;
+  method: OperatingMethod;        // dominant evidence mode — informational; each attribute is evidenced independently
   population?: Population;
   sampling?: Sampling;
   steps: OperatingStep[];

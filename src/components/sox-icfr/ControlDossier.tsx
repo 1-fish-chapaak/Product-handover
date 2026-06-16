@@ -3,13 +3,13 @@ import { motion } from 'motion/react';
 import {
   ArrowLeft, FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, Download, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
-  CornerDownRight, Pencil, ShieldCheck, RotateCcw, Cpu, ChevronRight, Scale,
+  CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import {
   controlConclusion, courtFor, designProgress, discussionsFor, operatingProgress, trackResult,
 } from './helpers';
-import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, ResultChip } from './parts';
+import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { downloadControlWorkingPaper } from './icfrWorkingPaper';
 import { cn } from '../../lib/cn';
@@ -34,32 +34,69 @@ function RationaleForm({ title, onCancel, buttons }: { title: string; onCancel: 
   );
 }
 
-// ── one operating step (test attribute) ──────────────────────────────────────────
+// ── one operating attribute — its own workflow and/or self-attestation ────────────
 function StepRow({ control, step, canEdit }: { control: Control; step: OperatingStep; canEdit: boolean }) {
-  const { setStepResult, overrideStep } = useIcfr();
+  const { setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence } = useIcfr();
   const [over, setOver] = useState(false);
+  const [attestOpen, setAttestOpen] = useState(false);
+  const [noteDraft, setNoteDraft] = useState(step.attestation?.note ?? '');
   const effective: TestResult = step.override ? (step.override.result as TestResult) : step.result;
+  const att = step.attestation;
+
+  const resultBtn = (target: TestResult, label: string, Icon: typeof CheckCircle2, on: boolean, onTone: string) => (
+    <button onClick={() => setStepResult(control.id, step.id, target)} className={cn('h-8 px-2.5 inline-flex items-center gap-1 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer', on ? onTone : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-ink-300 hover:text-ink-900')}><Icon size={13} />{label}</button>
+  );
+
   return (
     <div className={cn('step-row', effective === 'Fail' && 'fail', effective === 'Pass' && 'pass')}>
-      <div className="flex items-start gap-3">
-        <Tickmark result={effective} size={20} />
+      <div className="flex items-start gap-3.5">
+        <Tickmark result={effective} size={22} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] font-bold text-ink-400">{step.code}</span>
-            <span className="text-[12.5px] font-semibold text-ink-900">{step.description}</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-mono text-[11px] font-bold text-ink-500">{step.code}</span>
+            <span className="text-[13px] font-semibold text-ink-900">{step.description}</span>
             {step.override && <span className="override-tag"><Pencil size={9} /> Overridden</span>}
           </div>
-          <div className="text-[11px] text-ink-400 mt-0.5">{step.assertion} · {step.precision} · {step.procedures.join(' / ')}</div>
-          {step.override && <div className="text-[11px] text-high-700 mt-1 flex items-start gap-1"><CornerDownRight size={11} className="mt-0.5 shrink-0" /> {step.override.rationale} <span className="text-ink-400">— {step.override.by}</span></div>}
+          <div className="text-[11px] text-ink-400 mt-1">{step.assertion} · {step.precision} · {step.procedures.join(' / ')}</div>
+          {step.override && <div className="text-[11px] text-high-700 mt-1.5 flex items-start gap-1"><CornerDownRight size={11} className="mt-0.5 shrink-0" /> {step.override.rationale} <span className="text-ink-400">— {step.override.by}</span></div>}
         </div>
         {canEdit && (
-          <div className="flex items-center gap-1 shrink-0">
-            <button onClick={() => setStepResult(control.id, step.id, 'Pass')} title="Mark pass" className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer', effective === 'Pass' ? 'bg-compliant-50 border-compliant-200 text-compliant-700' : 'border-canvas-border text-ink-400 hover:text-compliant-700')}><CheckCircle2 size={14} /></button>
-            <button onClick={() => setStepResult(control.id, step.id, 'Fail')} title="Mark fail" className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer', effective === 'Fail' ? 'bg-risk-50 border-risk-200 text-risk-700' : 'border-canvas-border text-ink-400 hover:text-risk-700')}><XCircle size={14} /></button>
-            <button onClick={() => setOver(o => !o)} title="Override with rationale" className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer', step.override ? 'bg-high-50 border-high-200 text-high-700' : 'border-canvas-border text-ink-400 hover:text-high-700')}><Pencil size={13} /></button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {resultBtn('Pass', 'Pass', CheckCircle2, effective === 'Pass', 'bg-compliant-50 border-compliant-300 text-compliant-700')}
+            {resultBtn('Fail', 'Fail', XCircle, effective === 'Fail', 'bg-risk-50 border-risk-300 text-risk-700')}
+            <button onClick={() => setOver(o => !o)} title="Override result with rationale" className={cn('h-8 w-8 inline-flex items-center justify-center rounded-lg border transition-colors cursor-pointer', step.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={13} /></button>
           </div>
         )}
       </div>
+
+      {/* evidence — each attribute is evidenced on its own */}
+      <div className="mt-3 ml-[36px] space-y-2">
+        {step.workflowName && (
+          <div className="flex items-center gap-2.5 rounded-lg border border-evidence-100 bg-evidence-50/40 px-3 py-2">
+            <Cpu size={14} className="text-evidence-700 shrink-0" />
+            <div className="min-w-0 flex-1"><div className="text-[12px] font-semibold text-ink-800 truncate">{step.workflowName}</div><div className="text-[10.5px] font-mono text-ink-400">{step.workflowRunRef ?? 'run not pulled yet'}</div></div>
+            {canEdit && <button onClick={() => pullStepRun(control.id, step.id)} className="h-7 px-2.5 rounded-md bg-evidence-600 text-white text-[11.5px] font-semibold hover:bg-evidence-700 inline-flex items-center gap-1 cursor-pointer"><WorkflowIcon size={12} /> {step.workflowRunRef ? 'Re-pull' : 'Pull run'}</button>}
+          </div>
+        )}
+        <div className="rounded-lg border border-canvas-border px-3 py-2.5">
+          <div className="flex items-center gap-2 text-[11px] font-bold text-ink-600"><Hand size={12} /> Self-attestation {att && <span className="font-normal text-ink-400">· {att.by}, {att.at}</span>}</div>
+          {att?.note && !attestOpen && <p className="text-[12px] text-ink-700 mt-1.5 italic">“{att.note}”</p>}
+          {att && att.evidence.length > 0 && <div className="flex flex-wrap gap-1.5 mt-1.5">{att.evidence.map(f => <span key={f.id} className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-ink-600 bg-paper-50 border border-canvas-border rounded-md px-1.5 h-[20px]"><Paperclip size={9} />{f.name}</span>)}</div>}
+          {canEdit ? (attestOpen ? (
+            <div className="mt-2">
+              <textarea autoFocus value={noteDraft} onChange={e => setNoteDraft(e.target.value)} rows={2} placeholder="Describe how this attribute is satisfied — this is recorded as your attestation." className="w-full text-[12px] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+              <div className="flex items-center gap-2 mt-1.5">
+                <button disabled={!noteDraft.trim()} onClick={() => { attestStep(control.id, step.id, noteDraft.trim()); setAttestOpen(false); }} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[11.5px] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 cursor-pointer">Save attestation</button>
+                <button onClick={() => addStepEvidence(control.id, step.id, `evidence-${step.code}.pdf`)} className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[11.5px] font-semibold hover:border-brand-300 hover:text-brand-700 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>
+                <button onClick={() => setAttestOpen(false)} className="h-7 px-2 text-ink-500 text-[11.5px] font-semibold hover:text-ink-800 cursor-pointer">Done</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setAttestOpen(true)} className="mt-1.5 h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[11.5px] font-semibold hover:border-brand-300 hover:text-brand-700 inline-flex items-center gap-1 cursor-pointer"><Pencil size={11} /> {att?.note ? 'Edit attestation' : 'Self-attest with evidence'}</button>
+          )) : !att && <p className="text-[11.5px] text-ink-400 mt-1">Not attested</p>}
+        </div>
+      </div>
+
       {over && (
         step.override
           ? <div className="mt-2 flex justify-end"><button onClick={() => { overrideStep(control.id, step.id, null); setOver(false); }} className="h-7 px-3 text-[12px] font-semibold rounded-lg border border-canvas-border text-ink-600 hover:text-ink-900 inline-flex items-center gap-1.5 cursor-pointer"><RotateCcw size={12} /> Remove override</button></div>
@@ -125,13 +162,13 @@ function DesignTrack({ control, canEdit }: { control: Control; canEdit: boolean 
         </div>
         <div className="text-right shrink-0"><TrackPill c={result} />{d.testedBy && <div className="text-[10.5px] text-ink-400 mt-1">{d.testedBy} · {d.testedAt}</div>}</div>
       </div>
-      <div className="p-4">
+      <div className="p-5">
         {/* required documents */}
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="text-[12px] font-bold text-ink-700 inline-flex items-center gap-1.5"><FileText size={13} /> Required design documents</h4>
+        <div className="flex items-center justify-between mb-2.5">
+          <h4 className="text-[12.5px] font-bold text-ink-700 inline-flex items-center gap-1.5"><FileText size={14} /> Required design documents</h4>
           <span className="text-[11px] text-ink-400 tabular-nums">{prog.docsReceived}/{prog.docsTotal} received</span>
         </div>
-        <div className="mb-4">
+        <div className="mb-5">
           {d.documents.map(doc => (
             <div key={doc.id} className="doc-row">
               <FileCheck2 size={15} className={cn('shrink-0', DOC_TONE[doc.status])} />
@@ -151,16 +188,16 @@ function DesignTrack({ control, canEdit }: { control: Control; canEdit: boolean 
         </div>
 
         {/* design considerations */}
-        <h4 className="text-[12px] font-bold text-ink-700 inline-flex items-center gap-1.5 mb-2"><ClipboardCheck size={13} /> Design considerations <span className="font-normal text-ink-400">· assessed in the walkthrough</span></h4>
-        <div className="space-y-1.5 mb-4">
+        <h4 className="text-[12.5px] font-bold text-ink-700 inline-flex items-center gap-1.5 mb-2.5"><ClipboardCheck size={14} /> Design considerations <span className="font-normal text-ink-400">· assessed in the walkthrough</span></h4>
+        <div className="space-y-2 mb-5">
           {d.points.map(p => (
             <div key={p.id} className="flex items-center gap-2.5 py-1.5">
               <Tickmark result={p.result} size={17} />
               <span className="text-[12.5px] text-ink-800 flex-1">{p.text}</span>
               {canEdit && (
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setDesignPoint(control.id, p.id, 'Pass')} className={cn('h-6 px-2 text-[11px] font-semibold rounded border transition-colors cursor-pointer', p.result === 'Pass' ? 'bg-compliant-50 border-compliant-200 text-compliant-700' : 'border-canvas-border text-ink-400')}>Pass</button>
-                  <button onClick={() => setDesignPoint(control.id, p.id, 'Fail')} className={cn('h-6 px-2 text-[11px] font-semibold rounded border transition-colors cursor-pointer', p.result === 'Fail' ? 'bg-risk-50 border-risk-200 text-risk-700' : 'border-canvas-border text-ink-400')}>Fail</button>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => setDesignPoint(control.id, p.id, 'Pass')} className={cn('h-7 px-2.5 text-[11.5px] font-semibold rounded-md border transition-colors cursor-pointer', p.result === 'Pass' ? 'bg-compliant-50 border-compliant-300 text-compliant-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-compliant-300 hover:text-compliant-700')}>Pass</button>
+                  <button onClick={() => setDesignPoint(control.id, p.id, 'Fail')} className={cn('h-7 px-2.5 text-[11.5px] font-semibold rounded-md border transition-colors cursor-pointer', p.result === 'Fail' ? 'bg-risk-50 border-risk-300 text-risk-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-risk-300 hover:text-risk-700')}>Fail</button>
                 </div>
               )}
             </div>
@@ -176,15 +213,16 @@ function DesignTrack({ control, canEdit }: { control: Control; canEdit: boolean 
 
 // ── operating track (TOE) ────────────────────────────────────────────────────────
 function OperatingTrack({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { setPopulation, setSampling, setStepResult } = useIcfr();
+  const { setPopulation, setSampling } = useIcfr();
   const o = control.operating; const prog = operatingProgress(control);
   const result = trackResult(o);
   const anyFail = o.steps.some(s => (s.override ? s.override.result : s.result) === 'Fail');
   const allTested = o.steps.every(s => (s.override ? s.override.result : s.result) !== 'Not tested') && o.steps.length > 0;
   const suggestion: TrackConclusion = anyFail ? 'Ineffective' : allTested ? 'Effective' : 'Not tested';
   const [sampleSize, setSampleSize] = useState(25);
+  const wfCount = o.steps.filter(s => s.workflowName).length;
+  const attCount = o.steps.filter(s => s.attestation).length;
 
-  const pullRun = () => o.steps.forEach(s => { if (s.result === 'Not tested') setStepResult(control.id, s.id, 'Pass'); });
   const uploadPop = () => setPopulation(control.id, { source: 'SAP — full-period extract', count: 2640, tieOut: 'Agreed to GL control account', evidence: [{ id: 'ev', name: 'population.xlsx', kind: 'XLSX', uploadedBy: 'You · Auditor', uploadedAt: 'just now' }] });
   const drawSample = () => { const s: Sampling = { basis: `${sampleSize} items — judgment documented (handbook: no fixed minimum).`, method: 'Random', size: sampleSize, samples: Array.from({ length: sampleSize }, (_, i) => ({ id: `s${i}`, ref: `#${1000 + i}`, result: 'Not tested' })) }; setSampling(control.id, s); };
 
@@ -192,34 +230,23 @@ function OperatingTrack({ control, canEdit }: { control: Control; canEdit: boole
     <section className="track track-operating">
       <div className="track-head">
         <div>
-          <div className="flex items-center gap-2"><span className="track-num">②</span><h3 className="text-[14px] font-bold text-ink-900">Test of operating effectiveness</h3>
-            <span className={cn('inline-flex items-center gap-1 px-2 h-[22px] rounded-md border text-[11px] font-semibold', o.method === 'Automated' ? 'bg-evidence-50 border-evidence-100 text-evidence-700' : 'bg-paper-50 border-canvas-border text-ink-600')}>{o.method === 'Automated' ? <WorkflowIcon size={11} /> : <Hand size={11} />}{o.method}</span>
-          </div>
-          <p className="text-[11.5px] text-ink-500 mt-0.5">Did the control operate as designed across the period? {o.method === 'Automated' ? 'Driven by the linked continuous-monitoring workflow.' : 'Sampled from the population and tested per attribute.'}</p>
+          <div className="flex items-center gap-2"><span className="track-num">②</span><h3 className="text-[14px] font-bold text-ink-900">Test of operating effectiveness</h3><Pill tone="info">independent</Pill></div>
+          <p className="text-[11.5px] text-ink-500 mt-1 max-w-[560px]">Did the control operate as designed across the period? Each attribute is evidenced on its own — by its own linked workflow, or self-attested with evidence.</p>
         </div>
         <div className="text-right shrink-0"><TrackPill c={result} />{o.testedBy && <div className="text-[10.5px] text-ink-400 mt-1">{o.testedBy} · {o.testedAt}</div>}</div>
       </div>
-      <div className="p-4">
-        {o.method === 'Automated' ? (
-          <div className="mb-4 rounded-xl border border-evidence-100 bg-evidence-50/40 p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2"><Cpu size={15} className="text-evidence-700" /><div><div className="text-[12.5px] font-semibold text-ink-900">{o.workflowName ?? 'Continuous-monitoring workflow'}</div><div className="text-[11px] text-ink-400 font-mono">{o.workflowRunRef ?? 'no run pulled'}</div></div></div>
-              {canEdit && <button onClick={pullRun} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold hover:bg-evidence-700 transition-colors cursor-pointer"><WorkflowIcon size={13} /> Pull latest run</button>}
-            </div>
-            <p className="text-[11px] text-ink-500 mt-2">Automated controls test the full population — no sampling. With effective GITC, the result may be benchmarked across periods.</p>
-          </div>
-        ) : (
-          <div className="mb-4 grid grid-cols-2 gap-3">
-            {/* population */}
-            <div className="rounded-xl border border-canvas-border p-3">
-              <div className="text-[11.5px] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><Upload size={12} /> Population</div>
+      <div className="p-5">
+        {/* sampling context — optional, for manual sampling-based controls */}
+        {o.method === 'Manual' && (
+          <div className="mb-5 grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-canvas-border p-3.5">
+              <div className="text-[11.5px] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><Upload size={12} /> Population <span className="font-normal text-ink-400">· optional</span></div>
               {o.population ? (
                 <div className="text-[12px] text-ink-700"><div className="font-semibold tabular-nums text-[15px] text-ink-900">{o.population.count.toLocaleString()}</div><div className="text-[11px] text-ink-400">{o.population.source}</div><div className="text-[11px] text-compliant-700 mt-0.5 inline-flex items-center gap-1"><CheckCircle2 size={11} /> {o.population.tieOut}</div></div>
-              ) : canEdit ? <button onClick={uploadPop} className="h-8 px-3 text-[12px] font-semibold rounded-lg border border-dashed border-canvas-border text-ink-500 hover:text-brand-700 hover:border-brand-300 inline-flex items-center gap-1.5 cursor-pointer w-full justify-center"><Upload size={13} /> Upload population</button> : <span className="text-[11.5px] text-ink-400">Not uploaded</span>}
+              ) : canEdit ? <button onClick={uploadPop} className="h-8 px-3 text-[12px] font-semibold rounded-lg border border-dashed border-canvas-border text-ink-600 hover:text-brand-700 hover:border-brand-300 inline-flex items-center gap-1.5 cursor-pointer w-full justify-center"><Upload size={13} /> Upload population</button> : <span className="text-[11.5px] text-ink-400">Not uploaded</span>}
             </div>
-            {/* sampling */}
-            <div className="rounded-xl border border-canvas-border p-3">
-              <div className="text-[11.5px] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><FlaskConical size={12} /> Sample</div>
+            <div className="rounded-xl border border-canvas-border p-3.5">
+              <div className="text-[11.5px] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><FlaskConical size={12} /> Sample <span className="font-normal text-ink-400">· optional</span></div>
               {o.sampling ? (
                 <div className="text-[12px] text-ink-700"><div className="font-semibold tabular-nums text-[15px] text-ink-900">{o.sampling.size} items</div><div className="text-[11px] text-ink-400">{o.sampling.method} · {o.sampling.basis}</div></div>
               ) : canEdit ? (
@@ -232,12 +259,11 @@ function OperatingTrack({ control, canEdit }: { control: Control; canEdit: boole
           </div>
         )}
 
-        {/* steps / attributes */}
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="text-[12px] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={13} /> Test attributes</h4>
-          <span className="text-[11px] text-ink-400 tabular-nums">{prog.passed} pass · {prog.failed} fail · {prog.total - prog.tested} untested</span>
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-[12.5px] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Test attributes <span className="font-normal text-ink-400">· each evidenced independently</span></h4>
+          <span className="text-[11px] text-ink-400 tabular-nums">{wfCount} workflow · {attCount} attested · {prog.passed} pass · {prog.failed} fail</span>
         </div>
-        <div className="mb-4">{o.steps.map(s => <StepRow key={s.id} control={control} step={s} canEdit={canEdit} />)}</div>
+        <div className="space-y-3 mb-5">{o.steps.map(s => <StepRow key={s.id} control={control} step={s} canEdit={canEdit} />)}</div>
 
         <ConcludeBar control={control} which="operating" suggestion={suggestion} canEdit={canEdit} />
       </div>
@@ -302,7 +328,7 @@ export default function ControlDossier() {
       <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 mb-3 cursor-pointer transition-colors"><ArrowLeft size={15} /> Control register</button>
 
       {/* leadsheet header */}
-      <div className="leadsheet mb-4">
+      <div className="leadsheet mb-5">
         <div className="leadsheet-head">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
@@ -340,8 +366,8 @@ export default function ControlDossier() {
       </div>
 
       {/* tracks + discussion */}
-      <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
-        <div className="space-y-4">
+      <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
+        <div className="space-y-5">
           <DesignTrack control={control} canEdit={canEdit} />
           <OperatingTrack control={control} canEdit={canEdit} />
           {concl === 'Ineffective' && (

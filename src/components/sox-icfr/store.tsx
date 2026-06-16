@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { seedIcfrEngagement } from './mockData';
 import type {
-  Control, Deficiency, DiscussionAnchor, DocStatus, HandoffTask, IcfrEngagement,
+  Attestation, Control, Deficiency, DiscussionAnchor, DocStatus, EvidenceFile, HandoffTask, IcfrEngagement,
   Override, Population, Role, Sampling, TestResult, TrackConclusion,
 } from './types';
 import { ROLE_LABEL } from './types';
@@ -28,6 +28,9 @@ interface IcfrCtx {
   setSampling: (controlId: string, sampling: Sampling) => void;
   setStepResult: (controlId: string, stepId: string, result: TestResult) => void;
   overrideStep: (controlId: string, stepId: string, override: Override | null) => void;
+  pullStepRun: (controlId: string, stepId: string) => void;
+  attestStep: (controlId: string, stepId: string, note: string) => void;
+  addStepEvidence: (controlId: string, stepId: string, fileName: string) => void;
   concludeOperating: (controlId: string, conclusion: TrackConclusion) => void;
   overrideOperating: (controlId: string, override: Override | null) => void;
   // discussions
@@ -107,6 +110,29 @@ export function IcfrProvider({ children, initialRole = 'auditor' }: { children: 
   const overrideStep = useCallback<IcfrCtx['overrideStep']>((controlId, stepId, override) => {
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => s.id === stepId ? { ...s, override: override ?? undefined } : s) } }));
   }, [patchControl]);
+
+  const patchStep = useCallback((controlId: string, stepId: string, fn: (s: Control['operating']['steps'][number]) => Control['operating']['steps'][number]) => {
+    patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => s.id === stepId ? fn(s) : s) } }));
+  }, [patchControl]);
+
+  const pullStepRun = useCallback<IcfrCtx['pullStepRun']>((controlId, stepId) => {
+    patchStep(controlId, stepId, s => ({ ...s, workflowRunRef: 'run · just now · 0 exceptions', result: s.result === 'Not tested' ? 'Pass' : s.result }));
+  }, [patchStep]);
+
+  const attestStep = useCallback<IcfrCtx['attestStep']>((controlId, stepId, note) => {
+    patchStep(controlId, stepId, s => {
+      const att: Attestation = { note, by: me, role, at: 'just now', evidence: s.attestation?.evidence ?? [] };
+      return { ...s, attestation: att };
+    });
+  }, [patchStep, me, role]);
+
+  const addStepEvidence = useCallback<IcfrCtx['addStepEvidence']>((controlId, stepId, fileName) => {
+    patchStep(controlId, stepId, s => {
+      const ev: EvidenceFile = { id: `f-${fileName}`, name: fileName, kind: fileName.endsWith('.xlsx') ? 'XLSX' : 'PDF', uploadedBy: me, uploadedAt: 'just now' };
+      const att: Attestation = s.attestation ?? { note: '', by: me, role, at: 'just now', evidence: [] };
+      return { ...s, attestation: { ...att, evidence: [...att.evidence, ev] } };
+    });
+  }, [patchStep, me, role]);
 
   const concludeOperating = useCallback<IcfrCtx['concludeOperating']>((controlId, conclusion) => {
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, conclusion, testedBy: me, testedAt: 'just now' } }));
@@ -197,11 +223,11 @@ export function IcfrProvider({ children, initialRole = 'auditor' }: { children: 
     eng, role, view, selectedControlId, me,
     setRole: changeRole, setView, openControl, back,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
-    setPopulation, setSampling, setStepResult, overrideStep, concludeOperating, overrideOperating,
+    setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, concludeOperating, overrideOperating,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateDeficiency, togglePeriod, rollForward, createEngagement,
-  }), [eng, role, view, selectedControlId, me, changeRole, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, setPopulation, setSampling, setStepResult, overrideStep, concludeOperating, overrideOperating, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateDeficiency, togglePeriod, rollForward, createEngagement]);
+  }), [eng, role, view, selectedControlId, me, changeRole, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, concludeOperating, overrideOperating, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateDeficiency, togglePeriod, rollForward, createEngagement]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
