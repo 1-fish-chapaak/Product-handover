@@ -1,3 +1,4 @@
+import { validationQA } from './helpers';
 import type {
   Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, Deficiency, Discussion, DocStatus,
   EvidenceFile, HandoffTask, IcfrEngagement, Nature, OperatingStep, OperatingTrack, Sampling, SignificantAccount,
@@ -11,7 +12,7 @@ const doc = (kind: DesignDoc['kind'], name: string, status: DocStatus, by?: stri
 
 let _p = 0;
 const point = (text: string, result: DesignPoint['result'] = 'Pass', wfName = 'Design walkthrough check'): DesignPoint =>
-  ({ id: `dp${++_p}`, text, result, workflowId: `wf-tod-${_p}`, workflowName: wfName, workflowRunRef: result !== 'Not tested' ? 'run · validated' : undefined });
+  ({ id: `dp${++_p}`, text, result, workflowId: `wf-tod-${_p}`, workflowName: wfName, workflowRunRef: result !== 'Not tested' ? 'run · validated' : undefined, validation: result !== 'Not tested' ? { qa: validationQA(text, result === 'Fail'), at: '14 Apr' } : undefined });
 
 let _s = 0;
 const step = (code: string, description: string, assertion: Assertion, precision: string, procedures: TestProcedure[], result: OperatingStep['result'] = 'Not tested', extra: Partial<OperatingStep> = {}): OperatingStep =>

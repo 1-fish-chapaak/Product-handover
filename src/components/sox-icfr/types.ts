@@ -54,6 +54,10 @@ export interface DesignDoc {
   uploadedBy?: string;
   at?: string;
 }
+/** The Q&A a validation workflow produced — reviewable after it runs. */
+export interface ValidationQA { q: string; a: string; pass: boolean; }
+export interface ValidationResult { qa: ValidationQA[]; at: string; }
+
 /** A design consideration — validated by its own workflow, with manual override. */
 export interface DesignPoint {
   id: string;
@@ -61,6 +65,7 @@ export interface DesignPoint {
   workflowId?: string;
   workflowName?: string;
   workflowRunRef?: string;
+  validation?: ValidationResult;
   result: TestResult;
   override?: Override;
 }

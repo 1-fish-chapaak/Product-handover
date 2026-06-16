@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { seedIcfrEngagement } from './mockData';
+import { validationQA } from './helpers';
 import type {
   Attestation, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
   EvidenceFile, HandoffTask, IcfrEngagement, OperatingStep, Override, Population, Role, Sampling, TestResult, TrackConclusion,
@@ -124,7 +125,11 @@ export function IcfrProvider({ children, initialRole = 'auditor' }: { children: 
     patchControl(controlId, c => ({ ...c, design: { ...c.design, points: c.design.points.filter(p => p.id !== pointId) } }));
   }, [patchControl]);
   const validateDesignPoint = useCallback<IcfrCtx['validateDesignPoint']>((controlId, pointId) => {
-    patchControl(controlId, c => ({ ...c, design: { ...c.design, points: c.design.points.map(p => p.id === pointId ? { ...p, result: p.result === 'Not tested' ? 'Pass' : p.result, workflowRunRef: 'run · validated · just now', override: undefined } : p) } }));
+    patchControl(controlId, c => ({ ...c, design: { ...c.design, points: c.design.points.map(p => {
+      if (p.id !== pointId) return p;
+      const willFail = (p.override ? p.override.result : p.result) === 'Fail';
+      return { ...p, result: willFail ? 'Fail' : 'Pass', override: undefined, workflowRunRef: 'run · validated · just now', validation: { qa: validationQA(p.text, willFail), at: 'just now' } };
+    }) } }));
   }, [patchControl]);
   const overrideDesignPoint = useCallback<IcfrCtx['overrideDesignPoint']>((controlId, pointId, override) => {
     patchControl(controlId, c => ({ ...c, design: { ...c.design, points: c.design.points.map(p => p.id === pointId ? { ...p, override: override ?? undefined } : p) } }));

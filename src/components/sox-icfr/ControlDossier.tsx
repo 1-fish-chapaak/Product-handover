@@ -1,24 +1,25 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft, FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, Download, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
-  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2,
+  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import {
   controlConclusion, courtFor, designProgress, discussionsFor, operatingProgress, trackResult,
   pointResult, stepResult,
 } from './helpers';
-import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark } from './parts';
+import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { downloadControlWorkingPaper } from './icfrWorkingPaper';
 import { cn } from '../../lib/cn';
 import { DESIGN_DOC_KINDS } from './types';
 import type {
   Control, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, OperatingStep,
-  Sampling, TestResult, TrackConclusion,
+  Sampling, TestResult, TrackConclusion, ValidationQA,
 } from './types';
 
 const DOC_TONE: Record<DocStatus, string> = { Received: 'text-compliant-700', Requested: 'text-mitigated-700', Missing: 'text-ink-400' };
@@ -83,7 +84,7 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
   const addEmail = () => { const e = draft.trim().replace(/,$/, ''); if (e && !emails.includes(e)) setEmails([...emails, e]); setDraft(''); };
   const toggle = (id: string) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const canSend = sel.size > 0 && emails.length > 0;
-  return (
+  return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <motion.div className="modal" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border">
@@ -125,7 +126,8 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
           </div>
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -159,37 +161,72 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled }: { con
   );
 }
 
-// ── design consideration row (validated by its own workflow + manual override) ────
+// ── validation Q&A modal — review what the workflow asked and found ───────────────
+function QAResultsModal({ title, qa, onClose }: { title: string; qa: ValidationQA[]; onClose: () => void }) {
+  const passed = qa.filter(x => x.pass).length;
+  return createPortal(
+    <div className="modal-backdrop" onClick={onClose}>
+      <motion.div className="modal" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border">
+          <div className="flex items-center gap-2"><ListChecks size={16} className="text-brand-600" /><h3 className="text-[14px] font-bold text-ink-900">Validation results</h3></div>
+          <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
+        </div>
+        <div className="px-5 py-2.5 border-b border-canvas-border bg-paper-50/40"><p className="text-[12px] text-ink-600"><b className="text-ink-800">Consideration —</b> {title}</p></div>
+        <div className="px-5 py-4 space-y-3.5 max-h-[52vh] overflow-y-auto">
+          {qa.map((item, i) => (
+            <div key={i} className="flex items-start gap-3">
+              <Tickmark result={item.pass ? 'Pass' : 'Fail'} size={18} />
+              <div><div className="text-[12.5px] font-semibold text-ink-900">{item.q}</div><div className="text-[12px] text-ink-600 mt-0.5 leading-relaxed">{item.a}</div></div>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-between px-5 py-3.5 border-t border-canvas-border">
+          <span className="text-[11.5px] text-ink-500">{passed}/{qa.length} checks passed</span>
+          <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 cursor-pointer">Close</button>
+        </div>
+      </motion.div>
+    </div>,
+    document.body,
+  );
+}
+
+// ── design consideration row — validated by its own workflow (Q&A) + override ─────
+const VALIDATE_MS = 6000;
 function PointRow({ control, point, canEdit }: { control: Control; point: DesignPoint; canEdit: boolean }) {
   const { setDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignPoint } = useIcfr();
   const [over, setOver] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [showQA, setShowQA] = useState(false);
   const eff = pointResult(point);
+  const runValidate = () => { setValidating(true); window.setTimeout(() => { validateDesignPoint(control.id, point.id); setValidating(false); }, VALIDATE_MS); };
+
   return (
     <div className="subcard px-3.5 py-3">
       <div className="flex items-start gap-3">
-        <Tickmark result={eff} size={20} />
+        {validating ? <span className="w-5 h-5 inline-flex items-center justify-center"><Loader2 size={15} className="animate-spin text-evidence-600" /></span> : <Tickmark result={eff} size={20} />}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[12.5px] font-medium text-ink-800">{point.text}</span>
-            {point.override && <span className="override-tag"><Pencil size={9} /> Overridden</span>}
-          </div>
-          <div className="text-[11px] text-ink-400 mt-1 inline-flex items-center gap-1.5"><WorkflowIcon size={11} /> {point.workflowName ?? 'Design walkthrough check'} · {point.workflowRunRef ?? 'not validated'}</div>
+          <div className="flex items-center gap-2"><span className="text-[12.5px] font-medium text-ink-800">{point.text}</span>{point.override && <span className="override-tag"><Pencil size={9} /> Overridden</span>}</div>
+          <div className="text-[11px] text-ink-400 mt-1 inline-flex items-center gap-1.5"><WorkflowIcon size={11} /> {point.workflowName ?? 'Design walkthrough check'} · {validating ? 'validating…' : (point.workflowRunRef ?? 'not validated')}</div>
           {point.override && <div className="text-[11px] text-high-700 mt-1 flex items-start gap-1"><CornerDownRight size={11} className="mt-0.5 shrink-0" /> {point.override.rationale}</div>}
         </div>
-        {canEdit && (
+        {canEdit && !validating && (
           <div className="flex items-center gap-1.5 shrink-0">
-            <button onClick={() => validateDesignPoint(control.id, point.id)} title="Validate via workflow" className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] font-semibold text-ink-600 hover:border-evidence-300 hover:text-evidence-700 cursor-pointer"><PlayCircle size={12} /> Validate</button>
+            {point.validation && <button onClick={() => setShowQA(true)} className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><ListChecks size={12} /> View results</button>}
+            <button onClick={runValidate} title="Validate via workflow" className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] font-semibold text-ink-600 hover:border-evidence-300 hover:text-evidence-700 cursor-pointer"><PlayCircle size={12} /> {point.validation ? 'Re-run' : 'Validate'}</button>
             <button onClick={() => setOver(o => !o)} title="Override" className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border cursor-pointer', point.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={12} /></button>
             <button onClick={() => removeDesignPoint(control.id, point.id)} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
           </div>
         )}
+        {validating && <span className="text-[11px] font-semibold text-evidence-600 shrink-0">Validating…</span>}
       </div>
+      {validating && <div className="mt-2.5 ml-8 h-1.5 rounded-full bg-paper-100 overflow-hidden"><motion.div className="h-full bg-evidence-500" initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: VALIDATE_MS / 1000, ease: 'linear' }} /></div>}
       {over && (point.override
         ? <div className="mt-2 flex justify-end"><button onClick={() => { overrideDesignPoint(control.id, point.id, null); setOver(false); }} className="h-7 px-3 text-[12px] font-semibold rounded-lg border border-canvas-border text-ink-600 hover:text-ink-900 inline-flex items-center gap-1.5 cursor-pointer"><RotateCcw size={12} /> Remove override</button></div>
         : <RationaleForm title="Override this consideration — record why" onCancel={() => setOver(false)} buttons={[
             { label: 'Override · Pass', onClick: n => { overrideDesignPoint(control.id, point.id, { result: 'Pass', by: 'You · Auditor', at: 'just now', rationale: n }); setOver(false); } },
             { label: 'Override · Fail', onClick: n => { setDesignPoint(control.id, point.id, 'Fail'); overrideDesignPoint(control.id, point.id, { result: 'Fail', by: 'You · Auditor', at: 'just now', rationale: n }); setOver(false); } },
           ]} />)}
+      <AnimatePresence>{showQA && point.validation && <QAResultsModal title={point.text} qa={point.validation.qa} onClose={() => setShowQA(false)} />}</AnimatePresence>
     </div>
   );
 }
@@ -277,11 +314,13 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
 
 // ── design section (TOD) ──────────────────────────────────────────────────────────
 function DesignSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { setDocStatus, addDesignDoc, removeDesignDoc, addDesignPoint } = useIcfr();
+  const { setDocStatus, addDesignDoc, removeDesignDoc, addDesignPoint, validateDesignPoint } = useIcfr();
   const d = control.design; const prog = designProgress(control);
   const [modal, setModal] = useState(false);
   const [newPoint, setNewPoint] = useState('');
   const [addingPoint, setAddingPoint] = useState(false);
+  const [validatingAll, setValidatingAll] = useState(false);
+  const runValidateAll = () => { setValidatingAll(true); window.setTimeout(() => { control.design.points.forEach(p => validateDesignPoint(control.id, p.id)); setValidatingAll(false); }, VALIDATE_MS); };
   const missing = d.documents.filter(x => x.status !== 'Received');
   const suggestion: TrackConclusion = d.documents.length === 0 && d.points.length === 0 ? 'Not tested'
     : missing.length > 0 || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
@@ -325,9 +364,12 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
           )}
 
           {/* considerations */}
-          <div className="flex items-center justify-between mb-2.5">
+          <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
             <h4 className="text-[12.5px] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Design considerations <span className="font-normal text-ink-400">· each validated by a workflow</span></h4>
-            {canEdit && <button onClick={() => setAddingPoint(a => !a)} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add</button>}
+            <div className="flex items-center gap-2">
+              {canEdit && d.points.length > 0 && <button disabled={validatingAll} onClick={runValidateAll} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-evidence-600 text-white text-[11.5px] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-70 cursor-pointer">{validatingAll ? <><Loader2 size={12} className="animate-spin" /> Validating…</> : <><PlayCircle size={12} /> Validate all</>}</button>}
+              {canEdit && <button onClick={() => setAddingPoint(a => !a)} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add</button>}
+            </div>
           </div>
           {addingPoint && (
             <div className="flex items-center gap-2 mb-2.5">
@@ -436,16 +478,34 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
 // ── vertical stepper step ─────────────────────────────────────────────────────────
 function VStep({ n, title, subtitle, status, locked, right, children }: { n: number; title: string; subtitle: string; status: TrackConclusion; locked?: boolean; right?: React.ReactNode; children: React.ReactNode }) {
   const nodeClass = locked ? 'locked' : status === 'Effective' ? 'done' : status === 'Ineffective' ? 'fail' : 'active';
+  const concluded = status === 'Effective' || status === 'Ineffective';
+  const [flash, setFlash] = useState(false);
+  const prev = useRef(status);
+  useEffect(() => {
+    if (status !== prev.current && (status === 'Effective' || status === 'Ineffective')) {
+      setFlash(true);
+      const t = window.setTimeout(() => setFlash(false), 1500);
+      prev.current = status;
+      return () => window.clearTimeout(t);
+    }
+    prev.current = status;
+  }, [status]);
+
   return (
     <motion.div className="vstep" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
       <div className="vstep-rail" />
       <div className={cn('vstep-node', nodeClass)}>{locked ? <Lock size={15} /> : status === 'Effective' ? <Check size={17} strokeWidth={3} /> : status === 'Ineffective' ? <X size={16} strokeWidth={3} /> : n}</div>
-      <div className={cn('panel', locked && 'panel-locked')}>
+      <div className={cn('panel relative', locked && 'panel-locked')}>
         <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-canvas-border">
           <div><h3 className="text-[15px] font-bold text-ink-900">{title}</h3><p className="text-[11.5px] text-ink-500 mt-0.5 max-w-[520px]">{subtitle}</p></div>
-          <div className="flex items-center gap-2 shrink-0">{right}<TrackPill c={status} /></div>
+          <div className="flex items-center gap-2 shrink-0">{right}{concluded ? <Stamp result={status as 'Effective' | 'Ineffective'} /> : <TrackPill c={status} />}</div>
         </div>
         {children}
+        <AnimatePresence>{flash && concluded && (
+          <motion.div className="stamp-flash" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <Stamp result={status as 'Effective' | 'Ineffective'} size="lg" />
+          </motion.div>
+        )}</AnimatePresence>
       </div>
     </motion.div>
   );
