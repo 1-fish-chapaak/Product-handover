@@ -50,6 +50,8 @@ interface IcfrCtx {
   removeAttribute: (controlId: string, stepId: string) => void;
   mapStepWorkflow: (controlId: string, stepId: string, name: string) => void;
   toggleStepAttest: (controlId: string, stepId: string, enabled: boolean) => void;
+  toggleStepAI: (controlId: string, stepId: string, on: boolean) => void;
+  runStepValidation: (controlId: string, stepId: string) => void;
   testAllAttributes: (controlId: string) => void;
   // discussions
   addComment: (controlId: string, anchor: DiscussionAnchor, text: string) => void;
@@ -198,6 +200,15 @@ export function IcfrProvider({ children, initialRole = 'auditor' }: { children: 
   const toggleStepAttest = useCallback<IcfrCtx['toggleStepAttest']>((controlId, stepId, enabled) => {
     patchStep(controlId, stepId, s => ({ ...s, attestEnabled: enabled }));
   }, [patchStep]);
+  const toggleStepAI = useCallback<IcfrCtx['toggleStepAI']>((controlId, stepId, on) => {
+    patchStep(controlId, stepId, s => ({ ...s, aiValidation: on }));
+  }, [patchStep]);
+  const runStepValidation = useCallback<IcfrCtx['runStepValidation']>((controlId, stepId) => {
+    patchStep(controlId, stepId, s => {
+      const willFail = (s.override ? s.override.result : s.result) === 'Fail';
+      return { ...s, result: willFail ? 'Fail' : 'Pass', workflowRunRef: 'Ask IRA · validated · just now', validation: { qa: validationQA(s.description, willFail), at: 'just now' } };
+    });
+  }, [patchStep]);
   const testAllAttributes = useCallback<IcfrCtx['testAllAttributes']>((controlId) => {
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => {
       const res: TestResult = s.result === 'Fail' || s.override?.result === 'Fail' ? 'Fail' : 'Pass';
@@ -296,11 +307,11 @@ export function IcfrProvider({ children, initialRole = 'auditor' }: { children: 
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
     addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, concludeOperating, overrideOperating,
-    addAttribute, removeAttribute, mapStepWorkflow, toggleStepAttest, testAllAttributes,
+    addAttribute, removeAttribute, mapStepWorkflow, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateDeficiency, togglePeriod, rollForward, createEngagement,
-  }), [eng, role, view, selectedControlId, me, changeRole, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, toggleStepAttest, testAllAttributes, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateDeficiency, togglePeriod, rollForward, createEngagement]);
+  }), [eng, role, view, selectedControlId, me, changeRole, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateDeficiency, togglePeriod, rollForward, createEngagement]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
