@@ -3,7 +3,7 @@ import { seedIcfrEngagement } from './mockData';
 import { validationQA } from './helpers';
 import type {
   Attestation, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
-  EvidenceFile, HandoffTask, IcfrEngagement, OperatingStep, Override, Population, Role, Sampling, TestResult, TrackConclusion,
+  EvidenceFile, EvidenceMode, HandoffTask, IcfrEngagement, OperatingStep, Override, Population, Role, Sampling, TestResult, TrackConclusion,
 } from './types';
 
 let _uid = 0;
@@ -49,6 +49,7 @@ interface IcfrCtx {
   addAttribute: (controlId: string, description: string) => void;
   removeAttribute: (controlId: string, stepId: string) => void;
   mapStepWorkflow: (controlId: string, stepId: string, name: string) => void;
+  setStepEvidenceMode: (controlId: string, stepId: string, mode: EvidenceMode) => void;
   toggleStepAttest: (controlId: string, stepId: string, enabled: boolean) => void;
   toggleStepAI: (controlId: string, stepId: string, on: boolean) => void;
   runStepValidation: (controlId: string, stepId: string) => void;
@@ -195,7 +196,10 @@ export function IcfrProvider({ children, initialRole = 'auditor' }: { children: 
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.filter(s => s.id !== stepId) } }));
   }, [patchControl]);
   const mapStepWorkflow = useCallback<IcfrCtx['mapStepWorkflow']>((controlId, stepId, name) => {
-    patchStep(controlId, stepId, s => ({ ...s, workflowId: uid('wf'), workflowName: name, workflowRunRef: undefined }));
+    patchStep(controlId, stepId, s => ({ ...s, evidenceMode: 'workflow', workflowId: uid('wf'), workflowName: name, workflowRunRef: undefined }));
+  }, [patchStep]);
+  const setStepEvidenceMode = useCallback<IcfrCtx['setStepEvidenceMode']>((controlId, stepId, mode) => {
+    patchStep(controlId, stepId, s => ({ ...s, evidenceMode: mode }));
   }, [patchStep]);
   const toggleStepAttest = useCallback<IcfrCtx['toggleStepAttest']>((controlId, stepId, enabled) => {
     patchStep(controlId, stepId, s => ({ ...s, attestEnabled: enabled }));
@@ -307,11 +311,11 @@ export function IcfrProvider({ children, initialRole = 'auditor' }: { children: 
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
     addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, concludeOperating, overrideOperating,
-    addAttribute, removeAttribute, mapStepWorkflow, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
+    addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateDeficiency, togglePeriod, rollForward, createEngagement,
-  }), [eng, role, view, selectedControlId, me, changeRole, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateDeficiency, togglePeriod, rollForward, createEngagement]);
+  }), [eng, role, view, selectedControlId, me, changeRole, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateDeficiency, togglePeriod, rollForward, createEngagement]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

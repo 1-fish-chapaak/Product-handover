@@ -81,6 +81,8 @@ export interface DesignTrack {
 // ─── Operating track (TOE) ──────────────────────────────────────────────────────
 
 export type OperatingMethod = 'Automated' | 'Manual';
+/** How one attribute is evidenced — choose one per attribute. */
+export type EvidenceMode = 'ai' | 'workflow' | 'attest';
 /** A first-line self-attestation against one attribute: text + uploaded evidence. */
 export interface Attestation {
   note: string;
@@ -98,6 +100,7 @@ export interface OperatingStep {
   assertion: Assertion;
   precision: string;
   procedures: TestProcedure[];
+  evidenceMode?: EvidenceMode;
   workflowId?: string;
   workflowName?: string;
   workflowRunRef?: string;
