@@ -40,13 +40,17 @@ export function controlConclusion(c: Control): Conclusion {
 
 // ─── Track progress ──────────────────────────────────────────────────────────────
 
+import type { DesignPoint, OperatingStep, TestResult } from './types';
+export function pointResult(p: DesignPoint): TestResult { return p.override ? (p.override.result as TestResult) : p.result; }
+export function stepResult(s: OperatingStep): TestResult { return s.override ? (s.override.result as TestResult) : s.result; }
+
 export function designProgress(c: Control) {
   const docs = c.design.documents;
   return {
     docsReceived: docs.filter(d => d.status === 'Received').length,
     docsTotal: docs.length,
     docsMissing: docs.filter(d => d.status !== 'Received').length,
-    pointsPass: c.design.points.filter(p => p.result === 'Pass').length,
+    pointsPass: c.design.points.filter(p => pointResult(p) === 'Pass').length,
     pointsTotal: c.design.points.length,
   };
 }
