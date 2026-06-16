@@ -1,27 +1,40 @@
-import { useState } from 'react';
+import { useState, type ElementType } from 'react';
 import { motion } from 'motion/react';
 import {
-  FileSearch, Table2, Workflow,
-  Search, Sparkles, Bot, Info,
+  FileSearch, Table2, Workflow, Search,
+  LineChart, Image as ImageIcon, Mic, Stethoscope,
 } from 'lucide-react';
 import type { View } from '../../hooks/useAppState';
-import GlowCard from '../shared/GlowCard';
+import { useToast } from '../shared/Toast';
+import FloatingLines from '../shared/FloatingLines';
+import ListToolbar from '../shared/ListToolbar';
+import EmptyState from '../shared/EmptyState';
 
 interface Props {
   setView: (v: View) => void;
   onLaunchWorkflowBuilder?: (prompt: string) => void;
 }
 
+interface ToolTag {
+  label: string;
+  /** Tailwind bg + text classes, e.g. "bg-sky-100 text-sky-700". */
+  color: string;
+}
+
 interface Tool {
   id: string;
-  icon: typeof FileSearch;
+  icon: ElementType;
   title: string;
   description: string;
-  tags: { label: string; color: string }[];
+  tags: ToolTag[];
   beta?: boolean;
   view?: string;
   isWorkflowLauncher?: boolean;
+  /** No tool screen yet — clicking shows a "coming soon" toast. */
+  comingSoon?: boolean;
 }
+
+const BETA_TAG: ToolTag = { label: 'Beta', color: 'bg-mitigated-50 text-mitigated-700' };
 
 const tools: Tool[] = [
   {
@@ -61,10 +74,133 @@ const tools: Tool[] = [
     // the chat surface. Click routes through onLaunchWorkflowBuilder('').
     isWorkflowLauncher: true,
   },
+  // New v1 tools — tool screens not built yet, so they show a "coming soon"
+  // toast on click (to be built out one at a time later).
+  {
+    id: 'insights-anomaly',
+    icon: LineChart,
+    title: 'Insights & Anomaly Report',
+    description: 'Automated statistical profiling, anomaly detection, and heuristic reports',
+    tags: [
+      { label: 'EDA', color: 'bg-sky-100 text-sky-700' },
+      { label: 'Analytics', color: 'bg-indigo-100 text-indigo-700' },
+      { label: 'Data', color: 'bg-teal-100 text-teal-700' },
+    ],
+    comingSoon: true,
+  },
+  {
+    id: 'image-analytics',
+    icon: ImageIcon,
+    title: 'Image Analytics',
+    description: 'AI-powered image chat, comparison, and compliance auditing',
+    tags: [
+      { label: 'Image', color: 'bg-violet-100 text-violet-700' },
+      { label: 'Audit', color: 'bg-indigo-100 text-indigo-700' },
+      { label: 'Compare', color: 'bg-sky-100 text-sky-700' },
+    ],
+    comingSoon: true,
+  },
+  {
+    id: 'speech-auditor',
+    icon: Mic,
+    title: 'Speech Auditor',
+    description: 'AI-powered call recording analysis with transcription, sentiment, and audit reports',
+    tags: [
+      { label: 'Speech', color: 'bg-fuchsia-100 text-fuchsia-700' },
+      { label: 'Audit', color: 'bg-indigo-100 text-indigo-700' },
+      { label: 'Sentiment', color: 'bg-teal-100 text-teal-700' },
+    ],
+    comingSoon: true,
+  },
+  {
+    id: 'medical-report-reader',
+    icon: Stethoscope,
+    title: 'Medical Report Reader',
+    description: 'AI-powered forensic medical report analysis for insurance fraud detection',
+    tags: [
+      { label: 'Medical', color: 'bg-teal-100 text-teal-700' },
+      { label: 'Forensics', color: 'bg-risk-50 text-risk-700' },
+      { label: 'Insurance', color: 'bg-sky-100 text-sky-700' },
+    ],
+    comingSoon: true,
+  },
 ];
+
+// Concierge-only card — mirrors the shared ReportCard chrome (icon tile, title,
+// description, footer pills) but keeps the per-tag COLORED pills, and the "+N"
+// overflow reveals the hidden tags on hover / keyboard focus.
+function ToolCard({
+  icon: Icon, title, description, tags, index = 0, onClick,
+}: {
+  icon: ElementType;
+  title: string;
+  description: string;
+  tags: ToolTag[];
+  index?: number;
+  onClick?: () => void;
+}) {
+  const MAX = 3;
+  const shown = tags.slice(0, MAX);
+  const hidden = tags.slice(MAX);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0, transition: { delay: index * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
+      whileHover={{ y: -3, transition: { duration: 0.18, ease: 'easeOut' } }}
+      onClick={onClick}
+      className="bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-[12px] p-5 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:shadow-[0_12px_32px_rgba(15,8,30,0.08)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[176px]"
+    >
+      <div className="flex items-start mb-4">
+        <span className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 bg-brand-50 transition-transform duration-200 group-hover:scale-[1.06]">
+          <Icon size={16} className="text-brand-700" strokeWidth={1.75} />
+        </span>
+      </div>
+
+      <h3 className="text-[15px] leading-[1.35] font-semibold text-text group-hover:text-primary transition-colors mb-1.5 truncate" title={title}>
+        {title}
+      </h3>
+      <p className="text-[12px] text-text-secondary leading-[1.55] line-clamp-2" title={description}>
+        {description}
+      </p>
+
+      <div className="mt-auto pt-4 flex items-center gap-1.5 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+          {shown.map((t) => (
+            <span key={t.label} className={`inline-flex items-center h-6 px-2.5 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0 ${t.color}`}>
+              {t.label}
+            </span>
+          ))}
+        </div>
+        {hidden.length > 0 && (
+          <span className="relative group/more shrink-0">
+            <span
+              tabIndex={0}
+              role="button"
+              aria-label={`Also tagged: ${hidden.map((t) => t.label).join(', ')}`}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center h-6 px-2 rounded-full border border-canvas-border bg-canvas-elevated text-[11px] font-medium text-ink-500 tabular-nums cursor-default transition-colors group-hover/more:border-brand-300 group-hover/more:text-brand-700 focus-visible:outline-none focus-visible:border-brand-300 focus-visible:text-brand-700"
+            >
+              +{hidden.length}
+            </span>
+            {/* Hover/focus reveal — the hidden tags as their colored pills.
+                Sits outside the truncating row so it's never clipped. */}
+            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 hidden group-hover/more:flex group-focus-within/more:flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_32px_rgba(15,8,30,0.16)] whitespace-nowrap">
+              {hidden.map((t) => (
+                <span key={t.label} className={`inline-flex items-center h-5 px-2 rounded-full text-[11px] font-semibold ${t.color}`}>
+                  {t.label}
+                </span>
+              ))}
+            </span>
+          </span>
+        )}
+      </div>
+    </motion.div>
+  );
+}
 
 export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Props) {
   const [search, setSearch] = useState('');
+  const { addToast } = useToast();
 
   const filtered = tools.filter(
     (t) =>
@@ -73,164 +209,88 @@ export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Pr
       t.tags.some((tag) => tag.label.toLowerCase().includes(search.toLowerCase()))
   );
 
-  return (
-    <div className="h-full overflow-y-auto relative bg-canvas">
-      {/* Hero */}
-      <div className="border-b border-canvas-border bg-canvas-elevated">
-        <div className="p-8">
-          <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-          >
-            <div className="flex items-center gap-3 mb-1">
-              <div className="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center">
-                <Bot size={20} className="text-white" />
-              </div>
-              <div>
-                <h1 className="text-[1.75rem] font-semibold text-ink-900">
-                  AI Concierge
-                </h1>
-                <p className="text-[0.875rem] text-ink-500 leading-relaxed">
-                  Specialized AI tools for document analysis and data extraction.
-                </p>
-              </div>
-            </div>
-          </motion.div>
+  const launch = (tool: Tool) => {
+    if (tool.isWorkflowLauncher) onLaunchWorkflowBuilder?.('');
+    else if (tool.view) setView(tool.view as View);
+    else if (tool.comingSoon) addToast({ type: 'info', message: `${tool.title} — coming soon` });
+  };
 
-          {/* Search */}
+  return (
+    <div className="h-full flex flex-col overflow-hidden bg-canvas">
+      {/* Fixed header strip — full-bleed bg-canvas-elevated band via matching
+          negative margins, ambient FloatingLines + serif display H1. Mirrors
+          the Reports / Knowledge Hub page recipe. */}
+      <div className="px-6 lg:px-12 xl:px-[124px] pt-8 shrink-0">
+        <div className="bg-canvas-elevated -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-8 pt-8 border-b border-canvas-border relative overflow-hidden">
+          <FloatingLines
+            enabledWaves={['top', 'bottom']}
+            lineCount={3}
+            lineDistance={10}
+            bendRadius={5}
+            bendStrength={-0.3}
+            interactive
+            parallax
+            color="#6a12cd"
+            opacity={0.05}
+          />
           <motion.div
-            initial={{ opacity: 0, y: 6 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, delay: 0.05, ease: [0.2, 0, 0, 1] }}
-            className="mt-6 max-w-md"
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="mb-6 min-w-0"
           >
-            <div className="relative">
-              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-500" />
-              <input
-                type="text"
-                placeholder="Search tools..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 h-10 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-4 focus:ring-brand-600/20 focus:border-brand-600 transition-colors"
-              />
-              {search && (
+            <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">
+              AI Concierge
+            </h1>
+            <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">
+              Specialized AI tools for document analysis and data extraction.
+            </p>
+          </motion.div>
+        </div>
+      </div>
+
+      {/* Scrolling content region — search toolbar + tool grid. */}
+      <div className="px-6 lg:px-12 xl:px-[124px] pb-8 flex-1 min-h-0 overflow-y-auto relative">
+        <div className="pt-6">
+          <div className="mb-6">
+            <ListToolbar
+              search={search}
+              onSearch={setSearch}
+              searchPlaceholder="Search AI tools…"
+            />
+          </div>
+
+          {filtered.length === 0 ? (
+            <EmptyState
+              icon={Search}
+              title={`No tools match “${search}”`}
+              body="Try a different search."
+              size="compact"
+              action={
                 <button
                   onClick={() => setSearch('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-500 hover:text-ink-700 transition-colors cursor-pointer"
+                  className="text-[0.8125rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer"
                 >
-                  <span className="text-xs">Clear</span>
+                  Clear search
                 </button>
-              )}
+              }
+            />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filtered.map((tool, i) => (
+                <ToolCard
+                  key={tool.id}
+                  index={i}
+                  icon={tool.icon}
+                  title={tool.title}
+                  description={tool.description}
+                  tags={tool.beta ? [BETA_TAG, ...tool.tags] : tool.tags}
+                  onClick={() => launch(tool)}
+                />
+              ))}
             </div>
-          </motion.div>
+          )}
         </div>
-      </div>
-
-      {/* Info Note */}
-      <div className="px-8 pt-6 pb-2">
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, delay: 0.1, ease: [0.2, 0, 0, 1] }}
-          className="flex items-start gap-3 px-5 py-4 rounded-xl bg-brand-50 border border-brand-100"
-        >
-          <Info size={18} className="text-brand-600 mt-0.5 shrink-0" />
-          <p className="text-[0.8125rem] text-brand-700 leading-relaxed">
-            Looking for <span className="font-semibold">RACM generation</span>? It's now embedded in{' '}
-            <span className="font-semibold">Governance &gt; RACM</span>. Data profiling and anomaly detection
-            is available directly in <span className="font-semibold">IRA AI chat</span>.
-          </p>
-        </motion.div>
-      </div>
-
-      {/* Tool Grid */}
-      <div className="p-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {filtered.map((tool, i) => {
-            const Icon = tool.icon;
-
-            return (
-              <motion.div
-                key={tool.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.2,
-                  delay: i * 0.04,
-                  ease: [0.2, 0, 0, 1],
-                }}
-              >
-                <GlowCard
-                  onClick={() => {
-                    if (tool.isWorkflowLauncher) {
-                      onLaunchWorkflowBuilder?.('');
-                    } else if (tool.view) {
-                      setView(tool.view as View);
-                    }
-                  }}
-                  className="bg-canvas-elevated border border-canvas-border"
-                >
-                  <div className="p-6">
-                    {/* Header row */}
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="w-11 h-11 rounded-xl bg-brand-50 flex items-center justify-center">
-                        <Icon size={20} className="text-brand-700" />
-                      </div>
-                      {tool.beta && (
-                        <span className="inline-flex items-center px-2 h-6 rounded-full bg-mitigated-50 text-mitigated-700 text-[0.75rem] font-medium">
-                          Beta
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Title */}
-                    <h3 className="text-[0.9375rem] font-bold text-text mb-1.5 flex items-center gap-2">
-                      {tool.title}
-                      {tool.view && (
-                        <Sparkles size={12} className="text-primary/40" />
-                      )}
-                    </h3>
-
-                    {/* Description */}
-                    <p className="text-[0.75rem] text-text-secondary leading-relaxed mb-4">
-                      {tool.description}
-                    </p>
-
-                    {/* Tags */}
-                    <div className="flex flex-wrap gap-1.5">
-                      {tool.tags.map((tag) => (
-                        <span
-                          key={tag.label}
-                          className={`px-2.5 py-0.5 rounded-full text-[0.75rem] font-semibold ${tag.color}`}
-                        >
-                          {tag.label}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </GlowCard>
-              </motion.div>
-            );
-          })}
-        </div>
-
-        {filtered.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-16"
-          >
-            <Search size={32} className="mx-auto text-text-muted/40 mb-3" />
-            <p className="text-[0.875rem] text-text-muted">No tools match "{search}"</p>
-            <button
-              onClick={() => setSearch('')}
-              className="mt-2 text-[0.75rem] text-primary hover:underline cursor-pointer"
-            >
-              Clear search
-            </button>
-          </motion.div>
-        )}
       </div>
     </div>
   );
