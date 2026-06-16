@@ -239,15 +239,16 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
 
 // ── operating attribute — its own workflow and/or self-attestation ────────────────
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
-  const { setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, mapStepWorkflow, toggleStepAttest, toggleStepAI, runStepValidation, removeAttribute } = useIcfr();
+  const { setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
   const [over, setOver] = useState(false);
   const [noteDraft, setNoteDraft] = useState(step.attestation?.note ?? '');
   const [validatingWf, setValidatingWf] = useState(false);
   const [showQA, setShowQA] = useState(false);
   const eff = stepResult(step);
   const att = step.attestation;
-  const attestOn = step.attestEnabled ?? !!att;   // separate module — default off (on if already attested)
-  const aiOn = step.aiValidation ?? false;        // generic AI validation — toggle, default off
+  const attestOn = step.attestEnabled ?? !!att;   // section 2 — separate toggle, default off (on if already attested)
+  // section 1 — validation: AI validation is the default; can switch to a mapped workflow
+  const v1: 'ai' | 'workflow' = step.evidenceMode === 'workflow' ? 'workflow' : step.evidenceMode === 'ai' ? 'ai' : (step.workflowName ? 'workflow' : 'ai');
   const busy = testing || validatingWf;
   const runAI = () => { setValidatingWf(true); window.setTimeout(() => { runStepValidation(control.id, step.id); setValidatingWf(false); }, 4000); };
 
@@ -278,34 +279,42 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
         )}
       </div>
 
-      {/* evidence — map a workflow (default); generic AI validation + self-attest are toggles, off by default */}
+      {/* evidence — Section 1: validation (AI validation default / workflow) · Section 2: self-attest (separate) */}
       <div className="mt-3 ml-[36px] space-y-2">
-        {step.workflowName ? (
-          <div className="rounded-lg border border-evidence-100 bg-evidence-50/40 px-3 py-2.5">
-            <div className="flex items-center gap-2.5">
-              <Cpu size={14} className="text-evidence-700 shrink-0" />
-              <div className="min-w-0 flex-1"><div className="text-[12px] font-semibold text-ink-800 truncate">{step.workflowName}</div><div className="text-[10.5px] font-mono text-ink-400">{validatingWf ? 'Ask IRA is validating…' : (step.workflowRunRef ?? 'not run yet')}</div></div>
-              {canEdit && <label className="inline-flex items-center gap-1.5 cursor-pointer shrink-0"><span className="text-[11px] font-semibold text-ink-600 inline-flex items-center gap-1"><Sparkles size={12} className="text-brand-600" /> AI validation</span><Toggle on={aiOn} onChange={v => toggleStepAI(control.id, step.id, v)} label="Toggle AI validation" /></label>}
-            </div>
+        <div className="rounded-lg border border-canvas-border px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="text-[11px] font-bold text-ink-600">Validation</span>
             {canEdit && (
-              <div className="flex items-center gap-2.5 mt-2 flex-wrap">
-                {aiOn ? (
-                  validatingWf
-                    ? <span className="text-[11.5px] font-semibold text-brand-600 inline-flex items-center gap-1.5"><Loader2 size={13} className="animate-spin" /> Validating…</span>
-                    : <>
-                        <button onClick={runAI} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 inline-flex items-center gap-1 cursor-pointer"><Sparkles size={12} /> {step.validation ? 'Re-run' : 'Run generic validation'}</button>
-                        {step.validation && <button onClick={() => setShowQA(true)} className="text-[11.5px] font-semibold text-brand-700 underline underline-offset-2 hover:text-brand-800 inline-flex items-center gap-1 cursor-pointer"><ListChecks size={12} /> View results</button>}
-                      </>
-                ) : (
-                  <button onClick={() => pullStepRun(control.id, step.id)} className="h-7 px-2.5 rounded-md bg-evidence-600 text-white text-[11.5px] font-semibold hover:bg-evidence-700 inline-flex items-center gap-1 cursor-pointer"><WorkflowIcon size={12} /> {step.workflowRunRef ? 'Re-pull' : 'Pull run'}</button>
-                )}
-                <Dropdown trigger={<><Link2 size={12} /> Remap</>}>{close => WORKFLOW_LIBRARY.map(w => <button key={w} className={menuItem} onClick={() => { mapStepWorkflow(control.id, step.id, w); close(); }}><WorkflowIcon size={12} className="text-evidence-600" />{w}</button>)}</Dropdown>
+              <div className="inline-flex items-center p-0.5 rounded-md border border-canvas-border bg-paper-50/60">
+                <button onClick={() => setStepEvidenceMode(control.id, step.id, 'ai')} className={cn('h-6 px-2 rounded text-[11px] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer', v1 === 'ai' ? 'bg-canvas-elevated text-brand-700 ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800')}><Sparkles size={11} /> AI validation</button>
+                <button onClick={() => setStepEvidenceMode(control.id, step.id, 'workflow')} className={cn('h-6 px-2 rounded text-[11px] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer', v1 === 'workflow' ? 'bg-canvas-elevated text-brand-700 ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800')}><WorkflowIcon size={11} /> Workflow</button>
               </div>
             )}
           </div>
-        ) : canEdit ? (
-          <Dropdown trigger={<><WorkflowIcon size={12} className="text-evidence-600" /> Map a workflow</>}>{close => WORKFLOW_LIBRARY.map(w => <button key={w} className={menuItem} onClick={() => { mapStepWorkflow(control.id, step.id, w); close(); }}><WorkflowIcon size={12} className="text-evidence-600" />{w}</button>)}</Dropdown>
-        ) : <span className="text-[11.5px] text-ink-400">No workflow mapped</span>}
+          {v1 === 'ai' ? (
+            <div className="rounded-md bg-brand-50/30 border border-brand-100 px-2.5 py-2 flex items-center gap-2.5 flex-wrap">
+              <Sparkles size={14} className="text-brand-600 shrink-0" />
+              <span className="text-[11.5px] text-ink-600 flex-1 min-w-0">Generic validation by Ask IRA · <span className="font-mono text-[10.5px] text-ink-400">{validatingWf ? 'validating…' : (step.validation ? (step.workflowRunRef ?? 'validated') : 'not run yet')}</span></span>
+              {canEdit && (validatingWf
+                ? <span className="text-[11.5px] font-semibold text-brand-600 inline-flex items-center gap-1.5"><Loader2 size={13} className="animate-spin" /> Validating…</span>
+                : <button onClick={runAI} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 inline-flex items-center gap-1 cursor-pointer"><Sparkles size={12} /> {step.validation ? 'Re-run' : 'Run AI validation'}</button>)}
+              {step.validation && <button onClick={() => setShowQA(true)} className="text-[11.5px] font-semibold text-brand-700 underline underline-offset-2 hover:text-brand-800 inline-flex items-center gap-1 cursor-pointer"><ListChecks size={12} /> View results</button>}
+            </div>
+          ) : (
+            step.workflowName ? (
+              <div className="rounded-md border border-evidence-100 bg-evidence-50/40 px-2.5 py-2 flex items-center gap-2.5">
+                <Cpu size={14} className="text-evidence-700 shrink-0" />
+                <div className="min-w-0 flex-1"><div className="text-[12px] font-semibold text-ink-800 truncate">{step.workflowName}</div><div className="text-[10.5px] font-mono text-ink-400">{step.workflowRunRef ?? 'not run yet'}</div></div>
+                {canEdit && <>
+                  <button onClick={() => pullStepRun(control.id, step.id)} className="h-7 px-2.5 rounded-md bg-evidence-600 text-white text-[11.5px] font-semibold hover:bg-evidence-700 inline-flex items-center gap-1 cursor-pointer"><WorkflowIcon size={12} /> {step.workflowRunRef ? 'Re-pull' : 'Pull run'}</button>
+                  <Dropdown trigger={<><Link2 size={12} /> Remap</>}>{close => WORKFLOW_LIBRARY.map(w => <button key={w} className={menuItem} onClick={() => { mapStepWorkflow(control.id, step.id, w); close(); }}><WorkflowIcon size={12} className="text-evidence-600" />{w}</button>)}</Dropdown>
+                </>}
+              </div>
+            ) : canEdit ? (
+              <Dropdown trigger={<><WorkflowIcon size={12} className="text-evidence-600" /> Map a workflow</>}>{close => WORKFLOW_LIBRARY.map(w => <button key={w} className={menuItem} onClick={() => { mapStepWorkflow(control.id, step.id, w); close(); }}><WorkflowIcon size={12} className="text-evidence-600" />{w}</button>)}</Dropdown>
+            ) : <span className="text-[11.5px] text-ink-400">No workflow mapped</span>
+          )}
+        </div>
 
         <div className="rounded-lg border border-canvas-border px-3 py-2.5">
           <div className="flex items-center gap-2 text-[11px] font-bold text-ink-600"><Hand size={12} /> Self-attestation {att && <span className="font-normal text-ink-400">· {att.by}, {att.at}</span>}
