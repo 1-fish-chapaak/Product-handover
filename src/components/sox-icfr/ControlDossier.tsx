@@ -14,6 +14,8 @@ import {
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp } from './parts';
 import { Pill } from '../shared/StatusBadge';
+import { useToast } from '../shared/Toast';
+import { Sparkles } from 'lucide-react';
 import { downloadControlWorkingPaper } from './icfrWorkingPaper';
 import { cn } from '../../lib/cn';
 import { DESIGN_DOC_KINDS } from './types';
@@ -134,14 +136,18 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
 // ── conclude footer — always visible, prominent ───────────────────────────────────
 function ConcludeFooter({ control, which, suggestion, canEdit, disabled }: { control: Control; which: 'design' | 'operating'; suggestion: TrackConclusion; canEdit: boolean; disabled?: boolean }) {
   const { concludeDesign, concludeOperating, overrideDesign, overrideOperating } = useIcfr();
+  const { addToast } = useToast();
   const track = control[which];
   const conclude = which === 'design' ? concludeDesign : concludeOperating;
   const override = which === 'design' ? overrideDesign : overrideOperating;
+  const label = which === 'design' ? 'Design' : 'Operating effectiveness';
   const [pending, setPending] = useState<TrackConclusion | null>(null);
   if (!canEdit) return null;
   const apply = (target: TrackConclusion) => {
-    if (suggestion !== 'Not tested' && target !== suggestion) { setPending(target); return; }
-    override(control.id, null); conclude(control.id, target);
+    conclude(control.id, target);                                  // always save the conclusion
+    const contradicts = suggestion !== 'Not tested' && target !== suggestion;
+    if (contradicts) setPending(target); else override(control.id, null);
+    addToast({ type: 'success', title: `${label} concluded ${target.toLowerCase()}`, message: contradicts ? 'Saved — add a rationale for going against the evidence.' : 'Saved to the working paper.' });
   };
   return (
     <div className="mt-4 pt-4 border-t border-canvas-border">
@@ -150,7 +156,7 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled }: { con
         <button disabled={disabled} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[12.5px] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> Conclude ineffective</button>
         {suggestion !== 'Not tested' && <span className="text-[11.5px] text-ink-400 inline-flex items-center gap-1"><Scale size={12} /> Evidence suggests <b className="font-semibold text-ink-600">{suggestion}</b></span>}
       </div>
-      {pending && <RationaleForm title={`Override the evidence — conclude ${pending} against a ${suggestion} result`} onCancel={() => setPending(null)} buttons={[{ label: `Override · ${pending}`, onClick: note => { override(control.id, { result: pending === 'Effective' ? 'Effective' : 'Ineffective', by: 'You · Auditor', at: 'just now', rationale: note }); conclude(control.id, pending); setPending(null); } }]} />}
+      {pending && <RationaleForm title={`Overriding the evidence — record why you concluded ${pending}`} onCancel={() => setPending(null)} buttons={[{ label: `Save rationale`, onClick: note => { override(control.id, { result: pending === 'Effective' ? 'Effective' : 'Ineffective', by: 'You · Auditor', at: 'just now', rationale: note }); setPending(null); } }]} />}
       {track.override && (
         <div className="mt-2.5 text-[11.5px] text-high-700 flex items-start gap-1.5 p-2.5 rounded-lg bg-high-50/50 border border-high-200">
           <Pencil size={12} className="mt-0.5 shrink-0" /><span><b>Conclusion overridden</b> — {track.override.rationale} <span className="text-ink-400">· {track.override.by}</span></span>
@@ -168,10 +174,10 @@ function QAResultsModal({ title, qa, onClose }: { title: string; qa: ValidationQ
     <div className="modal-backdrop" onClick={onClose}>
       <motion.div className="modal" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border">
-          <div className="flex items-center gap-2"><ListChecks size={16} className="text-brand-600" /><h3 className="text-[14px] font-bold text-ink-900">Validation results</h3></div>
+          <div className="flex items-center gap-2"><Sparkles size={16} className="text-brand-600" /><h3 className="text-[14px] font-bold text-ink-900">Ask IRA — validation results</h3></div>
           <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
         </div>
-        <div className="px-5 py-2.5 border-b border-canvas-border bg-paper-50/40"><p className="text-[12px] text-ink-600"><b className="text-ink-800">Consideration —</b> {title}</p></div>
+        <div className="px-5 py-2.5 border-b border-canvas-border bg-paper-50/40"><p className="text-[12px] text-ink-600"><b className="text-ink-800">Validated —</b> {title}</p></div>
         <div className="px-5 py-4 space-y-3.5 max-h-[52vh] overflow-y-auto">
           {qa.map((item, i) => (
             <div key={i} className="flex items-start gap-3">
@@ -233,12 +239,17 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
 
 // ── operating attribute — its own workflow and/or self-attestation ────────────────
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
-  const { setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, mapStepWorkflow, toggleStepAttest, removeAttribute } = useIcfr();
+  const { setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, mapStepWorkflow, toggleStepAttest, toggleStepAI, runStepValidation, removeAttribute } = useIcfr();
   const [over, setOver] = useState(false);
   const [noteDraft, setNoteDraft] = useState(step.attestation?.note ?? '');
+  const [validatingWf, setValidatingWf] = useState(false);
+  const [showQA, setShowQA] = useState(false);
   const eff = stepResult(step);
   const att = step.attestation;
   const attestOn = step.attestEnabled ?? !!att;
+  const aiOn = step.aiValidation ?? !!step.workflowName;
+  const busy = testing || validatingWf;
+  const runAI = () => { setValidatingWf(true); window.setTimeout(() => { runStepValidation(control.id, step.id); setValidatingWf(false); }, 4000); };
 
   const resultBtn = (target: TestResult, label: string, Icon: typeof CheckCircle2, on: boolean, tone: string) => (
     <button onClick={() => setStepResult(control.id, step.id, target)} className={cn('h-8 px-2.5 inline-flex items-center gap-1 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer', on ? tone : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-ink-300 hover:text-ink-900')}><Icon size={13} />{label}</button>
@@ -247,7 +258,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
   return (
     <div className={cn('step-row', eff === 'Fail' && 'fail', eff === 'Pass' && 'pass')}>
       <div className="flex items-start gap-3.5">
-        {testing ? <span className="w-[22px] h-[22px] inline-flex items-center justify-center"><Loader2 size={16} className="animate-spin text-brand-500" /></span> : <Tickmark result={eff} size={22} />}
+        {busy ? <span className="w-[22px] h-[22px] inline-flex items-center justify-center"><Loader2 size={16} className="animate-spin text-brand-500" /></span> : <Tickmark result={eff} size={22} />}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-[11px] font-bold text-ink-500">{step.code}</span>
@@ -270,13 +281,27 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
       {/* evidence — its own workflow + optional self-attestation */}
       <div className="mt-3 ml-[36px] space-y-2">
         {step.workflowName ? (
-          <div className="flex items-center gap-2.5 rounded-lg border border-evidence-100 bg-evidence-50/40 px-3 py-2">
-            <Cpu size={14} className="text-evidence-700 shrink-0" />
-            <div className="min-w-0 flex-1"><div className="text-[12px] font-semibold text-ink-800 truncate">{step.workflowName}</div><div className="text-[10.5px] font-mono text-ink-400">{step.workflowRunRef ?? 'run not pulled yet'}</div></div>
-            {canEdit && <>
-              <button onClick={() => pullStepRun(control.id, step.id)} className="h-7 px-2.5 rounded-md bg-evidence-600 text-white text-[11.5px] font-semibold hover:bg-evidence-700 inline-flex items-center gap-1 cursor-pointer"><WorkflowIcon size={12} /> {step.workflowRunRef ? 'Re-pull' : 'Pull run'}</button>
-              <Dropdown trigger={<><Link2 size={12} /> Remap</>}>{close => WORKFLOW_LIBRARY.map(w => <button key={w} className={menuItem} onClick={() => { mapStepWorkflow(control.id, step.id, w); close(); }}><WorkflowIcon size={12} className="text-evidence-600" />{w}</button>)}</Dropdown>
-            </>}
+          <div className="rounded-lg border border-evidence-100 bg-evidence-50/40 px-3 py-2.5">
+            <div className="flex items-center gap-2.5">
+              <Cpu size={14} className="text-evidence-700 shrink-0" />
+              <div className="min-w-0 flex-1"><div className="text-[12px] font-semibold text-ink-800 truncate">{step.workflowName}</div><div className="text-[10.5px] font-mono text-ink-400">{validatingWf ? 'Ask IRA is validating…' : (step.workflowRunRef ?? 'not run yet')}</div></div>
+              {canEdit && <label className="inline-flex items-center gap-1.5 cursor-pointer shrink-0"><span className="text-[11px] font-semibold text-ink-600 inline-flex items-center gap-1"><Sparkles size={12} className="text-brand-600" /> AI validation</span><Toggle on={aiOn} onChange={v => toggleStepAI(control.id, step.id, v)} label="Toggle AI validation" /></label>}
+            </div>
+            {canEdit && (
+              <div className="flex items-center gap-2.5 mt-2 flex-wrap">
+                {aiOn ? (
+                  validatingWf
+                    ? <span className="text-[11.5px] font-semibold text-brand-600 inline-flex items-center gap-1.5"><Loader2 size={13} className="animate-spin" /> Ask IRA is validating…</span>
+                    : <>
+                        <button onClick={runAI} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 inline-flex items-center gap-1 cursor-pointer"><Sparkles size={12} /> {step.validation ? 'Re-run Ask IRA' : 'Run AI validation'}</button>
+                        {step.validation && <button onClick={() => setShowQA(true)} className="text-[11.5px] font-semibold text-brand-700 underline underline-offset-2 hover:text-brand-800 inline-flex items-center gap-1 cursor-pointer"><ListChecks size={12} /> View results</button>}
+                      </>
+                ) : (
+                  <button onClick={() => pullStepRun(control.id, step.id)} className="h-7 px-2.5 rounded-md bg-evidence-600 text-white text-[11.5px] font-semibold hover:bg-evidence-700 inline-flex items-center gap-1 cursor-pointer"><WorkflowIcon size={12} /> {step.workflowRunRef ? 'Re-pull' : 'Pull run'}</button>
+                )}
+                <Dropdown trigger={<><Link2 size={12} /> Remap</>}>{close => WORKFLOW_LIBRARY.map(w => <button key={w} className={menuItem} onClick={() => { mapStepWorkflow(control.id, step.id, w); close(); }}><WorkflowIcon size={12} className="text-evidence-600" />{w}</button>)}</Dropdown>
+              </div>
+            )}
           </div>
         ) : canEdit && (
           <Dropdown trigger={<><WorkflowIcon size={12} className="text-evidence-600" /> Map a workflow</>}>{close => WORKFLOW_LIBRARY.map(w => <button key={w} className={menuItem} onClick={() => { mapStepWorkflow(control.id, step.id, w); close(); }}><WorkflowIcon size={12} className="text-evidence-600" />{w}</button>)}</Dropdown>
@@ -308,6 +333,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
             { label: 'Override · Pass', onClick: n => { overrideStep(control.id, step.id, { result: 'Pass', by: 'You · Auditor', at: 'just now', rationale: n }); setOver(false); } },
             { label: 'Override · Fail', onClick: n => { overrideStep(control.id, step.id, { result: 'Fail', by: 'You · Auditor', at: 'just now', rationale: n }); setOver(false); } },
           ]} />)}
+      <AnimatePresence>{showQA && step.validation && <QAResultsModal title={step.description} qa={step.validation.qa} onClose={() => setShowQA(false)} />}</AnimatePresence>
     </div>
   );
 }

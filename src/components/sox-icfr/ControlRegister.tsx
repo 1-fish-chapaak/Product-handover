@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Search, Plus, FileSpreadsheet, AlertTriangle, Layers, Rows3, MessageSquare,
   Star, RefreshCw, ListFilter, FileText, X, Send, LayoutGrid, Table2,
@@ -8,7 +8,7 @@ import {
   controlConclusion, courtFor, designProgress, engagementProgress, openDiscussionCount,
   operatingProgress, trackResult,
 } from './helpers';
-import { ConclusionPill, CourtBadge, NatureChip, Tickmark, Stamp } from './parts';
+import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
 import { downloadIcfrWorkingPaper } from './icfrWorkingPaper';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
@@ -26,39 +26,33 @@ const VIEWS: { id: SavedView; label: string }[] = [
 // binding colours, one per process — drawn from the brand purple + evidence blue families (on-theme, no brown)
 const BINDINGS = ['#6A12CD', '#0369A1', '#550FA5', '#075985', '#8838DE', '#0284C7', '#3B0B72', '#1E3A5F'];
 function spineColor(p: string): string { let h = 0; for (let i = 0; i < p.length; i++) h = (h * 31 + p.charCodeAt(i)) >>> 0; return BINDINGS[h % BINDINGS.length]; }
-const tickFor = (r: ReturnType<typeof trackResult>) => (r === 'Effective' ? 'Pass' : r === 'Ineffective' ? 'Fail' : 'Not tested') as 'Pass' | 'Fail' | 'Not tested';
 
 function ControlCard({ c, discN, court, role, onOpen }: { c: Control; discN: number; court: ReturnType<typeof courtFor>; role: ReturnType<typeof useIcfr>['role']; onOpen: () => void }) {
   const dp = designProgress(c); const op = operatingProgress(c);
   const dRes = trackResult(c.design); const oRes = trackResult(c.operating);
   const concl = controlConclusion(c);
-  const dPct = dp.docsTotal ? Math.round((dp.docsReceived / dp.docsTotal) * 100) : 0;
-  const oPct = op.total ? Math.round((op.passed / op.total) * 100) : 0;
-  const trackTone = (r: ReturnType<typeof trackResult>) => (r === 'Ineffective' ? 'var(--color-risk-500)' : 'var(--color-compliant-500)');
+  const dStarted = dp.docsReceived > 0 || dp.pointsPass > 0;
+  const oStarted = op.tested > 0;
+  const dotCls = (res: ReturnType<typeof trackResult>, started: boolean) => res === 'Effective' ? 'ok' : res === 'Ineffective' ? 'ko' : started ? 'prog' : 'none';
+  const label = (res: ReturnType<typeof trackResult>, started: boolean) => res === 'Not tested' ? (started ? 'In progress' : 'Not started') : res;
   return (
-    <button className={cn('ctrl-card', concl === 'Ineffective' && 'ineffective')} style={{ '--spine': spineColor(c.process) } as CSSProperties} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter') onOpen(); }} aria-label={`Open ${c.id} — ${c.description}`}>
-      <div className="flex items-center gap-1.5">
+    <button className="ac-card" onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter') onOpen(); }} aria-label={`Open ${c.id} — ${c.description}`}>
+      <div className="flex items-center gap-2">
         <span className="wp-ref">{c.wpRef}</span>
-        <NatureChip nature={c.nature} small />
-        {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200" />}
+        <span className="ac-eyebrow"><span className="dot" style={{ background: spineColor(c.process) }} /><span className="lbl">{c.process}</span></span>
+        {c.isKey && <Star size={12} className="text-mitigated fill-mitigated-100 shrink-0" />}
         {discN > 0 && <span className="ml-auto inline-flex items-center gap-0.5 text-[10.5px] font-bold text-brand-700 bg-brand-50 px-1.5 h-[17px] rounded-full"><MessageSquare size={9} />{discN}</span>}
       </div>
-      <h3 className="card-title mt-2">{c.description}</h3>
-      <div className="card-sub">{c.id} · {c.subProcess}</div>
-      <div className="card-tracks">
-        {([['① Design', dRes, dPct, `${dp.docsReceived}/${dp.docsTotal} docs`], ['② Operating', oRes, oPct, `${op.tested}/${op.total} · ${c.operating.method === 'Automated' ? 'auto' : 'manual'}`]] as const).map(([label, res, pct, meta]) => (
-          <div key={label} className="card-track">
-            <Tickmark result={tickFor(res)} size={22} />
-            <div className="min-w-0"><div className="t-label">{label}</div><div className="t-val">{res === 'Not tested' ? 'Not started' : res}</div></div>
-            <div className="ml-auto flex flex-col items-end gap-1">
-              <span className="meter"><span style={{ width: `${pct}%`, background: trackTone(res) }} /></span>
-              <span className="text-[9.5px] text-ink-400 tabular-nums">{meta}</span>
-            </div>
-          </div>
-        ))}
+      <h3 className="ac-title mt-2.5">{c.description}</h3>
+      <div className="ac-meta">{c.id} · {c.subProcess} · {c.nature}</div>
+      <div className="ac-div" />
+      <div>
+        <div className="ac-track"><span className="ac-track-label">Design</span><span className={cn('ac-dot', dotCls(dRes, dStarted))} /><span className="ac-track-status">{label(dRes, dStarted)}</span><span className="ac-track-count">{dp.docsReceived}/{dp.docsTotal}</span></div>
+        <div className="ac-track"><span className="ac-track-label">Operating</span><span className={cn('ac-dot', dotCls(oRes, oStarted))} /><span className="ac-track-status">{label(oRes, oStarted)}</span><span className="ac-track-count">{op.tested}/{op.total}</span></div>
       </div>
-      <div className="card-foot">
-        {concl === 'Effective' || concl === 'Ineffective' ? <Stamp result={concl} animate={false} /> : <ConclusionPill c={concl} />}
+      <div className="ac-div" />
+      <div className="ac-foot">
+        <ConclusionPill c={concl} />
         <span className="ml-auto"><CourtBadge court={court} fromRole={role} /></span>
       </div>
     </button>

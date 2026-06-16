@@ -101,6 +101,8 @@ export interface OperatingStep {
   workflowId?: string;
   workflowName?: string;
   workflowRunRef?: string;
+  aiValidation?: boolean;
+  validation?: ValidationResult;
   attestEnabled?: boolean;
   attestation?: Attestation;
   result: TestResult;
