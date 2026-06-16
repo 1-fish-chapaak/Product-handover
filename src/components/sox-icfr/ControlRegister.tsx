@@ -8,7 +8,7 @@ import {
   controlConclusion, courtFor, designProgress, engagementProgress, openDiscussionCount,
   operatingProgress, trackResult,
 } from './helpers';
-import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
+import { ConclusionPill, CourtBadge, NatureChip, Tickmark, Stamp } from './parts';
 import { downloadIcfrWorkingPaper } from './icfrWorkingPaper';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
@@ -23,8 +23,8 @@ const VIEWS: { id: SavedView; label: string }[] = [
   { id: 'key', label: 'Key controls' },
 ];
 
-// book-cloth binding colours, one per process (stable hash)
-const BINDINGS = ['#3f5e63', '#6d3b46', '#3a4a6b', '#5a6b3a', '#5b4a6b', '#6b5a3a', '#44525a', '#6b4a3a'];
+// binding colours, one per process — drawn from the brand purple + evidence blue families (on-theme, no brown)
+const BINDINGS = ['#6A12CD', '#0369A1', '#550FA5', '#075985', '#8838DE', '#0284C7', '#3B0B72', '#1E3A5F'];
 function spineColor(p: string): string { let h = 0; for (let i = 0; i < p.length; i++) h = (h * 31 + p.charCodeAt(i)) >>> 0; return BINDINGS[h % BINDINGS.length]; }
 const tickFor = (r: ReturnType<typeof trackResult>) => (r === 'Effective' ? 'Pass' : r === 'Ineffective' ? 'Fail' : 'Not tested') as 'Pass' | 'Fail' | 'Not tested';
 
@@ -58,7 +58,7 @@ function ControlCard({ c, discN, court, role, onOpen }: { c: Control; discN: num
         ))}
       </div>
       <div className="card-foot">
-        <ConclusionPill c={concl} />
+        {concl === 'Effective' || concl === 'Ineffective' ? <Stamp result={concl} animate={false} /> : <ConclusionPill c={concl} />}
         <span className="ml-auto"><CourtBadge court={court} fromRole={role} /></span>
       </div>
     </button>
