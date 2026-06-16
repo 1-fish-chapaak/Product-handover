@@ -7,16 +7,16 @@
   --paper-rule-strong: color-mix(in srgb, var(--color-ink-900) 16%, transparent);
 }
 
-/* ── The tickmark — the auditor's mark ──────────────────────────────────────────── */
+/* ── Status mark — clean, professional, high-contrast ───────────────────────────── */
 .sox-tick {
-  border-radius: 5px;
+  border-radius: 6px;
   line-height: 1;
-  transform: rotate(-7deg);
-  border: 1.5px solid currentColor;
+  font-weight: 700;
+  border: 1px solid transparent;
 }
-.sox-tick-ok { color: var(--color-compliant-700); background: color-mix(in srgb, var(--color-compliant-50) 70%, transparent); }
-.sox-tick-ko { color: var(--color-risk-700); background: color-mix(in srgb, var(--color-risk-50) 70%, transparent); }
-.sox-tick-none { color: var(--color-ink-300); border-style: dashed; transform: none; }
+.sox-tick-ok { color: #fff; background: var(--color-compliant-600); }
+.sox-tick-ko { color: #fff; background: var(--color-risk-600); }
+.sox-tick-none { color: var(--color-ink-400); background: transparent; border-color: var(--paper-rule-strong); }
 
 /* ── W/P cross-reference — the ledger index mark ────────────────────────────────── */
 .wp-ref {
@@ -125,14 +125,10 @@
   overflow: hidden;
 }
 .leadsheet-head {
-  padding: 18px 22px 16px;
-  border-bottom: 2px solid var(--color-ink-900);
+  padding: 20px 24px 18px;
+  border-bottom: 1px solid var(--color-canvas-border);
   position: relative;
-  background:
-    linear-gradient(color-mix(in srgb, var(--color-paper-50) 50%, transparent), transparent);
-}
-.leadsheet-head::after {
-  content: ''; position: absolute; left: 0; right: 0; bottom: -5px; height: 1px; background: var(--color-ink-900); opacity: 0.35;
+  background: linear-gradient(color-mix(in srgb, var(--color-paper-50) 40%, transparent), transparent);
 }
 .leadsheet-title { font-family: var(--font-display, 'Source Serif 4', serif); font-weight: 600; letter-spacing: -0.01em; }
 .leadsheet-stamp {
@@ -170,6 +166,39 @@
 .disc-bubble.auditor { border-left: 3px solid var(--color-info-400, var(--color-brand-400)); }
 .disc-bubble.reviewer { border-left: 3px solid var(--color-evidence-500); }
 .disc-bubble.risk-owner { border-left: 3px solid var(--color-mitigated-500); }
+
+/* ── Vertical stepper (TOD → TOE) ───────────────────────────────────────────────── */
+.vstepper { position: relative; }
+.vstep { position: relative; padding-left: 54px; padding-bottom: 18px; }
+.vstep:last-child { padding-bottom: 0; }
+.vstep-rail { position: absolute; left: 18px; top: 40px; bottom: 0; width: 2px; background: var(--paper-rule-strong); }
+.vstep:last-child .vstep-rail { display: none; }
+.vstep-node {
+  position: absolute; left: 0; top: 0; width: 38px; height: 38px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;
+  border: 1px solid var(--color-canvas-border); background: var(--color-canvas-elevated); color: var(--color-ink-500);
+  transition: box-shadow .15s, border-color .15s;
+}
+.vstep-node.done { background: var(--color-compliant-600); border-color: var(--color-compliant-600); color: #fff; }
+.vstep-node.fail { background: var(--color-risk-600); border-color: var(--color-risk-600); color: #fff; }
+.vstep-node.active { border-color: var(--color-brand-400); color: var(--color-brand-700); box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-brand-200) 40%, transparent); }
+.vstep-node.locked { color: var(--color-ink-300); background: var(--color-paper-50); }
+
+/* ── Panels — modern, quiet borders ─────────────────────────────────────────────── */
+.panel { border: 1px solid var(--color-canvas-border); border-radius: 14px; background: var(--color-canvas-elevated); }
+.panel-locked { opacity: .62; }
+.subcard { border: 1px solid var(--paper-rule); border-radius: 11px; background: var(--color-canvas-elevated); }
+
+/* ── Toggle switch ──────────────────────────────────────────────────────────────── */
+.toggle { width: 34px; height: 20px; border-radius: 999px; background: var(--color-paper-200); position: relative; transition: background .15s; cursor: pointer; border: none; flex-shrink: 0; padding: 0; }
+.toggle.on { background: var(--color-brand-600); }
+.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.toggle.on::after { transform: translateX(14px); }
+.toggle:focus-visible { outline: 2px solid var(--color-brand-500); outline-offset: 2px; }
+
+/* ── Modal ──────────────────────────────────────────────────────────────────────── */
+.modal-backdrop { position: fixed; inset: 0; background: color-mix(in srgb, var(--color-ink-900) 42%, transparent); backdrop-filter: blur(2px); z-index: 50; display: flex; align-items: flex-start; justify-content: center; padding: 64px 20px; }
+.modal { width: 100%; max-width: 540px; background: var(--color-canvas-elevated); border: 1px solid var(--color-canvas-border); border-radius: 16px; box-shadow: 0 24px 60px -20px rgba(15,8,30,.55); overflow: hidden; }
 
 @media (prefers-reduced-motion: reduce) {
   .sox-book-ui * { animation-duration: .001ms !important; transition-duration: .001ms !important; }

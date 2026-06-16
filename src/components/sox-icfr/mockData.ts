@@ -10,7 +10,8 @@ const doc = (kind: DesignDoc['kind'], name: string, status: DocStatus, by?: stri
   ({ id: `dd${++_d}`, kind, name, status, uploadedBy: status === 'Received' ? (by ?? 'Risk Owner') : undefined, at: status === 'Received' ? '12 Apr' : undefined });
 
 let _p = 0;
-const point = (text: string, result: DesignPoint['result'] = 'Pass'): DesignPoint => ({ id: `dp${++_p}`, text, result });
+const point = (text: string, result: DesignPoint['result'] = 'Pass', wfName = 'Design walkthrough check'): DesignPoint =>
+  ({ id: `dp${++_p}`, text, result, workflowId: `wf-tod-${_p}`, workflowName: wfName, workflowRunRef: result !== 'Not tested' ? 'run · validated' : undefined });
 
 let _s = 0;
 const step = (code: string, description: string, assertion: Assertion, precision: string, procedures: TestProcedure[], result: OperatingStep['result'] = 'Not tested', extra: Partial<OperatingStep> = {}): OperatingStep =>
@@ -19,7 +20,7 @@ const step = (code: string, description: string, assertion: Assertion, precision
 let _f = 0;
 const file = (name: string, by = 'Risk Owner', kind: EvidenceFile['kind'] = 'PDF'): EvidenceFile => ({ id: `f${++_f}`, name, kind, uploadedBy: by, uploadedAt: '12 Apr' });
 const wf = (id: string, name: string, runRef?: string): Partial<OperatingStep> => ({ workflowId: id, workflowName: name, workflowRunRef: runRef });
-const attest = (note: string, by: string, files: string[]): Partial<OperatingStep> => ({ attestation: { note, by, role: 'risk-owner', at: '12 Apr', evidence: files.map(f => file(f, by)) } as Attestation });
+const attest = (note: string, by: string, files: string[]): Partial<OperatingStep> => ({ attestEnabled: true, attestation: { note, by, role: 'risk-owner', at: '12 Apr', evidence: files.map(f => file(f, by)) } as Attestation });
 
 const designTrack = (conclusion: TrackConclusion, documents: DesignDoc[], points: DesignPoint[], testedBy: string | null = null): DesignTrack =>
   ({ documents, points, conclusion, testedBy: conclusion !== 'Not tested' ? (testedBy ?? 'A. Mehta · Auditor') : null, testedAt: conclusion !== 'Not tested' ? '14 Apr' : null });
@@ -165,6 +166,15 @@ const DETAILED: Control[] = [
       step('F1', 'Receipts near period-end recorded in correct period per GRN.', 'Cut-off', 'Per item', ['Inspection', 'Reperformance']),
     ], undefined, 0),
   },
+  {
+    id: 'P2P-C-07', wpRef: 'P-07', description: 'Aged GR/IR items are reviewed and cleared each month.',
+    process: 'Procure to Pay', subProcess: 'Period close', nature: 'Manual', type: 'Detective', frequency: 'Monthly', isKey: false,
+    precision: 'GR/IR entries open beyond 60 days are investigated and resolved.',
+    owner: 'M. Nair · Accounts Payable', riskId: 'R-24', riskDescription: 'Unreconciled goods-received/invoice-received balances misstate liabilities.',
+    assertions: ['Completeness', 'Accuracy'],
+    design: designTrack('Not tested', [], []),
+    operating: manualTrack('Not tested', [], undefined, 0),
+  },
 ];
 
 // ── generator — fills the register to scale ──────────────────────────────────────
@@ -297,8 +307,8 @@ export function racmTemplate(process: string): Control[] {
     process: sp.process, subProcess: sp.subs[i % sp.subs.length], nature: 'Manual' as Nature, type: 'Preventive' as const, frequency: 'Monthly' as const,
     isKey: true, precision: `${title}.`, owner: sp.owner, riskId: `R-${i + 1}`, riskDescription: `Risk addressed by: ${title.toLowerCase()}.`,
     assertions: ['Accuracy', 'Existence / Occurrence'] as Assertion[],
-    design: designTrack('Not tested', [doc('Process narrative', 'narrative.pdf', 'Missing'), doc('Flowchart', 'flowchart.pdf', 'Missing'), doc('Walkthrough', 'walkthrough', 'Missing')], [point('Control addresses the risk.', 'Not tested')]),
-    operating: manualTrack('Not tested', [step(`${i + 1}.1`, `${title} — attribute.`, 'Accuracy', 'Per item', ['Inspection'])], undefined, 0),
+    design: designTrack('Not tested', [], []),
+    operating: manualTrack('Not tested', [], undefined, 0),
   }));
 }
 

@@ -54,11 +54,15 @@ export interface DesignDoc {
   uploadedBy?: string;
   at?: string;
 }
-/** A design consideration assessed in the walkthrough. */
+/** A design consideration — validated by its own workflow, with manual override. */
 export interface DesignPoint {
   id: string;
   text: string;
+  workflowId?: string;
+  workflowName?: string;
+  workflowRunRef?: string;
   result: TestResult;
+  override?: Override;
 }
 export interface DesignTrack {
   documents: DesignDoc[];
@@ -92,6 +96,7 @@ export interface OperatingStep {
   workflowId?: string;
   workflowName?: string;
   workflowRunRef?: string;
+  attestEnabled?: boolean;
   attestation?: Attestation;
   result: TestResult;
   override?: Override;

@@ -44,7 +44,7 @@ function ControlCard({ c, discN, court, role, onOpen }: { c: Control; discN: num
         {discN > 0 && <span className="ml-auto inline-flex items-center gap-0.5 text-[10.5px] font-bold text-brand-700 bg-brand-50 px-1.5 h-[17px] rounded-full"><MessageSquare size={9} />{discN}</span>}
       </div>
       <h3 className="card-title mt-2">{c.description}</h3>
-      <div className="card-sub">{c.id} · {c.subProcess} · {c.owner}</div>
+      <div className="card-sub">{c.id} · {c.subProcess}</div>
       <div className="card-tracks">
         {([['① Design', dRes, dPct, `${dp.docsReceived}/${dp.docsTotal} docs`], ['② Operating', oRes, oPct, `${op.tested}/${op.total} · ${c.operating.method === 'Automated' ? 'auto' : 'manual'}`]] as const).map(([label, res, pct, meta]) => (
           <div key={label} className="card-track">
