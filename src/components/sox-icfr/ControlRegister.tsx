@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import {
-  Search, Plus, FileSpreadsheet, AlertTriangle, Layers, Rows3, ChevronRight, MessageSquare,
-  Star, RefreshCw, ListFilter, FileText, X, Send,
+  Search, Plus, FileSpreadsheet, AlertTriangle, Layers, Rows3, MessageSquare,
+  Star, RefreshCw, ListFilter, FileText, X, Send, LayoutGrid, Table2,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import {
@@ -22,6 +22,48 @@ const VIEWS: { id: SavedView; label: string }[] = [
   { id: 'exceptions', label: 'Exceptions' },
   { id: 'key', label: 'Key controls' },
 ];
+
+// book-cloth binding colours, one per process (stable hash)
+const BINDINGS = ['#3f5e63', '#6d3b46', '#3a4a6b', '#5a6b3a', '#5b4a6b', '#6b5a3a', '#44525a', '#6b4a3a'];
+function spineColor(p: string): string { let h = 0; for (let i = 0; i < p.length; i++) h = (h * 31 + p.charCodeAt(i)) >>> 0; return BINDINGS[h % BINDINGS.length]; }
+const tickFor = (r: ReturnType<typeof trackResult>) => (r === 'Effective' ? 'Pass' : r === 'Ineffective' ? 'Fail' : 'Not tested') as 'Pass' | 'Fail' | 'Not tested';
+
+function ControlCard({ c, discN, court, role, onOpen }: { c: Control; discN: number; court: ReturnType<typeof courtFor>; role: ReturnType<typeof useIcfr>['role']; onOpen: () => void }) {
+  const dp = designProgress(c); const op = operatingProgress(c);
+  const dRes = trackResult(c.design); const oRes = trackResult(c.operating);
+  const concl = controlConclusion(c);
+  const dPct = dp.docsTotal ? Math.round((dp.docsReceived / dp.docsTotal) * 100) : 0;
+  const oPct = op.total ? Math.round((op.passed / op.total) * 100) : 0;
+  const trackTone = (r: ReturnType<typeof trackResult>) => (r === 'Ineffective' ? 'var(--color-risk-500)' : 'var(--color-compliant-500)');
+  return (
+    <button className={cn('ctrl-card', concl === 'Ineffective' && 'ineffective')} style={{ '--spine': spineColor(c.process) } as CSSProperties} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter') onOpen(); }} aria-label={`Open ${c.id} — ${c.description}`}>
+      <div className="flex items-center gap-1.5">
+        <span className="wp-ref">{c.wpRef}</span>
+        <NatureChip nature={c.nature} small />
+        {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200" />}
+        {discN > 0 && <span className="ml-auto inline-flex items-center gap-0.5 text-[10.5px] font-bold text-brand-700 bg-brand-50 px-1.5 h-[17px] rounded-full"><MessageSquare size={9} />{discN}</span>}
+      </div>
+      <h3 className="card-title mt-2">{c.description}</h3>
+      <div className="card-sub">{c.id} · {c.subProcess} · {c.owner}</div>
+      <div className="card-tracks">
+        {([['① Design', dRes, dPct, `${dp.docsReceived}/${dp.docsTotal} docs`], ['② Operating', oRes, oPct, `${op.tested}/${op.total} · ${c.operating.method === 'Automated' ? 'auto' : 'manual'}`]] as const).map(([label, res, pct, meta]) => (
+          <div key={label} className="card-track">
+            <Tickmark result={tickFor(res)} size={22} />
+            <div className="min-w-0"><div className="t-label">{label}</div><div className="t-val">{res === 'Not tested' ? 'Not started' : res}</div></div>
+            <div className="ml-auto flex flex-col items-end gap-1">
+              <span className="meter"><span style={{ width: `${pct}%`, background: trackTone(res) }} /></span>
+              <span className="text-[9.5px] text-ink-400 tabular-nums">{meta}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="card-foot">
+        <ConclusionPill c={concl} />
+        <span className="ml-auto"><CourtBadge court={court} fromRole={role} /></span>
+      </div>
+    </button>
+  );
+}
 
 function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackResult>; a: number; b: number; label: string }) {
   const pct = b === 0 ? 0 : Math.round((a / b) * 100);
@@ -48,6 +90,7 @@ export default function ControlRegister() {
   const [nature, setNature] = useState('All');
   const [grouped, setGrouped] = useState(true);
   const [dense, setDense] = useState(false);
+  const [layout, setLayout] = useState<'cards' | 'table'>('cards');
   const [sel, setSel] = useState<Set<string>>(new Set());
 
   const stats = engagementProgress(eng);
@@ -143,11 +186,38 @@ export default function ControlRegister() {
           </select>
         </div>
         <div className="flex-1" />
-        <button onClick={() => setGrouped(g => !g)} className={cn('filter-pill', grouped && 'on')}><Layers size={13} /> Group by process</button>
-        <button onClick={() => setDense(d => !d)} className={cn('filter-pill', dense && 'on')}><Rows3 size={13} /> Dense</button>
+        <button onClick={() => setGrouped(g => !g)} className={cn('filter-pill', grouped && 'on')}><Layers size={13} /> {layout === 'cards' ? 'Shelves' : 'Group'} by process</button>
+        {layout === 'table' && <button onClick={() => setDense(d => !d)} className={cn('filter-pill', dense && 'on')}><Rows3 size={13} /> Dense</button>}
+        <div className="inline-flex items-center p-0.5 rounded-lg border border-canvas-border bg-canvas-elevated">
+          <button onClick={() => setLayout('cards')} title="Card view" className={cn('h-8 px-2.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors', layout === 'cards' ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}><LayoutGrid size={13} /> Cards</button>
+          <button onClick={() => setLayout('table')} title="Table view" className={cn('h-8 px-2.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors', layout === 'table' ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}><Table2 size={13} /> Table</button>
+        </div>
       </div>
 
-      {/* table */}
+      {/* register body — cards (default) or table */}
+      {layout === 'cards' ? (
+        <div>
+          {groups.map(g => (
+            <div key={g.key || 'flat'} className="shelf">
+              {g.key && (
+                <div className="shelf-head">
+                  <span className="shelf-swatch" style={{ background: spineColor(g.key) }} />
+                  <span className="shelf-title">{g.key}</span>
+                  <span className="text-[11.5px] text-ink-400 font-medium">· {g.rows.length}</span>
+                  <span className="text-[10.5px] font-semibold text-ink-400 hidden md:inline">{g.rows.filter(c => trackResult(c.design) !== 'Not tested').length} design · {g.rows.filter(c => trackResult(c.operating) !== 'Not tested').length} operating concluded</span>
+                  <span className="shelf-board" />
+                </div>
+              )}
+              <div className="card-grid">
+                {g.rows.map(c => <ControlCard key={c.id} c={c} discN={openDiscussionCount(eng, c.id)} court={courtFor(c, eng.tasks)} role={role} onOpen={() => openControl(c.id)} />)}
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <div className="text-center py-16 text-ink-400 text-[13px] rounded-2xl border border-dashed border-canvas-border">No controls match these filters. <button onClick={() => { setQ(''); setProcess('All'); setNature('All'); setSavedView('all'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button></div>
+          )}
+        </div>
+      ) : (
       <div className={cn('reg-wrap', dense && 'reg-dense')}>
         <table className="w-full border-collapse">
           <thead className="reg-head">
@@ -205,6 +275,7 @@ export default function ControlRegister() {
           </tbody>
         </table>
       </div>
+      )}
       <div className="mt-2 text-[11.5px] text-ink-400 flex items-center justify-between">
         <span>Showing {filtered.length} of {eng.controls.length} controls</span>
         <span className="inline-flex items-center gap-3"><span className="inline-flex items-center gap-1"><Tickmark result="Pass" size={13} /> effective</span><span className="inline-flex items-center gap-1"><Tickmark result="Fail" size={13} /> ineffective</span><span className="inline-flex items-center gap-1"><Tickmark result="Not tested" size={13} /> not started</span></span>
