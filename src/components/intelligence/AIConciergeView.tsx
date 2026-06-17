@@ -38,7 +38,8 @@ const tools: Tool[] = [
   {
     id: 'racm-generator',
     icon: TableProperties,
-    accent: { chip: 'bg-violet-100', icon: 'text-violet-600' },
+    // #1 icon-chip unify → revert to per-tool pastel: { chip: 'bg-violet-100', icon: 'text-violet-600' }
+    accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
     title: 'RACM Generator',
     description: 'Generate Risk & Control Matrices from SOP and process documents',
     tags: [
@@ -51,7 +52,8 @@ const tools: Tool[] = [
   {
     id: 'forensics',
     icon: ShieldCheck,
-    accent: { chip: 'bg-rose-100', icon: 'text-rose-600' },
+    // #1 icon-chip unify → revert to per-tool pastel: { chip: 'bg-rose-100', icon: 'text-rose-600' }
+    accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
     title: 'Document Forensics',
     description: 'Detect forgery, tampering, and AI-generated content in documents',
     tags: [
@@ -63,7 +65,8 @@ const tools: Tool[] = [
   {
     id: 'table',
     icon: Table2,
-    accent: { chip: 'bg-sky-100', icon: 'text-sky-600' },
+    // #1 icon-chip unify → revert to per-tool pastel: { chip: 'bg-sky-100', icon: 'text-sky-600' }
+    accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
     title: 'Table Extractor',
     description: 'Extract structured tables from PDFs and images with AI',
     tags: [
@@ -95,7 +98,8 @@ const tools: Tool[] = [
   {
     id: 'insights-anomaly',
     icon: BarChart3,
-    accent: { chip: 'bg-indigo-100', icon: 'text-indigo-600' },
+    // #1 icon-chip unify → revert to per-tool pastel: { chip: 'bg-indigo-100', icon: 'text-indigo-600' }
+    accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
     title: 'Insights & Anomaly Report',
     description: 'Automated statistical profiling, anomaly detection, and heuristic reports',
     tags: [
@@ -108,7 +112,8 @@ const tools: Tool[] = [
   {
     id: 'image-analytics',
     icon: ImageIcon,
-    accent: { chip: 'bg-teal-100', icon: 'text-teal-600' },
+    // #1 icon-chip unify → revert to per-tool pastel: { chip: 'bg-teal-100', icon: 'text-teal-600' }
+    accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
     title: 'Image Analytics',
     description: 'AI-powered image chat, comparison, and compliance auditing',
     tags: [
@@ -121,7 +126,8 @@ const tools: Tool[] = [
   {
     id: 'speech-auditor',
     icon: Mic,
-    accent: { chip: 'bg-amber-100', icon: 'text-amber-600' },
+    // #1 icon-chip unify → revert to per-tool pastel: { chip: 'bg-amber-100', icon: 'text-amber-600' }
+    accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
     title: 'Speech Auditor',
     description: 'AI-powered call recording analysis with transcription, sentiment, and audit reports',
     tags: [
@@ -134,7 +140,8 @@ const tools: Tool[] = [
   {
     id: 'medical-report-reader',
     icon: HeartPulse,
-    accent: { chip: 'bg-emerald-100', icon: 'text-emerald-600' },
+    // #1 icon-chip unify → revert to per-tool pastel: { chip: 'bg-emerald-100', icon: 'text-emerald-600' }
+    accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
     title: 'Medical Report Reader',
     description: 'AI-powered forensic medical report analysis for insurance fraud detection',
     tags: [
@@ -147,27 +154,33 @@ const tools: Tool[] = [
 ];
 
 // Concierge tool card — flat editorial (DESIGN.md §5/§7.17): canvas-elevated
-// sheet, 1px hairline that tints brand-300 on hover, whisper resting shadow with
-// a single diffuse lift on hover. Uniform brand-tinted tag chips
+// sheet, 1px hairline that tints brand-200 on hover, flat at rest with a single
+// sanctioned diffuse lift on hover (§4); keyboard-operable via role=button. Uniform brand-tinted tag chips
 // (bg-brand-50 / text-brand-700). No glass, gradient, or glow.
 function ToolCard({
-  icon: Icon, accent, title, description, tags, index = 0, onClick,
+  icon: Icon, accent, title, description, index = 0, onClick, // #5: 'tags' removed (hidden on launcher) — revert: re-add `tags,`
 }: {
   icon: ElementType;
   accent: { chip: string; icon: string };
   title: string;
   description: string;
-  tags: ToolTag[];
+  // #5: tags hidden on launcher — revert: restore the line  tags: ToolTag[];
   index?: number;
   onClick?: () => void;
 }) {
+  // #2 keyboard a11y (role=button + tabIndex + Enter/Space) · #3 flat-at-rest (no resting shadow; sanctioned diffuse hover lift) · #8 token tidiness (rounded-lg, brand-200 hover).
+  // Revert: remove role/tabIndex/onKeyDown and restore the className below to:
+  // "bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-[12px] p-5 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:shadow-[0_12px_32px_rgba(15,8,30,0.08)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[176px]"
   return (
     <motion.div
+      role="button"
+      tabIndex={0}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0, transition: { delay: index * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
       whileHover={{ y: -3, transition: { duration: 0.18, ease: 'easeOut' } }}
       onClick={onClick}
-      className="bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-[12px] p-5 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:shadow-[0_12px_32px_rgba(15,8,30,0.08)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[176px]"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
+      className="bg-canvas-elevated border border-canvas-border hover:border-brand-200 rounded-lg p-5 hover:shadow-[0_8px_24px_rgba(15,8,30,0.04)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[176px]"
     >
       <div className="flex items-start mb-4">
         <span className={`w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 ${accent.chip} transition-transform duration-200 group-hover:scale-[1.06]`}>
@@ -175,13 +188,16 @@ function ToolCard({
         </span>
       </div>
 
-      <h3 className="text-[15px] leading-[1.35] font-semibold text-text group-hover:text-primary transition-colors mb-1.5 truncate" title={title}>
+      {/* #6 two-line titles → revert: replace line-clamp-2 with truncate */}
+      <h3 className="text-[15px] leading-[1.35] font-semibold text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2" title={title}>
         {title}
       </h3>
       <p className="text-[12px] text-text-secondary leading-[1.55] line-clamp-2" title={description}>
         {description}
       </p>
 
+      {/* #5 tags hidden on the launcher (each tool's `tags` data is kept for revert).
+          Restore: uncomment this block AND re-add `tags` to ToolCard's props/type + the `tags={tool.tags}` call-site prop.
       <div className="mt-auto pt-4 flex flex-wrap gap-1.5">
         {tags.map((t) => (
           <span
@@ -192,6 +208,7 @@ function ToolCard({
           </span>
         ))}
       </div>
+      */}
     </motion.div>
   );
 }
@@ -211,7 +228,7 @@ export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Pr
           negative margins, ambient FloatingLines + serif display H1. Mirrors
           the Reports / Knowledge Hub page recipe (DESIGN.md §7.4 / §7.17). */}
       <div className="px-6 lg:px-12 xl:px-[124px] pt-8 shrink-0">
-        <div className="bg-canvas-elevated -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-8 pt-8 border-b border-canvas-border relative overflow-hidden">
+        <div className="bg-canvas-elevated -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-8 pt-8 pb-6 min-h-[148px] border-b border-canvas-border relative overflow-hidden">
           <FloatingLines
             enabledWaves={['top', 'bottom']}
             lineCount={3}
@@ -227,12 +244,12 @@ export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Pr
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className="mb-6 min-w-0"
+            className="min-w-0"
           >
             <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">
               AI Concierge
             </h1>
-            <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">
+            <p className="mt-2 text-[0.8125rem] text-ink-500 leading-relaxed max-w-md">
               AI-powered tools for auditing, compliance, and data analysis.
             </p>
           </motion.div>
@@ -242,6 +259,7 @@ export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Pr
       {/* Scrolling content region — tool grid. */}
       <div className="px-6 lg:px-12 xl:px-[124px] pb-8 flex-1 min-h-0 overflow-y-auto relative">
         <div className="pt-6">
+          {/* #4 flat grid — lone last card stays LEFT-aligned (per request; not centered/stretched). */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {tools.map((tool, i) => (
               <ToolCard
@@ -251,7 +269,7 @@ export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Pr
                 accent={tool.accent}
                 title={tool.title}
                 description={tool.description}
-                tags={tool.tags}
+                // #5: tags hidden on launcher — revert: restore  tags={tool.tags}
                 onClick={() => launch(tool)}
               />
             ))}
