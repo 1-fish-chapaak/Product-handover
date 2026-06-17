@@ -843,7 +843,7 @@ function AppInner() {
         );
 
       case 'sox-icfr':
-        return <SoxIcfrApp onBack={() => setView('engagements')} />;
+        return <SoxIcfrApp engagementId={state.selectedEngagementId ?? undefined} onBack={() => setView('engagements')} />;
 
       case 'engagements':
         return (

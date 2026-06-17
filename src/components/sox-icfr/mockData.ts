@@ -273,8 +273,8 @@ const TASKS: HandoffTask[] = [
 ];
 
 const DEFICIENCIES: Deficiency[] = [
-  { id: 'DEF-001', controlId: 'P2P-C-04', track: 'operating', description: 'Duplicate-invoice block does not catch reference variants (leading zeros / whitespace); 4 variant duplicates posted in period.', rootCause: 'Match key compares raw reference without normalisation.', likelihood: 'Reasonably possible', magnitude: 1_180_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP payments', remediation: { action: 'Normalise reference in match key; re-test.', date: null, owner: 'M. Nair · Accounts Payable', status: 'In progress' } },
-  { id: 'DEF-002', controlId: 'P2P-C-05', track: 'design', description: 'Manual AP journal review occurs after posting, so the control cannot prevent an erroneous or unauthorised posting.', rootCause: 'Review step placed post-posting in the process design.', likelihood: 'Reasonably possible', magnitude: 640_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP close', remediation: { action: 'Move review to a pre-posting hold.', date: null, owner: 'D. Rao · Controller', status: 'Open' } },
+  { id: 'DEF-001', controlId: 'P2P-C-04', track: 'operating', description: 'Duplicate-invoice block does not catch reference variants (leading zeros / whitespace); 4 variant duplicates posted in period.', rootCause: 'Match key compares raw reference without normalisation.', likelihood: 'Reasonably possible', magnitude: 1_180_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP payments', remediation: { action: 'Normalise reference in match key; re-test.', date: '30 Jun', owner: 'M. Nair · Accounts Payable', status: 'In progress' }, status: 'Remediation' },
+  { id: 'DEF-002', controlId: 'P2P-C-05', track: 'design', description: 'Manual AP journal review occurs after posting, so the control cannot prevent an erroneous or unauthorised posting.', rootCause: 'Review step placed post-posting in the process design.', likelihood: 'Reasonably possible', magnitude: 640_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP close', remediation: { action: 'Move review to a pre-posting hold.', date: null, owner: 'D. Rao · Controller', status: 'Open' }, status: 'Identified' },
 ];
 
 const ACCOUNTS: SignificantAccount[] = [
@@ -289,6 +289,7 @@ const ENGAGEMENT: IcfrEngagement = {
   id: 'eng-1', code: 'ICFR-26', name: 'FY26 ICFR — Air India Express', entity: 'Air India Express Ltd', framework: 'COSO 2013 / SOX 404',
   periodStart: '01 Apr 2025', periodEnd: '31 Mar 2026', period: 'Interim',
   materiality: 5_000_000, performanceMateriality: 3_750_000, preparer: 'A. Mehta · Auditor', reviewer: 'J. Fernandes · Reviewer',
+  rules: { clearlyTrivial: 250_000, sdBandPct: 20, aggregate: true, autoRoute: true, mwIndicators: [] },
   accounts: ACCOUNTS,
   controls: [...DETAILED, ...generate()],
   deficiencies: DEFICIENCIES,
@@ -296,8 +297,42 @@ const ENGAGEMENT: IcfrEngagement = {
   discussions: DISCUSSIONS,
 };
 
-export function seedIcfrEngagement(): IcfrEngagement {
-  return structuredClone(ENGAGEMENT);
+/** Identity carried in from the app-level Engagement record (engagements.ts). */
+export interface SeedMeta { id?: string; code?: string; name?: string; process?: string; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; }
+const PROC_LABEL: Record<string, string> = { P2P: 'Procure to Pay', O2C: 'Order to Cash', R2R: 'Record to Report', S2C: 'Order to Cash', ITGC: 'IT General Controls' };
+
+export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
+  const base = structuredClone(ENGAGEMENT);
+  if (meta?.materiality) base.materiality = meta.materiality;
+  if (meta?.performanceMateriality) base.performanceMateriality = meta.performanceMateriality;
+  if (meta?.clearlyTrivial != null) base.rules.clearlyTrivial = meta.clearlyTrivial;
+  if (meta?.sdBandPct) base.rules.sdBandPct = meta.sdBandPct;
+  // No meta, or the flagship engagement → the fully-populated demo, with identity overlaid.
+  if (!meta || !meta.id || meta.id === 'eng-1') {
+    if (meta) {
+      if (meta.code) base.code = meta.code;
+      if (meta.name) base.name = meta.name;
+      if (meta.periodStart) base.periodStart = meta.periodStart;
+      if (meta.periodEnd) base.periodEnd = meta.periodEnd;
+    }
+    return base;
+  }
+  // Any other engagement → a fresh engagement scoped to the picked process, ready to configure.
+  const proc = PROC_LABEL[meta.process ?? 'O2C'] ?? 'Order to Cash';
+  return {
+    ...base,
+    id: meta.id,
+    code: meta.code ?? base.code,
+    name: meta.name ?? base.name,
+    period: 'Interim',
+    periodStart: meta.periodStart ?? base.periodStart,
+    periodEnd: meta.periodEnd ?? base.periodEnd,
+    preparer: meta.owner ? `${meta.owner} · Auditor` : base.preparer,
+    controls: racmTemplate(proc),
+    deficiencies: [],
+    tasks: [],
+    discussions: [],
+  };
 }
 
 // ── RACM template for the setup wizard ──────────────────────────────────────────

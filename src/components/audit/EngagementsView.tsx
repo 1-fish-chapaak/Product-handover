@@ -6,7 +6,7 @@ import {
   Pencil, UserPlus, CheckCircle2,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
-import { ENGAGEMENTS, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
+import { ENGAGEMENTS, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
 import CreateEngagementWizard from './CreateEngagementWizard';
 import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
 import { useCan } from '../../context/CurrentUserContext';
@@ -39,12 +39,14 @@ const TYPE_CLS: Record<EngType, string> = {
   Compliance: 'bg-brand-50 text-brand-700 border-brand-100',
   'Internal Audit': 'bg-evidence-50 text-evidence-700 border-evidence-100',
   Automation: 'bg-compliant-50 text-compliant-700 border-compliant-100',
+  'SOX / ICFR': 'bg-brand-100 text-brand-800 border-brand-200',
 };
 
 const TYPE_LABEL: Record<EngType, string> = {
   Compliance: 'Compliance',
   'Internal Audit': 'Internal Audit',
   Automation: 'Automation',
+  'SOX / ICFR': 'SOX / ICFR',
 };
 
 /** Short label for the Automation subtype shown as a small tag next to the type pill. */
@@ -57,7 +59,7 @@ const SUBTYPE_LABEL: Record<AutomationSubtype, string> = {
   Custom: 'Custom',
 };
 
-const TYPE_FILTERS: ('All' | EngType)[] = ['All', 'Compliance', 'Internal Audit', 'Automation'];
+const TYPE_FILTERS: ('All' | EngType)[] = ['All', 'SOX / ICFR', 'Compliance', 'Internal Audit', 'Automation'];
 const STATUS_FILTERS: ('All' | EngStatus)[] = ['All', 'Active', 'In Progress', 'Planned', 'Review', 'Draft'];
 const PROCESS_FILTERS: ('All' | ProcessCode)[] = ['All', 'P2P', 'O2C', 'R2R', 'S2C', 'ITGC'];
 
@@ -365,6 +367,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
           <CreateEngagementWizard
             onClose={() => setWizardOpen(false)}
             onCreated={(newEng) => {
+              registerEngagement(newEng);
               setCreated(prev => [newEng, ...prev]);
               setWizardOpen(false);
             }}
