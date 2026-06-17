@@ -510,6 +510,10 @@ export interface GrcActivityEntry {
   message: string;
   comment?: string;
   attachment?: { name: string };
+  /** Set to 'comment' for free-form posts from the always-on comment channel
+   *  (as opposed to system/action log entries). Drives the comment-count badge
+   *  on the Classify/Action CTAs and the comment styling in the thread. */
+  kind?: 'comment';
 }
 export type GrcActionStatus = 'Implemented' | 'Partially Implemented' | 'Pending' | 'Discrepancy';
 export interface GrcCaseDetail {

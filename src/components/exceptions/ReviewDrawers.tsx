@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   ClipboardList,
   AlertTriangle,
+  Send,
 } from 'lucide-react';
 import { auditorReviewStage, type AuditorReviewStage } from './statusModel';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
@@ -429,16 +430,111 @@ function ActivityTimeline({ entries }: { entries: GrcActivityEntry[] }) {
   );
 }
 
+// ─── Unified comment box ────────────────────────────────────────────────────
+// One classy comment section used across every review modal (Classify, View,
+// Review Plan, Review Action, Mark Complete). It merges what used to be two
+// boxes — the decision rationale and the cross-persona comment channel — into a
+// single host-controlled field: the text is the modal's review comment, and the
+// "Post Comment" CTA shares it with the other persona (added to the activity log
+// and they're notified). An optional suggested chip pre-fills an editable
+// rationale. When `onPostComment` is omitted the box is read-only-friendly
+// (Post Comment hidden).
+export function CaseCommentBox({
+  value,
+  onChange,
+  onPostComment,
+  label = 'Comment',
+  hint = 'optional',
+  placeholder = 'Add a comment — shared with the other reviewer and captured in the activity log…',
+  suggested,
+  onApplySuggested,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onPostComment?: (text: string, attachment?: { name: string }) => void;
+  label?: string;
+  hint?: string;
+  placeholder?: string;
+  suggested?: string;
+  onApplySuggested?: () => void;
+}) {
+  const [attachment, setAttachment] = useState<{ name: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const canPost = !!value.trim() || !!attachment;
+  const post = () => {
+    if (!canPost || !onPostComment) return;
+    onPostComment(value.trim(), attachment ?? undefined);
+    onChange('');
+    setAttachment(null);
+  };
+  return (
+    <div>
+      <div className="flex items-baseline gap-1.5 mb-2">
+        <span className="text-[12.5px] font-semibold text-ink-800">{label}</span>
+        {hint && <span className="text-[11.5px] text-ink-400">{hint}</span>}
+      </div>
+      {suggested && onApplySuggested && <SuggestedChip message={suggested} onApply={onApplySuggested} />}
+      <div className="rounded-[10px] border border-canvas-border bg-canvas-elevated focus-within:border-brand-600 focus-within:ring-[3px] focus-within:ring-brand-600/15 transition-colors">
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); post(); } }}
+          rows={3}
+          placeholder={placeholder}
+          className="w-full resize-y bg-transparent px-3.5 py-3 text-[13px] text-ink-900 leading-relaxed placeholder:text-ink-400 focus:outline-none"
+        />
+        {attachment && (
+          <div className="px-3.5 pb-2.5">
+            <span className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1.5 bg-brand-50 border border-brand-100 rounded-full text-[11.5px] text-ink-700">
+              <Paperclip size={11} className="text-brand-600" /> {attachment.name}
+              <button type="button" onClick={() => setAttachment(null)} aria-label="Remove attachment" className="w-4 h-4 inline-flex items-center justify-center rounded-full text-ink-500 hover:text-ink-800 hover:bg-white cursor-pointer"><X size={11} /></button>
+            </span>
+          </div>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) setAttachment({ name: f.name }); e.target.value = ''; }}
+        />
+        <div className="flex items-center justify-between gap-3 px-2.5 py-2 border-t border-canvas-border">
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            title="Attach a file"
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium text-ink-600 rounded-[8px] hover:bg-[#F4F2F7] hover:text-brand-700 cursor-pointer transition-colors"
+          >
+            <Paperclip size={14} /> Attach
+          </button>
+          {onPostComment && (
+            <button
+              type="button"
+              onClick={post}
+              disabled={!canPost}
+              className="inline-flex items-center gap-1.5 h-8 px-3.5 text-[12.5px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-[8px] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Send size={13} /> Post Comment
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Review Classification Drawer ───
 export function ReviewClassificationDrawer({
   exception,
   onClose,
   onDecision,
+  onPostComment,
   role,
 }: {
   exception: GrcException;
   onClose: () => void;
   onDecision: (decision: 'approve' | 'reject') => void;
+  /** Post a free-form comment to this case's thread (always-on channel). */
+  onPostComment?: (text: string, attachment?: { name: string }) => void;
   role?: 'risk-owner' | 'auditor';
 }) {
   const { can } = useCan();
@@ -506,23 +602,14 @@ export function ReviewClassificationDrawer({
         </div>
 
         <div className="mb-5">
-          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Comment</label>
-          <div className="relative">
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Add a review comment..."
-              rows={4}
-              className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
-            />
-            <button
-              type="button"
-              className="absolute bottom-2 right-2 w-7 h-7 flex items-center justify-center text-ink-400 hover:text-brand-700 cursor-pointer"
-              aria-label="Attach file"
-            >
-              <Paperclip size={14} />
-            </button>
-          </div>
+          <CaseCommentBox
+            value={comment}
+            onChange={setComment}
+            onPostComment={onPostComment}
+            label="Comment"
+            hint="optional"
+            placeholder="Add a comment — shared with the other reviewer and captured in the activity log…"
+          />
         </div>
 
         {detail && <ActivityTimeline entries={detail.activityLog} />}
@@ -537,6 +624,7 @@ export function ReviewCaseDrawer({
   onClose,
   onDecision,
   onViewBulk,
+  onPostComment,
   role,
 }: {
   exception: GrcException;
@@ -546,6 +634,8 @@ export function ReviewCaseDrawer({
     payload: { implementation: 'Implemented' | 'Partially Implemented' | null; comment: string },
   ) => void;
   onViewBulk: (bulkId: string) => void;
+  /** Post a free-form comment to this case's thread (always-on channel). */
+  onPostComment?: (text: string, attachment?: { name: string }) => void;
   role?: 'risk-owner' | 'auditor';
 }) {
   const detail = GRC_CASE_DETAILS[exception.id];
@@ -844,37 +934,24 @@ export function ReviewCaseDrawer({
                 </motion.div>
               )}
 
-              <div>
-                <label className="block text-[12.5px] font-medium text-ink-800 mb-2">
-                  Comment {isCompletionReview && <span className="text-risk">*</span>}
-                </label>
-                {!isViewMode && <SuggestedChip message={suggested} onApply={applySuggested} />}
-                <div className="relative">
-                  <textarea
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    placeholder={isCompletionReview ? 'Add your review comment (required)…' : 'Add a review comment...'}
-                    rows={4}
-                    className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
-                  />
-                  <button
-                    type="button"
-                    title="Attach file"
-                    aria-label="Attach file to comment"
-                    className="absolute bottom-2 right-2 w-7 h-7 flex items-center justify-center text-ink-400 hover:text-brand-700 cursor-pointer"
-                  >
-                    <Paperclip size={14} />
-                  </button>
-                </div>
-                {isCompletionReview && (
-                  <p className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-brand-700">
-                    <FileText size={12} className="shrink-0" /> This comment will be captured in the Action Taken Report (ATR).
-                  </p>
-                )}
-              </div>
+              <CaseCommentBox
+                value={comment}
+                onChange={setComment}
+                onPostComment={onPostComment}
+                label="Comment"
+                hint={isCompletionReview ? 'required for this review' : 'optional'}
+                placeholder={isCompletionReview ? 'Add your review comment (required)…' : 'Add a comment — shared with the other reviewer and captured in the activity log…'}
+                suggested={!isViewMode ? suggested : undefined}
+                onApplySuggested={!isViewMode ? applySuggested : undefined}
+              />
+              {isCompletionReview && (
+                <p className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-brand-700">
+                  <FileText size={12} className="shrink-0" /> The comment you submit with the decision is captured in the Action Taken Report (ATR).
+                </p>
+              )}
             </section>
 
-            {/* Activity log lives directly under the decision/comment section */}
+            {/* Activity & comments log — every action and comment shows here. */}
             {detail && (
               <div className="mt-4">
                 <ActivityTimeline entries={detail.activityLog} />
@@ -893,12 +970,15 @@ export function CompleteActionDrawer({
   exception,
   onClose,
   onSubmit,
+  onPostComment,
   bulkId,
   linkedCases = [],
 }: {
   exception: GrcException;
   onClose: () => void;
   onSubmit: (payload: { note: string; evidence: { name: string }[]; implementation: 'Implemented' | 'Partially Implemented'; comment: string }) => void;
+  /** Post a free-form comment to this case's thread (always-on channel). */
+  onPostComment?: (text: string, attachment?: { name: string }) => void;
   /** Bulk group this case belongs to — surfaces the "Part of Bulk Action" banner. */
   bulkId?: string;
   /** Live linked cases the action taken is recorded against (all, once the plan is
@@ -946,7 +1026,7 @@ export function CompleteActionDrawer({
               Cancel
             </button>
             <button
-              onClick={() => canSubmit && implementation && onSubmit({ note: note.trim(), evidence, implementation, comment: comment.trim() })}
+              onClick={() => { if (canSubmit && implementation) onSubmit({ note: note.trim(), evidence, implementation, comment: comment.trim() }); }}
               disabled={!canSubmit}
               className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
                 canSubmit ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
@@ -1073,17 +1153,19 @@ export function CompleteActionDrawer({
             <p className="text-[11.5px] text-ink-500 mt-2 leading-snug">The Auditor reviews your evidence and confirms the final outcome.</p>
           </div>
 
-          {/* Comment — always shown; the suggested chip appears once a status is
-              chosen and pre-fills an editable message. */}
+          {/* Unified comment — the note for the Auditor and the cross-persona
+              comment channel in one box; the suggested chip pre-fills an editable
+              message once a status is chosen. */}
           <div className="mb-4">
-            <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Comment</label>
-            <SuggestedChip message={suggested} onApply={applySuggested} />
-            <textarea
+            <CaseCommentBox
               value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Add a note for the Auditor…"
-              rows={3}
-              className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+              onChange={setComment}
+              onPostComment={onPostComment}
+              label="Comment"
+              hint="optional"
+              placeholder="Add a note for the Auditor — shared with them and captured in the activity log…"
+              suggested={suggested}
+              onApplySuggested={applySuggested}
             />
           </div>
 
@@ -1132,6 +1214,7 @@ export function ClassifyExceptionDrawer({
   exception,
   onClose,
   onSave,
+  onPostComment,
   actionableId,
   scopeCount = 1,
   linkedCases = [],
@@ -1148,6 +1231,8 @@ export function ClassifyExceptionDrawer({
     dueDate?: string;
     actionPlans?: { name: string; details: string; dueDate: string }[];
   }) => void;
+  /** Post a free-form comment to this case's thread (always-on channel). */
+  onPostComment?: (text: string, attachment?: { name: string }) => void;
   /** Actionable ID assigned once an actionable classification is chosen — shown
    *  while the management action plan is created. */
   actionableId?: string;
@@ -1583,31 +1668,21 @@ export function ClassifyExceptionDrawer({
           </motion.div>
         )}
 
+        {/* Unified comment box — classification rationale and the cross-persona
+            comment channel in one; with the synced activity log below. */}
         {step === 0 && (
         <div className="mb-5">
-          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
-            Comment <span className="text-[11px] font-normal text-ink-400">(optional)</span>
-          </label>
-          <div className="relative">
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Explain your classification rationale..."
-              rows={5}
-              className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
-            />
-            <button
-              type="button"
-              className="absolute bottom-2 right-2 w-7 h-7 flex items-center justify-center text-ink-400 hover:text-brand-700 cursor-pointer"
-              aria-label="Attach file"
-            >
-              <Paperclip size={14} />
-            </button>
-          </div>
+          <CaseCommentBox
+            value={comment}
+            onChange={setComment}
+            onPostComment={onPostComment}
+            label="Comment"
+            hint="optional"
+            placeholder="Explain your classification rationale — shared with the Auditor and captured in the activity log…"
+          />
         </div>
         )}
 
-        {/* Synced activity log — every action by either persona shows here. */}
         {step === 0 && (
         <div className="mt-1">
           <ActivityTimeline entries={reclassDetail?.activityLog ?? []} />
