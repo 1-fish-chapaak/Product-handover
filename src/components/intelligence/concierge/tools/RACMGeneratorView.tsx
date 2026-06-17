@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { motion } from 'motion/react';
 import {
   TableProperties, X, Search, FileSpreadsheet, FileJson, FileText,
   Upload, Sparkles, FileStack, Check, ArrowRight,
-  History, Trash2, ChevronDown,
+  History, Trash2, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { ConciergeFlow } from '../ConciergeKit';
 import type { PickedFile, HistoryJob, JobState } from '../types';
@@ -11,6 +11,7 @@ import ListPlaceholder from '../../../shared/ListPlaceholder';
 import { Button } from '../../../shared/Button';
 import { Pill, type Tone } from '../../../shared/StatusBadge';
 import { DateFilterPicker, dateInFilter, DEFAULT_DATE_FILTER, type DateFilter } from '../../../shared/DateFilterPicker';
+import ConfirmationModal from '../../../shared/ConfirmationModal';
 
 // ─── Result type ─────────────────────────────────────────────────────────────
 
@@ -371,6 +372,15 @@ const REVEAL_ITEM = {
   show: { opacity: 1, y: 0, transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] } },
 };
 
+// "How it works" steps shown below the upload cards on the empty RACM Generator home.
+const HOW_IT_WORKS_STEPS = [
+  { title: 'Upload SOP', sub: 'PDF, CSV, or image' },
+  { title: 'Document Parsing', sub: 'AI reads your document' },
+  { title: 'Risk Identification', sub: 'Extracts risks & gaps' },
+  { title: 'Control Mapping', sub: 'Maps controls to risks' },
+  { title: 'Generate RACM', sub: 'Structured matrix output' },
+];
+
 function RacmCreateChooser({
   options, setOption, submit,
 }: {
@@ -516,31 +526,56 @@ function RacmCreateChooser({
     );
   }
 
-  // ── Empty state — inviting, centered placeholder ───────────────────────────
+  // ── Empty state — placeholder + cards, then a "how it works" explainer ──────
   return (
-    <ListPlaceholder
-      icon={FileStack}
-      title="Start your RACM library"
-      body="Upload an existing matrix or SOPs to extract — IRA consolidates them into one RACM."
-      action={
-        <div className="w-full max-w-2xl mx-auto space-y-5">
-          <div className="grid grid-cols-2 gap-3 text-left">
-            <button onClick={() => racmInputRef.current?.click()} className="group text-left rounded-xl border border-border-light bg-canvas-elevated hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
-              <div className="p-2 rounded-lg bg-evidence-50 inline-flex mb-3"><Upload size={16} className="text-evidence-700" /></div>
-              <div className="text-[0.84375rem] font-semibold text-text mb-1">Upload a RACM</div>
-              <div className="text-[0.71875rem] text-text-muted leading-relaxed">Import an existing matrix (.xlsx / .csv).</div>
-            </button>
-            <button onClick={() => sopInputRef.current?.click()} className="group text-left rounded-xl border border-border-light bg-canvas-elevated hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
-              <div className="p-2 rounded-lg bg-brand-50 inline-flex mb-3"><Sparkles size={16} className="text-brand-600" /></div>
-              <div className="text-[0.84375rem] font-semibold text-text mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-text-muted">→</span> extract</div>
-              <div className="text-[0.71875rem] text-text-muted leading-relaxed">Upload a procedure doc (.pdf/.docx). IRA reads and drafts it.</div>
-            </button>
-          </div>
+    <div>
+      <ListPlaceholder
+        className="!pt-8 !pb-5"
+        icon={FileStack}
+        title="Start your RACM library"
+        body="Upload an existing matrix or SOPs to extract — IRA consolidates them into one RACM."
+        action={
+          <div className="w-full max-w-2xl mx-auto space-y-5">
+            <div className="grid grid-cols-2 gap-3 text-left">
+              <button onClick={() => racmInputRef.current?.click()} className="group text-left rounded-xl border border-border-light bg-canvas-elevated hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
+                <div className="p-2 rounded-lg bg-evidence-50 inline-flex mb-3"><Upload size={16} className="text-evidence-700" /></div>
+                <div className="text-[0.84375rem] font-semibold text-text mb-1">Upload a RACM</div>
+                <div className="text-[0.71875rem] text-text-muted leading-relaxed">Import an existing matrix (.xlsx / .csv).</div>
+              </button>
+              <button onClick={() => sopInputRef.current?.click()} className="group text-left rounded-xl border border-border-light bg-canvas-elevated hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
+                <div className="p-2 rounded-lg bg-brand-50 inline-flex mb-3"><Sparkles size={16} className="text-brand-600" /></div>
+                <div className="text-[0.84375rem] font-semibold text-text mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-text-muted">→</span> extract</div>
+                <div className="text-[0.71875rem] text-text-muted leading-relaxed">Upload a procedure doc (.pdf/.docx). IRA reads and drafts it.</div>
+              </button>
+            </div>
 
-          {fileInputs}
+            {fileInputs}
+          </div>
+        }
+      />
+
+      {/* How it works — onboarding explainer (empty state only); width matches the header subtitle */}
+      <div className="max-w-4xl mx-auto pb-6">
+        <div className="pt-6 border-t border-canvas-border">
+          <p className="text-center text-[0.9375rem] text-ink-500 leading-relaxed">
+            Transform your Standard Operating Procedures into structured Risk Assessment and Control Matrices — AI identifies risks, maps controls, and highlights compliance gaps automatically.
+          </p>
+          <p className="mt-4 text-center text-[0.6875rem] font-bold uppercase tracking-[0.18em] text-ink-400">How it works</p>
+          <ol className="mt-5 flex items-start justify-center gap-1.5 flex-wrap">
+            {HOW_IT_WORKS_STEPS.map((s, i) => (
+              <Fragment key={s.title}>
+                <li className="flex flex-col items-center text-center w-[8rem] shrink-0">
+                  <span className="w-9 h-9 rounded-full bg-canvas-elevated border border-canvas-border text-brand-700 font-mono font-bold text-sm flex items-center justify-center">{i + 1}</span>
+                  <span className="mt-2.5 text-[0.8125rem] font-semibold text-ink-800">{s.title}</span>
+                  <span className="mt-0.5 text-[0.75rem] text-ink-400 leading-snug">{s.sub}</span>
+                </li>
+                {i < HOW_IT_WORKS_STEPS.length - 1 && <ChevronRight size={16} className="text-ink-300 mt-2.5 shrink-0" />}
+              </Fragment>
+            ))}
+          </ol>
         </div>
-      }
-    />
+      </div>
+    </div>
   );
 }
 
@@ -727,6 +762,7 @@ function RacmHistoryList({ jobs, onOpen, onDelete }: {
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState<DateFilter>(DEFAULT_DATE_FILTER);
   const [dateOpen, setDateOpen] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   if (jobs.length === 0) {
     return (
@@ -765,7 +801,13 @@ function RacmHistoryList({ jobs, onOpen, onDelete }: {
     groups.find((g) => g.key === (isToday ? 'Today' : 'Earlier'))!.jobs.push(j);
   }
 
+  const deletingJob = jobs.find((j) => j.id === confirmDeleteId);
+  const deletingName = deletingJob
+    ? (deletingJob.files.length > 1 ? `${deletingJob.files.length} files` : (deletingJob.files[0] ?? 'this RACM'))
+    : '';
+
   return (
+    <>
     <div>
       <div className="flex items-center gap-2 mb-5">
         <div className="relative flex-1">
@@ -851,8 +893,9 @@ function RacmHistoryList({ jobs, onOpen, onDelete }: {
                           </div>
                           <Pill tone={status.tone}>{status.label}</Pill>
                           <button
-                            onClick={(e) => { e.stopPropagation(); onDelete(j.id); }}
+                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(j.id); }}
                             aria-label={`Delete ${name}`}
+                            title="Delete RACM"
                             className="shrink-0 p-1 rounded-md text-ink-300 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
                           >
                             <Trash2 size={15} />
@@ -868,6 +911,16 @@ function RacmHistoryList({ jobs, onOpen, onDelete }: {
         </div>
       )}
     </div>
+    <ConfirmationModal
+      open={confirmDeleteId !== null}
+      title="Delete this RACM?"
+      description={<>This permanently removes <span className="font-semibold text-ink-700">{deletingName}</span> from your generation history. This can't be undone.</>}
+      confirmLabel="Delete"
+      tone="destructive"
+      onConfirm={() => { if (confirmDeleteId) onDelete(confirmDeleteId); setConfirmDeleteId(null); }}
+      onClose={() => setConfirmDeleteId(null)}
+    />
+    </>
   );
 }
 

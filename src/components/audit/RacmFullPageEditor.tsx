@@ -28,6 +28,8 @@ import ListPlaceholder from '../shared/ListPlaceholder';
 
 interface Props {
   onBack: () => void;
+  /** Optional label shown beside the back arrow (e.g. "Back to RACM"). Icon-only when omitted. */
+  backLabel?: string;
   /** RACM display name shown in the page header */
   racmName?: string;
   /** Identifier for the RACM being edited — used to label the version/source */
@@ -52,6 +54,15 @@ const CHIP_COLUMNS = new Set<keyof ProcurementRacmRow>([
 
 // Columns that the user can pin / freeze to the left
 const PINNABLE_KEYS: (keyof ProcurementRacmRow)[] = ['riskId', 'controlId', 'subProcess'];
+// Columns frozen (sticky) while scrolling sideways — fixed set, not user-toggleable.
+const PINNED_KEYS = new Set<keyof ProcurementRacmRow>(PINNABLE_KEYS);
+// Identity columns that can never be hidden — shown as "locked" in the column picker.
+const LOCKED_KEYS = new Set<keyof ProcurementRacmRow>(['riskId', 'controlId']);
+// Default visible columns (mirrors the prior default group selection).
+const DEFAULT_VISIBLE_GROUPS = new Set<ColumnGroup>(['identity', 'context', 'risk', 'control', 'assertions']);
+const DEFAULT_VISIBLE_COLS = new Set<keyof ProcurementRacmRow>(
+  PROCUREMENT_RACM_COLUMNS.filter(c => DEFAULT_VISIBLE_GROUPS.has(c.group)).map(c => c.key),
+);
 
 // Curated set of columns that expose a per-column filter in the header.
 //   'text'  → free-text search box (substring match)
@@ -75,7 +86,20 @@ function isKeyControl(controlId: string): boolean {
 
 type GroupByMode = 'none' | 'subProcess' | 'processArea' | 'riskRating';
 
-export default function RacmFullPageEditor({ onBack, racmName, racmId, processLabel, sourceFiles }: Props) {
+const GROUP_BY_LABELS: Record<GroupByMode, string> = {
+  none: 'No grouping',
+  subProcess: 'Sub-Process',
+  processArea: 'Process Area',
+  riskRating: 'Risk Rating',
+};
+const GROUP_BY_OPTIONS: { value: GroupByMode; label: string }[] = [
+  { value: 'none', label: 'No grouping' },
+  { value: 'subProcess', label: 'Sub-Process' },
+  { value: 'processArea', label: 'Process Area' },
+  { value: 'riskRating', label: 'Risk Rating' },
+];
+
+export default function RacmFullPageEditor({ onBack, backLabel, racmName, racmId, processLabel, sourceFiles }: Props) {
   const { openShare } = useShare();
   // When generated from 2+ files, show a trailing "Ref" column and tag each row
   // with its source file (round-robin across the uploaded files for this mock).
@@ -94,11 +118,9 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
   const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({});
   const setColumnFilter = (key: string, vals: string[]) =>
     setColumnFilters(prev => { const next = { ...prev }; if (vals.length) next[key] = vals; else delete next[key]; return next; });
-  const [visibleGroups, setVisibleGroups] = useState<Set<ColumnGroup>>(
-    new Set(['identity', 'context', 'risk', 'control', 'assertions'])
-  );
-  const [pinnedKeys, setPinnedKeys] = useState<Set<keyof ProcurementRacmRow>>(
-    new Set(['riskId', 'controlId'])
+  // Per-column visibility (Manage-Exceptions style). Pins are fixed (PINNED_KEYS).
+  const [visibleCols, setVisibleCols] = useState<Set<keyof ProcurementRacmRow>>(
+    () => new Set(DEFAULT_VISIBLE_COLS)
   );
   // User-resized column widths (override the per-column defaults), remembered per RACM.
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
@@ -118,8 +140,8 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
   // Header: inline-renamable title + a working status (mock lifecycle).
   const [titleOverride, setTitleOverride] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
-  const [status, setStatus] = useState<'Draft' | 'In Review' | 'Final'>('Draft');
-  const [statusOpen, setStatusOpen] = useState(false);
+  const [status] = useState<'Draft' | 'In Review' | 'Final'>('Draft');
+  const [groupByOpen, setGroupByOpen] = useState(false);
 
   // ─── Derived ─────────────────────────────────────────────────────────
   // Distinct values per multi-select column, sorted, for the header filter menus.
@@ -197,8 +219,8 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
 
   const visibleColumns = useMemo<RacmColumnDef[]>(() => {
     // pinned first, then by configured group order
-    const pinned = PROCUREMENT_RACM_COLUMNS.filter(c => pinnedKeys.has(c.key));
-    const rest = PROCUREMENT_RACM_COLUMNS.filter(c => !pinnedKeys.has(c.key) && visibleGroups.has(c.group));
+    const pinned = PROCUREMENT_RACM_COLUMNS.filter(c => PINNED_KEYS.has(c.key) && visibleCols.has(c.key));
+    const rest = PROCUREMENT_RACM_COLUMNS.filter(c => !PINNED_KEYS.has(c.key) && visibleCols.has(c.key));
     let cols = [...pinned, ...rest];
     // A constant Process Area lives in the header instead of a per-row column.
     if (singleProcessArea) cols = cols.filter(c => c.key !== 'processArea');
@@ -209,7 +231,7 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
       cols.splice(Math.max(afterControlId, 1), 0, REF_COLUMN);
     }
     return cols;
-  }, [pinnedKeys, visibleGroups, showRef, singleProcessArea]);
+  }, [visibleCols, showRef, singleProcessArea]);
 
   // Overlay any user resize overrides on the default widths, then hand these
   // "effective" columns to the header + rows so widths stay in sync everywhere.
@@ -273,19 +295,16 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
       return n;
     });
 
-  const toggleColumnGroup = (g: ColumnGroup) =>
-    setVisibleGroups(prev => {
-      const n = new Set(prev);
-      if (n.has(g)) n.delete(g); else n.add(g);
-      return n;
-    });
-
-  const togglePin = (key: keyof ProcurementRacmRow) =>
-    setPinnedKeys(prev => {
+  const toggleColumn = (key: keyof ProcurementRacmRow) => {
+    if (LOCKED_KEYS.has(key)) return; // locked identity columns can't be hidden
+    setVisibleCols(prev => {
       const n = new Set(prev);
       if (n.has(key)) n.delete(key); else n.add(key);
       return n;
     });
+  };
+
+  const resetColumns = () => setVisibleCols(new Set(DEFAULT_VISIBLE_COLS));
 
   const toggleRowSelected = (id: string) =>
     setSelectedRowIds(prev => {
@@ -299,7 +318,11 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
   // Cleaned, renamable display title — strip the leading "RACM ·" and any extension.
   const baseName = (racmName ?? 'Procurement SOP: Budget to Payment RACM')
     .replace(/^RACM\s*·\s*/i, '')
-    .replace(/\.(xlsx|xls|csv|pdf|docx?|json)$/i, '');
+    .replace(/\.(xlsx|xls|csv|pdf|docx?|json)$/i, '')
+    .replace(/[-_]+/g, ' ')                              // separators → spaces
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/(^|\s)([a-z])/g, (_, sp, c) => sp + c.toUpperCase()); // Title Case (preserve existing caps)
   const displayTitle = titleOverride ?? baseName;
   const STATUS_TONES: Record<string, string> = {
     'Draft': 'bg-draft-50 text-draft-700',
@@ -308,7 +331,7 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
   };
 
   // ─── Build sticky-left offset map (px-based) ─────────────────────────
-  const pinnedColumnList = effCols.filter(c => pinnedKeys.has(c.key));
+  const pinnedColumnList = effCols.filter(c => PINNED_KEYS.has(c.key));
   const stickyOffsets = useMemo(() => {
     const map = new Map<string, number>();
     let acc = 40; // checkbox column
@@ -322,76 +345,62 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
   // ─── Render ──────────────────────────────────────────────────────────
   return (
     <div className="h-full w-full flex flex-col bg-canvas overflow-hidden">
-      {/* Header */}
-      <div className="bg-white px-6 py-3 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
+      {/* Top bar — back */}
+      <div className="bg-white px-6 h-12 flex items-center shrink-0">
+        {backLabel ? (
+          <button onClick={onBack} className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-ink-500 hover:text-brand-700 transition-colors cursor-pointer -ml-0.5 shrink-0">
+            <ArrowLeft size={15} /> {backLabel}
+          </button>
+        ) : (
           <Button variant="ghost" size="sm" iconOnly shape="md" aria-label="Back" onClick={onBack} className="-ml-1 shrink-0">
             <ArrowLeft size={16} />
           </Button>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              {editingTitle ? (
-                <input
-                  autoFocus
-                  defaultValue={displayTitle}
-                  onBlur={(e) => { const v = e.target.value.trim(); setTitleOverride(v || null); setEditingTitle(false); }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                    else if (e.key === 'Escape') setEditingTitle(false);
-                  }}
-                  className="text-[0.9375rem] font-bold text-text bg-white border border-brand-200 rounded-md px-1.5 py-0.5 -my-0.5 outline-none focus:ring-2 focus:ring-primary/20 min-w-[18rem]"
-                />
-              ) : (
-                <button
-                  onDoubleClick={() => setEditingTitle(true)}
-                  title="Double-click to rename"
-                  className="text-[0.9375rem] font-bold text-text truncate hover:bg-brand-50 rounded px-1 -mx-1 cursor-text transition-colors">
-                  {displayTitle}
-                </button>
-              )}
-              {processLabel && <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-primary/10 text-primary">{processLabel}</span>}
-              {singleProcessArea && <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-semibold bg-paper-100 text-ink-600 truncate max-w-[14rem]">{singleProcessArea}</span>}
-              {/* Status — working lifecycle control (mock) */}
-              <div className="relative shrink-0">
-                <button onClick={() => setStatusOpen(o => !o)}
-                  className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold inline-flex items-center gap-1 cursor-pointer ${STATUS_TONES[status]}`}>
-                  {status.toUpperCase()}<ChevronDown size={9} />
-                </button>
-                {statusOpen && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setStatusOpen(false)} />
-                    <div className="absolute left-0 top-full mt-1 z-20 w-32 bg-canvas-elevated border border-canvas-border rounded-lg shadow-lg py-1">
-                      {(['Draft', 'In Review', 'Final'] as const).map(s => (
-                        <button key={s} onClick={() => { setStatus(s); setStatusOpen(false); }}
-                          className={`w-full text-left px-2.5 py-1.5 text-[0.6875rem] hover:bg-paper-50 cursor-pointer ${s === status ? 'font-semibold text-brand-700' : 'text-ink-700'}`}>
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-              <span className="text-[0.625rem] text-text-muted font-mono">v0.1</span>
-            </div>
+        )}
+      </div>
+
+      {/* RACM name section — title + inline meta; actions on the right */}
+      <div className="bg-white px-6 pt-0 pb-3.5 flex items-center justify-between gap-4 shrink-0">
+        <div className="min-w-0 flex items-center gap-3">
+          {editingTitle ? (
+            <input
+              autoFocus
+              defaultValue={displayTitle}
+              onBlur={(e) => { const v = e.target.value.trim(); setTitleOverride(v || null); setEditingTitle(false); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                else if (e.key === 'Escape') setEditingTitle(false);
+              }}
+              className="text-[1.375rem] font-bold text-ink-900 leading-tight bg-white border border-brand-200 rounded-md px-2 py-0.5 -mx-1 outline-none focus:ring-2 focus:ring-primary/20 min-w-[18rem]"
+            />
+          ) : (
+            <button
+              onDoubleClick={() => setEditingTitle(true)}
+              title="Double-click to rename"
+              className="text-[1.375rem] font-bold text-ink-900 leading-tight truncate min-w-0 hover:bg-brand-50 rounded px-1 -mx-1 cursor-text transition-colors">
+              {displayTitle}
+            </button>
+          )}
+          {/* Inline meta — process tag(s), static status badge, version */}
+          <div className="flex items-center gap-2 shrink-0">
+            {processLabel && <span className="px-2 py-0.5 rounded text-xs font-bold bg-primary/10 text-primary">{processLabel}</span>}
+            {singleProcessArea && <span className="px-2 py-0.5 rounded text-xs font-semibold bg-paper-100 text-ink-600 whitespace-nowrap">{singleProcessArea}</span>}
+            <span className={`px-2 py-0.5 rounded text-xs font-bold ${STATUS_TONES[status]}`}>{status}</span>
+            <span className="text-xs text-text-muted font-mono">v0.1</span>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Gated permission="racm_share">
-          <Button variant="outline" size="sm" leftIcon={<Share2 size={11} />}
+          <Button variant="outline" size="md" leftIcon={<Share2 size={14} />}
             onClick={(e) => openShare({ type: 'racm', id: racmId ?? 'racm', anchor: rectFromEvent(e) })}>
             Share
           </Button>
           </Gated>
           <Gated permission="ctrl_export" mode="disable" title="You don't have permission to export">
-          <Button variant="outline" size="sm" leftIcon={<Download size={11} />}
+          <Button variant="outline" size="md" leftIcon={<Download size={14} />}
             onClick={() => setShowImportToast(true)}>
             Export
           </Button>
           </Gated>
-          <Button variant="primary" size="sm" leftIcon={<Plus size={11} />}
-            onClick={addRow}>
-            Add Risk-Control
-          </Button>
           <input ref={fileInputRef} type="file" accept=".xlsx,.csv" className="hidden"
             onChange={() => { setShowImportToast(true); if (fileInputRef.current) fileInputRef.current.value = ''; }} />
         </div>
@@ -399,62 +408,83 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
 
       {/* Toolbar */}
       <div className="bg-white border-b border-border-light px-6 py-2.5 flex items-center justify-between gap-3 shrink-0">
+        {/* Left — search */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <div className="relative max-w-md flex-1">
             <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search all columns…"
-              className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-[0.6875rem] bg-white outline-none focus:border-primary/40 transition-all" />
-          </div>
-          {/* Group-by */}
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border bg-white">
-            <Layers size={10} className="text-ink-400" />
-            <select value={groupBy} onChange={e => setGroupBy(e.target.value as GroupByMode)}
-              className="text-[0.625rem] bg-transparent outline-none cursor-pointer text-text-secondary">
-              <option value="none">No grouping</option>
-              <option value="subProcess">Group by Sub-Process</option>
-              <option value="processArea">Group by Process Area</option>
-              <option value="riskRating">Group by Risk Rating</option>
-            </select>
-          </div>
-          {/* Columns */}
-          <div className="relative">
-            <button onClick={() => setShowColumnPanel(v => !v)}
-              className={`px-2.5 py-1.5 rounded-lg text-[0.625rem] font-semibold cursor-pointer transition-colors flex items-center gap-1.5 ${showColumnPanel ? 'bg-primary/10 text-primary ring-1 ring-primary/30' : 'border border-border text-text-secondary hover:bg-surface-2'}`}>
-              <Columns3 size={10} />
-              Columns ({visibleColumns.length}/{PROCUREMENT_RACM_COLUMNS.length})
-            </button>
-            {showColumnPanel && (
-              <ColumnVisibilityPanel
-                visibleGroups={visibleGroups}
-                pinnedKeys={pinnedKeys}
-                onToggleGroup={toggleColumnGroup}
-                onTogglePin={togglePin}
-                onClose={() => setShowColumnPanel(false)}
-              />
-            )}
+              className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-xs bg-white outline-none focus:border-primary/40 transition-all" />
           </div>
         </div>
+        {/* Right — grouping, columns, add */}
         <div className="flex items-center gap-2 shrink-0">
           {selectedRowIds.size > 0 && (
             <>
-              <span className="text-[0.625rem] text-text-muted">{selectedRowIds.size} selected</span>
-              <Button variant="destructive" size="sm" leftIcon={<Trash2 size={10} />} onClick={deleteSelected}>
+              <span className="text-xs text-text-muted">{selectedRowIds.size} selected</span>
+              <Button variant="destructive" size="sm" leftIcon={<Trash2 size={12} />} onClick={deleteSelected}>
                 Delete
               </Button>
               <span className="text-ink-200">|</span>
             </>
           )}
-          <span className="hidden sm:inline-flex items-center gap-1 text-[0.625rem] text-ink-400"><Star size={9} className="text-mitigated fill-mitigated" />Key control</span>
-          <span className="text-ink-200">|</span>
-          {saveStatus === 'saved' && <span className="text-[0.625rem] text-compliant-700 flex items-center gap-1"><Check size={10} />All changes saved</span>}
-          {saveStatus === 'saving' && <span className="text-[0.625rem] text-mitigated-700">Saving…</span>}
-          {saveStatus === 'edited' && <span className="text-[0.625rem] text-brand-700">Edited</span>}
+          {/* Group-by — themed popover, matches the Column-groups panel */}
+          <div className="relative">
+            <button onClick={() => setGroupByOpen(o => !o)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5 ${groupByOpen ? 'bg-primary/10 text-primary ring-1 ring-primary/30' : 'border border-border text-text-secondary hover:bg-surface-2'}`}>
+              <Layers size={12} className={groupByOpen ? 'text-primary' : 'text-ink-400'} />
+              {groupBy === 'none' ? 'No grouping' : `Group by ${GROUP_BY_LABELS[groupBy]}`}
+              <ChevronDown size={12} className="opacity-60" />
+            </button>
+            {groupByOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setGroupByOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 w-56 bg-white border border-border rounded-xl shadow-xl z-30 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-border-light bg-surface-2/40">
+                    <h6 className="text-[0.625rem] font-bold text-text uppercase tracking-wider">Group by</h6>
+                  </div>
+                  <div className="p-2 space-y-0.5">
+                    {GROUP_BY_OPTIONS.map(opt => {
+                      const on = groupBy === opt.value;
+                      return (
+                        <button key={opt.value} onClick={() => { setGroupBy(opt.value); setGroupByOpen(false); }}
+                          className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${on ? 'bg-primary/5 text-primary font-semibold' : 'text-text-secondary hover:bg-surface-2 font-medium'}`}>
+                          <span>{opt.label}</span>
+                          {on && <Check size={13} className="text-primary" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          {/* Columns */}
+          <div className="relative">
+            <button onClick={() => setShowColumnPanel(v => !v)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5 ${showColumnPanel ? 'bg-primary/10 text-primary ring-1 ring-primary/30' : 'border border-border text-text-secondary hover:bg-surface-2'}`}>
+              <Columns3 size={12} />
+              Columns ({visibleColumns.length}/{PROCUREMENT_RACM_COLUMNS.length})
+            </button>
+            {showColumnPanel && (
+              <ColumnVisibilityPanel
+                columns={singleProcessArea ? PROCUREMENT_RACM_COLUMNS.filter(c => c.key !== 'processArea') : PROCUREMENT_RACM_COLUMNS}
+                visibleCols={visibleCols}
+                onToggle={toggleColumn}
+                onReset={resetColumns}
+                onClose={() => setShowColumnPanel(false)}
+              />
+            )}
+          </div>
+          {/* Add */}
+          <Button variant="primary" size="md" leftIcon={<Plus size={14} />} onClick={addRow}>
+            Add Risk-Control
+          </Button>
         </div>
       </div>
 
       {/* Stats strip */}
-      <div className="bg-surface-2/40 border-b border-border-light px-6 py-2 flex items-center gap-6 text-[0.625rem] shrink-0 overflow-x-auto">
+      <div className="bg-white border-b border-border-light px-6 py-2 flex items-center gap-6 text-[0.625rem] shrink-0 overflow-x-auto">
         <StatPill label="Total Controls" value={stats.total} />
         <StatPill label="Total Risks" value={stats.risks} />
         <StatPill label="Sub-Processes" value={stats.subProcesses} />
@@ -465,8 +495,10 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
         <StatPill label="Automated" value={stats.automated} accent="text-compliant-700" />
       </div>
 
-      {/* Grid container — inset right shadow hints there are more columns to scroll to */}
-      <div className="flex-1 overflow-auto bg-white shadow-[inset_-14px_0_10px_-10px_rgba(15,8,30,0.05)]">
+      {/* Grid container — 24px side gutters match the header's px-6. The inner div is the
+          scroll region, so sticky columns + the scrollbar stay within the inset gutters. */}
+      <div className="flex-1 min-h-0 px-6 bg-white">
+        <div className="h-full overflow-auto shadow-[inset_-14px_0_10px_-10px_rgba(15,8,30,0.05)]">
         {filteredRows.length === 0 ? (
           <ListPlaceholder
             icon={Search}
@@ -487,7 +519,7 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
             onToggleGroup={toggleGroup}
             visibleColumns={effCols}
             onResize={startResize}
-            pinnedKeys={pinnedKeys}
+            pinnedKeys={PINNED_KEYS}
             stickyOffsets={stickyOffsets}
             selectedRowIds={selectedRowIds}
             onToggleRowSelected={toggleRowSelected}
@@ -501,6 +533,7 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
             onKeyOnlyChange={setShowOnlyKey}
           />
         )}
+        </div>
       </div>
 
       {/* Pagination footer */}
@@ -638,18 +671,19 @@ function ColumnFilterControl({ colKey: _colKey, label, mode, options, value, onC
   );
 }
 
-// ─── Column visibility panel ───────────────────────────────────────────────
+// ─── Column visibility panel — flat "Show columns" list (Manage-Exceptions style) ──
 function ColumnVisibilityPanel({
-  visibleGroups, pinnedKeys, onToggleGroup, onTogglePin, onClose,
+  columns, visibleCols, onToggle, onReset, onClose,
 }: {
-  visibleGroups: Set<ColumnGroup>;
-  pinnedKeys: Set<keyof ProcurementRacmRow>;
-  onToggleGroup: (g: ColumnGroup) => void;
-  onTogglePin: (k: keyof ProcurementRacmRow) => void;
+  columns: RacmColumnDef[];
+  visibleCols: Set<keyof ProcurementRacmRow>;
+  onToggle: (k: keyof ProcurementRacmRow) => void;
+  onReset: () => void;
   onClose: () => void;
 }) {
   // close on outside click
   const ref = useRef<HTMLDivElement>(null);
+  const [q, setQ] = useState('');
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
@@ -658,45 +692,40 @@ function ColumnVisibilityPanel({
     return () => window.removeEventListener('mousedown', handler);
   }, [onClose]);
 
+  const term = q.trim().toLowerCase();
+  const filtered = term ? columns.filter(c => c.label.toLowerCase().includes(term)) : columns;
+
   return (
     <div ref={ref} className="absolute right-0 top-full mt-1 w-72 bg-white border border-border rounded-xl shadow-xl z-30 overflow-hidden">
-      <div className="px-3 py-2 border-b border-border-light bg-surface-2/40">
-        <h6 className="text-[0.625rem] font-bold text-text uppercase tracking-wider">Column groups</h6>
-        <p className="text-[0.5625rem] text-text-muted mt-0.5">Toggle entire groups in/out of view.</p>
+      <div className="px-3 py-2 border-b border-border-light bg-surface-2/40 flex items-center justify-between">
+        <h6 className="text-[0.625rem] font-bold text-text uppercase tracking-wider">Show columns</h6>
+        <button onClick={onReset} className="text-[0.6875rem] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer">Reset</button>
       </div>
-      <div className="p-2 space-y-0.5">
-        {COLUMN_GROUP_ORDER.map(g => {
-          const on = visibleGroups.has(g);
+      <div className="px-2.5 pt-2 pb-1">
+        <div className="relative">
+          <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-400" />
+          <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search columns…"
+            className="w-full pl-7 pr-2 py-1.5 border border-border rounded-lg text-xs bg-white outline-none focus:border-primary/40 transition-colors" />
+        </div>
+      </div>
+      <ul className="py-1 max-h-[300px] overflow-y-auto">
+        {filtered.length === 0 && <li className="px-3 py-3 text-xs text-ink-400 text-center">No columns match.</li>}
+        {filtered.map(col => {
+          const locked = LOCKED_KEYS.has(col.key);
+          const checked = locked || visibleCols.has(col.key);
           return (
-            <button key={g} onClick={() => onToggleGroup(g)}
-              className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[0.6875rem] cursor-pointer transition-colors ${on ? 'bg-primary/5 text-primary' : 'text-text-secondary hover:bg-surface-2'}`}>
-              <span className="font-medium">{COLUMN_GROUP_LABELS[g]}</span>
-              <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${on ? 'bg-primary border-primary' : 'border-border'}`}>
-                {on && <Check size={9} className="text-white" />}
-              </span>
-            </button>
+            <li key={col.key as string}>
+              <label className={`flex items-center gap-2.5 px-3 py-1.5 text-xs ${locked ? 'text-ink-400 cursor-not-allowed' : 'text-ink-800 hover:bg-surface-2 cursor-pointer'}`}>
+                <input type="checkbox" checked={checked} disabled={locked}
+                  onChange={() => onToggle(col.key)}
+                  className="accent-brand-600 cursor-pointer w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{col.label}</span>
+                {locked && <span className="ml-auto text-[0.625rem] text-ink-400 shrink-0">locked</span>}
+              </label>
+            </li>
           );
         })}
-      </div>
-      <div className="px-3 py-2 border-t border-border-light bg-surface-2/40">
-        <h6 className="text-[0.625rem] font-bold text-text uppercase tracking-wider">Pinned columns</h6>
-        <p className="text-[0.5625rem] text-text-muted mt-0.5">Pin to keep visible while scrolling horizontally.</p>
-      </div>
-      <div className="p-2 space-y-0.5">
-        {PINNABLE_KEYS.map(k => {
-          const col = PROCUREMENT_RACM_COLUMNS.find(c => c.key === k)!;
-          const on = pinnedKeys.has(k);
-          return (
-            <button key={k} onClick={() => onTogglePin(k)}
-              className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[0.6875rem] cursor-pointer transition-colors ${on ? 'bg-primary/5 text-primary' : 'text-text-secondary hover:bg-surface-2'}`}>
-              <span className="font-medium">{col.label}</span>
-              <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${on ? 'bg-primary border-primary' : 'border-border'}`}>
-                {on && <Check size={9} className="text-white" />}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      </ul>
     </div>
   );
 }
@@ -965,7 +994,9 @@ function CellContent({
       <button onClick={onOpenDetail}
         className="font-mono text-[0.6875rem] text-primary hover:underline cursor-pointer inline-flex items-center gap-1">
         {col.key === 'controlId' && row.isKey && (
-          <Star size={10} className="text-mitigated fill-mitigated shrink-0" aria-label="Key control" />
+          <span title="Key control" className="inline-flex shrink-0">
+            <Star size={10} className="text-mitigated fill-mitigated" aria-label="Key control" />
+          </span>
         )}
         {val || '—'}
       </button>
