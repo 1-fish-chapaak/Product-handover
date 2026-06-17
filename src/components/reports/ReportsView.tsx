@@ -9,7 +9,7 @@ import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
   Sparkles, X, Edit3, BookOpen, Upload, Trash2, Plus, Search, Layers, Check,
-  WifiOff, FileCheck2, FolderArchive,
+  WifiOff, FileCheck2, FolderArchive, Copy,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
@@ -26,9 +26,9 @@ import { exportAtrWord } from './atrTemplate';
 import { type Tone } from '../shared/StatusBadge';
 import { ReportPill } from './ReportPill';
 import { reportDisplayName } from './reportName';
-import { TemplateEditor, mergeTemplateOptions } from './TemplateEditor';
+import { TemplateEditor } from './TemplateEditor';
 import {
-  ICON_MAP, CATEGORY_COLORS, BLANK_TEMPLATE,
+  ICON_MAP, CATEGORY_COLORS, BLANK_TEMPLATE, mergeTemplateOptions,
   templateKind, reportKind, startReportDownload,
   type AttachedQuery, type EditableTemplate, type GeneratedReport,
 } from './reportShared';
@@ -1466,12 +1466,24 @@ export default function ReportsView({
         })()}
 
         {activeTab === 'templates' && (() => {
-          // Customize opens the editor directly. A standard template opens on a
-          // copy (editingAsCopy), so the shared original is never mutated; a
-          // custom template opens on itself and Save updates it in place.
-          const openCustomizeTemplate = (rt: typeof REPORT_TEMPLATES[number], isCustom: boolean) => {
-            setEditingAsCopy(!isCustom);
+          // Custom templates open straight into the editor (edit in place).
+          const editCustomTemplate = (rt: typeof REPORT_TEMPLATES[number]) => {
+            setEditingAsCopy(false);
             setEditingTemplate(rt);
+          };
+          // Standard templates can't be edited — "Clone" duplicates one into an
+          // editable custom copy and drops you straight into editing it. No
+          // intermediate locked/preview screen.
+          const cloneStandardTemplate = (rt: typeof REPORT_TEMPLATES[number]) => {
+            const taken = [...REPORT_TEMPLATES.map(t => t.name), ...customTemplates.map(t => t.name)];
+            let name = `Copy of ${rt.name}`;
+            let n = 2;
+            while (taken.some(x => x.toLowerCase() === name.toLowerCase())) name = `Copy of ${rt.name} (${n++})`;
+            const copy = { ...rt, id: `ct-copy-${Date.now()}`, name } as typeof REPORT_TEMPLATES[number];
+            addCustomTemplate(copy);
+            setEditingAsCopy(false);
+            setEditingTemplate(copy);
+            addToast({ type: 'success', message: `Cloned “${rt.name}” — now editing your copy.` });
           };
           const renderCard = (rt: typeof REPORT_TEMPLATES[0], i: number, fixedWidth?: boolean, isCustom?: boolean) => {
             const Icon = ICON_MAP[rt.icon] || FileText;
@@ -1525,13 +1537,13 @@ export default function ReportsView({
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <ActionTooltip label="Customize">
+                    <ActionTooltip label={isCustom ? 'Edit' : 'Clone to edit'}>
                       <button
-                        onClick={(e) => { e.stopPropagation(); openCustomizeTemplate(rt, !!isCustom); }}
-                        aria-label={`Customize template ${rt.name}`}
+                        onClick={(e) => { e.stopPropagation(); if (isCustom) editCustomTemplate(rt); else cloneStandardTemplate(rt); }}
+                        aria-label={`${isCustom ? 'Edit' : 'Clone'} template ${rt.name}`}
                         className="w-7 h-7 flex items-center justify-center rounded-full text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer"
                       >
-                        <Edit3 size={13} />
+                        {isCustom ? <Edit3 size={13} /> : <Copy size={13} />}
                       </button>
                     </ActionTooltip>
                     {isCustom && (
@@ -1653,13 +1665,6 @@ export default function ReportsView({
             sources={wizardSources}
             onClose={() => setWizardTemplate(null)}
             onCreate={(payload) => createReportFromWizard(wizardTemplate, payload)}
-            // Customize keeps the wizard mounted underneath (suppressed) so the
-            // user's query/workflow selections survive the round-trip.
-            suppressed={!!editingTemplate}
-            onCustomize={() => {
-              setEditingAsCopy(true);
-              setEditingTemplate(wizardTemplate);
-            }}
           />
         )}
       </AnimatePresence>
@@ -1668,6 +1673,10 @@ export default function ReportsView({
       <AnimatePresence>
         {editingTemplate && (
           <TemplateEditor
+            // Key by identity so cloning a standard (which swaps editingTemplate
+            // to the new copy) remounts the editor fresh instead of reusing the
+            // locked standard's seeded state.
+            key={editingTemplate.id}
             template={editingTemplate}
             isCopy={editingAsCopy}
             initialName={editingTemplate.id === 'ct-blank' ? 'Untitled Template' : undefined}
@@ -1725,13 +1734,6 @@ export default function ReportsView({
             setViewingReport(newReport);
             setAtrWizardOpen(false);
             addToast({ type: 'success', message: 'Action Taken Report added to My Reports.' });
-          }}
-          onCustomize={() => {
-            const atrTemplate = REPORT_TEMPLATES.find(t => t.id === 'rt-007');
-            if (!atrTemplate) return;
-            setAtrWizardOpen(false);
-            setEditingAsCopy(true);
-            setEditingTemplate(atrTemplate);
           }}
         />
       )}

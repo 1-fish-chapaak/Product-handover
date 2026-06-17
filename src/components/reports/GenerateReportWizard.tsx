@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import {
   X, FileText, Search, Check, Minus, ArrowRight, ArrowLeft,
-  Loader2, GripVertical, Sparkles, Settings, Workflow, CalendarRange, ChevronDown, ArrowLeftRight,
+  Loader2, GripVertical, Sparkles, Workflow, CalendarRange, ChevronDown, ArrowLeftRight,
 } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import ColumnFilter from '../shared/ColumnFilter';
@@ -43,14 +43,11 @@ const currentPeriod = () => {
 const sevTone = (sev: string): Tone =>
   sev === 'High' ? 'risk' : sev === 'Medium' ? 'mitigated' : 'compliant';
 
-export default function GenerateReportWizard({ template, onClose, onCreate, onCustomize, suppressed = false, sources = [] }: {
+export default function GenerateReportWizard({ template, onClose, onCreate, suppressed = false, sources = [] }: {
   template: { id: string; name: string; desc: string };
   onClose: () => void;
   onCreate: (payload: WizardCreatePayload) => void;
-  /** Opens the template editor on top — the wizard stays mounted, suppressed. */
-  onCustomize?: () => void;
-  /** Hidden + inert while the template editor is stacked above it, so the
-   *  wizard's selections survive the round-trip. */
+  /** Reserved: hide + inert the wizard while another modal stacks above it. */
   suppressed?: boolean;
   /** The full pickable pool — rows derived from the user's live reports
    *  (newest first). There is no static catalog. */
@@ -373,15 +370,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, onCu
             </div>
 
             {/* Footer */}
-            <div className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center justify-between gap-3">
-              {onCustomize ? (
-                <button
-                  onClick={onCustomize}
-                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-medium text-ink-500 bg-white border border-canvas-border hover:border-brand-600/40 hover:text-brand-600 rounded-[8px] transition-colors cursor-pointer"
-                >
-                  <Settings size={13} /> Customize template
-                </button>
-              ) : <span />}
+            <div className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3">
               <div className="flex items-center gap-3">
                 <span className="text-[12px] text-ink-400">
                   {selectedSummary}

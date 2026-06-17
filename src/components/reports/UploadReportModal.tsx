@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   X, FileText, FileSpreadsheet, CloudUpload, Loader2, CheckCircle2, AlertCircle,
-  Sparkles, ArrowRight, ArrowLeft, Check, Settings,
+  Sparkles, ArrowRight, ArrowLeft, Check,
 } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useToast } from '../shared/Toast';
@@ -46,15 +46,13 @@ export type AtrReportSource = {
  *  2. Upload    — upload the filled template (or any report) + confirm report meta.
  *  3. Review    — extracted observations rendered into the standard ATR format.
  */
-export default function UploadReportModal({ onClose, onAddToReport, reportSources, onCustomize }: {
+export default function UploadReportModal({ onClose, onAddToReport, reportSources }: {
   onClose: () => void;
   /** When provided, the review step shows "Add to Report" (instead of Download)
    *  and hands the generated ATR back to be saved into My Reports. */
   onAddToReport?: (meta: AtrMeta, observations: AtrObservation[], insights: AtrInsight[]) => void;
   /** Reports the user can pick instead of uploading a file. */
   reportSources?: AtrReportSource[];
-  /** Opens the ATR template in the editor instead — closes this wizard. */
-  onCustomize?: () => void;
 }) {
   const { addToast } = useToast();
   const [step, setStep] = useState<Step>('template');
@@ -399,14 +397,7 @@ export default function UploadReportModal({ onClose, onAddToReport, reportSource
                 <ArrowLeft size={14} /> Back
               </button>
             ) : (
-              <div className="flex items-center gap-2">
-                <button onClick={onClose} className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer">Cancel</button>
-                {onCustomize && (
-                  <button onClick={onCustomize} className="inline-flex items-center gap-1.5 h-10 px-4 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 hover:text-brand-700 transition-colors cursor-pointer">
-                    <Settings size={14} /> Customize template
-                  </button>
-                )}
-              </div>
+              <button onClick={onClose} className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer">Cancel</button>
             )}
             {step === 'template' ? (
               <button onClick={() => setStep('upload')} className="inline-flex items-center gap-1.5 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">

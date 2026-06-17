@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState, type ElementType } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, Reorder, useDragControls } from 'motion/react';
-import { ArrowLeft, Download, History, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2, GripVertical, Edit3, StickyNote } from 'lucide-react';
+import { ArrowLeft, Download, History, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2, GripVertical, Edit3, StickyNote, Sparkles } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import EmptyState from '../shared/EmptyState';
@@ -843,7 +843,7 @@ function EditorialLayout({
             <button
               onClick={onGenerateAtr}
               title="Generate Action Taken Report"
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-ink-700 bg-white border border-canvas-border rounded-[8px] hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
             >
               <FileText size={14} />
               Generate ATR
@@ -852,9 +852,16 @@ function EditorialLayout({
               onClick={() => addToast({ type: 'info', message: 'Activity log coming soon for bulk audit.' })}
               title="View this report's activity log"
               aria-label="View report activity log"
-              className="w-9 h-9 rounded-[8px] flex items-center justify-center text-ink-500 bg-white border border-canvas-border hover:bg-canvas hover:text-ink-800 transition-colors cursor-pointer"
+              className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/85 bg-white/10 border border-white/25 hover:bg-white/20 hover:text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
             >
               <History size={16} />
+            </button>
+            <button
+              onClick={() => addToast({ type: 'success', message: 'Generating report summary…' })}
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            >
+              <Sparkles size={13} />
+              Generate Summary
             </button>
           </>
         }

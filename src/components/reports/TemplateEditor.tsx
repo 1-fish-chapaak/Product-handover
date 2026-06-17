@@ -1,8 +1,9 @@
 // Template authoring + apply surfaces, extracted from ReportsView:
 //   • TemplateEditor       — the brand/theme/header-footer/arrangement editor
 //   • ApplyTemplateDropdown — pick a template to apply to an open report
-//   • mergeTemplateOptions  — dedupe standard + custom + the report's own template
 //   • TemplateSectionRow / TemplateCarousel — internal helpers
+// (mergeTemplateOptions lives in reportShared so this module exports only
+//  components, keeping React Fast Refresh intact.)
 // Depends only on the shared keystone, ReportDocumentChrome, and ConfirmDialog.
 
 import { useState, useRef } from 'react';
@@ -21,20 +22,6 @@ import {
   type EditableTemplate,
 } from './reportShared';
 
-
-// Merge template lists into a single deduped option list (by id). Used to build
-// the Apply Template dropdown: standard + the user's active customs + the
-// report's own template (which may be a removed seed not in the active list).
-export function mergeTemplateOptions(
-  ...lists: (typeof REPORT_TEMPLATES[number] | null | undefined)[][]
-): typeof REPORT_TEMPLATES[number][] {
-  const seen = new Set<string>();
-  const out: typeof REPORT_TEMPLATES[number][] = [];
-  for (const t of lists.flat()) {
-    if (t && !seen.has(t.id)) { seen.add(t.id); out.push(t); }
-  }
-  return out;
-}
 
 // ─── Apply Template Dropdown ───
 export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, onSelect, onClose }: { templates?: typeof REPORT_TEMPLATES[number][]; activeId?: string | null; onSelect: (template: typeof REPORT_TEMPLATES[0]) => void; onClose: () => void }) {
@@ -133,9 +120,8 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
   // A brand-new template (BLANK_TEMPLATE) opens the same surface as Customize /
   // Edit, but it isn't "based on" anything — it's a create flow.
   const isNew = template.id === 'ct-blank';
-  // The name field is shown in every flow now (Customize, New, and Edit), seeded
-  // to a sensible default: an explicit initialName, "Copy of …" when forking a
-  // standard template, or the template's own name when editing in place.
+  // The name field is shown in every flow (New / Edit), seeded to a sensible
+  // default: an explicit initialName, or the template's own name when editing.
   const defaultName = initialName ?? (isCopy ? `Copy of ${template.name}` : template.name);
   const [copyName, setCopyName] = useState(defaultName);
   const [brand, setBrand] = useState(template.brand ?? 'Irame');
@@ -320,8 +306,8 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Settings size={16} /></div>
             <div className="min-w-0">
-              <h3 className="text-[15px] font-semibold text-ink-900 leading-tight">{isNew ? 'Create template' : isCopy ? 'Customize template' : 'Edit template'}</h3>
-              <p className="text-[11px] text-ink-500 leading-snug truncate">{isNew ? 'New custom template' : isCopy ? `Based on ${template.name}` : template.name}</p>
+              <h3 className="text-[15px] font-semibold text-ink-900 leading-tight">{isNew ? 'Create template' : 'Edit template'}</h3>
+              <p className="text-[11px] text-ink-500 leading-snug truncate">{isNew ? 'New custom template' : template.name}</p>
             </div>
           </div>
           <button onClick={attemptClose} aria-label="Close" className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={16} /></button>
@@ -357,7 +343,8 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
             </div>
           )}
           {/* Template Name + Brand — stacked in the narrow column. Shown in every
-              flow (Create, Customize, Edit) so a custom template can be renamed. */}
+              flow (Create, Customize, Edit) so a custom template can be renamed.
+              Standard templates lock every field — clone to edit. */}
           <div>
             <label className="flex items-center gap-2 text-[12px] font-semibold text-ink-800 mb-1.5"><FileText size={14} /> Template Name</label>
             <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[13px] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
@@ -418,7 +405,6 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
               <div className="rounded-[14px] overflow-hidden border border-canvas-border bg-white shadow-[0_8px_28px_rgba(15,8,30,0.10)]">
                 <ReportBrandBanner
                   title={copyName || 'Untitled Template'}
-                  brand={brand || 'Irame'}
                   gradient={TEMPLATE_THEME_GRADIENT[theme]}
                   headerText={headerText}
                 >
@@ -518,7 +504,7 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
             className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[13px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             {isSaving && <Loader2 size={12} className="animate-spin" />}
-            {isSaving ? 'Saving…' : isNew ? 'Create template' : isCopy ? 'Save Copy' : 'Save Template'}
+            {isSaving ? 'Saving…' : isNew ? 'Create template' : 'Save Template'}
           </button>
         </div>
       </motion.div>
@@ -534,3 +520,4 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
     </motion.div>
   );
 }
+

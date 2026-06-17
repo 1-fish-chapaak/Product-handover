@@ -69,6 +69,22 @@ export const BLANK_TEMPLATE = {
   sections: [] as { name: string; icon: string }[],
 };
 
+// Merge template lists into a single deduped option list (by id). Used to build
+// the Apply Template dropdown: standard + the user's active customs + the
+// report's own template (which may be a removed seed not in the active list).
+// Lives here (not in TemplateEditor) so that module exports only components,
+// keeping React Fast Refresh working for the editor.
+export function mergeTemplateOptions(
+  ...lists: (typeof REPORT_TEMPLATES[number] | null | undefined)[][]
+): typeof REPORT_TEMPLATES[number][] {
+  const seen = new Set<string>();
+  const out: typeof REPORT_TEMPLATES[number][] = [];
+  for (const t of lists.flat()) {
+    if (t && !seen.has(t.id)) { seen.add(t.id); out.push(t); }
+  }
+  return out;
+}
+
 // ─── Report-type classification ──────────────────────────────────────────────
 //
 // A report's type is resolved from the most authoritative signal available, in

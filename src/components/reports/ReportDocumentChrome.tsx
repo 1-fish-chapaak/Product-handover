@@ -3,7 +3,6 @@
 // brand banner, metadata grid, numbered sections, KPI tile grid.
 
 import { motion } from 'motion/react';
-import { Sparkles } from 'lucide-react';
 import { KpiCountUp } from '../shared/KpiTile';
 import { statTone } from './reportTones';
 import FloatingLines from '../shared/FloatingLines';
@@ -166,15 +165,13 @@ export function CoverBanner({ title, gradient, description, byline, actions, fac
   );
 }
 
-export function ReportBrandBanner({ title, actions, children, className = '', brand, gradient, headerText, facts }: {
+export function ReportBrandBanner({ title, actions, children, className = '', gradient, headerText, facts }: {
   title: string;
   /** CTAs rendered top-right on the banner, like the ATR document. */
   actions?: React.ReactNode;
   /** Description / byline content rendered under the title. */
   children?: React.ReactNode;
   className?: string;
-  /** Brand name shown as the banner eyebrow. Defaults to IRAME.AI. */
-  brand?: string;
   /** [from, to] gradient override (from the template's chosen theme). */
   gradient?: [string, string];
   /** Confidentiality / header line stamped top-right (from the template). */
@@ -182,12 +179,12 @@ export function ReportBrandBanner({ title, actions, children, className = '', br
   /** Glanceable key-facts capsule, rendered top-right in the letterhead tone. */
   facts?: { value: React.ReactNode; label: string }[];
 }) {
-  // Purple gradient letterhead — IRAME.AI lockup + title over floating-line art,
-  // matching the ATR document. A template's theme gradient overrides the default.
+  // Purple gradient letterhead — title + byline over floating-line art, with
+  // actions stacked top-right. A template's theme gradient overrides the default.
   const [from, to] = gradient ?? ['#3b0b72', '#6a12cd'];
   return (
     <div
-      className={`relative overflow-hidden px-9 pt-8 pb-7 ${className}`}
+      className={`relative overflow-hidden px-9 pt-9 pb-8 ${className}`}
       style={{ backgroundImage: `linear-gradient(to bottom right, ${from}, ${to})` }}
     >
       <div
@@ -199,14 +196,7 @@ export function ReportBrandBanner({ title, actions, children, className = '', br
       </div>
       <div className="relative z-10 flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2.5 mb-5">
-            <div className="w-9 h-9 rounded-[9px] bg-white/15 border border-white/20 text-white flex items-center justify-center"><Sparkles size={16} /></div>
-            <div className="leading-tight">
-              <div className="text-[0.8125rem] font-bold tracking-wide uppercase text-white">{brand || 'IRAME.AI'}</div>
-              <div className="text-[0.625rem] font-semibold tracking-[0.22em] text-white/60 mt-0.5">AUDIT INTELLIGENCE</div>
-            </div>
-          </div>
-          <h1 className="text-[2rem] font-semibold tracking-tight leading-tight text-white mb-1">{title}</h1>
+          <h1 className="text-[2rem] font-semibold tracking-tight leading-tight text-white mb-1.5">{title}</h1>
           {children}
         </div>
         <div className="shrink-0 flex flex-col items-end gap-3">

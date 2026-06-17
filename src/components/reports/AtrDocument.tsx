@@ -1,4 +1,4 @@
-import { Sparkles, Calendar, PenLine, Eye, Lightbulb } from 'lucide-react';
+import { Calendar, PenLine, Eye, Lightbulb } from 'lucide-react';
 import type {
   AtrMeta, AtrObservation, AtrActionPlan, AtrInsight,
   AtrClassification, AtrObservationStatus, AtrActionStatus,
@@ -120,13 +120,6 @@ export default function AtrDocument({
         </div>
         <div className="relative z-10 flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
-            <div className="flex items-center gap-2.5 mb-5">
-              <div className="w-9 h-9 rounded-[9px] bg-white/15 border border-white/20 text-white flex items-center justify-center"><Sparkles size={16} /></div>
-              <div className="leading-tight">
-                <div className="text-[0.8125rem] font-bold tracking-wide text-white">IRAME.AI</div>
-                <div className="text-[0.625rem] font-semibold tracking-[0.22em] text-white/60 mt-0.5">AUDIT INTELLIGENCE</div>
-              </div>
-            </div>
             <h1 className="text-[2rem] font-semibold tracking-tight leading-tight text-white">Action Taken Report</h1>
             {(meta.auditEntity || meta.auditPeriod) && (
               <p className="text-[0.8125rem] text-white/70 mt-1.5">

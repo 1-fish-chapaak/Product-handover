@@ -28,9 +28,9 @@ import { REPORT_QUERIES_ATR, type ReportQueryAtr } from '../../data/reportQuerie
 import { QUERY_GRAPHS, QUERY_TABLES } from '../../data/queryGraphs';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { reportDisplayName } from './reportName';
-import { ApplyTemplateDropdown, mergeTemplateOptions } from './TemplateEditor';
+import { ApplyTemplateDropdown } from './TemplateEditor';
 import {
-  SECTION_ICONS, TEMPLATE_THEME_GRADIENT,
+  SECTION_ICONS, TEMPLATE_THEME_GRADIENT, mergeTemplateOptions,
   computeQueryKpis, reportKind,
   type AttachedQuery, type WorkflowResult,
   CUSTOM_TEMPLATES,
@@ -2581,7 +2581,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     {isAtrReport && (
                       <button
                         onClick={() => setUploadReportOpen(true)}
-                        className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-ink-700 bg-white border border-canvas-border rounded-[8px] hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                        className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                       >
                         <Upload size={14} />
                         Upload Report
@@ -2778,7 +2778,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     <button
                       onClick={() => setAtrModalOpen(true)}
                       title="Open the live Action Taken Report"
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-ink-700 bg-white border border-canvas-border rounded-[8px] hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                     >
                       <FileText size={14} />
                       Live ATR
@@ -2788,13 +2788,13 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                       onClick={() => setActivityLogOpen(true)}
                       title="View this report's activity log"
                       aria-label="View report activity log"
-                      className="w-9 h-9 rounded-[8px] flex items-center justify-center text-ink-500 bg-white border border-canvas-border hover:bg-canvas hover:text-ink-800 transition-colors cursor-pointer"
+                      className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/85 bg-white/10 border border-white/25 hover:bg-white/20 hover:text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                     >
                       <History size={16} />
                     </button>
                     <button
                       onClick={() => addToast({ type: 'success', message: 'Generating report summary…' })}
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                     >
                       <Sparkles size={13} />
                       Generate Summary
@@ -2989,7 +2989,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                               <button
                                 onClick={() => setAtrModalOpen(true)}
                                 title="Generate Action Taken Report"
-                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-ink-700 bg-white border border-canvas-border rounded-[8px] hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                               >
                                 <FileText size={14} />
                                 Generate ATR
@@ -2999,9 +2999,16 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                 onClick={() => setActivityLogOpen(true)}
                                 title="View this report's activity log"
                                 aria-label="View report activity log"
-                                className="w-9 h-9 rounded-[8px] flex items-center justify-center text-ink-500 bg-white border border-canvas-border hover:bg-canvas hover:text-ink-800 transition-colors cursor-pointer"
+                                className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/85 bg-white/10 border border-white/25 hover:bg-white/20 hover:text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                               >
                                 <History size={16} />
+                              </button>
+                              <button
+                                onClick={() => addToast({ type: 'success', message: 'Generating report summary…' })}
+                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                              >
+                                <Sparkles size={13} />
+                                Generate Summary
                               </button>
                             </>
                           }
