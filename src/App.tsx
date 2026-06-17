@@ -817,6 +817,7 @@ function AppInner() {
             onUpdateCustomTemplate={updateCustomTemplate}
             focusReportId={focusReportId}
             onFocusReportConsumed={() => setFocusReportId(null)}
+            onOpenSox={() => setView('sox-icfr')}
           />
         );
 

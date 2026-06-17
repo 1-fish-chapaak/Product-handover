@@ -71,6 +71,9 @@ interface ReportsViewProps {
   /** When set, ReportsView opens that report in the full detail view. Cleared by the parent after consumption. */
   focusReportId?: string | null;
   onFocusReportConsumed?: () => void;
+  /** SOX reports are produced from a SOX/ICFR engagement, not generated here —
+   *  this routes the user to that area when they pick the SOX template. */
+  onOpenSox?: () => void;
 }
 
 
@@ -89,6 +92,7 @@ export default function ReportsView({
   onUpdateCustomTemplate,
   focusReportId,
   onFocusReportConsumed,
+  onOpenSox,
 }: ReportsViewProps = {}) {
   const { addToast, updateToast } = useToast();
   const { openShare } = useShare();
@@ -1451,30 +1455,12 @@ export default function ReportsView({
             setEditingTemplate(copy);
             addToast({ type: 'success', message: `Cloned “${rt.name}” — now editing your copy.` });
           };
-          // SOX reports aren't assembled from a query picker — generate a
-          // structured draft straight from the template's sections (empty,
-          // fill-in-the-blank). Opens the report reader on the new draft.
-          const generateSoxDraft = (rt: typeof REPORT_TEMPLATES[number]) => {
-            const now = new Date();
-            const today = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-            const period = `FY${String(now.getFullYear()).slice(-2)} Q${Math.floor(now.getMonth() / 3) + 1}`;
-            const newReport: GeneratedReport = {
-              id: `gr-gen-${Date.now()}`,
-              templateId: rt.id,
-              kind: 'sox',
-              name: uniqueReportName(`${period} ${rt.name}`),
-              tag: 'SOX Compliance',
-              generatedBy: 'You',
-              generatedAt: today,
-              status: 'draft',
-              pages: Math.max(1, rt.sections?.length ?? 0),
-              queries: 0,
-              isEmpty: true,
-              reportPeriod: period,
-            };
-            setGeneratedReports(prev => [newReport, ...prev]);
-            setViewingReport(newReport);
-            addToast({ type: 'success', message: `${rt.name} draft created — fill in each section.` });
+          // SOX reports are produced from a SOX/ICFR engagement (control testing
+          // → working paper → report), never generated standalone from a
+          // template. Picking the SOX template routes the user to that area.
+          const openSoxFromEngagement = () => {
+            addToast({ type: 'info', message: 'SOX reports are generated from a SOX / ICFR engagement.' });
+            onOpenSox?.();
           };
           const renderCard = (rt: typeof REPORT_TEMPLATES[0], i: number, fixedWidth?: boolean, isCustom?: boolean) => {
             const Icon = ICON_MAP[rt.icon] || FileText;
@@ -1494,7 +1480,7 @@ export default function ReportsView({
                   // draft, IA/Bulk by assembling from existing report queries.
                   const kind = templateKind(rt);
                   if (kind === 'atr') { setAtrWizardOpen(true); return; }
-                  if (kind === 'sox') { generateSoxDraft(rt); return; }
+                  if (kind === 'sox') { openSoxFromEngagement(); return; }
                   setWizardTemplate(rt);
                 }}
               >
