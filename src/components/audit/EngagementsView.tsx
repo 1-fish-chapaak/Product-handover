@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
@@ -15,6 +15,12 @@ import { useToast } from '../shared/Toast';
 interface Props {
   onOpenEngagement: (engagementId: string) => void;
   onOpenAuditPlanning: () => void;
+  /** Open already narrowed to a type (e.g. routed from the SOX report flow
+   *  with 'Compliance'). Lands on the list so the filter is visible. */
+  initialTypeFilter?: 'All' | EngType;
+  /** Called once on mount after the initial filter is applied, so the parent
+   *  can clear its one-shot flag (normal navigation stays unfiltered). */
+  onInitialFilterConsumed?: () => void;
 }
 
 const STATUS_CLS: Record<EngStatus, string> = {
@@ -68,12 +74,18 @@ function healthTier(pct: number): { bar: string; text: string } {
   return { bar: 'bg-risk', text: 'text-risk-700' };
 }
 
-export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning }: Props) {
+export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning, initialTypeFilter, onInitialFilterConsumed }: Props) {
   const { can } = useCan();
   const { addToast } = useToast();
-  const [mode, setMode] = useState<'overview' | 'list'>('overview');
+  const presetType = initialTypeFilter && initialTypeFilter !== 'All';
+  // When routed with an initial type (e.g. SOX → 'Compliance'), open straight
+  // onto the list view, pre-filtered to that type.
+  const [mode, setMode] = useState<'overview' | 'list'>(presetType ? 'list' : 'overview');
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'All' | EngType>('All');
+  const [typeFilter, setTypeFilter] = useState<'All' | EngType>(initialTypeFilter ?? 'All');
+  // Clear the parent's one-shot flag once we've taken the initial filter, so a
+  // later plain visit to Engagements opens unfiltered.
+  useEffect(() => { if (presetType) onInitialFilterConsumed?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [statusFilter, setStatusFilter] = useState<'All' | EngStatus>('All');
   const [processFilter, setProcessFilter] = useState<'All' | ProcessCode>('All');
   const [wizardOpen, setWizardOpen] = useState(false);

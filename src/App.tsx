@@ -306,6 +306,9 @@ function AppInner() {
   // switching to the Reports view and passing the id down so ReportsView
   // can open the report in its full-page view.
   const [focusReportId, setFocusReportId] = useState<string | null>(null);
+  // One-shot: when the SOX report flow routes to Engagements, open it pre-filtered
+  // to Compliance. Cleared on consume so plain visits stay unfiltered.
+  const [engagementsSoxFilter, setEngagementsSoxFilter] = useState(false);
   useEffect(() => {
     const handler = (e: Event) => {
       const id = (e as CustomEvent<{ id: string }>).detail?.id;
@@ -817,7 +820,7 @@ function AppInner() {
             onUpdateCustomTemplate={updateCustomTemplate}
             focusReportId={focusReportId}
             onFocusReportConsumed={() => setFocusReportId(null)}
-            onOpenSox={() => setView('sox-icfr')}
+            onOpenSox={() => { setEngagementsSoxFilter(true); setView('engagements'); }}
           />
         );
 
@@ -849,6 +852,8 @@ function AppInner() {
           <EngagementsView
             onOpenAuditPlanning={() => setView('audit-planning')}
             onOpenEngagement={openEngagement}
+            initialTypeFilter={engagementsSoxFilter ? 'Compliance' : undefined}
+            onInitialFilterConsumed={() => setEngagementsSoxFilter(false)}
           />
         );
 

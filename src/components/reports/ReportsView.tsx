@@ -670,7 +670,7 @@ export default function ReportsView({
   // Canonical "Report" name cell shared by every list-view table (All · SOX · IA
   // · Shared) so the lists never drift: brand tile + type icon, 14.5px name with
   // a quiet secondary subline. Hover affordances only when the row is openable.
-  const ReportNameCell = ({ icon: Icon, name, subline, onClick, selectable, selected, isSelecting, onToggleSelect }: { icon: React.ElementType; name: string; subline?: React.ReactNode; onClick?: () => void; selectable?: boolean; selected?: boolean; isSelecting?: boolean; onToggleSelect?: () => void }) => {
+  const ReportNameCell = ({ icon: Icon, iconClass, name, subline, onClick, selectable, selected, isSelecting, onToggleSelect }: { icon: React.ElementType; iconClass?: string; name: string; subline?: React.ReactNode; onClick?: () => void; selectable?: boolean; selected?: boolean; isSelecting?: boolean; onToggleSelect?: () => void }) => {
     const display = reportDisplayName(name);
     const truncated = display.length > 100 ? display.slice(0, 100) + '…' : display;
     const clickable = Boolean(onClick) || Boolean(selectable);
@@ -678,9 +678,11 @@ export default function ReportsView({
     const handleClick = () => { if (selectable && isSelecting) onToggleSelect?.(); else onClick?.(); };
     return (
       <div className={`flex items-center gap-3 min-w-0 ${clickable ? 'cursor-pointer' : ''}`} onClick={handleClick}>
-        <span className="relative shrink-0 w-9 h-9 flex items-center justify-center text-ink-400">
-          {/* Type tile — present at rest, fades out so the checkbox sits cleanly on the row bg. */}
-          <span aria-hidden="true" className={`absolute inset-0 flex items-center justify-center transition-opacity duration-150 ${selectable ? (selected || isSelecting ? 'opacity-0' : 'opacity-100 group-hover:opacity-0') : 'opacity-100'}`}>
+        <span className="relative shrink-0 w-9 h-9 flex items-center justify-center">
+          {/* Type tile — a soft tone-tinted square so each row carries the same
+              type anchor the grid card uses (list↔grid parity). Fades out on
+              hover/select so the checkbox sits cleanly on the row bg. */}
+          <span aria-hidden="true" className={`absolute inset-0 flex items-center justify-center rounded-[9px] transition-opacity duration-150 ${iconClass ?? 'text-ink-400'} ${selectable ? (selected || isSelecting ? 'opacity-0' : 'opacity-100 group-hover:opacity-0') : 'opacity-100'}`}>
             <Icon size={16} strokeWidth={1.75} />
           </span>
           {selectable && (
@@ -1027,6 +1029,7 @@ export default function ReportsView({
                 return (
                   <ReportNameCell
                     icon={UNIFIED_KIND_META[item.kind as UnifiedKind].icon}
+                    iconClass={UNIFIED_KIND_META[item.kind as UnifiedKind].classes}
                     name={String(item.name)}
                     subline={(item.pills as string[] | undefined)?.join(' · ')}
                     onClick={() => row.open()}
@@ -1163,6 +1166,7 @@ export default function ReportsView({
               { key: 'name', label: 'Report', truncate: true, render: (item) => (
                 <ReportNameCell
                   icon={UNIFIED_KIND_META[reportType].icon}
+                  iconClass={UNIFIED_KIND_META[reportType].classes}
                   name={String(item.name)}
                   subline={item.generatedBy && String(item.generatedBy) !== 'You' ? `By ${String(item.generatedBy)}` : undefined}
                   onClick={() => { const report = generatedReports.find(r => r.id === item.id); if (report) setViewingReport(report); }}
@@ -1339,7 +1343,8 @@ export default function ReportsView({
             columns={[
               { key: 'name', label: 'Report', truncate: true, render: (item) => (
                 <ReportNameCell
-                  icon={FileText}
+                  icon={UNIFIED_KIND_META[(item.kind as UnifiedKind) ?? 'ia'].icon}
+                  iconClass={UNIFIED_KIND_META[(item.kind as UnifiedKind) ?? 'ia'].classes}
                   name={String(item.name)}
                   subline={`${String(item.queries)} ${Number(item.queries) === 1 ? 'query' : 'queries'}`}
                   onClick={() => openSharedReport(item as unknown as typeof SHARED_REPORTS[number])}
@@ -1459,7 +1464,7 @@ export default function ReportsView({
           // → working paper → report), never generated standalone from a
           // template. Picking the SOX template routes the user to that area.
           const openSoxFromEngagement = () => {
-            addToast({ type: 'info', message: 'SOX reports are generated from a SOX / ICFR engagement.' });
+            addToast({ type: 'info', message: 'Open a SOX / ICFR engagement to generate its report.' });
             onOpenSox?.();
           };
           const renderCard = (rt: typeof REPORT_TEMPLATES[0], i: number, fixedWidth?: boolean, isCustom?: boolean) => {
@@ -1476,8 +1481,8 @@ export default function ReportsView({
                 className={`bg-canvas-elevated border border-canvas-border rounded-[12px] p-5 transition-colors duration-200 group cursor-pointer flex flex-col min-h-[176px] hover:border-brand-200 ${fixedWidth ? 'w-[200px] shrink-0' : ''}`}
                 onClick={() => {
                   // Whole card = the primary action. Each report type generates
-                  // its own way: ATR via upload/observations, SOX as a structured
-                  // draft, IA/Bulk by assembling from existing report queries.
+                  // its own way: ATR via upload/observations, SOX from a SOX/ICFR
+                  // engagement, IA/Bulk by assembling from existing report queries.
                   const kind = templateKind(rt);
                   if (kind === 'atr') { setAtrWizardOpen(true); return; }
                   if (kind === 'sox') { openSoxFromEngagement(); return; }
