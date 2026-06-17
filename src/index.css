@@ -77,6 +77,15 @@
   --color-evidence-500: #0EA5E9;
   --color-evidence-600: #0284C7;
   --color-evidence-700: #075985;
+  /* extended GRC ramps (100–600) so utilities like bg-compliant-600 resolve */
+  --color-compliant-100:#DCFCE7; --color-compliant-200:#BBF7D0; --color-compliant-300:#86EFAC;
+  --color-compliant-400:#4ADE80; --color-compliant-500:#22C55E; --color-compliant-600:#16A34A;
+  --color-risk-100:#FEE4E2; --color-risk-200:#FECDCA; --color-risk-300:#FDA29B;
+  --color-risk-400:#F97066; --color-risk-500:#F04438; --color-risk-600:#D92D20;
+  --color-high-100:#FFEAD5; --color-high-200:#FDDCAB; --color-high-300:#FEB273;
+  --color-high-400:#FD853A; --color-high-500:#FB6514; --color-high-600:#EC4A0A;
+  --color-mitigated-100:#FEF0C7; --color-mitigated-200:#FEDF89; --color-mitigated-300:#FEC84B;
+  --color-mitigated-400:#FDB022; --color-mitigated-500:#F79009; --color-mitigated-600:#DC6803;
   --color-info:         #6A12CD;  /* Info (brand-tied) */
   --color-info-50:      #F7F0FF;
   --color-info-700:     #550FA5;
