@@ -136,6 +136,28 @@ export function exceptionActionsFor(
   return actions;
 }
 
+// ─── Auditor review stage ──────────────────────────────────────────────────
+// Which review the Auditor owes on a case *right now* — the basis for both the
+// single Review drawer and the Bulk Review flow. Derived from exceptionActionsFor
+// so it can never drift from the table CTAs. Returns null when there is nothing
+// for the Auditor to review (unclassified, awaiting the Risk Owner, or decided).
+//   plan           → accept/reject the management action plan
+//   completion     → review the completed Action Taken + implementation outcome
+//   classification → approve/reject a non-actionable disposition (BAU / False Positive)
+export type AuditorReviewStage = 'plan' | 'completion' | 'classification';
+
+export function auditorReviewStage(
+  ex: Pick<GrcException, 'classification' | 'actionReview' | 'actionPhase' | 'classificationReview'>,
+): AuditorReviewStage | null {
+  const a = exceptionActionsFor(ex, 'auditor').find(
+    x => x.kind === 'reviewPlan' || x.kind === 'reviewAction' || x.kind === 'review',
+  );
+  if (!a) return null;
+  if (a.kind === 'reviewAction') return 'completion';
+  if (a.kind === 'reviewPlan') return 'plan';
+  return 'classification';
+}
+
 // ─── Actionable ID generation ──────────────────────────────────────────────
 // An exception classified as an actionable type gets an Actionable ID — the
 // identifier its management action plan is tracked under. IDs are sequential

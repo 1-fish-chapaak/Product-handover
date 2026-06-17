@@ -219,7 +219,7 @@ const AUDITOR_KEYS: PermissionKey[] = [
   'ctrl_edit', 'ctrl_link', 'ctrl_export',
   'racm_edit', 'racm_share', 'racm_link_risk', 'racm_link_control', 'racm_link_workflow', 'racm_unmap', 'racm_archive',
   'bp_edit', 'sop_archive',
-  'exc_classify', 'exc_triage',
+  'exc_classify', 'exc_triage', 'exc_assign',
   'rp_edit', 'rp_comment',
   'db_add',
   'ds_upload',

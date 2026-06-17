@@ -32,6 +32,9 @@ interface Props {
   cases: GrcException[];
   onClose: () => void;
   onApply: (payload: BulkAssignPayload) => void;
+  /** Pre-fill the assignee picker (e.g. changing a single case's assignee) so
+   *  the user can add/remove from the current owners instead of starting blank. */
+  initialAssignees?: { name: string; initials: string }[];
 }
 
 function deriveInitials(input: string): string {
@@ -46,14 +49,20 @@ function deriveInitials(input: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
+export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssignees }: Props) {
   // Per-row checked set — interactive, starts with everything checked so the
   // title "Assign N Cases" matches the count the user came in with.
   const [checked, setChecked] = useState<Set<string>>(() => new Set(cases.map(c => c.id)));
   const [page, setPage] = useState(1);
   const [assigneeInput, setAssigneeInput] = useState('');
-  const [pickedUserIds, setPickedUserIds] = useState<Set<string>>(() => new Set());
-  const [freeEmailEntries, setFreeEmailEntries] = useState<{ name: string; initials: string }[]>([]);
+  // Pre-seed the picker from any existing assignees so "change assignee" lets the
+  // user add/remove from the current owners rather than starting from scratch.
+  const [pickedUserIds, setPickedUserIds] = useState<Set<string>>(
+    () => new Set((initialAssignees ?? []).map(a => RISK_OWNERS.find(u => u.name === a.name)?.id).filter((id): id is string => !!id)),
+  );
+  const [freeEmailEntries, setFreeEmailEntries] = useState<{ name: string; initials: string }[]>(
+    () => (initialAssignees ?? []).filter(a => !RISK_OWNERS.some(u => u.name === a.name)),
+  );
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [note, setNote] = useState('');
   const assigneeRef = useRef<HTMLDivElement | null>(null);
@@ -260,11 +269,11 @@ export default function BulkAssignDrawer({ cases, onClose, onApply }: Props) {
       />
       <motion.aside
         ref={drawerRef}
-        initial={{ x: 24, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        exit={{ x: 24, opacity: 0 }}
-        transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-[640px] bg-canvas-elevated shadow-xl border-l border-canvas-border z-[60] flex flex-col"
+        initial={{ opacity: 0, scale: 0.98, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.98, y: 8 }}
+        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[860px] max-h-[88vh] bg-canvas-elevated shadow-xl border border-canvas-border rounded-[16px] z-[60] flex flex-col"
         role="dialog"
         aria-modal="true"
         aria-label="Bulk Assign"
