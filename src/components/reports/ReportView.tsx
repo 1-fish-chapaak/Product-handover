@@ -2959,8 +2959,9 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             <main className="min-w-0">
               <Reorder.Group axis="y" values={sections} onReorder={setSections} as="div" className="list-none p-0 m-0 [&>*:last-child>*]:rounded-b-[12px]">
                 {sections.map((section, i) => {
+                  // `key` is intentionally NOT in here — React requires keys to
+                  // be passed directly on each element, never via a spread prop.
                   const sectionProps = {
-                    key: section.id,
                     value: section,
                     id: `section-${section.id}`,
                     layout: true as const,
@@ -3038,7 +3039,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   if (section.kind === 'summary') {
                     const hasQueries = sections.some(s => s.kind === 'query');
                     return (
-                      <Reorder.Item {...sectionProps}>
+                      <Reorder.Item key={section.id} {...sectionProps}>
                         <div className="border-x border-b border-canvas-border bg-white px-9 pt-7 pb-6">
                           <ReportNumberedHeading
                             n={sectionNumber(section.id)}
@@ -3080,7 +3081,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
 
                   if (section.kind === 'stats') {
                     return (
-                      <Reorder.Item {...sectionProps}>
+                      <Reorder.Item key={section.id} {...sectionProps}>
                         <div className="border-x border-b border-canvas-border bg-white px-9 py-6">
                           <ReportKpiTiles stats={activeStats} />
                         </div>
@@ -3125,7 +3126,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
 
                   if (section.kind === 'workflow') {
                     return (
-                      <Reorder.Item {...sectionProps}>
+                      <Reorder.Item key={section.id} {...sectionProps}>
                         <WorkflowResultCard
                           workflow={section.workflow}
                           index={i}
@@ -3140,7 +3141,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
 
                   if (section.kind === 'note') {
                     return (
-                      <Reorder.Item {...sectionProps}>
+                      <Reorder.Item key={section.id} {...sectionProps}>
                         <div className="border-x border-b border-canvas-border bg-white px-9 pt-7 pb-6">
                           <ReportNumberedHeading n={sectionNumber(section.id)} title={section.title} />
                           <p className="text-[13px] text-ink-800 leading-relaxed">{section.content}</p>
@@ -3151,7 +3152,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
 
                   if (section.kind === 'observation') {
                     return (
-                      <Reorder.Item {...sectionProps}>
+                      <Reorder.Item key={section.id} {...sectionProps}>
                         <ObservationCard
                           obs={section}
                           index={i}
