@@ -88,7 +88,7 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
       ...(showRef ? { ref: sourceFiles![i % sourceFiles!.length] } : {}),
     })));
   const [search, setSearch] = useState('');
-  const [groupBy, setGroupBy] = useState<GroupByMode>('none');
+  const [groupBy, setGroupBy] = useState<GroupByMode>('subProcess');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [showOnlyKey, setShowOnlyKey] = useState(false);
   const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({});
@@ -100,6 +100,13 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
   const [pinnedKeys, setPinnedKeys] = useState<Set<keyof ProcurementRacmRow>>(
     new Set(['riskId', 'controlId'])
   );
+  // User-resized column widths (override the per-column defaults), remembered per RACM.
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    try { return JSON.parse(localStorage.getItem(`racm-colw-${racmId ?? 'x'}`) || '{}'); } catch { return {}; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(`racm-colw-${racmId ?? 'x'}`, JSON.stringify(colWidths)); } catch { /* ignore */ }
+  }, [colWidths, racmId]);
   const [showColumnPanel, setShowColumnPanel] = useState(false);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [detailRowId, setDetailRowId] = useState<string | null>(null);
@@ -108,6 +115,11 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Header: inline-renamable title + a working status (mock lifecycle).
+  const [titleOverride, setTitleOverride] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [status, setStatus] = useState<'Draft' | 'In Review' | 'Final'>('Draft');
+  const [statusOpen, setStatusOpen] = useState(false);
 
   // ─── Derived ─────────────────────────────────────────────────────────
   // Distinct values per multi-select column, sorted, for the header filter menus.
@@ -178,11 +190,18 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
     };
   }, [rows, filteredRows]);
 
+  // Process Area is surfaced once in the header; when every row shares one area we
+  // drop the repeating column (it would otherwise be a column of identical "…").
+  const processAreas = useMemo(() => Array.from(new Set(rows.map(r => r.processArea).filter(Boolean))), [rows]);
+  const singleProcessArea = processAreas.length === 1 ? processAreas[0] : null;
+
   const visibleColumns = useMemo<RacmColumnDef[]>(() => {
     // pinned first, then by configured group order
     const pinned = PROCUREMENT_RACM_COLUMNS.filter(c => pinnedKeys.has(c.key));
     const rest = PROCUREMENT_RACM_COLUMNS.filter(c => !pinnedKeys.has(c.key) && visibleGroups.has(c.group));
-    const cols = [...pinned, ...rest];
+    let cols = [...pinned, ...rest];
+    // A constant Process Area lives in the header instead of a per-row column.
+    if (singleProcessArea) cols = cols.filter(c => c.key !== 'processArea');
     // Ref (source file) sits immediately after the Control ID column — i.e. right
     // after the frozen ID columns — when a RACM was consolidated from 2+ files.
     if (showRef) {
@@ -190,7 +209,28 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
       cols.splice(Math.max(afterControlId, 1), 0, REF_COLUMN);
     }
     return cols;
-  }, [pinnedKeys, visibleGroups, showRef]);
+  }, [pinnedKeys, visibleGroups, showRef, singleProcessArea]);
+
+  // Overlay any user resize overrides on the default widths, then hand these
+  // "effective" columns to the header + rows so widths stay in sync everywhere.
+  const effCols = useMemo<RacmColumnDef[]>(
+    () => visibleColumns.map(c => (colWidths[c.key as string] != null ? { ...c, width: colWidths[c.key as string] } : c)),
+    [visibleColumns, colWidths],
+  );
+  const startResize = (e: { clientX: number; preventDefault: () => void; stopPropagation: () => void }, key: string, startW: number) => {
+    e.preventDefault(); e.stopPropagation();
+    const startX = e.clientX;
+    const onMove = (ev: globalThis.MouseEvent) =>
+      setColWidths(prev => ({ ...prev, [key]: Math.max(60, Math.round(startW + (ev.clientX - startX))) }));
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = ''; document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none';
+  };
 
   // ─── Mutations ───────────────────────────────────────────────────────
   const updateCell = (rowKey: string, colKey: keyof ProcurementRacmRow, value: string) => {
@@ -256,8 +296,19 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
 
   const detailRow = detailRowId ? rows.find(r => `${r.riskId}-${r.controlId}` === detailRowId) || null : null;
 
+  // Cleaned, renamable display title — strip the leading "RACM ·" and any extension.
+  const baseName = (racmName ?? 'Procurement SOP: Budget to Payment RACM')
+    .replace(/^RACM\s*·\s*/i, '')
+    .replace(/\.(xlsx|xls|csv|pdf|docx?|json)$/i, '');
+  const displayTitle = titleOverride ?? baseName;
+  const STATUS_TONES: Record<string, string> = {
+    'Draft': 'bg-draft-50 text-draft-700',
+    'In Review': 'bg-evidence-50 text-evidence-700',
+    'Final': 'bg-compliant-50 text-compliant-700',
+  };
+
   // ─── Build sticky-left offset map (px-based) ─────────────────────────
-  const pinnedColumnList = visibleColumns.filter(c => pinnedKeys.has(c.key));
+  const pinnedColumnList = effCols.filter(c => pinnedKeys.has(c.key));
   const stickyOffsets = useMemo(() => {
     const map = new Map<string, number>();
     let acc = 40; // checkbox column
@@ -279,10 +330,47 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
           </Button>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              {racmId && <span className="font-mono text-[0.75rem] font-semibold text-brand-700">{racmId.toUpperCase()}</span>}
-              <h1 className="text-[0.9375rem] font-bold text-text truncate">{racmName ?? 'Procurement SOP: Budget to Payment RACM'}</h1>
+              {editingTitle ? (
+                <input
+                  autoFocus
+                  defaultValue={displayTitle}
+                  onBlur={(e) => { const v = e.target.value.trim(); setTitleOverride(v || null); setEditingTitle(false); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                    else if (e.key === 'Escape') setEditingTitle(false);
+                  }}
+                  className="text-[0.9375rem] font-bold text-text bg-white border border-brand-200 rounded-md px-1.5 py-0.5 -my-0.5 outline-none focus:ring-2 focus:ring-primary/20 min-w-[18rem]"
+                />
+              ) : (
+                <button
+                  onDoubleClick={() => setEditingTitle(true)}
+                  title="Double-click to rename"
+                  className="text-[0.9375rem] font-bold text-text truncate hover:bg-brand-50 rounded px-1 -mx-1 cursor-text transition-colors">
+                  {displayTitle}
+                </button>
+              )}
               {processLabel && <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-primary/10 text-primary">{processLabel}</span>}
-              <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-bold bg-mitigated-50 text-mitigated-700">DRAFT</span>
+              {singleProcessArea && <span className="px-1.5 py-0.5 rounded text-[0.5625rem] font-semibold bg-paper-100 text-ink-600 truncate max-w-[14rem]">{singleProcessArea}</span>}
+              {/* Status — working lifecycle control (mock) */}
+              <div className="relative shrink-0">
+                <button onClick={() => setStatusOpen(o => !o)}
+                  className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold inline-flex items-center gap-1 cursor-pointer ${STATUS_TONES[status]}`}>
+                  {status.toUpperCase()}<ChevronDown size={9} />
+                </button>
+                {statusOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setStatusOpen(false)} />
+                    <div className="absolute left-0 top-full mt-1 z-20 w-32 bg-canvas-elevated border border-canvas-border rounded-lg shadow-lg py-1">
+                      {(['Draft', 'In Review', 'Final'] as const).map(s => (
+                        <button key={s} onClick={() => { setStatus(s); setStatusOpen(false); }}
+                          className={`w-full text-left px-2.5 py-1.5 text-[0.6875rem] hover:bg-paper-50 cursor-pointer ${s === status ? 'font-semibold text-brand-700' : 'text-ink-700'}`}>
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
               <span className="text-[0.625rem] text-text-muted font-mono">v0.1</span>
             </div>
           </div>
@@ -294,10 +382,6 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
             Share
           </Button>
           </Gated>
-          <Button variant="outline" size="sm" leftIcon={<Upload size={11} />}
-            onClick={() => fileInputRef.current?.click()}>
-            Import
-          </Button>
           <Gated permission="ctrl_export" mode="disable" title="You don't have permission to export">
           <Button variant="outline" size="sm" leftIcon={<Download size={11} />}
             onClick={() => setShowImportToast(true)}>
@@ -319,7 +403,7 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
           <div className="relative max-w-md flex-1">
             <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search across all 25 columns…"
+              placeholder="Search all columns…"
               className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-[0.6875rem] bg-white outline-none focus:border-primary/40 transition-all" />
           </div>
           {/* Group-by */}
@@ -361,6 +445,8 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
               <span className="text-ink-200">|</span>
             </>
           )}
+          <span className="hidden sm:inline-flex items-center gap-1 text-[0.625rem] text-ink-400"><Star size={9} className="text-mitigated fill-mitigated" />Key control</span>
+          <span className="text-ink-200">|</span>
           {saveStatus === 'saved' && <span className="text-[0.625rem] text-compliant-700 flex items-center gap-1"><Check size={10} />All changes saved</span>}
           {saveStatus === 'saving' && <span className="text-[0.625rem] text-mitigated-700">Saving…</span>}
           {saveStatus === 'edited' && <span className="text-[0.625rem] text-brand-700">Edited</span>}
@@ -379,8 +465,8 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
         <StatPill label="Automated" value={stats.automated} accent="text-compliant-700" />
       </div>
 
-      {/* Grid container */}
-      <div className="flex-1 overflow-auto bg-white">
+      {/* Grid container — inset right shadow hints there are more columns to scroll to */}
+      <div className="flex-1 overflow-auto bg-white shadow-[inset_-14px_0_10px_-10px_rgba(15,8,30,0.05)]">
         {filteredRows.length === 0 ? (
           <ListPlaceholder
             icon={Search}
@@ -399,7 +485,8 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
             grouped={grouped}
             collapsedGroups={collapsedGroups}
             onToggleGroup={toggleGroup}
-            visibleColumns={visibleColumns}
+            visibleColumns={effCols}
+            onResize={startResize}
             pinnedKeys={pinnedKeys}
             stickyOffsets={stickyOffsets}
             selectedRowIds={selectedRowIds}
@@ -447,6 +534,7 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
           <DetailPanel
             row={detailRow}
             onClose={() => setDetailRowId(null)}
+            onImport={() => fileInputRef.current?.click()}
             onUpdate={(k, v) => updateCell(`${detailRow.riskId}-${detailRow.controlId}`, k, v)}
           />
         )}
@@ -615,7 +703,7 @@ function ColumnVisibilityPanel({
 
 // ─── Grid ─────────────────────────────────────────────────────────────────
 function RacmGrid({
-  grouped, collapsedGroups, onToggleGroup, visibleColumns, pinnedKeys, stickyOffsets,
+  grouped, collapsedGroups, onToggleGroup, visibleColumns, onResize, pinnedKeys, stickyOffsets,
   selectedRowIds, onToggleRowSelected, onOpenDetail, onUpdateCell, showGroupHeaders,
   columnFilters, columnFilterOptions, onColumnFilterChange, keyOnly, onKeyOnlyChange,
 }: {
@@ -623,6 +711,7 @@ function RacmGrid({
   collapsedGroups: Set<string>;
   onToggleGroup: (label: string) => void;
   visibleColumns: RacmColumnDef[];
+  onResize: (e: { clientX: number; preventDefault: () => void; stopPropagation: () => void }, key: string, startW: number) => void;
   pinnedKeys: Set<keyof ProcurementRacmRow>;
   stickyOffsets: { offsets: Map<string, number>; total: number };
   selectedRowIds: Set<string>;
@@ -654,7 +743,7 @@ function RacmGrid({
           return (
             <div key={c.key}
               style={{ width: c.width, minWidth: c.width, left: pinned ? left : undefined }}
-              className={`h-9 px-3 flex items-center justify-between gap-1 text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider border-r border-border-light ${pinned ? 'sticky bg-surface-2/95 z-10' : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''}`}>
+              className={`relative h-9 px-3 flex items-center justify-between gap-1 text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider border-r border-border-light ${pinned ? 'sticky bg-surface-2/95 z-10' : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''}`}>
               <span className="truncate">{c.label}</span>
               {filterMode && (
                 <ColumnFilterControl colKey={c.key as string} label={c.label}
@@ -664,6 +753,12 @@ function RacmGrid({
                   onChange={(vals) => onColumnFilterChange(c.key as string, vals)}
                   keyToggle={c.key === 'controlId' ? { checked: keyOnly, onChange: onKeyOnlyChange } : undefined} />
               )}
+              {/* Drag-to-resize handle */}
+              <div
+                onMouseDown={(e) => onResize(e, c.key as string, c.width)}
+                className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-primary/30 active:bg-primary/40 z-20"
+                aria-hidden
+              />
             </div>
           );
         })}
@@ -920,11 +1015,12 @@ function CellContent({
 
 // ─── Detail Panel ─────────────────────────────────────────────────────────
 function DetailPanel({
-  row, onClose, onUpdate,
+  row, onClose, onUpdate, onImport,
 }: {
   row: ProcurementRacmRow;
   onClose: () => void;
   onUpdate: (k: keyof ProcurementRacmRow, v: string) => void;
+  onImport?: () => void;
 }) {
   const sections: { group: ColumnGroup; label: string }[] = COLUMN_GROUP_ORDER.map(g => ({ group: g, label: COLUMN_GROUP_LABELS[g] }));
 
@@ -966,9 +1062,16 @@ function DetailPanel({
         <div className="flex items-center gap-1.5 text-[0.625rem] text-text-muted">
           <Save size={10} />Changes auto-save
         </div>
-        <Button variant="primary" size="sm" onClick={onClose}>
-          Done
-        </Button>
+        <div className="flex items-center gap-2">
+          {onImport && (
+            <Button variant="outline" size="sm" leftIcon={<Upload size={11} />} onClick={onImport}>
+              Import
+            </Button>
+          )}
+          <Button variant="primary" size="sm" onClick={onClose}>
+            Done
+          </Button>
+        </div>
       </div>
     </motion.div>
   );
