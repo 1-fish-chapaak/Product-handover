@@ -50,6 +50,11 @@ export type View =
   | 'ai-concierge'
   | 'ai-concierge-forensics'
   | 'ai-concierge-table-extractor'
+  | 'ai-concierge-image'
+  | 'ai-concierge-speech'
+  | 'ai-concierge-medical'
+  | 'ai-concierge-insights'
+  | 'ai-concierge-racm'
   | 'ai-concierge-workflow-builder'
   // System
   | 'configuration'
@@ -542,6 +547,22 @@ export function useAppState() {
     setState(prev => ({ ...prev, workflowBuilderSeedPrompt: prompt }));
   }, []);
 
+  // Open the AI Concierge "Workflow Builder" tile INSIDE the Ask IRA chat rather
+  // than the standalone journey: land on view='chat' with an (empty) workflow
+  // seed, which boots ChatView into Workflow mode on its empty state — where the
+  // Recent Workflows launcher shows. A non-empty prompt would auto-start an
+  // in-thread build. Scoped to the tile; the shared
+  // launchWorkflowBuilderWithPrompt (Evidence / Engagement / home) is unchanged.
+  const launchWorkflowBuilderInChat = useCallback((prompt: string = '') => {
+    setState(prev => ({
+      ...prev,
+      view: 'chat' as View,
+      selectedChatId: null,
+      workflowBuilderSeedPrompt: prompt,
+      showChatHistory: false,
+    }));
+  }, []);
+
   // ── Notifications ──
   const openNotificationDrawer = useCallback(() => {
     setState(prev => ({ ...prev, notificationDrawerOpen: true }));
@@ -649,6 +670,7 @@ export function useAppState() {
     closeExecutionPanel,
     setExceptionRole,
     launchWorkflowBuilderWithPrompt,
+    launchWorkflowBuilderInChat,
     setWorkflowBuilderSeedPrompt,
     openNotificationDrawer,
     closeNotificationDrawer,

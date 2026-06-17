@@ -51,6 +51,7 @@ import StepOutputView from '../concierge-workflow-builder/StepOutputView';
 import UploadDataModal from '../concierge-workflow-builder/UploadDataModal';
 import SaveWorkflowModal from '../concierge-workflow-builder/SaveWorkflowModal';
 import { ToleranceAdjustCard, ViewPreviewCard, type ToleranceCardState } from '../concierge-workflow-builder/AIAssistantPanel';
+import ChatRecentWorkflows from './ChatRecentWorkflows';
 import {
   generateWorkflow as wfGenerate,
   getClarifyQuestions as wfGetClarify,
@@ -5044,7 +5045,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: prefersReducedMotion ? 0 : 0.5 }}
-              className="w-[52.5rem] max-w-full text-center grid grid-rows-[1fr_auto_1fr] h-full"
+              className={`w-[52.5rem] max-w-full text-center ${buildWorkflowMode ? 'flex flex-col min-h-full pt-10 pb-12' : 'grid grid-rows-[1fr_auto_1fr] h-full'}`}
             >
               {/* Row 1 — heading group, anchored to the bottom of its row
                   so it sits just above the centered input. pb-8 gives the
@@ -5312,7 +5313,19 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     never blank.
                   Click fills the composer (no auto-send) so the user
                   can edit before sending. */}
-              {(() => {
+              {buildWorkflowMode ? (
+                /* Workflow mode: the Recent Workflows launcher (mirrors the
+                   standalone builder's list) stands in for the plain name-chips.
+                   Clicking a row fills the composer (no auto-send), like the
+                   starter chips below. */
+                <ChatRecentWorkflows
+                  onPick={(seed) => {
+                    setInput(seed);
+                    textareaRef.current?.focus();
+                    requestAnimationFrame(() => handleTextareaInput());
+                  }}
+                />
+              ) : (() => {
                 // 5 content-sized chips in a centered 3+2 layout, each with a
                 // contextual icon derived from its label keywords.
                 const workflowSuggestions: string[] = WORKFLOWS.slice(0, 5).map(w => w.name);
