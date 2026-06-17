@@ -14,9 +14,10 @@ import {
   UserPlus,
   CalendarClock,
   Workflow,
+  ClipboardList,
 } from 'lucide-react';
 import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, GRC_BULK_ACTIONS, type GrcException, type GrcExceptionSeverity, type GrcActivityEntry, type GrcExceptionClassification, type GrcReviewStatus, type GrcDueDateRevision, type GrcActionStatus, type GrcCaseDetail } from '../../data/mockData';
-import { deriveStatus, requiresActionPlan, isMemberEligibleForDrawer, nextActionableId, type ExceptionActionKind, type DrawerActionType } from './statusModel';
+import { deriveStatus, requiresActionPlan, isMemberEligibleForDrawer, nextActionableId, auditorReviewStage, type ExceptionActionKind, type DrawerActionType } from './statusModel';
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
 import { QUERY_TABLES } from '../../data/queryGraphs';
 import type { ExceptionRole } from '../../hooks/useAppState';
@@ -33,13 +34,14 @@ import {
   BulkRequestDueDateDrawer,
   BulkReviewDueDateDrawer,
   BulkScopeChooser,
+  BulkReviewDrawer,
   type ScopeCandidate,
+  type BulkReviewSubmission,
 } from './ReviewDrawers';
 import ActionHubView, { CircularProgress } from './ActionHubView';
 import GenerateATRModal from './GenerateATRModal';
 import ExceptionsTable from './ExceptionsTable';
 import SampleDataModal, { type SampleDataPayload } from './SampleDataModal';
-import BulkClassifyModal, { type BulkClassifyPayload } from './BulkClassifyModal';
 import BulkAssignDrawer, { type BulkAssignPayload } from './BulkAssignDrawer';
 import ExceptionDetailDrawer from './ExceptionDetailDrawer';
 import ActivityTimelineDrawer from './ActivityTimelineDrawer';
@@ -54,8 +56,15 @@ import type { Assignment } from './workflow/workflowTypes';
 // `scopeIds` is the set of cases the action applies to — always includes
 // `exceptionId` (the opened/primary case that drives the drawer's content).
 // Defaults to `[exceptionId]` for non-bulk cases (today's single-case behavior).
+// `bulkSkipped` (bulk classify only) carries how many selected cases were left
+// out because they're locked by the auditor flow — surfaced in the drawer.
 type DrawerState =
-  | { type: DrawerActionType; exceptionId: string; scopeIds: string[] }
+  | {
+      type: DrawerActionType;
+      exceptionId: string;
+      scopeIds: string[];
+      bulkSkipped?: { awaitingReview: number; approved: number };
+    }
   | null;
 
 // Human label per action — used in the bulk scope chooser header.
@@ -67,6 +76,41 @@ const ACTION_LABEL: Record<DrawerActionType, string> = {
   requestDueDate: 'Request Date Change',
   reviewDueDate: 'Review Date Change',
 };
+
+// The Auditor review state-transition — the single source of truth shared by the
+// single Review drawer and Bulk Review, so both flows move a case identically.
+function reviewTransition(
+  ex: GrcException,
+  input: { decision: 'approve' | 'reject'; implementation: 'Implemented' | 'Partially Implemented' | null },
+): { actionStatus: GrcActionStatus; patch: Partial<GrcException>; log: string } {
+  const actionable = requiresActionPlan(ex.classification);
+  const approved = input.decision === 'approve';
+
+  // Stage 1 · Plan review — accept/reject the management action plan.
+  if (actionable && ex.actionPhase === 'plan-review') {
+    if (approved) return {
+      actionStatus: 'Pending',
+      patch: { actionPhase: 'in-progress', status: deriveStatus(ex.classification, 'Pending', 'Pending') },
+      log: 'Accepted the management action plan — Risk Owner to implement before the due date.',
+    };
+    return {
+      actionStatus: 'Discrepancy',
+      patch: { actionReview: 'Rejected', actionPhase: undefined, status: deriveStatus(ex.classification, 'Rejected', 'Discrepancy') },
+      log: 'Rejected the management action plan — reopened for the Risk Owner to revise.',
+    };
+  }
+
+  // Stage 2 · Completion review (actionable) / disposition review (non-actionable).
+  const actionReview: GrcReviewStatus = approved ? 'Approved' : 'Rejected';
+  const actionStatus: GrcActionStatus = approved
+    ? (actionable ? (input.implementation ?? 'Implemented') : 'Implemented')
+    : 'Discrepancy';
+  const nextPhase = (approved && actionable && input.implementation === 'Partially Implemented') ? ('in-progress' as const) : undefined;
+  const log = approved
+    ? (actionable ? `Reviewed the completed action — ${input.implementation ?? 'Implemented'}` : 'Approved the classification — no action plan required')
+    : (actionable ? 'Marked the completed action as Discrepancy — reopened for the Risk Owner' : 'Rejected the classification — back to the Risk Owner');
+  return { actionStatus, patch: { actionReview, actionPhase: nextPhase, status: deriveStatus(ex.classification, actionReview, actionStatus) }, log };
+}
 
 interface ManageExceptionsViewProps {
   role: ExceptionRole;
@@ -233,16 +277,12 @@ function deriveExceptionsFromOutputTable(
       const pct = parseFloat(String(row[matchCol]).replace('%', ''));
       if (!Number.isNaN(pct)) severity = pct >= 95 ? 'High' : pct >= 85 ? 'Medium' : 'Low';
     }
-    // Seed flags + dueDate on a few rows so the demo shows Overdue/Bulk chips
-    // the same way the default GRC_EXCEPTIONS mock does.
+    // Seed dueDate on a few rows so the demo shows the dynamic Overdue chip.
+    // Bulk grouping is NOT seeded — the Bulk chip appears only once a Risk Owner
+    // actually bulk-classifies cases together (select cases → Bulk Classify).
     const flags: Array<'Overdue' | 'Bulk'> = [];
-    let bulkId: string | undefined;
+    const bulkId: string | undefined = undefined;
     let dueDate: string | undefined;
-    // Two demoable bulk groups so the scope chooser has genuinely linked cases:
-    //   ACT002 — two unclassified cases (the Risk Owner can classify them together)
-    //   ACT001 — two classified cases awaiting plan review (the Auditor reviews them together)
-    if (i === 0 || i === 5) { flags.push('Bulk'); bulkId = 'ACT002'; }
-    else if (i === 2 || i === 3) { flags.push('Bulk'); bulkId = 'ACT001'; }
     if (i % 5 === 0) {
       // Past due date so the dynamic Overdue chip renders via the dueDate path.
       dueDate = '2026-04-15';
@@ -291,11 +331,11 @@ function deriveExceptionsFromOutputTable(
       };
     }
 
-    // Seed an Actionable ID for the pre-classified actionable rows. The two
-    // ACT001-bundled rows (i=2,3) share one ID, mirroring a bulk classification.
+    // Seed a distinct Actionable ID for each pre-classified actionable row (they
+    // are independent until a Risk Owner bulk-classifies cases together).
     let actionableId: string | undefined;
     if (requiresActionPlan(classification)) {
-      actionableId = (i === 2 || i === 3) ? 'ACT-0002' : i === 1 ? 'ACT-0001' : i === 4 ? 'ACT-0003' : undefined;
+      actionableId = i === 1 ? 'ACT-0001' : i === 2 ? 'ACT-0002' : i === 3 ? 'ACT-0003' : i === 4 ? 'ACT-0004' : undefined;
     }
 
     return {
@@ -373,16 +413,18 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
   const [activityDrawerOpen, setActivityDrawerOpen] = useState(false);
   const { addToast } = useToast();
   const logEvent = useAuditLog();
-  const [bulkClassifyOpen, setBulkClassifyOpen] = useState(false);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [bulkRequestDueOpen, setBulkRequestDueOpen] = useState(false);
   const [bulkReviewDueOpen, setBulkReviewDueOpen] = useState(false);
+  // Auditor Bulk Review — the reviewable cases + a breakdown of what was skipped.
+  const [bulkReview, setBulkReview] = useState<
+    { cases: GrcException[]; skipped: { awaitingRiskOwner: number; alreadyReviewed: number } } | null
+  >(null);
   /** When set, opens the BulkAssignDrawer scoped to just this one case
    *  (from a per-row "Assign" click). Mutually exclusive with bulkAssignOpen
    *  at the UI level — closing either clears both. */
   const [singleAssignCase, setSingleAssignCase] = useState<GrcException | null>(null);
   const [detailExceptionId, setDetailExceptionId] = useState<string | null>(null);
-  const [nextActionableNum, setNextActionableNum] = useState(2);
   const [atrExpanded, setAtrExpanded] = useState(false);
 
   const sourceQuery = useMemo(() => {
@@ -449,7 +491,174 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     setDrawer({ type, exceptionId: ex.id, scopeIds });
   };
 
+  // Launch the shared Classify drawer over the selected cases — this IS the bulk
+  // classify (same UI as the single classify, applied to every editable case).
+  //
+  // Once an exception is in the auditor flow it must not be silently overwritten:
+  // cases awaiting auditor review and auditor-approved cases are LOCKED and skipped.
+  // Only editable cases (unclassified, or auditor-rejected) are carried forward —
+  // and the Risk Owner gets a clear, numbered breakdown of what was left out.
+  const beginBulkClassify = () => {
+    const selectedCases = exceptions.filter(e => selected.has(e.id));
+    if (selectedCases.length === 0) return;
+
+    const eligible = selectedCases.filter(e => isMemberEligibleForDrawer(e, 'classify', persona));
+    const locked = selectedCases.filter(e => !isMemberEligibleForDrawer(e, 'classify', persona));
+    const isApproved = (e: GrcException) => e.actionReview === 'Approved' || e.actionReview === 'Implemented';
+    const approved = locked.filter(isApproved);
+    const awaitingReview = locked.filter(e => !isApproved(e));
+
+    // Record the skip decision on every locked case so the trail is complete.
+    if (locked.length > 0) {
+      const nowIso = new Date().toISOString();
+      locked.forEach(e => {
+        const reason = isApproved(e) ? 'auditor-approved' : 'awaiting auditor review';
+        const entry: GrcActivityEntry = {
+          id: `act-bulkskip-${e.id}-${Date.now()}`,
+          author: 'You',
+          role: 'Risk Owner',
+          timestamp: fmtStamp(nowIso),
+          message: `Excluded from a bulk classification — case is ${reason} and is locked from re-classification.`,
+        };
+        const detail = GRC_CASE_DETAILS[e.id];
+        if (detail) detail.activityLog = [entry, ...detail.activityLog];
+        else GRC_CASE_DETAILS[e.id] = {
+          classificationJustification: '', actionTitle: '', actionDueDate: '',
+          actionDescription: '', actionStatus: 'Pending', activityLog: [entry],
+        };
+      });
+      logEvent({
+        action: 'Update',
+        description: `Bulk classify: ${eligible.length} editable case${eligible.length === 1 ? '' : 's'} included; ${locked.length} skipped (${awaitingReview.length} awaiting auditor review, ${approved.length} auditor-approved)`,
+        module: 'Exceptions', entity: 'Exception',
+      });
+    }
+
+    // Nothing editable in the selection → don't open the drawer; explain why.
+    if (eligible.length === 0) {
+      addToast({
+        type: 'info',
+        message: `None of the ${selectedCases.length} selected case${selectedCases.length === 1 ? '' : 's'} can be re-classified — ${awaitingReview.length} awaiting auditor review and ${approved.length} auditor-approved are locked.`,
+      });
+      setSelected(new Set());
+      return;
+    }
+
+    // Some were skipped → proceed with the editable ones and report the breakdown.
+    if (locked.length > 0) {
+      addToast({
+        type: 'info',
+        message: `Bulk classify applies to ${eligible.length} editable case${eligible.length === 1 ? '' : 's'}. Skipped ${locked.length}: ${awaitingReview.length} awaiting auditor review, ${approved.length} auditor-approved (locked to protect the auditor's decision).`,
+      });
+    }
+
+    setDrawer({
+      type: 'classify',
+      exceptionId: eligible[0].id,
+      scopeIds: eligible.map(e => e.id),
+      bulkSkipped: locked.length > 0 ? { awaitingReview: awaitingReview.length, approved: approved.length } : undefined,
+    });
+  };
+
+  // ── Auditor Bulk Review ─────────────────────────────────────────────────
+  // Review many selected cases at once. Only cases that actually need the
+  // Auditor's review are carried forward; the rest are skipped with a clear,
+  // numbered breakdown. A single reviewable case opens the focused single drawer.
+  const beginBulkReview = () => {
+    const selectedCases = exceptions.filter(e => selected.has(e.id));
+    if (selectedCases.length === 0) return;
+
+    const reviewable = selectedCases.filter(e => auditorReviewStage(e) !== null);
+    const locked = selectedCases.filter(e => auditorReviewStage(e) === null);
+    const isDone = (e: GrcException) => e.actionReview === 'Approved' || e.actionReview === 'Implemented';
+    const alreadyReviewed = locked.filter(isDone);
+    const awaitingRiskOwner = locked.filter(e => !isDone(e));
+
+    if (locked.length > 0) {
+      logEvent({
+        action: 'Update',
+        description: `Bulk review: ${reviewable.length} ready; ${locked.length} skipped (${awaitingRiskOwner.length} awaiting Risk Owner, ${alreadyReviewed.length} already reviewed)`,
+        module: 'Exceptions', entity: 'Exception',
+      });
+    }
+
+    if (reviewable.length === 0) {
+      addToast({
+        type: 'info',
+        message: `None of the ${selectedCases.length} selected case${selectedCases.length === 1 ? '' : 's'} are ready for your review — ${awaitingRiskOwner.length} awaiting the Risk Owner, ${alreadyReviewed.length} already reviewed.`,
+      });
+      setSelected(new Set());
+      return;
+    }
+
+    // Exactly one reviewable case → the focused single Review drawer is clearer.
+    if (reviewable.length === 1) {
+      setSelected(new Set());
+      beginAction('action', reviewable[0]);
+      return;
+    }
+
+    if (locked.length > 0) {
+      addToast({
+        type: 'info',
+        message: `Bulk review covers ${reviewable.length} case${reviewable.length === 1 ? '' : 's'} ready for review. Skipped ${locked.length}: ${awaitingRiskOwner.length} awaiting the Risk Owner, ${alreadyReviewed.length} already reviewed.`,
+      });
+    }
+
+    setBulkReview({ cases: reviewable, skipped: { awaitingRiskOwner: awaitingRiskOwner.length, alreadyReviewed: alreadyReviewed.length } });
+  };
+
+  // Apply every Bulk Review decision in one pass, reusing the shared transition so
+  // each case moves exactly as it would through the single Review drawer.
+  const applyBulkReview = (subs: BulkReviewSubmission[]) => {
+    if (subs.length === 0) return;
+    const nowIso = new Date().toISOString();
+    const byId = new Map(subs.map(s => [s.id, s]));
+    let approvedCount = 0;
+    let rejectedCount = 0;
+
+    subs.forEach(s => {
+      const ex = exceptions.find(e => e.id === s.id);
+      if (!ex) return;
+      const t = reviewTransition(ex, { decision: s.decision, implementation: s.implementation });
+      if (s.decision === 'approve') approvedCount += 1; else rejectedCount += 1;
+      const detail = GRC_CASE_DETAILS[s.id];
+      if (detail) {
+        detail.actionStatus = t.actionStatus;
+        detail.activityLog = [{
+          id: `act-bulkrev-${s.id}-${Date.now()}`,
+          author: 'You', role: 'Auditor', timestamp: fmtStamp(nowIso),
+          message: `${t.log} · part of a bulk review of ${subs.length} cases`,
+          comment: s.comment || undefined,
+        }, ...detail.activityLog];
+      }
+    });
+
+    updateExceptions(list => list.map(e => {
+      const s = byId.get(e.id);
+      if (!s) return e;
+      const t = reviewTransition(e, { decision: s.decision, implementation: s.implementation });
+      return { ...e, ...t.patch, lastUpdated: nowIso.slice(0, 10) };
+    }));
+
+    logEvent({
+      action: 'Update',
+      description: `Bulk review submitted — ${subs.length} case${subs.length === 1 ? '' : 's'} reviewed (${approvedCount} approved/accepted, ${rejectedCount} rejected)`,
+      module: 'Exceptions', entity: 'Exception',
+    });
+    addToast({
+      type: 'success',
+      message: `Bulk review submitted — ${subs.length} case${subs.length === 1 ? '' : 's'} reviewed (${approvedCount} approved, ${rejectedCount} rejected).`,
+    });
+    setSelected(new Set());
+    setBulkReview(null);
+  };
+
   const beginAction = (type: DrawerActionType, ex: GrcException) => {
+    // A per-row Classify always acts on just that case — bulk classification is
+    // done explicitly via the toolbar (select cases → Bulk Classify). No chooser.
+    if (type === 'classify') { openDrawerWithScope(type, ex, [ex.id]); return; }
+
     // Resolve the group from the LIVE exceptions sharing this bulkId — robust to
     // both the default mock and query-derived rows (whose bulkId assignment may
     // differ from the static GRC_BULK_ACTIONS.caseIds).
@@ -463,10 +672,20 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
       isOpened: m.id === ex.id,
       eligible: m.id === ex.id || isMemberEligibleForDrawer(m, type, persona, ex),
       statusLabel: statusLabelFor(m),
+      classification: m.classification,
+      actionableId: m.actionableId,
     }));
     const eligibleCount = candidates.filter(c => c.eligible).length;
     // Only the opened case applies → no chooser needed.
     if (eligibleCount <= 1) { openDrawerWithScope(type, ex, [ex.id]); return; }
+
+    // Mark Action Complete applies to every linked case automatically — once the
+    // plan is approved, the action taken covers all linked exceptions. No chooser;
+    // the drawer surfaces the grouped cases instead.
+    if (type === 'complete') {
+      openDrawerWithScope(type, ex, candidates.filter(c => c.eligible).map(c => c.id));
+      return;
+    }
 
     setScopeChooser({ type, exceptionId: ex.id, candidates });
   };
@@ -805,15 +1024,29 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 <div className="flex items-center gap-1.5">
                   {/* Assignment & Approval Workflow — additive bulk action (both personas). */}
                   <WorkflowAssignButton selectedIds={[...selected]} />
-                  {/* Bulk Classify — permission-gated. */}
-                  {can('exc_classify') && selected.size > 0 && (
+                  {/* Bulk Classify — Risk Owner only (classification is theirs). */}
+                  {role === 'risk-owner' && can('exc_classify') && selected.size > 0 && (
                     <button
-                      onClick={() => setBulkClassifyOpen(true)}
+                      onClick={beginBulkClassify}
                       title={`Bulk classify ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
                       className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer transition-colors"
                     >
                       <Tag size={13} />
                       Bulk Classify
+                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
+                        {selected.size}
+                      </span>
+                    </button>
+                  )}
+                  {/* Bulk Review — Auditor reviews many cases' plans / action taken at once. */}
+                  {role !== 'risk-owner' && selected.size > 0 && (
+                    <button
+                      onClick={beginBulkReview}
+                      title={`Bulk review ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
+                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer transition-colors"
+                    >
+                      <ClipboardList size={13} />
+                      Bulk Review
                       <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
                         {selected.size}
                       </span>
@@ -861,20 +1094,6 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                       </span>
                     </button>
                   )}
-                  {/* Triage — permission-gated, available to any reviewing role. */}
-                  {can('exc_triage') && selected.size > 0 && (
-                    <button
-                      onClick={() => { logEvent({ action: 'Update', description: `Triaged ${selected.size} exception${selected.size === 1 ? '' : 's'}`, module: 'Exceptions', entity: 'Exception' }); addToast({ message: `Triaged ${selected.size} case${selected.size === 1 ? '' : 's'}.`, type: 'success' }); }}
-                      title={`Triage ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
-                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-ink-700 bg-white border-border hover:bg-surface-2 cursor-pointer transition-colors"
-                    >
-                      <FlaskConical size={13} />
-                      Triage
-                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-ink-900/10 rounded-full tabular-nums">
-                        {selected.size}
-                      </span>
-                    </button>
-                  )}
                 </div>
               }
               headerExtras={
@@ -909,6 +1128,13 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             exception={drawerException}
             actionableId={plannedActionableId}
             scopeCount={clScope.length}
+            bulkSkipped={drawer.bulkSkipped}
+            linkedCases={clScope.length > 1
+              ? clScope
+                  .map(id => exceptions.find(e => e.id === id))
+                  .filter((e): e is GrcException => !!e)
+                  .map(e => ({ id: e.id, title: e.title, classification: e.classification, statusLabel: statusLabelFor(e) }))
+              : []}
             onClose={() => setDrawer(null)}
             onSave={(payload) => {
               const classification = payload.classification as GrcException['classification'];
@@ -919,6 +1145,31 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               const scope = drawer?.scopeIds ?? [drawerException.id];
               // Actionable → all scoped cases share the planned Actionable ID; non-actionable clears it.
               const assignedActionableId = actionable ? plannedActionableId : undefined;
+
+              // Bulk classify (>1 case) links the scoped cases into a bulk group:
+              // they share a bulkId, carry the Bulk chip, and the group is registered
+              // so every bulk-aware surface treats them as linked. For an actionable
+              // classification the bulk group IS the management action plan, so it
+              // reuses the shared Actionable ID — keeping the ID identical across the
+              // classify panel, the bulk banner and the Mark Action Complete drawer.
+              const isBulk = scope.length > 1;
+              const bulkGroupId = isBulk
+                ? (scope.map(id => exceptions.find(e => e.id === id)?.bulkId).find(Boolean)
+                    ?? assignedActionableId
+                    ?? `ACT${String(
+                        (Object.keys(GRC_BULK_ACTIONS)
+                          .map(k => parseInt(k.replace(/\D/g, ''), 10))
+                          .filter(n => !Number.isNaN(n))
+                          .reduce((a, b) => Math.max(a, b), 0)) + 1,
+                      ).padStart(3, '0')}`)
+                : undefined;
+              if (isBulk && bulkGroupId) {
+                GRC_BULK_ACTIONS[bulkGroupId] = {
+                  id: bulkGroupId,
+                  caseIds: [...scope],
+                  title: first?.name?.trim() || `${classification} · bulk action`,
+                };
+              }
               const planNote = actionable
                 ? ` · submitted ${plans.length} management action plan${plans.length === 1 ? '' : 's'} for review${first?.dueDate ? ` · due ${fmtDue(first.dueDate)}` : ''}`
                 : ' · no action plan required';
@@ -963,6 +1214,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                       actionPhase: actionable ? ('plan-review' as const) : undefined,
                       status: deriveStatus(classification, 'Pending', 'Pending'),
                       actionableId: assignedActionableId,
+                      // A bulk classify links the cases (shared bulkId + Bulk chip).
+                      bulkId: isBulk ? bulkGroupId : e.bulkId,
+                      flags: isBulk
+                        ? (e.flags?.includes('Bulk') ? e.flags : [...(e.flags ?? []), 'Bulk' as const])
+                        : e.flags,
                       dueDate: (actionable && first?.dueDate) ? first.dueDate : (payload.dueDate ?? e.dueDate),
                       lastUpdated: nowIso.slice(0, 10),
                     }
@@ -1154,10 +1410,20 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             onViewBulk={(bulkId) => setBulkModalId(bulkId)}
           />
         )}
-        {drawer?.type === 'complete' && drawerException && (
+        {drawer?.type === 'complete' && drawerException && (() => {
+          const scopeIds = drawer?.scopeIds ?? [drawerException.id];
+          const linkedCases = scopeIds.length > 1
+            ? scopeIds
+                .map(id => exceptions.find(e => e.id === id))
+                .filter((e): e is GrcException => !!e)
+                .map(e => ({ id: e.id, title: e.title, classification: e.classification, statusLabel: statusLabelFor(e) }))
+            : [];
+          return (
           <CompleteActionDrawer
             key="complete-drawer"
             exception={drawerException}
+            bulkId={drawerException.bulkId}
+            linkedCases={linkedCases}
             onClose={() => setDrawer(null)}
             onSubmit={({ note, evidence, implementation, comment }) => {
               const nowIso = new Date().toISOString();
@@ -1186,7 +1452,8 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               setDrawer(null);
             }}
           />
-        )}
+          );
+        })()}
         {scopeChooser && (() => {
           const opened = exceptions.find(e => e.id === scopeChooser.exceptionId);
           if (!opened || !opened.bulkId) return null;
@@ -1204,6 +1471,15 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             />
           );
         })()}
+        {bulkReview && (
+          <BulkReviewDrawer
+            key="bulk-review-drawer"
+            cases={bulkReview.cases}
+            skipped={bulkReview.skipped}
+            onClose={() => setBulkReview(null)}
+            onSubmit={applyBulkReview}
+          />
+        )}
         {bulkModalId && (
           <BulkActionGroupModal
             key="bulk-modal"
@@ -1225,36 +1501,6 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               setSampleCountLeft(c => Math.max(0, c - 1));
               setSampleModalOpen(false);
               addToast({ type: 'success', message: `Sample sheet "${payload.name}" has been created` });
-            }}
-          />
-        )}
-        {bulkClassifyOpen && (
-          <BulkClassifyModal
-            key="bulk-classify-modal"
-            selectedCases={exceptions.filter(e => selected.has(e.id))}
-            actionableId={`ACT${String(nextActionableNum).padStart(3, '0')}`}
-            onClose={() => setBulkClassifyOpen(false)}
-            onApply={(payload: BulkClassifyPayload) => {
-              payload.caseIds.forEach(id => { const d = GRC_CASE_DETAILS[id]; if (d) d.actionStatus = 'Pending'; });
-              updateExceptions(prev => prev.map(e =>
-                payload.caseIds.includes(e.id)
-                  ? {
-                      ...e,
-                      severity: payload.severity,
-                      classification: payload.classification,
-                      classificationReview: 'Approved' as const,
-                      actionReview: 'Pending' as const,
-                      actionPhase: requiresActionPlan(payload.classification) ? ('plan-review' as const) : undefined,
-                      status: deriveStatus(payload.classification, 'Pending', 'Pending'),
-                      dueDate: payload.dueDate ?? e.dueDate,
-                      lastUpdated: new Date().toISOString().slice(0, 10),
-                    }
-                  : e
-              ));
-              setNextActionableNum(n => n + 1);
-              setSelected(new Set());
-              setBulkClassifyOpen(false);
-              logEvent({ action: 'Update', description: `Classified ${payload.caseIds.length} exception${payload.caseIds.length === 1 ? '' : 's'} as ${payload.classification}`, module: 'Exceptions', entity: 'Exception' });
             }}
           />
         )}
@@ -1354,6 +1600,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
           <BulkAssignDrawer
             key={singleAssignCase ? `single-assign-${singleAssignCase.id}` : 'bulk-assign-drawer'}
             cases={singleAssignCase ? [singleAssignCase] : exceptions.filter(e => selected.has(e.id))}
+            initialAssignees={singleAssignCase ? (singleAssignCase.assignees ?? (singleAssignCase.assignedTo ? [singleAssignCase.assignedTo] : [])) : undefined}
             onClose={() => { setBulkAssignOpen(false); setSingleAssignCase(null); }}
             onApply={(payload: BulkAssignPayload) => {
               if (payload.assignees.length === 0) return;
@@ -1377,12 +1624,16 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               payload.caseIds.forEach(caseId => {
                 const detail = GRC_CASE_DETAILS[caseId];
                 if (!detail) return;
+                const wasAssigned = (() => {
+                  const tgt = exceptions.find(e => e.id === caseId);
+                  return !!(tgt?.assignees && tgt.assignees.length > 0) || !!tgt?.assignedTo;
+                })();
                 const entry: GrcActivityEntry = {
                   id: `act-assign-${caseId}-${Date.now()}`,
                   author: 'You',
-                  role: 'Auditor',
+                  role: role === 'risk-owner' ? 'Risk Owner' : 'Auditor',
                   timestamp: fmtStamp(nowIso),
-                  message: `Assigned to ${assigneeNames}`,
+                  message: `${wasAssigned ? 'Reassigned' : 'Assigned'} to ${assigneeNames}`,
                   comment: payload.note,
                 };
                 detail.activityLog = [entry, ...detail.activityLog];
