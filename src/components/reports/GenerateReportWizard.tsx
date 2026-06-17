@@ -369,22 +369,20 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
               })()}
             </div>
 
-            {/* Footer — left: live selection status + a clear-all reset once
-                anything is picked; right: the primary Continue action. */}
+            {/* Footer — left: live selection count + a clear-all reset once
+                anything is picked; right: the primary Continue action. (The
+                "what to do" instruction lives in the header subtitle, so the
+                footer only reports status — no duplicate guidance.) */}
             <div className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
-                {selectedKeyCount > 0 ? (
-                  <>
-                    <span className="text-[12px] font-medium text-ink-600 truncate">{selectedSummary}</span>
-                    <button
-                      onClick={() => setSelected([])}
-                      className="shrink-0 inline-flex items-center gap-1 h-7 px-2 text-[12px] font-medium text-ink-500 hover:text-brand-600 rounded-[6px] hover:bg-brand-600/[0.06] transition-colors cursor-pointer"
-                    >
-                      <X size={12} /> Clear all
-                    </button>
-                  </>
-                ) : (
-                  <span className="text-[12px] text-ink-400">Pick the queries and workflows to include</span>
+                <span className={`text-[12px] truncate ${selectedKeyCount > 0 ? 'font-medium text-ink-600' : 'text-ink-400'}`}>{selectedSummary}</span>
+                {selectedKeyCount > 0 && (
+                  <button
+                    onClick={() => setSelected([])}
+                    className="shrink-0 inline-flex items-center gap-1 h-7 px-2 text-[12px] font-medium text-ink-500 hover:text-brand-600 rounded-[6px] hover:bg-brand-600/[0.06] transition-colors cursor-pointer"
+                  >
+                    <X size={12} /> Clear all
+                  </button>
                 )}
               </div>
               <button

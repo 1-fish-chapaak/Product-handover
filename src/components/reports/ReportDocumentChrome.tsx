@@ -89,17 +89,18 @@ export function ReportMetaPanel({ items, columns }: { items: { label: string; va
   const cols = columns ?? (facts.length <= 4 ? facts.length : 3);
   const lastRowStart = facts.length - (facts.length % cols || cols);
   return (
-    <div className={`grid ${META_COL_CLASS[cols]} border border-canvas-border rounded-[10px] overflow-hidden bg-canvas-elevated`}>
+    <div className={`grid ${META_COL_CLASS[cols]} border border-canvas-border rounded-[12px] overflow-hidden bg-canvas-elevated shadow-[0_1px_3px_rgba(15,8,30,0.05)]`}>
       {facts.map((it, i) => {
         const isLastCol = i % cols === cols - 1;
         const hasRightNeighbor = !isLastCol && i + 1 < facts.length;
         const isLastRow = i >= lastRowStart;
         return (
-          <div key={it.label} className={`px-5 py-3.5 border-canvas-border ${hasRightNeighbor ? 'border-r' : ''} ${isLastRow ? '' : 'border-b'}`}>
-            <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-1.5">{it.label}</div>
-            <div className="border-l-[3px] border-brand-500 pl-3">
-              <div className="text-[0.8125rem] font-bold text-ink-900 leading-snug">{it.value || '—'}</div>
+          <div key={it.label} className={`px-5 py-4 border-canvas-border ${hasRightNeighbor ? 'border-r' : ''} ${isLastRow ? '' : 'border-b'}`}>
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="w-1 h-1 rounded-full bg-brand-500" aria-hidden="true" />
+              <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.13em] text-ink-400">{it.label}</div>
             </div>
+            <div className="text-[0.875rem] font-bold text-ink-900 leading-snug">{it.value || '—'}</div>
           </div>
         );
       })}
@@ -185,7 +186,7 @@ export function ReportBrandBanner({ title, actions, children, className = '', gr
   return (
     <div
       className={`relative overflow-hidden px-9 pt-9 pb-8 ${className}`}
-      style={{ backgroundImage: `linear-gradient(125deg, ${from} 0%, ${to} 62%, ${to} 100%)` }}
+      style={{ backgroundImage: `linear-gradient(125deg, ${from} 0%, ${to} 62%, ${to} 100%)`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.22)' }}
     >
       {/* Deepen the lower-left and lift the upper-right so the panel reads with
           depth instead of a flat sheet. */}
@@ -213,7 +214,7 @@ export function ReportBrandBanner({ title, actions, children, className = '', gr
       />
       <div className="relative z-10 flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0 flex-1">
-          <h1 className="text-[2rem] font-semibold tracking-tight leading-tight text-white mb-1.5">{title}</h1>
+          <h1 className="text-[2.0625rem] font-bold tracking-[-0.02em] leading-[1.08] text-white mb-1.5" style={{ textShadow: '0 1px 2px rgba(10,2,30,0.22)' }}>{title}</h1>
           {children}
         </div>
         <div className="shrink-0 flex flex-col items-end gap-3">
