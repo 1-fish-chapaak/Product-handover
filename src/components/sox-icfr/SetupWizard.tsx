@@ -42,6 +42,7 @@ export default function SetupWizard() {
     const eng: IcfrEngagement = {
       id: 'icfr-new', code, name, entity, framework, periodStart, periodEnd, period,
       materiality, performanceMateriality: pm, preparer: 'You · Auditor', reviewer: 'Reviewer',
+      rules: { clearlyTrivial: Math.round(materiality * 0.05), sdBandPct: 20, aggregate: true, autoRoute: true, mwIndicators: [] },
       accounts: TEMPLATE_ACCOUNTS.map(a => ({ ...a, inScope: scope[a.id] ?? a.inScope })),
       controls: controls.map(c => ({ ...c, owner: owners[c.id] ?? c.owner })),
       deficiencies: [], tasks: [], discussions: [],
