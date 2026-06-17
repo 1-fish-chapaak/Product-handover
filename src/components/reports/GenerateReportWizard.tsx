@@ -218,26 +218,50 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
         aria-hidden={suppressed}
         inert={suppressedSettled}
       >
-        {/* Title bar */}
-        <header className="shrink-0 px-6 py-3 flex items-center justify-between gap-4 border-b border-canvas-border">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
-              <FileText size={16} />
+        {/* Title bar + stepper */}
+        <header className="shrink-0 px-6 pt-3 pb-3 border-b border-canvas-border">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
+                <FileText size={16} />
+              </div>
+              <div>
+                <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Generate {template.name}</h2>
+                <p className="text-[0.75rem] text-ink-500 leading-snug">
+                  {step === 1 ? 'Pick the queries this report is built from' : 'Review arrangement & executive summary'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Generate {template.name}</h2>
-              <p className="text-[0.75rem] text-ink-500 leading-snug">
-                Step {step} of 2 — {step === 1 ? 'pick the queries this report is built from' : 'review arrangement & executive summary'}
-              </p>
-            </div>
+            <button
+              onClick={attemptClose}
+              className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0"
+              aria-label="Close"
+            >
+              <X size={16} />
+            </button>
           </div>
-          <button
-            onClick={attemptClose}
-            className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0"
-            aria-label="Close"
-          >
-            <X size={16} />
-          </button>
+          {/* Two-step progress — Pick → Review (mirrors the ATR wizard) */}
+          <div className="flex items-center gap-2">
+            {['Pick queries', 'Review'].map((label, i) => {
+              const activeIdx = step - 1;
+              const state = i < activeIdx ? 'done' : i === activeIdx ? 'active' : 'todo';
+              return (
+                <div key={label} className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 h-7 pl-1.5 pr-2.5 rounded-full text-[0.75rem] font-semibold ${
+                    state === 'active' ? 'bg-brand-50 text-brand-700' : state === 'done' ? 'bg-compliant-50 text-compliant-700' : 'bg-draft-50 text-ink-500'
+                  }`}>
+                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[0.625rem] ${
+                      state === 'active' ? 'bg-brand-600 text-white' : state === 'done' ? 'bg-compliant text-white' : 'bg-ink-300 text-white'
+                    }`}>
+                      {state === 'done' ? <Check size={10} /> : i + 1}
+                    </span>
+                    {label}
+                  </span>
+                  {i < 1 && <span className="w-5 h-px bg-canvas-border" />}
+                </div>
+              );
+            })}
+          </div>
         </header>
 
         {step === 1 ? (
