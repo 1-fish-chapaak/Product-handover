@@ -653,7 +653,12 @@ function renderCell(
         const overflow = allAssignees.length - visible.length;
         const overflowNames = allAssignees.slice(MAX_VISIBLE).map(a => a.name).join(', ');
         return (
-          <div className="inline-flex items-center min-w-0">
+          <button
+            type="button"
+            onClick={onAssign}
+            title="Change assignees"
+            className="group/asg inline-flex items-center min-w-0 rounded-[8px] px-1 -mx-1 py-0.5 hover:bg-brand-50/60 cursor-pointer transition-colors"
+          >
             {visible.map((a, i) => (
               <span
                 key={`${a.name}-${i}`}
@@ -683,16 +688,23 @@ function renderCell(
                 </span>
               </span>
             )}
-          </div>
+            <span className="ml-1.5 opacity-0 group-hover/asg:opacity-100 transition-opacity text-brand-600 shrink-0"><Pencil size={12} /></span>
+          </button>
         );
       }
       return allAssignees.length === 1 ? (
-        <div className="inline-flex items-center gap-2 min-w-0">
+        <button
+          type="button"
+          onClick={onAssign}
+          title="Change assignee"
+          className="group/asg inline-flex items-center gap-2 min-w-0 rounded-[8px] px-1.5 -mx-1.5 py-0.5 hover:bg-brand-50/60 cursor-pointer transition-colors"
+        >
           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-50 text-brand-700 text-[10px] font-semibold shrink-0">
             {allAssignees[0].initials}
           </span>
           <span className="text-ink-700 text-[12.5px] truncate">{allAssignees[0].name}</span>
-        </div>
+          <span className="opacity-0 group-hover/asg:opacity-100 transition-opacity text-brand-600 shrink-0"><Pencil size={11} /></span>
+        </button>
       ) : (
         <button
           type="button"

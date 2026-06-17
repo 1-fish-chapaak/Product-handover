@@ -33,6 +33,11 @@ import ExceptionListDrawer from './ExceptionListDrawer';
 import ExceptionDetailDrawer from './ExceptionDetailDrawer';
 
 // ── Live derivations from the exceptions table (single source of truth) ──
+// A management action plan is identified by its Actionable ID — cases classified
+// together in one bulk action share a single plan. So the plan-stage counts are
+// measured per distinct Actionable ID (the plan), not per exception. Actionable
+// cases that somehow lack an ID fall back to their own id so they still count once.
+const planKey = (ex: GrcException) => ex.actionableId ?? ex.id;
 const actionStatusOf = (ex: GrcException) => GRC_CASE_DETAILS[ex.id]?.actionStatus ?? 'Pending';
 const completionOf = (ex: GrcException) => GRC_CASE_DETAILS[ex.id]?.completion;
 const combinedOf = (ex: GrcException): CombinedActionReview => combineActionReview(ex.actionReview, actionStatusOf(ex), ex.classification);
@@ -262,6 +267,11 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
       actionPlan: count(hasActionPlan),
       actionTaken: count(isActionTaken),
       reviewComplete: count(isReviewComplete),
+      // Plan-level counts (distinct Actionable IDs) — the unit the ATR pipeline
+      // is really measured in, since linked cases share one management action plan.
+      planTotal: new Set(exceptions.filter(isActionable).map(planKey)).size,
+      planActionTaken: new Set(exceptions.filter(isActionTaken).map(planKey)).size,
+      planReviewComplete: new Set(exceptions.filter(isReviewComplete).map(planKey)).size,
       open: count(ex => statusOf(ex) === 'Open'),
       inProgress: count(ex => statusOf(ex) === 'Under Review'),
       closed: count(ex => statusOf(ex) === 'Closed'),
@@ -283,19 +293,20 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
     [openPreset, exceptions],
   );
 
-  // ATR readiness tracks the actionable pipeline: an ATR can be issued once every
-  // actionable exception's action has been reviewed by the Auditor.
-  const readinessPct = m.actionable > 0
-    ? Math.round((m.reviewComplete / m.actionable) * 100)
+  // ATR readiness tracks the action-plan pipeline: an ATR can be issued once every
+  // management action plan (Actionable ID) has been reviewed by the Auditor.
+  const readinessPct = m.planTotal > 0
+    ? Math.round((m.planReviewComplete / m.planTotal) * 100)
     : (m.total > 0 && m.unclassified === 0 ? 100 : 0);
 
-  // Funnel narrows: of all exceptions → classified → (actionable need a plan) →
-  // action taken → reviewed. Each stage's denominator is its meaningful baseline.
+  // Funnel narrows: of all exceptions → classified → management action plans →
+  // action taken → reviewed. The plan stages count distinct Actionable IDs (plans),
+  // not exceptions, since linked cases share one plan.
   const stages = [
-    { key: 'classified',     icon: Tag,           label: 'Exceptions Classified',   sublabel: 'of all exceptions',          count: m.classified,     denom: m.total,      tone: 'brand' as Tone },
-    { key: 'actionPlan',     icon: ClipboardList, label: 'Management Action Plan',   sublabel: 'of classified need a plan',  count: m.actionable,     denom: m.classified, tone: 'evidence' as Tone },
-    { key: 'actionTaken',    icon: Wrench,        label: 'Action Taken',            sublabel: 'of action plans',            count: m.actionTaken,    denom: m.actionable, tone: 'mitigated' as Tone },
-    { key: 'reviewComplete', icon: ShieldCheck,   label: 'Auditor Review Complete', sublabel: 'of action plans',            count: m.reviewComplete, denom: m.actionable, tone: 'compliant' as Tone },
+    { key: 'classified',     icon: Tag,           label: 'Exceptions Classified',   sublabel: 'of all exceptions',          count: m.classified,        denom: m.total,      tone: 'brand' as Tone },
+    { key: 'actionPlan',     icon: ClipboardList, label: 'Management Action Plan',   sublabel: 'action plans created',       count: m.planTotal,         denom: m.planTotal,  tone: 'evidence' as Tone },
+    { key: 'actionTaken',    icon: Wrench,        label: 'Action Taken',            sublabel: 'of action plans',            count: m.planActionTaken,   denom: m.planTotal,  tone: 'mitigated' as Tone },
+    { key: 'reviewComplete', icon: ShieldCheck,   label: 'Auditor Review Complete', sublabel: 'of action plans',            count: m.planReviewComplete, denom: m.planTotal, tone: 'compliant' as Tone },
   ];
 
   return (
@@ -305,12 +316,12 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
         {/* ── ATR Readiness — the journey toward issuing the Audit-to-Record ── */}
         <section className="mb-5 rounded-[14px] border border-canvas-border bg-gradient-to-br from-brand-50/50 via-canvas-elevated to-canvas-elevated px-5 py-4">
           <div className="flex items-center gap-3.5 mb-4">
-            <CircularProgress pct={readinessPct} size={52} stroke={5} label={m.actionable > 0 ? <span className="text-[0.8125rem] font-bold tabular-nums">{m.reviewComplete}/{m.actionable}</span> : <span className="text-[0.75rem] font-semibold text-ink-400">—</span>} />
+            <CircularProgress pct={readinessPct} size={52} stroke={5} label={m.planTotal > 0 ? <span className="text-[0.8125rem] font-bold tabular-nums">{m.planReviewComplete}/{m.planTotal}</span> : <span className="text-[0.75rem] font-semibold text-ink-400">—</span>} />
             <div className="min-w-0">
               <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-none">ATR Readiness</h2>
               <p className="text-[0.75rem] text-ink-500 mt-1 leading-snug">
-                {m.actionable > 0
-                  ? <>{m.reviewComplete} of {m.actionable} action plan{m.actionable === 1 ? '' : 's'} reviewed · an ATR can be issued once every action plan is reviewed by the Auditor.</>
+                {m.planTotal > 0
+                  ? <>{m.planReviewComplete} of {m.planTotal} action plan{m.planTotal === 1 ? '' : 's'} reviewed · an ATR can be issued once every action plan is reviewed by the Auditor.</>
                   : <>No action plans yet — classify exceptions as a deficiency or non-compliance to start the ATR pipeline.</>}
               </p>
             </div>
@@ -399,13 +410,15 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
         )}
       </AnimatePresence>
 
-      {/* Deep-dive — full case detail stacked over the list */}
+      {/* Deep-dive — full action-plan / case detail stacked over the list */}
       <AnimatePresence>
         {detailEx && (
           <ExceptionDetailDrawer
             key={detailEx.id}
             exception={detailEx}
             role={role}
+            linkedExceptions={detailEx.actionableId ? exceptions.filter(e => e.actionableId === detailEx.actionableId) : [detailEx]}
+            onSelectLinked={setDetailEx}
             onAction={(kind, ex) => { setDetailEx(null); onAction?.(kind, ex); }}
             onClose={() => setDetailEx(null)}
           />
