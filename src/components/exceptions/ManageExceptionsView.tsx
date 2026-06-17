@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, type ElementType } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft,
@@ -15,8 +15,11 @@ import {
   CalendarClock,
   Workflow,
   ClipboardList,
+  MessageSquare,
+  Send,
+  X,
 } from 'lucide-react';
-import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, GRC_BULK_ACTIONS, type GrcException, type GrcExceptionSeverity, type GrcActivityEntry, type GrcExceptionClassification, type GrcReviewStatus, type GrcDueDateRevision, type GrcActionStatus, type GrcCaseDetail } from '../../data/mockData';
+import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, GRC_BULK_ACTIONS, type GrcException, type GrcExceptionSeverity, type GrcActivityEntry, type GrcActivityAuthorRole, type GrcExceptionClassification, type GrcReviewStatus, type GrcDueDateRevision, type GrcActionStatus, type GrcCaseDetail } from '../../data/mockData';
 import { deriveStatus, requiresActionPlan, isMemberEligibleForDrawer, nextActionableId, auditorReviewStage, type ExceptionActionKind, type DrawerActionType } from './statusModel';
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
 import { QUERY_TABLES } from '../../data/queryGraphs';
@@ -45,6 +48,7 @@ import SampleDataModal, { type SampleDataPayload } from './SampleDataModal';
 import BulkAssignDrawer, { type BulkAssignPayload } from './BulkAssignDrawer';
 import ExceptionDetailDrawer from './ExceptionDetailDrawer';
 import ActivityTimelineDrawer from './ActivityTimelineDrawer';
+import { markCommentUnread, clearCommentUnread } from './commentStore';
 import { useToast } from '../shared/Toast';
 // ─── Assignment & Approval Workflow module (configurable, data-driven) ───
 import { WorkflowProvider } from './workflow/WorkflowContext';
@@ -425,6 +429,13 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
    *  at the UI level — closing either clears both. */
   const [singleAssignCase, setSingleAssignCase] = useState<GrcException | null>(null);
   const [detailExceptionId, setDetailExceptionId] = useState<string | null>(null);
+  // Cross-persona comment channel — bump forces a re-render after we mutate a
+  // case's activity log in place (same pattern the action handlers use).
+  const [, setCommentTick] = useState(0);
+  const [commentModalOpen, setCommentModalOpen] = useState(false);
+  const [bulkCommentText, setBulkCommentText] = useState('');
+  // Bulk Actions dropdown — one CTA grouping every multi-select action.
+  const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
   const [atrExpanded, setAtrExpanded] = useState(false);
 
   const sourceQuery = useMemo(() => {
@@ -480,6 +491,73 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
   const statusLabelFor = (ex: GrcException) => (ex.status === 'Under Review' ? 'In-Progress' : ex.status);
   // Suffix appended to each case's activity log when an action spans a bulk group.
   const bulkSuffix = (n: number) => (n > 1 ? ` · applied to ${n} linked cases` : '');
+
+  // ── Always-on comment channel ───────────────────────────────────────────
+  // Either persona can comment on any case — individually or in bulk — no matter
+  // its status, phase, or review outcome. The comment lands in the case's
+  // activity log and the OTHER persona is notified (row indicator) until they
+  // open the case. This is never disabled: it's how the two personas talk.
+  const personaName = (r: ExceptionRole) => (r === 'auditor' ? 'Auditor' : 'Risk Owner');
+  const postComment = (text: string, ids: string[], attachment?: { name: string }) => {
+    const body = text.trim();
+    if ((!body && !attachment) || ids.length === 0) return;
+    const authorRole: GrcActivityAuthorRole = persona === 'auditor' ? 'Auditor' : 'Risk Owner';
+    const recipient: ExceptionRole = persona === 'risk-owner' ? 'auditor' : 'risk-owner';
+    const stamp = fmtStamp(new Date().toISOString());
+    const baseMessage = ids.length > 1 ? `Commented · sent to ${ids.length} cases` : 'Added a comment';
+    ids.forEach((id, i) => {
+      const entry: GrcActivityEntry = {
+        id: `act-comment-${id}-${Date.now()}-${i}`,
+        author: 'You',
+        role: authorRole,
+        timestamp: stamp,
+        message: baseMessage,
+        kind: 'comment',
+        ...(body ? { comment: body } : {}),
+        ...(attachment ? { attachment } : {}),
+      };
+      const detail = GRC_CASE_DETAILS[id];
+      if (detail) detail.activityLog = [entry, ...detail.activityLog];
+      else GRC_CASE_DETAILS[id] = {
+        classificationJustification: '', actionTitle: '', actionDueDate: '',
+        actionDescription: '', actionStatus: 'Pending', activityLog: [entry],
+      };
+    });
+    markCommentUnread(ids, recipient);
+    setCommentTick(t => t + 1);
+    logEvent({
+      action: 'Update',
+      description: ids.length > 1
+        ? `Commented on ${ids.length} exceptions as the ${authorRole}`
+        : `Commented on ${ids[0]} as the ${authorRole}`,
+      module: 'Exceptions', entity: 'Exception',
+    });
+    addToast({ type: 'success', message: ids.length > 1
+      ? `Comment shared on ${ids.length} cases — the ${personaName(recipient)} will see it.`
+      : `Comment shared — the ${personaName(recipient)} will see it.` });
+  };
+
+  // Open a case's detail and clear this persona's unread comment badge for it.
+  const openDetail = (id: string) => {
+    clearCommentUnread(id, persona);
+    setDetailExceptionId(id);
+    setCommentTick(t => t + 1);
+  };
+
+  // Opening a Classify/Action review modal counts as reading the case's comments
+  // → clear this persona's unread badge for the open case (and any linked scope).
+  useEffect(() => {
+    if (!drawer) return;
+    const ids = drawer.scopeIds ?? [drawer.exceptionId];
+    ids.forEach(id => clearCommentUnread(id, persona));
+    setCommentTick(t => t + 1);
+  }, [drawer, persona]);
+
+  // The Bulk Actions menu only makes sense with a selection — close it when the
+  // selection clears so it never lingers open against an inactive button.
+  useEffect(() => {
+    if (selected.size === 0) setBulkMenuOpen(false);
+  }, [selected.size]);
 
   // ── Bulk-action funnel ──────────────────────────────────────────────────
   // Every single action routes through beginAction. If the case belongs to a
@@ -1019,81 +1097,95 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 setSingleAssignCase(ex);
               }}
               extraColumns={sourceQuery ? QUERY_TABLES[sourceQuery.id] : undefined}
-              onOpenDetail={(ex) => setDetailExceptionId(ex.id)}
+              onOpenDetail={(ex) => openDetail(ex.id)}
               headerLeading={
-                <div className="flex items-center gap-1.5">
-                  {/* Assignment & Approval Workflow — additive bulk action (both personas). */}
+                <div className="flex items-center gap-2">
+                  {/* Assignment & Approval Workflow — distinct workflow action. */}
                   <WorkflowAssignButton selectedIds={[...selected]} />
-                  {/* Bulk Classify — Risk Owner only (classification is theirs). */}
-                  {role === 'risk-owner' && can('exc_classify') && selected.size > 0 && (
-                    <button
-                      onClick={beginBulkClassify}
-                      title={`Bulk classify ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
-                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer transition-colors"
-                    >
-                      <Tag size={13} />
-                      Bulk Classify
-                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
-                        {selected.size}
-                      </span>
-                    </button>
-                  )}
-                  {/* Bulk Review — Auditor reviews many cases' plans / action taken at once. */}
-                  {role !== 'risk-owner' && selected.size > 0 && (
-                    <button
-                      onClick={beginBulkReview}
-                      title={`Bulk review ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
-                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer transition-colors"
-                    >
-                      <ClipboardList size={13} />
-                      Bulk Review
-                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
-                        {selected.size}
-                      </span>
-                    </button>
-                  )}
-                  {/* Bulk Assign — permission-gated. */}
-                  {can('exc_assign') && selected.size > 0 && (
-                    <button
-                      onClick={() => setBulkAssignOpen(true)}
-                      title={`Bulk assign ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
-                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer transition-colors"
-                    >
-                      <UserPlus size={13} />
-                      Bulk Assign
-                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
-                        {selected.size}
-                      </span>
-                    </button>
-                  )}
-                  {/* Risk owner: bulk request a revised due date for eligible selected cases. */}
-                  {role === 'risk-owner' && bulkRequestEligible.length > 0 && (
-                    <button
-                      onClick={() => setBulkRequestDueOpen(true)}
-                      title={`Request a revised due date for ${bulkRequestEligible.length} selected case${bulkRequestEligible.length === 1 ? '' : 's'}`}
-                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-brand-700 bg-canvas-elevated border-canvas-border hover:border-brand-200 cursor-pointer transition-colors"
-                    >
-                      <CalendarClock size={13} />
-                      Request Date Change
-                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full tabular-nums">
-                        {bulkRequestEligible.length}
-                      </span>
-                    </button>
-                  )}
-                  {/* Auditor: bulk review pending revised-due-date requests. */}
-                  {role !== 'risk-owner' && bulkReviewEligible.length > 0 && (
-                    <button
-                      onClick={() => setBulkReviewDueOpen(true)}
-                      title={`Review ${bulkReviewEligible.length} pending due-date request${bulkReviewEligible.length === 1 ? '' : 's'}`}
-                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-white bg-mitigated border-mitigated hover:bg-mitigated-700 cursor-pointer transition-colors"
-                    >
-                      <CalendarClock size={13} />
-                      Review Date Changes
-                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
-                        {bulkReviewEligible.length}
-                      </span>
-                    </button>
-                  )}
+                  {/* Bulk Actions — one CTA grouping every multi-select action.
+                      Always visible; inactive until a case is selected, then it
+                      activates (and reveals the persona's applicable actions). */}
+                  {(() => {
+                    const active = selected.size > 0;
+                    const items: { key: string; label: string; icon: ElementType; count: number; onClick: () => void }[] = [
+                      { key: 'comment', label: 'Comment', icon: MessageSquare, count: selected.size, onClick: () => { setBulkCommentText(''); setCommentModalOpen(true); } },
+                      ...(role === 'risk-owner' && can('exc_classify')
+                        ? [{ key: 'classify', label: 'Bulk Classify', icon: Tag, count: selected.size, onClick: beginBulkClassify }]
+                        : []),
+                      ...(role !== 'risk-owner'
+                        ? [{ key: 'review', label: 'Bulk Review', icon: ClipboardList, count: selected.size, onClick: beginBulkReview }]
+                        : []),
+                      ...(can('exc_assign')
+                        ? [{ key: 'assign', label: 'Bulk Assign', icon: UserPlus, count: selected.size, onClick: () => setBulkAssignOpen(true) }]
+                        : []),
+                      ...(role === 'risk-owner' && bulkRequestEligible.length > 0
+                        ? [{ key: 'reqdue', label: 'Request Date Change', icon: CalendarClock, count: bulkRequestEligible.length, onClick: () => setBulkRequestDueOpen(true) }]
+                        : []),
+                      ...(role !== 'risk-owner' && bulkReviewEligible.length > 0
+                        ? [{ key: 'revdue', label: 'Review Date Changes', icon: CalendarClock, count: bulkReviewEligible.length, onClick: () => setBulkReviewDueOpen(true) }]
+                        : []),
+                    ];
+                    return (
+                      <div className="relative">
+                        <button
+                          type="button"
+                          disabled={!active}
+                          onClick={() => active && setBulkMenuOpen(o => !o)}
+                          aria-haspopup="menu"
+                          aria-expanded={bulkMenuOpen && active}
+                          title={active ? `Bulk actions for ${selected.size} selected case${selected.size === 1 ? '' : 's'}` : 'Select one or more cases to enable bulk actions'}
+                          className={`flex items-center gap-1.5 h-8 px-3 text-[12px] font-medium rounded-[8px] border transition-colors ${
+                            active
+                              ? 'text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer'
+                              : 'text-ink-400 bg-canvas-elevated border-canvas-border cursor-not-allowed'
+                          }`}
+                        >
+                          <Layers size={13} />
+                          Bulk Actions
+                          {active && (
+                            <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
+                              {selected.size}
+                            </span>
+                          )}
+                          <ChevronDown size={13} className={`transition-transform ${bulkMenuOpen && active ? 'rotate-180' : ''}`} />
+                        </button>
+                        <AnimatePresence>
+                          {bulkMenuOpen && active && (
+                            <>
+                              <div className="fixed inset-0 z-[55]" onClick={() => setBulkMenuOpen(false)} />
+                              <motion.div
+                                initial={{ opacity: 0, y: -4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -4 }}
+                                transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }}
+                                className="absolute left-0 top-full mt-1.5 z-[56] w-60 bg-canvas-elevated border border-canvas-border rounded-[10px] shadow-lg py-1"
+                                role="menu"
+                              >
+                                {items.map((item) => {
+                                  const Icon = item.icon;
+                                  return (
+                                    <button
+                                      key={item.key}
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => { setBulkMenuOpen(false); item.onClick(); }}
+                                      className="w-full flex items-center gap-2.5 px-3 h-9 text-[12.5px] font-medium text-ink-700 hover:bg-brand-50 hover:text-brand-700 cursor-pointer transition-colors text-left"
+                                    >
+                                      <Icon size={14} className="text-ink-500 shrink-0" />
+                                      <span className="flex-1">{item.label}</span>
+                                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full tabular-nums">
+                                        {item.count}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </motion.div>
+                            </>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })()}
                 </div>
               }
               headerExtras={
@@ -1126,6 +1218,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
           <ClassifyExceptionDrawer
             key="classify-drawer"
             exception={drawerException}
+            onPostComment={(text, attachment) => postComment(text, drawer?.scopeIds ?? [drawerException.id], attachment)}
             actionableId={plannedActionableId}
             scopeCount={clScope.length}
             bulkSkipped={drawer.bulkSkipped}
@@ -1335,6 +1428,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             key="classification-drawer"
             exception={drawerException}
             role={role}
+            onPostComment={(text, attachment) => postComment(text, drawer?.scopeIds ?? [drawerException.id], attachment)}
             onClose={() => setDrawer(null)}
             onDecision={() => setDrawer(null)}
           />
@@ -1344,6 +1438,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             key="action-drawer"
             exception={drawerException}
             role={role}
+            onPostComment={(text, attachment) => postComment(text, drawer?.scopeIds ?? [drawerException.id], attachment)}
             onClose={() => setDrawer(null)}
             onDecision={(decision, { implementation, comment }) => {
               const nowIso = new Date().toISOString();
@@ -1424,6 +1519,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             exception={drawerException}
             bulkId={drawerException.bulkId}
             linkedCases={linkedCases}
+            onPostComment={(text, attachment) => postComment(text, drawer?.scopeIds ?? [drawerException.id], attachment)}
             onClose={() => setDrawer(null)}
             onSubmit={({ note, evidence, implementation, comment }) => {
               const nowIso = new Date().toISOString();
@@ -1666,6 +1762,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               extraColumns={sourceQuery ? QUERY_TABLES[sourceQuery.id] : undefined}
               role={role}
               onAction={(kind, target) => { setDetailExceptionId(null); runExceptionAction(kind, target); }}
+              onComment={(text, attachment) => postComment(text, [ex.id], attachment)}
               onClose={() => setDetailExceptionId(null)}
             />
           );
@@ -1681,6 +1778,59 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             key="atr-modal"
             onClose={() => setAtrModalOpen(false)}
           />
+        )}
+        {commentModalOpen && (
+          <div key="bulk-comment-modal">
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50"
+              onClick={() => setCommentModalOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[520px] bg-canvas-elevated shadow-xl border border-canvas-border rounded-[16px] z-[60] flex flex-col"
+              role="dialog" aria-label="Comment on selected cases"
+            >
+              <header className="shrink-0 px-6 pt-5 pb-4 flex items-start justify-between gap-4 border-b border-canvas-border">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full"><MessageSquare size={11} /> Bulk</span>
+                    <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight">Comment on {selected.size} case{selected.size === 1 ? '' : 's'}</h2>
+                  </div>
+                  <p className="text-[12.5px] text-ink-500 leading-snug">
+                    Posts to every selected case as the {personaName(persona)}. The {personaName(persona === 'risk-owner' ? 'auditor' : 'risk-owner')} will be notified and can reply on each case.
+                  </p>
+                </div>
+                <button onClick={() => setCommentModalOpen(false)} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close"><X size={16} /></button>
+              </header>
+              <div className="px-6 py-5">
+                <label htmlFor="bulk-comment" className="sr-only">Comment</label>
+                <textarea
+                  id="bulk-comment"
+                  autoFocus
+                  value={bulkCommentText}
+                  onChange={(e) => setBulkCommentText(e.target.value)}
+                  onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && bulkCommentText.trim()) { e.preventDefault(); postComment(bulkCommentText, [...selected]); setCommentModalOpen(false); } }}
+                  rows={4}
+                  placeholder="Write a comment for the selected cases…"
+                  className="w-full resize-y rounded-[8px] border border-canvas-border bg-canvas-elevated px-3 py-2.5 text-[13px] text-ink-900 leading-relaxed placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-[3px] focus:ring-brand-600/20 transition-colors"
+                />
+              </div>
+              <footer className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3">
+                <button type="button" onClick={() => setCommentModalOpen(false)} className="h-9 px-5 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-[#F4F2F7] cursor-pointer transition-colors">Cancel</button>
+                <button
+                  type="button"
+                  disabled={!bulkCommentText.trim()}
+                  onClick={() => { postComment(bulkCommentText, [...selected]); setCommentModalOpen(false); }}
+                  className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-[8px] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send size={14} /> Post comment
+                </button>
+              </footer>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

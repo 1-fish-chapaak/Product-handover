@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Calendar, ArrowRight, FileText, Paperclip, CheckCircle2, User, Tag, RotateCcw, ClipboardCheck, CornerUpLeft, ExternalLink, Link as LinkIcon } from 'lucide-react';
+import { X, Calendar, ArrowRight, FileText, Paperclip, CheckCircle2, User, Tag, RotateCcw, ClipboardCheck, CornerUpLeft, ExternalLink, Link as LinkIcon, MessageSquare, Send } from 'lucide-react';
 import { GRC_CASE_DETAILS } from '../../data/mockData';
 import type {
   GrcException,
@@ -57,10 +57,31 @@ interface Props {
   linkedExceptions?: GrcException[];
   /** Deep-dive into a specific linked exception (re-opens the detail). */
   onSelectLinked?: (ex: GrcException) => void;
+  /** Post a free-form comment (with an optional attachment) to this case's
+   *  thread. Always available to both personas — the comment channel is never
+   *  disabled by case status or phase. When omitted (read-only hosts), the
+   *  composer is hidden. */
+  onComment?: (text: string, attachment?: { name: string }) => void;
   onClose: () => void;
 }
 
-export default function ExceptionDetailDrawer({ exception: ex, extraColumns, role, onAction, linkedExceptions, onSelectLinked, onClose }: Props) {
+export default function ExceptionDetailDrawer({ exception: ex, extraColumns, role, onAction, linkedExceptions, onSelectLinked, onComment, onClose }: Props) {
+  // Always-on comment composer — never gated by case status, phase, or review.
+  const [commentText, setCommentText] = useState('');
+  const [commentAttachment, setCommentAttachment] = useState<{ name: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const personaLabel = role === 'auditor' ? 'Auditor' : 'Risk Owner';
+  const personaInitials = role === 'auditor' ? 'AU' : 'RO';
+  const otherPersonaLabel = role === 'auditor' ? 'Risk Owner' : 'Auditor';
+  // Anything typed or attached counts as an unsent comment — the case actions
+  // are then held until it's posted (or cleared).
+  const hasUnsentComment = !!commentText.trim() || !!commentAttachment;
+  const submitComment = () => {
+    if (!hasUnsentComment || !onComment) return;
+    onComment(commentText.trim(), commentAttachment ?? undefined);
+    setCommentText('');
+    setCommentAttachment(null);
+  };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
@@ -297,29 +318,105 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
             </section>
           )}
 
-          {/* Activity journey — everything that happened to this case */}
-          {activity.length > 0 && (
-            <section>
-              <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Activity Journey</h3>
-              <ol className="space-y-3.5">
-                {activity.map((entry) => (
-                  <li key={entry.id} className="flex gap-3">
-                    <div className="shrink-0 w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center"><User size={13} /></div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="text-[12.5px] text-ink-800"><span className="font-semibold">{entry.author}</span> <span className="text-ink-500">[{entry.role}]</span></div>
-                        <span className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">{entry.timestamp}</span>
-                      </div>
-                      <p className="text-[12.5px] text-ink-700 leading-snug mt-0.5">{entry.message}</p>
-                      {entry.comment && (
-                        <div className="mt-2 px-3 py-2 bg-[#FAFAFB] border border-canvas-border rounded-[8px] text-[12px] text-ink-700 leading-relaxed">{entry.comment}</div>
-                      )}
+          {/* Activity & comments — the always-on channel between the Risk Owner
+              and the Auditor. The composer is never disabled by case status,
+              phase, or review outcome: the two personas can always talk here. */}
+          <section>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em]">Activity &amp; Comments</h3>
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-500">
+                <MessageSquare size={12} className="text-brand-600" />
+                Risk Owner and Auditor can comment anytime
+              </span>
+            </div>
+
+            {/* Composer — always available to whichever persona is active. */}
+            {onComment && (
+              <div className="flex gap-3 mb-5">
+                <div className="shrink-0 w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-[10px] font-semibold tracking-wider" aria-hidden="true">
+                  {personaInitials}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <label htmlFor="case-comment" className="sr-only">Add a comment as the {personaLabel}</label>
+                  <textarea
+                    id="case-comment"
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); submitComment(); } }}
+                    rows={2}
+                    placeholder={`Comment as the ${personaLabel} — the ${otherPersonaLabel} will be notified and can reply.`}
+                    className="w-full resize-y rounded-[8px] border border-canvas-border bg-canvas-elevated px-3 py-2 text-[12.5px] text-ink-900 leading-relaxed placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-[3px] focus:ring-brand-600/20 transition-colors"
+                  />
+                  {commentAttachment && (
+                    <div className="mt-2 inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1.5 bg-brand-50 border border-brand-100 rounded-full text-[11.5px] text-ink-700">
+                      <Paperclip size={11} className="text-brand-600" /> {commentAttachment.name}
+                      <button type="button" onClick={() => setCommentAttachment(null)} aria-label="Remove attachment" className="w-4 h-4 inline-flex items-center justify-center rounded-full text-ink-500 hover:text-ink-800 hover:bg-white cursor-pointer"><X size={11} /></button>
                     </div>
-                  </li>
-                ))}
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) setCommentAttachment({ name: f.name }); e.target.value = ''; }}
+                  />
+                  <div className="flex items-center justify-between gap-3 mt-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        title="Attach a file"
+                        className="inline-flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium text-ink-600 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 hover:text-brand-700 cursor-pointer transition-colors"
+                      >
+                        <Paperclip size={13} /> Attach
+                      </button>
+                      <span className="text-[11px] text-ink-400 truncate"><kbd className="font-mono text-[10px] text-ink-500">⌘↵</kbd> to post · visible to both personas.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={submitComment}
+                      disabled={!hasUnsentComment}
+                      className="inline-flex items-center gap-1.5 h-8 px-3.5 text-[12.5px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-[8px] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Send size={13} /> Post Comment
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Thread — newest first (comments and actions interleaved). */}
+            {activity.length > 0 ? (
+              <ol className="space-y-3.5">
+                {activity.map((entry) => {
+                  const isComment = entry.kind === 'comment';
+                  return (
+                    <li key={entry.id} className="flex gap-3">
+                      <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${isComment ? 'bg-brand-50 text-brand-600' : 'bg-[#F4F2F7] text-ink-500'}`}>
+                        {isComment ? <MessageSquare size={13} /> : <User size={13} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="text-[12.5px] text-ink-800"><span className="font-semibold">{entry.author}</span> <span className="text-ink-500">[{entry.role}]</span></div>
+                          <span className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">{entry.timestamp}</span>
+                        </div>
+                        <p className="text-[12.5px] text-ink-700 leading-snug mt-0.5">{entry.message}</p>
+                        {entry.comment && (
+                          <div className="mt-2 px-3 py-2 bg-brand-50/50 border-l-2 border-brand-300 rounded-r-[8px] text-[12px] text-ink-800 leading-relaxed">{entry.comment}</div>
+                        )}
+                        {entry.attachment && (
+                          <span className="mt-2 inline-flex items-center gap-1.5 h-7 px-2.5 bg-white border border-canvas-border rounded-full text-[11.5px] text-ink-700">
+                            <Paperclip size={11} className="text-brand-600" /> {entry.attachment.name}
+                          </span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ol>
-            </section>
-          )}
+            ) : (
+              <p className="text-[12px] text-ink-400 py-2">No activity yet. Start the conversation with a comment above.</p>
+            )}
+          </section>
 
           {/* All data fields — joined row from the source query's output table */}
           <section>
@@ -366,6 +463,11 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
         {/* Footer — persona-aware actions (same as the Exceptions tab) + Close */}
         <footer className="shrink-0 px-7 py-4 border-t border-canvas-border flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
+            {hasUnsentComment && actions.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-mitigated-700 mr-1">
+                <MessageSquare size={12} /> Post your comment to continue.
+              </span>
+            )}
             {actions.length > 0 ? (
               actions.map(a => {
                 const Icon = ACTION_ICON[a.kind];
@@ -373,9 +475,10 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
                   <button
                     key={a.kind}
                     type="button"
+                    disabled={hasUnsentComment}
                     onClick={() => onAction?.(a.kind, ex)}
-                    title={`${a.label} · ${role === 'risk-owner' ? 'Risk Owner' : 'Auditor'} action`}
-                    className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-[8px] cursor-pointer transition-colors"
+                    title={hasUnsentComment ? 'Post your comment first, then continue with this action.' : `${a.label} · ${role === 'risk-owner' ? 'Risk Owner' : 'Auditor'} action`}
+                    className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-[8px] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Icon size={14} /> {a.label}
                   </button>
