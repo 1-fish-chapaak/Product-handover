@@ -11,7 +11,7 @@ import { VIEW_PERMISSIONS } from './data/rbac';
 import EmptyState from './components/shared/EmptyState';
 import LoginView from './components/auth/LoginView';
 import { Lock } from 'lucide-react';
-import { GENERATED_REPORTS } from './data/mockData';
+import { GENERATED_REPORTS, GENERATED_REPORTS_KEY } from './data/mockData';
 import Sidebar from './components/sidebar/Sidebar';
 import ChatView from './components/chat/ChatView';
 import ArtifactPanel from './components/artifacts/ArtifactPanel';
@@ -36,6 +36,7 @@ import ReportBuilder from './components/reports/ReportBuilder';
 import AuditPlanningView from './components/audit/AuditPlanningView';
 import AuditPlanningPage from './components/audit/AuditPlanningPage';
 import EngagementsView from './components/audit/EngagementsView';
+import SoxIcfrApp from './components/sox-icfr/SoxIcfrApp';
 import EngagementOverviewView from './components/audit/EngagementOverviewView';
 import ClosedCaseSamplingView from './components/audit/ClosedCaseSamplingView';
 import MyQueueView from './components/audit/MyQueueView';
@@ -50,6 +51,13 @@ import ControlLibraryView from './components/governance/ControlLibraryView';
 import ControlTestingView from './components/execution/ControlTestingView';
 import EvidenceView from './components/execution/EvidenceView';
 import AIConciergeView from './components/intelligence/AIConciergeView';
+import DocumentForensicsView from './components/intelligence/concierge/tools/DocumentForensicsView';
+import ImageAnalyticsView from './components/intelligence/concierge/tools/ImageAnalyticsView';
+import SpeechAuditorView from './components/intelligence/concierge/tools/SpeechAuditorView';
+import TableExtractorView from './components/intelligence/concierge/tools/TableExtractorView';
+import MedicalReportReaderView from './components/intelligence/concierge/tools/MedicalReportReaderView';
+import InsightsAnomalyView from './components/intelligence/concierge/tools/InsightsAnomalyView';
+import RACMGeneratorView from './components/intelligence/concierge/tools/RACMGeneratorView';
 import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
 import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
@@ -156,6 +164,7 @@ function AppInner() {
     closeExecutionPanel,
     setExceptionRole,
     launchWorkflowBuilderWithPrompt,
+    launchWorkflowBuilderInChat,
     setWorkflowBuilderSeedPrompt,
     openNotificationDrawer,
     closeNotificationDrawer,
@@ -231,7 +240,7 @@ function AppInner() {
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
   const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
-  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' };
+  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge'; sourceFiles?: string[] };
   const [racmEditorContext, setRacmEditorContext] = useState<RacmEditorContext | null>(null);
   const openRacmFullEditor = (ctx: RacmEditorContext) => {
     setRacmEditorContext(ctx);
@@ -258,20 +267,26 @@ function AppInner() {
   }, []); // run once on mount
   type CustomTemplate = typeof CUSTOM_TEMPLATES[number];
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
+  // The old demo seeds — filtered out of any previously persisted blob so the
+  // Custom section only ever shows templates the user actually created.
+  const DEMO_TEMPLATE_IDS = new Set(['ct-custom-01', 'ct-custom-02', 'ct-003', 'ct-004', 'ct-005', 'ct-006']);
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>(() => {
     try {
       const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed as CustomTemplate[];
+        if (Array.isArray(parsed)) {
+          return (parsed as CustomTemplate[]).filter(t => !DEMO_TEMPLATE_IDS.has(t.id));
+        }
       }
     } catch { /* ignore */ }
-    return CUSTOM_TEMPLATES;
+    return [];
   });
   useEffect(() => {
     try { localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(customTemplates)); } catch { /* ignore */ }
   }, [customTemplates]);
   const addCustomTemplate = (t: CustomTemplate) => setCustomTemplates(prev => [t, ...prev]);
+  const removeCustomTemplate = (id: string) => setCustomTemplates(prev => prev.filter(t => t.id !== id));
 
   useEffect(() => {
     if (mainScrollRef.current) {
@@ -542,7 +557,7 @@ function AppInner() {
                     queries: 1,
                   };
                   try {
-                    const key = 'irame.reports.generatedReports.v7';
+                    const key = GENERATED_REPORTS_KEY;
                     const raw = localStorage.getItem(key);
                     const arr = raw ? JSON.parse(raw) : [];
                     if (Array.isArray(arr) && !arr.some((r: { id: string }) => r.id === newReport.id)) {
@@ -800,6 +815,7 @@ function AppInner() {
             }}
             customTemplates={customTemplates}
             onAddCustomTemplate={addCustomTemplate}
+            onRemoveCustomTemplate={removeCustomTemplate}
             focusReportId={focusReportId}
             onFocusReportConsumed={() => setFocusReportId(null)}
           />
@@ -824,6 +840,9 @@ function AppInner() {
             existingTemplateNames={[...REPORT_TEMPLATES.map(t => t.name), ...customTemplates.map(t => t.name)]}
           />
         );
+
+      case 'sox-icfr':
+        return <SoxIcfrApp onBack={() => setView('engagements')} />;
 
       case 'engagements':
         return (
@@ -918,6 +937,7 @@ function AppInner() {
             racmName={racmEditorContext?.racmName ?? 'Procurement SOP · Budget to Payment RACM'}
             racmId={racmEditorContext?.racmId}
             processLabel={racmEditorContext?.processLabel}
+            sourceFiles={racmEditorContext?.sourceFiles}
           />
         );
 
@@ -949,9 +969,34 @@ function AppInner() {
 
       // Intelligence — AI Concierge
       case 'ai-concierge':
+        // The "Workflow Builder" tile redirects into the Ask IRA chat (Workflow
+        // mode + Recent Workflows launcher) rather than the standalone journey.
+        return <AIConciergeView setView={setView} onLaunchWorkflowBuilder={launchWorkflowBuilderInChat} />;
       case 'ai-concierge-forensics':
+        return <DocumentForensicsView onBack={() => setView('ai-concierge')} />;
       case 'ai-concierge-table-extractor':
-        return <AIConciergeView setView={setView} onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt} />;
+        return <TableExtractorView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-image':
+        return <ImageAnalyticsView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-speech':
+        return <SpeechAuditorView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-medical':
+        return <MedicalReportReaderView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-insights':
+        return <InsightsAnomalyView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-racm':
+        return (
+          <RACMGeneratorView
+            onBack={() => setView('ai-concierge')}
+            onOpenEditor={(name, sourceFiles) => openRacmFullEditor({
+              racmId: 'racm-generated',
+              racmName: name,
+              processLabel: '',
+              backView: 'ai-concierge',
+              sourceFiles,
+            })}
+          />
+        );
 
       case 'ai-concierge-workflow-builder':
         return (

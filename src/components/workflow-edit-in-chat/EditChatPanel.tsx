@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { ArrowLeft, CheckCircle2, Eye, Link2, Play, Send, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Eye, Link2, Play, Send, ShieldCheck } from 'lucide-react';
 import QueryClarificationCard, { type QueryClarificationData } from '../chat/QueryClarificationCard';
 import type { AttachmentSelection } from '../chat/DataPickerModal';
 import StepOutputView from '../concierge-workflow-builder/StepOutputView';
@@ -306,7 +306,7 @@ function ChatBubble({
                 onClick={onViewWorkspace}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-white border border-canvas-border hover:border-brand-300 hover:text-brand-700 text-ink-600 text-[0.75rem] font-semibold px-3 py-2 transition-colors cursor-pointer"
               >
-                <Sparkles size={12} />
+                <Eye size={12} />
                 View Workspace
               </button>
             )}

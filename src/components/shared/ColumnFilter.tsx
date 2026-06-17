@@ -54,13 +54,17 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
     const onDocClick = (e: MouseEvent) => {
       if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
     };
-    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    // Capture + stopPropagation so an open menu consumes Escape itself and it
+    // never reaches a parent modal's focus-trap (which would close the modal).
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); }
+    };
     document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('keydown', onEsc);
+    document.addEventListener('keydown', onEsc, true);
     return () => {
       clearTimeout(t);
       document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onEsc);
+      document.removeEventListener('keydown', onEsc, true);
     };
   }, [open]);
 

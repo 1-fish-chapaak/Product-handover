@@ -8,7 +8,7 @@ function defaultGroupName(): string {
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   X, Search, Layers, FileText, Database, Upload, Check, Mail, Plus, Loader2, Folder,
-  AlertTriangle, Lock,
+  AlertTriangle, Lock, Star,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import ConfirmationModal from '../shared/ConfirmationModal';
@@ -18,6 +18,7 @@ import {
   type DataSource,
 } from '../data-sources/sources';
 import { useDialogA11y } from './useModalA11y';
+import { useFavouriteSources } from '../data-sources/useFavouriteSources';
 
 // ─── Selected attachment shape ───────────────────────────────────────────────
 // Three flavours of selection:
@@ -48,15 +49,23 @@ interface Props {
   // the chat-composer copy; callers embedding the picker elsewhere (e.g. a
   // workflow executor) can override it to match their context.
   attachHint?: React.ReactNode;
+  // When the picker is opened to EDIT an existing composer selection, seed it so
+  // the already-attached items show as selected: each source id ticks its list
+  // row, each file appears (ready) in the Upload tab. Confirm then REPLACES the
+  // selection, so unchecking in the modal removes it from the composer too.
+  initialSourceIds?: string[];
+  initialFiles?: File[];
 }
 
-type TabId = 'all' | 'file' | 'integrated' | 'upload' | 'connect';
+type TabId = 'all' | 'file' | 'integrated' | 'upload' | 'connect' | 'favourites' | 'folder';
 
 const CHAT_TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
-  { id: 'upload',     label: 'Upload',   icon: Upload },
-  { id: 'all',        label: 'All Data', icon: Layers },
-  { id: 'file',       label: 'Files',    icon: FileText },
-  { id: 'integrated', label: 'DB',       icon: Database },
+  { id: 'favourites', label: 'Favourites', icon: Star },
+  { id: 'upload',     label: 'Upload',     icon: Upload },
+  { id: 'all',        label: 'All Data',   icon: Layers },
+  { id: 'file',       label: 'Files',      icon: FileText },
+  { id: 'folder',     label: 'Folder',     icon: Folder },
+  { id: 'integrated', label: 'DB',         icon: Database },
 ];
 
 // kh-add mode surfaces two tabs: Upload (drop files/folders) and Connect
@@ -76,8 +85,11 @@ export default function DataPickerModal({
   confirmLabel = 'Add',
   mode = 'chat',
   attachHint,
+  initialSourceIds,
+  initialFiles,
 }: Props) {
   const { addToast } = useToast();
+  const { favs, toggleFav } = useFavouriteSources();
   const TABS = mode === 'kh-add' ? KH_ADD_TABS : CHAT_TABS;
   const [tab, setTab] = useState<TabId>(defaultTab);
   const [search, setSearch] = useState('');
@@ -104,21 +116,56 @@ export default function DataPickerModal({
   // inputs live inside UploadPanel — it registers these triggers so the buttons work.
   const uploadTriggersRef = useRef<{ chooseFiles: () => void; chooseFolder: () => void } | null>(null);
 
-  // Reset transient state when the modal opens fresh. The starting tab is
-  // caller-controlled (defaults to Upload, which is the chat default).
+  // Reset transient state when the modal opens. The starting tab is caller-
+  // controlled (defaults to Upload). If the caller passed an existing selection
+  // (initialSourceIds / initialFiles), seed it so the picker reflects what's
+  // already attached: source ids tick their rows, files appear ready in Upload.
   useEffect(() => {
     if (open) {
       setTab(defaultTab);
       setSearch('');
-      setSelectedSourceIds(new Set());
-      setPendingUploads([]);
+      setSelectedSourceIds(new Set(initialSourceIds ?? []));
+      setPendingUploads(
+        (initialFiles ?? []).map((f, i) => ({
+          localId: `seed-${i}-${f.name}`,
+          name: f.name,
+          sizeBytes: f.size,
+          progress: 100,
+          status: 'ready' as const,
+          file: f,
+          path: (f as File & { webkitRelativePath?: string }).webkitRelativePath || undefined,
+        })),
+      );
       setCombinedName('');
       setConfirmClose(false);
       setConfirmAttach(false);
       setPendingRemoval(null);
       setSubmitting(false);
     }
+    // initialSourceIds/initialFiles are read only at open time (intentionally not
+    // deps) so a parent re-render while open doesn't wipe in-modal edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultTab]);
+
+  // Folders among this session's uploads, grouped by top-level path segment
+  // ("Q1 SOX/file.csv" → "Q1 SOX"). Loose files (no "/") aren't folders.
+  // Drives the Folder tab + its count (0 until a folder is uploaded).
+  const uploadedFolders = useMemo(() => {
+    const map = new Map<string, { name: string; files: PendingUpload[]; bytes: number }>();
+    for (const u of pendingUploads) {
+      if (!u.path || !u.path.includes('/')) continue;
+      const top = u.path.split('/')[0];
+      let e = map.get(top);
+      if (!e) { e = { name: top, files: [], bytes: 0 }; map.set(top, e); }
+      e.files.push(u);
+      e.bytes += u.sizeBytes;
+    }
+    return [...map.values()];
+  }, [pendingUploads]);
+
+  const removeFolder = (name: string) => {
+    setPendingUploads(prev => prev.filter(u => !(u.path && u.path.includes('/') && u.path.split('/')[0] === name)));
+  };
 
   const tabCounts = useMemo<Record<TabId, number>>(() => ({
     all:        SEED.length,
@@ -126,19 +173,22 @@ export default function DataPickerModal({
     integrated: SEED.filter(d => INTEGRATED_TYPES.includes(d.type)).length,
     upload:     pendingUploads.length,
     connect:    0, // no count — connect tab is an action, not a list
-  }), [pendingUploads.length]);
+    favourites: SEED.filter(d => favs.has(d.id)).length,
+    folder:     uploadedFolders.length,
+  }), [pendingUploads.length, favs, uploadedFolders.length]);
 
   const visibleSources = useMemo(() => {
     return SEED
       .filter(d => {
         if (tab === 'all') return true;
+        if (tab === 'favourites') return favs.has(d.id);
         if (tab === 'file') return d.type === 'file';
         if (tab === 'integrated') return INTEGRATED_TYPES.includes(d.type);
-        return false; // upload tab handles its own list
+        return false; // upload / folder tabs handle their own lists
       })
       .filter(d => !search || d.name.toLowerCase().includes(search.toLowerCase()) || d.subtype.toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [tab, search]);
+  }, [tab, search, favs]);
 
   // All currently-selected existing sources (across every tab) — shown alongside
   // fresh uploads in the combined list on the Upload tab.
@@ -149,6 +199,10 @@ export default function DataPickerModal({
   // Only fully-validated, fully-uploaded files count toward the Attach total —
   // in-flight files aren't attachable yet, and errored files never are.
   const readyUploads = pendingUploads.filter(u => u.status === 'ready');
+  // Seeded uploads (pre-attached, localId 'seed-…') are ALREADY saved on the
+  // composer, so closing shouldn't warn about discarding them — only net-new
+  // ready uploads count toward the unsaved-close guard.
+  const newReadyUploads = readyUploads.filter(u => !u.localId.startsWith('seed-'));
   const totalSelected = selectedSourceIds.size + readyUploads.length;
   const inFlightCount = pendingUploads.filter(u => u.status === 'validating' || u.status === 'uploading').length;
   // Failed files block the confirm — the user must remove them first (a real
@@ -160,7 +214,7 @@ export default function DataPickerModal({
   // (backdrop, ✕, Cancel) and confirm first. Errored-only files have nothing to
   // lose, so they don't trigger the guard.
   const requestClose = () => {
-    if (inFlightCount > 0 || readyUploads.length > 0) setConfirmClose(true);
+    if (inFlightCount > 0 || newReadyUploads.length > 0) setConfirmClose(true);
     else onClose();
   };
 
@@ -256,7 +310,7 @@ export default function DataPickerModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="absolute inset-0 bg-text/30 backdrop-blur-[3px]"
+            className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]"
             onClick={requestClose}
           />
           <motion.div
@@ -268,8 +322,8 @@ export default function DataPickerModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.98 }}
             transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-            className={`relative w-[820px] max-w-[94vw] max-h-[88vh] bg-white rounded-2xl shadow-2xl border border-border-light flex flex-col overflow-hidden ${
-              mode === 'kh-add' ? 'h-[680px]' : 'h-[600px]'
+            className={`relative max-w-[94vw] max-h-[88vh] bg-white rounded-2xl shadow-2xl border border-border-light flex flex-col overflow-hidden ${
+              mode === 'kh-add' ? 'w-[820px] h-[680px]' : 'w-[960px] h-[600px]'
             }`}
           >
             {/* Header — title + close on their own row. */}
@@ -293,7 +347,7 @@ export default function DataPickerModal({
                   <button
                     key={t.id}
                     onClick={() => setTab(t.id)}
-                    className={`relative flex items-center gap-1.5 px-3.5 h-10 text-[0.75rem] font-medium transition-colors cursor-pointer ${
+                    className={`relative flex items-center gap-1.5 px-3.5 h-10 shrink-0 whitespace-nowrap text-[0.75rem] font-medium transition-colors cursor-pointer ${
                       isActive ? 'text-primary' : 'text-ink-500 hover:text-ink-800'
                     }`}
                   >
@@ -321,7 +375,7 @@ export default function DataPickerModal({
                   <button
                     type="button"
                     onClick={() => uploadTriggersRef.current?.chooseFiles()}
-                    className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 h-8 shrink-0 whitespace-nowrap rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
                   >
                     <Upload size={13} />
                     Choose files
@@ -329,7 +383,7 @@ export default function DataPickerModal({
                   <button
                     type="button"
                     onClick={() => uploadTriggersRef.current?.chooseFolder()}
-                    className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-paper-200 bg-white text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 h-8 shrink-0 whitespace-nowrap rounded-md border border-paper-200 bg-white text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
                   >
                     <Folder size={13} />
                     Choose folder
@@ -340,7 +394,7 @@ export default function DataPickerModal({
 
             {/* Search — sits directly below the tabs (it filters the active
                 tab's list). Chat mode, data tabs only; the Upload tab has none. */}
-            {mode === 'chat' && tab !== 'upload' && (
+            {mode === 'chat' && tab !== 'upload' && tab !== 'folder' && (
               <div className="px-5 py-3">
                 <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
@@ -373,6 +427,12 @@ export default function DataPickerModal({
                   triggersRef={uploadTriggersRef}
                   mode={mode}
                 />
+              ) : tab === 'folder' ? (
+                <FolderUploadsList
+                  folders={uploadedFolders}
+                  onRemoveFolder={removeFolder}
+                  onGoToUpload={() => setTab('upload')}
+                />
               ) : (
                 <SourceList
                   sources={visibleSources}
@@ -381,6 +441,9 @@ export default function DataPickerModal({
                   search={search}
                   showRequestIntegration={tab === 'integrated'}
                   onRequestIntegration={() => addToast({ type: 'info', message: 'Opening request form…' })}
+                  favs={favs}
+                  onToggleFav={toggleFav}
+                  emptyFavourites={tab === 'favourites'}
                 />
               )}
             </div>
@@ -456,9 +519,9 @@ export default function DataPickerModal({
             description={
               inFlightCount > 0
                 ? <>{inFlightCount} file{inFlightCount === 1 ? ' is' : 's are'} still uploading.
-                  {' '}Closing now will cancel {inFlightCount === 1 ? 'it' : 'them'}{readyUploads.length > 0 ? ` and discard ${readyUploads.length} ready file${readyUploads.length === 1 ? '' : 's'}` : ''}.</>
-                : <>{readyUploads.length} file{readyUploads.length === 1 ? ' is' : 's are'} ready to add.
-                  {' '}Closing now will discard {readyUploads.length === 1 ? 'it' : 'them'} — {readyUploads.length === 1 ? 'it won’t' : 'they won’t'} be added to your Knowledge Hub.</>
+                  {' '}Closing now will cancel {inFlightCount === 1 ? 'it' : 'them'}{newReadyUploads.length > 0 ? ` and discard ${newReadyUploads.length} ready file${newReadyUploads.length === 1 ? '' : 's'}` : ''}.</>
+                : <>{newReadyUploads.length} file{newReadyUploads.length === 1 ? ' is' : 's are'} ready to add.
+                  {' '}Closing now will discard {newReadyUploads.length === 1 ? 'it' : 'them'} — {newReadyUploads.length === 1 ? 'it won’t' : 'they won’t'} be added to your Knowledge Hub.</>
             }
             confirmLabel={inFlightCount > 0 ? 'Cancel uploads' : 'Discard'}
             cancelLabel={inFlightCount > 0 ? 'Keep uploading' : 'Keep files'}
@@ -514,15 +577,25 @@ interface SourceListProps {
   search: string;
   showRequestIntegration: boolean;
   onRequestIntegration: () => void;
+  favs: Set<string>;
+  onToggleFav: (id: string) => void;
+  /** True on the Favourites tab — tailors the empty state copy. */
+  emptyFavourites?: boolean;
 }
 
-function SourceList({ sources, selectedIds, onToggle, search, showRequestIntegration, onRequestIntegration }: SourceListProps) {
+function SourceList({ sources, selectedIds, onToggle, search, showRequestIntegration, onRequestIntegration, favs, onToggleFav, emptyFavourites }: SourceListProps) {
   if (sources.length === 0) {
     return (
       <div className="text-center py-16 px-6">
-        <Search size={24} className="mx-auto text-ink-400 mb-3" />
+        {emptyFavourites && !search
+          ? <Star size={24} className="mx-auto text-ink-400 mb-3" />
+          : <Search size={24} className="mx-auto text-ink-400 mb-3" />}
         <p className="text-[0.8125rem] text-ink-500">
-          {search ? `No sources match "${search}".` : 'No sources available.'}
+          {search
+            ? `No sources match "${search}".`
+            : emptyFavourites
+              ? 'No favourites yet — tap the ☆ on any source to add it.'
+              : 'No sources available.'}
         </p>
         {showRequestIntegration && !search && (
           <a
@@ -547,6 +620,8 @@ function SourceList({ sources, selectedIds, onToggle, search, showRequestIntegra
             source={s}
             selected={selectedIds.has(s.id)}
             onToggle={() => onToggle(s.id)}
+            fav={favs.has(s.id)}
+            onToggleFav={() => onToggleFav(s.id)}
           />
         ))}
       </ul>
@@ -573,18 +648,18 @@ function SourceList({ sources, selectedIds, onToggle, search, showRequestIntegra
   );
 }
 
-function SourceRow({ source, selected, onToggle }: { source: DataSource; selected: boolean; onToggle: () => void }) {
+function SourceRow({ source, selected, onToggle, fav, onToggleFav }: { source: DataSource; selected: boolean; onToggle: () => void; fav: boolean; onToggleFav: () => void }) {
   // One calm brand tile tone for every source so the icon frame reads the same
   // here as it does in the Knowledge Hub; the glyph still distinguishes type.
   const { icon: Icon, label: typeLabel } = TYPE_META[source.type];
+  // Row + star are siblings (not nested buttons) so both stay valid, focusable
+  // controls; the hover/selected tint lives on the <li> so it spans the whole row.
   return (
-    <li>
+    <li className={`flex items-stretch transition-colors ${selected ? 'bg-primary-xlight' : 'hover:bg-paper-50'}`}>
       <button
         type="button"
         onClick={onToggle}
-        className={`w-full flex items-center gap-3 px-5 py-3 text-left transition-colors cursor-pointer ${
-          selected ? 'bg-primary-xlight' : 'hover:bg-paper-50'
-        }`}
+        className="flex-1 min-w-0 flex items-center gap-3 pl-5 pr-0 py-3 text-left cursor-pointer"
         aria-pressed={selected}
       >
         {/* Checkbox — mirrors the shared DS Checkbox (src/components/shared/Checkbox.tsx)
@@ -616,7 +691,75 @@ function SourceRow({ source, selected, onToggle }: { source: DataSource; selecte
           {typeLabel}
         </span>
       </button>
+
+      {/* Favourite star — sibling control so it doesn't toggle row selection. */}
+      <button
+        type="button"
+        onClick={onToggleFav}
+        aria-label={fav ? `Remove ${source.name} from favourites` : `Add ${source.name} to favourites`}
+        aria-pressed={fav}
+        title={fav ? 'Favourited' : 'Add to favourites'}
+        className="shrink-0 px-4 flex items-center justify-center cursor-pointer text-ink-400 hover:text-amber-500 transition-colors"
+      >
+        <Star size={15} className={fav ? 'text-amber-500 fill-amber-500' : ''} />
+      </button>
     </li>
+  );
+}
+
+// ─── Folder tab — folders uploaded this session ─────────────────────────────
+// Reflects folders the user has uploaded (via the Upload tab's folder drop);
+// empty (count 0) until one is added. Each folder commits as one source on Add.
+function FolderUploadsList({
+  folders,
+  onRemoveFolder,
+  onGoToUpload,
+}: {
+  folders: { name: string; files: PendingUpload[]; bytes: number }[];
+  onRemoveFolder: (name: string) => void;
+  onGoToUpload: () => void;
+}) {
+  if (folders.length === 0) {
+    return (
+      <div className="text-center py-16 px-6">
+        <Folder size={24} className="mx-auto text-ink-400 mb-3" />
+        <p className="text-[0.8125rem] text-ink-500">No folders uploaded yet.</p>
+        <button
+          type="button"
+          onClick={onGoToUpload}
+          className="inline-flex items-center gap-2 mt-4 px-3 h-9 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
+        >
+          <Upload size={13} />
+          Upload a folder
+        </button>
+      </div>
+    );
+  }
+  return (
+    <ul className="divide-y divide-border-light">
+      {folders.map(f => (
+        <li key={f.name} className="flex items-center gap-3 px-5 py-3 hover:bg-paper-50 transition-colors">
+          <div className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-brand-50 text-brand-700">
+            <Folder size={15} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[0.8125rem] font-medium text-ink-800 truncate">{f.name}</div>
+            <div className="text-[0.6875rem] text-ink-500 mt-0.5 tabular-nums truncate">
+              {f.files.length} {f.files.length === 1 ? 'file' : 'files'} · {formatBytesShort(f.bytes)}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onRemoveFolder(f.name)}
+            aria-label={`Remove folder ${f.name}`}
+            title="Remove folder"
+            className="shrink-0 p-1.5 rounded-md text-ink-400 hover:text-risk hover:bg-risk-50 transition-colors cursor-pointer"
+          >
+            <X size={14} />
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 

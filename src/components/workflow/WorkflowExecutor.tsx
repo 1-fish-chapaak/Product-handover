@@ -8,7 +8,7 @@ import {
   ChevronDown, ChevronUp, X, Database, Search, Check,
   TrendingUp, Users, Percent, CalendarDays, Pencil, AlertCircle,
   Link2, RefreshCw, Info, Wand2, Upload, Folder, ScanLine,
-  Sparkles, ArrowUp, Layers, Plus, PanelRightClose,
+  MessageSquare, ArrowUp, Layers, Plus, PanelRightClose,
 } from 'lucide-react';
 import type { WorkflowRunSeed } from './workflowRunSeed';
 import { PlanSection, type ExecutorParameters } from '../concierge-workflow-builder/PlanPanel';
@@ -2294,7 +2294,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     >
                       <div className="flex items-center gap-2 mb-1">
                         <span className="w-6 h-6 rounded-lg bg-brand-100 text-brand-600 flex items-center justify-center">
-                          <Sparkles size={13} />
+                          <MessageSquare size={13} />
                         </span>
                         <h3 className="text-[13px] font-bold text-ink-800">Ask a follow-up</h3>
                       </div>
@@ -2374,6 +2374,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                 setActiveTab={setWsTab}
                 onClose={() => setRightOpen(false)}
                 planSlot={<PlanSection workflow={workflow} />}
+                showHistory
                 onShareResults={onShareResults}
                 onOpenInKnowledgeHub={onOpenInKnowledgeHub}
                 onComposeInChat={onComposeInChat}

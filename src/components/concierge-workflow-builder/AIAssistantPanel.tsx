@@ -577,7 +577,7 @@ export default function AIAssistantPanel({
               className={[
                 'w-full inline-flex items-center justify-center gap-2 rounded-xl text-[0.8125rem] font-semibold px-4 py-3 transition-all',
                 primaryAction.enabled
-                  ? 'bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white cursor-pointer shadow-[0_1px_0_rgba(106,18,205,0.08),0_8px_20px_-8px_rgba(106,18,205,0.45)]'
+                  ? 'bg-brand-600 hover:bg-brand-500 text-white cursor-pointer shadow-[0_1px_0_rgba(106,18,205,0.08),0_8px_20px_-8px_rgba(106,18,205,0.45)]'
                   : 'bg-brand-100 text-brand-300 cursor-not-allowed',
               ].join(' ')}
             >
@@ -629,7 +629,7 @@ export default function AIAssistantPanel({
                 className={[
                   'w-8 h-8 rounded-lg flex items-center justify-center transition-all',
                   input.trim()
-                    ? 'bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white cursor-pointer shadow-sm'
+                    ? 'bg-brand-600 hover:bg-brand-500 text-white cursor-pointer shadow-sm'
                     : 'bg-canvas-border text-ink-400 cursor-not-allowed',
                 ].join(' ')}
               >
@@ -663,7 +663,7 @@ export function ViewPreviewCard({ onClick, revealed }: ViewPreviewCardProps) {
           'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[0.75rem] font-semibold transition-all shrink-0',
           revealed
             ? 'bg-brand-50 text-brand-400 cursor-not-allowed'
-            : 'text-white bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 shadow-[0_8px_16px_-10px_rgba(106,18,205,0.5)] cursor-pointer',
+            : 'text-white bg-brand-600 hover:bg-brand-500 shadow-[0_8px_16px_-10px_rgba(106,18,205,0.5)] cursor-pointer',
         ].join(' ')}
       >
         <Eye size={13} />
@@ -918,7 +918,7 @@ export function ToleranceAdjustCard({
             'flex-1 inline-flex items-center justify-center gap-2 rounded-lg text-[0.75rem] font-semibold px-3 py-2 transition-all',
             disabled || running
               ? 'bg-brand-100 text-brand-400 cursor-not-allowed'
-              : 'bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white cursor-pointer shadow-[0_8px_16px_-8px_rgba(106,18,205,0.45)]',
+              : 'bg-brand-600 hover:bg-brand-500 text-white cursor-pointer shadow-[0_8px_16px_-8px_rgba(106,18,205,0.45)]',
           ].join(' ')}
         >
           {running ? (

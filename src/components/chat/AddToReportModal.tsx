@@ -47,7 +47,7 @@ interface AddToReportModalProps {
   onRetryLoad?: () => void;
 }
 
-const ACCENT = 'violet' as const;
+const ACCENT = 'brand' as const;
 const NAME_MAX = 80;
 const DESC_MAX = 240;
 const DESC_SOFT = Math.round(DESC_MAX * 0.8);
@@ -219,8 +219,8 @@ export function AddToReportModal({
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-canvas-border">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
-            <FileText size={15} className="text-violet-700" />
+          <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center">
+            <FileText size={15} className="text-brand-700" />
           </div>
           <div>
             <h2 id={titleId} className="text-[0.9375rem] font-semibold text-ink-800">
@@ -237,7 +237,7 @@ export function AddToReportModal({
           onClick={handleClose}
           aria-label="Close"
           disabled={submitting}
-          className="min-h-[40px] min-w-[40px] flex items-center justify-center text-ink-400 hover:text-ink-600 rounded-md hover:bg-paper-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="min-h-[40px] min-w-[40px] flex items-center justify-center text-ink-400 hover:text-ink-600 rounded-md hover:bg-paper-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <X size={16} />
         </button>
@@ -258,7 +258,7 @@ export function AddToReportModal({
                 aria-controls="add-rpt-existing-panel"
                 aria-selected={mode === 'existing'}
                 onClick={() => setMode('existing')}
-                className={`flex-1 text-[0.75rem] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
+                className={`flex-1 text-[0.75rem] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
                   mode === 'existing' ? 'bg-white text-ink-800 shadow-sm' : 'text-ink-500 hover:text-ink-700'
                 }`}
               >
@@ -271,7 +271,7 @@ export function AddToReportModal({
                 aria-controls="add-rpt-new-panel"
                 aria-selected={mode === 'new'}
                 onClick={() => setMode('new')}
-                className={`flex-1 text-[0.75rem] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
+                className={`flex-1 text-[0.75rem] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
                   mode === 'new' ? 'bg-white text-ink-800 shadow-sm' : 'text-ink-500 hover:text-ink-700'
                 }`}
               >
@@ -298,7 +298,7 @@ export function AddToReportModal({
                     aria-controls="rpt-list"
                     aria-activedescendant={navigableIds[highlight] ? `rpt-row-${navigableIds[highlight]}` : undefined}
                     disabled={loading || !!loadError || noReportsAtAll}
-                    className="w-full h-10 pl-9 pr-3 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300 transition-all disabled:bg-paper-50 disabled:text-ink-400"
+                    className="w-full h-10 pl-9 pr-3 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition-all disabled:bg-paper-50 disabled:text-ink-400"
                   />
                 </div>
 
@@ -321,7 +321,7 @@ export function AddToReportModal({
                       title="No reports yet"
                       description="Start a draft report to capture findings, KPIs, and charts in one place."
                       primaryAction={{ label: 'Start a draft', onClick: () => setMode('new') }}
-                      accent="violet"
+                      accent="brand"
                     />
                   ) : noSearchHits ? (
                     <ModalEmptyState
@@ -333,7 +333,7 @@ export function AddToReportModal({
                         onClick: () => { setNewName(searchTrim); setMode('new'); },
                       }}
                       secondaryAction={{ label: 'Clear search', onClick: () => setSearch('') }}
-                      accent="violet"
+                      accent="brand"
                     />
                   ) : (
                     filtered.map(r => {
@@ -360,18 +360,18 @@ export function AddToReportModal({
                             const idx = navigableIds.indexOf(r.id);
                             if (idx >= 0) setHighlight(idx);
                           }}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
                             disabled
                               ? 'border-canvas-border bg-paper-50 opacity-60 cursor-not-allowed'
                               : selectedId === r.id
-                                ? 'border-violet-300 bg-violet-50/50 ring-1 ring-violet-200 cursor-pointer'
+                                ? 'border-brand-300 bg-brand-50/50 ring-1 ring-brand-200 cursor-pointer'
                                 : isHighlighted
-                                  ? 'border-violet-200 bg-violet-50/30 cursor-pointer'
-                                  : 'border-canvas-border hover:border-violet-200 hover:bg-paper-50 cursor-pointer'
+                                  ? 'border-brand-200 bg-brand-50/30 cursor-pointer'
+                                  : 'border-canvas-border hover:border-brand-200 hover:bg-paper-50 cursor-pointer'
                           }`}
                         >
-                          <div className="w-8 h-8 rounded-md bg-violet-50 flex items-center justify-center shrink-0">
-                            {isFinal ? <Lock size={14} className="text-ink-400" /> : <FileText size={14} className="text-violet-700" />}
+                          <div className="w-8 h-8 rounded-md bg-brand-50 flex items-center justify-center shrink-0">
+                            {isFinal ? <Lock size={14} className="text-ink-400" /> : <FileText size={14} className="text-brand-700" />}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="text-[0.8125rem] font-medium text-ink-800 truncate">
@@ -383,7 +383,7 @@ export function AddToReportModal({
                             </div>
                           </div>
                           {alreadyAdded ? (
-                            <span className="text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 shrink-0">
+                            <span className="text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-600 shrink-0">
                               Already added
                             </span>
                           ) : (
@@ -394,7 +394,7 @@ export function AddToReportModal({
                             </span>
                           )}
                           {selectedId === r.id && !disabled && (
-                            <div className="w-5 h-5 rounded-full bg-violet-600 flex items-center justify-center shrink-0">
+                            <div className="w-5 h-5 rounded-full bg-brand-600 flex items-center justify-center shrink-0">
                               <Check size={12} className="text-white" />
                             </div>
                           )}
@@ -429,7 +429,7 @@ export function AddToReportModal({
                     className={`w-full h-10 px-3 rounded-lg border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 transition-all ${
                       nameError
                         ? 'border-risk/40 focus:ring-risk/20 focus:border-risk'
-                        : 'border-canvas-border focus:ring-violet-200 focus:border-violet-300'
+                        : 'border-canvas-border focus:ring-brand-200 focus:border-brand-300'
                     }`}
                   />
                   <div className="flex items-center justify-between mt-1 gap-2">
@@ -452,7 +452,7 @@ export function AddToReportModal({
                     placeholder="What this report covers..." rows={2}
                     maxLength={DESC_MAX}
                     aria-describedby="new-rpt-desc-counter"
-                    className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300 transition-all resize-none"
+                    className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition-all resize-none"
                   />
                   <div className="flex justify-end mt-1">
                     <span id="new-rpt-desc-counter" className={`text-[0.6875rem] tabular-nums ${
@@ -475,7 +475,7 @@ export function AddToReportModal({
                 icon={<FileText size={20} />}
                 title="Nothing to add"
                 description="This result has no KPIs, charts, or table columns to attach yet."
-                accent="violet"
+                accent="brand"
               />
             ) : (
               <>
@@ -494,7 +494,7 @@ export function AddToReportModal({
                         setAll(resultData.charts.map(c => c.id), true, setSelCharts);
                         setAll(resultData.table.columns, true, setSelCols);
                       }}
-                      className="text-[0.6875rem] font-medium text-violet-600 hover:text-violet-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                      className="text-[0.6875rem] font-medium text-brand-600 hover:text-brand-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
                     >
                       Select all
                     </button>
@@ -505,7 +505,7 @@ export function AddToReportModal({
                         setSelCharts(new Set());
                         setSelCols(new Set());
                       }}
-                      className="text-[0.6875rem] font-medium text-ink-500 hover:text-ink-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+                      className="text-[0.6875rem] font-medium text-ink-500 hover:text-ink-700 cursor-pointer min-h-[32px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
                     >
                       Clear
                     </button>
@@ -595,7 +595,7 @@ export function AddToReportModal({
             type="button"
             onClick={() => { setSubmitError(null); setStep('pick'); }}
             disabled={submitting}
-            className="text-[0.75rem] font-medium text-ink-500 hover:text-ink-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed min-h-[40px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+            className="text-[0.75rem] font-medium text-ink-500 hover:text-ink-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed min-h-[40px] px-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
           >
             Back
           </button>
@@ -619,7 +619,7 @@ export function AddToReportModal({
               type="button"
               onClick={handleClose}
               disabled={submitting}
-              className="min-h-[40px] px-3.5 rounded-md text-[0.75rem] font-semibold text-ink-600 hover:bg-paper-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+              className="min-h-[40px] px-3.5 rounded-md text-[0.75rem] font-semibold text-ink-600 hover:bg-paper-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
             >
               Cancel
             </button>
@@ -629,7 +629,7 @@ export function AddToReportModal({
               type="button"
               disabled={!canProceed}
               onClick={() => setStep('sections')}
-              className="inline-flex items-center gap-1 min-h-[40px] px-3.5 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-[0.75rem] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-1"
+              className="inline-flex items-center gap-1 min-h-[40px] px-3.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-[0.75rem] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-1"
             >
               Next <ChevronRight size={13} />
             </button>
@@ -639,7 +639,7 @@ export function AddToReportModal({
               type="button"
               disabled={totalSelected === 0 || submitting}
               onClick={handleConfirm}
-              className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-[0.75rem] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-1"
+              className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-[0.75rem] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-1"
             >
               {submitting ? <ButtonSpinner /> : <FileText size={13} />}
               {submitError && !submitting ? 'Retry' : submitting ? 'Adding…' : 'Add to Report'}
@@ -667,7 +667,7 @@ function Highlighted({ text, query }: { text: string; query: string }) {
   return (
     <>
       {text.slice(0, idx)}
-      <mark className="bg-violet-100 text-violet-700 rounded-sm px-0.5">
+      <mark className="bg-brand-100 text-brand-700 rounded-sm px-0.5">
         {text.slice(idx, idx + query.length)}
       </mark>
       {text.slice(idx + query.length)}
