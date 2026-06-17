@@ -98,26 +98,32 @@ export default function AtrDocument({
 
   return (
     <article className={`report-printable ${maxWidthClass} mx-auto bg-canvas-elevated border border-canvas-border rounded-[12px] shadow-sm overflow-hidden`}>
-      {/* Purple gradient letterhead — IRAME.AI lockup + title over the
-          floating-line art, matching the report covers. */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-[#3b0b72] to-[#6a12cd] px-9 pt-8 pb-7">
+      {/* Purple gradient letterhead — title over the woven line art, matching
+          the report covers. */}
+      <div
+        className="relative overflow-hidden px-9 pt-9 pb-8"
+        style={{ backgroundImage: 'linear-gradient(125deg, #3b0b72 0%, #6a12cd 62%, #6a12cd 100%)' }}
+      >
         <div
           className="absolute inset-0 z-0 print:hidden"
-          style={{ maskImage: 'linear-gradient(to right, transparent 35%, white 70%)', WebkitMaskImage: 'linear-gradient(to right, transparent 35%, white 70%)' }}
+          style={{ backgroundImage: 'radial-gradient(135% 160% at 100% -10%, rgba(255,255,255,0.20), rgba(255,255,255,0) 52%), radial-gradient(120% 130% at 0% 120%, rgba(8,2,24,0.32), rgba(8,2,24,0) 55%)' }}
+          aria-hidden="true"
+        />
+        <div
+          className="absolute inset-0 z-0 print:hidden"
+          style={{ maskImage: 'linear-gradient(to right, transparent 18%, white 56%)', WebkitMaskImage: 'linear-gradient(to right, transparent 18%, white 56%)' }}
           aria-hidden="true"
         >
-          <FloatingLines
-            enabledWaves={['top', 'middle']}
-            lineCount={6}
-            lineDistance={6}
-            bendRadius={4}
-            bendStrength={-0.3}
-            interactive
-            parallax={false}
-            color="#e879f9"
-            opacity={0.3}
-          />
+          <FloatingLines enabledWaves={['top', 'middle', 'bottom']} lineCount={[7, 8, 7]} lineDistance={5} interactive={false} parallax={false} color="#c084fc" opacity={0.22} />
+          <FloatingLines enabledWaves={['top', 'middle']} lineCount={6} lineDistance={7} interactive={false} parallax={false} color="#f5d0fe" opacity={0.4} />
         </div>
+        {/* Readability scrim — darkens the left so the title and byline keep
+            full contrast while the weave stays dense on the right. */}
+        <div
+          className="absolute inset-0 z-0"
+          style={{ backgroundImage: 'linear-gradient(to right, rgba(17,5,42,0.48), rgba(17,5,42,0.14) 40%, rgba(17,5,42,0) 62%)' }}
+          aria-hidden="true"
+        />
         <div className="relative z-10 flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
             <h1 className="text-[2rem] font-semibold tracking-tight leading-tight text-white">Action Taken Report</h1>

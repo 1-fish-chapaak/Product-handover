@@ -185,15 +185,32 @@ export function ReportBrandBanner({ title, actions, children, className = '', gr
   return (
     <div
       className={`relative overflow-hidden px-9 pt-9 pb-8 ${className}`}
-      style={{ backgroundImage: `linear-gradient(to bottom right, ${from}, ${to})` }}
+      style={{ backgroundImage: `linear-gradient(125deg, ${from} 0%, ${to} 62%, ${to} 100%)` }}
     >
+      {/* Deepen the lower-left and lift the upper-right so the panel reads with
+          depth instead of a flat sheet. */}
       <div
         className="absolute inset-0 z-0 print:hidden"
-        style={{ maskImage: 'linear-gradient(to right, transparent 35%, white 70%)', WebkitMaskImage: 'linear-gradient(to right, transparent 35%, white 70%)' }}
+        style={{ backgroundImage: 'radial-gradient(135% 160% at 100% -10%, rgba(255,255,255,0.20), rgba(255,255,255,0) 52%), radial-gradient(120% 130% at 0% 120%, rgba(8,2,24,0.32), rgba(8,2,24,0) 55%)' }}
+        aria-hidden="true"
+      />
+      {/* Woven line art — two layers for a denser, refined weave. No mouse
+          interaction; masked to the right so the title stays crisp. */}
+      <div
+        className="absolute inset-0 z-0 print:hidden"
+        style={{ maskImage: 'linear-gradient(to right, transparent 18%, white 56%)', WebkitMaskImage: 'linear-gradient(to right, transparent 18%, white 56%)' }}
         aria-hidden="true"
       >
-        <FloatingLines enabledWaves={['top', 'middle']} lineCount={6} lineDistance={6} bendRadius={4} bendStrength={-0.3} interactive parallax={false} color="#e879f9" opacity={0.3} />
+        <FloatingLines enabledWaves={['top', 'middle', 'bottom']} lineCount={[7, 8, 7]} lineDistance={5} interactive={false} parallax={false} color="#c084fc" opacity={0.22} />
+        <FloatingLines enabledWaves={['top', 'middle']} lineCount={6} lineDistance={7} interactive={false} parallax={false} color="#f5d0fe" opacity={0.4} />
       </div>
+      {/* Readability scrim — darkens the left, where the title and byline sit,
+          so text keeps full contrast while the weave stays dense on the right. */}
+      <div
+        className="absolute inset-0 z-0"
+        style={{ backgroundImage: 'linear-gradient(to right, rgba(17,5,42,0.48), rgba(17,5,42,0.14) 40%, rgba(17,5,42,0) 62%)' }}
+        aria-hidden="true"
+      />
       <div className="relative z-10 flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0 flex-1">
           <h1 className="text-[2rem] font-semibold tracking-tight leading-tight text-white mb-1.5">{title}</h1>
