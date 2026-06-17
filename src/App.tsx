@@ -240,7 +240,7 @@ function AppInner() {
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
   const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
-  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge'; sourceFiles?: string[] };
+  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm'; backLabel?: string; sourceFiles?: string[] };
   const [racmEditorContext, setRacmEditorContext] = useState<RacmEditorContext | null>(null);
   const openRacmFullEditor = (ctx: RacmEditorContext) => {
     setRacmEditorContext(ctx);
@@ -256,7 +256,8 @@ function AppInner() {
         racmId: params.get('racmId') ?? '',
         racmName: params.get('racmName') ?? 'RACM',
         processLabel: params.get('processLabel') ?? '',
-        backView: 'business-processes',
+        backView: (params.get('backView') as RacmEditorContext['backView']) ?? 'business-processes',
+        backLabel: params.get('backLabel') ?? undefined,
       });
       setView('racm-full-editor');
     } else if (params.get('view') === 'audit-risk-register') {
@@ -934,6 +935,7 @@ function AppInner() {
         return (
           <RacmFullPageEditor
             onBack={() => setView(racmEditorContext?.backView ?? 'engagement-overview')}
+            backLabel={racmEditorContext?.backLabel}
             racmName={racmEditorContext?.racmName ?? 'Procurement SOP · Budget to Payment RACM'}
             racmId={racmEditorContext?.racmId}
             processLabel={racmEditorContext?.processLabel}
@@ -992,7 +994,8 @@ function AppInner() {
               racmId: 'racm-generated',
               racmName: name,
               processLabel: '',
-              backView: 'ai-concierge',
+              backView: 'ai-concierge-racm',
+              backLabel: 'Back to RACM',
               sourceFiles,
             })}
           />

@@ -1,84 +1,17 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { Fragment, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { motion } from 'motion/react';
 import {
-  TableProperties, Download, ChevronDown, X, Search,
-  ShieldAlert, ListChecks, Layers, FileSpreadsheet, FileJson, FileText,
+  TableProperties, X, Search, FileSpreadsheet, FileJson, FileText,
   Upload, Sparkles, FileStack, Check, ArrowRight,
+  History, Trash2, ChevronDown, ChevronRight,
 } from 'lucide-react';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-} from 'recharts';
-import * as XLSX from 'xlsx';
 import { ConciergeFlow } from '../ConciergeKit';
 import type { PickedFile, HistoryJob, JobState } from '../types';
 import ListPlaceholder from '../../../shared/ListPlaceholder';
 import { Button } from '../../../shared/Button';
-
-// ─── Field model ─────────────────────────────────────────────────────────────
-// Ported verbatim from irame-mvp's racm-field-definitions.js — the full 25-field
-// RACM schema. The result matrix renders every field (wide + scrollable) per the
-// prototype's RACM convention; blanks show "—".
-
-type RacmField = { key: string; label: string; group: string; width: number };
-
-const RACM_FIELDS: RacmField[] = [
-  { key: 'riskId', label: 'Risk ID', group: 'IDENTIFICATION', width: 80 },
-  { key: 'controlId', label: 'Control ID', group: 'IDENTIFICATION', width: 90 },
-  { key: 'processArea', label: 'Process Area', group: 'IDENTIFICATION', width: 160 },
-  { key: 'subProcess', label: 'Sub-Process', group: 'IDENTIFICATION', width: 160 },
-  { key: 'riskCategory', label: 'Risk Category', group: 'RISK', width: 140 },
-  { key: 'riskDescription', label: 'Risk Description', group: 'RISK', width: 280 },
-  { key: 'riskRating', label: 'Risk Rating', group: 'RISK', width: 110 },
-  { key: 'riskLikelihood', label: 'Likelihood', group: 'RISK', width: 100 },
-  { key: 'riskImpact', label: 'Impact', group: 'RISK', width: 90 },
-  { key: 'controlObjective', label: 'Control Objective', group: 'CONTROL', width: 240 },
-  { key: 'controlActivity', label: 'Control Activity', group: 'CONTROL', width: 280 },
-  { key: 'controlType', label: 'Control Type', group: 'CONTROL', width: 120 },
-  { key: 'controlNature', label: 'Control Nature', group: 'CONTROL', width: 130 },
-  { key: 'controlFrequency', label: 'Frequency', group: 'CONTROL', width: 120 },
-  { key: 'controlOwner', label: 'Control Owner', group: 'CONTROL', width: 160 },
-  { key: 'controlEvidence', label: 'Control Evidence', group: 'CONTROL', width: 200 },
-  { key: 'assertionsCoveredCEAVOP', label: 'Assertions (CEAVOP)', group: 'FINANCIAL', width: 160 },
-  { key: 'financialStatementLineItem', label: 'FS Line Item', group: 'FINANCIAL', width: 180 },
-  { key: 'regulatoryReference', label: 'Regulatory Ref', group: 'FINANCIAL', width: 150 },
-  { key: 'keyReport', label: 'Key Report', group: 'REPORTING', width: 180 },
-  { key: 'ipeIceDetails', label: 'IPE/ICE Details', group: 'REPORTING', width: 180 },
-  { key: 'segregationOfDuties', label: 'Segregation of Duties', group: 'GOVERNANCE', width: 220 },
-  { key: 'managementReviewControl', label: 'Mgmt Review Control', group: 'GOVERNANCE', width: 220 },
-  { key: 'extractionConfidence', label: 'Confidence', group: 'GOVERNANCE', width: 120 },
-  { key: 'sopSectionReference', label: 'SOP Section', group: 'GOVERNANCE', width: 120 },
-];
-
-const FIELD_GROUPS: { key: string; label: string; fields: string[] }[] = [
-  { key: 'IDENTIFICATION', label: 'Identification', fields: ['riskId', 'controlId', 'processArea', 'subProcess'] },
-  { key: 'RISK', label: 'Risk Assessment', fields: ['riskCategory', 'riskDescription', 'riskRating', 'riskLikelihood', 'riskImpact'] },
-  { key: 'CONTROL', label: 'Control Design', fields: ['controlObjective', 'controlActivity', 'controlType', 'controlNature', 'controlFrequency', 'controlOwner', 'controlEvidence'] },
-  { key: 'FINANCIAL', label: 'Financial Reporting', fields: ['assertionsCoveredCEAVOP', 'financialStatementLineItem', 'regulatoryReference'] },
-  { key: 'REPORTING', label: 'Reporting & Evidence', fields: ['keyReport', 'ipeIceDetails'] },
-  { key: 'GOVERNANCE', label: 'Governance', fields: ['segregationOfDuties', 'managementReviewControl', 'extractionConfidence', 'sopSectionReference'] },
-];
-
-const WIDE_FIELDS = new Set([
-  'riskDescription', 'controlObjective', 'controlActivity',
-  'controlEvidence', 'segregationOfDuties', 'managementReviewControl',
-]);
-
-// ─── Colour maps (mirror irame-mvp's racm.constants) ─────────────────────────
-
-const RATING_PILL: Record<string, string> = {
-  Critical: 'text-red-700 bg-red-50 border-red-200',
-  High: 'text-orange-700 bg-orange-50 border-orange-200',
-  Medium: 'text-amber-700 bg-amber-50 border-amber-200',
-  Low: 'text-green-700 bg-green-50 border-green-200',
-};
-const CONFIDENCE_PILL: Record<string, string> = {
-  EXTRACTED: 'text-green-700 bg-green-50 border-green-200',
-  INFERRED: 'text-amber-700 bg-amber-50 border-amber-200',
-  RECOMMENDED: 'text-brand-700 bg-brand-50 border-brand-200',
-};
-const RATING_HEX: Record<string, string> = {
-  Critical: '#dc2626', High: '#ea580c', Medium: '#ca8a04', Low: '#16a34a',
-};
+import { Pill, type Tone } from '../../../shared/StatusBadge';
+import { DateFilterPicker, dateInFilter, DEFAULT_DATE_FILTER, type DateFilter } from '../../../shared/DateFilterPicker';
+import ConfirmationModal from '../../../shared/ConfirmationModal';
 
 // ─── Result type ─────────────────────────────────────────────────────────────
 
@@ -293,336 +226,6 @@ function buildResult(files: PickedFile[], options: Record<string, unknown>): Res
   return { entries: RACM_ENTRIES, fileName, summary, sourceFiles };
 }
 
-const LABELS = RACM_FIELDS.map((f) => f.label);
-const rowsForExport = (r: Result) => r.entries.map((e) => RACM_FIELDS.map((f) => e[f.key] ?? ''));
-
-function downloadBlob(name: string, blob: Blob) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-const csvCell = (v: string) => {
-  const s = String(v ?? '');
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
-function exportCsv(r: Result) {
-  const header = LABELS.map(csvCell).join(',');
-  const body = rowsForExport(r).map((row) => row.map(csvCell).join(',')).join('\n');
-  downloadBlob(`racm-${Date.now()}.csv`, new Blob([`${header}\n${body}`], { type: 'text/csv;charset=utf-8' }));
-}
-function exportJson(r: Result) {
-  downloadBlob(`racm-${Date.now()}.json`, new Blob([JSON.stringify(r.entries, null, 2)], { type: 'application/json' }));
-}
-function exportXlsx(r: Result) {
-  const ws = XLSX.utils.aoa_to_sheet([LABELS, ...rowsForExport(r)]);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'RACM');
-  XLSX.writeFile(wb, `racm-${Date.now()}.xlsx`);
-}
-
-// ─── Export menu (result header action) ──────────────────────────────────────
-
-function ExportMenu({ result }: { result: Result }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, []);
-  const items = [
-    { label: 'Excel (.xlsx)', icon: FileSpreadsheet, action: () => exportXlsx(result) },
-    { label: 'CSV', icon: FileText, action: () => exportCsv(result) },
-    { label: 'JSON', icon: FileJson, action: () => exportJson(result) },
-  ];
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 px-3.5 py-2 transition-colors cursor-pointer"
-      >
-        <Download size={14} /> Export <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="absolute right-0 mt-1 w-44 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_32px_rgba(15,8,30,0.16)] z-20 py-1">
-          {items.map((it) => {
-            const Icon = it.icon;
-            return (
-              <button
-                key={it.label}
-                onClick={() => { it.action(); setOpen(false); }}
-                className="w-full text-left inline-flex items-center gap-2 px-3 py-2 text-[0.8125rem] text-ink-600 hover:bg-paper-50/70 hover:text-brand-700 cursor-pointer"
-              >
-                <Icon size={14} /> {it.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Detail modal ────────────────────────────────────────────────────────────
-
-function FieldValue({ fieldKey, value }: { fieldKey: string; value: string }) {
-  if (fieldKey === 'riskRating' && value) {
-    return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[0.75rem] font-semibold border ${RATING_PILL[value] ?? 'text-ink-600 bg-paper-100 border-canvas-border'}`}>{value}</span>;
-  }
-  if (fieldKey === 'extractionConfidence' && value) {
-    return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[0.75rem] font-semibold border ${CONFIDENCE_PILL[value] ?? 'text-ink-600 bg-paper-100 border-canvas-border'}`}>{value}</span>;
-  }
-  return <span className="text-[0.8125rem] text-ink-800 whitespace-pre-wrap">{value || '—'}</span>;
-}
-
-function DetailModal({ entry, onClose }: { entry: RacmEntry | null; onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  return (
-    <AnimatePresence>
-      {entry && (
-        <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-        >
-          <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" onClick={onClose} />
-          <motion.div
-            initial={{ opacity: 0, y: 12, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.98 }}
-            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="relative w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border border-canvas-border bg-canvas-elevated shadow-[0_24px_64px_rgba(15,8,30,0.24)]"
-          >
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-5 py-3.5 border-b border-canvas-border bg-canvas-elevated">
-              <h3 className="text-[0.9375rem] font-semibold text-ink-900 truncate">
-                {entry.riskId} / {entry.controlId} — {entry.processArea}
-              </h3>
-              <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-md text-ink-400 hover:text-ink-800 hover:bg-paper-100 cursor-pointer shrink-0">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="px-5 py-4 space-y-6">
-              {FIELD_GROUPS.map((group) => (
-                <div key={group.key}>
-                  <h4 className="text-[0.8125rem] font-semibold text-brand-700 border-b border-brand-100 pb-1 mb-3">{group.label}</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
-                    {group.fields.map((fieldKey) => {
-                      const def = RACM_FIELDS.find((f) => f.key === fieldKey);
-                      const wide = WIDE_FIELDS.has(fieldKey);
-                      return (
-                        <div key={fieldKey} className={`space-y-1 ${wide ? 'sm:col-span-2' : ''}`}>
-                          <p className="text-[0.6875rem] font-medium text-ink-400">{def?.label ?? fieldKey}</p>
-                          <div className={wide ? 'rounded-md bg-paper-50/70 px-3 py-2' : ''}>
-                            <FieldValue fieldKey={fieldKey} value={entry[fieldKey]} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
-
-// ─── Summary dashboard ───────────────────────────────────────────────────────
-
-function StatCard({ icon: Icon, label, value, tone }: { icon: typeof ShieldAlert; label: string; value: number; tone: string }) {
-  return (
-    <div className="rounded-[12px] border border-canvas-border bg-canvas-elevated px-4 py-3.5 flex items-center gap-3">
-      <span className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
-        <Icon size={17} className="text-brand-700" strokeWidth={1.75} />
-      </span>
-      <div className="min-w-0">
-        <p className={`text-[1.5rem] font-semibold leading-none tabular-nums ${tone}`}>{value}</p>
-        <p className="text-[0.6875rem] text-ink-500 mt-1">{label}</p>
-      </div>
-    </div>
-  );
-}
-
-function Summary({ entries }: { entries: RacmEntry[] }) {
-  const stats = useMemo(() => {
-    const totalRisks = entries.length;
-    const uniqueControls = new Set(entries.map((e) => (e.controlActivity || '').toLowerCase().trim())).size;
-    const areaCounts = new Map<string, number>();
-    entries.forEach((e) => { const a = e.processArea || 'Unspecified'; areaCounts.set(a, (areaCounts.get(a) ?? 0) + 1); });
-    const ratingData = ['Critical', 'High', 'Medium', 'Low'].map((name) => ({
-      name, count: entries.filter((e) => e.riskRating === name).length, color: RATING_HEX[name],
-    }));
-    const areaData = [...areaCounts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
-    return { totalRisks, uniqueControls, processAreas: areaCounts.size, ratingData, areaData };
-  }, [entries]);
-
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard icon={ShieldAlert} label="Total risks" value={stats.totalRisks} tone="text-brand-700" />
-        <StatCard icon={ListChecks} label="Unique controls" value={stats.uniqueControls} tone="text-sky-600" />
-        <StatCard icon={Layers} label="Process areas" value={stats.processAreas} tone="text-compliant-700" />
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <div className="rounded-[12px] border border-canvas-border bg-canvas-elevated p-4">
-          <p className="text-[0.75rem] font-semibold text-ink-700 mb-2">Risk rating distribution</p>
-          <ResponsiveContainer width="100%" height={170}>
-            <BarChart data={stats.ratingData} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#ece8f3" horizontal={false} />
-              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#8b8595' }} />
-              <YAxis type="category" dataKey="name" width={64} tick={{ fontSize: 11, fill: '#5b5566' }} />
-              <Tooltip cursor={{ fill: 'rgba(106,18,205,0.05)' }} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #ece8f3' }} />
-              <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={18}>
-                {stats.ratingData.map((d) => <Cell key={d.name} fill={d.color} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="rounded-[12px] border border-canvas-border bg-canvas-elevated p-4">
-          <p className="text-[0.75rem] font-semibold text-ink-700 mb-2">Process area breakdown</p>
-          <div className="max-h-[170px] overflow-y-auto">
-            <table className="w-full text-left">
-              <tbody>
-                {stats.areaData.map((a) => (
-                  <tr key={a.name} className="border-t border-canvas-border first:border-t-0">
-                    <td className="py-1.5 text-[0.8125rem] text-ink-700">{a.name}</td>
-                    <td className="py-1.5 text-right text-[0.8125rem] font-semibold text-ink-600 tabular-nums">{a.count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Matrix cell + table ─────────────────────────────────────────────────────
-
-function MatrixCell({ field, value }: { field: RacmField; value: string }) {
-  if (!value) return <span className="text-ink-300">—</span>;
-  if (field.key === 'riskRating') {
-    return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[0.6875rem] font-semibold border ${RATING_PILL[value] ?? 'text-ink-600 bg-paper-100 border-canvas-border'}`}>{value}</span>;
-  }
-  if (field.key === 'extractionConfidence') {
-    return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[0.6875rem] font-semibold border ${CONFIDENCE_PILL[value] ?? 'text-ink-600 bg-paper-100 border-canvas-border'}`}>{value}</span>;
-  }
-  return <div className="truncate" style={{ maxWidth: field.width }} title={value}>{value}</div>;
-}
-
-function ResultView({ result }: { result: Result }) {
-  const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<RacmEntry | null>(null);
-  const [showSummary, setShowSummary] = useState(true);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return result.entries;
-    return result.entries.filter((e) => Object.values(e).some((v) => String(v).toLowerCase().includes(q)));
-  }, [query, result.entries]);
-
-  return (
-    <div className="space-y-5">
-      {/* Header row — count + summary toggle */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-[0.875rem] text-ink-600">
-          <span className="font-semibold text-ink-900 tabular-nums">{result.entries.length}</span> control{result.entries.length === 1 ? '' : 's'} generated from{' '}
-          <span className="text-ink-800">{result.fileName}</span>
-        </p>
-        <button
-          onClick={() => setShowSummary((s) => !s)}
-          className="text-[0.8125rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer"
-        >
-          {showSummary ? 'Hide summary' : 'Show summary'}
-        </button>
-      </div>
-
-      {showSummary && (
-        <>
-          <Summary entries={result.entries} />
-          <div className="rounded-[12px] border border-canvas-border bg-canvas-elevated p-4">
-            <p className="text-[0.75rem] font-semibold text-ink-700 mb-2">SOP analysis summary</p>
-            <ul className="space-y-1.5">
-              {result.summary.map((line, i) => (
-                <li key={i} className="flex items-start gap-2 text-[0.8125rem] text-ink-600 leading-relaxed">
-                  <span className="mt-1.5 w-1 h-1 rounded-full bg-brand-400 shrink-0" />
-                  {line}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </>
-      )}
-
-      {/* Wide matrix — full schema, scrollable */}
-      <div className="rounded-[12px] border border-canvas-border overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-canvas-border bg-paper-50/70 flex items-center justify-between gap-3 flex-wrap">
-          <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search entries…"
-              className="w-56 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-700 pl-8 pr-3 py-1.5 outline-none focus:border-brand-300"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-[0.6875rem] text-ink-400 hidden sm:inline">Scroll right for more columns →</span>
-            <span className="text-[0.75rem] text-ink-400 tabular-nums">{filtered.length} entries</span>
-          </div>
-        </div>
-        <div className="overflow-x-auto max-h-[30rem] overflow-y-auto">
-          <table className="min-w-max text-left border-collapse">
-            <thead className="sticky top-0 z-10 bg-paper-50">
-              <tr className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">
-                <th className="px-3 py-2.5 whitespace-nowrap">#</th>
-                {RACM_FIELDS.map((f) => (
-                  <th key={f.key} className="px-3 py-2.5 whitespace-nowrap" style={{ minWidth: f.width }}>{f.label}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((e, i) => (
-                <tr
-                  key={`${e.riskId}-${i}`}
-                  onClick={() => setSelected(e)}
-                  className="border-t border-canvas-border hover:bg-paper-50/50 cursor-pointer transition-colors"
-                >
-                  <td className="px-3 py-2 text-[0.75rem] text-ink-400 tabular-nums whitespace-nowrap">{i + 1}</td>
-                  {RACM_FIELDS.map((f) => (
-                    <td key={f.key} className="px-3 py-2 text-[0.8125rem] text-ink-800 align-top">
-                      <MatrixCell field={f} value={e[f.key]} />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={RACM_FIELDS.length + 1} className="px-3 py-10 text-center text-[0.8125rem] text-ink-400">
-                    No entries match your search.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <p className="text-[0.6875rem] text-ink-400">Click any row to see the full risk &amp; control detail.</p>
-
-      <DetailModal entry={selected} onClose={() => setSelected(null)} />
-    </div>
-  );
-}
-
 // ─── Create-RACM chooser — multi-file staging ────────────────────────────────
 // Reuses the shared ListPlaceholder. The two tiles ADD files to a staged list
 // (import a matrix and/or SOPs to extract); the user keeps adding, types optional
@@ -658,12 +261,125 @@ function SourcePill({ source }: { source: 'racm' | 'sop' }) {
   );
 }
 
+// ─── History helpers ─────────────────────────────────────────────────────────
+// The history model stores no source-type or absolute time, but the live job id
+// encodes the creation epoch (`job-<ms>-<seq>`) and the file extension implies the
+// source. We derive both so each row can read like an audit record.
+
+function inferSource(name: string): 'racm' | 'sop' {
+  const ext = name.split('.').pop()?.toLowerCase();
+  return ext === 'xlsx' || ext === 'xls' || ext === 'csv' ? 'racm' : 'sop';
+}
+
+function entrySource(files: string[]): 'racm' | 'sop' | 'mixed' {
+  if (files.length === 0) return 'sop';
+  const set = new Set(files.map(inferSource));
+  return set.size === 1 ? ([...set][0] as 'racm' | 'sop') : 'mixed';
+}
+
+function jobEpoch(id: string): number | null {
+  const m = id.match(/^job-(\d+)-/);
+  return m ? Number(m[1]) : null;
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function formatDateTime(ms: number): string {
+  const d = new Date(ms);
+  let h = d.getHours();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${h}:${mm} ${ampm}`;
+}
+
+function startOfDay(t: number): number {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+const STATUS_PILL: Record<string, { label: string; tone: Tone }> = {
+  COMPLETED: { label: 'Completed', tone: 'compliant' },
+  IN_PROGRESS: { label: 'In progress', tone: 'evidence' },
+  FAILED: { label: 'Failed', tone: 'risk' },
+  CANCELLED: { label: 'Cancelled', tone: 'draft' },
+};
+
+// Source tag — reuses the Sources-list pill for a single type; a neutral pill for
+// a consolidated run that mixed a matrix import with SOP extraction.
+function EntrySourceTag({ source }: { source: 'racm' | 'sop' | 'mixed' }) {
+  if (source === 'mixed') {
+    return (
+      <span className="shrink-0 inline-flex items-center rounded-md px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide text-ink-500 bg-paper-100">
+        Mixed
+      </span>
+    );
+  }
+  return <SourcePill source={source} />;
+}
+
+// ─── "What you'll get" preview ───────────────────────────────────────────────
+// Disabled per request — the attached-file list fills this space instead. Kept
+// here (commented) so it can be re-enabled by restoring <RacmPreview /> above.
+
+/*
+const RACM_FIELD_GROUPS = ['Identification', 'Risk Assessment', 'Control Design', 'Financial Reporting', 'Reporting & Evidence', 'Governance'];
+
+function RacmPreview() {
+  const controls = RACM_ENTRIES.length;
+  const processAreas = new Set(RACM_ENTRIES.map((e) => e.processArea)).size;
+  const critical = RACM_ENTRIES.filter((e) => e.riskRating === 'Critical').length;
+  const high = RACM_ENTRIES.filter((e) => e.riskRating === 'High').length;
+  return (
+    <div>
+      <h2 className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-ink-400 mb-3">What you'll get</h2>
+      <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
+        <p className="font-display text-[1.0625rem] text-ink-900 leading-snug">A full Risk &amp; Control Matrix</p>
+        <p className="mt-1 text-[0.8125rem] text-ink-500 leading-relaxed">25 fields per control — risks, controls, CEAVOP assertions, and governance, ready for your working papers.</p>
+
+        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[0.8125rem] text-ink-600">
+          <span><span className="font-mono tabular-nums font-semibold text-ink-900">{controls}</span> controls</span>
+          <span className="text-canvas-border" aria-hidden>·</span>
+          <span><span className="font-mono tabular-nums font-semibold text-ink-900">{processAreas}</span> process areas</span>
+          <span className="text-canvas-border" aria-hidden>·</span>
+          <span><span className="font-mono tabular-nums font-semibold text-ink-900">{critical}</span> Critical</span>
+          <span className="text-canvas-border" aria-hidden>·</span>
+          <span><span className="font-mono tabular-nums font-semibold text-ink-900">{high}</span> High</span>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-canvas-border">
+          <p className="text-[0.625rem] font-semibold uppercase tracking-wide text-ink-400 mb-2">Matrix structure</p>
+          <div className="flex flex-wrap gap-1.5">
+            {RACM_FIELD_GROUPS.map((g) => (
+              <span key={g} className="inline-flex items-center rounded-md bg-paper-100 px-2 py-1 text-[0.6875rem] font-medium text-ink-600">{g}</span>
+            ))}
+          </div>
+        </div>
+
+        <p className="mt-4 flex items-start gap-2 text-[0.75rem] text-ink-500 leading-relaxed">
+          <Sparkles size={13} className="text-brand-600 mt-0.5 shrink-0" />
+          AI-recommended controls are flagged so you can review before adopting.
+        </p>
+      </div>
+    </div>
+  );
+}
+*/
+
 // One orchestrated entrance — sections rise and settle on exponential ease-out.
 const REVEAL_CONTAINER = { hidden: {}, show: { transition: { staggerChildren: 0.06, delayChildren: 0.02 } } };
 const REVEAL_ITEM = {
   hidden: { opacity: 0, y: 8 },
   show: { opacity: 1, y: 0, transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] } },
 };
+
+// "How it works" steps shown below the upload cards on the empty RACM Generator home.
+const HOW_IT_WORKS_STEPS = [
+  { title: 'Upload SOP', sub: 'PDF, CSV, or image' },
+  { title: 'Document Parsing', sub: 'AI reads your document' },
+  { title: 'Risk Identification', sub: 'Extracts risks & gaps' },
+  { title: 'Control Mapping', sub: 'Maps controls to risks' },
+  { title: 'Generate RACM', sub: 'Structured matrix output' },
+];
 
 function RacmCreateChooser({
   options, setOption, submit,
@@ -753,7 +469,7 @@ function RacmCreateChooser({
     return (
       <motion.div variants={REVEAL_CONTAINER} initial="hidden" animate="show" className="flex flex-col h-full">
         <motion.div variants={REVEAL_ITEM} className="shrink-0 flex flex-wrap items-center justify-end gap-2.5">
-          <Button variant="primary" size="md" onClick={() => racmInputRef.current?.click()} leftIcon={<Upload size={15} />}>
+          <Button variant="outline" size="md" onClick={() => racmInputRef.current?.click()} leftIcon={<Upload size={15} />}>
             Add a RACM
           </Button>
           <Button variant="outline" size="md" onClick={() => sopInputRef.current?.click()} leftIcon={<Sparkles size={15} />}>
@@ -764,14 +480,14 @@ function RacmCreateChooser({
         <motion.div variants={REVEAL_ITEM} className="shrink-0 mt-8 mb-3 flex items-baseline justify-between gap-3">
           <h2 className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-ink-400">Sources</h2>
           <span className="text-[0.75rem] text-ink-400">
-            <span className="font-mono tabular-nums text-ink-600">{staged.length}</span> {staged.length === 1 ? 'file' : 'files'} ready
+            <span className="font-mono tabular-nums text-ink-600">{staged.length}</span> {staged.length === 1 ? 'file' : 'files'}
           </span>
         </motion.div>
 
         {/* Sources list — the only scrollable region. Hugs its content when there
             are a few files; shrinks and scrolls internally when there are many, so
             the page itself never scrolls. */}
-        <motion.div variants={REVEAL_ITEM} className="min-h-0 overflow-y-auto rounded-xl border border-canvas-border bg-canvas-elevated divide-y divide-canvas-border mb-4">
+        <motion.div variants={REVEAL_ITEM} className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-canvas-border bg-canvas-elevated divide-y divide-canvas-border mb-4">
           {staged.map((s) => {
             const Glyph = fileGlyph(s.file.name);
             const size = formatBytes(s.file.size);
@@ -781,10 +497,12 @@ function RacmCreateChooser({
                   <Glyph size={15} className={s.source === 'racm' ? 'text-evidence-700' : 'text-brand-600'} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[0.84375rem] text-ink-800 truncate">{s.file.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[0.84375rem] text-ink-800 truncate">{s.file.name}</p>
+                    <SourcePill source={s.source} />
+                  </div>
                   {size && <p className="text-[0.6875rem] text-ink-400 font-mono tabular-nums">{size}</p>}
                 </div>
-                <SourcePill source={s.source} />
                 <button
                   onClick={() => removeFile(s.file.name)}
                   aria-label={`Remove ${s.file.name}`}
@@ -797,7 +515,9 @@ function RacmCreateChooser({
           })}
         </motion.div>
 
-        <motion.div variants={REVEAL_ITEM} className="shrink-0 mt-auto">{instructions}</motion.div>
+        {/* "What you'll get" preview disabled per request — the Sources list fills this space instead. Re-enable with <RacmPreview />. */}
+
+        <motion.div variants={REVEAL_ITEM} className="shrink-0 mt-8">{instructions}</motion.div>
 
         <motion.div variants={REVEAL_ITEM} className="shrink-0 mt-6">{footer}</motion.div>
 
@@ -806,35 +526,56 @@ function RacmCreateChooser({
     );
   }
 
-  // ── Empty state — inviting, centered placeholder ───────────────────────────
+  // ── Empty state — placeholder + cards, then a "how it works" explainer ──────
   return (
-    <ListPlaceholder
-      icon={FileStack}
-      title="Start your RACM library"
-      body="Upload one or more files — an existing matrix or SOPs to extract from. IRA consolidates them into a single RACM."
-      action={
-        <div className="w-full max-w-2xl mx-auto space-y-5">
-          <div className="grid grid-cols-2 gap-3 text-left">
-            <button onClick={() => racmInputRef.current?.click()} className="group text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
-              <div className="p-2 rounded-lg bg-evidence-50 inline-flex mb-3"><Upload size={16} className="text-evidence-700" /></div>
-              <div className="text-[0.84375rem] font-semibold text-text mb-1">Upload a RACM</div>
-              <div className="text-[0.71875rem] text-text-muted leading-relaxed">Import an existing matrix (.xlsx / .csv).</div>
-            </button>
-            <button onClick={() => sopInputRef.current?.click()} className="group text-left rounded-xl border border-border-light hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
-              <div className="p-2 rounded-lg bg-brand-50 inline-flex mb-3"><Sparkles size={16} className="text-brand-600" /></div>
-              <div className="text-[0.84375rem] font-semibold text-text mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-text-muted">→</span> extract</div>
-              <div className="text-[0.71875rem] text-text-muted leading-relaxed">Upload a procedure doc (.pdf/.docx). IRA reads and drafts it.</div>
-            </button>
+    <div>
+      <ListPlaceholder
+        className="!pt-8 !pb-5"
+        icon={FileStack}
+        title="Start your RACM library"
+        body="Upload an existing matrix or SOPs to extract — IRA consolidates them into one RACM."
+        action={
+          <div className="w-full max-w-2xl mx-auto space-y-5">
+            <div className="grid grid-cols-2 gap-3 text-left">
+              <button onClick={() => racmInputRef.current?.click()} className="group text-left rounded-xl border border-border-light bg-canvas-elevated hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
+                <div className="p-2 rounded-lg bg-evidence-50 inline-flex mb-3"><Upload size={16} className="text-evidence-700" /></div>
+                <div className="text-[0.84375rem] font-semibold text-text mb-1">Upload a RACM</div>
+                <div className="text-[0.71875rem] text-text-muted leading-relaxed">Import an existing matrix (.xlsx / .csv).</div>
+              </button>
+              <button onClick={() => sopInputRef.current?.click()} className="group text-left rounded-xl border border-border-light bg-canvas-elevated hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
+                <div className="p-2 rounded-lg bg-brand-50 inline-flex mb-3"><Sparkles size={16} className="text-brand-600" /></div>
+                <div className="text-[0.84375rem] font-semibold text-text mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-text-muted">→</span> extract</div>
+                <div className="text-[0.71875rem] text-text-muted leading-relaxed">Upload a procedure doc (.pdf/.docx). IRA reads and drafts it.</div>
+              </button>
+            </div>
+
+            {fileInputs}
           </div>
+        }
+      />
 
-          {instructions}
-
-          {footer}
-
-          {fileInputs}
+      {/* How it works — onboarding explainer (empty state only); width matches the header subtitle */}
+      <div className="max-w-4xl mx-auto pb-6">
+        <div className="pt-6 border-t border-canvas-border">
+          <p className="text-center text-[0.9375rem] text-ink-500 leading-relaxed">
+            Transform your Standard Operating Procedures into structured Risk Assessment and Control Matrices — AI identifies risks, maps controls, and highlights compliance gaps automatically.
+          </p>
+          <p className="mt-4 text-center text-[0.6875rem] font-bold uppercase tracking-[0.18em] text-ink-400">How it works</p>
+          <ol className="mt-5 flex items-start justify-center gap-1.5 flex-wrap">
+            {HOW_IT_WORKS_STEPS.map((s, i) => (
+              <Fragment key={s.title}>
+                <li className="flex flex-col items-center text-center w-[8rem] shrink-0">
+                  <span className="w-9 h-9 rounded-full bg-canvas-elevated border border-canvas-border text-brand-700 font-mono font-bold text-sm flex items-center justify-center">{i + 1}</span>
+                  <span className="mt-2.5 text-[0.8125rem] font-semibold text-ink-800">{s.title}</span>
+                  <span className="mt-0.5 text-[0.75rem] text-ink-400 leading-snug">{s.sub}</span>
+                </li>
+                {i < HOW_IT_WORKS_STEPS.length - 1 && <ChevronRight size={16} className="text-ink-300 mt-2.5 shrink-0" />}
+              </Fragment>
+            ))}
+          </ol>
         </div>
-      }
-    />
+      </div>
+    </div>
   );
 }
 
@@ -860,8 +601,17 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
   const mm = String(Math.floor(elapsed / 60000)).padStart(2, '0');
   const ss = String(Math.floor((elapsed % 60000) / 1000)).padStart(2, '0');
 
-  // Timestamped activity log — append a line whenever the status message changes.
-  const [log, setLog] = useState<{ time: string; tag: string; msg: string }[]>([]);
+  // Rough estimate of time remaining — progress advances linearly, so we can
+  // extrapolate from how long the current progress took.
+  const remainingS = state.progress > 0 && state.progress < 100
+    ? Math.max(1, Math.round((elapsed / state.progress) * (100 - state.progress) / 1000))
+    : null;
+
+  // The files being processed (fileName arrives as a ", "-joined list).
+  const sources = fileName ? fileName.split(', ').filter(Boolean) : [];
+
+  // Plain-language activity log — append a line whenever the status changes.
+  const [log, setLog] = useState<{ time: string; msg: string }[]>([]);
   const lastMsg = useRef('');
   useEffect(() => {
     const msg = state.message;
@@ -869,9 +619,8 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
     lastMsg.current = msg;
     const d = new Date();
     const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
-    const tag = (stages[state.stageIndex]?.label ?? 'Info').toUpperCase().split(' ')[0];
-    setLog((prev) => [...prev, { time, tag, msg }]);
-  }, [state.message, state.stageIndex, stages]);
+    setLog((prev) => [...prev, { time, msg }]);
+  }, [state.message]);
 
   // Tips carousel.
   const [tipIdx, setTipIdx] = useState(0);
@@ -884,13 +633,17 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
   const subStatus = state.message || (state.status === 'UPLOADING' ? 'Uploading…' : 'Starting…');
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="rounded-[14px] border-2 border-brand-200 bg-canvas-elevated p-5 shadow-[0_12px_32px_rgba(106,18,205,0.06)]">
-        <div className="flex items-center gap-2 mb-5 min-w-0">
+    <div className="pb-10">
+      <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
+        <div className="flex items-center gap-2 mb-1">
           <Sparkles size={16} className="text-brand-600 animate-pulse shrink-0" />
-          <span className="text-[0.8125rem] text-ink-500 shrink-0">Processing:</span>
-          <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{fileName}</span>
+          <span className="text-[0.875rem] font-semibold text-ink-800">
+            Processing <span className="font-mono tabular-nums">{sources.length}</span> source{sources.length === 1 ? '' : 's'}
+          </span>
         </div>
+        {sources.length > 0 && (
+          <p className="text-[0.75rem] text-ink-400 mb-5 leading-relaxed">{sources.join('  ·  ')}</p>
+        )}
 
         <div className="flex items-start mb-5">
           {stages.map((s, i) => {
@@ -913,26 +666,26 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
         <p className="text-[0.8125rem] text-ink-700 mb-2">{subStatus}</p>
 
         <div className="h-2 rounded-full bg-paper-100 overflow-hidden mb-1.5">
-          <motion.div className="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-600" animate={{ width: `${state.progress}%` }} transition={{ ease: 'easeOut', duration: 0.3 }} />
+          <motion.div className="h-full rounded-full bg-brand-600" animate={{ width: `${state.progress}%` }} transition={{ ease: 'easeOut', duration: 0.3 }} />
         </div>
         <div className="flex items-center justify-between text-[0.6875rem] text-ink-400 tabular-nums">
           <span>{state.progress}%</span>
-          <span>Time elapsed: {mm}:{ss}</span>
+          <span>{mm}:{ss} elapsed{remainingS != null ? `  ·  ~${remainingS}s remaining` : ''}</span>
         </div>
 
         <div className="flex items-center justify-between gap-3 mt-4">
-          <p className="text-[0.6875rem] text-ink-400">You can close this page and come back later. Your report will be saved automatically.</p>
-          <button onClick={onCancel} className="shrink-0 inline-flex items-center px-3 py-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:text-risk-700 hover:border-risk-200 cursor-pointer transition-colors">Cancel</button>
+          <p className="text-[0.6875rem] text-ink-400">Leave this page anytime — your RACM keeps generating and saves automatically.</p>
+          <button onClick={onCancel} title="Stop and discard this generation" className="shrink-0 inline-flex items-center px-3 py-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:text-risk-700 hover:border-risk-200 cursor-pointer transition-colors">Cancel</button>
         </div>
 
         <div className="mt-4 rounded-lg bg-paper-50/70 border border-canvas-border p-3">
-          <div className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wide mb-1.5">Activity Log</div>
+          <div className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wide mb-1.5">Activity log</div>
           <div className="max-h-28 overflow-y-auto space-y-0.5">
             {log.length === 0 ? (
               <p className="text-[0.6875rem] text-ink-400">Starting…</p>
             ) : log.map((l, i) => (
               <p key={i} className="text-[0.6875rem] text-ink-500 leading-relaxed">
-                <span className="text-ink-400 tabular-nums">{l.time}</span> <span className="text-brand-600 font-semibold">[{l.tag}]</span> {l.msg}
+                <span className="text-ink-400 tabular-nums mr-2">{l.time}</span>{l.msg}
               </p>
             ))}
           </div>
@@ -940,18 +693,23 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-        <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-4">
+        <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-4">
           <div className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wide mb-3">What we're checking</div>
           <div className="space-y-2.5">
-            {checking.map((c) => (
-              <div key={c} className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-md bg-brand-50 inline-flex items-center justify-center shrink-0 mt-px"><Check size={12} className="text-brand-600" /></span>
-                <span className="text-[0.75rem] text-ink-600 leading-relaxed">{c}</span>
-              </div>
-            ))}
+            {checking.map((c, i) => {
+              const done = state.progress >= ((i + 1) / checking.length) * 100;
+              return (
+                <div key={c} className="flex items-start gap-2.5">
+                  <span className={`w-5 h-5 rounded-md inline-flex items-center justify-center shrink-0 mt-px transition-colors ${done ? 'bg-compliant-50' : 'bg-paper-100'}`}>
+                    {done ? <Check size={12} className="text-compliant-700" /> : <span className="w-1.5 h-1.5 rounded-full bg-ink-300" />}
+                  </span>
+                  <span className={`text-[0.75rem] leading-relaxed transition-colors ${done ? 'text-ink-700' : 'text-ink-500'}`}>{c}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
-        <div className="rounded-[14px] border border-brand-100 bg-brand-50/40 p-4 flex flex-col">
+        <div className="rounded-xl border border-brand-100 bg-brand-50/40 p-4 flex flex-col">
           <div className="text-[0.6875rem] font-semibold text-brand-700 uppercase tracking-wide mb-3">Did you know?</div>
           <p className="text-[0.8125rem] text-ink-600 leading-relaxed flex-1">{tips[tipIdx]}</p>
           {tips.length > 1 && (
@@ -968,11 +726,203 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
 }
 
 // ─── History seed ────────────────────────────────────────────────────────────
+// Ids use the live `job-<ms>-<seq>` shape so the same timestamp parsing works for
+// seed and real runs alike. Times are anchored to load so the buckets stay sensible.
 
+const SEED_NOW = Date.now();
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
 const HISTORY_SEED: HistoryJob[] = [
-  { id: 'racm-seed-1', files: ['order-to-cash-sop.pdf'], status: 'COMPLETED', createdAt: '3h ago', meta: '18 controls' },
-  { id: 'racm-seed-2', files: ['inventory-policy.pdf'], status: 'COMPLETED', createdAt: 'Yesterday', meta: '9 controls' },
+  // Today
+  { id: `job-${SEED_NOW - 12 * 60_000}-11`, files: ['q3-payroll-controls.xlsx'], status: 'IN_PROGRESS', createdAt: '12m ago' },
+  { id: `job-${SEED_NOW - 2 * HOUR}-10`, files: ['order-to-cash-sop.pdf'], status: 'COMPLETED', createdAt: '2h ago', meta: '18 controls' },
+  { id: `job-${SEED_NOW - 5 * HOUR}-9`, files: ['revenue-recognition-policy.pdf', 'existing-rcm.xlsx'], status: 'COMPLETED', createdAt: '5h ago', meta: '31 controls' },
+  // Yesterday
+  { id: `job-${SEED_NOW - 26 * HOUR}-8`, files: ['period-close-process.docx'], status: 'COMPLETED', createdAt: 'Yesterday', meta: '12 controls' },
+  { id: `job-${SEED_NOW - 30 * HOUR}-7`, files: ['legacy-controls.csv'], status: 'FAILED', createdAt: 'Yesterday' },
+  { id: `job-${SEED_NOW - 34 * HOUR}-6`, files: ['inventory-policy.pdf'], status: 'COMPLETED', createdAt: 'Yesterday', meta: '9 controls' },
+  // Earlier
+  { id: `job-${SEED_NOW - 3 * DAY}-5`, files: ['procurement-sop.pdf'], status: 'COMPLETED', createdAt: '3d ago', meta: '22 controls' },
+  { id: `job-${SEED_NOW - 4 * DAY}-4`, files: ['p2p-control-matrix.xlsx', 'vendor-master-controls.xlsx'], status: 'COMPLETED', createdAt: '4d ago', meta: '24 controls' },
+  { id: `job-${SEED_NOW - 6 * DAY}-3`, files: ['treasury-sop.pdf', 'fx-policy.docx', 'bank-rcm.xlsx'], status: 'COMPLETED', createdAt: '6d ago', meta: '40 controls' },
+  { id: `job-${SEED_NOW - 12 * DAY}-2`, files: ['fixed-assets-sop.pdf'], status: 'COMPLETED', createdAt: '12d ago', meta: '15 controls' },
 ];
+
+// ─── Generation history — RACM-only stacked list (mirrors the Sources rows) ───
+// Replaces the shared JobHistory table for RACM's side sheet (via renderHistory).
+// Grouped by day, file glyph + source tag + status pill, exact timestamp, mono
+// controls count, whole row opens the result, delete on the right.
+
+function RacmHistoryList({ jobs, onOpen, onDelete }: {
+  jobs: HistoryJob[];
+  onOpen: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState('');
+  const [dateFilter, setDateFilter] = useState<DateFilter>(DEFAULT_DATE_FILTER);
+  const [dateOpen, setDateOpen] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  if (jobs.length === 0) {
+    return (
+      <ListPlaceholder
+        icon={History}
+        title="No generations yet"
+        body="Your generated RACMs will appear here — open one to pick up where you left off."
+      />
+    );
+  }
+
+  const nowDate = new Date();
+  const today0 = startOfDay(nowDate.getTime());
+  const q = search.trim().toLowerCase();
+
+  // Newest first, then filter by the date range and the search term (which matches
+  // file names, status, source type, or the controls note).
+  const visible = [...jobs]
+    .sort((a, b) => (jobEpoch(b.id) ?? 0) - (jobEpoch(a.id) ?? 0))
+    .filter((j) => {
+      const ep = jobEpoch(j.id);
+      const iso = (ep == null ? nowDate : new Date(ep)).toISOString();
+      if (!dateInFilter(iso, dateFilter, nowDate)) return false;
+      if (!q) return true;
+      const hay = [...j.files, j.meta ?? '', STATUS_PILL[j.status]?.label ?? '', entrySource(j.files)].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+
+  // Two buckets only: anything created today vs. everything older.
+  const groups: { key: 'Today' | 'Earlier'; jobs: HistoryJob[] }[] = [
+    { key: 'Today', jobs: [] }, { key: 'Earlier', jobs: [] },
+  ];
+  for (const j of visible) {
+    const ep = jobEpoch(j.id);
+    const isToday = ep != null && startOfDay(ep) === today0;
+    groups.find((g) => g.key === (isToday ? 'Today' : 'Earlier'))!.jobs.push(j);
+  }
+
+  const deletingJob = jobs.find((j) => j.id === confirmDeleteId);
+  const deletingName = deletingJob
+    ? (deletingJob.files.length > 1 ? `${deletingJob.files.length} files` : (deletingJob.files[0] ?? 'this RACM'))
+    : '';
+
+  return (
+    <>
+    <div>
+      <div className="flex items-center gap-2 mb-5">
+        <div className="relative flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+          <input
+            type="text"
+            placeholder="Search by file, status…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 h-9 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 transition-colors"
+          />
+        </div>
+        <DateFilterPicker
+          filter={dateFilter}
+          open={dateOpen}
+          onToggle={() => setDateOpen((p) => !p)}
+          onClose={() => setDateOpen(false)}
+          onApply={(next) => { setDateFilter(next); setDateOpen(false); }}
+          today={nowDate}
+          rangeStacked
+        />
+      </div>
+
+      {visible.length === 0 ? (
+        <ListPlaceholder
+          icon={Search}
+          title="No matches"
+          body="No generations match your search or date range."
+        />
+      ) : (
+        <div className="space-y-6">
+          {groups.filter((g) => g.jobs.length > 0).map((group) => {
+            const isCollapsed = !!collapsed[group.key];
+            return (
+              <div key={group.key}>
+                <button
+                  type="button"
+                  onClick={() => setCollapsed((c) => ({ ...c, [group.key]: !c[group.key] }))}
+                  aria-expanded={!isCollapsed}
+                  className="group/sec w-full flex items-center justify-between gap-3 mb-2.5 cursor-pointer"
+                >
+                  <h3 className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-ink-400">
+                    {group.key}<span className="ml-1.5 font-mono tabular-nums text-ink-300">{group.jobs.length}</span>
+                  </h3>
+                  <ChevronDown size={15} className={`shrink-0 text-ink-400 transition-transform group-hover/sec:text-ink-600 ${isCollapsed ? '-rotate-90' : ''}`} />
+                </button>
+                {!isCollapsed && (
+                  <div className="space-y-2">
+                    {group.jobs.map((j) => {
+                      const src = entrySource(j.files);
+                      const Glyph = j.files.length > 1 ? FileStack : fileGlyph(j.files[0] ?? '');
+                      const chipBg = src === 'racm' ? 'bg-evidence-50' : src === 'sop' ? 'bg-brand-50' : 'bg-paper-100';
+                      const chipFg = src === 'racm' ? 'text-evidence-700' : src === 'sop' ? 'text-brand-600' : 'text-ink-500';
+                      const ep = jobEpoch(j.id);
+                      const when = ep == null ? j.createdAt : formatDateTime(ep);
+                      const completed = j.status === 'COMPLETED';
+                      const status = STATUS_PILL[j.status] ?? STATUS_PILL.COMPLETED;
+                      const name = j.files.length > 1 ? `${j.files.length} files` : (j.files[0] ?? '—');
+                      const controls = j.meta?.match(/^(\d+)\s+controls?$/i) ?? null;
+                      return (
+                        <div
+                          key={j.id}
+                          onClick={completed ? () => onOpen(j.id) : undefined}
+                          role={completed ? 'button' : undefined}
+                          tabIndex={completed ? 0 : undefined}
+                          onKeyDown={completed ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(j.id); } } : undefined}
+                          className={`group flex items-center gap-3 rounded-xl border border-canvas-border bg-canvas-elevated px-3.5 py-3 transition-colors ${completed ? 'cursor-pointer hover:border-brand-200 hover:bg-brand-50/30' : ''}`}
+                        >
+                          <span className={`w-8 h-8 rounded-lg inline-flex items-center justify-center shrink-0 ${chipBg}`}>
+                            <Glyph size={15} className={chipFg} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="text-[0.84375rem] text-ink-800 truncate">{name}</p>
+                              <EntrySourceTag source={src} />
+                            </div>
+                            <p className="text-[0.6875rem] text-ink-400 mt-0.5">
+                              <span className="font-mono tabular-nums">{when}</span>
+                              {j.meta && (controls
+                                ? <span> · <span className="font-mono tabular-nums">{controls[1]}</span> controls</span>
+                                : <span> · {j.meta}</span>)}
+                            </p>
+                          </div>
+                          <Pill tone={status.tone}>{status.label}</Pill>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(j.id); }}
+                            aria-label={`Delete ${name}`}
+                            title="Delete RACM"
+                            className="shrink-0 p-1 rounded-md text-ink-300 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+    <ConfirmationModal
+      open={confirmDeleteId !== null}
+      title="Delete this RACM?"
+      description={<>This permanently removes <span className="font-semibold text-ink-700">{deletingName}</span> from your generation history. This can't be undone.</>}
+      confirmLabel="Delete"
+      tone="destructive"
+      onConfirm={() => { if (confirmDeleteId) onDelete(confirmDeleteId); setConfirmDeleteId(null); }}
+      onClose={() => setConfirmDeleteId(null)}
+    />
+    </>
+  );
+}
 
 // ─── Main view ───────────────────────────────────────────────────────────────
 
@@ -989,7 +939,7 @@ export default function RACMGeneratorView({ onBack, onOpenEditor }: { onBack: ()
       uploadCtaLabel="Generate RACM"
       stages={[
         { id: 'extract', label: 'Extract' },
-        { id: 'chunk', label: 'Chunk' },
+        { id: 'chunk', label: 'Segment' },
         { id: 'analyze', label: 'Analyze' },
         { id: 'consolidate', label: 'Consolidate' },
         { id: 'gap', label: 'Gap analysis' },
@@ -997,7 +947,7 @@ export default function RACMGeneratorView({ onBack, onOpenEditor }: { onBack: ()
       ]}
       messages={[
         'Extracting text and tables from the document…',
-        'Chunking the SOP into logical process sections…',
+        'Segmenting the document into logical process sections…',
         'Analyzing each section for risks and controls…',
         'Consolidating and de-duplicating the control set…',
         'Running gap analysis against the control framework…',
@@ -1029,6 +979,7 @@ export default function RACMGeneratorView({ onBack, onOpenEditor }: { onBack: ()
       historyMeta={(result) => `${result.entries.length} controls`}
       historyAsDrawer
       historySeed={HISTORY_SEED}
+      renderHistory={(api) => <RacmHistoryList {...api} />}
     />
   );
 }
