@@ -88,7 +88,7 @@ export function ObservationActionsMenu({
         onClick={handleToggle}
         title="More options"
         aria-label="More options"
-        className="w-8 h-8 flex items-center justify-center rounded-[8px] text-text-muted hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+        className="w-8 h-8 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
       >
         <MoreVertical size={16} />
       </button>
@@ -96,11 +96,11 @@ export function ObservationActionsMenu({
         <div
           ref={menuRef}
           style={menuStyle}
-          className="w-[210px] bg-white border border-border-light rounded-[8px] shadow-xl py-1"
+          className="w-[210px] bg-white border border-canvas-border rounded-[8px] shadow-xl py-1"
         >
           <button
             onClick={() => { setOpen(false); onEdit(); }}
-            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
           >
             <Edit3 size={14} />
             Edit observation
@@ -108,13 +108,13 @@ export function ObservationActionsMenu({
           {hasAttachment && (
             <button
               onClick={() => { setOpen(false); onToggleAttachment(); }}
-              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-text-secondary hover:bg-primary-xlight hover:text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
+              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
             >
               {attachmentHidden ? <Eye size={14} /> : <EyeOff size={14} />}
               {attachmentHidden ? 'Show attachment' : 'Hide attachment'}
             </button>
           )}
-          <div className="my-1 border-t border-border-light/60" />
+          <div className="my-1 border-t border-canvas-border/60" />
           <button
             onClick={() => { setOpen(false); onDelete(); }}
             className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-risk-700 hover:bg-risk-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
@@ -199,7 +199,7 @@ export default function ObservationCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-b border-border-light' : 'border border-border-light rounded-[12px]'}`}
+      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-b border-canvas-border' : 'border border-canvas-border rounded-[12px]'}`}
     >
       <div className="px-6 py-5">
         <motion.div
@@ -209,9 +209,9 @@ export default function ObservationCard({
           className="flex items-center justify-between mb-4 gap-4"
         >
           <div className="flex items-center gap-2.5 text-[11px] min-w-0">
-            <span className="font-bold text-primary uppercase tracking-wider shrink-0">{obs.obsId}</span>
+            <span className="font-bold text-brand-600 uppercase tracking-wider shrink-0">{obs.obsId}</span>
             <span className="w-px h-3 bg-border-light shrink-0" />
-            <span className="font-medium text-text-muted uppercase tracking-wider shrink-0">Observation</span>
+            <span className="font-medium text-ink-400 uppercase tracking-wider shrink-0">Observation</span>
           </div>
           <ObservationActionsMenu
             hasAttachment={attachments.length > 0}
@@ -226,7 +226,7 @@ export default function ObservationCard({
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
-          className="text-[15px] font-semibold text-text leading-[1.5] mb-5"
+          className="text-[15px] font-semibold text-ink-800 leading-[1.5] mb-5"
         >
           {obs.title}
         </motion.h3>
@@ -236,7 +236,7 @@ export default function ObservationCard({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: baseDelay + 0.4, duration: 0.4 }}
-            className="text-[13px] text-text-secondary leading-relaxed mb-4 whitespace-pre-wrap"
+            className="text-[13px] text-ink-500 leading-relaxed mb-4 whitespace-pre-wrap"
           >
             {obs.description}
           </motion.p>
@@ -260,7 +260,7 @@ export default function ObservationCard({
                     whileHover={{ scale: 1.02 }}
                     title={`${att.name} — click to view full size`}
                     aria-label={`Open ${att.name} in full screen`}
-                    className="block w-[88px] h-[88px] rounded-[12px] border border-border-light overflow-hidden bg-paper-50 cursor-zoom-in hover:border-primary/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                    className="block w-[88px] h-[88px] rounded-[12px] border border-canvas-border overflow-hidden bg-canvas cursor-zoom-in hover:border-brand-600/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                   >
                     <img src={att.dataUrl} alt={att.name} className="w-full h-full object-cover" />
                   </motion.button>
@@ -276,11 +276,11 @@ export default function ObservationCard({
                   rel="noopener noreferrer"
                   download={inlineMime ? undefined : att.name}
                   title={`${att.name} — ${formatFileSize(att.size)}`}
-                  className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-paper-50 border border-border-light rounded-[8px] hover:border-primary/40 hover:bg-white transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-canvas border border-canvas-border rounded-[8px] hover:border-brand-600/40 hover:bg-white transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   <Icon size={14} className={`shrink-0 ${tone}`} />
-                  <span className="text-[12px] text-text font-medium truncate group-hover:text-primary">{att.name}</span>
-                  <span className="text-[10px] text-text-muted tabular-nums shrink-0">{formatFileSize(att.size)}</span>
+                  <span className="text-[12px] text-ink-800 font-medium truncate group-hover:text-brand-600">{att.name}</span>
+                  <span className="text-[10px] text-ink-400 tabular-nums shrink-0">{formatFileSize(att.size)}</span>
                 </a>
               );
             })}
@@ -290,14 +290,14 @@ export default function ObservationCard({
                   type="button"
                   onClick={() => setOverflowOpen(o => !o)}
                   aria-label={`Show ${overflowItems.length} more attachments`}
-                  className="w-[88px] h-[88px] rounded-[12px] border border-border-light bg-paper-50 hover:border-primary/40 hover:bg-white transition-colors inline-flex flex-col items-center justify-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="w-[88px] h-[88px] rounded-[12px] border border-canvas-border bg-canvas hover:border-brand-600/40 hover:bg-white transition-colors inline-flex flex-col items-center justify-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   <span className="text-[18px] leading-none font-semibold text-ink-900 tabular-nums">+{overflowItems.length}</span>
                   <span className="text-[10px] text-ink-500 uppercase tracking-wider">more</span>
                 </button>
                 {overflowOpen && (
-                  <div className="absolute top-full left-0 mt-2 z-30 w-[280px] bg-white border border-border-light rounded-[8px] shadow-xl py-1 max-h-[280px] overflow-y-auto">
-                    <div className="px-3 py-2 text-[10px] font-bold text-text-muted uppercase tracking-wider border-b border-border-light/60">
+                  <div className="absolute top-full left-0 mt-2 z-30 w-[280px] bg-white border border-canvas-border rounded-[8px] shadow-xl py-1 max-h-[280px] overflow-y-auto">
+                    <div className="px-3 py-2 text-[10px] font-bold text-ink-400 uppercase tracking-wider border-b border-canvas-border/60">
                       {overflowItems.length} more {overflowItems.length === 1 ? 'attachment' : 'attachments'}
                     </div>
                     <ul className="py-1">
@@ -311,14 +311,14 @@ export default function ObservationCard({
                               <button
                                 type="button"
                                 onClick={() => { setOverflowOpen(false); setLightboxIndex(imageIdx); }}
-                                className="flex items-center gap-2.5 w-full text-left px-3 py-2 hover:bg-primary-xlight/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
+                                className="flex items-center gap-2.5 w-full text-left px-3 py-2 hover:bg-brand-50/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
                               >
-                                <div className="w-7 h-7 rounded border border-border-light overflow-hidden bg-white shrink-0">
+                                <div className="w-7 h-7 rounded border border-canvas-border overflow-hidden bg-white shrink-0">
                                   <img src={att.dataUrl} alt="" className="w-full h-full object-cover" />
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <div className="text-[12px] text-text font-medium truncate">{att.name}</div>
-                                  <div className="text-[10px] text-text-muted tabular-nums">{formatFileSize(att.size)}</div>
+                                  <div className="text-[12px] text-ink-800 font-medium truncate">{att.name}</div>
+                                  <div className="text-[10px] text-ink-400 tabular-nums">{formatFileSize(att.size)}</div>
                                 </div>
                               </button>
                             </li>
@@ -333,14 +333,14 @@ export default function ObservationCard({
                               rel="noopener noreferrer"
                               download={inlineMime ? undefined : att.name}
                               onClick={() => setOverflowOpen(false)}
-                              className="flex items-center gap-2.5 px-3 py-2 hover:bg-primary-xlight/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
+                              className="flex items-center gap-2.5 px-3 py-2 hover:bg-brand-50/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-inset"
                             >
-                              <div className={`w-7 h-7 rounded border border-border-light bg-white inline-flex items-center justify-center shrink-0 ${tone}`}>
+                              <div className={`w-7 h-7 rounded border border-canvas-border bg-white inline-flex items-center justify-center shrink-0 ${tone}`}>
                                 <Icon size={14} />
                               </div>
                               <div className="min-w-0 flex-1">
-                                <div className="text-[12px] text-text font-medium truncate">{att.name}</div>
-                                <div className="text-[10px] text-text-muted tabular-nums">{formatFileSize(att.size)}</div>
+                                <div className="text-[12px] text-ink-800 font-medium truncate">{att.name}</div>
+                                <div className="text-[10px] text-ink-400 tabular-nums">{formatFileSize(att.size)}</div>
                               </div>
                             </a>
                           </li>
@@ -369,7 +369,7 @@ export default function ObservationCard({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
           onClick={() => setLightboxIndex(null)}
-          className="fixed inset-0 z-[1100] bg-ink-900/85 flex items-center justify-center p-8 cursor-zoom-out"
+          className="fixed inset-0 z-[70] bg-ink-900/85 flex items-center justify-center p-8 cursor-zoom-out"
         >
           <button
             onClick={(e) => { e.stopPropagation(); setLightboxIndex(null); }}

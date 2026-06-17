@@ -52,17 +52,16 @@ export default function ComprehensiveAtrModal({
         aria-label="Action Taken Report"
       >
         {/* Title bar */}
-        <header className="shrink-0 px-6 py-3 flex items-center justify-between gap-4 border-b border-canvas-border">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
-              <FileText size={16} />
+        {/* Title bar — the document banner carries the report title, so this
+            bar stays a thin context strip. */}
+        <header className="shrink-0 px-6 py-2.5 flex items-center justify-between gap-4 border-b border-canvas-border">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-[8px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
+              <FileText size={14} />
             </div>
-            <div>
-              <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Action Taken Report</h2>
-              <p className="text-[0.75rem] text-ink-500 leading-snug">
-                Generated from {observations.length} observation{observations.length === 1 ? '' : 's'} · <span className="font-mono">{meta.reportId}</span>
-              </p>
-            </div>
+            <p className="text-[0.8125rem] font-medium text-ink-600 truncate">
+              Generated from {observations.length} observation{observations.length === 1 ? '' : 's'} · <span className="font-mono">{meta.reportId}</span>
+            </p>
           </div>
           <button
             onClick={onClose}

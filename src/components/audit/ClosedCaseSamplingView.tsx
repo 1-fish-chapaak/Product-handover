@@ -291,7 +291,7 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
           <div className="text-[0.75rem] font-bold tracking-[0.18em] text-primary uppercase mb-1.5">
             Audit Quality
           </div>
-          <h1 className="font-display text-[1.75rem] font-bold text-ink-900 tracking-tight leading-tight">
+          <h1 className="text-[1.75rem] font-bold text-ink-900 tracking-tight leading-tight">
             Closed-Case Sampling
           </h1>
           <p className="text-[0.75rem] text-text-secondary mt-2 max-w-2xl leading-relaxed">

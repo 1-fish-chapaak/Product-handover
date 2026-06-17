@@ -28,23 +28,23 @@ export default function AtrReportView({ report, onBack, onShare }: {
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
-      className="report-printable h-full overflow-y-auto bg-surface-2"
+      className="report-printable h-full overflow-y-auto bg-canvas"
     >
       <div className="px-[124px] py-8">
         {/* Top bar */}
         <div className="flex items-center justify-between mb-5 flex-wrap gap-2 print:hidden">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-primary transition-colors cursor-pointer">
+          <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-ink-500 hover:text-brand-600 transition-colors cursor-pointer">
             <ArrowLeft size={14} /> Back to Reports
           </button>
           <div className="flex items-center gap-2">
             {onShare && (
-              <button onClick={onShare} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-[8px]">
+              <button onClick={onShare} className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[12px] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white rounded-[8px]">
                 <Share2 size={14} /> Share
               </button>
             )}
             <button
               onClick={() => { addToast({ type: 'info', message: 'Opening print dialog — choose “Save as PDF”.' }); window.setTimeout(() => window.print(), 250); }}
-              className="flex items-center gap-1.5 px-3 py-2 border border-border text-[12px] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-[8px]"
+              className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[12px] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white rounded-[8px]"
             >
               <Download size={14} /> Download
             </button>

@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { FileText, FileSpreadsheet, FileImage, ChevronDown, ExternalLink, Download, FolderOpen, ShieldCheck } from 'lucide-react';
 import { EVIDENCE_LIBRARY, type EvidenceItem, type EvidenceType } from '../../data/atrLibrary';
-import ListToolbar, { ToolbarSelect, ToolbarViewToggle } from '../shared/ListToolbar';
+import ListToolbar, { ToolbarViewToggle } from '../shared/ListToolbar';
+import ColumnFilter from '../shared/ColumnFilter';
 import ReportCard from '../shared/ReportCard';
 
 const TYPE_META: Record<EvidenceType, { icon: React.ElementType; bg: string; fg: string }> = {
@@ -38,7 +39,7 @@ function EvidenceRow({ item, onOpenSource }: { item: EvidenceItem; onOpenSource:
         <button
           onClick={() => onOpenSource(item.atrId)}
           title="Open the source ATR report"
-          className="inline-flex items-center gap-1 h-8 px-2.5 text-[11.5px] font-semibold text-primary bg-white border border-border-light rounded-[8px] hover:border-primary/30 cursor-pointer transition-colors"
+          className="inline-flex items-center gap-1 h-8 px-2.5 text-[11.5px] font-semibold text-brand-600 bg-white border border-canvas-border rounded-[8px] hover:border-brand-600/30 cursor-pointer transition-colors"
         >
           View source <ExternalLink size={11} />
         </button>
@@ -54,7 +55,7 @@ function AreaGroup({ area, items, onOpenSource }: { area: string; items: Evidenc
   const [open, setOpen] = useState(true);
   const atrName = items[0]?.atrName;
   return (
-    <section className="bg-white border border-border-light rounded-[12px] overflow-hidden mb-4">
+    <section className="bg-white border border-canvas-border rounded-[12px] overflow-hidden mb-4">
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer text-left">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-9 h-9 rounded-[9px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><ShieldCheck size={16} /></div>
@@ -71,7 +72,7 @@ function AreaGroup({ area, items, onOpenSource }: { area: string; items: Evidenc
       <AnimatePresence initial={false}>
         {open && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }} className="overflow-hidden">
-            <div className="border-t border-border-light divide-y divide-border-light/70">
+            <div className="border-t border-canvas-border divide-y divide-border-light/70">
               {items.map(item => <EvidenceRow key={item.id} item={item} onOpenSource={onOpenSource} />)}
             </div>
           </motion.div>
@@ -88,15 +89,15 @@ export default function EvidenceRepository({ onOpenSource, view, onViewChange }:
   onViewChange: (mode: 'list' | 'grid') => void;
 }) {
   const [q, setQ] = useState('');
-  const [type, setType] = useState<'All' | EvidenceType>('All');
+  const [types, setTypes] = useState<string[]>([]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     return EVIDENCE_LIBRARY.filter(e =>
-      (type === 'All' || e.type === type) &&
+      (types.length === 0 || types.includes(e.type)) &&
       (!s || e.name.toLowerCase().includes(s) || e.observation.toLowerCase().includes(s) || e.area.toLowerCase().includes(s) || e.atrName.toLowerCase().includes(s)),
     );
-  }, [q, type]);
+  }, [q, types]);
 
   // Segregate by audit area.
   const groups = useMemo(() => {
@@ -113,11 +114,15 @@ export default function EvidenceRepository({ onOpenSource, view, onViewChange }:
         searchPlaceholder="Search evidence…"
         trailing={
           <>
-            <ToolbarSelect
+            <ColumnFilter
+              variant="button"
+              icon
+              selectIndicator="checkbox"
               label="Type"
-              value={type}
-              onChange={v => setType(v as 'All' | EvidenceType)}
-              options={TYPE_FILTERS.map(t => ({ value: t, label: t === 'All' ? 'All types' : t }))}
+              options={TYPE_FILTERS.filter(t => t !== 'All') as string[]}
+              value={types}
+              onChange={setTypes}
+              align="end"
             />
             <ToolbarViewToggle mode={view} onChange={onViewChange} />
           </>
@@ -138,12 +143,12 @@ export default function EvidenceRepository({ onOpenSource, view, onViewChange }:
                 key={item.id}
                 index={i}
                 icon={t.icon}
-                iconClass="bg-evidence-50 text-evidence-700"
+                iconClass="bg-brand-50/70 text-brand-600"
                 eyebrow={item.type}
                 title={item.name}
                 description={`Backs: ${item.observation}`}
                 pills={[item.type, item.size, item.area]}
-                footerRight={<span className="font-mono text-[11px] tabular-nums text-ink-400">{item.uploadedAt}</span>}
+                footerRight={<span className="text-[11px] tabular-nums text-ink-400">{item.uploadedAt}</span>}
                 onClick={() => onOpenSource(item.atrId)}
                 actions={
                   <button title="Download" onClick={(e) => e.stopPropagation()} className="w-7 h-7 rounded-[8px] flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-paper-50 cursor-pointer" aria-label="Download"><Download size={14} /></button>

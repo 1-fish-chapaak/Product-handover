@@ -1,4 +1,4 @@
-import type { WorkflowResult } from "../components/reports/ReportsView";
+import type { WorkflowResult } from "../components/reports/reportShared";
 
 // ─── Business Processes ───
 export const BUSINESS_PROCESSES = [

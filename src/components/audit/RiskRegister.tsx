@@ -385,7 +385,7 @@ function RiskDetailPage({
                   : 'bg-compliant-50 text-compliant-700'
               }`}>{risk.priority}</span>
             </div>
-            <h1 className="font-display text-[1.625rem] font-[420] tracking-tight text-ink-900 leading-[1.2]">{risk.name}</h1>
+            <h1 className="text-[1.625rem] font-semibold tracking-tight text-ink-900 leading-[1.2]">{risk.name}</h1>
           </div>
           {/* Business Process + Category pills */}
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -924,7 +924,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         {!embedded && (
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h1 className="font-display text-[1.125rem] font-semibold text-ink-900">Risk Register</h1>
+              <h1 className="text-[1.125rem] font-semibold text-ink-900">Risk Register</h1>
               <p className="text-[0.8125rem] text-text-muted mt-1">Maintain the master list of business and audit risks across processes.</p>
             </div>
             <Button variant="primary" size="sm" shape="lg" onClick={() => setShowCreateDrawer(true)}

@@ -33,7 +33,6 @@ import EmailPreviewModal from './components/modals/EmailPreviewModal';
 import ShareModal from './components/modals/ShareModal';
 import PowerBIImportWizard from './components/modals/PowerBIImportWizard';
 import ReportBuilder from './components/reports/ReportBuilder';
-import AuditPlanningView from './components/audit/AuditPlanningView';
 import AuditPlanningPage from './components/audit/AuditPlanningPage';
 import EngagementsView from './components/audit/EngagementsView';
 import SoxIcfrApp from './components/sox-icfr/SoxIcfrApp';
@@ -56,10 +55,8 @@ import WorkflowBuilderJourney from './components/concierge-workflow-builder/Work
 import AdminView from './components/admin/AdminView';
 import WorkflowExecutor from './components/workflow/WorkflowExecutor';
 import WorkflowEditInChatJourney from './components/workflow-edit-in-chat/WorkflowEditInChatJourney';
-import EngagementDetailView from './components/engagement/EngagementDetailView';
 import ControlDetailDrawer from './components/engagement/ControlDetailDrawer';
 // V2 Execution placeholder — old execution UI detached from main flow
-import EngagementExecutionV2Placeholder from './components/engagement-execution-v2/EngagementExecutionV2Placeholder';
 import EngagementExecutionV2 from './components/engagement-execution-v2/EngagementExecutionV2';
 import ManageExceptionsView from './components/exceptions/ManageExceptionsView';
 import WorkingPaperPanel from './components/execution/WorkingPaperPanel';
@@ -279,6 +276,7 @@ function AppInner() {
   }, [customTemplates]);
   const addCustomTemplate = (t: CustomTemplate) => setCustomTemplates(prev => [t, ...prev]);
   const removeCustomTemplate = (id: string) => setCustomTemplates(prev => prev.filter(t => t.id !== id));
+  const updateCustomTemplate = (t: CustomTemplate) => setCustomTemplates(prev => prev.map(x => x.id === t.id ? t : x));
 
   useEffect(() => {
     if (mainScrollRef.current) {
@@ -808,6 +806,7 @@ function AppInner() {
             customTemplates={customTemplates}
             onAddCustomTemplate={addCustomTemplate}
             onRemoveCustomTemplate={removeCustomTemplate}
+            onUpdateCustomTemplate={updateCustomTemplate}
             focusReportId={focusReportId}
             onFocusReportConsumed={() => setFocusReportId(null)}
           />

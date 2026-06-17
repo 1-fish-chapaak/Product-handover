@@ -229,21 +229,21 @@ export default function SmartTable<T extends Record<string, unknown>>({
       <div className={stickyHeader ? '' : 'overflow-x-auto'}>
         <table className={`w-full ${isModern ? 'text-[13px]' : 'text-[12.5px]'}`}>
           <thead>
-            <tr className={isModern ? 'border-b border-border-light' : 'bg-surface-2 border-b border-border-light'}>
-              {expandable && <th className={`w-8 ${stickyHeader ? `sticky ${stickyHeaderTop} z-10 ${isModern ? 'bg-white' : 'bg-surface-2'}` : ''}`} />}
+            <tr className="bg-surface-2 border-b border-border-light">
+              {expandable && <th className={`w-8 ${stickyHeader ? `sticky ${stickyHeaderTop} z-10 bg-surface-2` : ''}`} />}
               {columns.map((col, ci) => (
                 <th
                   key={col.key}
                   className={[
                     isModern
-                      ? `${dense ? 'py-2.5' : 'py-3'} text-[10.5px] font-semibold uppercase tracking-[0.08em] text-text-muted ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
+                      ? `${dense ? 'py-2.5' : 'py-3'} font-semibold text-text-secondary ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
                       : 'px-4 py-2.5 font-semibold text-text-secondary',
                     alignClass(col.align),
                     col.sortable !== false ? 'cursor-pointer select-none hover:text-text-secondary transition-colors' : '',
                     // Pin the header row to the page scroller, parked under any
                     // sticky toolbar via `stickyHeaderTop`. Each cell carries the
                     // header fill so scrolled rows don't show through.
-                    stickyHeader ? `sticky ${stickyHeaderTop} z-10 ${isModern ? 'bg-white' : 'bg-surface-2'}` : '',
+                    stickyHeader ? `sticky ${stickyHeaderTop} z-10 bg-surface-2` : '',
                     col.truncate ? 'max-w-0' : '',
                   ].filter(Boolean).join(' ')}
                   style={col.width ? { width: col.width } : undefined}
@@ -316,7 +316,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                         : 'border-b border-border-light last:border-0',
                       selected ? 'bg-brand-50/60' : (stripeOn && i % 2 === 1 ? 'bg-surface-2/30' : ''),
                       onRowClick || expandable ? 'cursor-pointer' : '',
-                      noRowHover ? '' : (selected ? 'hover:bg-brand-50/70' : (isModern ? 'hover:bg-paper-50/50' : 'hover:bg-primary-xlight/50')),
+                      noRowHover ? '' : (selected ? 'hover:bg-brand-50/70' : (isModern ? 'hover:bg-brand-50/50' : 'hover:bg-primary-xlight/50')),
                     ].filter(Boolean).join(' ')}
                     onClick={() => {
                       if (expandable) handleToggleExpand(id);

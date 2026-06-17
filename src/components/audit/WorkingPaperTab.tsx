@@ -177,7 +177,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
       {/* Header */}
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="font-display text-[1.375rem] font-bold text-text leading-tight flex items-center gap-2">
+          <h2 className="text-[1.375rem] font-bold text-text leading-tight flex items-center gap-2">
             <BookText size={22} className="text-primary" />
             {title}
           </h2>
@@ -234,7 +234,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
             <div className="text-[0.75rem] uppercase tracking-wider font-semibold text-text-muted mb-1">
               {titleShort} · {engagement.code}
             </div>
-            <h3 className="font-display text-[1.25rem] font-bold text-text leading-snug">{engagement.name}</h3>
+            <h3 className="text-[1.25rem] font-bold text-text leading-snug">{engagement.name}</h3>
             <p className="text-[0.75rem] text-text-secondary mt-1.5">{engagement.description}</p>
           </div>
           <div className="text-right shrink-0">
@@ -432,7 +432,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
                 </button>
               </header>
               <div className="flex-1 overflow-y-auto px-6 py-5 bg-white">
-                <div className="font-display text-[1.25rem] font-bold text-text mb-1">{title} · {engagement.name}</div>
+                <div className="text-[1.25rem] font-bold text-text mb-1">{title} · {engagement.name}</div>
                 <div className="text-[0.6875rem] text-text-muted mb-5">{engagement.code} · {engagement.framework} · {engagement.periodStart} – {engagement.periodEnd}</div>
                 <h4 className="text-[0.75rem] font-bold text-text mt-4 mb-2 uppercase tracking-wide">1. Engagement summary</h4>
                 <p className="text-[0.75rem] text-text-secondary mb-4">{engagement.description}</p>

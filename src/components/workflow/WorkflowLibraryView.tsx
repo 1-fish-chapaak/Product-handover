@@ -297,7 +297,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
         <div className="font-mono text-[0.6875rem] text-ink-500 mb-2 tracking-tight">
           Workflow Library
         </div>
-        <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">
+        <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">
           Workflow Library
         </h1>
         <p className="text-[0.875rem] text-ink-500 mt-1">

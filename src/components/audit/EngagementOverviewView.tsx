@@ -1969,7 +1969,7 @@ function WorkflowConfigDrawer({
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <Settings size={16} className="text-brand-600 shrink-0" />
-              <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight truncate">{wf.name}</h2>
+              <h2 className="text-[18px] font-semibold text-ink-900 tracking-tight truncate">{wf.name}</h2>
             </div>
             <p className="text-[12px] text-ink-500">
               <span className="font-mono">{wf.code}</span>

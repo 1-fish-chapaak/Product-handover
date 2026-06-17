@@ -54,7 +54,7 @@ export function ManageExceptionsLaunchButton({ queryId, compact = false }: { que
         disabled={launching}
         title="Review & classify exceptions · opens in a new tab"
         aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-        className={`group inline-flex items-center gap-1.5 h-8 px-2 -mx-2 rounded-[8px] text-[12px] leading-4 font-semibold text-text-secondary hover:text-primary hover:bg-surface-2 cursor-pointer transition-colors ${
+        className={`group inline-flex items-center gap-1.5 h-8 px-2 -mx-2 rounded-[8px] text-[12px] leading-4 font-semibold text-ink-500 hover:text-brand-600 hover:bg-canvas cursor-pointer transition-colors ${
           launching ? 'opacity-60' : ''
         }`}
       >
@@ -118,7 +118,7 @@ export function ManageExceptionsLaunchButton({ queryId, compact = false }: { que
       {launching && (
         <span
           aria-hidden="true"
-          className="absolute -top-[32px] left-1/2 text-[10px] font-semibold text-primary bg-white border border-primary/25 px-2 h-6 rounded-full shadow-md whitespace-nowrap flex items-center gap-1 pointer-events-none"
+          className="absolute -top-[32px] left-1/2 text-[10px] font-semibold text-brand-600 bg-white border border-brand-600/25 px-2 h-6 rounded-full shadow-md whitespace-nowrap flex items-center gap-1 pointer-events-none"
           style={{ animation: 'launch-hint-in 220ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
         >
           <ArrowRight size={12} className="-rotate-45" />

@@ -28,6 +28,9 @@ export interface ReportCardProps {
   footerRight?: ReactNode;
   /** Hover-revealed action icons, overlaid on the footer-right. */
   actions?: ReactNode;
+  /** Optional left accent spine (a `bg-*` class) giving a type its own identity.
+   *  Opted into by SOX / ATR cards; other types stay plain. */
+  accent?: string;
   onClick?: () => void;
   index?: number;
   /** Multi-select — checkbox overlays the icon tile; selected = brand border. */
@@ -39,7 +42,7 @@ export interface ReportCardProps {
 
 export default function ReportCard({
   icon: Icon, iconClass = 'bg-brand-50 text-brand-700', eyebrow,
-  title, subtitle, description, pills = [], maxPills = 3, footerRight, actions, onClick, index = 0,
+  title, subtitle, description, pills = [], maxPills = 3, footerRight, actions, accent, onClick, index = 0,
   selectable, selected, isSelecting, onToggleSelect,
 }: ReportCardProps) {
   const iconBg = iconClass.split(' ').find(c => c.startsWith('bg-')) ?? 'bg-brand-50';
@@ -59,15 +62,15 @@ export default function ReportCard({
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0, transition: { delay: index * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
-      whileHover={{ y: -3, transition: { duration: 0.18, ease: 'easeOut' } }}
       onClick={() => { if (selectable && isSelecting) onToggleSelect?.(); else onClick?.(); }}
       aria-pressed={selectable ? (selected || undefined) : undefined}
-      className={`bg-canvas-elevated border rounded-[12px] p-5 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:shadow-[0_12px_32px_rgba(15,8,30,0.08)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[176px] ${selected ? 'border-brand-400' : 'border-canvas-border hover:border-brand-300'}`}
+      className={`relative overflow-hidden bg-canvas-elevated border rounded-[12px] ${accent ? 'pl-6 pr-5 py-5' : 'p-5'} transition-colors duration-200 group cursor-pointer flex flex-col min-h-[176px] ${selected ? 'border-brand-400' : 'border-canvas-border hover:border-brand-200'}`}
     >
+      {accent && <span aria-hidden className={`pointer-events-none absolute inset-y-0 left-0 w-[3px] ${accent}`} />}
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="relative w-9 h-9 flex items-center justify-center shrink-0">
           {/* Type tile — present at rest, fades out so the checkbox sits cleanly on the card. */}
-          <span aria-hidden="true" className={`absolute inset-0 rounded-[10px] flex items-center justify-center ${iconBg} transition-[opacity,transform] duration-200 group-hover:scale-[1.06] ${selectable ? (selected || isSelecting ? 'opacity-0' : 'opacity-100 group-hover:opacity-0') : 'opacity-100'}`}>
+          <span aria-hidden="true" className={`absolute inset-0 rounded-[10px] flex items-center justify-center ${iconBg} transition-opacity duration-200 ${selectable ? (selected || isSelecting ? 'opacity-0' : 'opacity-100 group-hover:opacity-0') : 'opacity-100'}`}>
             <Icon size={16} className={tone} strokeWidth={1.75} />
           </span>
           {selectable && (

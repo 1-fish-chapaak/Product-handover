@@ -8,7 +8,7 @@
 // is indistinguishable from a hand-assembled one.
 
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
-import type { WorkflowResult } from './ReportsView';
+import type { WorkflowResult } from './reportShared';
 
 export type QuerySource = 'report';
 
@@ -63,7 +63,7 @@ const KEY_META: Record<string, KeyMeta> = {
   Q01: {
     risk: 'Financial Risk', severity: 'High',
     kpis: [
-      { label: 'Flagged By AI', value: '140', color: 'text-primary' },
+      { label: 'Flagged By AI', value: '140', color: 'text-brand-600' },
       { label: 'Manually Flagged', value: '1', color: 'text-high-700' },
       { label: 'Resolved', value: '3', color: 'text-compliant-700' },
       { label: 'Pending', value: '136', color: 'text-risk-700' },
@@ -73,7 +73,7 @@ const KEY_META: Record<string, KeyMeta> = {
   Q02: {
     risk: 'Compliance Risk', severity: 'High',
     kpis: [
-      { label: 'Changes Found', value: '47', color: 'text-primary' },
+      { label: 'Changes Found', value: '47', color: 'text-brand-600' },
       { label: 'Unauthorized', value: '12', color: 'text-risk-700' },
       { label: 'Verified', value: '35', color: 'text-compliant-700' },
       { label: 'Pending', value: '8', color: 'text-high-700' },
@@ -83,7 +83,7 @@ const KEY_META: Record<string, KeyMeta> = {
   RA01: {
     risk: 'Aggregate Risk', severity: 'High',
     kpis: [
-      { label: 'Total Risks', value: '12', color: 'text-primary' },
+      { label: 'Total Risks', value: '12', color: 'text-brand-600' },
       { label: 'High', value: '7', color: 'text-risk-700' },
       { label: 'Mitigated', value: '5', color: 'text-compliant-700' },
     ],
@@ -92,7 +92,7 @@ const KEY_META: Record<string, KeyMeta> = {
   RA02: {
     risk: 'Mitigation Gap', severity: 'High',
     kpis: [
-      { label: 'Strategies Reviewed', value: '18', color: 'text-primary' },
+      { label: 'Strategies Reviewed', value: '18', color: 'text-brand-600' },
       { label: 'Effective', value: '10', color: 'text-compliant-700' },
       { label: 'Partial', value: '5', color: 'text-mitigated-700' },
       { label: 'Ineffective', value: '3', color: 'text-risk-700' },
@@ -102,7 +102,7 @@ const KEY_META: Record<string, KeyMeta> = {
   CE01: {
     risk: 'Control Gap', severity: 'High',
     kpis: [
-      { label: 'Controls Tested', value: '54', color: 'text-primary' },
+      { label: 'Controls Tested', value: '54', color: 'text-brand-600' },
       { label: 'Effective', value: '48', color: 'text-compliant-700' },
       { label: 'Deficient', value: '4', color: 'text-risk-700' },
       { label: 'Pending Test', value: '33', color: 'text-mitigated-700' },
@@ -112,7 +112,7 @@ const KEY_META: Record<string, KeyMeta> = {
   WA01: {
     risk: 'Operational Risk', severity: 'Medium',
     kpis: [
-      { label: 'Total Runs', value: '115', color: 'text-primary' },
+      { label: 'Total Runs', value: '115', color: 'text-brand-600' },
       { label: 'Accuracy', value: '94.2%', color: 'text-compliant-700' },
       { label: 'Exceptions', value: '23', color: 'text-high-700' },
       { label: 'Avg Runtime', value: '1.8d', color: 'text-evidence-700' },
@@ -122,7 +122,7 @@ const KEY_META: Record<string, KeyMeta> = {
   WA02: {
     risk: 'Processing Risk', severity: 'Medium',
     kpis: [
-      { label: 'Exceptions', value: '23', color: 'text-primary' },
+      { label: 'Exceptions', value: '23', color: 'text-brand-600' },
       { label: 'Auto-Resolved', value: '8', color: 'text-compliant-700' },
       { label: 'Manual Review', value: '12', color: 'text-mitigated-700' },
       { label: 'Escalated', value: '3', color: 'text-risk-700' },
@@ -132,7 +132,7 @@ const KEY_META: Record<string, KeyMeta> = {
   EX01: {
     risk: 'Strategic Risk', severity: 'Medium',
     kpis: [
-      { label: 'Compliance', value: '94.2%', color: 'text-primary' },
+      { label: 'Compliance', value: '94.2%', color: 'text-brand-600' },
       { label: 'Material Weakness', value: '2', color: 'text-risk-700' },
       { label: 'Cost Saved', value: '24L', color: 'text-compliant-700' },
       { label: 'Exposure', value: '18L', color: 'text-high-700' },
@@ -150,6 +150,12 @@ export const DEMO_REPORT_QUERY_KEYS: Record<string, string[]> = {
   'gr-001': ['Q01', 'Q02'],
   'gr-003': ['CE01', 'WA01', 'WA02'],
   'gr-004': ['RA01', 'RA02', 'EX01'],
+  // gr-008 deliberately re-uses Q01 (duplicate-invoice) from gr-001 and CE01
+  // (control-testing) from gr-003 so the wizard picker has the same query in
+  // two reports — that's what makes the "click to swap" affordance visible the
+  // moment the wizard opens. Pick Q01 in one report, then watch it offer to
+  // swap onto the other.
+  'gr-008': ['Q01', 'CE01'],
 };
 
 /** Project a workflow run into a query-shaped def — used only for counting and

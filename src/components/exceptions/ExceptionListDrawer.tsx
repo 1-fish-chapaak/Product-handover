@@ -222,7 +222,7 @@ export default function ExceptionListDrawer({
       >
         <header className="shrink-0 px-6 pt-5 pb-4 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div>
-            <h2 className="font-display text-[20px] font-semibold text-ink-900 tracking-tight">{title}</h2>
+            <h2 className="text-[20px] font-semibold text-ink-900 tracking-tight">{title}</h2>
             <p className="text-[12.5px] text-ink-500 mt-0.5">
               {groupByActionable ? `${groups.length} management action plan${groups.length === 1 ? '' : 's'} · grouped by Actionable ID` : subtitle}
             </p>

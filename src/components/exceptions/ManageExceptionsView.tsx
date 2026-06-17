@@ -596,7 +596,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
         <div className={`max-w-[1600px] mx-auto px-8 ${embedded ? 'pt-4 pb-0' : 'pt-8 pb-0'}`}>
           <div className="flex items-start justify-between gap-6">
             <div className="min-w-0">
-              {!embedded && <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">Manage Exceptions</h1>}
+              {!embedded && <h1 className="text-[34px] font-semibold tracking-tight text-ink-900 leading-[1.15]">Manage Exceptions</h1>}
               {embedded ? (
                 <h2 className="text-[16px] font-semibold text-ink-900 mb-3">Exceptions & Cases</h2>
               ) : (

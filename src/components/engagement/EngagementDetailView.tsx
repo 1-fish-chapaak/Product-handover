@@ -153,7 +153,7 @@ function WorkflowMappingDrawer({ control, onClose }: { control: ControlDetail; o
             <div>
               <div className="flex items-center gap-2">
                 <Link2 size={18} className="text-brand-600" />
-                <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight">Workflow Mapping</h2>
+                <h2 className="text-[1.125rem] font-semibold text-ink-900 tracking-tight">Workflow Mapping</h2>
               </div>
               <p className="text-[0.75rem] text-ink-500 mt-1">{control.controlName}</p>
             </div>

@@ -128,7 +128,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
         <div className="flex items-end justify-between mb-5">
           <div>
             <div className="text-[11px] font-semibold text-text-muted tracking-wider uppercase mb-1">Engagements</div>
-            <h1 className="font-display text-[32px] font-bold text-text leading-tight">Engagement Library</h1>
+            <h1 className="text-[32px] font-bold text-text leading-tight">Engagement Library</h1>
             <p className="text-[13px] text-text-secondary mt-1.5 max-w-xl">
               {mode === 'overview'
                 ? 'A cross-engagement snapshot — health, attention, and activity across your whole portfolio.'

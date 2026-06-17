@@ -152,7 +152,7 @@ export default function ReportDownloadModal({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
-        className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+        className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       >
         <div
           className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]"
@@ -173,14 +173,14 @@ export default function ReportDownloadModal({
           {/* Header */}
           <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-4">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="p-2 rounded-[8px] bg-primary/10 text-primary shrink-0">
+              <div className="p-2 rounded-[8px] bg-brand-600/10 text-brand-600 shrink-0">
                 <Download size={16} />
               </div>
-              <h2 className="text-[15px] font-bold text-text">Download Report</h2>
+              <h2 className="text-[15px] font-bold text-ink-800">Download Report</h2>
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-[8px] text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="p-1.5 rounded-[8px] text-ink-400 hover:text-ink-800 hover:bg-canvas transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
               aria-label="Close preview"
             >
               <X size={16} />
@@ -188,7 +188,7 @@ export default function ReportDownloadModal({
           </div>
 
           {/* Format Tabs */}
-          <div className="shrink-0 px-6 border-b border-border-light bg-surface-1/40">
+          <div className="shrink-0 px-6 border-b border-canvas-border bg-canvas-elevated-1/40">
             <div role="tablist" aria-label="Download format" className="flex items-center gap-1">
               {FORMATS.map(f => {
                 const isActive = format === f.id;
@@ -199,14 +199,14 @@ export default function ReportDownloadModal({
                     aria-selected={isActive}
                     onClick={() => setFormat(f.id)}
                     className={`relative inline-flex items-center h-11 px-4 text-[13px] font-semibold cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px] ${
-                      isActive ? 'text-primary' : 'text-text-muted hover:text-text'
+                      isActive ? 'text-brand-600' : 'text-ink-400 hover:text-ink-800'
                     }`}
                   >
                     <span>{f.label}</span>
                     {isActive && (
                       <motion.span
                         layoutId="download-tab-indicator"
-                        className="absolute left-2 right-2 -bottom-px h-[2px] bg-primary rounded-t"
+                        className="absolute left-2 right-2 -bottom-px h-[2px] bg-brand-600 rounded-t"
                         transition={{ type: 'spring', stiffness: 500, damping: 32 }}
                       />
                     )}
@@ -261,13 +261,13 @@ export default function ReportDownloadModal({
           </div>
 
           {/* Footer — primary Download action */}
-          <div className="shrink-0 px-6 py-4 border-t border-border-light bg-white flex items-center justify-end">
+          <div className="shrink-0 px-6 py-4 border-t border-canvas-border bg-white flex items-center justify-end">
             <Gated permission="rp_edit" mode="disable" title="You don't have permission to export reports">
             <button
               onClick={handleDownload}
               disabled={isDownloading}
               aria-busy={isDownloading || undefined}
-              className="flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] bg-primary hover:bg-primary-hover text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-80 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-80 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
               {isDownloading ? 'Preparing…' : 'Download'}
@@ -305,21 +305,21 @@ function PdfPreview({
       {/* Cover page — chrome carries the tag + Irame mark, body shows title + meta */}
       <PdfPage pageNo={1} totalPages={totalPages} variant="cover" reportName={reportName} reportTag={reportTag}>
         <div className="h-full flex flex-col justify-center text-center">
-          <h1 className="font-display text-[30px] leading-[1.15] font-semibold text-ink-900 tracking-tight mb-4">
+          <h1 className="text-[30px] leading-[1.15] font-semibold text-ink-900 tracking-tight mb-4">
             {reportName}
           </h1>
           <div className="mx-auto h-px bg-ink-900/20 w-16 mb-5" />
-          <p className="text-[12px] text-text-secondary leading-relaxed max-w-[68%] mx-auto mb-10">
+          <p className="text-[12px] text-ink-500 leading-relaxed max-w-[68%] mx-auto mb-10">
             Findings, observations, and remediation for the period.
           </p>
           <div className="grid grid-cols-2 gap-4 text-[11px] max-w-[60%] mx-auto">
             <div>
-              <div className="text-[9px] uppercase tracking-wider text-text-muted mb-0.5">Author</div>
-              <div className="font-semibold text-text">{generatedBy}</div>
+              <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-0.5">Author</div>
+              <div className="font-semibold text-ink-800">{generatedBy}</div>
             </div>
             <div>
-              <div className="text-[9px] uppercase tracking-wider text-text-muted mb-0.5">Date</div>
-              <div className="font-semibold text-text">{generatedAt}</div>
+              <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-0.5">Date</div>
+              <div className="font-semibold text-ink-800">{generatedAt}</div>
             </div>
           </div>
         </div>
@@ -373,7 +373,7 @@ function PageBlockBody({ block, typeface }: { block: DownloadPreviewSection[]; t
 function PdfContents({ sections }: { sections: DownloadPreviewSection[] }) {
   return (
     <div>
-      <h2 className="font-display text-[22px] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-1">
+      <h2 className="text-[22px] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-1">
         Table of Contents
       </h2>
       <div className="h-px bg-ink-900/20 w-12 mb-6" />
@@ -383,12 +383,12 @@ function PdfContents({ sections }: { sections: DownloadPreviewSection[] }) {
           const label = contentsLabel(s);
           return (
             <li key={s.id} className="flex items-baseline gap-3 text-[12px]">
-              <span className="font-mono tabular-nums text-text-muted w-7 shrink-0">
+              <span className="font-mono tabular-nums text-ink-400 w-7 shrink-0">
                 {String(i + 1).padStart(2, '0')}
               </span>
-              <span className="font-display text-ink-900 truncate">{label}</span>
+              <span className="text-ink-900 truncate">{label}</span>
               <span className="flex-1 border-b border-dotted border-ink-900/20 translate-y-[-3px]" />
-              <span className="font-mono tabular-nums text-text-muted">{pageNo}</span>
+              <span className="font-mono tabular-nums text-ink-400">{pageNo}</span>
             </li>
           );
         })}
@@ -455,28 +455,6 @@ function IrameWordmark({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
   );
 }
 
-// Small upper-right tag badge — accepts any "SOX Compliance"-style label.
-function ReportTagBadge({ tag }: { tag: string }) {
-  const parts = tag.split(/\s+/);
-  const first = parts[0];
-  const rest = parts.slice(1).join(' ');
-  return (
-    <div className="inline-flex items-center gap-1.5 text-ink-700">
-      <svg width="11" height="11" viewBox="0 0 10 10" aria-hidden>
-        <path d="M1 5.5 L4 8 L9 1" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <div className="leading-none">
-        <div className="font-bold text-[11px] tracking-[0.04em]">{first}</div>
-        {rest && (
-          <div className="text-[6px] tracking-[0.18em] font-semibold opacity-70 mt-[1px]">
-            {rest.toUpperCase()}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // Smooth gradient strip along the bottom edge — light purple → deep brand.
 function FooterChevronBand() {
   return (
@@ -491,7 +469,7 @@ function FooterChevronBand() {
   );
 }
 
-function PdfPage({ pageNo, totalPages, variant = 'interior', reportName, reportTag, children }: {
+function PdfPage({ pageNo, totalPages, variant = 'interior', reportName, children }: {
   pageNo: number;
   totalPages: number;
   variant?: 'cover' | 'interior';
@@ -538,7 +516,7 @@ function PdfPage({ pageNo, totalPages, variant = 'interior', reportName, reportT
         <div className="flex items-center gap-3">
           <span className="text-[11px] font-semibold text-brand-700">{reportName}</span>
           <div className="flex-1 h-px bg-ink-900/25" />
-          <span className="text-[10px] font-mono tabular-nums text-text-muted">{pageNo} / {totalPages}</span>
+          <span className="text-[10px] font-mono tabular-nums text-ink-400">{pageNo} / {totalPages}</span>
         </div>
       </div>
       <FooterChevronBand />
@@ -551,7 +529,7 @@ function PdfPage({ pageNo, totalPages, variant = 'interior', reportName, reportT
 // number bottom right. Primary-colored title bar.
 
 function PptPreview({
-  reportName, reportTag, generatedBy, generatedAt, sections,
+  reportName, generatedBy, generatedAt, sections,
 }: {
   reportName: string;
   reportTag?: string;
@@ -565,13 +543,13 @@ function PptPreview({
       {/* Title slide */}
       <PptSlide slideNo={1} total={total} reportName={reportName}>
         <div className="h-full flex flex-col justify-center">
-          <h1 className="font-display text-[34px] leading-[1.1] font-semibold text-ink-900 tracking-tight mb-3">
+          <h1 className="text-[34px] leading-[1.1] font-semibold text-ink-900 tracking-tight mb-3">
             {reportName}
           </h1>
-          <div className="h-[3px] bg-primary w-12 mb-4" />
-          <div className="flex items-center gap-3 text-[12px] text-text-secondary">
-            <span className="font-semibold text-text">{generatedBy}</span>
-            <span className="text-text-muted/60">·</span>
+          <div className="h-[3px] bg-brand-600 w-12 mb-4" />
+          <div className="flex items-center gap-3 text-[12px] text-ink-500">
+            <span className="font-semibold text-ink-800">{generatedBy}</span>
+            <span className="text-ink-400/60">·</span>
             <span>{generatedAt}</span>
           </div>
         </div>
@@ -621,7 +599,7 @@ function PptSlide({ slideNo, total, reportName, children }: {
         <div className="flex items-center gap-3">
           <span className="text-[11px] font-semibold text-brand-700">{reportName}</span>
           <div className="flex-1 h-px bg-ink-900/25" />
-          <span className="text-[10px] font-mono tabular-nums text-text-muted">{slideNo} / {total}</span>
+          <span className="text-[10px] font-mono tabular-nums text-ink-400">{slideNo} / {total}</span>
         </div>
       </div>
       <FooterChevronBand />
@@ -641,24 +619,24 @@ function PptQuerySlideBody({ section }: { section: Extract<DownloadPreviewSectio
     <div className="h-full flex flex-col">
       {/* Header band */}
       <div className="mb-3 shrink-0">
-        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-text-muted mb-1">{section.queryId}</div>
-        <h2 className="font-display text-[18px] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-2">{section.queryTitle}</h2>
+        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-400 mb-1">{section.queryId}</div>
+        <h2 className="text-[18px] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-2">{section.queryTitle}</h2>
         <div className="flex items-center gap-2 text-[10px]">
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold ${severityBadgeClass(section.severity)}`}>
             <AlertTriangle size={12} /> {section.severity}
           </span>
-          <span className="text-text-muted">·</span>
-          <span className="text-text-secondary">{section.risk}</span>
+          <span className="text-ink-400">·</span>
+          <span className="text-ink-500">{section.risk}</span>
         </div>
       </div>
 
       {/* 2-column body */}
       <div className="flex-1 grid grid-cols-2 gap-4 min-h-0">
         {/* Left: chart */}
-        <div className="bg-canvas-elevated border border-border-light rounded-[12px] p-3 flex flex-col min-h-0">
+        <div className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-3 flex flex-col min-h-0">
           {firstChart ? (
             <>
-              <div className="flex items-center gap-1.5 mb-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-text-secondary shrink-0">
+              <div className="flex items-center gap-1.5 mb-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-ink-500 shrink-0">
                 <BarChart3 size={12} /> {firstChart.title}
               </div>
               <div className="flex-1 min-h-0">
@@ -673,7 +651,7 @@ function PptQuerySlideBody({ section }: { section: Extract<DownloadPreviewSectio
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-[11px] text-text-muted">No chart attached</div>
+            <div className="flex-1 flex items-center justify-center text-[11px] text-ink-400">No chart attached</div>
           )}
         </div>
 
@@ -684,7 +662,7 @@ function PptQuerySlideBody({ section }: { section: Extract<DownloadPreviewSectio
               {kpis.map(k => (
                 <div key={k.label} className="flex items-baseline gap-1.5">
                   <span className="text-[15px] font-semibold text-ink-900 leading-none">{k.value}</span>
-                  <span className="text-[10px] text-text-muted font-medium leading-tight">{k.label}</span>
+                  <span className="text-[10px] text-ink-400 font-medium leading-tight">{k.label}</span>
                 </div>
               ))}
             </div>
@@ -694,11 +672,11 @@ function PptQuerySlideBody({ section }: { section: Extract<DownloadPreviewSectio
           )}
           {section.findings.length > 0 && (
             <div>
-              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-text-muted mb-1">Findings</div>
+              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-ink-400 mb-1">Findings</div>
               <ul className="space-y-0.5">
                 {section.findings.slice(0, 3).map((f, i) => (
                   <li key={i} className="text-[10px] leading-[1.4] text-ink-800 flex gap-1.5">
-                    <span className="text-primary mt-[3px] shrink-0">•</span>
+                    <span className="text-brand-600 mt-[3px] shrink-0">•</span>
                     <span className="line-clamp-2">{f}</span>
                   </li>
                 ))}
@@ -733,13 +711,13 @@ function DocxPreview({
       {/* Cover-style title page */}
       <PdfPage pageNo={1} totalPages={totalPages} reportName={reportName} reportTag={reportTag}>
         <div className="pt-2">
-          <h1 className="font-display text-[26px] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-2">
+          <h1 className="text-[26px] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-2">
             {reportName}
           </h1>
-          <p className="text-[12px] text-text-muted italic mb-1">
+          <p className="text-[12px] text-ink-400 italic mb-1">
             Prepared by {generatedBy}
           </p>
-          <p className="text-[12px] text-text-muted italic">{generatedAt}</p>
+          <p className="text-[12px] text-ink-400 italic">{generatedAt}</p>
         </div>
       </PdfPage>
 
@@ -766,19 +744,19 @@ function SectionContent({ section, typeface, compact = false }: {
   compact?: boolean;
 }) {
   const titleClass = typeface === 'serif'
-    ? 'font-display text-[18px] leading-[1.25] font-semibold text-ink-900 tracking-tight'
-    : 'font-display text-[20px] leading-[1.2] font-semibold text-ink-900 tracking-tight';
+    ? 'text-[18px] leading-[1.25] font-semibold text-ink-900 tracking-tight'
+    : 'text-[20px] leading-[1.2] font-semibold text-ink-900 tracking-tight';
   const bodyClass = typeface === 'serif'
-    ? 'font-display text-[12px] leading-[1.65] text-ink-800'
+    ? 'text-[12px] leading-[1.65] text-ink-800'
     : 'text-[13px] leading-[1.55] text-ink-800';
-  const labelClass = 'text-[10px] font-bold uppercase tracking-[0.16em] text-text-muted';
+  const labelClass = 'text-[10px] font-bold uppercase tracking-[0.16em] text-ink-400';
 
   if (section.kind === 'summary') {
     const stats = section.stats ?? [];
     return (
       <div>
         <h2 className={titleClass + ' mb-4 flex items-center gap-2'}>
-          <Sparkles size={14} className="text-primary" />
+          <Sparkles size={14} className="text-brand-600" />
           {section.title || 'Executive Summary'}
         </h2>
         {/* ATR-style KPI tile grid — mirrors the on-screen exec summary */}
@@ -787,7 +765,7 @@ function SectionContent({ section, typeface, compact = false }: {
             {stats.map(st => (
               <div
                 key={st.label}
-                className="rounded-[10px] border border-border-light bg-white p-3"
+                className="rounded-[10px] border border-canvas-border bg-white p-3"
                 style={{ borderLeft: `3px solid ${st.accent ?? '#6A12CD'}` }}
               >
                 <div className="text-[18px] font-bold tabular-nums leading-none mb-1" style={{ color: st.accent ?? '#6A12CD' }}>{st.value}</div>
@@ -813,8 +791,8 @@ function SectionContent({ section, typeface, compact = false }: {
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold ${severityBadgeClass(section.severity)}`}>
             <AlertTriangle size={12} /> {section.severity}
           </span>
-          <span className="text-text-muted">·</span>
-          <span className="text-text-secondary">{section.risk}</span>
+          <span className="text-ink-400">·</span>
+          <span className="text-ink-500">{section.risk}</span>
         </div>
 
         {/* KPI strip — mirrors the in-report inline metrics */}
@@ -823,7 +801,7 @@ function SectionContent({ section, typeface, compact = false }: {
             {kpis.map(k => (
               <span key={k.label} className="flex items-baseline gap-1.5">
                 <span className="text-[15px] font-semibold text-ink-900 leading-none">{k.value}</span>
-                <span className="text-[10px] text-text-muted font-medium">{k.label}</span>
+                <span className="text-[10px] text-ink-400 font-medium">{k.label}</span>
               </span>
             ))}
           </div>
@@ -833,8 +811,8 @@ function SectionContent({ section, typeface, compact = false }: {
 
         {/* Charts — render each available chart with the canonical renderer */}
         {!compact && charts.map(g => (
-          <div key={g.id} className="bg-canvas-elevated border border-border-light rounded-[12px] p-3 mb-3">
-            <div className="flex items-center gap-1.5 mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-text-secondary">
+          <div key={g.id} className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-3 mb-3">
+            <div className="flex items-center gap-1.5 mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-500">
               <BarChart3 size={12} /> {g.title}
             </div>
             <div className="h-[160px]">
@@ -852,16 +830,16 @@ function SectionContent({ section, typeface, compact = false }: {
 
         {/* Results table */}
         {!compact && table && table.rows.length > 0 && (
-          <div className="bg-canvas-elevated border border-border-light rounded-[12px] p-3 mb-3">
-            <div className="flex items-center gap-1.5 mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-text-secondary">
+          <div className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-3 mb-3">
+            <div className="flex items-center gap-1.5 mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-500">
               <LayoutGrid size={12} /> Results Table
             </div>
-            <div className="overflow-hidden rounded-[12px] border border-border-light">
+            <div className="overflow-hidden rounded-[12px] border border-canvas-border">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-paper-50">
                     {table.columns.map(c => (
-                      <th key={c} className="px-2 py-1.5 text-left text-[9px] font-bold text-text-muted uppercase tracking-wider border-b border-border-light whitespace-nowrap">
+                      <th key={c} className="px-2 py-1.5 text-left text-[9px] font-bold text-ink-400 uppercase tracking-wider border-b border-canvas-border whitespace-nowrap">
                         {c}
                       </th>
                     ))}
@@ -869,9 +847,9 @@ function SectionContent({ section, typeface, compact = false }: {
                 </thead>
                 <tbody>
                   {table.rows.slice(0, 8).map((row, ri) => (
-                    <tr key={ri} className="border-b border-border-light last:border-b-0">
+                    <tr key={ri} className="border-b border-canvas-border last:border-b-0">
                       {row.map((cell, ci) => (
-                        <td key={ci} className="px-2 py-1.5 text-[10px] text-text-secondary whitespace-nowrap">
+                        <td key={ci} className="px-2 py-1.5 text-[10px] text-ink-500 whitespace-nowrap">
                           {cell}
                         </td>
                       ))}
@@ -890,7 +868,7 @@ function SectionContent({ section, typeface, compact = false }: {
           <FindingsBlock title="Observations" items={section.observations} bodyClass={bodyClass} labelClass={labelClass} />
         )}
         {compact && (section.findings.length > 0 || section.observations.length > 0) && (
-          <div className="text-[11px] text-text-muted italic">
+          <div className="text-[11px] text-ink-400 italic">
             {section.findings.length} {section.findings.length === 1 ? 'finding' : 'findings'} · {section.observations.length} {section.observations.length === 1 ? 'observation' : 'observations'}
           </div>
         )}
@@ -902,7 +880,7 @@ function SectionContent({ section, typeface, compact = false }: {
     return (
       <div>
         <div className={labelClass + ' mb-2 flex items-center gap-1.5'}>
-          <ShieldAlert size={12} className="text-primary" /> {section.workflowId}
+          <ShieldAlert size={12} className="text-brand-600" /> {section.workflowId}
         </div>
         <h2 className={titleClass + ' mb-3'}>{section.workflowName}</h2>
         <div className="flex items-center gap-2 mb-4 text-[10px]">
@@ -925,7 +903,7 @@ function SectionContent({ section, typeface, compact = false }: {
     return (
       <div>
         <div className={labelClass + ' mb-2 flex items-center gap-1.5'}>
-          <FileText size={12} className="text-primary" /> Note
+          <FileText size={12} className="text-brand-600" /> Note
         </div>
         <h2 className={titleClass + ' mb-3'}>{section.title}</h2>
         <p className={bodyClass}>{section.content}</p>
@@ -937,7 +915,7 @@ function SectionContent({ section, typeface, compact = false }: {
     return (
       <div>
         <div className={labelClass + ' mb-2 flex items-center gap-1.5'}>
-          <CheckCircle2 size={12} className="text-primary" /> {section.obsId}
+          <CheckCircle2 size={12} className="text-brand-600" /> {section.obsId}
         </div>
         <h2 className={titleClass + ' mb-3'}>{section.title}</h2>
         <p className={bodyClass}>{section.description}</p>
@@ -960,7 +938,7 @@ function FindingsBlock({ title, items, bodyClass, labelClass }: {
       <ul className="space-y-1">
         {items.map((it, i) => (
           <li key={i} className={bodyClass + ' flex gap-2'}>
-            <span className="text-primary mt-1 shrink-0">•</span>
+            <span className="text-brand-600 mt-1 shrink-0">•</span>
             <span>{it}</span>
           </li>
         ))}

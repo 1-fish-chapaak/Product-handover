@@ -121,7 +121,7 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
         {/* Header */}
         <header className="shrink-0 px-7 pt-7 pb-5 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div className="min-w-0">
-            <h2 className="font-display text-[28px] leading-[1.15] font-semibold text-ink-900 tracking-tight">
+            <h2 className="text-[28px] leading-[1.15] font-semibold text-ink-900 tracking-tight">
               {ex.id}
             </h2>
             <p className="text-[13px] text-ink-500 mt-1 leading-snug">

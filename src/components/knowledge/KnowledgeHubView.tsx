@@ -91,7 +91,7 @@ function SmartLearnComingSoon() {
             <Brain size={24} className="text-brand-700" />
           </motion.div>
         </div>
-        <h2 className="font-display text-[1.75rem] text-ink-900 leading-tight mb-3">
+        <h2 className="text-[1.75rem] text-ink-900 leading-tight mb-3">
           Smart Learn is on the way
         </h2>
         <p className="text-[0.9375rem] text-ink-500 leading-relaxed max-w-md mx-auto">
@@ -192,7 +192,7 @@ export default function KnowledgeHubView() {
             {/* Header — title · subhead. Add source CTA lives on the filter
                 row inside DataSourcesView (matches reference). */}
             <div className="min-w-0">
-              <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">
+              <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">
                 Knowledge Hub
               </h1>
               <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">

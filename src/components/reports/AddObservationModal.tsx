@@ -62,7 +62,7 @@ export function attachmentVisual(mime: string): { Icon: React.ElementType; tone:
     return { Icon: FileSpreadsheet, tone: 'text-compliant-700' };
   if (mime === 'application/msword' || mime.includes('wordprocessing'))
     return { Icon: FileText, tone: 'text-evidence-700' };
-  return { Icon: Paperclip, tone: 'text-text-muted' };
+  return { Icon: Paperclip, tone: 'text-ink-400' };
 }
 
 // Compute the next OBS-NNN id given the list of existing ids.
@@ -282,7 +282,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
-        className="reports-focus-noring fixed inset-0 z-[9999] flex items-center justify-center p-6"
+        className="reports-focus-noring fixed inset-0 z-[60] flex items-center justify-center p-6"
         onClick={handleBackdropClose}
       >
         <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
@@ -301,7 +301,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
           aria-modal="true"
           aria-labelledby="add-observation-title"
           tabIndex={-1}
-          className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[560px] max-w-[calc(100vw-32px)] p-6"
+          className="relative bg-white rounded-[16px] border border-canvas-border shadow-2xl w-[560px] max-w-[calc(100vw-32px)] p-6"
         >
           {isDraggingFiles && (
             <motion.div
@@ -309,23 +309,23 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.12 }}
-              className="absolute inset-1 z-10 rounded-[12px] border-2 border-dashed border-primary bg-primary-xlight/90 backdrop-blur-[2px] flex items-center justify-center pointer-events-none"
+              className="absolute inset-1 z-10 rounded-[12px] border-2 border-dashed border-brand-600 bg-brand-50/90 backdrop-blur-[2px] flex items-center justify-center pointer-events-none"
             >
               <div className="text-center">
-                <CloudUpload size={32} className="text-primary mx-auto mb-2" strokeWidth={1.75} />
-                <div className="text-[14px] font-semibold text-primary">Drop to attach files</div>
-                <div className="text-[11px] text-text-secondary mt-1">PNG, JPG, PDF up to {ATTACHMENT_MAX_LABEL}</div>
+                <CloudUpload size={32} className="text-brand-600 mx-auto mb-2" strokeWidth={1.75} />
+                <div className="text-[14px] font-semibold text-brand-600">Drop to attach files</div>
+                <div className="text-[11px] text-ink-500 mt-1">PNG, JPG, PDF up to {ATTACHMENT_MAX_LABEL}</div>
               </div>
             </motion.div>
           )}
           <button
             onClick={handleBackdropClose}
             aria-label="Close"
-            className="absolute top-4 right-4 w-7 h-7 inline-flex items-center justify-center rounded-[8px] text-text-muted hover:text-text hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="absolute top-4 right-4 w-7 h-7 inline-flex items-center justify-center rounded-[8px] text-ink-400 hover:text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             <X size={16} />
           </button>
-          <h3 id="add-observation-title" className="text-[16px] font-bold text-text tracking-tight mb-5">
+          <h3 id="add-observation-title" className="text-[16px] font-bold text-ink-800 tracking-tight mb-5">
             {editing ? 'Edit observation' : 'Add observation'}
           </h3>
 
@@ -355,17 +355,17 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
 
           <div className="space-y-4">
             <div>
-              <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Observation ID</label>
+              <label className="block text-[11px] font-semibold text-ink-500 uppercase tracking-wider mb-1.5">Observation ID</label>
               <input
                 type="text"
                 value={editing?.obsId ?? nextObsId}
                 readOnly
-                className="w-full bg-paper-50 border border-border-light rounded-[8px] px-3 py-2 text-[13px] font-mono text-text tabular-nums cursor-default"
+                className="w-full bg-paper-50 border border-canvas-border rounded-[8px] px-3 py-2 text-[13px] font-mono text-ink-800 tabular-nums cursor-default"
               />
             </div>
 
             <div>
-              <label htmlFor="observation-name" className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">
+              <label htmlFor="observation-name" className="block text-[11px] font-semibold text-ink-500 uppercase tracking-wider mb-1.5">
                 Name <span className="text-risk ml-0.5 normal-case font-normal">*</span>
               </label>
               <input
@@ -382,23 +382,23 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                 aria-invalid={showErrors && !obsForm.name.trim() ? 'true' : undefined}
                 aria-required="true"
                 autoFocus
-                className={`w-full bg-white border rounded-[8px] px-3 py-2 text-[13px] text-text focus:outline-none focus:ring-2 transition-all ${
+                className={`w-full bg-white border rounded-[8px] px-3 py-2 text-[13px] text-ink-800 focus:outline-none focus:ring-2 transition-all ${
                   showErrors && !obsForm.name.trim()
                     ? 'border-risk-300 focus:border-risk-400 focus:ring-risk-200/60'
-                    : 'border-border-light focus:border-primary/40 focus:ring-primary/15'
+                    : 'border-canvas-border focus:border-brand-600/40 focus:ring-brand-600/15'
                 }`}
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Description</label>
-              <div className="bg-white border border-border-light rounded-[8px] focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15 transition-all overflow-hidden">
+              <label className="block text-[11px] font-semibold text-ink-500 uppercase tracking-wider mb-1.5">Description</label>
+              <div className="bg-white border border-canvas-border rounded-[8px] focus-within:border-brand-600/40 focus-within:ring-2 focus-within:ring-brand-600/15 transition-all overflow-hidden">
                 <textarea
                   value={obsForm.description}
                   onChange={(e) => setObsForm(prev => ({ ...prev, description: e.target.value }))}
                   placeholder="Add observation details, evidence, and recommended actions."
                   rows={4}
-                  className="w-full bg-transparent border-0 px-3 pt-2 pb-1 text-[13px] text-text focus:outline-none focus:ring-0 resize-none"
+                  className="w-full bg-transparent border-0 px-3 pt-2 pb-1 text-[13px] text-ink-800 focus:outline-none focus:ring-0 resize-none"
                 />
                 {obsForm.attachments.length > 0 && (
                   <ul className="px-3 pb-2 space-y-1.5">
@@ -408,26 +408,26 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                       return (
                         <li
                           key={att.id}
-                          className="flex items-center gap-2.5 px-2 py-1.5 bg-paper-50 border border-border-light rounded-[8px]"
+                          className="flex items-center gap-2.5 px-2 py-1.5 bg-paper-50 border border-canvas-border rounded-[8px]"
                         >
                           {isImage ? (
-                            <div className="w-8 h-8 rounded-[8px] border border-border-light overflow-hidden bg-white shrink-0">
+                            <div className="w-8 h-8 rounded-[8px] border border-canvas-border overflow-hidden bg-white shrink-0">
                               <img src={att.dataUrl} alt="" className="w-full h-full object-cover" />
                             </div>
                           ) : (
-                            <div className={`w-8 h-8 rounded-[8px] border border-border-light bg-white inline-flex items-center justify-center shrink-0 ${tone}`}>
+                            <div className={`w-8 h-8 rounded-[8px] border border-canvas-border bg-white inline-flex items-center justify-center shrink-0 ${tone}`}>
                               <Icon size={16} />
                             </div>
                           )}
                           <div className="min-w-0 flex-1">
-                            <div className="text-[12px] text-text font-medium truncate">{att.name}</div>
-                            <div className="text-[10px] text-text-muted tabular-nums">{formatFileSize(att.size)}</div>
+                            <div className="text-[12px] text-ink-800 font-medium truncate">{att.name}</div>
+                            <div className="text-[10px] text-ink-400 tabular-nums">{formatFileSize(att.size)}</div>
                           </div>
                           <button
                             type="button"
                             onClick={() => removeAttachment(att.id)}
                             aria-label={`Remove ${att.name}`}
-                            className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-[8px] text-text-muted hover:text-risk-700 hover:bg-white transition-colors cursor-pointer"
+                            className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-[8px] text-ink-400 hover:text-risk-700 hover:bg-white transition-colors cursor-pointer"
                           >
                             <X size={14} />
                           </button>
@@ -436,10 +436,10 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                     })}
                   </ul>
                 )}
-                <div className="flex items-center justify-between px-2 py-1.5 border-t border-border-light/60 bg-paper-50/40">
+                <div className="flex items-center justify-between px-2 py-1.5 border-t border-canvas-border/60 bg-paper-50/40">
                   <label
                     title={`Attach files (PNG, JPG, PDF up to ${ATTACHMENT_MAX_LABEL})`}
-                    className="inline-flex items-center gap-1.5 h-7 px-2 rounded-[8px] text-[11px] font-medium text-text-secondary hover:text-primary hover:bg-primary-xlight transition-colors cursor-pointer focus-within:ring-2 focus-within:ring-brand-600/40 focus-within:ring-offset-1"
+                    className="inline-flex items-center gap-1.5 h-7 px-2 rounded-[8px] text-[11px] font-medium text-ink-500 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer focus-within:ring-2 focus-within:ring-brand-600/40 focus-within:ring-offset-1"
                   >
                     <Paperclip size={14} />
                     <span>{obsForm.attachments.length > 0 ? 'Add more files' : 'Attach files'}</span>
@@ -455,7 +455,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                     />
                   </label>
                   {obsForm.attachments.length > 0 && (
-                    <span className="text-[10px] text-text-muted tabular-nums pr-1">
+                    <span className="text-[10px] text-ink-400 tabular-nums pr-1">
                       {obsForm.attachments.length} {obsForm.attachments.length === 1 ? 'file' : 'files'}
                     </span>
                   )}
@@ -471,7 +471,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
             <button
               onClick={onClose}
               disabled={isSaving}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Cancel
             </button>
@@ -480,7 +480,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
               onClick={handleSave}
               disabled={isSaving}
               aria-busy={isSaving || undefined}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-white bg-primary rounded-[8px] hover:bg-primary-hover disabled:bg-primary/60 disabled:cursor-not-allowed transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-500 disabled:bg-brand-600/60 disabled:cursor-not-allowed transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               {isSaving && <Loader2 size={14} className="animate-spin" />}
               {isSaving
@@ -497,7 +497,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
-              className="fixed inset-0 z-[10000] flex items-center justify-center p-6"
+              className="fixed inset-0 z-[70] flex items-center justify-center p-6"
               onClick={() => setShowDiscardConfirm(false)}
             >
               <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
@@ -510,14 +510,14 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                 role="alertdialog"
                 aria-modal="true"
                 aria-labelledby="discard-obs-title"
-                className="relative bg-white rounded-[16px] border border-border-light shadow-2xl w-[320px] p-6"
+                className="relative bg-white rounded-[16px] border border-canvas-border shadow-2xl w-[320px] p-6"
               >
-                <h3 id="discard-obs-title" className="text-[16px] font-bold text-text tracking-tight mb-2">Discard changes?</h3>
-                <p className="text-[13px] text-text-secondary leading-relaxed mb-6">Your observation has unsaved changes. Discard them?</p>
+                <h3 id="discard-obs-title" className="text-[16px] font-bold text-ink-800 tracking-tight mb-2">Discard changes?</h3>
+                <p className="text-[13px] text-ink-500 leading-relaxed mb-6">Your observation has unsaved changes. Discard them?</p>
                 <div className="flex items-center justify-end gap-2.5">
                   <button
                     onClick={() => setShowDiscardConfirm(false)}
-                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
+                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
                   >
                     Keep editing
                   </button>

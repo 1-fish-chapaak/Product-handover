@@ -180,7 +180,7 @@ function DrawerShell({
       <header className="shrink-0 px-6 pt-5 pb-0 border-b border-canvas-border">
         <div className="flex items-start justify-between gap-4 mb-3">
           <div>
-            <h2 className="font-display text-[20px] font-semibold text-ink-900 tracking-tight">{title}</h2>
+            <h2 className="text-[20px] font-semibold text-ink-900 tracking-tight">{title}</h2>
             {subtitle && <p className="text-[12.5px] text-ink-500 mt-0.5">{subtitle}</p>}
           </div>
           <button
@@ -1895,7 +1895,7 @@ export function BulkScopeChooser({
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full"><LinkIcon size={11} /> Bulk</span>
-              <h2 className="font-display text-[19px] font-semibold text-ink-900 tracking-tight truncate">{actionLabel}</h2>
+              <h2 className="text-[19px] font-semibold text-ink-900 tracking-tight truncate">{actionLabel}</h2>
             </div>
             <p className="text-[12.5px] text-ink-500 leading-snug">
               <span className="font-mono tabular-nums">ID: {groupId}</span> · {candidates.length} linked cases{groupTitle ? <> · <span className="text-ink-600">{groupTitle}</span></> : null}
@@ -2004,7 +2004,7 @@ export function BulkActionGroupModal({
       >
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div>
-            <h2 className="font-display text-[20px] font-semibold text-ink-900 tracking-tight">Bulk Action Group</h2>
+            <h2 className="text-[20px] font-semibold text-ink-900 tracking-tight">Bulk Action Group</h2>
             <p className="text-[12.5px] text-ink-500 mt-0.5 font-mono tabular-nums">
               ID: {bulk.id} · {cases.length} cases
             </p>

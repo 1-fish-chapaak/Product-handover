@@ -1,9 +1,11 @@
-import { Sparkles, Calendar, PenLine, Eye } from 'lucide-react';
+import { Sparkles, Calendar, PenLine, Eye, Lightbulb } from 'lucide-react';
 import type {
   AtrMeta, AtrObservation, AtrActionPlan, AtrInsight,
   AtrClassification, AtrObservationStatus, AtrActionStatus,
 } from './atrTypes';
 import { computeExecSummary } from './atrTemplate';
+import FloatingLines from '../shared/FloatingLines';
+import { ReportMetaPanel } from './ReportDocumentChrome';
 
 // ─── Token maps (theme defines base / -50 / -700 only for semantic colors) ───
 const OBS_STATUS_PILL: Record<AtrObservationStatus, { cls: string; dot: string }> = {
@@ -46,20 +48,8 @@ function NumberedHeading({ n, title, subtitle }: { n: number; title: string; sub
     <div className="flex items-start gap-3 mb-5">
       <span className="shrink-0 w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[0.8125rem] font-bold flex items-center justify-center mt-0.5">{n}</span>
       <div>
-        <h2 className="text-[1.0625rem] font-bold text-ink-900 tracking-tight leading-tight">{title}</h2>
+        <h2 className="text-[1.1875rem] font-semibold text-ink-900 tracking-tight leading-tight">{title}</h2>
         <p className="text-[0.75rem] text-ink-500">{subtitle}</p>
-      </div>
-    </div>
-  );
-}
-
-function MetaCell({ label, value }: { label: string; value?: string }) {
-  if (!value) return null;
-  return (
-    <div>
-      <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-1.5">{label}</div>
-      <div className="border-l-[3px] border-brand-500 pl-3">
-        <div className="text-[0.8125rem] font-bold text-ink-900">{value}</div>
       </div>
     </div>
   );
@@ -70,7 +60,7 @@ function FieldRow({ label, children, italic }: { label: string; children: React.
   return (
     <>
       <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ink-500 pt-2">{label}</div>
-      <p className={`pt-2 text-[0.75rem] text-ink-800 leading-relaxed ${italic ? 'italic text-ink-700' : ''}`}>{children}</p>
+      <p className={`pt-2 text-[0.875rem] text-ink-800 leading-relaxed ${italic ? 'italic text-ink-600' : ''}`}>{children}</p>
     </>
   );
 }
@@ -108,37 +98,75 @@ export default function AtrDocument({
 
   return (
     <article className={`report-printable ${maxWidthClass} mx-auto bg-canvas-elevated border border-canvas-border rounded-[12px] shadow-sm overflow-hidden`}>
-      {/* Brand banner */}
-      <div className="relative px-9 py-7 bg-gradient-to-br from-brand-700 to-brand-600 text-white overflow-hidden">
-        <div className="absolute -right-6 -top-10 w-48 h-48 rounded-full bg-white/5" aria-hidden="true" />
-        <div className="relative flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-8 h-8 rounded-[8px] bg-white/15 flex items-center justify-center"><Sparkles size={15} /></div>
-              <div className="leading-none">
-                <div className="text-[0.8125rem] font-bold tracking-wide">IRAME.AI</div>
-                <div className="text-[0.5rem] font-semibold tracking-[0.22em] text-white/70 mt-0.5">AUDIT INTELLIGENCE</div>
+      {/* Purple gradient letterhead — IRAME.AI lockup + title over the
+          floating-line art, matching the report covers. */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#3b0b72] to-[#6a12cd] px-9 pt-8 pb-7">
+        <div
+          className="absolute inset-0 z-0 print:hidden"
+          style={{ maskImage: 'linear-gradient(to right, transparent 35%, white 70%)', WebkitMaskImage: 'linear-gradient(to right, transparent 35%, white 70%)' }}
+          aria-hidden="true"
+        >
+          <FloatingLines
+            enabledWaves={['top', 'middle']}
+            lineCount={6}
+            lineDistance={6}
+            bendRadius={4}
+            bendStrength={-0.3}
+            interactive
+            parallax={false}
+            color="#e879f9"
+            opacity={0.3}
+          />
+        </div>
+        <div className="relative z-10 flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5 mb-5">
+              <div className="w-9 h-9 rounded-[9px] bg-white/15 border border-white/20 text-white flex items-center justify-center"><Sparkles size={16} /></div>
+              <div className="leading-tight">
+                <div className="text-[0.8125rem] font-bold tracking-wide text-white">IRAME.AI</div>
+                <div className="text-[0.625rem] font-semibold tracking-[0.22em] text-white/60 mt-0.5">AUDIT INTELLIGENCE</div>
               </div>
             </div>
-            <h1 className="text-[1.75rem] font-bold tracking-tight leading-tight">Action Taken Report</h1>
+            <h1 className="text-[2rem] font-semibold tracking-tight leading-tight text-white">Action Taken Report</h1>
             {(meta.auditEntity || meta.auditPeriod) && (
-              <p className="text-[0.8125rem] text-white/80 mt-1">
+              <p className="text-[0.8125rem] text-white/70 mt-1.5">
                 {[meta.auditEntity, meta.auditPeriod].filter(Boolean).join(' · ')}
               </p>
             )}
           </div>
-          {headerActions && <div className="shrink-0 flex items-center gap-2 print:hidden">{headerActions}</div>}
+          <div className="shrink-0 flex flex-col items-end gap-3">
+            {headerActions && <div className="flex items-center gap-2 print:hidden">{headerActions}</div>}
+            {/* Key facts — glanceable headline numbers on the banner right. */}
+            {ex.totalObservations > 0 && (
+              <div className="flex items-stretch rounded-[12px] border border-white/20 bg-white/10 overflow-hidden">
+                {[
+                  { value: ex.totalObservations, label: 'Observations' },
+                  { value: totalExceptions, label: 'Exceptions' },
+                  { value: ex.totalActionPlans, label: 'Action Plans' },
+                ].map((s, i) => (
+                  <div key={s.label} className={`px-5 py-3 text-center ${i > 0 ? 'border-l border-white/15' : ''}`}>
+                    <div className="text-[1.5rem] font-bold text-white tabular-nums leading-none">{s.value}</div>
+                    <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-white/65 mt-1.5 whitespace-nowrap">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Metadata grid */}
-      <div className="px-9 py-6 grid grid-cols-3 gap-x-8 gap-y-5 border-b border-canvas-border">
-        <MetaCell label="Report ID" value={meta.reportId} />
-        <MetaCell label="Audit Title" value={meta.auditTitle} />
-        <MetaCell label="Audit Period" value={meta.auditPeriod} />
-        <MetaCell label="Prepared By" value={meta.preparedBy} />
-        <MetaCell label="Generated On" value={meta.generatedOn} />
-        <MetaCell label="Audit Entity" value={meta.auditEntity} />
+      {/* Metadata — structured report-facts panel. Audit Entity + Period live in
+          the banner subtitle, so the panel carries only the unique facts. */}
+      <div className="px-9 py-6 border-b border-canvas-border">
+        <ReportMetaPanel
+          columns={4}
+          items={[
+            { label: 'Report ID', value: meta.reportId },
+            { label: 'Audit Title', value: meta.auditTitle },
+            { label: 'Prepared By', value: meta.preparedBy },
+            { label: 'Generated On', value: meta.generatedOn },
+          ]}
+        />
       </div>
 
       {/* Section 1 — Executive Summary */}
@@ -220,9 +248,12 @@ export default function AtrDocument({
           </div>
           <div className="space-y-3">
             {insights.map((ins, i) => (
-              <div key={i} className="bg-brand-50/40 border border-canvas-border border-l-[3px] border-l-brand-500 rounded-[10px] p-4">
-                <div className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5">{ins.title}</div>
-                <p className="text-[0.75rem] text-ink-700 leading-relaxed">{ins.body}</p>
+              <div key={i} className="flex gap-3.5 bg-canvas-elevated border border-canvas-border rounded-[10px] p-4 hover:border-brand-200 transition-colors">
+                <span className="shrink-0 mt-0.5 w-6 h-6 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center"><Lightbulb size={13} /></span>
+                <div className="min-w-0">
+                  <div className="text-[0.9375rem] font-semibold text-ink-900 mb-1 leading-snug">{ins.title}</div>
+                  <p className="text-[0.875rem] text-ink-700 leading-relaxed">{ins.body}</p>
+                </div>
               </div>
             ))}
           </div>
@@ -270,7 +301,7 @@ function ObservationCard({ index, obs }: { index: number; obs: AtrObservation })
         <div className="flex items-center gap-2.5 flex-wrap min-w-0">
           <span className="shrink-0 w-7 h-7 rounded-[8px] bg-brand-600 text-white text-[0.8125rem] font-bold flex items-center justify-center">{index}</span>
           <div className="min-w-0">
-            <h3 className="text-[0.9375rem] font-bold text-ink-900 leading-tight">{obs.title}</h3>
+            <h3 className="text-[1.0625rem] font-semibold text-ink-900 leading-tight">{obs.title}</h3>
             {obs.process && <div className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-ink-500 mt-0.5">{obs.process}</div>}
           </div>
         </div>

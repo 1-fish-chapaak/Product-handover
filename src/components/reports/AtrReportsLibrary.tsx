@@ -143,9 +143,6 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
           pageSize={20}
           hideResultCount
           columns={[
-            { key: 'index', label: 'No.', width: '56px', sortable: false, render: (_item, i) => (
-              <span className="font-mono text-[11.5px] text-text-muted tabular-nums">{String(i + 1).padStart(2, '0')}</span>
-            )},
             { key: 'name', label: 'Report', truncate: true, render: (item) => {
               const atr = item as unknown as AtrLibraryReport;
               const plans = atr.atrData.observations.reduce((n, o) => n + o.actionPlans.length, 0);
@@ -155,8 +152,8 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
                     <FileText size={16} strokeWidth={1.75} aria-hidden="true" />
                   </span>
                   <div className="min-w-0">
-                    <div className="text-[14.5px] font-semibold tracking-[-0.006em] text-ink-900 truncate group-hover:text-primary transition-colors" title={reportDisplayName(atr.name)}>{reportDisplayName(atr.name)}</div>
-                    <div className="mt-0.5 text-[11.5px] text-text-muted truncate">{atr.atrData.observations.length} obs · {plans} plans · {evidenceCount[atr.id] ?? 0} evidence</div>
+                    <div className="text-[14.5px] font-semibold tracking-[-0.006em] text-ink-900 truncate group-hover:text-brand-600 transition-colors" title={reportDisplayName(atr.name)}>{reportDisplayName(atr.name)}</div>
+                    <div className="mt-0.5 text-[11.5px] text-ink-400 truncate">{atr.atrData.observations.length} obs · {plans} plans · {evidenceCount[atr.id] ?? 0} evidence</div>
                   </div>
                 </div>
               );
@@ -169,8 +166,8 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
               const atr = item as unknown as AtrLibraryReport;
               return <ReportPill tone={atr.status === 'final' ? 'compliant' : 'draft'}>{atr.status === 'final' ? 'Final' : 'Draft'}</ReportPill>;
             }},
-            { key: 'generatedAt', label: 'Generated', width: '150px', align: 'right', render: (item) => (
-              <span className="font-mono text-[12px] tabular-nums text-text-muted whitespace-nowrap">{String((item as unknown as AtrLibraryReport).generatedAt)}</span>
+            { key: 'generatedAt', label: 'Generated', width: '150px', render: (item) => (
+              <span className="text-[12px] tabular-nums text-ink-500 whitespace-nowrap">{String((item as unknown as AtrLibraryReport).generatedAt)}</span>
             )},
             { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => {
               const atr = item as unknown as AtrLibraryReport;
@@ -196,10 +193,11 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
                 icon={FileText}
                 iconClass="bg-info-50 text-info-700"
                 eyebrow="ATR"
+                accent="bg-evidence-600"
                 title={reportDisplayName(atr.name)}
                 description={`${atr.atrData.meta.auditEntity} — ${atr.atrData.meta.auditPeriod}`}
                 pills={[atr.status === 'final' ? 'Final' : 'Draft', `${atr.atrData.observations.length} observations`, `${plans} action plans`, `${ev} evidence`]}
-                footerRight={<span className="font-mono text-[11px] tabular-nums text-ink-400">{atr.generatedAt}</span>}
+                footerRight={<span className="text-[11px] tabular-nums text-ink-400">{atr.generatedAt}</span>}
                 onClick={() => onOpen(atr)}
                 actions={<>
                   {onDownload && <button title="Download" onClick={(e) => { e.stopPropagation(); onDownload(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button>}
