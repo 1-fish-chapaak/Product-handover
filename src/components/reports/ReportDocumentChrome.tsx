@@ -166,7 +166,7 @@ export function CoverBanner({ title, gradient, description, byline, actions, fac
           )}
         </div>
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2 text-[13px] flex-wrap">{byline}</div>
+          <div className="flex items-center gap-2 text-[0.8125rem] flex-wrap">{byline}</div>
           {actions && <div className="flex items-center gap-2 print:hidden">{actions}</div>}
         </div>
       </div>

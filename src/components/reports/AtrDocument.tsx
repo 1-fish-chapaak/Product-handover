@@ -19,7 +19,7 @@ const ACTION_STATUS: Record<AtrActionStatus, { pill: string; border: string; dot
   'Partially Implemented': { pill: 'bg-mitigated-50 text-mitigated-700', border: 'border-t-mitigated', dot: 'bg-mitigated' },
   Pending:                 { pill: 'bg-risk-50 text-risk-700',           border: 'border-t-risk',      dot: 'bg-risk' },
   Overdue:                 { pill: 'bg-risk-50 text-risk-700',           border: 'border-t-risk',      dot: 'bg-risk' },
-  'Not Due':               { pill: 'bg-[#EEEEF1] text-ink-600',          border: 'border-t-ink-300',   dot: 'bg-ink-400' },
+  'Not Due':               { pill: 'bg-paper-100 text-ink-600',          border: 'border-t-ink-300',   dot: 'bg-ink-400' },
 };
 const CLASSIFICATION_PILL: Record<AtrClassification, string> = {
   'Design Deficiency': 'bg-high-50 text-high-700',
@@ -97,7 +97,7 @@ export default function AtrDocument({
     s === 'Closed' ? 'Closed' : s === 'In Progress' ? 'In Progress' : 'Open';
 
   return (
-    <article className={`report-printable ${maxWidthClass} mx-auto bg-canvas-elevated border border-canvas-border rounded-[12px] shadow-sm overflow-hidden`}>
+    <article className={`report-printable ${maxWidthClass} mx-auto bg-canvas-elevated border border-canvas-border rounded-[12px] overflow-hidden`}>
       {/* Purple gradient letterhead — title over the woven line art, matching
           the report covers. */}
       <div
@@ -214,7 +214,7 @@ export default function AtrDocument({
                   </tr>
                 );
               })}
-              <tr className="border-t border-canvas-border bg-[#FAFAFB] font-semibold">
+              <tr className="border-t border-canvas-border bg-paper-50 font-semibold">
                 <td className="px-4 py-3 text-brand-700">TOTAL · {ex.totalObservations} observation{ex.totalObservations === 1 ? '' : 's'}</td>
                 <td className="px-3 py-3 text-center tabular-nums">{totalExceptions}</td>
                 <td className="px-3 py-3 text-center tabular-nums">{ex.totalActionPlans}</td>

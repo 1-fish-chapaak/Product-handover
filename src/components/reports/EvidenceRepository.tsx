@@ -24,22 +24,22 @@ function EvidenceRow({ item, onOpenSource }: { item: EvidenceItem; onOpenSource:
       <div className={`w-9 h-9 rounded-[9px] ${t.bg} ${t.fg} flex items-center justify-center shrink-0`}><Icon size={16} /></div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] font-semibold text-ink-900 truncate">{item.name}</span>
-          <span className={`inline-flex items-center h-5 px-1.5 text-[9.5px] font-bold rounded ${t.bg} ${t.fg}`}>{item.type}</span>
+          <span className="text-[0.8125rem] font-semibold text-ink-900 truncate">{item.name}</span>
+          <span className={`inline-flex items-center h-5 px-1.5 text-[0.59375rem] font-bold rounded ${t.bg} ${t.fg}`}>{item.type}</span>
         </div>
-        <div className="text-[11.5px] text-ink-500 mt-0.5 truncate">
+        <div className="text-[0.71875rem] text-ink-500 mt-0.5 truncate">
           Backs: <span className="text-ink-700">{item.observation}</span>
         </div>
       </div>
       <div className="hidden md:block text-right shrink-0 min-w-0">
-        <div className="text-[11.5px] text-ink-600 truncate max-w-[200px]">{item.atrName}</div>
-        <div className="text-[11px] text-ink-400">{item.uploadedBy} · {item.uploadedAt} · {item.size}</div>
+        <div className="text-[0.71875rem] text-ink-600 truncate max-w-[200px]">{item.atrName}</div>
+        <div className="text-[0.6875rem] text-ink-400">{item.uploadedBy} · {item.uploadedAt} · {item.size}</div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
         <button
           onClick={() => onOpenSource(item.atrId)}
           title="Open the source ATR report"
-          className="inline-flex items-center gap-1 h-8 px-2.5 text-[11.5px] font-semibold text-brand-600 bg-white border border-canvas-border rounded-[8px] hover:border-brand-600/30 cursor-pointer transition-colors"
+          className="inline-flex items-center gap-1 h-8 px-2.5 text-[0.71875rem] font-semibold text-brand-600 bg-white border border-canvas-border rounded-[8px] hover:border-brand-600/30 cursor-pointer transition-colors"
         >
           View source <ExternalLink size={11} />
         </button>
@@ -60,12 +60,12 @@ function AreaGroup({ area, items, onOpenSource }: { area: string; items: Evidenc
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-9 h-9 rounded-[9px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><ShieldCheck size={16} /></div>
           <div className="min-w-0">
-            <h3 className="text-[13.5px] font-semibold text-ink-900 truncate">{area}</h3>
-            <p className="text-[11.5px] text-ink-500 truncate">{atrName}</p>
+            <h3 className="text-[0.84375rem] font-semibold text-ink-900 truncate">{area}</h3>
+            <p className="text-[0.71875rem] text-ink-500 truncate">{atrName}</p>
           </div>
         </div>
         <div className="flex items-center gap-2.5 shrink-0">
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-paper-50 text-ink-600 tabular-nums">{items.length}</span>
+          <span className="text-[0.6875rem] font-bold px-2 py-0.5 rounded-full bg-paper-50 text-ink-600 tabular-nums">{items.length}</span>
           <ChevronDown size={16} className={`text-ink-500 transition-transform ${open ? '' : '-rotate-90'}`} />
         </div>
       </button>
@@ -132,7 +132,7 @@ export default function EvidenceRepository({ onOpenSource, view, onViewChange }:
       {groups.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
           <div className="w-12 h-12 rounded-[10px] bg-paper-50 flex items-center justify-center"><FolderOpen size={22} className="text-ink-400" /></div>
-          <div className="text-[13px] font-medium text-ink-700">No evidence matches your filters.</div>
+          <div className="text-[0.8125rem] font-medium text-ink-700">No evidence matches your filters.</div>
         </div>
       ) : view === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-6">
@@ -148,7 +148,7 @@ export default function EvidenceRepository({ onOpenSource, view, onViewChange }:
                 title={item.name}
                 description={`Backs: ${item.observation}`}
                 pills={[item.type, item.size, item.area]}
-                footerRight={<span className="text-[11px] tabular-nums text-ink-400">{item.uploadedAt}</span>}
+                footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{item.uploadedAt}</span>}
                 onClick={() => onOpenSource(item.atrId)}
                 actions={
                   <button title="Download" onClick={(e) => e.stopPropagation()} className="w-7 h-7 rounded-[8px] flex items-center justify-center text-ink-400 hover:text-ink-700 hover:bg-paper-50 cursor-pointer" aria-label="Download"><Download size={14} /></button>

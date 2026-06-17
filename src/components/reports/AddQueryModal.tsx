@@ -83,12 +83,12 @@ export default function AddQueryModal({ open, onClose, onAttach }: {
             role="dialog"
             aria-modal="true"
             aria-label="Add Query"
-            className="relative bg-canvas-elevated rounded-[16px] border border-canvas-border shadow-2xl flex flex-col overflow-hidden w-[840px] h-[600px]"
+            className="relative bg-canvas-elevated rounded-[16px] border border-canvas-border shadow-xl flex flex-col overflow-hidden w-[840px] h-[600px]"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-7 py-4 border-b border-canvas-border">
-              <h2 className="text-[16px] font-bold text-ink-900 shrink-0">Add Query</h2>
+              <h2 className="text-[1rem] font-bold text-ink-900 shrink-0">Add Query</h2>
               <div className="flex-1 mx-5 relative">
                 <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
                 <input
@@ -96,7 +96,7 @@ export default function AddQueryModal({ open, onClose, onAttach }: {
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder={activeTab === 'upload' ? 'Drop files below to upload...' : 'Search...'}
-                  className="w-full pl-10 pr-4 py-2 text-[13px] border border-canvas-border rounded-full bg-canvas-elevated text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
+                  className="w-full pl-10 pr-4 py-2 text-[0.8125rem] border border-canvas-border rounded-full bg-canvas-elevated text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
                 />
               </div>
               <button onClick={handleClose} className="p-1.5 rounded-[8px] hover:bg-canvas transition-colors cursor-pointer shrink-0">
@@ -117,13 +117,13 @@ export default function AddQueryModal({ open, onClose, onAttach }: {
                 <button
                   key={tab.id}
                   onClick={() => { setActiveTab(tab.id); setSelectedQuery(null); setSelectedSource(null); }}
-                  className={`flex items-center gap-1.5 pb-3 pt-3 text-[13px] font-semibold transition-colors cursor-pointer relative whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 pb-3 pt-3 text-[0.8125rem] font-semibold transition-colors cursor-pointer relative whitespace-nowrap ${
                     activeTab === tab.id ? 'text-brand-700' : 'text-ink-400 hover:text-ink-600'
                   }`}
                 >
                   <tab.icon size={14} />
                   {tab.label}
-                  {tab.count > 0 && <span className="text-[11px] text-ink-400 font-normal">{tab.count}</span>}
+                  {tab.count > 0 && <span className="text-[0.6875rem] text-ink-400 font-normal">{tab.count}</span>}
                   {activeTab === tab.id && (
                     <motion.div layoutId="add-query-tab" className="absolute bottom-0 left-0 right-0 h-[2px] bg-brand-600 rounded-full" />
                   )}
@@ -146,7 +146,7 @@ export default function AddQueryModal({ open, onClose, onAttach }: {
                             if (filtered.length === 0) return null;
                             return (
                               <div key={group.group || 'ungrouped'}>
-                                {group.group && <div className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2">{group.group}</div>}
+                                {group.group && <div className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2">{group.group}</div>}
                                 <div className="space-y-2">
                                   {filtered.map(q => (
                                     <button
@@ -159,7 +159,7 @@ export default function AddQueryModal({ open, onClose, onAttach }: {
                                       {activeTab === 'recent'
                                         ? <MessageSquare size={14} className={selectedQuery === q ? 'text-brand-600' : 'text-ink-400'} />
                                         : <Star size={14} className={selectedQuery === q ? 'text-brand-600' : 'text-ink-400'} />}
-                                      <span className={`text-[13px] ${selectedQuery === q ? 'text-brand-700 font-medium' : 'text-ink-700'}`}>{q}</span>
+                                      <span className={`text-[0.8125rem] ${selectedQuery === q ? 'text-brand-700 font-medium' : 'text-ink-700'}`}>{q}</span>
                                     </button>
                                   ))}
                                 </div>
@@ -170,10 +170,10 @@ export default function AddQueryModal({ open, onClose, onAttach }: {
                       ) : (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                           {activeTab === 'recent' ? <MessageSquare size={32} className="text-ink-200 mb-3" /> : <Star size={32} className="text-ink-200 mb-3" />}
-                          <p className="text-[14px] font-medium text-ink-500 mb-1">
+                          <p className="text-[0.875rem] font-medium text-ink-500 mb-1">
                             {activeTab === 'recent' ? 'No chats found' : 'No favourites found'}
                           </p>
-                          <p className="text-[12px] text-ink-400">
+                          <p className="text-[0.75rem] text-ink-400">
                             {search ? 'Try a different search term.' : activeTab === 'recent' ? 'Start a new chat to see it here.' : 'Star a chat to add it to favourites.'}
                           </p>
                         </div>
@@ -207,13 +207,13 @@ export default function AddQueryModal({ open, onClose, onAttach }: {
                       {uploadedFile ? (
                         <div>
                           <CloudUpload size={32} className="text-green-600 mx-auto mb-3" />
-                          <h3 className="text-[15px] font-bold text-ink-900 mb-1">{uploadedFile.name}</h3>
-                          <p className="text-[13px] text-compliant font-medium mb-1">
+                          <h3 className="text-[0.9375rem] font-bold text-ink-900 mb-1">{uploadedFile.name}</h3>
+                          <p className="text-[0.8125rem] text-compliant font-medium mb-1">
                             {(uploadedFile.size / 1024).toFixed(1)} KB — File ready
                           </p>
                           <button
                             onClick={e => { e.stopPropagation(); setUploadedFile(null); }}
-                            className="text-[12px] text-ink-400 hover:text-red-500 transition-colors cursor-pointer mt-1"
+                            className="text-[0.75rem] text-ink-400 hover:text-red-500 transition-colors cursor-pointer mt-1"
                           >
                             Remove file
                           </button>
@@ -221,16 +221,16 @@ export default function AddQueryModal({ open, onClose, onAttach }: {
                       ) : (
                         <>
                           <Upload size={32} className="text-ink-300 mb-3" />
-                          <h3 className="text-[14px] font-semibold text-ink-800 mb-1">Drop files here</h3>
-                          <p className="text-[13px] text-ink-400 mb-4">or pick from your computer</p>
+                          <h3 className="text-[0.875rem] font-semibold text-ink-800 mb-1">Drop files here</h3>
+                          <p className="text-[0.8125rem] text-ink-400 mb-4">or pick from your computer</p>
                           <button
                             onClick={e => { e.stopPropagation(); document.getElementById('add-query-file-input')?.click(); }}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold rounded-[8px] transition-colors cursor-pointer"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold rounded-[8px] transition-colors cursor-pointer"
                           >
                             <Upload size={14} />
                             Choose files
                           </button>
-                          <p className="text-[11px] text-ink-400 mt-3">CSV · Excel · ≤ 50 MB each</p>
+                          <p className="text-[0.6875rem] text-ink-400 mt-3">CSV · Excel · ≤ 50 MB each</p>
                         </>
                       )}
                     </div>
@@ -261,8 +261,8 @@ export default function AddQueryModal({ open, onClose, onAttach }: {
                                   <Icon size={14} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="text-[13px] font-medium text-ink-900 truncate">{source.name}</div>
-                                  <div className="text-[11px] text-ink-400">{source.subtype} · {formatDate(source.createdAt)}</div>
+                                  <div className="text-[0.8125rem] font-medium text-ink-900 truncate">{source.name}</div>
+                                  <div className="text-[0.6875rem] text-ink-400">{source.subtype} · {formatDate(source.createdAt)}</div>
                                 </div>
                                 {isSelected && <Check size={16} className="text-brand-600 shrink-0" />}
                               </button>
@@ -272,8 +272,8 @@ export default function AddQueryModal({ open, onClose, onAttach }: {
                       ) : (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                           <Search size={32} className="text-ink-200 mb-3" />
-                          <p className="text-[14px] font-medium text-ink-500 mb-1">No {tabLabel} found</p>
-                          <p className="text-[12px] text-ink-400">
+                          <p className="text-[0.875rem] font-medium text-ink-500 mb-1">No {tabLabel} found</p>
+                          <p className="text-[0.75rem] text-ink-400">
                             {search ? 'Try a different search term.' : `No ${tabLabel} available.`}
                           </p>
                         </div>
@@ -286,8 +286,8 @@ export default function AddQueryModal({ open, onClose, onAttach }: {
 
             {/* Footer */}
             <div className="flex items-center justify-end gap-3 px-7 py-4 border-t border-canvas-border">
-              <p className="text-[12px] text-ink-400 mr-auto">Pick a saved query, file, or data source to attach.</p>
-              <button onClick={handleClose} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[13px] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 transition-colors cursor-pointer">
+              <p className="text-[0.75rem] text-ink-400 mr-auto">Pick a saved query, file, or data source to attach.</p>
+              <button onClick={handleClose} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 transition-colors cursor-pointer">
                 Cancel
               </button>
               {(() => {
@@ -299,7 +299,7 @@ export default function AddQueryModal({ open, onClose, onAttach }: {
                   <button
                     onClick={handleAttach}
                     disabled={!enabled || isAttaching}
-                    className={`inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[13px] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                    className={`inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[0.8125rem] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
                       enabled && !isAttaching ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
                     }`}
                   >

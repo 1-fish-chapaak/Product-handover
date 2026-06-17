@@ -33,7 +33,7 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
       className="absolute right-0 top-full mt-1 w-[280px] bg-white rounded-[8px] shadow-xl border border-canvas-border z-50 overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-canvas-border">
-        <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider">Select Template</span>
+        <span className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wider">Select Template</span>
       </div>
       <div className="max-h-[260px] overflow-y-auto p-1.5">
         {templates.map(rt => {
@@ -50,8 +50,8 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
                 <Icon size={12} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className={`text-[12px] truncate ${isActive ? 'font-semibold text-brand-600' : 'font-medium text-ink-800'}`}>{rt.name}</div>
-                <div className="text-[10px] text-ink-400">{rt.category}</div>
+                <div className={`text-[0.75rem] truncate ${isActive ? 'font-semibold text-brand-600' : 'font-medium text-ink-800'}`}>{rt.name}</div>
+                <div className="text-[0.625rem] text-ink-400">{rt.category}</div>
               </div>
               {isActive && <Check size={14} className="shrink-0 text-brand-600" />}
             </button>
@@ -93,8 +93,8 @@ function TemplateSectionRow({
           <GripVertical size={15} />
         </button>
         <SectionIcon size={16} className="shrink-0 text-brand-600" />
-        <h4 className="flex-1 min-w-0 truncate text-[14px] font-bold text-ink-800 tracking-tight">{section.name}</h4>
-        <span className="shrink-0 text-[11px] text-ink-400 tabular-nums whitespace-nowrap">Section {index + 1}</span>
+        <h4 className="flex-1 min-w-0 truncate text-[0.875rem] font-bold text-ink-800 tracking-tight">{section.name}</h4>
+        <span className="shrink-0 text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap">Section {index + 1}</span>
         <button
           onClick={onDelete}
           aria-label={`Delete ${section.name}`}
@@ -104,7 +104,7 @@ function TemplateSectionRow({
         </button>
       </div>
       <div className="border border-dashed border-canvas-border rounded-[10px] bg-canvas/40 px-5 py-6 text-center">
-        <p className="text-[12px] text-ink-400/80">Section content generated from report data</p>
+        <p className="text-[0.75rem] text-ink-400/80">Section content generated from report data</p>
       </div>
     </Reorder.Item>
   );
@@ -306,11 +306,11 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Settings size={16} /></div>
             <div className="min-w-0">
-              <h3 className="text-[15px] font-semibold text-ink-900 leading-tight">{isNew ? 'Create template' : 'Edit template'}</h3>
-              <p className="text-[11px] text-ink-500 leading-snug truncate">{isNew ? 'New custom template' : template.name}</p>
+              <h3 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">{isNew ? 'Create template' : 'Edit template'}</h3>
+              <p className="text-[0.6875rem] text-ink-500 leading-snug truncate">{isNew ? 'New custom template' : template.name}</p>
             </div>
           </div>
-          <button onClick={attemptClose} aria-label="Close" className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={16} /></button>
+          <button onClick={attemptClose} aria-label="Close" className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={16} /></button>
         </div>
 
         <div className="flex-1 min-h-0 flex">
@@ -320,7 +320,7 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
           {errors.length > 0 && (
             <div
               role="alert"
-              className="border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[12px] text-risk-800"
+              className="border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[0.75rem] text-risk-800"
             >
               <div className="font-semibold mb-1">Please complete the following before saving:</div>
               <ul className="space-y-0.5">
@@ -346,17 +346,17 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
               flow (Create, Customize, Edit) so a custom template can be renamed.
               Standard templates lock every field — clone to edit. */}
           <div>
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-ink-800 mb-1.5"><FileText size={14} /> Template Name</label>
-            <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[13px] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+            <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800 mb-1.5"><FileText size={14} /> Template Name</label>
+            <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.8125rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
           </div>
           <div>
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-ink-800 mb-1.5"><Image size={14} /> Brand Name</label>
-            <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[13px] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+            <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800 mb-1.5"><Image size={14} /> Brand Name</label>
+            <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.8125rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
           </div>
 
           {/* Theme */}
           <div>
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-ink-800 mb-1.5"><Palette size={14} /> Color Theme</label>
+            <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800 mb-1.5"><Palette size={14} /> Color Theme</label>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { name: 'Purple & White', colors: ['#6a12cd', '#f8f9fc'] },
@@ -375,7 +375,7 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
                     <div className="flex justify-center mb-1">
                       {t.colors.map((c, i) => <div key={i} className={`w-5 h-5 rounded-full border-2 border-white shadow-sm ${i > 0 ? '-ml-2' : ''}`} style={{ background: c }} />)}
                     </div>
-                    <span className="block text-[10px] font-medium text-ink-500 truncate">{t.name}</span>
+                    <span className="block text-[0.625rem] font-medium text-ink-500 truncate">{t.name}</span>
                   </button>
                 );
               })}
@@ -384,14 +384,14 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
 
           {/* Header text */}
           <div>
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-ink-800 mb-1.5"><Type size={14} /> Header Text</label>
-            <input value={headerText} onChange={e => setHeaderText(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[13px] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+            <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800 mb-1.5"><Type size={14} /> Header Text</label>
+            <input value={headerText} onChange={e => setHeaderText(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.8125rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
           </div>
 
           {/* Footer text */}
           <div>
-            <label className="flex items-center gap-2 text-[12px] font-semibold text-ink-800 mb-1.5"><Layout size={14} /> Footer Text</label>
-            <input value={footerText} onChange={e => setFooterText(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[13px] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+            <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800 mb-1.5"><Layout size={14} /> Footer Text</label>
+            <input value={footerText} onChange={e => setFooterText(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.8125rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
           </div>
             </div>
           </div>
@@ -408,8 +408,8 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
                   gradient={TEMPLATE_THEME_GRADIENT[theme]}
                   headerText={headerText}
                 >
-                  <p className="text-[13px] text-white/75 mb-3">{template.desc || 'Custom report template'}</p>
-                  <div className="flex items-center gap-1.5 text-[13px] flex-wrap">
+                  <p className="text-[0.8125rem] text-white/75 mb-3">{template.desc || 'Custom report template'}</p>
+                  <div className="flex items-center gap-1.5 text-[0.8125rem] flex-wrap">
                     <span className="font-semibold text-white">{brand || 'Irame'}</span>
                     <span className="text-white/30 mx-0.5">|</span>
                     <span className="text-white/70">{new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
@@ -432,15 +432,15 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
                 {/* Section outline — edited in place inside the page */}
                 <div ref={sectionsRef} tabIndex={-1} className="px-8 py-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="flex items-center gap-2 text-[14px] font-semibold text-ink-900"><FileText size={15} className="text-brand-600" /> Report Sections</h3>
-                    <span className="inline-flex items-center h-6 px-2.5 rounded-full bg-canvas text-[12px] font-medium text-ink-400 tabular-nums">{sections.length} {sections.length === 1 ? 'section' : 'sections'}</span>
+                    <h3 className="flex items-center gap-2 text-[0.875rem] font-semibold text-ink-900"><FileText size={15} className="text-brand-600" /> Report Sections</h3>
+                    <span className="inline-flex items-center h-6 px-2.5 rounded-full bg-canvas text-[0.75rem] font-medium text-ink-400 tabular-nums">{sections.length} {sections.length === 1 ? 'section' : 'sections'}</span>
                   </div>
 
                   {sections.length === 0 ? (
                     <div className="rounded-[12px] border border-dashed border-canvas-border bg-canvas/30 px-6 py-10 text-center">
                       <FileText size={22} className="mx-auto text-ink-300 mb-2.5" />
-                      <p className="text-[14px] font-semibold text-ink-800">No sections yet</p>
-                      <p className="text-[12.5px] text-ink-400 mt-1">Add a section below to build the report outline.</p>
+                      <p className="text-[0.875rem] font-semibold text-ink-800">No sections yet</p>
+                      <p className="text-[0.78125rem] text-ink-400 mt-1">Add a section below to build the report outline.</p>
                     </div>
                   ) : (
                     <Reorder.Group axis="y" values={sections} onReorder={setSections} className="space-y-3">
@@ -461,12 +461,12 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
                       onChange={e => setNewSectionName(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSection(); } }}
                       placeholder="Add a section…"
-                      className="flex-1 h-10 px-3.5 rounded-[8px] border border-canvas-border text-[13px] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                      className="flex-1 h-10 px-3.5 rounded-[8px] border border-canvas-border text-[0.8125rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
                     />
                     <button
                       onClick={addSection}
                       disabled={!newSectionName.trim()}
-                      className="inline-flex items-center gap-1.5 h-10 px-4 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="inline-flex items-center gap-1.5 h-10 px-4 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Plus size={15} /> Add
                     </button>
@@ -475,7 +475,7 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
 
                 {footerText && (
                   <div className="px-8 pb-6">
-                    <p className="text-[12px] text-ink-400">{footerText}</p>
+                    <p className="text-[0.75rem] text-ink-400">{footerText}</p>
                   </div>
                 )}
               </div>
@@ -487,13 +487,13 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
           <button
             onClick={attemptClose}
             disabled={isSaving}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >Cancel</button>
           {!isCopy && onSaveCopy && (
             <button
               onClick={handleSaveAsCopy}
               disabled={isSaving}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-brand-700 bg-white border border-brand-600/30 hover:bg-brand-600/[0.05] rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-brand-700 bg-white border border-brand-600/30 hover:bg-brand-600/[0.05] rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               <Copy size={13} /> Save as copy
             </button>
@@ -501,7 +501,7 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[13px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[0.8125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             {isSaving && <Loader2 size={12} className="animate-spin" />}
             {isSaving ? 'Saving…' : isNew ? 'Create template' : 'Save Template'}

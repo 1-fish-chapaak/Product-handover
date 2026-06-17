@@ -54,7 +54,7 @@ export function ManageExceptionsLaunchButton({ queryId, compact = false }: { que
         disabled={launching}
         title="Review & classify exceptions · opens in a new tab"
         aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-        className={`group inline-flex items-center gap-1.5 h-8 px-2 -mx-2 rounded-[8px] text-[12px] leading-4 font-semibold text-ink-500 hover:text-brand-600 hover:bg-canvas cursor-pointer transition-colors ${
+        className={`group inline-flex items-center gap-1.5 h-8 px-2 -mx-2 rounded-[8px] text-[0.75rem] leading-4 font-semibold text-ink-500 hover:text-brand-600 hover:bg-canvas cursor-pointer transition-colors ${
           launching ? 'opacity-60' : ''
         }`}
       >
@@ -73,7 +73,7 @@ export function ManageExceptionsLaunchButton({ queryId, compact = false }: { que
       disabled={launching}
       title="Review & classify exceptions · opens in a new tab"
       aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-      className={`group relative overflow-hidden inline-flex items-center gap-1.5 h-8 pl-3 pr-2.5 text-[12px] font-semibold text-white rounded-[8px] cursor-pointer transition-all duration-200 shadow-[0_2px_8px_rgba(106,18,205,0.25)] hover:shadow-[0_4px_14px_rgba(106,18,205,0.35)] ${
+      className={`group relative overflow-hidden inline-flex items-center gap-1.5 h-8 pl-3 pr-2.5 text-[0.75rem] font-semibold text-white rounded-[8px] cursor-pointer transition-all duration-200 shadow-[0_2px_8px_rgba(106,18,205,0.25)] hover:shadow-[0_4px_14px_rgba(106,18,205,0.35)] ${
         launching ? 'scale-[0.97] shadow-[0_0_0_4px_rgba(106,18,205,0.25),0_4px_14px_rgba(106,18,205,0.35)]' : 'hover:-translate-y-[1px] active:translate-y-0'
       }`}
       style={{ background: 'linear-gradient(135deg, #6A12CD 0%, #A366F0 100%)' }}
@@ -118,7 +118,7 @@ export function ManageExceptionsLaunchButton({ queryId, compact = false }: { que
       {launching && (
         <span
           aria-hidden="true"
-          className="absolute -top-[32px] left-1/2 text-[10px] font-semibold text-brand-600 bg-white border border-brand-600/25 px-2 h-6 rounded-full shadow-md whitespace-nowrap flex items-center gap-1 pointer-events-none"
+          className="absolute -top-[32px] left-1/2 text-[0.625rem] font-semibold text-brand-600 bg-white border border-brand-600/25 px-2 h-6 rounded-full shadow-md whitespace-nowrap flex items-center gap-1 pointer-events-none"
           style={{ animation: 'launch-hint-in 220ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
         >
           <ArrowRight size={12} className="-rotate-45" />

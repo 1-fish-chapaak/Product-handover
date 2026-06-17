@@ -60,15 +60,15 @@ export default function UploadTemplateModal({ onClose, onSave }: { onClose: () =
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         role="dialog" aria-modal="true" aria-label="Upload Template"
-        className="relative bg-white rounded-[16px] shadow-2xl w-[560px] max-h-[80vh] overflow-hidden flex flex-col"
+        className="relative bg-white rounded-[16px] shadow-xl w-[560px] max-h-[80vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-canvas-border flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-brand-600/10 text-brand-600 rounded-[8px]"><Upload size={16} /></div>
             <div>
-              <h3 className="text-[15px] font-semibold text-ink-800">Upload Template</h3>
-              <p className="text-[11px] text-ink-400">Convert a document into a report template</p>
+              <h3 className="text-[0.9375rem] font-semibold text-ink-800">Upload Template</h3>
+              <p className="text-[0.6875rem] text-ink-400">Convert a document into a report template</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"><X size={16} className="text-ink-400" /></button>
@@ -93,8 +93,8 @@ export default function UploadTemplateModal({ onClose, onSave }: { onClose: () =
                   <Upload size={32} className="text-brand-600/50 group-hover:text-brand-600 transition-colors" />
                 </div>
                 <div className="text-center">
-                  <p className="text-[13px] font-medium text-ink-800">Drop your template file here or click to browse</p>
-                  <p className="text-[11px] text-ink-400 mt-1">Supports .docx, .pdf, .xlsx</p>
+                  <p className="text-[0.8125rem] font-medium text-ink-800">Drop your template file here or click to browse</p>
+                  <p className="text-[0.6875rem] text-ink-400 mt-1">Supports .docx, .pdf, .xlsx</p>
                 </div>
               </button>
             </motion.div>
@@ -106,14 +106,14 @@ export default function UploadTemplateModal({ onClose, onSave }: { onClose: () =
               <div className="flex items-center gap-3 p-4 bg-brand-600/[0.03] border border-brand-600/10 rounded-[12px]">
                 <div className="p-2 bg-brand-600/10 rounded-[8px]"><FileText size={20} className="text-brand-600" /></div>
                 <div className="flex-1">
-                  <p className="text-[13px] font-semibold text-ink-800">{pickedFile?.name ?? 'SOX_Report_Template.docx'}</p>
-                  <p className="text-[11px] text-ink-400">{pickedFile?.size ?? '2.4 MB'}</p>
+                  <p className="text-[0.8125rem] font-semibold text-ink-800">{pickedFile?.name ?? 'SOX_Report_Template.docx'}</p>
+                  <p className="text-[0.6875rem] text-ink-400">{pickedFile?.size ?? '2.4 MB'}</p>
                 </div>
                 <CheckCircle2 size={20} className="text-compliant-700" />
               </div>
               <button
                 onClick={() => setStep('converting')}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-brand-600 text-white text-[13px] font-semibold hover:bg-brand-500 transition-all cursor-pointer rounded-[8px]"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-500 transition-all cursor-pointer rounded-[8px]"
               >
                 <Sparkles size={14} /> Convert to Template
               </button>
@@ -130,8 +130,8 @@ export default function UploadTemplateModal({ onClose, onSave }: { onClose: () =
                 <Sparkles size={32} className="text-brand-600" />
               </motion.div>
               <div className="text-center">
-                <p className="text-[14px] font-semibold text-ink-800">Analyzing document structure...</p>
-                <p className="text-[11px] text-ink-400 mt-1">Detecting sections, headers, and formatting</p>
+                <p className="text-[0.875rem] font-semibold text-ink-800">Analyzing document structure...</p>
+                <p className="text-[0.6875rem] text-ink-400 mt-1">Detecting sections, headers, and formatting</p>
               </div>
               <div className="w-48 h-1.5 bg-canvas rounded-full overflow-hidden">
                 <motion.div
@@ -150,13 +150,13 @@ export default function UploadTemplateModal({ onClose, onSave }: { onClose: () =
               <div className="flex items-center gap-3 p-4 bg-compliant-50 border border-compliant rounded-[12px]">
                 <CheckCircle2 size={20} className="text-compliant-700" />
                 <div>
-                  <p className="text-[13px] font-semibold text-brand-600">Template converted!</p>
-                  <p className="text-[11px] text-brand-600/70">6 sections detected</p>
+                  <p className="text-[0.8125rem] font-semibold text-brand-600">Template converted!</p>
+                  <p className="text-[0.6875rem] text-brand-600/70">6 sections detected</p>
                 </div>
               </div>
 
               <div>
-                <label className="text-[12px] font-semibold text-ink-800 mb-2 block">Detected Sections</label>
+                <label className="text-[0.75rem] font-semibold text-ink-800 mb-2 block">Detected Sections</label>
                 <div className="space-y-1.5">
                   {DETECTED_SECTIONS.map((section, i) => (
                     <motion.div
@@ -166,19 +166,19 @@ export default function UploadTemplateModal({ onClose, onSave }: { onClose: () =
                       transition={{ delay: i * 0.08 }}
                       className="flex items-center gap-2.5 px-3 py-2 bg-canvas rounded-[8px]"
                     >
-                      <div className="w-5 h-5 rounded-[8px] bg-brand-600/10 text-brand-600 flex items-center justify-center text-[10px] font-bold">{i + 1}</div>
-                      <span className="text-[12px] text-ink-800 font-medium">{section}</span>
+                      <div className="w-5 h-5 rounded-[8px] bg-brand-600/10 text-brand-600 flex items-center justify-center text-[0.625rem] font-bold">{i + 1}</div>
+                      <span className="text-[0.75rem] text-ink-800 font-medium">{section}</span>
                     </motion.div>
                   ))}
                 </div>
               </div>
 
               <div>
-                <label className="text-[12px] font-semibold text-ink-800 mb-2 block">Template Name</label>
+                <label className="text-[0.75rem] font-semibold text-ink-800 mb-2 block">Template Name</label>
                 <input
                   value={templateName}
                   onChange={e => setTemplateName(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-canvas-border text-[13px] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10 rounded-[8px]"
+                  className="w-full px-3 py-2.5 border border-canvas-border text-[0.8125rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10 rounded-[8px]"
                 />
               </div>
             </motion.div>
@@ -187,7 +187,7 @@ export default function UploadTemplateModal({ onClose, onSave }: { onClose: () =
 
         {step === 'converted' && (
           <div className="px-6 py-4 border-t border-canvas-border flex justify-end gap-2 shrink-0">
-            <button onClick={onClose} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 transition-colors cursor-pointer rounded-[8px]">Cancel</button>
+            <button onClick={onClose} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 transition-colors cursor-pointer rounded-[8px]">Cancel</button>
             <button
               onClick={() => {
                 const name = templateName.trim();
@@ -206,7 +206,7 @@ export default function UploadTemplateModal({ onClose, onSave }: { onClose: () =
                 }
                 onClose();
               }}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white text-[13px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer rounded-[8px]"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer rounded-[8px]"
             >
               Save Template
             </button>

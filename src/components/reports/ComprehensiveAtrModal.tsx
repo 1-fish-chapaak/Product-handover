@@ -41,7 +41,7 @@ export default function ComprehensiveAtrModal({
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
-        className="fixed inset-0 bg-ink-900/50 backdrop-blur-[2px] z-50"
+        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50"
         onClick={onClose}
       />
       <motion.div
@@ -65,7 +65,7 @@ export default function ComprehensiveAtrModal({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0"
+            className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0"
             aria-label="Close"
           >
             <X size={16} />
@@ -73,7 +73,7 @@ export default function ComprehensiveAtrModal({
         </header>
 
         {/* Document */}
-        <div className="flex-1 min-h-0 overflow-y-auto bg-[#F4F2F7] py-6">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-draft-50 py-6">
           <AtrDocument meta={meta} observations={observations} insights={insights} />
         </div>
 

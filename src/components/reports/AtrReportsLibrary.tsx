@@ -126,8 +126,8 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
           <div className="w-12 h-12 rounded-[10px] bg-paper-50 flex items-center justify-center"><FolderOpen size={22} className="text-ink-400" /></div>
-          <div className="text-[13px] font-medium text-ink-700">No ATRs match your filters.</div>
-          {activeFilters && <button onClick={clearAll} className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer">Clear all filters</button>}
+          <div className="text-[0.8125rem] font-medium text-ink-700">No ATRs match your filters.</div>
+          {activeFilters && <button onClick={clearAll} className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer">Clear all filters</button>}
         </div>
       ) : view === 'list' ? (
         <div className="flex-1 rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-hidden">
@@ -152,8 +152,8 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
                     <FileText size={16} strokeWidth={1.75} aria-hidden="true" />
                   </span>
                   <div className="min-w-0">
-                    <div className="text-[14.5px] font-semibold tracking-[-0.006em] text-ink-900 truncate group-hover:text-brand-600 transition-colors" title={reportDisplayName(atr.name)}>{reportDisplayName(atr.name)}</div>
-                    <div className="mt-0.5 text-[11.5px] text-ink-400 truncate">{atr.atrData.observations.length} obs · {plans} plans · {evidenceCount[atr.id] ?? 0} evidence</div>
+                    <div className="text-[0.90625rem] font-semibold tracking-[-0.006em] text-ink-900 truncate group-hover:text-brand-600 transition-colors" title={reportDisplayName(atr.name)}>{reportDisplayName(atr.name)}</div>
+                    <div className="mt-0.5 text-[0.71875rem] text-ink-400 truncate">{atr.atrData.observations.length} obs · {plans} plans · {evidenceCount[atr.id] ?? 0} evidence</div>
                   </div>
                 </div>
               );
@@ -167,7 +167,7 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
               return <ReportPill tone={atr.status === 'final' ? 'compliant' : 'draft'}>{atr.status === 'final' ? 'Final' : 'Draft'}</ReportPill>;
             }},
             { key: 'generatedAt', label: 'Generated', width: '150px', render: (item) => (
-              <span className="text-[12px] tabular-nums text-ink-500 whitespace-nowrap">{String((item as unknown as AtrLibraryReport).generatedAt)}</span>
+              <span className="text-[0.75rem] tabular-nums text-ink-500 whitespace-nowrap">{String((item as unknown as AtrLibraryReport).generatedAt)}</span>
             )},
             { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => {
               const atr = item as unknown as AtrLibraryReport;
@@ -197,7 +197,7 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
                 title={reportDisplayName(atr.name)}
                 description={`${atr.atrData.meta.auditEntity} — ${atr.atrData.meta.auditPeriod}`}
                 pills={[atr.status === 'final' ? 'Final' : 'Draft', `${atr.atrData.observations.length} observations`, `${plans} action plans`, `${ev} evidence`]}
-                footerRight={<span className="text-[11px] tabular-nums text-ink-400">{atr.generatedAt}</span>}
+                footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{atr.generatedAt}</span>}
                 onClick={() => onOpen(atr)}
                 actions={<>
                   {onDownload && <button title="Download" onClick={(e) => { e.stopPropagation(); onDownload(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button>}

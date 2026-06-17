@@ -225,7 +225,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
           </div>
           <button
             onClick={attemptClose}
-            className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0"
+            className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0"
             aria-label="Close"
           >
             <X size={16} />
@@ -242,7 +242,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search queries…"
-                  className="w-full h-8 pl-8 pr-3 rounded-[8px] border border-canvas-border text-[12px] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                  className="w-full h-8 pl-8 pr-3 rounded-[8px] border border-canvas-border text-[0.75rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
                 />
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -256,7 +256,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                         role="tab"
                         aria-selected={active}
                         onClick={() => setTypeFilter(t)}
-                        className={`h-7 px-2.5 rounded-[6px] text-[12px] font-medium whitespace-nowrap transition-colors cursor-pointer ${active ? 'bg-white text-brand-600 shadow-[0_1px_2px_rgba(15,8,30,0.08)]' : 'text-ink-500 hover:text-ink-800'}`}
+                        className={`h-7 px-2.5 rounded-[6px] text-[0.75rem] font-medium whitespace-nowrap transition-colors cursor-pointer ${active ? 'bg-white text-brand-600 shadow-[0_1px_2px_rgba(15,8,30,0.08)]' : 'text-ink-500 hover:text-ink-800'}`}
                       >
                         {t}
                       </button>
@@ -280,7 +280,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-3">
               {rows.length === 0 ? (
                 <div className="h-full flex items-center justify-center">
-                  <p className="text-[13px] text-ink-400">
+                  <p className="text-[0.8125rem] text-ink-400">
                     No items match {search ? `“${search}”` : 'your filters'}.
                   </p>
                 </div>
@@ -322,16 +322,16 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                               className="w-full flex items-center gap-3 px-3.5 py-2.5 bg-paper-50/60 border-b border-canvas-border text-left cursor-pointer hover:bg-paper-50 transition-colors"
                             >
                               {checkbox(groupState)}
-                              <span className="flex-1 min-w-0 text-[13px] font-semibold text-ink-900 truncate">{name}</span>
+                              <span className="flex-1 min-w-0 text-[0.8125rem] font-semibold text-ink-900 truncate">{name}</span>
                               {isWfGroup && (
                                 <span
-                                  className="shrink-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-full border border-brand-200 bg-brand-50 text-[10px] font-semibold text-brand-700"
+                                  className="shrink-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-full border border-brand-200 bg-brand-50 text-[0.625rem] font-semibold text-brand-700"
                                   title="A Bulk Audit — these rows are completed workflow runs"
                                 >
                                   <Workflow size={10} /> Bulk Audit
                                 </span>
                               )}
-                              <span className="font-mono text-[11px] tabular-nums text-ink-500 shrink-0">
+                              <span className="font-mono text-[0.6875rem] tabular-nums text-ink-500 shrink-0">
                                 {items.length} {isWfGroup ? (items.length === 1 ? 'workflow' : 'workflows') : (items.length === 1 ? 'query' : 'queries')}
                               </span>
                             </button>
@@ -346,14 +346,14 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                                   >
                                     {checkbox(isSelected ? 'on' : 'off')}
                                     <span className="flex-1 min-w-0">
-                                      <span className="block text-[13px] font-medium text-ink-800 truncate">{item.label}</span>
+                                      <span className="block text-[0.8125rem] font-medium text-ink-800 truncate">{item.label}</span>
                                       {keyTaken ? (
-                                        <span className="flex items-center gap-1 text-[11px] text-brand-600 truncate">
+                                        <span className="flex items-center gap-1 text-[0.6875rem] text-brand-600 truncate">
                                           <ArrowLeftRight size={11} className="shrink-0" />
                                           Selected in {takenFrom} — click to swap
                                         </span>
                                       ) : item.kind === 'workflow' ? (
-                                        <span className="block text-[11px] text-ink-400 truncate">{item.wfMeta}</span>
+                                        <span className="block text-[0.6875rem] text-ink-400 truncate">{item.wfMeta}</span>
                                       ) : null}
                                     </span>
                                     {sevPill(item.severity)}
@@ -375,11 +375,11 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                 footer only reports status — no duplicate guidance.) */}
             <div className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
-                <span className={`text-[12px] truncate ${selectedKeyCount > 0 ? 'font-medium text-ink-600' : 'text-ink-400'}`}>{selectedSummary}</span>
+                <span className={`text-[0.75rem] truncate ${selectedKeyCount > 0 ? 'font-medium text-ink-600' : 'text-ink-400'}`}>{selectedSummary}</span>
                 {selectedKeyCount > 0 && (
                   <button
                     onClick={() => setSelected([])}
-                    className="shrink-0 inline-flex items-center gap-1 h-7 px-2 text-[12px] font-medium text-ink-500 hover:text-brand-600 rounded-[6px] hover:bg-brand-600/[0.06] transition-colors cursor-pointer"
+                    className="shrink-0 inline-flex items-center gap-1 h-7 px-2 text-[0.75rem] font-medium text-ink-500 hover:text-brand-600 rounded-[6px] hover:bg-brand-600/[0.06] transition-colors cursor-pointer"
                   >
                     <X size={12} /> Clear all
                   </button>
@@ -388,7 +388,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
               <button
                 onClick={goPreview}
                 disabled={selectedKeyCount === 0 || isCreating}
-                className="shrink-0 inline-flex items-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[13px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="shrink-0 inline-flex items-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[0.8125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Continue <ArrowRight size={13} />
               </button>
@@ -397,28 +397,28 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
         ) : (
           <>
             {/* Step 2 — preview */}
-            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5 bg-[#F4F2F7]/60">
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5 bg-draft-50/60">
               {/* Report setup — flat layout (no card chrome) to stay compact. */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <label htmlFor="report-name" className="text-[12px] font-semibold text-ink-900 shrink-0">Report name</label>
+                      <label htmlFor="report-name" className="text-[0.75rem] font-semibold text-ink-900 shrink-0">Report name</label>
                       <span className="text-ink-300 shrink-0" aria-hidden="true">·</span>
-                      <span className="text-[12px] text-ink-400 truncate">Shown as the report title.</span>
+                      <span className="text-[0.75rem] text-ink-400 truncate">Shown as the report title.</span>
                     </div>
                     <input
                       id="report-name"
                       value={reportName}
                       onChange={e => setReportName(e.target.value)}
                       placeholder={`${currentPeriod()} ${template.name}`}
-                      className="w-full h-10 px-3.5 rounded-[8px] border border-canvas-border bg-white text-[12.5px] text-ink-800 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                      className="w-full h-10 px-3.5 rounded-[8px] border border-canvas-border bg-white text-[0.78125rem] text-ink-800 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
                     />
                   </div>
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <label htmlFor="report-period" className="text-[12px] font-semibold text-ink-900 shrink-0">Audit period</label>
+                      <label htmlFor="report-period" className="text-[0.75rem] font-semibold text-ink-900 shrink-0">Audit period</label>
                       <span className="text-ink-300 shrink-0" aria-hidden="true">·</span>
-                      <span className="text-[12px] text-ink-400 truncate">Preset or custom range.</span>
+                      <span className="text-[0.75rem] text-ink-400 truncate">Preset or custom range.</span>
                     </div>
                     <div className="relative" ref={periodRef}>
                       <CalendarRange size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
@@ -428,7 +428,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                         onChange={e => setReportPeriod(e.target.value)}
                         onFocus={() => setPeriodMenuOpen(false)}
                         placeholder="e.g. FY26 Q2"
-                        className="w-full h-10 pl-9 pr-10 rounded-[8px] border border-canvas-border bg-white text-[12.5px] text-ink-800 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                        className="w-full h-10 pl-9 pr-10 rounded-[8px] border border-canvas-border bg-white text-[0.78125rem] text-ink-800 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
                       />
                       <button
                         type="button"
@@ -458,9 +458,9 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                                   onClick={() => { setReportPeriod(o.value); setPeriodMenuOpen(false); }}
                                   className={`w-full flex items-center justify-between gap-3 px-3 h-9 text-left transition-colors cursor-pointer ${active ? 'bg-brand-600/[0.04]' : 'hover:bg-canvas'}`}
                                 >
-                                  <span className={`text-[12.5px] ${active ? 'text-brand-600 font-medium' : 'text-ink-800'}`}>{o.label}</span>
+                                  <span className={`text-[0.78125rem] ${active ? 'text-brand-600 font-medium' : 'text-ink-800'}`}>{o.label}</span>
                                   <span className="flex items-center gap-2 shrink-0">
-                                    <span className="font-mono text-[11px] tabular-nums text-ink-400">{o.value}</span>
+                                    <span className="font-mono text-[0.6875rem] tabular-nums text-ink-400">{o.value}</span>
                                     {active && <Check size={13} className="text-brand-600" />}
                                   </span>
                                 </button>
@@ -475,26 +475,26 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
 
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <label htmlFor="exec-summary" className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-900 shrink-0">
+                  <label htmlFor="exec-summary" className="flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-900 shrink-0">
                     <Sparkles size={13} className="text-brand-600" /> Executive summary
                   </label>
                   <span className="text-ink-300 shrink-0" aria-hidden="true">·</span>
-                  <span className="text-[12px] text-ink-400 truncate">Rolled up from your selection. Editable now and after generation; regenerates unless you've edited it.</span>
+                  <span className="text-[0.75rem] text-ink-400 truncate">Rolled up from your selection. Editable now and after generation; regenerates unless you've edited it.</span>
                 </div>
                 <textarea
                   id="exec-summary"
                   value={execSummary}
                   onChange={e => { setExecSummary(e.target.value); setSummaryEdited(true); }}
                   rows={4}
-                  className="w-full px-3.5 py-3 rounded-[8px] border border-canvas-border bg-white text-[12.5px] leading-relaxed text-ink-500 resize-none focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                  className="w-full px-3.5 py-3 rounded-[8px] border border-canvas-border bg-white text-[0.78125rem] leading-relaxed text-ink-500 resize-none focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
                 />
               </div>
 
               {ordered.length > 0 && (
                 <div className="bg-white rounded-[12px] border border-canvas-border p-4">
                   <div className="flex items-center justify-between mb-2.5">
-                    <label className="text-[12px] font-semibold text-ink-800">Query order — drag to rearrange</label>
-                    <span className="text-[11px] text-ink-400">{ordered.length} {ordered.length === 1 ? 'query' : 'queries'}</span>
+                    <label className="text-[0.75rem] font-semibold text-ink-800">Query order — drag to rearrange</label>
+                    <span className="text-[0.6875rem] text-ink-400">{ordered.length} {ordered.length === 1 ? 'query' : 'queries'}</span>
                   </div>
                   <Reorder.Group axis="y" values={ordered} onReorder={setOrdered} as="div" className="space-y-1.5">
                     {ordered.map((q, i) => (
@@ -502,10 +502,10 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                         className="flex items-center gap-3 px-3 py-2.5 rounded-[10px] border border-canvas-border bg-white cursor-grab active:cursor-grabbing"
                       >
                         <GripVertical size={14} className="text-ink-300 shrink-0" />
-                        <span className="text-[10px] font-bold text-brand-600/60 w-5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
+                        <span className="text-[0.625rem] font-bold text-brand-600/60 w-5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
                         <span className="flex-1 min-w-0">
-                          <span className="block text-[12.5px] font-medium text-ink-800 truncate">{q.title}</span>
-                          <span className="block text-[11px] text-ink-400 truncate">{q.risk}</span>
+                          <span className="block text-[0.78125rem] font-medium text-ink-800 truncate">{q.title}</span>
+                          <span className="block text-[0.6875rem] text-ink-400 truncate">{q.risk}</span>
                         </span>
                         <span className="shrink-0">
                           <ReportPill tone={sevTone(q.severity)}>{q.severity}</ReportPill>
@@ -519,10 +519,10 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
               {orderedWorkflows.length > 0 && (
                 <div className="bg-white rounded-[12px] border border-canvas-border p-4">
                   <div className="flex items-center justify-between mb-2.5">
-                    <label className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-800">
+                    <label className="flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-800">
                       <Workflow size={13} className="text-brand-600" /> Workflow results — drag to rearrange
                     </label>
-                    <span className="text-[11px] text-ink-400">{orderedWorkflows.length} {orderedWorkflows.length === 1 ? 'workflow' : 'workflows'}</span>
+                    <span className="text-[0.6875rem] text-ink-400">{orderedWorkflows.length} {orderedWorkflows.length === 1 ? 'workflow' : 'workflows'}</span>
                   </div>
                   <Reorder.Group axis="y" values={orderedWorkflows} onReorder={setOrderedWorkflows} as="div" className="space-y-1.5">
                     {orderedWorkflows.map((w, i) => {
@@ -532,10 +532,10 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                           className="flex items-center gap-3 px-3 py-2.5 rounded-[10px] border border-canvas-border bg-white cursor-grab active:cursor-grabbing"
                         >
                           <GripVertical size={14} className="text-ink-300 shrink-0" />
-                          <span className="text-[10px] font-bold text-brand-600/60 w-5 shrink-0">{String(ordered.length + i + 1).padStart(2, '0')}</span>
+                          <span className="text-[0.625rem] font-bold text-brand-600/60 w-5 shrink-0">{String(ordered.length + i + 1).padStart(2, '0')}</span>
                           <span className="flex-1 min-w-0">
-                            <span className="block text-[12.5px] font-medium text-ink-800 truncate">{w.name}</span>
-                            <span className="block text-[11px] text-ink-400 truncate font-mono tabular-nums">{w.workflowId} · {w.businessProcess ?? '—'} · {n} flagged {n === 1 ? 'record' : 'records'}</span>
+                            <span className="block text-[0.78125rem] font-medium text-ink-800 truncate">{w.name}</span>
+                            <span className="block text-[0.6875rem] text-ink-400 truncate font-mono tabular-nums">{w.workflowId} · {w.businessProcess ?? '—'} · {n} flagged {n === 1 ? 'record' : 'records'}</span>
                           </span>
                           <span className="shrink-0">
                             <ReportPill tone={sevTone(w.severity)}>{w.severity}</ReportPill>
@@ -553,14 +553,14 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
               <button
                 onClick={() => setStep(1)}
                 disabled={isCreating}
-                className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 h-9 px-4 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50"
               >
                 <ArrowLeft size={13} /> Back
               </button>
               <button
                 onClick={() => handleCreate()}
                 disabled={isCreating}
-                className="inline-flex items-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[13px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[0.8125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {isCreating ? <><Loader2 size={13} className="animate-spin" /> Generating…</> : <>Generate report <ArrowRight size={13} /></>}
               </button>
@@ -580,20 +580,20 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                 className="bg-white rounded-[12px] border border-canvas-border shadow-xl p-5 w-[340px]"
                 role="alertdialog" aria-label="Discard selection?"
               >
-                <h3 className="text-[14px] font-semibold text-ink-800 mb-1">Discard selection?</h3>
-                <p className="text-[12px] text-ink-500 leading-relaxed mb-4">
+                <h3 className="text-[0.875rem] font-semibold text-ink-800 mb-1">Discard selection?</h3>
+                <p className="text-[0.75rem] text-ink-500 leading-relaxed mb-4">
                   You've picked {selectedSummary.replace(' selected', '')}. Closing the wizard will discard them.
                 </p>
                 <div className="flex justify-end gap-2">
                   <button
                     onClick={() => setConfirmAbandon(false)}
-                    className="h-8 px-3.5 text-[12px] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"
+                    className="h-8 px-3.5 text-[0.75rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"
                   >
                     Keep editing
                   </button>
                   <button
                     onClick={onClose}
-                    className="h-8 px-3.5 text-[12px] font-semibold text-white bg-risk hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer"
+                    className="h-8 px-3.5 text-[0.75rem] font-semibold text-white bg-risk hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer"
                   >
                     Discard
                   </button>

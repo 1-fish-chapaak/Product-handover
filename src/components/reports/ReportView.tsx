@@ -82,7 +82,7 @@ function GenerateCasesGate({ queryId, phase, onPhaseChange }: { queryId: string;
       aria-label={isOn ? 'Generating cases' : 'Generate cases'}
       onClick={handleToggle}
       disabled={isOn}
-      className="inline-flex items-center gap-2 h-8 pl-2.5 pr-3 text-[12px] font-semibold text-ink-500 bg-white border border-canvas-border rounded-[8px] cursor-pointer hover:border-brand-600/40 hover:text-brand-600 transition-colors"
+      className="inline-flex items-center gap-2 h-8 pl-2.5 pr-3 text-[0.75rem] font-semibold text-ink-500 bg-white border border-canvas-border rounded-[8px] cursor-pointer hover:border-brand-600/40 hover:text-brand-600 transition-colors"
     >
       <span
         className={`relative inline-flex w-8 h-[18px] rounded-full transition-colors duration-200 ${
@@ -162,8 +162,8 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
           className="mb-4"
         >
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-2.5 min-w-0 flex-wrap text-[10px] font-semibold uppercase tracking-wider">
-              <span className="font-mono text-[12px] text-brand-600 tabular-nums shrink-0 normal-case tracking-normal">{query.id}</span>
+            <div className="flex items-center gap-2.5 min-w-0 flex-wrap text-[0.625rem] font-semibold uppercase tracking-wider">
+              <span className="font-mono text-[0.75rem] text-brand-600 tabular-nums shrink-0 normal-case tracking-normal">{query.id}</span>
               <span aria-hidden className="text-ink-300 select-none">·</span>
               <span className="text-ink-400 shrink-0">{query.risk}</span>
               <span aria-hidden className="text-ink-300 select-none">·</span>
@@ -185,7 +185,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                   >
                     <MessageSquare size={16} className="shrink-0" />
                     {myComments > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[9px] font-semibold bg-brand-600 text-white rounded-full tabular-nums border border-white">
+                      <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[0.5625rem] font-semibold bg-brand-600 text-white rounded-full tabular-nums border border-white">
                         {myComments}
                       </span>
                     )}
@@ -208,21 +208,21 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                         setMenuOpen(false);
                         onOpenQuery?.({ id: query.id, title: query.title });
                       }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
                     >
                       <ExternalLink size={14} />
                       Open Query
                     </button>
                     <button
                       onClick={() => { setMenuOpen(false); setWidgetModalOpen(true); }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
                     >
                       <LayoutGrid size={14} />
                       Add Widgets
                     </button>
                     <button
                       onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
                     >
                       <Download size={14} />
                       Download
@@ -231,7 +231,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                     <div className="my-1 border-t border-canvas-border" />
                     <button
                       onClick={() => { setMenuOpen(false); setShowDeleteConfirm(true); }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-risk-700 hover:bg-risk-50 cursor-pointer"
                     >
                       <Trash2 size={14} />
                       Delete Query
@@ -250,7 +250,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
-          className="text-[20px] font-semibold text-ink-800 leading-[1.3] tracking-[-0.005em] mb-4"
+          className="text-[1.25rem] font-semibold text-ink-800 leading-[1.3] tracking-[-0.005em] mb-4"
         >
           {query.title}
         </motion.h3>
@@ -271,10 +271,10 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                   transition={{ delay: baseDelay + 0.3 + ki * 0.05, duration: 0.3 }}
                   className="flex items-baseline gap-2"
                 >
-                  <span className="text-[16px] font-semibold text-ink-800 leading-none">
+                  <span className="text-[1rem] font-semibold text-ink-800 leading-none">
                     <KpiCountUp value={k.value} delay={120 + ki * 80} />
                   </span>
-                  <span className="text-[12px] text-ink-400 font-medium">{k.label}</span>
+                  <span className="text-[0.75rem] text-ink-400 font-medium">{k.label}</span>
                 </motion.span>
               ))}
             </div>
@@ -291,7 +291,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
             className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-4 mb-5"
           >
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 text-[11px] font-bold text-ink-500 uppercase tracking-wider">
+              <div className="flex items-center gap-2 text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider">
                 <BarChart3 size={12} />
                 {g.title}
               </div>
@@ -326,7 +326,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
             className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-4 mb-5"
           >
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 text-[11px] font-bold text-ink-500 uppercase tracking-wider">
+              <div className="flex items-center gap-2 text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider">
                 <LayoutGrid size={12} />
                 Results Table
               </div>
@@ -346,7 +346,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                     {queryTable.columns.map(c => (
                       <th
                         key={c}
-                        className="px-3 py-2 text-left text-[10px] font-bold text-ink-400 uppercase tracking-wider border-b border-canvas-border whitespace-nowrap"
+                        className="px-3 py-2 text-left text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider border-b border-canvas-border whitespace-nowrap"
                       >
                         {c}
                       </th>
@@ -357,7 +357,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                   {queryTable.rows.map((row, ri) => (
                     <tr key={ri} className="border-b border-canvas-border last:border-b-0">
                       {row.map((cell, ci) => (
-                        <td key={ci} className="px-3 py-2 text-[12px] text-ink-500 whitespace-nowrap">
+                        <td key={ci} className="px-3 py-2 text-[0.75rem] text-ink-500 whitespace-nowrap">
                           {cell}
                         </td>
                       ))}
@@ -494,10 +494,10 @@ function CommentDrawer({
       >
         {/* Header strip + close */}
         <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-4 border-b border-canvas-border bg-white">
-          <div className="inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-600">
+          <div className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-brand-600">
             <MessageSquare size={14} className="shrink-0" />
             Comments
-            <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 text-[10px] font-semibold rounded-full tabular-nums bg-brand-600/10 text-brand-600">
+            <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 text-[0.625rem] font-semibold rounded-full tabular-nums bg-brand-600/10 text-brand-600">
               {totalComments}
             </span>
           </div>
@@ -512,10 +512,10 @@ function CommentDrawer({
 
         {/* Header (title + sub-text) */}
         <header className="shrink-0 px-6 py-5 border-b border-canvas-border">
-          <h2 className="text-[16px] font-semibold text-ink-800 leading-tight">
+          <h2 className="text-[1rem] font-semibold text-ink-800 leading-tight">
             Comments
           </h2>
-          <p className="text-[12px] text-ink-400 mt-0.5 leading-snug">
+          <p className="text-[0.75rem] text-ink-400 mt-0.5 leading-snug">
             Commenting on{' '}
             <span className="font-mono font-semibold text-brand-600">{query.id}</span> — {query.title}
           </p>
@@ -530,7 +530,7 @@ function CommentDrawer({
                   onChange={(e) => setText(e.target.value)}
                   placeholder={`Leave a comment on ${query.id}…`}
                   rows={3}
-                  className="w-full resize-none p-3 pr-[72px] bg-white border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                  className="w-full resize-none p-3 pr-[72px] bg-white border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
                 />
                 <input
                   ref={fileInputRef}
@@ -557,7 +557,7 @@ function CommentDrawer({
                     disabled={!text.trim() || isPosting}
                     className={`w-7 h-7 flex items-center justify-center rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
                       text.trim() && !isPosting
-                        ? 'bg-[#6a12cd] text-white hover:bg-brand-500 cursor-pointer'
+                        ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
                         : 'text-ink-400/50 cursor-not-allowed'
                     }`}
                     aria-label="Post comment"
@@ -569,11 +569,11 @@ function CommentDrawer({
               </div>
               {attachment && (
                 <div className="mt-2 flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/10 text-brand-600 text-[11px] font-medium rounded-full">
+                  <span className="inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/10 text-brand-600 text-[0.6875rem] font-medium rounded-full">
                     <Paperclip size={12} />
                     {attachment}
                   </span>
-                  <button onClick={() => setAttachment(null)} className="text-[11px] text-ink-400 hover:text-risk-700 cursor-pointer">remove</button>
+                  <button onClick={() => setAttachment(null)} className="text-[0.6875rem] text-ink-400 hover:text-risk-700 cursor-pointer">remove</button>
                 </div>
               )}
             </section>
@@ -581,8 +581,8 @@ function CommentDrawer({
             {/* Shared activity log */}
             <div className="flex-1 overflow-y-auto px-6 py-4" aria-live="polite">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">Activity log</h3>
-                <span className="text-[11px] text-ink-400 tabular-nums">
+                <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-400">Activity log</h3>
+                <span className="text-[0.6875rem] text-ink-400 tabular-nums">
                   {totalComments} {totalComments === 1 ? 'comment' : 'comments'} across {queryGroups.length} {queryGroups.length === 1 ? 'query' : 'queries'}
                 </span>
               </div>
@@ -599,10 +599,10 @@ function CommentDrawer({
                     <section key={group.queryId} className="border border-canvas-border rounded-[12px] overflow-hidden">
                       <header className={`px-3 py-2 bg-canvas border-b border-canvas-border flex items-center justify-between ${group.queryId === query.id ? 'bg-brand-600/5' : ''}`}>
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-[11px] font-bold text-brand-600 shrink-0">{group.queryId}</span>
-                          <span className="text-[11px] text-ink-400 truncate">{group.queryTitle}</span>
+                          <span className="font-mono text-[0.6875rem] font-bold text-brand-600 shrink-0">{group.queryId}</span>
+                          <span className="text-[0.6875rem] text-ink-400 truncate">{group.queryTitle}</span>
                         </div>
-                        <span className="text-[10px] text-ink-400 tabular-nums shrink-0">
+                        <span className="text-[0.625rem] text-ink-400 tabular-nums shrink-0">
                           {group.items.length} {group.items.length === 1 ? 'comment' : 'comments'}
                         </span>
                       </header>
@@ -614,18 +614,18 @@ function CommentDrawer({
                           return (
                             <li key={c.id} className="px-3 py-3">
                               <div className="flex items-start gap-2.5">
-                                <span className="shrink-0 w-7 h-7 rounded-full bg-brand-600/10 text-brand-600 flex items-center justify-center text-[10px] font-bold tracking-wider">
+                                <span className="shrink-0 w-7 h-7 rounded-full bg-brand-600/10 text-brand-600 flex items-center justify-center text-[0.625rem] font-bold tracking-wider">
                                   {c.initials}
                                 </span>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center justify-between gap-2 mb-0.5">
-                                    <span className="text-[12px] font-semibold text-ink-800">{c.author}</span>
-                                    <span className="inline-flex items-center gap-1 text-[11px] text-ink-400 tabular-nums whitespace-nowrap">
+                                    <span className="text-[0.75rem] font-semibold text-ink-800">{c.author}</span>
+                                    <span className="inline-flex items-center gap-1 text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap">
                                       <ClockIcon size={12} />
                                       {c.timestamp}
                                     </span>
                                   </div>
-                                  <p className="text-[12px] text-ink-800 leading-relaxed whitespace-pre-wrap break-words">{displayText}</p>
+                                  <p className="text-[0.75rem] text-ink-800 leading-relaxed whitespace-pre-wrap break-words">{displayText}</p>
                                   {isLong && (
                                     <button
                                       type="button"
@@ -634,13 +634,13 @@ function CommentDrawer({
                                         if (next.has(c.id)) next.delete(c.id); else next.add(c.id);
                                         return next;
                                       })}
-                                      className="mt-1 text-[11px] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded"
+                                      className="mt-1 text-[0.6875rem] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded"
                                     >
                                       {isExpanded ? 'Show less' : 'Show more'}
                                     </button>
                                   )}
                                   {c.attachment && (
-                                    <span className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/10 text-brand-600 text-[11px] font-medium rounded-full">
+                                    <span className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/10 text-brand-600 text-[0.6875rem] font-medium rounded-full">
                                       <Paperclip size={12} />
                                       {c.attachment}
                                     </span>
@@ -739,8 +739,8 @@ function ReportActivityLogDrawer({
               <History size={20} />
             </div>
             <div>
-              <h2 className="text-[16px] font-semibold text-ink-800 leading-tight">Report Activity Log</h2>
-              <p className="text-[12px] text-ink-400 mt-0.5 leading-snug">
+              <h2 className="text-[1rem] font-semibold text-ink-800 leading-tight">Report Activity Log</h2>
+              <p className="text-[0.75rem] text-ink-400 mt-0.5 leading-snug">
                 All actions and comments across every query card on this report.
               </p>
             </div>
@@ -762,7 +762,7 @@ function ReportActivityLogDrawer({
               onChange={(e) => setText(e.target.value)}
               placeholder="Add a comment to the report activity log…"
               rows={3}
-              className="w-full resize-none p-3 pr-10 bg-white border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+              className="w-full resize-none p-3 pr-10 bg-white border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
             />
             <input
               ref={fileInputRef}
@@ -784,7 +784,7 @@ function ReportActivityLogDrawer({
             </button>
           </div>
           {attachment && (
-            <div className="mt-2 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/5 text-brand-600 text-[11px] font-medium rounded-full">
+            <div className="mt-2 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/5 text-brand-600 text-[0.6875rem] font-medium rounded-full">
               <Paperclip size={12} />
               {attachment}
               <button onClick={() => setAttachment(null)} className="hover:text-brand-600/70 cursor-pointer" aria-label="Remove attachment">
@@ -796,7 +796,7 @@ function ReportActivityLogDrawer({
             <button
               onClick={handlePost}
               disabled={!text.trim() || isPosting}
-              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
                 text.trim() && !isPosting
                   ? 'bg-brand-600 text-white hover:bg-brand-600/90 cursor-pointer'
                   : 'bg-brand-600/40 text-white/80 cursor-not-allowed'
@@ -821,23 +821,23 @@ function ReportActivityLogDrawer({
             <ol className="space-y-4">
               {sorted.map(c => (
                 <li key={c.id} className="flex gap-3">
-                  <div className="shrink-0 w-8 h-8 rounded-full bg-brand-600/10 text-brand-600 flex items-center justify-center text-[11px] font-semibold">
+                  <div className="shrink-0 w-8 h-8 rounded-full bg-brand-600/10 text-brand-600 flex items-center justify-center text-[0.6875rem] font-semibold">
                     {c.initials}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-3 mb-0.5">
-                      <span className="text-[12px] font-semibold text-ink-800">{c.author}</span>
-                      <span className="text-[11px] text-ink-400 tabular-nums whitespace-nowrap">{c.timestamp}</span>
+                      <span className="text-[0.75rem] font-semibold text-ink-800">{c.author}</span>
+                      <span className="text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap">{c.timestamp}</span>
                     </div>
-                    <div className="text-[11px] text-ink-400 mb-1.5">
+                    <div className="text-[0.6875rem] text-ink-400 mb-1.5">
                       <span className="inline-flex items-center h-4 px-1.5 font-mono font-medium bg-brand-600/5 text-brand-600 rounded">
                         {c.queryId}
                       </span>{' '}
                       <span className="ml-1 line-clamp-1">{c.queryTitle}</span>
                     </div>
-                    <p className="text-[12px] text-ink-800 leading-relaxed">{c.text}</p>
+                    <p className="text-[0.75rem] text-ink-800 leading-relaxed">{c.text}</p>
                     {c.attachment && (
-                      <button className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/5 text-brand-600 text-[11px] font-medium rounded-full hover:bg-brand-600/10 cursor-pointer">
+                      <button className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/5 text-brand-600 text-[0.6875rem] font-medium rounded-full hover:bg-brand-600/10 cursor-pointer">
                         <Paperclip size={12} />
                         {c.attachment}
                       </button>
@@ -893,7 +893,7 @@ function ContentsRow({
       >
         <GripVertical size={14} />
       </button>
-      <span className="shrink-0 w-6 text-[11px] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(index).padStart(2, '0')}</span>
+      <span className="shrink-0 w-6 text-[0.6875rem] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(index).padStart(2, '0')}</span>
       {isEditing ? (
         <input
           value={draftValue}
@@ -905,12 +905,12 @@ function ContentsRow({
           }}
           autoFocus
           onClick={(e) => e.stopPropagation()}
-          className="flex-1 min-w-0 bg-white border border-brand-600/40 rounded-[8px] px-2 py-1 text-[12.5px] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/15"
+          className="flex-1 min-w-0 bg-white border border-brand-600/40 rounded-[8px] px-2 py-1 text-[0.78125rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/15"
         />
       ) : (
         <button
           onClick={onScroll}
-          className="flex-1 min-w-0 text-left text-[12.5px] font-medium text-ink-700 truncate transition-colors cursor-pointer group-hover/crow:text-brand-700"
+          className="flex-1 min-w-0 text-left text-[0.78125rem] font-medium text-ink-700 truncate transition-colors cursor-pointer group-hover/crow:text-brand-700"
         >
           {section.title}
         </button>
@@ -1017,7 +1017,7 @@ function ObservationActionsMenu({
         >
           <button
             onClick={() => { setOpen(false); onEdit(); }}
-            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
           >
             <Edit3 size={14} />
             Edit observation
@@ -1025,7 +1025,7 @@ function ObservationActionsMenu({
           {hasAttachment && (
             <button
               onClick={() => { setOpen(false); onToggleAttachment(); }}
-              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
+              className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
             >
               {attachmentHidden ? <Eye size={14} /> : <EyeOff size={14} />}
               {attachmentHidden ? 'Show attachment' : 'Hide attachment'}
@@ -1034,7 +1034,7 @@ function ObservationActionsMenu({
           <div className="my-1 border-t border-canvas-border/60" />
           <button
             onClick={() => { setOpen(false); onDelete(); }}
-            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-risk-700 hover:bg-risk-50 cursor-pointer"
           >
             <Trash2 size={14} />
             Delete observation
@@ -1105,7 +1105,7 @@ function ObservationCard({
           transition={{ delay: baseDelay + 0.15, duration: 0.35 }}
           className="flex items-center justify-between mb-4 gap-4"
         >
-          <div className="flex items-center gap-2.5 text-[11px] min-w-0">
+          <div className="flex items-center gap-2.5 text-[0.6875rem] min-w-0">
             <span className="font-bold text-brand-600 uppercase tracking-wider shrink-0">{obs.obsId}</span>
             <span className="w-px h-3 bg-border-light shrink-0" />
             <span className="font-medium text-ink-400 uppercase tracking-wider shrink-0">Observation</span>
@@ -1124,7 +1124,7 @@ function ObservationCard({
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
-          className="text-[15px] font-semibold text-ink-800 leading-[1.5] mb-5"
+          className="text-[0.9375rem] font-semibold text-ink-800 leading-[1.5] mb-5"
         >
           {obs.title}
         </motion.h3>
@@ -1135,7 +1135,7 @@ function ObservationCard({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: baseDelay + 0.4, duration: 0.4 }}
-            className="text-[13px] text-ink-500 leading-relaxed mb-4 whitespace-pre-wrap"
+            className="text-[0.8125rem] text-ink-500 leading-relaxed mb-4 whitespace-pre-wrap"
           >
             {obs.description}
           </motion.p>
@@ -1181,8 +1181,8 @@ function ObservationCard({
                   className="inline-flex items-center gap-2 max-w-[260px] h-[36px] px-2.5 bg-canvas border border-canvas-border rounded-[8px] hover:border-brand-600/40 hover:bg-white transition-colors group"
                 >
                   <Icon size={14} className={`shrink-0 ${tone}`} />
-                  <span className="text-[12px] text-ink-800 font-medium truncate group-hover:text-brand-600">{att.name}</span>
-                  <span className="text-[10px] text-ink-400 tabular-nums shrink-0">{formatFileSize(att.size)}</span>
+                  <span className="text-[0.75rem] text-ink-800 font-medium truncate group-hover:text-brand-600">{att.name}</span>
+                  <span className="text-[0.625rem] text-ink-400 tabular-nums shrink-0">{formatFileSize(att.size)}</span>
                 </a>
               );
             })}
@@ -1239,9 +1239,9 @@ function ObservationCard({
             src={imageAttachments[lightboxIndex].dataUrl}
             alt={imageAttachments[lightboxIndex].name}
             onClick={(e) => e.stopPropagation()}
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-[12px] shadow-2xl cursor-default"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-[12px] shadow-xl cursor-default"
           />
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[12px] text-white/80 px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-sm">
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[0.75rem] text-white/80 px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-sm">
             <span>{obs.obsId}</span>
             <span className="text-white/40">·</span>
             <span>{imageAttachments[lightboxIndex].name}</span>
@@ -1321,7 +1321,7 @@ function WorkflowResultCard({
           transition={{ delay: baseDelay + 0.15, duration: 0.35 }}
           className="flex items-center justify-between mb-4 gap-4"
         >
-          <div className="flex items-center gap-2.5 text-[11px] min-w-0">
+          <div className="flex items-center gap-2.5 text-[0.6875rem] min-w-0">
             <span className="font-bold text-brand-600 uppercase tracking-wider shrink-0">Workflow · {workflow.workflowId}</span>
             {workflow.businessProcess && (
               <>
@@ -1351,7 +1351,7 @@ function WorkflowResultCard({
                   {onDelete && (
                     <button
                       onClick={() => { setMenuOpen(false); onDelete(); }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-risk-700 hover:bg-risk-50 cursor-pointer"
                     >
                       <Trash2 size={14} />
                       Delete
@@ -1370,12 +1370,12 @@ function WorkflowResultCard({
           transition={{ delay: baseDelay + 0.2, duration: 0.35 }}
           className="mb-5"
         >
-          <h3 className="text-[15px] font-semibold text-ink-800 leading-[1.5] mb-2">
+          <h3 className="text-[0.9375rem] font-semibold text-ink-800 leading-[1.5] mb-2">
             {workflow.name}
           </h3>
 
           {/* Risk owner — inline editable. Filled state renders as initials chip + name; empty state stays understated. */}
-          <div className="flex items-center gap-2 text-[12px]">
+          <div className="flex items-center gap-2 text-[0.75rem]">
             <span className="text-ink-400">Risk owner</span>
             {editingOwner ? (
               <input
@@ -1388,14 +1388,14 @@ function WorkflowResultCard({
                   if (e.key === 'Escape') { setOwnerDraft(workflow.riskOwner ?? ''); setEditingOwner(false); }
                 }}
                 placeholder="e.g., Priya Mehta"
-                className="flex-1 max-w-[280px] px-2 py-1 text-[12px] text-ink-800 border border-brand-600/40 rounded-[8px] focus:outline-none focus:border-brand-600"
+                className="flex-1 max-w-[280px] px-2 py-1 text-[0.75rem] text-ink-800 border border-brand-600/40 rounded-[8px] focus:outline-none focus:border-brand-600"
               />
             ) : workflow.riskOwner ? (
               <button
                 onClick={() => { setOwnerDraft(workflow.riskOwner ?? ''); setEditingOwner(true); }}
                 className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-[8px] hover:bg-brand-50 transition-colors cursor-pointer"
               >
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-600/15 text-brand-600 text-[10px] font-bold tabular-nums">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-600/15 text-brand-600 text-[0.625rem] font-bold tabular-nums">
                   {workflow.riskOwner.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()}
                 </span>
                 <span className="text-ink-800 font-medium">{workflow.riskOwner}</span>
@@ -1418,16 +1418,16 @@ function WorkflowResultCard({
             { title: 'Observations', items: workflow.observations, emptyCopy: 'No observations recorded for this workflow yet.' },
           ].map(section => (
             <div key={section.title}>
-              <h4 className="flex items-center gap-2 text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-3">
+              <h4 className="flex items-center gap-2 text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-3">
                 <span>{section.title}</span>
                 {section.items.length > 0 && (
-                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-canvas text-ink-400 text-[10px] font-semibold tabular-nums">
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-canvas text-ink-400 text-[0.625rem] font-semibold tabular-nums">
                     {section.items.length}
                   </span>
                 )}
               </h4>
               {section.items.length === 0 ? (
-                <p className="text-[12px] text-ink-400 italic">{section.emptyCopy}</p>
+                <p className="text-[0.75rem] text-ink-400 italic">{section.emptyCopy}</p>
               ) : (
                 <ul className="space-y-2.5">
                   {section.items.map((item, i) => (
@@ -1436,7 +1436,7 @@ function WorkflowResultCard({
                       initial={{ opacity: 0, x: -4 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: baseDelay + 0.4 + i * 0.05, duration: 0.3 }}
-                      className="flex gap-2.5 text-[13px] text-ink-800 leading-relaxed"
+                      className="flex gap-2.5 text-[0.8125rem] text-ink-800 leading-relaxed"
                     >
                       <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-brand-600/60" />
                       {item}
@@ -1450,20 +1450,20 @@ function WorkflowResultCard({
           {/* Output table */}
           {workflow.outputTable && workflow.outputTable.rows.length > 0 && (
             <div>
-              <h4 className="flex items-center gap-2 text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-3">
+              <h4 className="flex items-center gap-2 text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-3">
                 <span>Output</span>
-                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-canvas text-ink-400 text-[10px] font-semibold tabular-nums">
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-canvas text-ink-400 text-[0.625rem] font-semibold tabular-nums">
                   {workflow.outputTable.rows.length}
                 </span>
               </h4>
               <div className="border border-canvas-border rounded-[12px] overflow-hidden">
-                <table className="w-full border-collapse text-[12px]">
+                <table className="w-full border-collapse text-[0.75rem]">
                   <thead>
                     <tr className="bg-canvas/70">
                       {workflow.outputTable.columns.map((col, ci) => (
                         <th
                           key={col}
-                          className={`px-3 py-2 text-[10px] font-semibold text-ink-500 uppercase tracking-wider border-b border-canvas-border ${ci === workflow.outputTable!.columns.length - 1 ? 'text-right' : 'text-left'}`}
+                          className={`px-3 py-2 text-[0.625rem] font-semibold text-ink-500 uppercase tracking-wider border-b border-canvas-border ${ci === workflow.outputTable!.columns.length - 1 ? 'text-right' : 'text-left'}`}
                         >
                           {col}
                         </th>
@@ -1484,11 +1484,11 @@ function WorkflowResultCard({
                           return (
                             <td
                               key={ci}
-                              className={`px-3 py-2 text-ink-800 border-b border-canvas-border/60 last:border-b-0 ${isLast ? 'text-right' : ''} ${isId ? 'font-mono text-[12px] text-ink-500 tabular-nums' : ''}`}
+                              className={`px-3 py-2 text-ink-800 border-b border-canvas-border/60 last:border-b-0 ${isLast ? 'text-right' : ''} ${isId ? 'font-mono text-[0.75rem] text-ink-500 tabular-nums' : ''}`}
                             >
                               {isSeverity ? (
                                 <span
-                                  className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-[8px] text-[10px] font-semibold ${
+                                  className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-[8px] text-[0.625rem] font-semibold ${
                                     cellStr === 'High'
                                       ? 'bg-risk-50 text-risk-700'
                                       : cellStr === 'Medium'
@@ -1517,7 +1517,7 @@ function WorkflowResultCard({
                     ))}
                   </tbody>
                 </table>
-                <div className="flex items-center justify-between px-3 py-2 bg-canvas/40 border-t border-canvas-border/60 text-[11px] text-ink-400">
+                <div className="flex items-center justify-between px-3 py-2 bg-canvas/40 border-t border-canvas-border/60 text-[0.6875rem] text-ink-400">
                   <span>{workflow.outputTable.rows.length} {workflow.outputTable.rows.length === 1 ? 'record' : 'records'}</span>
                   <button
                     onClick={() => addToast({ type: 'success', message: `Exporting ${workflow.workflowId} output as CSV…` })}
@@ -1609,11 +1609,11 @@ function AttachedQueryCard({ query, index, onRemove }: {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-bold tracking-[0.08em] uppercase text-brand-600/80">{kindLabel}</span>
-            <span className="text-[10px] text-ink-400">·</span>
-            <span className="text-[10px] text-ink-400">Attached {query.attachedAt} by {query.attachedBy}</span>
+            <span className="text-[0.625rem] font-bold tracking-[0.08em] uppercase text-brand-600/80">{kindLabel}</span>
+            <span className="text-[0.625rem] text-ink-400">·</span>
+            <span className="text-[0.625rem] text-ink-400">Attached {query.attachedAt} by {query.attachedBy}</span>
           </div>
-          <h3 className="text-[14px] font-bold text-ink-800 tracking-tight leading-snug">{query.label}</h3>
+          <h3 className="text-[0.875rem] font-bold text-ink-800 tracking-tight leading-snug">{query.label}</h3>
         </div>
         <button
           onClick={() => setShowRemoveConfirm(true)}
@@ -1644,8 +1644,8 @@ function AttachedQueryCard({ query, index, onRemove }: {
           >
             <Loader2 size={14} className="text-brand-600 animate-spin shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-semibold text-brand-600 mb-0.5">Data syncing</p>
-              <p className="text-[11px] text-ink-400">Running query against your data — preview will appear in a moment.</p>
+              <p className="text-[0.75rem] font-semibold text-brand-600 mb-0.5">Data syncing</p>
+              <p className="text-[0.6875rem] text-ink-400">Running query against your data — preview will appear in a moment.</p>
             </div>
           </motion.div>
         )}
@@ -1660,8 +1660,8 @@ function AttachedQueryCard({ query, index, onRemove }: {
           >
             {/* Summary */}
             <div>
-              <div className="text-[10px] font-bold tracking-[0.08em] uppercase text-ink-400 mb-1.5">Summary</div>
-              <p className="text-[12px] leading-relaxed text-ink-800">{resolved.summary}</p>
+              <div className="text-[0.625rem] font-bold tracking-[0.08em] uppercase text-ink-400 mb-1.5">Summary</div>
+              <p className="text-[0.75rem] leading-relaxed text-ink-800">{resolved.summary}</p>
             </div>
 
             {/* Findings */}
@@ -1669,13 +1669,13 @@ function AttachedQueryCard({ query, index, onRemove }: {
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <Lightbulb size={12} className="text-evidence-700" />
-                  <span className="text-[10px] font-bold tracking-[0.08em] uppercase text-ink-400">Findings</span>
-                  <span className="text-[10px] text-ink-400">·</span>
-                  <span className="text-[10px] text-ink-400">{resolved.findings.length}</span>
+                  <span className="text-[0.625rem] font-bold tracking-[0.08em] uppercase text-ink-400">Findings</span>
+                  <span className="text-[0.625rem] text-ink-400">·</span>
+                  <span className="text-[0.625rem] text-ink-400">{resolved.findings.length}</span>
                 </div>
                 <ul className="space-y-1.5">
                   {resolved.findings.map((f, i) => (
-                    <li key={i} className="flex gap-2 text-[12px] text-ink-800 leading-relaxed">
+                    <li key={i} className="flex gap-2 text-[0.75rem] text-ink-800 leading-relaxed">
                       <span className="text-evidence-700 shrink-0 mt-1">•</span>
                       <span>{f}</span>
                     </li>
@@ -1689,13 +1689,13 @@ function AttachedQueryCard({ query, index, onRemove }: {
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <Eye size={12} className="text-brand-600" />
-                  <span className="text-[10px] font-bold tracking-[0.08em] uppercase text-ink-400">Observations</span>
-                  <span className="text-[10px] text-ink-400">·</span>
-                  <span className="text-[10px] text-ink-400">{resolved.observations.length}</span>
+                  <span className="text-[0.625rem] font-bold tracking-[0.08em] uppercase text-ink-400">Observations</span>
+                  <span className="text-[0.625rem] text-ink-400">·</span>
+                  <span className="text-[0.625rem] text-ink-400">{resolved.observations.length}</span>
                 </div>
                 <ul className="space-y-1.5">
                   {resolved.observations.map((o, i) => (
-                    <li key={i} className="flex gap-2 text-[12px] text-ink-800 leading-relaxed">
+                    <li key={i} className="flex gap-2 text-[0.75rem] text-ink-800 leading-relaxed">
                       <span className="text-brand-600 shrink-0 mt-1">•</span>
                       <span>{o}</span>
                     </li>
@@ -1716,8 +1716,8 @@ function AttachedQueryCard({ query, index, onRemove }: {
           >
             <PackageOpen size={14} className="text-ink-400 shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-semibold text-ink-800 mb-0.5">Preview not available</p>
-              <p className="text-[11px] text-ink-400">
+              <p className="text-[0.75rem] font-semibold text-ink-800 mb-0.5">Preview not available</p>
+              <p className="text-[0.6875rem] text-ink-400">
                 {query.kind === 'upload'
                   ? 'Uploaded files render once the parser finishes — wire your data pipeline to enable preview.'
                   : query.kind === 'source'
@@ -1858,29 +1858,29 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             rows={2}
             placeholder="Add a description for this report…"
             autoFocus
-            className="w-full bg-canvas border border-canvas-border rounded-[8px] px-3 py-2 text-ink-800 text-[13px] leading-snug placeholder:text-ink-400 focus:outline-none focus:border-brand-400 focus:bg-white transition-colors resize-none"
+            className="w-full bg-canvas border border-canvas-border rounded-[8px] px-3 py-2 text-ink-800 text-[0.8125rem] leading-snug placeholder:text-ink-400 focus:outline-none focus:border-brand-400 focus:bg-white transition-colors resize-none"
           />
           <div className="mt-2 flex items-center gap-2">
             <button
               onClick={saveEditDesc}
-              className="inline-flex items-center gap-1 h-7 px-3 bg-brand-600 text-white text-[11px] font-semibold rounded-[8px] hover:bg-brand-700 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 h-7 px-3 bg-brand-600 text-white text-[0.6875rem] font-semibold rounded-[8px] hover:bg-brand-700 transition-colors cursor-pointer"
             >
               <Check size={12} /> Save
             </button>
             <button
               onClick={cancelEditDesc}
-              className="h-7 px-2.5 text-ink-500 text-[11px] font-medium hover:text-ink-700 transition-colors cursor-pointer"
+              className="h-7 px-2.5 text-ink-500 text-[0.6875rem] font-medium hover:text-ink-700 transition-colors cursor-pointer"
             >
               Cancel
             </button>
-            <span className="text-ink-400 text-[10px] ml-auto hidden sm:inline">⌘↵ Save · Esc Cancel</span>
+            <span className="text-ink-400 text-[0.625rem] ml-auto hidden sm:inline">⌘↵ Save · Esc Cancel</span>
           </div>
         </div>
       );
     }
     return (
       <div className="group/desc flex items-start gap-1.5 mb-3 -ml-0.5">
-        <p className={`text-[13px] leading-snug pl-0.5 ${onDark ? 'text-white/75' : 'text-ink-500'}`}>
+        <p className={`text-[0.8125rem] leading-snug pl-0.5 ${onDark ? 'text-white/75' : 'text-ink-500'}`}>
           {displayDescription || <span className={`italic ${onDark ? 'text-white/45' : 'text-ink-400'}`}>No description</span>}
         </p>
         <button
@@ -2335,12 +2335,12 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         <div className="flex items-center justify-between gap-3 mb-4 pb-4 border-b border-canvas-border">
           <div className="flex items-center gap-2.5">
             <span className="w-7 h-7 rounded-[8px] bg-brand-50 text-brand-600 flex items-center justify-center"><List size={15} /></span>
-            <h3 className="text-[15px] leading-[20px] font-bold text-ink-900">Contents</h3>
-            <span className="inline-flex items-center h-5 px-2 rounded-full bg-canvas text-[11px] font-semibold text-ink-400 tabular-nums">{nonCoverSections.length}</span>
+            <h3 className="text-[0.9375rem] leading-[20px] font-bold text-ink-900">Contents</h3>
+            <span className="inline-flex items-center h-5 px-2 rounded-full bg-canvas text-[0.6875rem] font-semibold text-ink-400 tabular-nums">{nonCoverSections.length}</span>
           </div>
           <button
             onClick={openAddObservation}
-            className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer"
           >
             <Plus size={14} />
             Add Observation
@@ -2396,6 +2396,9 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   // Upload Report → Generate ATR flow — only offered on the ATR template (rt-007).
   const [uploadReportOpen, setUploadReportOpen] = useState(false);
   const isAtrReport = report.templateId === 'rt-007';
+  // SOX reports aren't assembled from queries — they're filled section by
+  // section — so the empty-state cover doesn't offer "Add Query".
+  const isSoxReport = reportKind(report) === 'sox';
   // ATR generation is offered on IA + Bulk reports (and ATRs themselves), never
   // on SOX — SOX is a separate report type that does not convert into an ATR.
   const canGenerateAtr = reportKind(report) !== 'sox';
@@ -2443,11 +2446,11 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         {/* Top bar */}
         <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
           <div className="flex items-center gap-3 flex-wrap">
-            <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-ink-500 hover:text-brand-600 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded">
+            <button onClick={onBack} className="flex items-center gap-1.5 text-[0.8125rem] text-ink-500 hover:text-brand-600 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded">
               <ArrowLeft size={14} /> Back to Reports
             </button>
             {isReadOnly && (
-              <span className="bg-canvas border border-canvas-border px-3 h-8 inline-flex items-center gap-2 rounded-full text-[11px] text-ink-500">
+              <span className="bg-canvas border border-canvas-border px-3 h-8 inline-flex items-center gap-2 rounded-full text-[0.6875rem] text-ink-500">
                 <Lock size={12} aria-hidden="true" />
                 <span>
                   View-only{sharedByName ? <> · shared by {sharedByName}</> : ''}
@@ -2460,7 +2463,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               <div className="relative">
                 <button
                   onClick={() => setShowApplyTemplate(p => !p)}
-                  className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[12px] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
+                  className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
                 >
                   <Layout size={14} />
                   <span className="truncate max-w-[220px]">{appliedTemplate?.name ?? reportTemplate?.name ?? 'Apply Template'}</span>
@@ -2488,13 +2491,13 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               </div>
             )}
             {onShare && can('rp_share') && (
-              <button onClick={onShare} className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[12px] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white rounded-[8px]">
+              <button onClick={onShare} className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white rounded-[8px]">
                 <Share2 size={14} /> Share
               </button>
             )}
             <button
               onClick={() => setShowDownloadModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[12px] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white rounded-[8px]"
+              className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white rounded-[8px]"
             >
               <Download size={14} /> Download
             </button>
@@ -2502,7 +2505,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               <button
                 onClick={handleSaveAsTemplate}
                 title="Save this report's structure as a custom template"
-                className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[12px] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white rounded-[8px]"
+                className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white rounded-[8px]"
               >
                 <BookOpen size={14} /> Save as template
               </button>
@@ -2525,7 +2528,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 className="flex items-center gap-3 px-6 py-4 glass-card-strong rounded-[12px] shadow-lg"
               >
                 <Loader2 size={20} className="text-brand-600 animate-spin" />
-                <span className="text-[14px] font-semibold text-ink-800">Applying template...</span>
+                <span className="text-[0.875rem] font-semibold text-ink-800">Applying template...</span>
               </motion.div>
             </motion.div>
           )}
@@ -2544,23 +2547,23 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="switch-template-title"
-                className="relative bg-white rounded-[16px] border border-canvas-border shadow-2xl w-[320px] p-6"
+                className="relative bg-white rounded-[16px] border border-canvas-border shadow-xl w-[320px] p-6"
                 onClick={e => e.stopPropagation()}
               >
-                <h3 id="switch-template-title" className="text-[15px] font-semibold text-ink-800 mb-2">Switch template?</h3>
-                <p className="text-[13px] text-ink-500 leading-relaxed mb-5">
+                <h3 id="switch-template-title" className="text-[0.9375rem] font-semibold text-ink-800 mb-2">Switch template?</h3>
+                <p className="text-[0.8125rem] text-ink-500 leading-relaxed mb-5">
                   Switching to “{pendingTemplate.name}” replaces the current layout and its sections. Some content may not carry over.
                 </p>
                 <div className="flex items-center justify-end gap-2">
                   <button
                     onClick={() => setPendingTemplate(null)}
-                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[13px] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-canvas transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-canvas transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={() => { const t = pendingTemplate; setPendingTemplate(null); applyTemplateNow(t); }}
-                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[13px] font-semibold bg-brand-600 hover:bg-brand-500 text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] text-[0.8125rem] font-semibold bg-brand-600 hover:bg-brand-500 text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                   >
                     Switch
                   </button>
@@ -2582,31 +2585,33 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     {isAtrReport && (
                       <button
                         onClick={() => setUploadReportOpen(true)}
-                        className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                        className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                       >
                         <Upload size={14} />
                         Upload Report
                       </button>
                     )}
-                    <button
-                      onClick={() => setAddQueryOpen(true)}
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-                    >
-                      <Plus size={14} />
-                      Add Query
-                    </button>
+                    {!isSoxReport && (
+                      <button
+                        onClick={() => setAddQueryOpen(true)}
+                        className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                      >
+                        <Plus size={14} />
+                        Add Query
+                      </button>
+                    )}
                   </>
                 )}
               >
-                {reportTemplate?.desc && <p className="text-[13px] text-white/75 mb-3">{reportTemplate.desc}</p>}
-                <div className="flex items-center gap-1.5 text-[13px] flex-wrap">
+                {reportTemplate?.desc && <p className="text-[0.8125rem] text-white/75 mb-3">{reportTemplate.desc}</p>}
+                <div className="flex items-center gap-1.5 text-[0.8125rem] flex-wrap">
                   <span className="font-semibold text-white">{report.generatedBy}</span>
                   <span className="text-white/30 mx-0.5">|</span>
                   <span className="text-white/70">{report.generatedAt}</span>
                   <span className="text-white/30 mx-0.5">|</span>
                   <span className="text-white/70">{reportTemplate?.sections.length ?? 0} {reportTemplate?.sections.length === 1 ? 'section' : 'sections'}</span>
                   {report.tag === 'Bulk Audit' && (
-                    <span className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-full bg-white/15 text-white border border-white/25">
+                    <span className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[0.625rem] font-semibold whitespace-nowrap rounded-full bg-white/15 text-white border border-white/25">
                       Bulk Audit
                     </span>
                   )}
@@ -2669,9 +2674,9 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                         >
                           <div className="flex items-center gap-2.5 px-1">
                             <Icon size={16} className="text-brand-600" />
-                            <h3 className="text-[14px] font-bold text-ink-800 tracking-tight">{section.name}</h3>
-                            <span className="text-[10px] text-ink-400">·</span>
-                            <span className="text-[10px] text-ink-400">{attached.length}</span>
+                            <h3 className="text-[0.875rem] font-bold text-ink-800 tracking-tight">{section.name}</h3>
+                            <span className="text-[0.625rem] text-ink-400">·</span>
+                            <span className="text-[0.625rem] text-ink-400">{attached.length}</span>
                           </div>
                           <AnimatePresence>
                             {attached.map((q, qi) => (
@@ -2697,16 +2702,16 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                       >
                         <div className="flex items-center gap-2.5 mb-3">
                           <Icon size={16} className="text-brand-600" />
-                          <h3 className="text-[14px] font-bold text-ink-800 tracking-tight">{section.name}</h3>
+                          <h3 className="text-[0.875rem] font-bold text-ink-800 tracking-tight">{section.name}</h3>
                         </div>
                         {/* Composed from attached queries where the section maps to
                             query content; dashed placeholder otherwise. */}
                         {/executive summary/i.test(section.name) && execText ? (
-                          <p className="text-[14px] text-ink-700 leading-relaxed">{execText}</p>
+                          <p className="text-[0.875rem] text-ink-700 leading-relaxed">{execText}</p>
                         ) : /recommendation|insight/i.test(section.name) && recBullets.length > 0 ? (
                           <ul className="space-y-2">
                             {recBullets.map((b, bi) => (
-                              <li key={bi} className="flex gap-2.5 text-[14px] text-ink-700 leading-relaxed">
+                              <li key={bi} className="flex gap-2.5 text-[0.875rem] text-ink-700 leading-relaxed">
                                 <span className="text-brand-600 mt-px shrink-0">•</span>
                                 <span>{b}</span>
                               </li>
@@ -2715,15 +2720,15 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                         ) : /appendix/i.test(section.name) && attached.length > 0 ? (
                           <ul className="space-y-1.5">
                             {attached.map(q => (
-                              <li key={q.id} className="flex items-baseline gap-2 text-[12.5px] text-ink-500">
+                              <li key={q.id} className="flex items-baseline gap-2 text-[0.78125rem] text-ink-500">
                                 <span className="font-medium text-ink-800">{q.label}</span>
-                                <span className="text-[11px] text-ink-400">Attached {q.attachedAt} by {q.attachedBy}</span>
+                                <span className="text-[0.6875rem] text-ink-400">Attached {q.attachedAt} by {q.attachedBy}</span>
                               </li>
                             ))}
                           </ul>
                         ) : (
                           <div className="border border-dashed border-canvas-border rounded-[12px] bg-canvas/40 px-6 py-7 text-center">
-                            <p className="text-[12px] text-ink-400/80">
+                            <p className="text-[0.75rem] text-ink-400/80">
                               {attached.length > 0
                                 ? `${section.name} will be generated from your attached queries.`
                                 : `Section content generated from ${report.name} data`}
@@ -2739,9 +2744,9 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     <div className="space-y-3">
                       <div className="flex items-center gap-2.5 px-1">
                         <MessageSquare size={16} className="text-brand-600" />
-                        <h3 className="text-[14px] font-bold text-ink-800 tracking-tight">Attached Queries</h3>
-                        <span className="text-[10px] text-ink-400">·</span>
-                        <span className="text-[10px] text-ink-400">{attached.length}</span>
+                        <h3 className="text-[0.875rem] font-bold text-ink-800 tracking-tight">Attached Queries</h3>
+                        <span className="text-[0.625rem] text-ink-400">·</span>
+                        <span className="text-[0.625rem] text-ink-400">{attached.length}</span>
                       </div>
                       <AnimatePresence>
                         {attached.map((q, qi) => (
@@ -2758,7 +2763,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
 
                   {(!reportTemplate || sections.length === 0) && (
                     <div className="bg-white border border-canvas-border rounded-[12px] px-6 py-12 text-center">
-                      <p className="text-[13px] text-ink-400">This template has no sections defined.</p>
+                      <p className="text-[0.8125rem] text-ink-400">This template has no sections defined.</p>
                     </div>
                   )}
                 </div>
@@ -2779,7 +2784,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     <button
                       onClick={() => setAtrModalOpen(true)}
                       title="Open the live Action Taken Report"
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                     >
                       <FileText size={14} />
                       Live ATR
@@ -2795,7 +2800,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     </button>
                     <button
                       onClick={() => addToast({ type: 'success', message: 'Generating report summary…' })}
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.78125rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                     >
                       <Sparkles size={13} />
                       Generate Summary
@@ -2804,14 +2809,14 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 }
               >
                 <EditableDescription onDark />
-                <div className="flex items-center gap-1.5 text-[13px] flex-wrap">
+                <div className="flex items-center gap-1.5 text-[0.8125rem] flex-wrap">
                   <span className="font-semibold text-white">{report.generatedBy}</span>
                   <span className="text-white/30 mx-0.5">|</span>
                   <span className="text-white/70">{report.generatedAt}</span>
                   <span className="text-white/30 mx-0.5">|</span>
                   <span className="text-white/70">{activeQueries.length} {activeQueries.length === 1 ? 'query' : 'queries'}</span>
                   {/* When a template is applied, show only the applied-template chip. */}
-                  <span className="inline-flex items-center h-6 px-2.5 ml-1 text-[11px] font-medium text-white bg-white/15 border border-white/25 rounded-full whitespace-nowrap">
+                  <span className="inline-flex items-center h-6 px-2.5 ml-1 text-[0.6875rem] font-medium text-white bg-white/15 border border-white/25 rounded-full whitespace-nowrap">
                     {appliedTemplate.name}
                   </span>
                 </div>
@@ -2834,13 +2839,13 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 <div className="flex items-center justify-between gap-3 mb-4 pb-4 border-b border-canvas-border">
                   <div className="flex items-center gap-2.5">
                     <span className="w-7 h-7 rounded-[8px] bg-brand-50 text-brand-600 flex items-center justify-center"><List size={15} /></span>
-                    <h3 className="text-[15px] leading-[20px] font-bold text-ink-900">Contents</h3>
-                    <span className="inline-flex items-center h-5 px-2 rounded-full bg-canvas text-[11px] font-semibold text-ink-400 tabular-nums">{(appliedTemplate.sections?.length ?? 0) + appliedObservations.length}</span>
+                    <h3 className="text-[0.9375rem] leading-[20px] font-bold text-ink-900">Contents</h3>
+                    <span className="inline-flex items-center h-5 px-2 rounded-full bg-canvas text-[0.6875rem] font-semibold text-ink-400 tabular-nums">{(appliedTemplate.sections?.length ?? 0) + appliedObservations.length}</span>
                   </div>
                   {!isReadOnly && (
                     <button
                       onClick={openAddObservation}
-                      className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                      className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                     >
                       <Plus size={14} />
                       Add Observation
@@ -2856,8 +2861,8 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 >
                   {appliedTemplate.sections.map((s, i) => (
                     <li key={`${s.name}-${i}`} className="flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-[8px] hover:bg-brand-50/30 transition-colors">
-                      <span className="shrink-0 w-6 text-[11px] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
-                      <span className="flex-1 min-w-0 text-[12.5px] font-medium text-ink-700 truncate">{s.name}</span>
+                      <span className="shrink-0 w-6 text-[0.6875rem] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
+                      <span className="flex-1 min-w-0 text-[0.78125rem] font-medium text-ink-700 truncate">{s.name}</span>
                     </li>
                   ))}
                   {appliedObservations.map((o, i) => {
@@ -2922,10 +2927,10 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                         return (
                           <div key={`${s.name}-${i}`} className="space-y-4">
                             <div className="bg-white rounded-[12px] border border-canvas-border p-5">
-                              <h3 className="text-[13px] font-bold text-ink-800 mb-2 flex items-center gap-2">
+                              <h3 className="text-[0.8125rem] font-bold text-ink-800 mb-2 flex items-center gap-2">
                                 <Icon size={14} className="text-brand-600" /> {s.name}
                               </h3>
-                              <p className="text-[14px] text-ink-700 leading-relaxed">{content}</p>
+                              <p className="text-[0.875rem] text-ink-700 leading-relaxed">{content}</p>
                             </div>
                             {(i === anchorIdx || (anchorIdx === -1 && i === tmplSections.length - 1)) && queryBlocks}
                           </div>
@@ -2991,7 +2996,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                               <button
                                 onClick={() => setAtrModalOpen(true)}
                                 title="Generate Action Taken Report"
-                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                               >
                                 <FileText size={14} />
                                 Generate ATR
@@ -3007,7 +3012,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                               </button>
                               <button
                                 onClick={() => addToast({ type: 'success', message: 'Generating report summary…' })}
-                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.78125rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                               >
                                 <Sparkles size={13} />
                                 Generate Summary
@@ -3016,14 +3021,14 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                           }
                         >
                           <EditableDescription onDark />
-                          <div className="flex items-center gap-1.5 text-[13px] flex-wrap">
+                          <div className="flex items-center gap-1.5 text-[0.8125rem] flex-wrap">
                             <span className="font-semibold text-white">{report.generatedBy}</span>
                             <span className="text-white/30 mx-0.5">|</span>
                             <span className="text-white/70">{report.generatedAt}</span>
                             <span className="text-white/30 mx-0.5">|</span>
                             <span className="text-white/70">{scopeLabel}</span>
                             {report.tag === 'Bulk Audit' && (
-                              <span className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-full bg-white/15 text-white border border-white/25">
+                              <span className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[0.625rem] font-semibold whitespace-nowrap rounded-full bg-white/15 text-white border border-white/25">
                                 Bulk Audit
                               </span>
                             )}
@@ -3068,7 +3073,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                 disabled={isRegeneratingSummary}
                                 aria-busy={isRegeneratingSummary || undefined}
                                 title="Regenerate this summary with the latest queries"
-                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                               >
                                 {isRegeneratingSummary ? (
                                   <Loader2 size={14} className="animate-spin" />
@@ -3082,7 +3087,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                           <div className="pb-5 border-b border-canvas-border mb-5">
                             <ReportKpiTiles stats={activeStats} animate />
                           </div>
-                          <p className="text-[14px] text-ink-700 leading-relaxed">{summaryOverride ?? section.content}</p>
+                          <p className="text-[0.875rem] text-ink-700 leading-relaxed">{summaryOverride ?? section.content}</p>
                         </div>
                       </Reorder.Item>
                     );
@@ -3153,7 +3158,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                       <Reorder.Item key={section.id} {...sectionProps}>
                         <div className="border-x border-b border-canvas-border bg-white px-9 pt-7 pb-6">
                           <ReportNumberedHeading n={sectionNumber(section.id)} title={section.title} />
-                          <p className="text-[13px] text-ink-800 leading-relaxed">{section.content}</p>
+                          <p className="text-[0.8125rem] text-ink-800 leading-relaxed">{section.content}</p>
                         </div>
                       </Reorder.Item>
                     );
@@ -3178,7 +3183,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               </Reorder.Group>
               {report.footerText && (
                 <div className="border-x border-b border-canvas-border bg-canvas/60 rounded-b-[12px] px-9 py-3 flex items-center justify-center">
-                  <span className="text-[11px] text-ink-400 tracking-wide">{report.footerText}</span>
+                  <span className="text-[0.6875rem] text-ink-400 tracking-wide">{report.footerText}</span>
                 </div>
               )}
             </main>

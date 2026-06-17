@@ -657,7 +657,7 @@ export default function ReportsView({
   const ActionTooltip = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <span className="relative group/tt inline-flex">
       {children}
-      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[10px] font-medium rounded-[8px] whitespace-nowrap opacity-0 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100 transition-opacity z-50">
+      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[0.625rem] font-medium rounded-[8px] whitespace-nowrap opacity-0 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100 transition-opacity z-50">
         {label}
       </span>
     </span>
@@ -700,8 +700,8 @@ export default function ReportsView({
           )}
         </span>
         <div className="min-w-0">
-          <div className="text-[14.5px] font-semibold tracking-[-0.006em] text-ink-900 truncate" title={display.length > 100 ? display : undefined}>{truncated}</div>
-          {subline && <div className="mt-0.5 text-[11.5px] text-ink-400 truncate">{subline}</div>}
+          <div className="text-[0.90625rem] font-semibold tracking-[-0.006em] text-ink-900 truncate" title={display.length > 100 ? display : undefined}>{truncated}</div>
+          {subline && <div className="mt-0.5 text-[0.71875rem] text-ink-400 truncate">{subline}</div>}
         </div>
       </div>
     );
@@ -710,14 +710,11 @@ export default function ReportsView({
   // Full, un-abbreviated type label for a list row's Type column.
   // Canonical bordered tone pill (StatusBadge §7.10.4) for every Type/category chip.
   const TYPE_PILL = (label: string, tone: Tone) => <ReportPill tone={tone}>{label}</ReportPill>;
-  // Bulk Audit — indigo bordered chip, distinct from the kind chips
+  // Bulk Audit — mitigated bordered chip, distinct from the kind chips
   // (IA=brand/purple, ATR=blue, SOX=amber) so it stands out as the
-  // cross-cutting engagement type.
-  const BULK_PILL = (
-    <span className="inline-flex items-center px-2.5 h-6 rounded-full border border-mitigated/30 bg-mitigated-50 text-mitigated-700 text-[0.75rem] font-semibold whitespace-nowrap">
-      Bulk Audit
-    </span>
-  );
+  // cross-cutting engagement type. Routed through the canonical ReportPill
+  // (§7.10.4) rather than a hand-rolled span.
+  const BULK_PILL = <ReportPill tone="mitigated">Bulk Audit</ReportPill>;
   // Muted placeholder for the Type column when a row has no special type.
 
 
@@ -783,7 +780,7 @@ export default function ReportsView({
         <div
           role="status"
           aria-live="assertive"
-          className="bg-mitigated-50 text-mitigated-800 border-y border-mitigated-200 px-4 h-8 flex items-center gap-2 text-[12px] shrink-0"
+          className="bg-mitigated-50 text-mitigated-800 border-y border-mitigated-200 px-4 h-8 flex items-center gap-2 text-[0.75rem] shrink-0"
         >
           <WifiOff size={14} aria-hidden="true" />
           <span>You're offline — recent changes will sync once you reconnect.</span>
@@ -819,7 +816,7 @@ export default function ReportsView({
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="mb-6 min-w-0"
           >
-            <h1 className="text-[34px] font-semibold tracking-tight text-ink-900 leading-[1.15]">Reports</h1>
+            <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">Reports</h1>
             <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">
               {activeTab === 'shared-reports'
                 ? <>Reports your team shared with you. Open, review, or download any of them.</>
@@ -887,7 +884,7 @@ export default function ReportsView({
               action={
                 <button
                   onClick={() => setMissingFocusReport(false)}
-                  className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="inline-flex items-center gap-1.5 h-9 px-4 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   <ArrowLeft size={14} /> Back to reports
                 </button>
@@ -919,7 +916,7 @@ export default function ReportsView({
               type="button"
               onClick={() => setReportType('evidence')}
               aria-pressed={reportType === 'evidence'}
-              className={`shrink-0 inline-flex items-center gap-2 h-10 px-4 rounded-[10px] border text-[0.875rem] font-semibold cursor-pointer transition-colors ${
+              className={`shrink-0 inline-flex items-center gap-2.5 h-9 px-3.5 rounded-lg border text-[0.875rem] font-semibold cursor-pointer transition-colors ${
                 reportType === 'evidence'
                   ? 'bg-brand-600 border-brand-600 text-white'
                   : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-300'
@@ -981,7 +978,7 @@ export default function ReportsView({
                       title={reportDisplayName(row.name)}
                       description={row.description}
                       pills={row.bulk ? ['Bulk Audit', ...row.pills] : row.pills}
-                      footerRight={<span className="text-[11px] tabular-nums text-ink-400">{row.date}</span>}
+                      footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{row.date}</span>}
                       onClick={() => row.open()}
                       selectable={Boolean(row.del)}
                       selected={selectedReportIds.has(row.id)}
@@ -1047,7 +1044,7 @@ export default function ReportsView({
                 );
               }},
               { key: 'date', label: 'Generated', width: '150px', render: (item) => (
-                <span className="text-[12px] tabular-nums text-ink-500 whitespace-nowrap">{String(item.date)}</span>
+                <span className="text-[0.75rem] tabular-nums text-ink-500 whitespace-nowrap">{String(item.date)}</span>
               )},
               { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => {
                 const row = item as unknown as UnifiedRow;
@@ -1141,7 +1138,7 @@ export default function ReportsView({
                 <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
                   <Search size={20} className="text-ink-400" />
                 </div>
-                <div className="text-[13px] font-medium text-ink-700">
+                <div className="text-[0.8125rem] font-medium text-ink-700">
                   {tagFilter.length > 0 && gridSearch
                     ? `No reports match "${gridSearch}" in "${tagFilter.join(', ')}".`
                     : tagFilter.length > 0
@@ -1150,10 +1147,10 @@ export default function ReportsView({
                 </div>
                 <div className="flex items-center gap-3 mt-1">
                   {tagFilter.length > 0 && (
-                    <button type="button" onClick={() => setTagFilter([])} className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer">Clear filter</button>
+                    <button type="button" onClick={() => setTagFilter([])} className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer">Clear filter</button>
                   )}
                   {gridSearch && (
-                    <button type="button" onClick={() => setGridSearch('')} className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer">Clear search</button>
+                    <button type="button" onClick={() => setGridSearch('')} className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer">Clear search</button>
                   )}
                 </div>
               </div>
@@ -1182,11 +1179,11 @@ export default function ReportsView({
               { key: 'queries', label: 'Queries', width: '104px', render: (item) => {
                 const n = Number(item.queries) || 0;
                 return (
-                  <span className={`inline-flex items-center justify-center min-w-[26px] h-[22px] px-2 rounded-full text-[11.5px] font-semibold tabular-nums ${n > 0 ? 'bg-paper-100 text-ink-600' : 'bg-paper-100 text-ink-400'}`}>{n}</span>
+                  <span className={`inline-flex items-center justify-center min-w-[26px] h-[22px] px-2 rounded-full text-[0.71875rem] font-semibold tabular-nums ${n > 0 ? 'bg-paper-100 text-ink-600' : 'bg-paper-100 text-ink-400'}`}>{n}</span>
                 );
               }},
               { key: 'generatedAt', label: 'Generated', width: '150px', render: (item) => (
-                <span className="text-[12px] tabular-nums text-ink-500 whitespace-nowrap">{String(item.generatedAt)}</span>
+                <span className="text-[0.75rem] tabular-nums text-ink-500 whitespace-nowrap">{String(item.generatedAt)}</span>
               )},
               { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
@@ -1216,7 +1213,7 @@ export default function ReportsView({
                   <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
                     <Search size={20} className="text-ink-400" />
                   </div>
-                  <div className="text-[13px] font-medium text-ink-700 max-w-[320px]">
+                  <div className="text-[0.8125rem] font-medium text-ink-700 max-w-[320px]">
                     {tagFilter.length > 0 && gridSearch
                       ? `No reports match "${gridSearch}" in "${tagFilter.join(', ')}".`
                       : tagFilter.length > 0
@@ -1228,7 +1225,7 @@ export default function ReportsView({
                       <button
                         type="button"
                         onClick={() => setTagFilter([])}
-                        className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer"
+                        className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer"
                       >
                         Clear filter
                       </button>
@@ -1237,7 +1234,7 @@ export default function ReportsView({
                       <button
                         type="button"
                         onClick={() => setGridSearch('')}
-                        className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer"
+                        className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer"
                       >
                         Clear search
                       </button>
@@ -1262,7 +1259,7 @@ export default function ReportsView({
                     title={reportDisplayName(r.name)}
                     description={reportDesc(r)}
                     pills={r.tag === 'Bulk Audit' ? ['Bulk Audit', ...reportPills(r)] : reportPills(r)}
-                    footerRight={<span className="text-[11px] tabular-nums text-ink-400">{r.generatedAt}</span>}
+                    footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{r.generatedAt}</span>}
                     onClick={() => setViewingReport(r)}
                     selectable
                     selected={selectedReportIds.has(r.id)}
@@ -1329,9 +1326,9 @@ export default function ReportsView({
                 <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
                   <Search size={20} className="text-ink-400" />
                 </div>
-                <div className="text-[13px] font-medium text-ink-700">No shared reports match your filters.</div>
+                <div className="text-[0.8125rem] font-medium text-ink-700">No shared reports match your filters.</div>
                 {(sharedGridSearch || sharedTypeFilter.length > 0) && (
-                  <button type="button" onClick={() => { setSharedGridSearch(''); setSharedTypeFilter([]); }} className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer mt-1">Clear filters</button>
+                  <button type="button" onClick={() => { setSharedGridSearch(''); setSharedTypeFilter([]); }} className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer mt-1">Clear filters</button>
                 )}
               </div>
             )}
@@ -1350,14 +1347,14 @@ export default function ReportsView({
               }},
               { key: 'sharedBy', label: 'Shared by', width: '220px', render: (item) => (
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-brand-600/10 text-brand-600 text-[9px] font-semibold flex items-center justify-center shrink-0">
+                  <div className="w-6 h-6 rounded-full bg-brand-600/10 text-brand-600 text-[0.5625rem] font-semibold flex items-center justify-center shrink-0">
                     {String(item.sharedBy).split(' ').map((n: string) => n[0]).join('')}
                   </div>
-                  <span className="text-ink-500 text-[12px] truncate">{String(item.sharedBy)}</span>
+                  <span className="text-ink-500 text-[0.75rem] truncate">{String(item.sharedBy)}</span>
                 </div>
               )},
               { key: 'sharedAt', label: 'Shared', width: '150px', render: (item) => (
-                <span className="text-[12px] tabular-nums text-ink-500 whitespace-nowrap">{String(item.sharedAt)}</span>
+                <span className="text-[0.75rem] tabular-nums text-ink-500 whitespace-nowrap">{String(item.sharedAt)}</span>
               )},
               { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
@@ -1388,14 +1385,14 @@ export default function ReportsView({
                   <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
                     <Search size={20} className="text-ink-400" />
                   </div>
-                  <div className="text-[13px] font-medium text-ink-700 max-w-[320px]">
+                  <div className="text-[0.8125rem] font-medium text-ink-700 max-w-[320px]">
                     No shared reports match your filters.
                   </div>
                   {(sharedGridSearch || sharedTypeFilter.length > 0) && (
                     <button
                       type="button"
                       onClick={() => { setSharedGridSearch(''); setSharedTypeFilter([]); }}
-                      className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer mt-1"
+                      className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer mt-1"
                     >
                       Clear filters
                     </button>
@@ -1419,7 +1416,7 @@ export default function ReportsView({
                   title={r.name}
                   description={`Shared by ${r.sharedBy} with ${r.sharedWith}.`}
                   pills={[`${r.queries} ${Number(r.queries) === 1 ? 'query' : 'queries'}`, r.sharedWith]}
-                  footerRight={<span className="text-[11px] tabular-nums text-ink-400">{r.sharedAt}</span>}
+                  footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{r.sharedAt}</span>}
                   onClick={() => openSharedReport(r as unknown as typeof SHARED_REPORTS[number])}
                   actions={<>
                     <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
@@ -1506,7 +1503,7 @@ export default function ReportsView({
                     <Icon size={16} className={eyebrowTone} strokeWidth={1.75} />
                   </div>
                   <div className="relative flex items-center h-7">
-                    <span className={`text-[10px] font-semibold uppercase tracking-[0.14em] transition-opacity duration-200 group-hover:opacity-0 ${eyebrowTone}`}>
+                    <span className={`text-[0.625rem] font-semibold uppercase tracking-[0.14em] transition-opacity duration-200 group-hover:opacity-0 ${eyebrowTone}`}>
                       {rt.category}
                     </span>
                     <span
@@ -1517,19 +1514,19 @@ export default function ReportsView({
                     </span>
                   </div>
                 </div>
-                <h3 className="text-[15px] leading-[1.35] font-semibold text-ink-800 group-hover:text-brand-600 transition-colors mb-1.5">{rt.name}</h3>
-                <p className="text-[12px] text-ink-500 leading-[1.55] line-clamp-2">{rt.desc}</p>
+                <h3 className="text-[0.9375rem] leading-[1.35] font-semibold text-ink-800 group-hover:text-brand-600 transition-colors mb-1.5">{rt.name}</h3>
+                <p className="text-[0.75rem] text-ink-500 leading-[1.55] line-clamp-2">{rt.desc}</p>
                 <div className="mt-auto pt-4 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
                     {sectionNames.length > 0 ? (
                       <>
-                        <span className="inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[11px] font-medium text-ink-600 tabular-nums whitespace-nowrap shrink-0">
+                        <span className="inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-600 tabular-nums whitespace-nowrap shrink-0">
                           {sectionNames.length} {sectionNames.length === 1 ? 'section' : 'sections'}
                         </span>
-                        <span className="text-[11px] text-ink-400 leading-none truncate">{sectionNames.slice(0, 2).join(' · ')}</span>
+                        <span className="text-[0.6875rem] text-ink-400 leading-none truncate">{sectionNames.slice(0, 2).join(' · ')}</span>
                       </>
                     ) : (
-                      <span className="inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[11px] font-medium text-ink-400 whitespace-nowrap shrink-0">
+                      <span className="inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-400 whitespace-nowrap shrink-0">
                         No sections
                       </span>
                     )}
@@ -1608,8 +1605,8 @@ export default function ReportsView({
                       <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
                         <Search size={20} className="text-ink-400" />
                       </div>
-                      <div className="text-[13px] font-medium text-ink-700">No templates match &ldquo;{templateSearch}&rdquo;.</div>
-                      <button type="button" onClick={() => setTemplateSearch('')} className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer mt-1">Clear search</button>
+                      <div className="text-[0.8125rem] font-medium text-ink-700">No templates match &ldquo;{templateSearch}&rdquo;.</div>
+                      <button type="button" onClick={() => setTemplateSearch('')} className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer mt-1">Clear search</button>
                     </div>
                   ) : (
                     <div className="grid grid-cols-3 gap-4">
@@ -1639,8 +1636,8 @@ export default function ReportsView({
                       <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
                         <Search size={20} className="text-ink-400" />
                       </div>
-                      <div className="text-[13px] font-medium text-ink-700">No templates match &ldquo;{templateSearch}&rdquo;.</div>
-                      <button type="button" onClick={() => setTemplateSearch('')} className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer mt-1">Clear search</button>
+                      <div className="text-[0.8125rem] font-medium text-ink-700">No templates match &ldquo;{templateSearch}&rdquo;.</div>
+                      <button type="button" onClick={() => setTemplateSearch('')} className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer mt-1">Clear search</button>
                     </div>
                   ) : (
                     <div className="grid grid-cols-3 gap-4">
@@ -1735,7 +1732,7 @@ export default function ReportsView({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               role="dialog" aria-modal="true" aria-label="New Report"
-              className="relative bg-white shadow-2xl w-[560px] overflow-hidden flex flex-col rounded-[16px]"
+              className="relative bg-white shadow-xl w-[560px] overflow-hidden flex flex-col rounded-[16px]"
               onClick={e => e.stopPropagation()}
             >
               {/* Header */}
@@ -1743,8 +1740,8 @@ export default function ReportsView({
                 <div className="flex items-center gap-2.5">
                   <div className="p-2 bg-brand-600/10 text-brand-600 rounded-[8px]"><FileText size={16} /></div>
                   <div>
-                    <h3 className="text-[15px] font-semibold text-ink-800">New Report</h3>
-                    <p className="text-[11px] text-ink-400">Set up your report</p>
+                    <h3 className="text-[0.9375rem] font-semibold text-ink-800">New Report</h3>
+                    <p className="text-[0.6875rem] text-ink-400">Set up your report</p>
                   </div>
                 </div>
                 <button onClick={closeNewReportModal} className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"><X size={16} className="text-ink-400" /></button>
@@ -1753,33 +1750,33 @@ export default function ReportsView({
               {/* Form */}
               <div className="p-6 space-y-5">
                 <div>
-                  <label className="block text-[12px] font-semibold text-ink-800 mb-1.5">Report <span className="text-risk">*</span></label>
+                  <label className="block text-[0.75rem] font-semibold text-ink-800 mb-1.5">Report <span className="text-risk">*</span></label>
                   <input
                     value={newReportName}
                     onChange={e => setNewReportName(e.target.value)}
                     placeholder="Report 01 — April 23, 2026"
                     aria-invalid={reportNameTaken(newReportName)}
-                    className={`w-full px-3 py-2.5 border text-[13px] text-ink-800 placeholder:text-ink-400/60 outline-none focus:ring-2 transition-all rounded-[8px] ${reportNameTaken(newReportName) ? 'border-risk-300 focus:border-risk-400 focus:ring-risk-100' : 'border-canvas-border focus:border-brand-600/40 focus:ring-brand-600/10'}`}
+                    className={`w-full px-3 py-2.5 border text-[0.8125rem] text-ink-800 placeholder:text-ink-400/60 outline-none focus:ring-2 transition-all rounded-[8px] ${reportNameTaken(newReportName) ? 'border-risk-300 focus:border-risk-400 focus:ring-risk-100' : 'border-canvas-border focus:border-brand-600/40 focus:ring-brand-600/10'}`}
                   />
                   {reportNameTaken(newReportName) && (
-                    <p className="mt-1.5 text-[11px] text-risk-700">A report named “{newReportName.trim()}” already exists — choose a different name.</p>
+                    <p className="mt-1.5 text-[0.6875rem] text-risk-700">A report named “{newReportName.trim()}” already exists — choose a different name.</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-[12px] font-semibold text-ink-800 mb-1.5">Description</label>
+                  <label className="block text-[0.75rem] font-semibold text-ink-800 mb-1.5">Description</label>
                   <textarea
                     value={newReportDesc}
                     onChange={e => setNewReportDesc(e.target.value)}
                     placeholder="Report Description goes here"
                     rows={3}
-                    className="w-full px-3 py-2.5 border border-canvas-border text-[13px] text-ink-800 placeholder:text-ink-400/60 outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10 transition-all resize-none rounded-[8px]"
+                    className="w-full px-3 py-2.5 border border-canvas-border text-[0.8125rem] text-ink-800 placeholder:text-ink-400/60 outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10 transition-all resize-none rounded-[8px]"
                   />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-[12px] font-semibold text-ink-800">Template</label>
+                    <label className="block text-[0.75rem] font-semibold text-ink-800">Template</label>
                     {newReportTemplatePrefilled && newReportTemplate && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-brand-600/10 text-brand-600 text-[10px] font-semibold">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-brand-600/10 text-brand-600 text-[0.625rem] font-semibold">
                         <Sparkles size={12} /> Pre-filled from selection
                       </span>
                     )}
@@ -1787,7 +1784,7 @@ export default function ReportsView({
                   <select
                     value={newReportTemplate}
                     onChange={e => { setNewReportTemplate(e.target.value); setNewReportTemplatePrefilled(false); }}
-                    className={`w-full px-3 py-2.5 border text-[13px] text-ink-800 appearance-none outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10 transition-all cursor-pointer bg-white rounded-[8px] ${
+                    className={`w-full px-3 py-2.5 border text-[0.8125rem] text-ink-800 appearance-none outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10 transition-all cursor-pointer bg-white rounded-[8px] ${
                       newReportTemplatePrefilled && newReportTemplate ? 'border-brand-600/50' : 'border-canvas-border'
                     }`}
                     style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236a12cd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
@@ -1837,7 +1834,7 @@ export default function ReportsView({
                     }, 1200);
                   }}
                   disabled={!newReportName.trim() || !newReportTemplate || reportNameTaken(newReportName)}
-                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer rounded-[8px]"
+                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer rounded-[8px]"
                 >
                   Continue <ArrowRight size={14} />
                 </button>
@@ -1861,7 +1858,7 @@ export default function ReportsView({
               initial={{ opacity: 0, scale: 0.97, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 16 }}
-              className="relative bg-white overflow-hidden shadow-2xl flex flex-col w-[560px] max-h-[80vh] rounded-[16px]"
+              className="relative bg-white overflow-hidden shadow-xl flex flex-col w-[560px] max-h-[80vh] rounded-[16px]"
               onClick={e => e.stopPropagation()}
             >
               <ReportBuilder

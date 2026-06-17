@@ -438,24 +438,24 @@ function DeleteObservationConfirm({
           aria-modal="true"
           aria-labelledby="delete-obs-title"
           tabIndex={-1}
-          className="w-full max-w-[320px] bg-white border border-canvas-border rounded-[16px] shadow-2xl overflow-hidden"
+          className="w-full max-w-[320px] bg-white border border-canvas-border rounded-[16px] shadow-xl overflow-hidden"
         >
           <div className="px-6 pt-6 pb-5">
-            <h3 id="delete-obs-title" className="text-[15px] font-semibold text-ink-800 mb-2">Remove observation?</h3>
-            <p className="text-[13px] text-ink-500 leading-relaxed">
+            <h3 id="delete-obs-title" className="text-[0.9375rem] font-semibold text-ink-800 mb-2">Remove observation?</h3>
+            <p className="text-[0.8125rem] text-ink-500 leading-relaxed">
               <span className="font-semibold text-ink-800">{obsId}</span> · {title} will be removed from this report.
             </p>
           </div>
           <div className="flex items-center justify-end gap-2 px-6 pb-5 pt-1">
             <button
               onClick={onCancel}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Remove observation
             </button>
@@ -511,11 +511,11 @@ function DeleteWorkflowConfirm({
           aria-modal="true"
           aria-labelledby="delete-wf-title"
           tabIndex={-1}
-          className="w-full max-w-[320px] bg-white border border-canvas-border rounded-[16px] shadow-2xl overflow-hidden"
+          className="w-full max-w-[320px] bg-white border border-canvas-border rounded-[16px] shadow-xl overflow-hidden"
         >
           <div className="px-6 pt-6 pb-5">
-            <h3 id="delete-wf-title" className="text-[15px] font-semibold text-ink-800 mb-2">Remove workflow from this report?</h3>
-            <p className="text-[13px] text-ink-500 leading-relaxed">
+            <h3 id="delete-wf-title" className="text-[0.9375rem] font-semibold text-ink-800 mb-2">Remove workflow from this report?</h3>
+            <p className="text-[0.8125rem] text-ink-500 leading-relaxed">
               <span className="font-semibold text-ink-800">{workflow.workflowId}</span> · {workflow.name} will be removed from the report.
               The underlying workflow definition is not affected.
             </p>
@@ -523,13 +523,13 @@ function DeleteWorkflowConfirm({
           <div className="flex items-center justify-end gap-2 px-6 pb-5 pt-1">
             <button
               onClick={onCancel}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Remove workflow
             </button>
@@ -582,7 +582,7 @@ function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, 
       className="absolute right-0 top-full mt-1 w-[280px] bg-white rounded-[8px] shadow-xl border border-canvas-border z-50 overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-canvas-border">
-        <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider">Select Template</span>
+        <span className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wider">Select Template</span>
       </div>
       <div className="max-h-[260px] overflow-y-auto p-1.5">
         {templates.map(rt => {
@@ -599,8 +599,8 @@ function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, 
                 <Icon size={12} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className={`text-[12px] truncate ${isActive ? 'font-semibold text-brand-600' : 'font-medium text-ink-800'}`}>{rt.name}</div>
-                <div className="text-[10px] text-ink-400">{rt.category}</div>
+                <div className={`text-[0.75rem] truncate ${isActive ? 'font-semibold text-brand-600' : 'font-medium text-ink-800'}`}>{rt.name}</div>
+                <div className="text-[0.625rem] text-ink-400">{rt.category}</div>
               </div>
               {isActive && <Check size={14} className="shrink-0 text-brand-600" />}
             </button>
@@ -643,7 +643,7 @@ function BulkReportHeader({ onBack, onShare, onExport, templates = REPORT_TEMPLA
         <div className="flex items-center justify-between gap-4">
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-[13px] text-ink-500 hover:text-brand-600 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded"
+            className="flex items-center gap-1.5 text-[0.8125rem] text-ink-500 hover:text-brand-600 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded"
           >
             <ArrowLeft size={14} /> Back to Reports
           </button>
@@ -654,7 +654,7 @@ function BulkReportHeader({ onBack, onShare, onExport, templates = REPORT_TEMPLA
                 onClick={() => setShowApplyTemplate(p => !p)}
                 disabled={applyingTemplate}
                 aria-busy={applyingTemplate || undefined}
-                className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[12px] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
+                className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
               >
                 {applyingTemplate ? (
                   <Loader2 size={14} className="animate-spin text-brand-600" />
@@ -690,7 +690,7 @@ function BulkReportHeader({ onBack, onShare, onExport, templates = REPORT_TEMPLA
             {onShare && (
               <button
                 onClick={onShare}
-                className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[12px] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
+                className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
               >
                 <Share2 size={14} /> Share
               </button>
@@ -699,7 +699,7 @@ function BulkReportHeader({ onBack, onShare, onExport, templates = REPORT_TEMPLA
             <div className="relative">
               <button
                 onClick={() => setShowDownloadDropdown(p => !p)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[12px] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
+                className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
               >
                 <Download size={14} /> Download <ChevronDown size={12} className={`transition-transform ${showDownloadDropdown ? 'rotate-180' : ''}`} />
               </button>
@@ -715,7 +715,7 @@ function BulkReportHeader({ onBack, onShare, onExport, templates = REPORT_TEMPLA
                     <button
                       key={ext}
                       onClick={() => { onExport(ext); setShowDownloadDropdown(false); }}
-                      className="w-full text-left px-3 py-2 text-[12px] text-ink-500 hover:bg-brand-50 hover:text-brand-600 transition-colors cursor-pointer"
+                      className="w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 transition-colors cursor-pointer"
                     >
                       {label}
                     </button>
@@ -742,7 +742,7 @@ function BulkReportHeader({ onBack, onShare, onExport, templates = REPORT_TEMPLA
               className="flex items-center gap-3 px-6 py-4 glass-card-strong rounded-[16px] shadow-lg"
             >
               <Loader2 size={20} className="text-brand-600 animate-spin" />
-              <span className="text-[14px] font-semibold text-ink-800">Applying template...</span>
+              <span className="text-[0.875rem] font-semibold text-ink-800">Applying template...</span>
             </motion.div>
           </motion.div>
         )}
@@ -769,7 +769,7 @@ function AllFailedEmpty({ report, failedWorkflows }: {
         title={report.name}
         className="rounded-[12px]"
       >
-        <p className="text-[13px] leading-snug text-white/75">
+        <p className="text-[0.8125rem] leading-snug text-white/75">
           All {failedWorkflows.length} {failedWorkflows.length === 1 ? 'workflow' : 'workflows'} failed during this run.
         </p>
       </ReportBrandBanner>
@@ -779,15 +779,15 @@ function AllFailedEmpty({ report, failedWorkflows }: {
         <div className="w-12 h-12 rounded-full bg-brand-50 flex items-center justify-center mx-auto mb-4">
           <AlertTriangle size={20} className="text-brand-700" />
         </div>
-        <h2 className="text-[18px] font-bold text-ink-800 mb-2">Nothing to report on the audit itself</h2>
-        <p className="text-[13px] text-ink-500 mb-6 max-w-[540px] mx-auto">
+        <h2 className="text-[1.125rem] font-bold text-ink-800 mb-2">Nothing to report on the audit itself</h2>
+        <p className="text-[0.8125rem] text-ink-500 mb-6 max-w-[540px] mx-auto">
           None of the {failedWorkflows.length} workflows in this run produced results — the report has no audit content. The failed runs are listed below for reference.
         </p>
         <div className="text-left max-w-[640px] mx-auto rounded-[12px] border border-brand-200 bg-brand-50/40 px-5 py-4">
-          <p className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider mb-2">Failed runs</p>
+          <p className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wider mb-2">Failed runs</p>
           <ul className="space-y-1.5">
             {failedWorkflows.map(w => (
-              <li key={w.id} className="text-[13px] text-ink-800">
+              <li key={w.id} className="text-[0.8125rem] text-ink-800">
                 <span className="font-medium text-ink-900">{w.name}</span>
                 <span className="text-ink-400"> ({w.workflowId}, {w.failureReason ?? 'errored'})</span>
               </li>
@@ -843,7 +843,7 @@ function EditorialLayout({
             <button
               onClick={onGenerateAtr}
               title="Generate Action Taken Report"
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12px] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
             >
               <FileText size={14} />
               Generate ATR
@@ -858,7 +858,7 @@ function EditorialLayout({
             </button>
             <button
               onClick={() => addToast({ type: 'success', message: 'Generating report summary…' })}
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.78125rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
             >
               <Sparkles size={13} />
               Generate Summary
@@ -867,11 +867,11 @@ function EditorialLayout({
         }
       >
         {report.pages != null && (
-          <p className="text-[13px] leading-snug text-white/75 mb-3">
+          <p className="text-[0.8125rem] leading-snug text-white/75 mb-3">
             {totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'} · {totals.records} flagged records
           </p>
         )}
-        <div className="flex items-center gap-1.5 text-[13px] flex-wrap">
+        <div className="flex items-center gap-1.5 text-[0.8125rem] flex-wrap">
           <span className="font-semibold text-white">{report.generatedBy}</span>
           <span className="text-white/30 mx-0.5">|</span>
           <span className="text-white/70">{report.generatedAt}</span>
@@ -880,7 +880,7 @@ function EditorialLayout({
             {totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}
           </span>
           {report.tag && (
-            <span className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[10px] font-semibold whitespace-nowrap rounded-full bg-white/15 text-white border border-white/25">
+            <span className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[0.625rem] font-semibold whitespace-nowrap rounded-full bg-white/15 text-white border border-white/25">
               {report.tag}
             </span>
           )}
@@ -1035,11 +1035,11 @@ function EditorialContents({
       <div className="flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-2">
           <List size={16} className="text-brand-600" />
-          <h3 className="text-[15px] leading-[20px] font-bold text-ink-800">Contents</h3>
+          <h3 className="text-[0.9375rem] leading-[20px] font-bold text-ink-800">Contents</h3>
         </div>
         <button
           onClick={onAddObservation}
-          className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+          className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
         >
           <Plus size={14} />
           Add Observation
@@ -1055,8 +1055,8 @@ function EditorialContents({
               onClick={() => onScrollToContent(r.anchor)}
               className="flex items-center gap-2 w-full py-2.5 pl-1 pr-1 rounded-[8px] hover:bg-brand-50/30 transition-colors text-left cursor-pointer"
             >
-              <span className="shrink-0 w-6 text-[10px] text-ink-400/70 font-mono tabular-nums text-right">{String(fixedStart + i + 1).padStart(2, '0')}</span>
-              <span className="flex-1 min-w-0 text-[12px] text-ink-500 truncate">{r.label}</span>
+              <span className="shrink-0 w-6 text-[0.625rem] text-ink-400/70 font-mono tabular-nums text-right">{String(fixedStart + i + 1).padStart(2, '0')}</span>
+              <span className="flex-1 min-w-0 text-[0.75rem] text-ink-500 truncate">{r.label}</span>
             </button>
           </li>
         ))}
@@ -1164,7 +1164,7 @@ function BulkContentsRow<T extends { id: string }>({
       >
         <GripVertical size={14} />
       </button>
-      <span className="shrink-0 w-6 text-[10px] text-ink-400/70 font-mono tabular-nums text-right">{String(displayId).padStart(2, '0')}</span>
+      <span className="shrink-0 w-6 text-[0.625rem] text-ink-400/70 font-mono tabular-nums text-right">{String(displayId).padStart(2, '0')}</span>
       {isEditing ? (
         <input
           value={draftValue}
@@ -1176,12 +1176,12 @@ function BulkContentsRow<T extends { id: string }>({
           }}
           autoFocus
           onClick={(e) => e.stopPropagation()}
-          className="flex-1 min-w-0 bg-white border border-brand-600/40 rounded-[8px] px-2 py-1 text-[12px] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/15"
+          className="flex-1 min-w-0 bg-white border border-brand-600/40 rounded-[8px] px-2 py-1 text-[0.75rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/15"
         />
       ) : (
         <button
           onClick={onScroll}
-          className="flex-1 min-w-0 text-left text-[12px] text-ink-500 truncate transition-colors cursor-pointer"
+          className="flex-1 min-w-0 text-left text-[0.75rem] text-ink-500 truncate transition-colors cursor-pointer"
         >
           {label}
         </button>
@@ -1226,7 +1226,7 @@ function EditorialSummary({ totals }: { totals: Totals }) {
       <div className="pb-5 border-b border-ink-900/15 mb-5">
         <ReportKpiTiles stats={bulkSummaryStats(totals)} animate />
       </div>
-      <p className="text-[15px] leading-[1.75] text-ink-800">
+      <p className="text-[0.9375rem] leading-[1.75] text-ink-800">
         This audit returned <strong className="font-semibold text-ink-900">{totals.records} flagged records</strong> across{' '}
         <strong className="font-semibold text-ink-900">{totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}</strong>.
         High-severity items should be triaged first; the remainder are queued for AP review.
@@ -1264,14 +1264,14 @@ function EditorialWorkflowStatus({ workflows, failedWorkflows, auditDate }: {
   return (
     <div>
       <ReportNumberedHeading n={2} title="Workflow Status" subtitle="All runs attempted in this audit" />
-      <table className="w-full border-collapse text-[13px]">
+      <table className="w-full border-collapse text-[0.8125rem]">
         <thead>
           <tr>
-            <th className="text-[10px] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-left">Workflow ID</th>
-            <th className="text-[10px] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-left">Workflow Name</th>
-            <th className="text-[10px] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-left">Result / Summary</th>
-            <th className="text-[10px] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-left">Status</th>
-            <th className="text-[10px] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-left">Audit Date</th>
+            <th className="text-[0.625rem] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-left">Workflow ID</th>
+            <th className="text-[0.625rem] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-left">Workflow Name</th>
+            <th className="text-[0.625rem] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-left">Result / Summary</th>
+            <th className="text-[0.625rem] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-left">Status</th>
+            <th className="text-[0.625rem] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-left">Audit Date</th>
           </tr>
         </thead>
         <tbody>
@@ -1279,23 +1279,23 @@ function EditorialWorkflowStatus({ workflows, failedWorkflows, auditDate }: {
             const isFailed = w.runStatus === 'failed';
             return (
               <tr key={w.id} className="border-b border-ink-900/10">
-                <td className="py-3 align-baseline font-bold text-brand-600 uppercase tracking-wider text-[11px]">
+                <td className="py-3 align-baseline font-bold text-brand-600 uppercase tracking-wider text-[0.6875rem]">
                   {w.workflowId}
                 </td>
                 <td className="py-3 align-baseline">
                   {isFailed ? (
-                    <span className="text-[13px] font-semibold text-ink-800">{w.name}</span>
+                    <span className="text-[0.8125rem] font-semibold text-ink-800">{w.name}</span>
                   ) : (
                     <button
                       type="button"
                       onClick={() => scrollToWorkflow(w.id)}
-                      className="text-left text-[13px] font-semibold text-ink-800 hover:text-brand-600 transition-colors cursor-pointer"
+                      className="text-left text-[0.8125rem] font-semibold text-ink-800 hover:text-brand-600 transition-colors cursor-pointer"
                     >
                       {w.name}
                     </button>
                   )}
                 </td>
-                <td className="py-3 align-baseline text-[13px] text-ink-800">
+                <td className="py-3 align-baseline text-[0.8125rem] text-ink-800">
                   {isFailed
                     ? <span className="text-ink-400">Run failed — no result.</span>
                     : resultSummary(w)}
@@ -1307,7 +1307,7 @@ function EditorialWorkflowStatus({ workflows, failedWorkflows, auditDate }: {
                     <span className="font-semibold text-compliant-700">completed</span>
                   )}
                 </td>
-                <td className="py-3 align-baseline text-[13px] text-ink-800 tabular-nums">
+                <td className="py-3 align-baseline text-[0.8125rem] text-ink-800 tabular-nums">
                   {auditDate}
                 </td>
               </tr>
@@ -1357,7 +1357,7 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
     <section id={`workflow-chapter-${workflow.id}`} className="mt-4 scroll-mt-6">
       {/* Meta row — fonts/treatment mirror QueryCard */}
       <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2.5 text-[11px] min-w-0">
+        <div className="flex items-center gap-2.5 text-[0.6875rem] min-w-0">
           <span className="font-bold text-brand-600 uppercase tracking-wider shrink-0">Workflow · {workflow.workflowId}</span>
           {workflow.businessProcess && (
             <>
@@ -1384,14 +1384,14 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
             <div className="absolute right-0 top-10 z-20 w-[200px] bg-white border border-canvas-border rounded-[8px] shadow-xl py-1">
               <button
                 onClick={() => { setMenuOpen(false); onOpenWorkflow(); }}
-                className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
+                className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
               >
                 <ExternalLink size={14} />
                 Open workflow
               </button>
               <button
                 onClick={() => { setMenuOpen(false); setOutputModalOpen(true); }}
-                className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
+                className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
               >
                 <Plus size={14} />
                 Add output
@@ -1399,7 +1399,7 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
               <div className="my-1 border-t border-canvas-border/60" />
               <button
                 onClick={() => { setMenuOpen(false); onRequestDelete(); }}
-                className="flex items-center gap-2 w-full text-left px-3 py-2 text-[12px] text-risk-700 hover:bg-risk-50 cursor-pointer"
+                className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-risk-700 hover:bg-risk-50 cursor-pointer"
               >
                 <Trash2 size={14} />
                 Delete workflow
@@ -1410,12 +1410,12 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
       </div>
 
       {/* Title — same as QueryCard h3 */}
-      <h2 className="text-[15px] font-semibold text-ink-800 leading-[1.5] mb-3">
+      <h2 className="text-[0.9375rem] font-semibold text-ink-800 leading-[1.5] mb-3">
         {workflow.name}
       </h2>
 
       {workflow.riskOwner && (
-        <p className="text-[12px] text-ink-400 mb-5">
+        <p className="text-[0.75rem] text-ink-400 mb-5">
           Risk owner · <span className="text-ink-800 font-medium">{workflow.riskOwner}</span>
         </p>
       )}
@@ -1423,13 +1423,13 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
       {/* Output table — sits above findings/observations now */}
       {workflow.outputTable && workflow.outputTable.rows.length > 0 && (
         <div className="mt-5 mb-6">
-          <table className="w-full border-collapse text-[13px]">
+          <table className="w-full border-collapse text-[0.8125rem]">
             <thead>
               <tr>
                 {workflow.outputTable.columns.map((col, ci) => (
                   <th
                     key={col}
-                    className={`text-[10px] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 ${ci === workflow.outputTable!.columns.length - 1 ? 'text-right' : 'text-left'}`}
+                    className={`text-[0.625rem] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 ${ci === workflow.outputTable!.columns.length - 1 ? 'text-right' : 'text-left'}`}
                   >
                     {col}
                   </th>
@@ -1446,7 +1446,7 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
                     return (
                       <td
                         key={ci}
-                        className={`py-3 align-baseline text-[13px] text-ink-800 ${isLast ? 'text-right' : ''}`}
+                        className={`py-3 align-baseline text-[0.8125rem] text-ink-800 ${isLast ? 'text-right' : ''}`}
                       >
                         {isSeverity ? <SeverityWord severity={cellStr as 'High' | 'Medium' | 'Low'} /> : cell}
                       </td>
@@ -1461,7 +1461,7 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
 
       {/* Findings */}
       <div className="mb-6">
-        <h4 className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-3">Findings</h4>
+        <h4 className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-3">Findings</h4>
         {workflow.findings.length === 0 ? (
           <EmptyState
             icon={AlertTriangle}
@@ -1472,7 +1472,7 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
         ) : (
           <ul className="space-y-2.5">
             {workflow.findings.map((f, i) => (
-              <li key={i} className="flex gap-2.5 text-[13px] text-ink-800 leading-relaxed">
+              <li key={i} className="flex gap-2.5 text-[0.8125rem] text-ink-800 leading-relaxed">
                 <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-brand-600/60" />
                 {f}
               </li>
@@ -1483,7 +1483,7 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
 
       {/* Observations */}
       <div className="mb-6">
-        <h4 className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-3">Observations</h4>
+        <h4 className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-3">Observations</h4>
         {workflow.observations.length === 0 ? (
           <EmptyState
             icon={StickyNote}
@@ -1494,7 +1494,7 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
         ) : (
           <ul className="space-y-2.5">
             {workflow.observations.map((o, i) => (
-              <li key={i} className="flex gap-2.5 text-[13px] text-ink-800 leading-relaxed">
+              <li key={i} className="flex gap-2.5 text-[0.8125rem] text-ink-800 leading-relaxed">
                 <div className="w-1 h-1 rounded-full mt-2 shrink-0 bg-brand-600/60" />
                 {o}
               </li>
@@ -1566,8 +1566,8 @@ function AttachedOutputsBlock({
               >
                 <div className={`p-2 rounded-[8px] ${kpi.color}`}><Icon size={16} /></div>
                 <div className="min-w-0">
-                  <div className="text-[18px] font-bold text-ink-800 leading-tight tabular-nums">{kpi.compute(workflow)}</div>
-                  <div className="text-[10px] text-ink-400 tracking-wide truncate">{kpi.label}</div>
+                  <div className="text-[1.125rem] font-bold text-ink-800 leading-tight tabular-nums">{kpi.compute(workflow)}</div>
+                  <div className="text-[0.625rem] text-ink-400 tracking-wide truncate">{kpi.label}</div>
                 </div>
                 <button
                   onClick={() => onRemove(k)}
@@ -1588,7 +1588,7 @@ function AttachedOutputsBlock({
         return (
           <div key={g.id} className="group relative bg-canvas-elevated border border-canvas-border rounded-[12px] p-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 text-[11px] font-bold text-ink-500 uppercase tracking-wider">
+              <div className="flex items-center gap-2 text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider">
                 <BarChart3 size={12} />
                 {graph.title}
               </div>
@@ -1620,7 +1620,7 @@ function AttachedOutputsBlock({
         return (
           <div key={t.id} className="group relative">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-[11px] font-bold text-ink-500 uppercase tracking-wider">{table.title}</h4>
+              <h4 className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider">{table.title}</h4>
               <button
                 onClick={() => onRemove(t)}
                 aria-label="Remove table"
@@ -1652,12 +1652,12 @@ function DerivedTable({ workflow, variant }: { workflow: WorkflowResult; variant
       totals.set(vendor, cur);
     });
     return (
-      <table className="w-full border-collapse text-[13px]">
+      <table className="w-full border-collapse text-[0.8125rem]">
         <thead>
           <tr>
-            <th className="text-[10px] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-left">Vendor</th>
-            <th className="text-[10px] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-right">Records</th>
-            <th className="text-[10px] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-right">Total amount</th>
+            <th className="text-[0.625rem] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-left">Vendor</th>
+            <th className="text-[0.625rem] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-right">Records</th>
+            <th className="text-[0.625rem] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-right">Total amount</th>
           </tr>
         </thead>
         <tbody>
@@ -1679,12 +1679,12 @@ function DerivedTable({ workflow, variant }: { workflow: WorkflowResult; variant
       if (sev in split) split[sev] += 1;
     });
     return (
-      <table className="w-full border-collapse text-[13px]">
+      <table className="w-full border-collapse text-[0.8125rem]">
         <thead>
           <tr>
-            <th className="text-[10px] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-left">Severity</th>
-            <th className="text-[10px] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-right">Records</th>
-            <th className="text-[10px] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-right">Share</th>
+            <th className="text-[0.625rem] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-left">Severity</th>
+            <th className="text-[0.625rem] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-right">Records</th>
+            <th className="text-[0.625rem] font-bold text-ink-500 uppercase tracking-wider pb-2 border-b border-ink-900/30 text-right">Share</th>
           </tr>
         </thead>
         <tbody>
@@ -1776,13 +1776,13 @@ function AddOutputModal({
           aria-modal="true"
           aria-labelledby="add-output-title"
           tabIndex={-1}
-          className="w-full max-w-[840px] max-h-[calc(100vh-48px)] bg-white border border-canvas-border rounded-[16px] shadow-2xl overflow-hidden flex flex-col"
+          className="w-full max-w-[840px] max-h-[calc(100vh-48px)] bg-white border border-canvas-border rounded-[16px] shadow-xl overflow-hidden flex flex-col"
         >
           <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-canvas-border">
             <div>
-              <h3 id="add-output-title" className="text-[16px] font-bold text-ink-800 tracking-tight">Add output to report</h3>
-              <p className="text-[12px] text-ink-500 mt-1">
-                <span className="font-bold text-brand-600 uppercase tracking-wider text-[11px]">Workflow · {workflow.workflowId}</span>
+              <h3 id="add-output-title" className="text-[1rem] font-bold text-ink-800 tracking-tight">Add output to report</h3>
+              <p className="text-[0.75rem] text-ink-500 mt-1">
+                <span className="font-bold text-brand-600 uppercase tracking-wider text-[0.6875rem]">Workflow · {workflow.workflowId}</span>
                 <span className="mx-1.5 text-ink-400">·</span>
                 {workflow.name}
               </p>
@@ -1804,10 +1804,10 @@ function AddOutputModal({
                 <button
                   key={t.id}
                   onClick={() => setTab(t.id)}
-                  className={`relative pb-3 pt-1 px-2 mr-2 text-[13px] font-semibold transition-colors cursor-pointer ${active ? 'text-brand-600' : 'text-ink-400 hover:text-ink-800'}`}
+                  className={`relative pb-3 pt-1 px-2 mr-2 text-[0.8125rem] font-semibold transition-colors cursor-pointer ${active ? 'text-brand-600' : 'text-ink-400 hover:text-ink-800'}`}
                 >
                   <span>{t.label}</span>
-                  <span className={`ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[10px] font-semibold tabular-nums ${active ? 'bg-brand-600/10 text-brand-600' : 'bg-paper-50 text-ink-400'}`}>
+                  <span className={`ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[0.625rem] font-semibold tabular-nums ${active ? 'bg-brand-600/10 text-brand-600' : 'bg-paper-50 text-ink-400'}`}>
                     {t.count}
                   </span>
                   {active && <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-brand-600 rounded-full" />}
@@ -1835,8 +1835,8 @@ function AddOutputModal({
                         </span>
                         <div className={`p-2 rounded-[8px] ${kpi.color}`}><Icon size={16} /></div>
                         <div className="min-w-0">
-                          <div className="text-[13px] font-semibold text-ink-800">{kpi.label}</div>
-                          <div className="text-[11px] text-ink-400">Current value · <span className="text-ink-800 tabular-nums font-medium">{kpi.compute(workflow)}</span></div>
+                          <div className="text-[0.8125rem] font-semibold text-ink-800">{kpi.label}</div>
+                          <div className="text-[0.6875rem] text-ink-400">Current value · <span className="text-ink-800 tabular-nums font-medium">{kpi.compute(workflow)}</span></div>
                         </div>
                       </div>
                     </button>
@@ -1859,7 +1859,7 @@ function AddOutputModal({
                         <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full border transition-colors ${picked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white border-canvas-border text-transparent'}`}>
                           <Check size={12} />
                         </span>
-                        <span className="text-[12px] font-semibold text-ink-800">{g.title}</span>
+                        <span className="text-[0.75rem] font-semibold text-ink-800">{g.title}</span>
                       </div>
                       <div className="h-[160px] bg-canvas-elevated rounded-[12px] p-1.5 pointer-events-none">
                         <ConfigurableChart
@@ -1893,8 +1893,8 @@ function AddOutputModal({
                         </span>
                         <div className="p-2 rounded-[8px] text-ink-500 bg-paper-50"><TableIcon size={16} /></div>
                         <div className="flex-1">
-                          <div className="text-[13px] font-semibold text-ink-800">{t.title}</div>
-                          <div className="text-[11px] text-ink-500 mt-0.5">{t.description}</div>
+                          <div className="text-[0.8125rem] font-semibold text-ink-800">{t.title}</div>
+                          <div className="text-[0.6875rem] text-ink-500 mt-0.5">{t.description}</div>
                         </div>
                       </div>
                     </button>
@@ -1905,20 +1905,20 @@ function AddOutputModal({
           </div>
 
           <div className="flex items-center justify-between px-6 py-4 border-t border-canvas-border bg-paper-50/40">
-            <span className="text-[12px] text-ink-400">
+            <span className="text-[0.75rem] text-ink-400">
               {selection.size === 0 ? 'Nothing selected' : `${selection.size} selected`}
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={onClose}
-                className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
               >
                 Cancel
               </button>
               <button
                 onClick={handleAttach}
                 disabled={selection.size === 0}
-                className={`inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${selection.size === 0 ? 'bg-brand-600/40 text-white/85 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-500 text-white'}`}
+                className={`inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${selection.size === 0 ? 'bg-brand-600/40 text-white/85 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-500 text-white'}`}
               >
                 Add to report
               </button>
