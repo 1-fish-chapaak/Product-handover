@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { findEngagement } from '../data/engagements';
 import type { WorkflowTypeId } from '../data/mockData';
 import type { WorkflowRunSeed } from '../components/workflow/workflowRunSeed';
 import {
@@ -349,7 +350,9 @@ export function useAppState() {
   }, []);
 
   const openEngagement = useCallback((engagementId: string) => {
-    setState(prev => ({ ...prev, view: 'engagement-overview' as View, selectedEngagementId: engagementId }));
+    const eng = findEngagement(engagementId);
+    const view: View = eng?.type === 'SOX / ICFR' ? 'sox-icfr' : 'engagement-overview';
+    setState(prev => ({ ...prev, view, selectedEngagementId: engagementId }));
   }, []);
 
   const openCaseManagement = useCallback((engagementId: string) => {

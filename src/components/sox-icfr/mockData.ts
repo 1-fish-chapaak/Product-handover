@@ -296,8 +296,40 @@ const ENGAGEMENT: IcfrEngagement = {
   discussions: DISCUSSIONS,
 };
 
-export function seedIcfrEngagement(): IcfrEngagement {
-  return structuredClone(ENGAGEMENT);
+/** Identity carried in from the app-level Engagement record (engagements.ts). */
+export interface SeedMeta { id?: string; code?: string; name?: string; process?: string; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; }
+const PROC_LABEL: Record<string, string> = { P2P: 'Procure to Pay', O2C: 'Order to Cash', R2R: 'Record to Report', S2C: 'Order to Cash', ITGC: 'IT General Controls' };
+
+export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
+  const base = structuredClone(ENGAGEMENT);
+  if (meta?.materiality) base.materiality = meta.materiality;
+  if (meta?.performanceMateriality) base.performanceMateriality = meta.performanceMateriality;
+  // No meta, or the flagship engagement → the fully-populated demo, with identity overlaid.
+  if (!meta || !meta.id || meta.id === 'eng-1') {
+    if (meta) {
+      if (meta.code) base.code = meta.code;
+      if (meta.name) base.name = meta.name;
+      if (meta.periodStart) base.periodStart = meta.periodStart;
+      if (meta.periodEnd) base.periodEnd = meta.periodEnd;
+    }
+    return base;
+  }
+  // Any other engagement → a fresh engagement scoped to the picked process, ready to configure.
+  const proc = PROC_LABEL[meta.process ?? 'O2C'] ?? 'Order to Cash';
+  return {
+    ...base,
+    id: meta.id,
+    code: meta.code ?? base.code,
+    name: meta.name ?? base.name,
+    period: 'Interim',
+    periodStart: meta.periodStart ?? base.periodStart,
+    periodEnd: meta.periodEnd ?? base.periodEnd,
+    preparer: meta.owner ? `${meta.owner} · Auditor` : base.preparer,
+    controls: racmTemplate(proc),
+    deficiencies: [],
+    tasks: [],
+    discussions: [],
+  };
 }
 
 // ── RACM template for the setup wizard ──────────────────────────────────────────

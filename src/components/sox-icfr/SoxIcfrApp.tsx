@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, ShieldCheck, RefreshCw } from 'lucide-react';
 import './register.css';
+import { findEngagement } from '../../data/engagements';
 import { IcfrProvider, useIcfr } from './store';
 import { RoleSwitcher } from './parts';
 import ControlRegister from './ControlRegister';
@@ -49,9 +50,11 @@ function Inner({ onBack }: { onBack?: () => void }) {
   );
 }
 
-export default function SoxIcfrApp({ onBack }: { onBack?: () => void }) {
+export default function SoxIcfrApp({ engagementId, onBack }: { engagementId?: string; onBack?: () => void }) {
+  const eng = engagementId ? findEngagement(engagementId) : undefined;
+  const seedMeta = eng ? { id: eng.id, code: eng.code, name: eng.name, process: eng.process, periodStart: eng.periodStart, periodEnd: eng.periodEnd, owner: eng.owner, materiality: eng.soxConfig?.overallMateriality, performanceMateriality: eng.soxConfig?.performanceMateriality } : undefined;
   return (
-    <IcfrProvider initialRole="auditor">
+    <IcfrProvider initialRole="auditor" seedMeta={seedMeta}>
       <Inner onBack={onBack} />
     </IcfrProvider>
   );

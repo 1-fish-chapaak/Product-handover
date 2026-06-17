@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import { seedIcfrEngagement } from './mockData';
+import { seedIcfrEngagement, type SeedMeta } from './mockData';
 import { validationQA } from './helpers';
 import type {
   Attestation, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
@@ -77,8 +77,8 @@ export function useIcfr(): IcfrCtx {
   return c;
 }
 
-export function IcfrProvider({ children, initialRole = 'auditor' }: { children: ReactNode; initialRole?: Role }) {
-  const [eng, setEng] = useState<IcfrEngagement>(() => seedIcfrEngagement());
+export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { children: ReactNode; initialRole?: Role; seedMeta?: SeedMeta }) {
+  const [eng, setEng] = useState<IcfrEngagement>(() => seedIcfrEngagement(seedMeta));
   const [role, setRole] = useState<Role>(initialRole);
   const [view, setView] = useState<View>(initialRole === 'risk-owner' ? 'portal' : 'register');
   const [selectedControlId, setSelectedControlId] = useState<string | null>(null);
