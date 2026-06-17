@@ -21,7 +21,10 @@ export function ReportKpiTiles({ stats, animate = false }: { stats: ReportStat[]
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {stats.map((stat, si) => {
         const tone = statTone(stat.color);
-        const cls = `relative overflow-hidden rounded-[12px] border border-canvas-border border-l-[3px] ${tone.border} bg-canvas-elevated p-4 shadow-[0_1px_2px_rgba(15,8,30,0.04)]`;
+        // Canonical card chrome: flat at rest, hover tints the border (Border-First,
+        // §4). The tone is carried by the corner wash + the value colour — not by a
+        // 3px side-stripe, which §5 reserves for alert cards only.
+        const cls = `relative overflow-hidden rounded-[14px] border border-canvas-border bg-canvas-elevated p-4 transition-colors duration-150 hover:border-brand-200`;
         const inner = (
           <>
             {/* Tone wash in the top-right corner for a subtle lift. */}
@@ -97,7 +100,7 @@ export function ReportMetaPanel({ items, columns }: { items: { label: string; va
   const cols = columns ?? (facts.length <= 4 ? facts.length : 3);
   const lastRowStart = facts.length - (facts.length % cols || cols);
   return (
-    <div className={`grid ${META_COL_CLASS[cols]} border border-canvas-border rounded-[12px] overflow-hidden bg-canvas-elevated shadow-[0_1px_3px_rgba(15,8,30,0.05)]`}>
+    <div className={`grid ${META_COL_CLASS[cols]} border border-canvas-border rounded-[12px] overflow-hidden bg-canvas-elevated`}>
       {facts.map((it, i) => {
         const isLastCol = i % cols === cols - 1;
         const hasRightNeighbor = !isLastCol && i + 1 < facts.length;

@@ -9,7 +9,7 @@
 import { useState, useRef } from 'react';
 import { motion, Reorder, useDragControls } from 'motion/react';
 import {
-  Check, Copy, FileText, GripVertical, Image, Layout,
+  Check, FileText, GripVertical, Image, Layout,
   Loader2, Palette, Plus, Settings, Trash2, Type, X,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
@@ -250,45 +250,6 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
     }, 320);
   };
 
-  // Fork from edit mode: save the current edits as a brand-new custom template
-  // instead of overwriting this one. Auto-names "Copy of X" (suffixing on
-  // collision) since edit mode has no name field of its own.
-  const handleSaveAsCopy = () => {
-    if (!onSaveCopy) return;
-    const next: { field: 'copyName' | 'brand' | 'sections'; label: string }[] = [];
-    if (!brand.trim()) next.push({ field: 'brand', label: 'Brand Name' });
-    if (!sections || sections.length === 0) next.push({ field: 'sections', label: 'At least one section' });
-    if (next.length > 0) {
-      setErrors(next);
-      const first = fieldRefs[next[0].field]?.current;
-      first?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
-      first?.focus?.();
-      return;
-    }
-    setErrors([]);
-    setIsSaving(true);
-    window.setTimeout(() => {
-      let finalName = `Copy of ${template.name}`;
-      let i = 2;
-      while (existingTemplateNames.some(n => n.toLowerCase() === finalName.toLowerCase())) {
-        finalName = `Copy of ${template.name} (${i++})`;
-      }
-      onSaveCopy({
-        ...template,
-        id: `ct-copy-${Date.now()}`,
-        name: finalName,
-        sections,
-        brand: brand.trim(),
-        theme,
-        headerText: headerText.trim(),
-        footerText: footerText.trim(),
-      });
-      addToast({ type: 'success', message: `Saved as "${finalName}".` });
-      setIsSaving(false);
-      onClose();
-    }, 320);
-  };
-
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }} className="fixed inset-0 z-[60] flex items-center justify-center" onClick={attemptClose}>
       <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
@@ -489,15 +450,8 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
             disabled={isSaving}
             className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >Cancel</button>
-          {!isCopy && onSaveCopy && (
-            <button
-              onClick={handleSaveAsCopy}
-              disabled={isSaving}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-brand-700 bg-white border border-brand-600/30 hover:bg-brand-600/[0.05] rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-            >
-              <Copy size={13} /> Save as copy
-            </button>
-          )}
+          {/* Custom templates save in place (overwrite). The "save a copy" path
+              belongs to standard templates, surfaced as "Clone to edit". */}
           <button
             onClick={handleSave}
             disabled={isSaving}

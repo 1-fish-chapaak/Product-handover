@@ -1478,7 +1478,7 @@ export default function ReportsView({
                 key={rt.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0, transition: { delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
-                className={`bg-canvas-elevated border border-canvas-border rounded-[12px] p-5 transition-colors duration-200 group cursor-pointer flex flex-col min-h-[176px] hover:border-brand-200 ${fixedWidth ? 'w-[200px] shrink-0' : ''}`}
+                className={`bg-canvas-elevated border border-canvas-border rounded-[12px] p-5 transition-colors duration-200 group cursor-pointer flex flex-col min-h-[164px] hover:border-brand-200 ${fixedWidth ? 'w-[200px] shrink-0' : ''}`}
                 onClick={() => {
                   // Whole card = the primary action. Each report type generates
                   // its own way: ATR via upload/observations, SOX from a SOX/ICFR
@@ -1489,7 +1489,7 @@ export default function ReportsView({
                   setWizardTemplate(rt);
                 }}
               >
-                <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="flex items-start justify-between gap-3 mb-3.5">
                   <div className={`inline-flex items-center justify-center w-9 h-9 rounded-[10px] ${tintBg}`}>
                     <Icon size={16} className={eyebrowTone} strokeWidth={1.75} />
                   </div>
@@ -1505,7 +1505,7 @@ export default function ReportsView({
                     </span>
                   </div>
                 </div>
-                <h3 className="text-[0.9375rem] leading-[1.35] font-semibold text-ink-800 group-hover:text-brand-600 transition-colors mb-1.5">{rt.name}</h3>
+                <h3 className="text-[0.9375rem] leading-[1.3] font-semibold tracking-tight text-ink-900 group-hover:text-brand-600 transition-colors mb-1.5">{rt.name}</h3>
                 <p className="text-[0.75rem] text-ink-500 leading-[1.55] line-clamp-2">{rt.desc}</p>
                 <div className="mt-auto pt-4 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
