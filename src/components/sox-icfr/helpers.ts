@@ -40,13 +40,27 @@ export function controlConclusion(c: Control): Conclusion {
 
 // ─── Track progress ──────────────────────────────────────────────────────────────
 
+import type { DesignPoint, OperatingStep, TestResult, ValidationQA } from './types';
+export function pointResult(p: DesignPoint): TestResult { return p.override ? (p.override.result as TestResult) : p.result; }
+export function stepResult(s: OperatingStep): TestResult { return s.override ? (s.override.result as TestResult) : s.result; }
+
+/** Deterministic Q&A a design-validation workflow returns for a consideration. */
+export function validationQA(text: string, fail: boolean): ValidationQA[] {
+  return [
+    { q: 'Does the control as described address the stated risk and assertion?', a: 'Yes — traced to the risk register and the relevant assertion in the narrative.', pass: true },
+    { q: 'Is the control performed at sufficient precision to catch a material error?', a: fail ? 'No — the review occurs after the entry is posted, so a material error could already be recorded before detection.' : 'Yes — it operates before the transaction completes and the threshold is below performance materiality.', pass: !fail },
+    { q: 'Is the performer segregated from the activity being controlled?', a: 'Yes — distinct system roles were confirmed in the walkthrough.', pass: true },
+    { q: 'Is the control’s operation evidenced and retained for the period?', a: fail ? 'Partially — sign-off is retained but does not evidence the pre-posting review.' : 'Yes — evidenced and retained for the full period.', pass: !fail },
+  ];
+}
+
 export function designProgress(c: Control) {
   const docs = c.design.documents;
   return {
     docsReceived: docs.filter(d => d.status === 'Received').length,
     docsTotal: docs.length,
     docsMissing: docs.filter(d => d.status !== 'Received').length,
-    pointsPass: c.design.points.filter(p => p.result === 'Pass').length,
+    pointsPass: c.design.points.filter(p => pointResult(p) === 'Pass').length,
     pointsTotal: c.design.points.length,
   };
 }

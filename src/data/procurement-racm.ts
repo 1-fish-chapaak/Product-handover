@@ -59,6 +59,8 @@ export interface ProcurementRacmRow {
   sopSectionRef: string;
   /** Attributes — comma-separated list of test attributes for this control (a control can have one or multiple) */
   attributes: string;
+  /** Ref — source file this row was extracted from. Set only for multi-file consolidation (RACM Generator). */
+  ref?: string;
 }
 
 export interface RacmColumnDef {
