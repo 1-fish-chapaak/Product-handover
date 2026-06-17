@@ -58,6 +58,14 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
   const [sevFilters, setSevFilters] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState<'All' | 'Queries' | 'Bulk Audit'>('All');
   const [selected, setSelected] = useState<PickableQuery[]>([]);
+  // Report groups can be collapsed so a long list of source reports stays
+  // scannable while assembling a report from several of them.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const toggleGroupCollapse = (name: string) => setCollapsedGroups(prev => {
+    const next = new Set(prev);
+    if (next.has(name)) next.delete(name); else next.add(name);
+    return next;
+  });
   const [ordered, setOrdered] = useState<GeneratedQueryDef[]>([]);
   const [orderedWorkflows, setOrderedWorkflows] = useState<WorkflowResult[]>([]);
   const [execSummary, setExecSummary] = useState('');
@@ -315,14 +323,27 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                         const selCount = items.filter(i => selected.some(p => p.uid === i.uid)).length;
                         const groupState = selCount === items.length ? 'on' : selCount > 0 ? 'some' : 'off';
                         const isWfGroup = items.every(i => i.kind === 'workflow');
+                        const isCollapsed = collapsedGroups.has(name);
                         return (
                           <div key={name} className="border border-canvas-border rounded-[12px] bg-white overflow-hidden">
-                            <button
-                              onClick={() => toggleReportGroup(items)}
-                              className="w-full flex items-center gap-3 px-3.5 py-2.5 bg-paper-50/60 border-b border-canvas-border text-left cursor-pointer hover:bg-paper-50 transition-colors"
+                            <div
+                              className={`flex items-center gap-2.5 px-3.5 py-2.5 bg-paper-50/60 ${isCollapsed ? '' : 'border-b border-canvas-border'}`}
                             >
-                              {checkbox(groupState)}
-                              <span className="flex-1 min-w-0 text-[0.8125rem] font-semibold text-ink-900 truncate">{name}</span>
+                              <button
+                                onClick={() => toggleReportGroup(items)}
+                                aria-label={`Select all in ${name}`}
+                                className="shrink-0 cursor-pointer"
+                              >
+                                {checkbox(groupState)}
+                              </button>
+                              <button
+                                onClick={() => toggleGroupCollapse(name)}
+                                aria-expanded={!isCollapsed}
+                                className="flex-1 min-w-0 flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity"
+                              >
+                                <ChevronDown size={14} className={`shrink-0 text-ink-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                                <span className="min-w-0 text-[0.8125rem] font-semibold text-ink-900 truncate">{name}</span>
+                              </button>
                               {isWfGroup && (
                                 <span
                                   className="shrink-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-full border border-brand-200 bg-brand-50 text-[0.625rem] font-semibold text-brand-700"
@@ -331,10 +352,16 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                                   <Workflow size={10} /> Bulk Audit
                                 </span>
                               )}
+                              {selCount > 0 && (
+                                <span className="shrink-0 inline-flex items-center h-5 px-2 rounded-full bg-brand-600 text-white text-[0.625rem] font-semibold tabular-nums">
+                                  {selCount} selected
+                                </span>
+                              )}
                               <span className="font-mono text-[0.6875rem] tabular-nums text-ink-500 shrink-0">
                                 {items.length} {isWfGroup ? (items.length === 1 ? 'workflow' : 'workflows') : (items.length === 1 ? 'query' : 'queries')}
                               </span>
-                            </button>
+                            </div>
+                            {!isCollapsed && (
                             <div className="divide-y divide-border-light/70">
                               {items.map(item => {
                                 const { isSelected, keyTaken, takenFrom } = rowState(item);
@@ -361,6 +388,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                                 );
                               })}
                             </div>
+                            )}
                           </div>
                         );
                       })}
