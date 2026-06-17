@@ -34,7 +34,16 @@ interface Props {
   racmId?: string;
   /** Optional process label for the page header (e.g. "P2P") */
   processLabel?: string;
+  /**
+   * Source file names when this RACM was consolidated from an upload (RACM
+   * Generator). When 2+ files, each row is tagged with its source file and a
+   * trailing "Ref" column is shown.
+   */
+  sourceFiles?: string[];
 }
+
+// Trailing "Ref" column — shown only when a RACM was consolidated from 2+ files.
+const REF_COLUMN: RacmColumnDef = { key: 'ref', label: 'Ref', group: 'meta', width: 220 };
 
 // Columns that render with a styled chip rather than plain text
 const CHIP_COLUMNS = new Set<keyof ProcurementRacmRow>([
@@ -66,11 +75,18 @@ function isKeyControl(controlId: string): boolean {
 
 type GroupByMode = 'none' | 'subProcess' | 'processArea' | 'riskRating';
 
-export default function RacmFullPageEditor({ onBack, racmName, racmId, processLabel }: Props) {
+export default function RacmFullPageEditor({ onBack, racmName, racmId, processLabel, sourceFiles }: Props) {
   const { openShare } = useShare();
+  // When generated from 2+ files, show a trailing "Ref" column and tag each row
+  // with its source file (round-robin across the uploaded files for this mock).
+  const showRef = (sourceFiles?.length ?? 0) > 1;
   // ─── State ───────────────────────────────────────────────────────────
   const [rows, setRows] = useState<ProcurementRacmRow[]>(() =>
-    PROCUREMENT_RACM_ROWS.map(r => ({ ...r, isKey: isKeyControl(r.controlId) })));
+    PROCUREMENT_RACM_ROWS.map((r, i) => ({
+      ...r,
+      isKey: isKeyControl(r.controlId),
+      ...(showRef ? { ref: sourceFiles![i % sourceFiles!.length] } : {}),
+    })));
   const [search, setSearch] = useState('');
   const [groupBy, setGroupBy] = useState<GroupByMode>('none');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -166,8 +182,15 @@ export default function RacmFullPageEditor({ onBack, racmName, racmId, processLa
     // pinned first, then by configured group order
     const pinned = PROCUREMENT_RACM_COLUMNS.filter(c => pinnedKeys.has(c.key));
     const rest = PROCUREMENT_RACM_COLUMNS.filter(c => !pinnedKeys.has(c.key) && visibleGroups.has(c.group));
-    return [...pinned, ...rest];
-  }, [pinnedKeys, visibleGroups]);
+    const cols = [...pinned, ...rest];
+    // Ref (source file) sits immediately after the Control ID column — i.e. right
+    // after the frozen ID columns — when a RACM was consolidated from 2+ files.
+    if (showRef) {
+      const afterControlId = cols.findIndex(c => c.key === 'controlId') + 1;
+      cols.splice(Math.max(afterControlId, 1), 0, REF_COLUMN);
+    }
+    return cols;
+  }, [pinnedKeys, visibleGroups, showRef]);
 
   // ─── Mutations ───────────────────────────────────────────────────────
   const updateCell = (rowKey: string, colKey: keyof ProcurementRacmRow, value: string) => {

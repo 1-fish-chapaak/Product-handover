@@ -51,6 +51,13 @@ import ControlLibraryView from './components/governance/ControlLibraryView';
 import ControlTestingView from './components/execution/ControlTestingView';
 import EvidenceView from './components/execution/EvidenceView';
 import AIConciergeView from './components/intelligence/AIConciergeView';
+import DocumentForensicsView from './components/intelligence/concierge/tools/DocumentForensicsView';
+import ImageAnalyticsView from './components/intelligence/concierge/tools/ImageAnalyticsView';
+import SpeechAuditorView from './components/intelligence/concierge/tools/SpeechAuditorView';
+import TableExtractorView from './components/intelligence/concierge/tools/TableExtractorView';
+import MedicalReportReaderView from './components/intelligence/concierge/tools/MedicalReportReaderView';
+import InsightsAnomalyView from './components/intelligence/concierge/tools/InsightsAnomalyView';
+import RACMGeneratorView from './components/intelligence/concierge/tools/RACMGeneratorView';
 import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
 import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
@@ -157,6 +164,7 @@ function AppInner() {
     closeExecutionPanel,
     setExceptionRole,
     launchWorkflowBuilderWithPrompt,
+    launchWorkflowBuilderInChat,
     setWorkflowBuilderSeedPrompt,
     openNotificationDrawer,
     closeNotificationDrawer,
@@ -232,7 +240,7 @@ function AppInner() {
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
   const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
-  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' };
+  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge'; sourceFiles?: string[] };
   const [racmEditorContext, setRacmEditorContext] = useState<RacmEditorContext | null>(null);
   const openRacmFullEditor = (ctx: RacmEditorContext) => {
     setRacmEditorContext(ctx);
@@ -929,6 +937,7 @@ function AppInner() {
             racmName={racmEditorContext?.racmName ?? 'Procurement SOP · Budget to Payment RACM'}
             racmId={racmEditorContext?.racmId}
             processLabel={racmEditorContext?.processLabel}
+            sourceFiles={racmEditorContext?.sourceFiles}
           />
         );
 
@@ -960,9 +969,34 @@ function AppInner() {
 
       // Intelligence — AI Concierge
       case 'ai-concierge':
+        // The "Workflow Builder" tile redirects into the Ask IRA chat (Workflow
+        // mode + Recent Workflows launcher) rather than the standalone journey.
+        return <AIConciergeView setView={setView} onLaunchWorkflowBuilder={launchWorkflowBuilderInChat} />;
       case 'ai-concierge-forensics':
+        return <DocumentForensicsView onBack={() => setView('ai-concierge')} />;
       case 'ai-concierge-table-extractor':
-        return <AIConciergeView setView={setView} onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt} />;
+        return <TableExtractorView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-image':
+        return <ImageAnalyticsView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-speech':
+        return <SpeechAuditorView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-medical':
+        return <MedicalReportReaderView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-insights':
+        return <InsightsAnomalyView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-racm':
+        return (
+          <RACMGeneratorView
+            onBack={() => setView('ai-concierge')}
+            onOpenEditor={(name, sourceFiles) => openRacmFullEditor({
+              racmId: 'racm-generated',
+              racmName: name,
+              processLabel: '',
+              backView: 'ai-concierge',
+              sourceFiles,
+            })}
+          />
+        );
 
       case 'ai-concierge-workflow-builder':
         return (
