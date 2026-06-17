@@ -29,16 +29,6 @@ const STEP_LABELS: { key: Step; label: string }[] = [
   { key: 'generated', label: 'Review' },
 ];
 
-/** An existing report offered as an ATR source — its queries become observations. */
-export type AtrReportSource = {
-  id: string;
-  name: string;
-  generatedBy: string;
-  generatedAt: string;
-  queries: number;
-  observations: AtrObservation[];
-};
-
 /**
  * Upload Report → Generate ATR (guided 3-step flow).
  *  1. Template  — download the Excel/Word template of required observation fields,
@@ -46,13 +36,11 @@ export type AtrReportSource = {
  *  2. Upload    — upload the filled template (or any report) + confirm report meta.
  *  3. Review    — extracted observations rendered into the standard ATR format.
  */
-export default function UploadReportModal({ onClose, onAddToReport, reportSources }: {
+export default function UploadReportModal({ onClose, onAddToReport }: {
   onClose: () => void;
   /** When provided, the review step shows "Add to Report" (instead of Download)
    *  and hands the generated ATR back to be saved into My Reports. */
   onAddToReport?: (meta: AtrMeta, observations: AtrObservation[], insights: AtrInsight[]) => void;
-  /** Reports the user can pick instead of uploading a file. */
-  reportSources?: AtrReportSource[];
 }) {
   const { addToast } = useToast();
   const [step, setStep] = useState<Step>('template');
@@ -105,22 +93,6 @@ export default function UploadReportModal({ onClose, onAddToReport, reportSource
     }
     setFile(f);
     if (showErrors) setShowErrors(false);
-  };
-
-  // Build the ATR straight from an existing report's queries — no upload step.
-  const pickReportSource = (src: AtrReportSource) => {
-    setAuditTitle(src.name);
-    setAuditPeriod(src.generatedAt);
-    setPreparedBy(src.generatedBy === 'You' ? 'Internal Audit Team' : src.generatedBy);
-    setAuditEntity(prev => prev || 'Auditify');
-    setStep('extracting');
-    addToast({ type: 'info', message: `Reading ${src.queries} ${src.queries === 1 ? 'query' : 'queries'} from "${src.name}"…` });
-    window.setTimeout(() => {
-      setObservations(src.observations);
-      setInsights([]);
-      setStep('generated');
-      addToast({ type: 'success', message: `Action Taken Report generated from "${src.name}".` });
-    }, 900);
   };
 
   const handleGenerate = async () => {
@@ -281,27 +253,6 @@ export default function UploadReportModal({ onClose, onAddToReport, reportSource
                     </button>
                   </div>
                 </div>
-                {reportSources && reportSources.length > 0 && (
-                  <div className="rounded-[12px] border border-canvas-border bg-[#FAFAFB] p-5">
-                    <div className="text-[0.875rem] font-semibold text-ink-900 mb-1">Or pick a report</div>
-                    <p className="text-[0.75rem] text-ink-500 leading-relaxed mb-3">Build the ATR from a report's queries. No upload needed.</p>
-                    <div className="flex flex-col gap-2 max-h-[176px] overflow-y-auto pr-0.5">
-                      {reportSources.map(src => (
-                        <button
-                          key={src.id}
-                          onClick={() => pickReportSource(src)}
-                          className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-[10px] border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40 transition-colors cursor-pointer text-left"
-                        >
-                          <span className="min-w-0">
-                            <span className="block text-[0.8125rem] font-semibold text-ink-800 truncate">{src.name}</span>
-                            <span className="block text-[0.6875rem] text-ink-500">{src.queries} {src.queries === 1 ? 'query' : 'queries'} · {src.generatedAt}</span>
-                          </span>
-                          <ArrowRight size={14} className="text-brand-700 shrink-0" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
                 <p className="text-[0.6875rem] text-ink-500 leading-relaxed px-1">
                   Already have a report? You can also upload a PDF, Word, Excel or CSV directly in the next step — we'll extract the observations from it.
                 </p>

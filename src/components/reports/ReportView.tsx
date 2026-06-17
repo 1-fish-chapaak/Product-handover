@@ -893,7 +893,7 @@ function ContentsRow({
       >
         <GripVertical size={14} />
       </button>
-      <span className="shrink-0 w-6 text-[10px] text-ink-400/70 font-mono tabular-nums text-right">{String(index).padStart(2, '0')}</span>
+      <span className="shrink-0 w-6 text-[11px] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(index).padStart(2, '0')}</span>
       {isEditing ? (
         <input
           value={draftValue}
@@ -905,12 +905,12 @@ function ContentsRow({
           }}
           autoFocus
           onClick={(e) => e.stopPropagation()}
-          className="flex-1 min-w-0 bg-white border border-brand-600/40 rounded-[8px] px-2 py-1 text-[12px] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/15"
+          className="flex-1 min-w-0 bg-white border border-brand-600/40 rounded-[8px] px-2 py-1 text-[12.5px] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/15"
         />
       ) : (
         <button
           onClick={onScroll}
-          className="flex-1 min-w-0 text-left text-[12px] text-ink-500 truncate transition-colors cursor-pointer"
+          className="flex-1 min-w-0 text-left text-[12.5px] font-medium text-ink-700 truncate transition-colors cursor-pointer group-hover/crow:text-brand-700"
         >
           {section.title}
         </button>
@@ -2332,10 +2332,11 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     if (nonCoverSections.length === 0) return null;
     return (
       <div className="border-x border-b border-canvas-border bg-white p-6">
-        <div className="flex items-center justify-between gap-3 mb-6">
-          <div className="flex items-center gap-2">
-            <List size={16} className="text-brand-600" />
-            <h3 className="text-[15px] leading-[20px] font-bold text-ink-800">Contents</h3>
+        <div className="flex items-center justify-between gap-3 mb-4 pb-4 border-b border-canvas-border">
+          <div className="flex items-center gap-2.5">
+            <span className="w-7 h-7 rounded-[8px] bg-brand-50 text-brand-600 flex items-center justify-center"><List size={15} /></span>
+            <h3 className="text-[15px] leading-[20px] font-bold text-ink-900">Contents</h3>
+            <span className="inline-flex items-center h-5 px-2 rounded-full bg-canvas text-[11px] font-semibold text-ink-400 tabular-nums">{nonCoverSections.length}</span>
           </div>
           <button
             onClick={openAddObservation}
@@ -2830,10 +2831,11 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             {/* Contents — read-only list of template-defined sections */}
             {appliedTemplate.sections && appliedTemplate.sections.length > 0 && (
               <div className="border border-canvas-border rounded-[12px] bg-white p-6 mb-5">
-                <div className="flex items-center justify-between gap-3 mb-6">
-                  <div className="flex items-center gap-2">
-                    <List size={16} className="text-brand-600" />
-                    <h3 className="text-[15px] leading-[20px] font-bold text-ink-800">Contents</h3>
+                <div className="flex items-center justify-between gap-3 mb-4 pb-4 border-b border-canvas-border">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-7 h-7 rounded-[8px] bg-brand-50 text-brand-600 flex items-center justify-center"><List size={15} /></span>
+                    <h3 className="text-[15px] leading-[20px] font-bold text-ink-900">Contents</h3>
+                    <span className="inline-flex items-center h-5 px-2 rounded-full bg-canvas text-[11px] font-semibold text-ink-400 tabular-nums">{(appliedTemplate.sections?.length ?? 0) + appliedObservations.length}</span>
                   </div>
                   {!isReadOnly && (
                     <button
@@ -2854,8 +2856,8 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 >
                   {appliedTemplate.sections.map((s, i) => (
                     <li key={`${s.name}-${i}`} className="flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-[8px] hover:bg-brand-50/30 transition-colors">
-                      <span className="shrink-0 w-6 text-[10px] text-ink-400/70 font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
-                      <span className="flex-1 min-w-0 text-[12px] text-ink-500 truncate">{s.name}</span>
+                      <span className="shrink-0 w-6 text-[11px] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
+                      <span className="flex-1 min-w-0 text-[12.5px] font-medium text-ink-700 truncate">{s.name}</span>
                     </li>
                   ))}
                   {appliedObservations.map((o, i) => {

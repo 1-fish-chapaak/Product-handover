@@ -174,37 +174,6 @@ export default function ReportsView({
   const [templatesSubTab, setTemplatesSubTab] = useState<'standard' | 'custom'>('standard');
   const [templateSearch, setTemplateSearch] = useState('');
 
-  // Turn a report's content into ATR observations so the ATR wizard can use an
-  // existing report as its source (instead of a file upload). Workflow reports
-  // map run results; query reports map their baked queries; demo reports fall
-  // back to the two seeded defaults.
-  const observationsFromReport = (r: GeneratedReport): AtrObservation[] => {
-    if (r.workflowResults?.length) {
-      return r.workflowResults
-        .filter(w => w.runStatus !== 'failed')
-        .map(w => ({
-          title: w.name,
-          process: w.businessProcess,
-          querySummary: w.findings[0],
-          riskSummary: w.findings[1] ?? w.findings[0],
-          risk: w.severity,
-          status: 'Open' as const,
-          actionPlans: w.observations.map((text, i) => ({ id: `ap-${w.id}-${i}`, text })),
-        }));
-    }
-    const defs = r.generatedQueries?.length
-      ? r.generatedQueries
-      : [defForKey('Q01'), defForKey('Q02')].filter((d): d is GeneratedQueryDef => d !== null);
-    return defs.map(q => ({
-      title: q.title,
-      process: q.risk,
-      querySummary: q.summary,
-      riskSummary: q.findings[0],
-      risk: q.severity as AtrObservation['risk'],
-      status: 'Open' as const,
-      actionPlans: q.observations.map((text, i) => ({ id: `ap-${q.id}-${i}`, text })),
-    }));
-  };
   // Save with collision-proof naming — upload + save-as-template flows suffix
   // "(2)", "(3)"… instead of erroring like the editor's copy flow does.
   const addCustomTemplateUnique = (t: EditableTemplate) => {
@@ -1485,6 +1454,31 @@ export default function ReportsView({
             setEditingTemplate(copy);
             addToast({ type: 'success', message: `Cloned “${rt.name}” — now editing your copy.` });
           };
+          // SOX reports aren't assembled from a query picker — generate a
+          // structured draft straight from the template's sections (empty,
+          // fill-in-the-blank). Opens the report reader on the new draft.
+          const generateSoxDraft = (rt: typeof REPORT_TEMPLATES[number]) => {
+            const now = new Date();
+            const today = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const period = `FY${String(now.getFullYear()).slice(-2)} Q${Math.floor(now.getMonth() / 3) + 1}`;
+            const newReport: GeneratedReport = {
+              id: `gr-gen-${Date.now()}`,
+              templateId: rt.id,
+              kind: 'sox',
+              name: uniqueReportName(`${period} ${rt.name}`),
+              tag: 'SOX Compliance',
+              generatedBy: 'You',
+              generatedAt: today,
+              status: 'draft',
+              pages: Math.max(1, rt.sections?.length ?? 0),
+              queries: 0,
+              isEmpty: true,
+              reportPeriod: period,
+            };
+            setGeneratedReports(prev => [newReport, ...prev]);
+            setViewingReport(newReport);
+            addToast({ type: 'success', message: `${rt.name} draft created — fill in each section.` });
+          };
           const renderCard = (rt: typeof REPORT_TEMPLATES[0], i: number, fixedWidth?: boolean, isCustom?: boolean) => {
             const Icon = ICON_MAP[rt.icon] || FileText;
             const color = CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50';
@@ -1498,8 +1492,12 @@ export default function ReportsView({
                 animate={{ opacity: 1, y: 0, transition: { delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
                 className={`bg-canvas-elevated border border-canvas-border rounded-[12px] p-5 transition-colors duration-200 group cursor-pointer flex flex-col min-h-[176px] hover:border-brand-200 ${fixedWidth ? 'w-[200px] shrink-0' : ''}`}
                 onClick={() => {
-                  // Whole card = the primary action. One click, straight to generate.
-                  if (rt.id === 'rt-007') { setAtrWizardOpen(true); return; }
+                  // Whole card = the primary action. Each report type generates
+                  // its own way: ATR via upload/observations, SOX as a structured
+                  // draft, IA/Bulk by assembling from existing report queries.
+                  const kind = templateKind(rt);
+                  if (kind === 'atr') { setAtrWizardOpen(true); return; }
+                  if (kind === 'sox') { generateSoxDraft(rt); return; }
                   setWizardTemplate(rt);
                 }}
               >
@@ -1703,17 +1701,6 @@ export default function ReportsView({
       {atrWizardOpen && (
         <UploadReportModal
           onClose={() => setAtrWizardOpen(false)}
-          reportSources={generatedReports
-            .filter(r => !r.atrData && !r.isEmpty)
-            .slice(0, 6)
-            .map(r => ({
-              id: r.id,
-              name: r.name,
-              generatedBy: r.generatedBy,
-              generatedAt: r.generatedAt,
-              queries: r.queries,
-              observations: observationsFromReport(r),
-            }))}
           onAddToReport={(meta: AtrMeta, observations: AtrObservation[], insights: AtrInsight[]) => {
             const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
             const name = uniqueReportName(meta.auditTitle ? meta.auditTitle : 'Action Taken Report');

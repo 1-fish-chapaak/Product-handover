@@ -21,13 +21,21 @@ export function ReportKpiTiles({ stats, animate = false }: { stats: ReportStat[]
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {stats.map((stat, si) => {
         const tone = statTone(stat.color);
-        const cls = `rounded-[10px] border border-canvas-border border-l-[3px] ${tone.border} bg-canvas-elevated p-4`;
+        const cls = `relative overflow-hidden rounded-[12px] border border-canvas-border border-l-[3px] ${tone.border} bg-canvas-elevated p-4 shadow-[0_1px_2px_rgba(15,8,30,0.04)]`;
         const inner = (
           <>
-            <div className={`text-[1.625rem] font-bold tabular-nums leading-none mb-1 ${tone.text}`}>
-              {animate ? <KpiCountUp value={stat.value} delay={120 + si * 80} /> : stat.value}
+            {/* Tone wash in the top-right corner for a subtle lift. */}
+            <span
+              className="absolute inset-0 pointer-events-none print:hidden"
+              style={{ background: `radial-gradient(120% 120% at 100% 0%, ${tone.hex}14, transparent 58%)` }}
+              aria-hidden="true"
+            />
+            <div className="relative">
+              <div className={`text-[1.75rem] font-bold tabular-nums leading-none mb-1.5 ${tone.text}`}>
+                {animate ? <KpiCountUp value={stat.value} delay={120 + si * 80} /> : stat.value}
+              </div>
+              <div className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 leading-tight">{stat.label}</div>
             </div>
-            <div className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-600 leading-tight">{stat.label}</div>
           </>
         );
         return animate ? (
