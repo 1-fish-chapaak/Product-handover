@@ -9,7 +9,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   PROJECT_ID: gen-lang-client-0250661731
   REGION: us-central1
-  SERVICE: hackathon-demo
+  SERVICE: product-handover
   AR_REPO: cloud-run-source-deploy
   WIF_PROVIDER: projects/141813993525/locations/global/workloadIdentityPools/github-pool/providers/github-provider
   DEPLOY_SA: gh-actions-deploy@gen-lang-client-0250661731.iam.gserviceaccount.com

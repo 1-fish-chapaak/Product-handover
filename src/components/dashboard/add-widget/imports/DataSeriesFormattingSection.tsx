@@ -77,7 +77,7 @@ export default function DataSeriesFormattingSection({
           <div className="size-[18px] rounded-[4px] flex items-center justify-center">
             <BarChart3 className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
           </div>
-          <span className="text-[12px] font-bold uppercase tracking-[0.8px] text-[#26064a]">Customize Data Colors</span>
+          <span className="text-[0.75rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">Customize Data Colors</span>
         </div>
         <ChevronDown
           className="size-[14px] text-[#6a12cd] transition-transform duration-200"
@@ -88,7 +88,7 @@ export default function DataSeriesFormattingSection({
         <div className="p-3 bg-[#fafafa] space-y-3">
           {/* Select Series */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[12px] font-semibold text-[#26064a]">Categories</label>
+            <label className="text-[0.75rem] font-semibold text-[#26064a]">Categories</label>
             <WhiteDropdown
               value={selectedSeries}
               onChange={setSelectedSeries}
@@ -102,7 +102,7 @@ export default function DataSeriesFormattingSection({
           <div className="grid gap-3 grid-cols-2">
             {/* Color */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-semibold text-[#26064a]">Color</label>
+              <label className="text-[0.6875rem] font-semibold text-[#26064a]">Color</label>
               <WhiteDropdown
                 value={selectedColor}
                 onChange={(hex) => {
@@ -118,7 +118,7 @@ export default function DataSeriesFormattingSection({
 
             {/* Spacing — bar charts / Distance from center — pie charts / disabled for others */}
             <div className={`flex flex-col gap-1.5 ${spacingType === 'disabled' ? 'opacity-40 pointer-events-none' : ''}`}>
-              <label className="text-[11px] font-semibold text-[#26064a]">{spacingType === 'pie' ? 'Distance from center' : 'Spacing'}</label>
+              <label className="text-[0.6875rem] font-semibold text-[#26064a]">{spacingType === 'pie' ? 'Distance from center' : 'Spacing'}</label>
               <WhiteDropdown
                 value={spacing}
                 onChange={setSpacing}

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronDown, ChevronRight, ShieldCheck, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, ShieldCheck } from 'lucide-react';
 import {
   GRC_EXCEPTIONS,
   GRC_BULK_ACTIONS,
@@ -8,9 +8,10 @@ import {
   type GrcException,
   type GrcExceptionStatus,
   type GrcExceptionClassification,
-  type GrcExceptionSeverity,
   type ActionHubEvent,
 } from '../../data/mockData';
+import ExceptionDetailDrawer from './ExceptionDetailDrawer';
+import type { ExceptionActionKind } from './statusModel';
 
 const STATUS_STYLE: Record<GrcExceptionStatus, string> = {
   Open:           'bg-[#EEEEF1] text-ink-600',
@@ -30,12 +31,6 @@ const CLASSIFICATION_STYLE: Record<GrcExceptionClassification, string> = {
   'Procedural Non-Compliance': 'bg-brand-50 text-brand-700',
   'Business as Usual':         'bg-compliant-50 text-compliant-700',
   'False Positive':            'bg-[#EEEEF1] text-ink-600',
-};
-
-const SEVERITY_STYLE: Record<GrcExceptionSeverity, string> = {
-  High:   'bg-high-50 text-high-700',
-  Medium: 'bg-mitigated-50 text-mitigated-700',
-  Low:    'bg-compliant-50 text-compliant-700',
 };
 
 function Pill({ children, className }: { children: React.ReactNode; className: string }) {
@@ -203,7 +198,11 @@ function ActionGroupRow({
                           <Pill className={STATUS_STYLE[ex.status]}>{STATUS_LABEL[ex.status]}</Pill>
                         </td>
                         <td className="px-3 py-2.5 align-middle">
-                          <AvatarChip name={ex.assignedTo.name} initials={ex.assignedTo.initials} />
+                          {ex.assignedTo ? (
+                            <AvatarChip name={ex.assignedTo.name} initials={ex.assignedTo.initials} />
+                          ) : (
+                            <span className="text-ink-500 text-[12px] italic">Unassigned</span>
+                          )}
                         </td>
                         <td className="px-3 py-2.5 align-middle text-ink-600 text-[12px]">
                           {last ? truncate(last.message, 42) : '—'}
@@ -226,7 +225,15 @@ function ActionGroupRow({
 
 export default function ExceptionStatusTracker({
   exceptions = GRC_EXCEPTIONS,
-}: { exceptions?: GrcException[] }) {
+  role,
+  onAction,
+}: {
+  exceptions?: GrcException[];
+  /** Active persona — drives the deep-dive drawer's next actions. */
+  role?: 'risk-owner' | 'auditor';
+  /** Perform the same recorded action the Exceptions tab would. */
+  onAction?: (kind: ExceptionActionKind, ex: GrcException) => void;
+}) {
   const buckets = useMemo(() => buildActionPlans(exceptions), [exceptions]);
   const totalCases = buckets.bulk.reduce((n, g) => n + g.exceptions.length, 0)
                    + buckets.individual.reduce((n, g) => n + g.exceptions.length, 0);
@@ -366,70 +373,18 @@ export default function ExceptionStatusTracker({
         </AnimatePresence>
       </section>
 
+      {/* Deep dive — full case detail with persona-aware actions */}
       <AnimatePresence>
-        {preview && <ExceptionPreviewDrawer exception={preview} onClose={() => setPreview(null)} />}
+        {preview && (
+          <ExceptionDetailDrawer
+            key={preview.id}
+            exception={preview}
+            role={role}
+            onAction={(kind, ex) => { setPreview(null); onAction?.(kind, ex); }}
+            onClose={() => setPreview(null)}
+          />
+        )}
       </AnimatePresence>
-    </>
-  );
-}
-
-function ExceptionPreviewDrawer({ exception, onClose }: { exception: GrcException; onClose: () => void }) {
-  const isBulk = Boolean(exception.bulkId);
-  return (
-    <>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.15 }}
-        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-40"
-        onClick={onClose}
-      />
-      <motion.aside
-        initial={{ x: 24, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        exit={{ x: 24, opacity: 0 }}
-        transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-[520px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
-        role="dialog"
-        aria-label={`Preview ${exception.id}`}
-      >
-        <header className="shrink-0 px-6 pt-5 pb-4 flex items-start justify-between gap-4 border-b border-canvas-border">
-          <div>
-            <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight font-mono">{exception.id}</h2>
-            <p className="text-[12.5px] text-ink-500 mt-0.5 leading-snug">{exception.title}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"
-            aria-label="Close"
-          >
-            <X size={16} />
-          </button>
-        </header>
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          <div className="border border-canvas-border rounded-[12px] p-4">
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <div className="flex items-center gap-2">
-                <Pill className="bg-brand-50 text-brand-700 font-mono">{exception.id}</Pill>
-                {isBulk && <Pill className="bg-brand-50 text-brand-700">Bulk</Pill>}
-              </div>
-              <Pill className={SEVERITY_STYLE[exception.severity]}>{exception.severity}</Pill>
-            </div>
-            <h3 className="text-[14px] font-semibold text-ink-900 leading-snug mb-3">{exception.title}</h3>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Pill className={STATUS_STYLE[exception.status]}>{STATUS_LABEL[exception.status]}</Pill>
-                <Pill className={CLASSIFICATION_STYLE[exception.classification]}>{exception.classification}</Pill>
-              </div>
-              <span className="text-[12.5px] text-ink-700">{exception.assignedTo.name}</span>
-            </div>
-          </div>
-        </div>
-        <footer className="shrink-0 px-6 py-3 border-t border-canvas-border text-right text-[11.5px] text-ink-500">
-          1 exception shown
-        </footer>
-      </motion.aside>
     </>
   );
 }

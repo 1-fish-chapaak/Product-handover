@@ -93,7 +93,7 @@ export default function TraceabilityPanel({ onClose, onOpenWorkingPaper, onOpenW
 
       {/* Breadcrumb */}
       <div className="px-6 py-2.5 border-b border-border-light bg-surface-2/20">
-        <div className="flex items-center gap-1.5 text-[11px]">
+        <div className="flex items-center gap-1.5 font-mono text-[12px]">
           <span className="text-primary font-semibold cursor-pointer hover:underline">Execution</span>
           <ChevronRight size={10} className="text-text-muted" />
           <span className="text-primary font-semibold cursor-pointer hover:underline">ENG-2026-001</span>

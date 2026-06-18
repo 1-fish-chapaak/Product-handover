@@ -1,16 +1,18 @@
 import { useState } from 'react';
+import DatePicker from '../shared/DatePicker';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft,
   Calendar,
   SlidersHorizontal, Database, Bell,
-  ExternalLink, MessageSquare, Clock, History,
+  ExternalLink, MessageSquare, Clock, History, User, AlertTriangle, RotateCcw, Loader2,
   DollarSign, Type, Plus, Minus, ChevronDown, ChevronRight, Sparkles,
-  Package, Coins, CircleDot, Sigma, Pencil, Search, X as XIcon, Check
+  Package, Coins, CircleDot, Sigma, Pencil, Search, X as XIcon, Check, Tag
 } from 'lucide-react';
 import { WORKFLOWS } from '../../data/mockData';
 import { LIBRARY_WORKFLOWS } from './WorkflowLibraryView';
 import { useToast } from '../shared/Toast';
+import Gated from '../shared/Gated';
 
 type StepType = 'INGESTION' | 'TRANSFORM' | 'COMPARISON' | 'VALIDATION' | 'SCORING' | 'ACTION';
 
@@ -151,6 +153,8 @@ interface Props {
   onOpenExecutor?: () => void;
   onEditInChat?: () => void;
   onViewVersionHistory?: () => void;
+  /** Which tab to land on. Defaults to 'overview'. */
+  initialTab?: TabId;
 }
 
 const RUN_HISTORY = [
@@ -828,6 +832,26 @@ type ResolvedWorkflow = {
   desc: string;
   steps: string[];
   runs: number;
+  owner: string;
+  lastRun: string | null;          // formatted date/time; null = never run
+  lastRunStatus: string | null;    // 'Success' | 'Error'; null = never run
+  lastRunError: string | null;     // failure reason, shown when lastRunStatus === 'Error'
+  lastRunErrorKind: string | null; // 'technical' (in-place retry) | 'data' (open executor)
+  linkedControls: { id: string; name: string }[]; // controls this workflow supports
+};
+
+// Run-status dot + text colour.
+const RUN_STATUS_DOT: Record<string, string> = { Success: 'bg-compliant', Error: 'bg-risk' };
+const RUN_STATUS_TEXT: Record<string, string> = { Success: 'text-compliant-700', Error: 'text-risk-700' };
+
+// Process Hub workflow data for resolution — kept in sync with the Process Hub
+// Workflows tab cards (SEED_BP_WF in BusinessProcesses.tsx).
+const BP_WORKFLOWS: Record<string, { name: string; desc: string; owner: string; lastRun: string | null; lastRunStatus: string | null; lastRunError: string | null; lastRunErrorKind: string | null; linkedControls: { id: string; name: string }[] }> = {
+  'wf-c1': { name: 'Three-Way PO Match', desc: 'Automated matching of PO, GRN, and Invoice before payment release.', owner: 'Karan Mehta', lastRun: 'May 18, 2026 · 6:00 PM', lastRunStatus: 'Success', lastRunError: null, lastRunErrorKind: null, linkedControls: [{ id: 'C-001', name: 'Three-Way PO/GRN/Invoice Matching' }, { id: 'C-004', name: 'High-Value Payment Review' }] },
+  'wf-c2': { name: 'Vendor Change Monitor', desc: 'Monitors vendor master data changes and validates approval chain.', owner: 'Tushar Goel', lastRun: 'May 18, 2026 · 6:00 PM', lastRunStatus: 'Error', lastRunError: 'Vendor master feed unavailable — connection timed out after 30s.', lastRunErrorKind: 'technical', linkedControls: [{ id: 'C-002', name: 'Vendor Master Change Approval' }] },
+  'wf-c3': { name: 'Duplicate Invoice Detector', desc: 'Scans invoices against historical data to flag duplicates.', owner: 'Deepak Bansal', lastRun: 'May 17, 2026 · 2:00 AM', lastRunStatus: 'Error', lastRunError: "Source file 'invoice_register_apr.csv' could not be parsed — column 'Invoice Date' is missing.", lastRunErrorKind: 'data', linkedControls: [{ id: 'C-003', name: 'Duplicate Invoice Detection' }] },
+  'wf-c4': { name: 'Payment Approval Review', desc: 'Manual review of high-value payment approvals.', owner: 'Neha Joshi', lastRun: 'May 16, 2026 · 11:30 AM', lastRunStatus: 'Success', lastRunError: null, lastRunErrorKind: null, linkedControls: [{ id: 'C-004', name: 'High-Value Payment Review' }] },
+  'wf-c5': { name: 'PO Dual Sign-Off Check', desc: 'Validates dual authorization for purchase orders above threshold.', owner: 'Tushar Goel', lastRun: null, lastRunStatus: null, lastRunError: null, lastRunErrorKind: null, linkedControls: [] },
 };
 
 function resolveWorkflow(workflowId: string): ResolvedWorkflow | null {
@@ -840,6 +864,12 @@ function resolveWorkflow(workflowId: string): ResolvedWorkflow | null {
       desc: wf.desc,
       steps: wf.steps,
       runs: wf.runs,
+      owner: 'Karan Mehta',
+      lastRun: `${wf.lastRun} · 6:00 PM`,
+      lastRunStatus: 'Success',
+      lastRunError: null,
+      lastRunErrorKind: null,
+      linkedControls: [],
     };
   }
   const lib = LIBRARY_WORKFLOWS.find(w => w.id === workflowId);
@@ -852,14 +882,130 @@ function resolveWorkflow(workflowId: string): ResolvedWorkflow | null {
       desc: lib.description,
       steps: DEFAULT_STEPS,
       runs: 8,
+      owner: 'Karan Mehta',
+      lastRun: 'May 12, 2026 · 9:00 AM',
+      lastRunStatus: 'Success',
+      lastRunError: null,
+      lastRunErrorKind: null,
+      linkedControls: [],
+    };
+  }
+  // Process Hub workflows
+  const bpWf = BP_WORKFLOWS[workflowId];
+  if (bpWf) {
+    return {
+      id: workflowId,
+      code: workflowId.toUpperCase(),
+      name: bpWf.name,
+      desc: bpWf.desc,
+      steps: DEFAULT_STEPS,
+      runs: 5,
+      owner: bpWf.owner,
+      lastRun: bpWf.lastRun,
+      lastRunStatus: bpWf.lastRunStatus,
+      lastRunError: bpWf.lastRunError,
+      lastRunErrorKind: bpWf.lastRunErrorKind,
+      linkedControls: bpWf.linkedControls,
     };
   }
   return null;
 }
 
-export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onEditInChat, onViewVersionHistory }: Props) {
+/** Editable chip list supporting add (input + Enter / button), inline rename (pencil), and delete (×). */
+function EditableChipList({
+  items, onChange, placeholder, onAdded,
+}: {
+  items: string[];
+  onChange: (next: string[]) => void;
+  placeholder: string;
+  onAdded?: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editVal, setEditVal] = useState('');
+
+  const add = () => {
+    const v = draft.trim();
+    if (!v) return;
+    if (items.some(i => i.toLowerCase() === v.toLowerCase())) { setDraft(''); return; }
+    onChange([...items, v]);
+    onAdded?.(v);
+    setDraft('');
+  };
+  const remove = (idx: number) => onChange(items.filter((_, i) => i !== idx));
+  const commitEdit = (idx: number) => {
+    const v = editVal.trim();
+    setEditingIdx(null);
+    if (!v) { remove(idx); return; }
+    onChange(items.map((it, i) => (i === idx ? v : it)));
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {items.map((it, idx) =>
+        editingIdx === idx ? (
+          <input
+            key={idx}
+            autoFocus
+            value={editVal}
+            onChange={e => setEditVal(e.target.value)}
+            onBlur={() => commitEdit(idx)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') commitEdit(idx);
+              if (e.key === 'Escape') setEditingIdx(null);
+            }}
+            className="px-2.5 py-1 rounded-full text-[12px] border border-primary/50 outline-none ring-2 ring-primary/15 bg-white text-text w-36"
+          />
+        ) : (
+          <span
+            key={idx}
+            className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-surface-2 border border-border-light text-[12px] font-medium text-text"
+          >
+            {it}
+            <button
+              onClick={() => { setEditingIdx(idx); setEditVal(it); }}
+              className="text-text-muted hover:text-primary cursor-pointer"
+              title="Rename"
+              aria-label={`Rename ${it}`}
+            >
+              <Pencil size={11} />
+            </button>
+            <button
+              onClick={() => remove(idx)}
+              className="text-text-muted hover:text-risk-700 cursor-pointer"
+              title="Remove"
+              aria-label={`Remove ${it}`}
+            >
+              <XIcon size={12} />
+            </button>
+          </span>
+        )
+      )}
+      <div className="inline-flex items-center gap-1">
+        <input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          placeholder={placeholder}
+          className="px-3 py-1.5 rounded-full text-[12px] border border-border-light bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 w-40"
+        />
+        <button
+          onClick={add}
+          disabled={!draft.trim()}
+          className="w-7 h-7 flex items-center justify-center rounded-full bg-primary hover:bg-primary-hover disabled:bg-text-muted/30 disabled:cursor-not-allowed text-white cursor-pointer transition-colors"
+          title="Add"
+          aria-label="Add"
+        >
+          <Plus size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onEditInChat, onViewVersionHistory, initialTab = 'overview' }: Props) {
   const wf = resolveWorkflow(workflowId);
-  const [tab, setTab] = useState<TabId>('overview');
+  const [tab, setTab] = useState<TabId>(initialTab);
   const [expandedDataset, setExpandedDataset] = useState<{ stepIdx: number; dsName: string } | null>(null);
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const [frequency, setFrequency] = useState<'Hourly' | 'Daily' | 'Weekly' | 'Monthly'>('Daily');
@@ -871,8 +1017,30 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
   const [tolerances, setTolerances] = useState<ToleranceRule[]>(DEFAULT_TOLERANCES);
   const [expandedTolId, setExpandedTolId] = useState<string | null>('date');
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [labels, setLabels] = useState<string[]>(['Reconciliation']);
+  const [subProcesses, setSubProcesses] = useState<string[]>(['Invoice Processing']);
+  // In-place re-run after a technical error (overrides the resolved run result).
+  const [retryingRun, setRetryingRun] = useState(false);
+  const [runOverride, setRunOverride] = useState<{ status: string | null; lastRun: string | null; error: string | null } | null>(null);
   const { addToast } = useToast();
   if (!wf) return null;
+
+  // Effective last-run values (local override wins once an in-place retry succeeds).
+  const effStatus = runOverride ? runOverride.status : wf.lastRunStatus;
+  const effLastRun = runOverride ? runOverride.lastRun : wf.lastRun;
+  const effError = runOverride ? runOverride.error : wf.lastRunError;
+  // Technical/server error re-runs in place; a data/file error opens the executor.
+  const handleRetryRun = () => {
+    if (wf.lastRunErrorKind === 'data') { onOpenExecutor ? onOpenExecutor() : addToast({ message: 'Opening executor…', type: 'info' }); return; }
+    if (retryingRun) return;
+    setRetryingRun(true);
+    addToast({ message: 'Re-running workflow…', type: 'info' });
+    setTimeout(() => {
+      setRunOverride({ status: 'Success', lastRun: 'Just now', error: null });
+      setRetryingRun(false);
+      addToast({ message: 'Workflow re-ran successfully.', type: 'success' });
+    }, 1600);
+  };
 
   const updateRule = (id: string, patch: Partial<ToleranceRule>) =>
     setTolerances(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
@@ -908,11 +1076,12 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
         {/* Top row: status badge (left) + utility actions (right) */}
         <div className="flex items-center justify-between gap-6 mb-5">
           <div className="flex items-center gap-3 shrink-0">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-success">
-              <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-              ACTIVE
-            </div>
             <span className="font-mono text-[11px] text-ink-500 tracking-tight">{wf.code}</span>
+            <span className="w-1 h-1 rounded-full bg-ink-300" />
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-ink-500">
+              <User size={12} className="text-ink-400" />
+              {wf.owner}
+            </span>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <button
@@ -922,6 +1091,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
               <History size={13} />
               Version history
             </button>
+            <Gated permission="wf_update_delete" mode="disable" title="You don't have permission to edit workflows">
             <button
               onClick={() => onEditInChat ? onEditInChat() : addToast({ message: 'Opening workflow in chat...', type: 'info' })}
               className="flex items-center gap-1.5 px-3 h-9 rounded-md bg-white border border-border text-[12px] font-semibold text-text hover:bg-surface-2 transition-colors cursor-pointer ml-1"
@@ -929,6 +1099,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
               <MessageSquare size={13} />
               Edit in Chat
             </button>
+            </Gated>
           </div>
         </div>
 
@@ -939,10 +1110,29 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
 
         {/* Bottom row: schedule meta (left) + primary CTA (right) */}
         <div className="flex items-center justify-between gap-6 mt-3">
-          <div className="flex items-center gap-1.5 text-[12px] text-text-muted min-w-0">
-            <Clock size={13} className="shrink-0" />
-            <span className="truncate">Next run on May 19, 6:00 PM</span>
+          <div className="flex items-center gap-3 text-[12px] text-text-muted min-w-0">
+            <span className="inline-flex items-center gap-1.5 min-w-0">
+              <History size={13} className="shrink-0" />
+              <span className="truncate">{effLastRun ? `Last run ${effLastRun}` : 'Not run yet'}</span>
+            </span>
+            {retryingRun ? (
+              <span className="inline-flex items-center gap-1 font-medium shrink-0 text-ink-500">
+                <Loader2 size={12} className="animate-spin" />
+                Running…
+              </span>
+            ) : effStatus && (
+              <span className={`inline-flex items-center gap-1 font-medium shrink-0 ${RUN_STATUS_TEXT[effStatus]}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${RUN_STATUS_DOT[effStatus]}`} />
+                {effStatus}
+              </span>
+            )}
+            <span className="w-1 h-1 rounded-full bg-ink-300 shrink-0" />
+            <span className="inline-flex items-center gap-1.5 min-w-0">
+              <Clock size={13} className="shrink-0" />
+              <span className="truncate">Next run May 19, 6:00 PM</span>
+            </span>
           </div>
+          <Gated permission="wf_run" mode="disable" title="You don't have permission to run workflows">
           <button
             onClick={() => onOpenExecutor ? onOpenExecutor() : addToast({ message: 'Opening executor...', type: 'info' })}
             className="flex items-center gap-1.5 px-4 h-9 rounded-md bg-primary hover:bg-primary-hover text-white text-[12px] font-semibold transition-colors cursor-pointer shrink-0"
@@ -950,7 +1140,27 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
             <ExternalLink size={13} />
             Open Executor
           </button>
+          </Gated>
         </div>
+
+        {/* Last-run error — only when the most recent run failed */}
+        {effStatus === 'Error' && effError && (
+          <div className="mt-4 flex items-center gap-3 rounded-lg border border-risk-100 bg-risk-50 px-3.5 py-2.5 text-[12px] text-risk-700">
+            <AlertTriangle size={14} className="shrink-0" />
+            <span className="leading-snug flex-1 min-w-0"><span className="font-semibold">Last run failed:</span> {effError}</span>
+            <Gated permission="wf_run" mode="disable" title="You don't have permission to run workflows">
+            <button
+              type="button"
+              disabled={retryingRun}
+              onClick={handleRetryRun}
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-risk-200 bg-white text-[12px] font-semibold text-risk-700 hover:bg-risk-50 disabled:opacity-60 disabled:cursor-default cursor-pointer transition-colors"
+            >
+              <RotateCcw size={13} className={retryingRun ? 'animate-spin' : ''} />
+              {retryingRun ? 'Retrying…' : 'Retry'}
+            </button>
+            </Gated>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -980,6 +1190,24 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
       {/* Overview Tab */}
       {tab === 'overview' && (
         <div className="space-y-5 pb-8">
+          {/* Linked controls — the controls this workflow supports (moved here from
+              the Process Hub workflow card). */}
+          {wf.linkedControls.length > 0 && (
+            <div>
+              <h4 className="text-[14px] font-semibold text-ink-900 mb-3">
+                Linked controls <span className="text-text-muted font-normal">({wf.linkedControls.length})</span>
+              </h4>
+              <div className="space-y-2">
+                {wf.linkedControls.map(c => (
+                  <div key={c.id} className="rounded-xl border border-border-light bg-white px-4 py-3 flex items-center gap-3">
+                    <span className="font-mono text-[12px] font-semibold text-brand-700 shrink-0">{c.id}</span>
+                    <span className="text-[13px] text-text min-w-0 truncate">{c.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Steps */}
           <div>
             <h4 className="text-[14px] font-semibold text-ink-900 mb-3">Steps</h4>
@@ -1100,6 +1328,35 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
         <div className="space-y-5 pb-8">
           <div className="rounded-2xl border border-border-light bg-white p-5">
             <h4 className="text-[11px] font-mono uppercase tracking-tight text-ink-500 mb-4 flex items-center gap-2">
+              <Tag size={13} className="text-primary" />
+              Labels & Sub-process
+            </h4>
+            <div className="space-y-5">
+              <div>
+                <label className="text-[13px] font-semibold text-text block mb-1">Labels</label>
+                <p className="text-[12px] text-text-muted mb-2.5">Tag this workflow for grouping and search — e.g. Reconciliation.</p>
+                <EditableChipList
+                  items={labels}
+                  onChange={setLabels}
+                  placeholder="Add label…"
+                  onAdded={(v) => addToast({ message: `Label “${v}” added`, type: 'success' })}
+                />
+              </div>
+              <div className="pt-4 border-t border-border-light">
+                <label className="text-[13px] font-semibold text-text block mb-1">Sub-process</label>
+                <p className="text-[12px] text-text-muted mb-2.5">Add, rename, or remove the sub-processes this workflow belongs to.</p>
+                <EditableChipList
+                  items={subProcesses}
+                  onChange={setSubProcesses}
+                  placeholder="Add sub-process…"
+                  onAdded={(v) => addToast({ message: `Sub-process “${v}” added`, type: 'success' })}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border-light bg-white p-5">
+            <h4 className="text-[11px] font-mono uppercase tracking-tight text-ink-500 mb-4 flex items-center gap-2">
               <Calendar size={13} className="text-primary" />
               Audit run frequency
             </h4>
@@ -1150,9 +1407,8 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
               {frequency === 'Monthly' && (
                 <div>
                   <label className="text-[13px] font-semibold text-text block mb-2">Select date</label>
-                  <input
-                    type="date"
-                    value={monthlyDate}
+                  <DatePicker
+                                        value={monthlyDate}
                     onChange={e => setMonthlyDate(e.target.value)}
                     placeholder="dd/mm/yyyy"
                     className="w-full h-11 px-3.5 rounded-xl border border-primary/40 text-[14px] bg-white text-text focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition-all"
@@ -1291,6 +1547,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
               })}
             </div>
 
+            <Gated permission="wf_update_delete" mode="disable" title="You don't have permission to edit workflows">
             <AddToleranceMenu
               onAddPreconfigured={(p) => {
                 if (tolerances.some(t => t.id === p.id)) {
@@ -1315,6 +1572,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
               }}
               onOpenBuilder={() => setBuilderOpen(true)}
             />
+            </Gated>
 
             {/* Impact preview */}
             <div className="mt-5 pt-5 border-t border-border-light">

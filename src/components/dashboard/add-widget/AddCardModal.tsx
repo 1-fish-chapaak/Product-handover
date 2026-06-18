@@ -20,9 +20,16 @@ import {
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { ConfigurableChart, PIE_DATA } from "./ConfigurableChart";
-import { FileTreeView } from "./FileTreeView";
+// ─── Multi-table (model) widget building — merged into Add Widget ───
+import MultiTableFieldPicker from "../model/MultiTableFieldPicker";
+import ModelChart from "../model/ModelChart";
+import { buildWidgetRows } from "../model/joinEngine";
+import type { ModelTable, Relationship, WidgetModelConfig, WidgetModelField } from "../model/relationshipTypes";
+import Gated from "../../shared/Gated";
+import { FileTreeView, type FileTreeFile } from "./FileTreeView";
 import { ColorPicker } from "./ColorPicker";
 import { WhiteDropdown } from "./WhiteDropdown";
+import { DB_SCHEMAS, INTEGRATION_CONFIGS } from "../../data-sources/datasetFiles";
 import TypographySection from "./imports/TypographySection-1760-98";
 import RangeYAxisSection from "./imports/RangeYAxisSection";
 import ConditionalFormattingSection from "./imports/ConditionalFormattingSection";
@@ -235,13 +242,13 @@ function AggDropdown({ value, onChange, fieldId }: { value: string; onChange: (v
       >
         {isDateField ? (
           <>
-            <span className="text-[10px] text-[#26064a]/70">{getDateDisplayLabel()}</span>
+            <span className="text-[0.625rem] text-[#26064a]/70">{getDateDisplayLabel()}</span>
             <ChevronDown className="size-[9px] text-[#6a12cd]" strokeWidth="0.75" />
           </>
         ) : (
           <>
-            {value && <span className="text-[11px] font-bold text-[#6a12cd]">{current.symbol}</span>}
-            {value && current.label && <span className="text-[10px] text-[#26064a]/70">{current.label}</span>}
+            {value && <span className="text-[0.6875rem] font-bold text-[#6a12cd]">{current.symbol}</span>}
+            {value && current.label && <span className="text-[0.625rem] text-[#26064a]/70">{current.label}</span>}
             <ChevronDown className="size-[9px] text-[#6a12cd]" strokeWidth="0.75" />
           </>
         )}
@@ -254,7 +261,7 @@ function AggDropdown({ value, onChange, fieldId }: { value: string; onChange: (v
         >
           {isDateField ? (
             <>
-              <p className="px-3 pt-1.5 pb-1 text-[9px] font-semibold uppercase tracking-[0.8px] text-[#9ca3af]">Date Granularity</p>
+              <p className="px-3 pt-1.5 pb-1 text-[0.5625rem] font-semibold uppercase tracking-[0.8px] text-[#9ca3af]">Date Granularity</p>
               {TEMPORAL_OPTIONS.map(opt => {
                 const selected = value ? value.split(",") : [];
                 const isSelected = selected.includes(opt.value);
@@ -267,20 +274,20 @@ function AggDropdown({ value, onChange, fieldId }: { value: string; onChange: (v
                     <div className={`w-[14px] h-[14px] rounded-[3px] border-2 flex items-center justify-center shrink-0 ${isSelected ? "border-[#6a12cd] bg-[#6a12cd]" : "border-[#d1d5db] bg-white"}`}>
                       {isSelected && <Check className="size-[10px] text-white" strokeWidth={3} />}
                     </div>
-                    <span className={`text-[12px] ${isSelected ? "text-[#6a12cd] font-medium" : "text-[#374151]"}`}>{opt.label}</span>
+                    <span className={`text-[0.75rem] ${isSelected ? "text-[#6a12cd] font-medium" : "text-[#374151]"}`}>{opt.label}</span>
                   </button>
                 );
               })}
             </>
           ) : (
             <>
-              <p className="px-3 pt-1.5 pb-1 text-[9px] font-semibold uppercase tracking-[0.8px] text-[#9ca3af]">Aggregation</p>
+              <p className="px-3 pt-1.5 pb-1 text-[0.5625rem] font-semibold uppercase tracking-[0.8px] text-[#9ca3af]">Aggregation</p>
               <button
                 onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onChange(""); setOpen(false); }}
                 className={`w-full flex items-center gap-2 px-3 py-[6px] text-left transition-colors hover:bg-[#f5f0ff] ${!value ? "bg-[#faf5ff] text-[#6a12cd]" : "text-[#374151]"}`}
               >
-                <span className="w-[18px] text-center text-[11px] font-bold shrink-0" style={{ color: !value ? "#6a12cd" : "#9ca3af" }}>—</span>
-                <span className="text-[12px]">None</span>
+                <span className="w-[18px] text-center text-[0.6875rem] font-bold shrink-0" style={{ color: !value ? "#6a12cd" : "#9ca3af" }}>—</span>
+                <span className="text-[0.75rem]">None</span>
                 {!value && <Check className="size-[10px] ml-auto text-[#6a12cd]" />}
               </button>
               {AGGREGATION_OPTIONS.filter(opt => opt.value !== "").map(opt => (
@@ -289,8 +296,8 @@ function AggDropdown({ value, onChange, fieldId }: { value: string; onChange: (v
                   onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onChange(opt.value); setOpen(false); }}
                   className={`w-full flex items-center gap-2 px-3 py-[6px] text-left transition-colors hover:bg-[#f5f0ff] ${opt.value === value ? "bg-[#faf5ff] text-[#6a12cd]" : "text-[#374151]"}`}
                 >
-                  <span className="w-[18px] text-center text-[11px] font-bold shrink-0" style={{ color: opt.value === value ? "#6a12cd" : "#9ca3af" }}>{opt.symbol}</span>
-                  <span className="text-[12px]">{opt.label}</span>
+                  <span className="w-[18px] text-center text-[0.6875rem] font-bold shrink-0" style={{ color: opt.value === value ? "#6a12cd" : "#9ca3af" }}>{opt.symbol}</span>
+                  <span className="text-[0.75rem]">{opt.label}</span>
                   {opt.value === value && <Check className="size-[10px] ml-auto text-[#6a12cd]" />}
                 </button>
               ))}
@@ -303,11 +310,27 @@ function AggDropdown({ value, onChange, fieldId }: { value: string; onChange: (v
   );
 }
 
-/* ─── Props ───────────────────────────────────────────────────────���─����������────── */
+/* ─── Props ─────────────────────────────────────────────────────────────────── */
+export interface AddCardDashboardSource {
+  type: 'excel' | 'csv' | 'sql' | 'query' | 'combo';
+  /** SEED id of the picked source — required for live-SQL dashboards. */
+  sourceId?: string;
+  /** Display name (file name or DB name). */
+  sourceName?: string;
+}
+
 interface AddCardModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSelectCard: (cardType: string, config?: { xAxis: string; yAxis: string; color: string; name?: string; description?: string; seriesColors?: Record<string, string>; fontFamily?: string }) => void;
+  onSelectCard: (cardType: string, config?: { xAxis: string; yAxis: string; color: string; name?: string; description?: string; seriesColors?: Record<string, string>; fontFamily?: string; model?: WidgetModelConfig }) => void;
+  /** Related tables → when present (and not a SQL dashboard), the Data Source
+   *  tab becomes the multi-table model builder. */
+  modelTables?: ModelTable[];
+  relationships?: Relationship[];
+  /** Pre-fills the model builder when editing a combined widget. */
+  initialModel?: WidgetModelConfig;
+  /** Opens the relationship manager (from the "needs connecting" prompt). */
+  onConnectTables?: () => void;
   mode?: 'add' | 'edit';
   initialXAxis?: string;
   initialYAxis?: string;
@@ -319,12 +342,19 @@ interface AddCardModalProps {
   onOpenExcelUpload?: () => void;
   onOpenQueryModal?: () => void;
   onOpenAddData?: () => void;
+  /** Jumps to the Knowledge Hub view, optionally focused on the given source.
+   *  Wired by the empty-state panel for unknown SQL sourceIds. */
+  onOpenKnowledgeHub?: (sourceId?: string) => void;
   isCreateDashboardMode?: boolean;
   onNavigateToBuilder?: (data: { cardType: string; config: any }) => void;
+  /** Source the parent dashboard is bound to. Drives the Data Source panel:
+   * for 'sql' we render the DB schema tree from DB_SCHEMAS instead of the
+   * canonical Excel demo files. */
+  dashboardSource?: AddCardDashboardSource;
 }
 
-/* ─── Modal ────���─────────────────────────────────────────────────────────── */
-export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', initialXAxis, initialYAxis, initialWidgetType, initialColor, initialFontFamily, initialName, initialSeriesColors, onOpenExcelUpload, onOpenQueryModal, onOpenAddData, isCreateDashboardMode = false, onNavigateToBuilder }: AddCardModalProps) {
+/* ─── Modal ─────────────────────────────────────────────────────────────────── */
+export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', initialXAxis, initialYAxis, initialWidgetType, initialColor, initialFontFamily, initialName, initialSeriesColors, onOpenExcelUpload, onOpenQueryModal, onOpenAddData, onOpenKnowledgeHub, isCreateDashboardMode = false, onNavigateToBuilder, dashboardSource, modelTables, relationships = [], initialModel, onConnectTables }: AddCardModalProps) {
   const [activeTab, setActiveTab] = useState<"data" | "format">("data");
   const [selected, setSelected] = useState<WidgetDef | null>(null); // No default selection
   const [chartTypeOpen, setChartTypeOpen] = useState(true);
@@ -333,6 +363,10 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
   const [file1Open, setFile1Open] = useState(true);
   const [file2Open, setFile2Open] = useState(false);
   const [addDataOpen, setAddDataOpen] = useState(false);
+  // The widget renders against the dashboard's bound source. Picking an
+  // additional / different source happens via the Add Data button, which
+  // opens the shared AddDataModal (same as dashboard creation).
+  const widgetSource: AddCardDashboardSource | undefined = dashboardSource;
   
   // Widget name and description
   const [widgetName, setWidgetName] = useState("");
@@ -340,7 +374,22 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
   
   // Widget Info section collapsed state
   const [widgetInfoCollapsed, setWidgetInfoCollapsed] = useState(false);
-  
+
+  // ── Multi-table (model) widget state ──
+  const [modelFields, setModelFields] = useState<WidgetModelField[]>(initialModel?.fields ?? []);
+  const [modelType, setModelType] = useState<string>(initialWidgetType ?? 'Bar Chart');
+  const [modelColor, setModelColor] = useState<string>(initialColor ?? '#6a12cd');
+  useEffect(() => {
+    if (!open) return;
+    if (initialModel) {
+      setModelFields(initialModel.fields);
+      setModelType(initialWidgetType ?? 'Bar Chart');
+      setModelColor(initialColor ?? '#6a12cd');
+    } else if (mode === 'add') {
+      setModelFields([]);
+    }
+  }, [open, initialModel, mode, initialWidgetType, initialColor]);
+
   // Chart type dropdown state
   const [chartDropdownOpen, setChartDropdownOpen] = useState(false);
   const chartDropdownBtnRef = useRef<HTMLButtonElement>(null);
@@ -583,6 +632,45 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
   const dimensionFields = filteredFields.filter(f => f.kind === "dimension");
   const measureFields = filteredFields.filter(f => f.kind === "measure");
 
+  // ── Live-SQL widget: build the Database → Table → Column tree from
+  //    DB_SCHEMAS so the user gets real DB columns instead of the canonical
+  //    Excel demo files. We map each column's label back to an existing
+  //    FIELDS id when one matches, so dragged items reuse the same icons,
+  //    aggregations, and chart wiring as the Excel flow.
+  // Three SQL states need to be distinguished:
+  //   1. isSqlBound       — dashboard claims a SQL source but its sourceId is
+  //                          unknown OR has no published tables. Render empty
+  //                          state panel; do NOT fall through to Excel demos.
+  //   2. isSqlWidget       — known sourceId + tables present; render DB tree.
+  //   3. neither           — Excel/CSV/combo/query → existing demo files path.
+  const isSqlBound = widgetSource?.type === 'sql' && !!widgetSource?.sourceId;
+  const sqlBindingValid = isSqlBound && !!DB_SCHEMAS[widgetSource!.sourceId!] && DB_SCHEMAS[widgetSource!.sourceId!].length > 0;
+  const isSqlWidget = isSqlBound && sqlBindingValid;
+  const sqlTables = isSqlWidget ? DB_SCHEMAS[widgetSource!.sourceId!] : [];
+  const sqlIntegration = widgetSource?.sourceId ? INTEGRATION_CONFIGS[widgetSource.sourceId] : undefined;
+  const sqlHeaderName = isSqlWidget
+    ? `${widgetSource?.sourceName || 'Database'}${sqlIntegration?.provider ? ` · ${sqlIntegration.provider}` : ''}`
+    : '';
+  const sqlFiles: FileTreeFile[] = isSqlWidget ? [{
+    name: sqlHeaderName,
+    icon: 'database',
+    sheets: sqlTables.map(t => ({
+      name: `${t.schema}.${t.name}`,
+      columns: t.columns
+        .filter(c => !dataSearch || c.label.toLowerCase().includes(dataSearch.toLowerCase()))
+        .map(c => c.label),
+    })),
+  }] : [];
+  const sqlFieldIdMap: Record<string, string> = {};
+  if (isSqlWidget) {
+    for (const t of sqlTables) {
+      for (const c of t.columns) {
+        const existing = FIELDS.find(f => f.label === c.label || f.axisValue === c.label);
+        sqlFieldIdMap[c.label] = existing?.id || c.label;
+      }
+    }
+  }
+
   // Determine which datasource is active based on selected fields
   const getActiveDatasource = (): "file1" | "file2" | null => {
     const allSelectedIds = [...xFieldIds, ...yFieldIds];
@@ -606,6 +694,66 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
   const activeDatasource = getActiveDatasource();
   const isFile1Disabled = activeDatasource === "file2";
   const isFile2Disabled = activeDatasource === "file1";
+
+  // ── Multi-table model builder: active for file/custom dashboards (excel /
+  //    csv / query / combo). SQL-typed dashboards keep their DB-table path
+  //    (valid → DB tree, invalid binding → SQL empty state). ──
+  const useModel = widgetSource?.type !== 'sql' && (modelTables?.length ?? 0) > 0;
+  const MODEL_CHART_TYPES = ['Bar Chart', 'Line Chart', 'Area Chart', 'Pie Chart', 'KPI', 'Table'];
+  const MODEL_COLORS = ['#6a12cd', '#0d9488', '#C2410C', '#1a2744', '#dc2626'];
+  const modelPreview = useModel ? buildWidgetRows(modelTables!, relationships, { fields: modelFields }) : null;
+  const canAddModel = useModel && modelFields.length > 0 && !modelPreview?.error;
+  const addModelWidget = () => {
+    onSelectCard(modelType, { xAxis: '', yAxis: '', color: modelColor, name: widgetName || 'Combined widget', model: { fields: modelFields } });
+    onOpenChange(false);
+  };
+
+  const renderModelBuilder = () => (
+    <div className="flex flex-1 overflow-hidden min-h-0">
+      <div className="flex-1 p-4 min-h-0 overflow-hidden">
+        <MultiTableFieldPicker
+          tables={modelTables!}
+          relationships={relationships}
+          selected={modelFields}
+          onChange={setModelFields}
+          onConnectTables={() => { onOpenChange(false); onConnectTables?.(); }}
+        />
+      </div>
+      <div className="w-[340px] shrink-0 border-l border-[#f3f4f6] bg-[rgba(249,250,251,0.5)] p-4 flex flex-col gap-4 overflow-y-auto">
+        <div>
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Widget name</label>
+          <input value={widgetName} onChange={e => setWidgetName(e.target.value)} placeholder="e.g. Spend by Vendor" className="w-full h-9 px-3 bg-white border border-[#e5e7eb] rounded-[8px] text-[12.5px] text-text focus:outline-none focus:border-[#6a12cd]/40" />
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Chart type</label>
+          <div className="grid grid-cols-3 gap-1.5">
+            {MODEL_CHART_TYPES.map(ct => (
+              <button key={ct} onClick={() => setModelType(ct)} className={`py-2 rounded-[8px] border text-[10.5px] font-medium cursor-pointer transition-colors ${modelType === ct ? 'border-[#6a12cd]/40 bg-[#faf5ff] text-[#6a12cd]' : 'border-[#e5e7eb] text-ink-600 hover:border-[#6a12cd]/20'}`}>
+                {ct.replace(' Chart', '')}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Color</label>
+          <div className="flex gap-1.5">
+            {MODEL_COLORS.map(c => <button key={c} onClick={() => setModelColor(c)} className={`w-7 h-7 rounded-[8px] border-2 cursor-pointer ${modelColor === c ? 'border-ink-900 scale-110' : 'border-transparent'}`} style={{ background: c }} />)}
+          </div>
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Preview</label>
+          <div className="h-[200px] border border-[#e5e7eb] rounded-[10px] p-2 bg-white">
+            {modelFields.length === 0
+              ? <div className="h-full flex items-center justify-center text-[11.5px] text-ink-400 text-center px-4">Pick fields from the related tables to preview the chart.</div>
+              : <ModelChart data={modelPreview!} type={modelType} color={modelColor} />}
+          </div>
+        </div>
+        <button onClick={addModelWidget} disabled={!canAddModel} className="mt-auto h-10 inline-flex items-center justify-center gap-2 text-[13px] font-semibold text-white bg-[#6a12cd] hover:bg-[#5a0ebd] rounded-[8px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+          {mode === 'edit' ? 'Save Widget' : 'Add Widget'}
+        </button>
+      </div>
+    </div>
+  );
 
   // Open chart dropdown
   const openChartDropdown = () => {
@@ -639,14 +787,14 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
             <div className="bg-[#faf5ff] rounded-[10px] size-[28px] flex items-center justify-center shrink-0">
               <LayoutGrid className="size-[14px] text-[#7C3AED]" strokeWidth={1.75} />
             </div>
-            <span className="text-[15px] font-semibold text-[#26064a]">{mode === 'edit' ? 'Edit Widget' : 'Add New Widget'}</span>
+            <span className="text-[0.9375rem] font-semibold text-[#26064a]">{mode === 'edit' ? 'Edit Widget' : 'Add New Widget'}</span>
           </div>
           <button onClick={() => onOpenChange(false)} className="p-1.5 rounded-lg hover:bg-[#f3f4f6] transition-colors cursor-pointer">
             <X className="size-[18px] text-[#6b7280]" />
           </button>
         </div>
 
-        {/* ── Two-tab switcher ── */}
+        {useModel ? renderModelBuilder() : (
         <div className="flex flex-1 overflow-hidden min-h-0">
 
           {/* ── Right Sidebar (moved to right) ── */}
@@ -656,7 +804,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
             <div className="flex shrink-0 border-b border-canvas-border">
               <button
                 onClick={() => setActiveTab("data")}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[12px] font-medium border-b-2 transition-colors cursor-pointer ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[0.75rem] font-medium border-b-2 transition-colors cursor-pointer ${
                   activeTab === "data" ? "border-brand-600 text-brand-700" : "border-transparent text-ink-500 hover:text-ink-700"
                 }`}
               >
@@ -665,7 +813,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
               </button>
               <button
                 onClick={() => setActiveTab("format")}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[12px] font-medium border-b-2 transition-colors cursor-pointer ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[0.75rem] font-medium border-b-2 transition-colors cursor-pointer ${
                   activeTab === "format" ? "border-brand-600 text-brand-700" : "border-transparent text-ink-500 hover:text-ink-700"
                 }`}
               >
@@ -690,7 +838,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                       <div className="size-[16px] flex items-center justify-center">
                         <LayoutGrid className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
                       </div>
-                      <span className="text-[12px] font-bold uppercase tracking-[0.8px] text-[#26064a] truncate w-[180px] text-left">
+                      <span className="text-[0.75rem] font-bold uppercase tracking-[0.8px] text-[#26064a] truncate w-[180px] text-left">
                         {selected ? selected.title : 'Chart Type'}
                       </span>
                     </div>
@@ -716,7 +864,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             }`}
                           >
                             <w.Icon className={`size-[16px] shrink-0 ${isActive ? "text-[#6a12cd]" : "text-[#6a12cd]"}`} strokeWidth={1.5} />
-                            <span className={`text-[12px] font-medium whitespace-nowrap ${isActive ? "font-semibold" : ""}`}>{w.title}</span>
+                            <span className={`text-[0.75rem] font-medium whitespace-nowrap ${isActive ? "font-semibold" : ""}`}>{w.title}</span>
                             {isActive && <Check className="size-[14px] ml-auto text-[#6a12cd]" strokeWidth={2} />}
                           </button>
                         );
@@ -728,23 +876,21 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                 {/* ── DATA SOURCE section ── */}
                 <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
                   <div className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white border-b border-[#f0f0f0]">
-                    <div className="flex items-center gap-2">
-                      <div className="size-[18px] rounded-[4px]  flex items-center justify-center">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="size-[18px] rounded-[4px] flex items-center justify-center">
                         <Database className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
                       </div>
-                      <span className="text-[12px] font-bold uppercase tracking-[0.8px] text-[#26064a]">Data Source</span>
+                      <span className="text-[0.75rem] font-bold uppercase tracking-[0.8px] text-[#26064a] shrink-0">Data Source</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onOpenAddData?.(); }}
-                        className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-white bg-[#6a12cd] hover:bg-[#5a0ebd] rounded-md transition-colors cursor-pointer shrink-0"
-                      >
-                        <Plus size={10} />
-                        Add Data
-                      </button>
-                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onOpenAddData?.(); }}
+                      className="flex items-center gap-1 px-2 py-1 text-[0.625rem] font-semibold text-white bg-[#6a12cd] hover:bg-[#5a0ebd] rounded-md transition-colors cursor-pointer shrink-0"
+                    >
+                      <Plus size={10} />
+                      Add Data
+                    </button>
                   </div>
-                  
+
                   <div className="bg-[#fafafa]">
                       {/* Search */}
                       <div className="px-2.5 pt-2.5 pb-2">
@@ -752,26 +898,47 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-[11px] text-[#b0b8c4]" />
                           <input
                             type="text"
-                            placeholder="Search fields…"
+                            placeholder={isSqlWidget ? 'Search columns…' : 'Search fields…'}
                             value={dataSearch}
                             onChange={e => setDataSearch(e.target.value)}
-                            className="w-full h-[32px] pl-8 pr-2.5 bg-white border border-[#e5e7eb] rounded-[6px] text-[12px] text-[#26064a] placeholder:text-[#c4c9d4] outline-none focus:border-[#6a12cd]/40 transition-colors"
+                            className="w-full h-[32px] pl-8 pr-2.5 bg-white border border-[#e5e7eb] rounded-[6px] text-[0.75rem] text-[#26064a] placeholder:text-[#c4c9d4] outline-none focus:border-[#6a12cd]/40 transition-colors"
                           />
                         </div>
                       </div>
 
-                      {/* File → Sheet → Fields tree */}
-                      <div className="mx-2.5 mb-2.5">
-                        <FileTreeView
-                          files={[
-                            { name: 'Invoice_Master.xlsx', icon: 'excel', sheets: [{ name: 'Sheet1', columns: dimensionFields.slice(0, 8).map(f => f.label) }] },
-                            { name: 'Vendor_Finance.xlsx', icon: 'excel', sheets: [{ name: 'Sheet1', columns: measureFields.map(f => f.label) }] },
-                          ]}
-                          search={dataSearch}
-                          draggable
-                          fieldIdMap={Object.fromEntries(FIELDS.map(f => [f.label, f.id]))}
-                        />
-                      </div>
+                      {/* Empty state — SQL-bound but no published tables. Don't fall
+                          through to Excel demos; ask the user to publish in KH. */}
+                      {isSqlBound && !sqlBindingValid && (
+                        <div className="mx-2.5 mb-2.5 px-3 py-4 bg-white border border-dashed border-[#e5e7eb] rounded-[8px] text-center">
+                          <Database size={20} className="text-[#b0b8c4] mx-auto mb-2" strokeWidth={1.5} />
+                          <p className="text-[0.75rem] font-semibold text-[#26064a] mb-1">No published tables</p>
+                          <p className="text-[0.6875rem] text-[#6b7280] mb-3 leading-relaxed">
+                            <span className="font-medium">{widgetSource?.sourceName || 'This connection'}</span> has no tables published to Knowledge Hub yet.
+                          </p>
+                          <button
+                            onClick={() => onOpenKnowledgeHub?.(widgetSource?.sourceId)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[0.6875rem] font-semibold text-white bg-[#6a12cd] hover:bg-[#5a0ebd] rounded-md transition-colors cursor-pointer"
+                          >
+                            <Database size={11} />
+                            Open Knowledge Hub
+                          </button>
+                        </div>
+                      )}
+
+                      {/* File → Sheet → Fields tree (or Database → Table → Column for live-SQL) */}
+                      {!(isSqlBound && !sqlBindingValid) && (
+                        <div className="mx-2.5 mb-2.5">
+                          <FileTreeView
+                            files={isSqlWidget ? sqlFiles : [
+                              { name: 'Invoice_Master.xlsx', icon: 'excel', sheets: [{ name: 'Sheet1', columns: dimensionFields.slice(0, 8).map(f => f.label) }] },
+                              { name: 'Vendor_Finance.xlsx', icon: 'excel', sheets: [{ name: 'Sheet1', columns: measureFields.map(f => f.label) }] },
+                            ]}
+                            search={dataSearch}
+                            draggable
+                            fieldIdMap={isSqlWidget ? sqlFieldIdMap : Object.fromEntries(FIELDS.map(f => [f.label, f.id]))}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -786,7 +953,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                       <div className="size-[16px] flex items-center justify-center">
                         <Info className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
                       </div>
-                      <span className="font-bold uppercase tracking-[0.8px] text-[#26064a] text-[12px]">Widget Info</span>
+                      <span className="font-bold uppercase tracking-[0.8px] text-[#26064a] text-[0.75rem]">Widget Info</span>
                     </div>
                     <ChevronDown 
                       className={`size-[16px] text-[#6a12cd] transition-transform duration-200 ${widgetInfoCollapsed ? 'rotate-0' : 'rotate-180'}`} 
@@ -796,23 +963,23 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                   {!widgetInfoCollapsed && (
                     <div className="p-3 space-y-3">
                       <div>
-                        <label className="block text-[11px] font-medium text-[#6b7280] mb-1.5">Widget Name</label>
+                        <label className="block text-[0.6875rem] font-medium text-[#6b7280] mb-1.5">Widget Name</label>
                         <input
                           type="text"
                           value={widgetName}
                           onChange={(e) => setWidgetName(e.target.value)}
                           placeholder="Enter widget name"
-                          className="w-full px-3 py-2 text-[13px] border border-[#e5e7eb] rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#6a12cd]/20 focus:border-[#6a12cd] transition-all"
+                          className="w-full px-3 py-2 text-[0.8125rem] border border-[#e5e7eb] rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#6a12cd]/20 focus:border-[#6a12cd] transition-all"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-medium text-[#6b7280] mb-1.5">Description</label>
+                        <label className="block text-[0.6875rem] font-medium text-[#6b7280] mb-1.5">Description</label>
                         <textarea
                           value={widgetDescription}
                           onChange={(e) => setWidgetDescription(e.target.value)}
                           placeholder="Enter widget description"
                           rows={2}
-                          className="w-full px-3 py-2 text-[13px] border border-[#e5e7eb] rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#6a12cd]/20 focus:border-[#6a12cd] transition-all resize-none"
+                          className="w-full px-3 py-2 text-[0.8125rem] border border-[#e5e7eb] rounded-[6px] focus:outline-none focus:ring-2 focus:ring-[#6a12cd]/20 focus:border-[#6a12cd] transition-all resize-none"
                         />
                       </div>
                     </div>
@@ -828,8 +995,8 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                 <div className="size-12 rounded-xl bg-[#f4f0ff] flex items-center justify-center mb-4">
                   <Settings className="size-5 text-[#6a12cd]" />
                 </div>
-                <h3 className="text-[14px] font-semibold text-[#26064a] mb-1.5">Nothing to customize yet</h3>
-                <p className="text-[12px] text-[#6b7280] leading-relaxed">
+                <h3 className="text-[0.875rem] font-semibold text-[#26064a] mb-1.5">Nothing to customize yet</h3>
+                <p className="text-[0.75rem] text-[#6b7280] leading-relaxed">
                   {!selected
                     ? "Select a chart type and add data fields first, then come back here to style your widget."
                     : isTable
@@ -839,7 +1006,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                 </p>
                 <button
                   onClick={() => setActiveTab("data")}
-                  className="mt-4 px-4 py-2 text-[12px] font-semibold text-[#6a12cd] bg-[#f4f0ff] hover:bg-[#ece5ff] rounded-lg transition-colors cursor-pointer"
+                  className="mt-4 px-4 py-2 text-[0.75rem] font-semibold text-[#6a12cd] bg-[#f4f0ff] hover:bg-[#ece5ff] rounded-lg transition-colors cursor-pointer"
                 >
                   Go to Data Source
                 </button>
@@ -859,7 +1026,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                       <div className="size-[18px] rounded-[4px] flex items-center justify-center">
                         <Palette className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
                       </div>
-                      <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#26064a]">General </span>
+                      <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">General </span>
                     </div>
                     <ChevronDown
                       className="size-[14px] text-[#6a12cd] transition-transform duration-200"
@@ -870,7 +1037,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                     <div className="bg-[#fafafa] p-2.5 space-y-3">
                       {/* Font Family dropdown */}
                       <div className="flex flex-col gap-1.5">
-                        <label className="text-[12px] font-semibold text-[#26064a]">Font Family</label>
+                        <label className="text-[0.75rem] font-semibold text-[#26064a]">Font Family</label>
                         <WhiteDropdown
                           value={fontFamily}
                           onChange={setFontFamily}
@@ -903,7 +1070,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                           }`}
                         >
                           <Bold className={`size-[14px] transition-colors ${isBold ? "text-white" : "text-[#6a12cd]"}`} />
-                          <span className="text-[11px] font-medium">
+                          <span className="text-[0.6875rem] font-medium">
                             Bold
                           </span>
                         </button>
@@ -916,7 +1083,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                           }`}
                         >
                           <Italic className={`size-[14px] transition-colors ${isItalic ? "text-white" : "text-[#6a12cd]"}`} />
-                          <span className="text-[11px] font-medium">
+                          <span className="text-[0.6875rem] font-medium">
                             Italic
                           </span>
                         </button>
@@ -929,7 +1096,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                           }`}
                         >
                           <Underline className={`size-[14px] transition-colors ${isUnderline ? "text-white" : "text-[#6a12cd]"}`} />
-                          <span className="text-[11px] font-medium">
+                          <span className="text-[0.6875rem] font-medium">
                             Underline
                           </span>
                         </button>
@@ -952,7 +1119,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                         <div className="size-[18px] rounded-[4px] flex items-center justify-center">
                           <ArrowRightLeft className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
                         </div>
-                        <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#26064a]">X axis</span>
+                        <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">X axis</span>
                       </div>
                       <ChevronDown
                         className="size-[14px] text-[#6a12cd] transition-transform duration-200"
@@ -964,13 +1131,13 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                       <div className="bg-[#fafafa] p-2.5 space-y-3">
                         {/* Title input */}
                         <div className="flex flex-col gap-1.5">
-                          <label className="text-[12px] font-medium text-[#26064a]">Title</label>
+                          <label className="text-[0.75rem] font-medium text-[#26064a]">Title</label>
                           <input
                             type="text"
                             value={xAxisTitle}
                             onChange={(e) => setXAxisTitle(e.target.value)}
                             placeholder={resolvedXAxis || "Enter X Axis Title"}
-                            className="w-full px-3.5 py-2 text-[12px] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                            className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                           />
                         </div>
 
@@ -985,7 +1152,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             }`}
                           >
                             <Bold className={`size-[14px] transition-colors ${xAxisBold ? "text-white" : "text-[#6a12cd]"}`} />
-                            <span className="text-[11px] font-medium">
+                            <span className="text-[0.6875rem] font-medium">
                               Bold
                             </span>
                           </button>
@@ -998,7 +1165,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             }`}
                           >
                             <Italic className={`size-[14px] transition-colors ${xAxisItalic ? "text-white" : "text-[#6a12cd]"}`} />
-                            <span className="text-[11px] font-medium">
+                            <span className="text-[0.6875rem] font-medium">
                               Italic
                             </span>
                           </button>
@@ -1011,7 +1178,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             }`}
                           >
                             <Underline className={`size-[14px] transition-colors ${xAxisUnderline ? "text-white" : "text-[#6a12cd]"}`} />
-                            <span className="text-[11px] font-medium">
+                            <span className="text-[0.6875rem] font-medium">
                               Underline
                             </span>
                           </button>
@@ -1032,7 +1199,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                         <div className="size-[18px] rounded-[4px] flex items-center justify-center">
                           <MoveVertical className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
                         </div>
-                        <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#26064a]">Y axis</span>
+                        <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">Y axis</span>
                       </div>
                       <ChevronDown
                         className="size-[14px] text-[#6a12cd] transition-transform duration-200"
@@ -1044,13 +1211,13 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                       <div className="bg-[#fafafa] p-2.5 space-y-3">
                         {/* Title input */}
                         <div className="flex flex-col gap-1.5">
-                          <label className="text-[12px] font-medium text-[#26064a]">Title</label>
+                          <label className="text-[0.75rem] font-medium text-[#26064a]">Title</label>
                           <input
                             type="text"
                             value={yAxisTitle}
                             onChange={(e) => setYAxisTitle(e.target.value)}
                             placeholder={resolvedYAxis || "Enter Y Axis Title"}
-                            className="w-full px-3.5 py-2 text-[12px] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                            className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                           />
                         </div>
 
@@ -1065,7 +1232,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             }`}
                           >
                             <Bold className={`size-[14px] transition-colors ${yAxisBold ? "text-white" : "text-[#6a12cd]"}`} />
-                            <span className="text-[11px] font-medium">
+                            <span className="text-[0.6875rem] font-medium">
                               Bold
                             </span>
                           </button>
@@ -1078,7 +1245,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             }`}
                           >
                             <Italic className={`size-[14px] transition-colors ${yAxisItalic ? "text-white" : "text-[#6a12cd]"}`} />
-                            <span className="text-[11px] font-medium">
+                            <span className="text-[0.6875rem] font-medium">
                               Italic
                             </span>
                           </button>
@@ -1091,7 +1258,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             }`}
                           >
                             <Underline className={`size-[14px] transition-colors ${yAxisUnderline ? "text-white" : "text-[#6a12cd]"}`} />
-                            <span className="text-[11px] font-medium">
+                            <span className="text-[0.6875rem] font-medium">
                               Underline
                             </span>
                           </button>
@@ -1112,7 +1279,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                         <div className="size-[18px] rounded-[4px] flex items-center justify-center">
                           <MoveVertical className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
                         </div>
-                        <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#26064a]">Y Axis Index</span>
+                        <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">Y Axis Index</span>
                       </div>
                       <ChevronDown
                         className="size-[14px] text-[#6a12cd] transition-transform duration-200"
@@ -1122,13 +1289,13 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                     {yIndexFormatOpen && (
                       <div className="bg-[#fafafa] p-2.5 space-y-3">
                         <div className="flex flex-col gap-1.5">
-                          <label className="text-[12px] font-medium text-[#26064a]">Title</label>
+                          <label className="text-[0.75rem] font-medium text-[#26064a]">Title</label>
                           <input
                             type="text"
                             value={yIndexTitle}
                             onChange={(e) => setYIndexTitle(e.target.value)}
                             placeholder="Enter Y Axis Index Title"
-                            className="w-full px-3.5 py-2 text-[12px] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                            className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                           />
                         </div>
                         <div className="flex items-center bg-white rounded-[6px] border border-[#e5e7eb] overflow-hidden">
@@ -1137,21 +1304,21 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border-r border-[#e5e7eb] transition-all duration-200 ${yIndexBold ? "bg-[#6a12cd] text-white" : "bg-white text-[#26064a] hover:bg-[#faf5ff]"}`}
                           >
                             <Bold className={`size-[14px] transition-colors ${yIndexBold ? "text-white" : "text-[#6a12cd]"}`} />
-                            <span className="text-[11px] font-medium">Bold</span>
+                            <span className="text-[0.6875rem] font-medium">Bold</span>
                           </button>
                           <button
                             onClick={() => setYIndexItalic(!yIndexItalic)}
                             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border-r border-[#e5e7eb] transition-all duration-200 ${yIndexItalic ? "bg-[#6a12cd] text-white" : "bg-white text-[#26064a] hover:bg-[#faf5ff]"}`}
                           >
                             <Italic className={`size-[14px] transition-colors ${yIndexItalic ? "text-white" : "text-[#6a12cd]"}`} />
-                            <span className="text-[11px] font-medium">Italic</span>
+                            <span className="text-[0.6875rem] font-medium">Italic</span>
                           </button>
                           <button
                             onClick={() => setYIndexUnderline(!yIndexUnderline)}
                             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 transition-all duration-200 ${yIndexUnderline ? "bg-[#6a12cd] text-white" : "bg-white text-[#26064a] hover:bg-[#faf5ff]"}`}
                           >
                             <Underline className={`size-[14px] transition-colors ${yIndexUnderline ? "text-white" : "text-[#6a12cd]"}`} />
-                            <span className="text-[11px] font-medium">Underline</span>
+                            <span className="text-[0.6875rem] font-medium">Underline</span>
                           </button>
                         </div>
                       </div>
@@ -1226,6 +1393,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
 
             {/* ── ADD WIDGET BUTTON — fixed at sidebar bottom ── */}
             <div className="shrink-0 px-3 py-3 border-t border-[#e5e7eb] bg-white">
+              <Gated permission="db_add" mode="disable" title="You don't have permission to add widgets">
               <button
                 onClick={() => {
                   if (isCreateDashboardMode && onNavigateToBuilder) {
@@ -1239,7 +1407,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                   }
                 }}
                 disabled={!canAdd}
-                className={`w-full h-[40px] px-4 rounded-[8px] text-[14px] font-semibold transition-all ${
+                className={`w-full h-[40px] px-4 rounded-[8px] text-[0.875rem] font-semibold transition-all ${
                   canAdd
                     ? "bg-[#6a12cd] text-white hover:bg-[#5a0ebd] shadow-sm"
                     : "bg-[#e5e7eb] text-[#9ca3af] cursor-not-allowed"
@@ -1247,6 +1415,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
               >
                 {isCreateDashboardMode ? "Create Dashboard" : "Add Widget"}
               </button>
+              </Gated>
             </div>
           </div>
 
@@ -1281,7 +1450,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                         {slot.ids.length === 0 ? (
                           <div className="flex items-center gap-2 h-full">
                             <GripVertical className="size-[14px] text-[#d1d5db]" />
-                            <span className="text-[12px] text-[#9ca3af]">{dim.label}</span>
+                            <span className="text-[0.75rem] text-[#9ca3af]">{dim.label}</span>
                           </div>
                         ) : (
                           <div className="flex flex-wrap gap-1.5 items-center">
@@ -1291,7 +1460,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                               const agg = yAggs[fid] || "";
                               return (
                                 <div key={fid} className="flex items-center gap-1.5 h-[28px] px-2.5 bg-[#faf5ff] rounded-[4px] border border-[#6a12cd]/30 shrink-0">
-                                  <span className="text-[12px] font-medium text-[#26064a] whitespace-nowrap">{field.label}</span>
+                                  <span className="text-[0.75rem] font-medium text-[#26064a] whitespace-nowrap">{field.label}</span>
                                   {slot.showAgg && <AggDropdown value={agg} onChange={(v) => changeAgg(fid, v)} fieldId={fid} />}
                                   <button onClick={() => slot.remove(fid)} className="p-0.5 rounded hover:bg-[rgba(38,6,74,0.1)] transition-colors">
                                     <X className="size-[12px] text-[#6b7280] hover:text-[#ef4444]" strokeWidth={2} />
@@ -1322,7 +1491,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                       rows.push(
                         <div key="yAxis-group" className="flex items-center gap-4">
                           <div className="w-[80px] shrink-0">
-                            <p className="text-[12px] font-semibold text-[#26064a]">{dim.label}</p>
+                            <p className="text-[0.75rem] font-semibold text-[#26064a]">{dim.label}</p>
                           </div>
                           <div className="flex-1 flex gap-2">
                             {renderDropZone(dim)}
@@ -1335,7 +1504,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                       rows.push(
                         <div key={dim.key} className="flex items-center gap-4">
                           <div className="w-[80px] shrink-0">
-                            <p className="text-[12px] font-semibold text-[#26064a]">{dim.label}</p>
+                            <p className="text-[0.75rem] font-semibold text-[#26064a]">{dim.label}</p>
                           </div>
                           {renderDropZone(dim)}
                         </div>
@@ -1363,7 +1532,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             className={`flex items-center gap-1 px-2 py-1 rounded-[4px] transition-colors ${selected?.id === id ? "bg-[#6A12CD] text-white" : "hover:bg-[#6A12CD]/10 text-[#26064A]"}`}
                           >
                             <Icon className={`size-[12px] ${selected?.id === id ? "text-white" : "text-[#26064A]"}`} strokeWidth={2} />
-                            <span className="text-[12px]">{label}</span>
+                            <span className="text-[0.75rem]">{label}</span>
                           </button>
                         ))}
                       </div>
@@ -1376,23 +1545,23 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
             {/* ── PREVIEW Section ── */}
             <div className="flex-1 overflow-hidden flex flex-col">
               <div className="flex items-center justify-between border-b border-canvas-border px-[16px] py-2.5">
-                <p className="text-[12px] font-medium uppercase tracking-[1px] text-[#26064a]">Preview</p>
-                {selected && <span className="text-[12px] font-medium text-[#6a12cd]">{selected.title}</span>}
+                <p className="text-[0.75rem] font-medium uppercase tracking-[1px] text-[#26064a]">Preview</p>
+                {selected && <span className="text-[0.75rem] font-medium text-[#6a12cd]">{selected.title}</span>}
               </div>
               {/* Y Axis Index suggestion — suggest combo chart */}
               {selected && (secondaryYFieldIds.length > 0 || yFieldIds.length > 1) && ['bar', 'line', 'area'].includes(selected.builderType) && (
                 <div className="flex items-center gap-2 px-4 py-2 bg-[#f4f0ff] border-b border-[#e5e7eb]">
                   <Lightbulb size={14} className="text-[#6a12cd] shrink-0" />
-                  <p className="text-[11px] text-[#26064a] flex-1">You have a secondary Y axis. Try a dual chart:</p>
+                  <p className="text-[0.6875rem] text-[#26064a] flex-1">You have a secondary Y axis. Try a dual chart:</p>
                   <button
                     onClick={() => { const combo = WIDGETS.find(w => w.id === 'line-clustered'); if (combo) setSelected(combo); }}
-                    className="text-[11px] font-semibold text-[#6a12cd] hover:underline cursor-pointer whitespace-nowrap"
+                    className="text-[0.6875rem] font-semibold text-[#6a12cd] hover:underline cursor-pointer whitespace-nowrap"
                   >
                     Line & Column
                   </button>
                   <button
                     onClick={() => { const combo = WIDGETS.find(w => w.id === 'line-stacked'); if (combo) setSelected(combo); }}
-                    className="text-[11px] font-semibold text-[#6a12cd] hover:underline cursor-pointer whitespace-nowrap"
+                    className="text-[0.6875rem] font-semibold text-[#6a12cd] hover:underline cursor-pointer whitespace-nowrap"
                   >
                     Line & Stacked
                   </button>
@@ -1411,10 +1580,10 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             const values = ["12,450", "94.2%", "₹4.2M", "23", "1.8d", "38d", "₹85L"];
                             return (
                               <div key={fid} className="bg-white rounded-xl border-2 border-[#e5e7eb] p-6 shadow-sm hover:shadow-md transition-shadow w-[280px]">
-                                <p className="text-[16px] font-semibold text-[#26064a] mb-3">
+                                <p className="text-[1rem] font-semibold text-[#26064a] mb-3">
                                   {label}
                                 </p>
-                                <p className="text-[48px] font-bold text-[#26064a]">
+                                <p className="text-[3rem] font-bold text-[#26064a]">
                                   {values[i % values.length]}
                                 </p>
                               </div>
@@ -1427,8 +1596,8 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                             <div className="mx-auto mb-4 size-20 rounded-2xl bg-[#f4f0ff] flex items-center justify-center">
                               <Hash className="size-10 text-[#6a12cd]/30" strokeWidth={1.5} />
                             </div>
-                            <p className="text-[15px] font-semibold text-[#26064a] mb-1">Add a Value Field</p>
-                            <p className="text-[13px] text-[#9ca3af] leading-relaxed">Drag a measure field into the Value slot above to see your KPI card.</p>
+                            <p className="text-[0.9375rem] font-semibold text-[#26064a] mb-1">Add a Value Field</p>
+                            <p className="text-[0.8125rem] text-[#9ca3af] leading-relaxed">Drag a measure field into the Value slot above to see your KPI card.</p>
                           </div>
                         </div>
                       )
@@ -1474,10 +1643,10 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                           <selected.Icon className="size-10 text-[#6a12cd]/30" strokeWidth={1.5} />
                         )}
                       </div>
-                      <p className="text-[15px] font-semibold text-[#26064a] mb-1">
+                      <p className="text-[0.9375rem] font-semibold text-[#26064a] mb-1">
                         {!selected ? "No Chart Selected" : "Almost There"}
                       </p>
-                      <p className="text-[13px] text-[#9ca3af] leading-relaxed">
+                      <p className="text-[0.8125rem] text-[#9ca3af] leading-relaxed">
                         {!selected
                           ? "Select a chart type from the sidebar to start building your visualization."
                           : "Drag data fields into the axis slots above to generate a preview."
@@ -1495,6 +1664,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
             </div>
           </div>
         </div>
+        )}
       </DialogContent>
 
 

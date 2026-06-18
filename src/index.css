@@ -70,7 +70,22 @@
   --color-compliant-700:#166534;
   --color-evidence:     #0369A1;  /* Sources / Info-blue */
   --color-evidence-50:  #F0F9FF;
+  --color-evidence-100: #E0F2FE;
+  --color-evidence-200: #BAE6FD;
+  --color-evidence-300: #7DD3FC;
+  --color-evidence-400: #38BDF8;
+  --color-evidence-500: #0EA5E9;
+  --color-evidence-600: #0284C7;
   --color-evidence-700: #075985;
+  /* extended GRC ramps (100–600) so utilities like bg-compliant-600 resolve */
+  --color-compliant-100:#DCFCE7; --color-compliant-200:#BBF7D0; --color-compliant-300:#86EFAC;
+  --color-compliant-400:#4ADE80; --color-compliant-500:#22C55E; --color-compliant-600:#16A34A;
+  --color-risk-100:#FEE4E2; --color-risk-200:#FECDCA; --color-risk-300:#FDA29B;
+  --color-risk-400:#F97066; --color-risk-500:#F04438; --color-risk-600:#D92D20;
+  --color-high-100:#FFEAD5; --color-high-200:#FDDCAB; --color-high-300:#FEB273;
+  --color-high-400:#FD853A; --color-high-500:#FB6514; --color-high-600:#EC4A0A;
+  --color-mitigated-100:#FEF0C7; --color-mitigated-200:#FEDF89; --color-mitigated-300:#FEC84B;
+  --color-mitigated-400:#FDB022; --color-mitigated-500:#F79009; --color-mitigated-600:#DC6803;
   --color-info:         #6A12CD;  /* Info (brand-tied) */
   --color-info-50:      #F7F0FF;
   --color-info-700:     #550FA5;
@@ -102,6 +117,7 @@
 
   /* ── Typography ── */
   --font-display: 'Source Serif 4', ui-serif, Georgia, serif;
+  --font-serif:   'Instrument Serif', 'Source Serif 4', ui-serif, Georgia, serif;
   --font-sans:    'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
 
@@ -112,6 +128,14 @@
   --radius-lg:  12px;
   --radius-xl:  16px;
   --radius-2xl: 20px;
+
+  /* ── Custom font-size token (between text-xs and text-sm) ── */
+  --text-meta: 0.8125rem; /* 13px — micro-body / dense labels */
+
+  /* ── Layering scale ── */
+  --z-popover: 100;
+  --z-modal:   200;
+  --z-toast:   300;
 }
 
 /* ── Scrollbars (subtle, brand-tinted) ── */
@@ -128,17 +152,30 @@
   color: var(--color-brand-700);
 }
 
-/* ── Body / root ── */
+/* ── Body / root ──
+   Soft brand-tinted gradient mesh behind every surface so cards/pills read
+   as floating material instead of 1px-bordered rectangles on flat white. */
 body {
   margin: 0;
   font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv11", "tnum";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: var(--color-canvas);
+  background-color: var(--color-canvas);
+  background-image:
+    radial-gradient(at 0% 0%, rgba(247, 240, 255, 0.6) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(252, 250, 253, 0.9) 0px, transparent 50%),
+    radial-gradient(at 50% 90%, rgba(237, 222, 254, 0.18) 0px, transparent 60%);
   color: var(--color-ink-800);
-  line-height: 16px;
+  line-height: 1.5;
   letter-spacing: 0;
+}
+
+/* Editorial serif utility — chat title + section headers. */
+.font-serif {
+  font-family: var(--font-serif);
+  letter-spacing: -0.01em;
+  font-weight: 400;
 }
 
 #root {
@@ -260,7 +297,11 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
 }
 .card-nav:hover::after { opacity: 0.6; transform: translateX(0); }
 
-/* ── Editorial backgrounds — neutralized (no decorative gradients) ── */
+/* ── Editorial backgrounds — neutralized (no decorative gradients) ──
+ * Exception: HomeView hero ships two ambient radial gradients (brand-500
+ * top-right + brand-400 bottom-left) inline. These are the single
+ * sanctioned decorative element on the homepage; everywhere else stays
+ * neutral. If you reach for a gradient elsewhere, push back first. */
 .bg-hero-pattern,
 .bg-grid-subtle,
 .bg-mesh-gradient,
@@ -268,10 +309,55 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
   background: var(--color-canvas);
 }
 
+/* ── Chat canvas mesh — Claude-aligned: near-flat off-white. The two
+ * whisper radial stops keep the canvas from reading as a sterile pure
+ * sheet, but the net read is calm and flat, the way Claude's chat reads.
+ * Stops were dialled back further so the page does not compete with the
+ * composer's hairline border. */
+.chat-canvas-mesh {
+  background-color: var(--color-canvas);
+  background-image:
+    radial-gradient(at 18% 0%, rgba(247, 240, 255, 0.22) 0px, transparent 55%),
+    radial-gradient(at 82% 100%, rgba(243, 238, 229, 0.14) 0px, transparent 60%);
+}
+
 /* ── Skeleton ── */
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+
+/* 21st.dev / Aceternity spotlight beam — fades + drifts in on mount */
+@keyframes spotlight {
+  0%   { opacity: 0; transform: translate(-72%, -62%) scale(0.5); }
+  100% { opacity: 1; transform: translate(-50%, -40%) scale(1); }
+}
+.animate-spotlight { animation: spotlight 2.4s ease 0.4s 1 forwards; }
+
+/* Gradient text shimmer — a soft lavender light sweeps across the headline */
+@keyframes text-shimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+.text-shimmer {
+  background: linear-gradient(100deg, #ffffff 36%, #C9ABFF 50%, #ffffff 64%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: text-shimmer 5.5s linear infinite;
+}
+/* dimmer variant for muted body copy */
+.text-shimmer-dim {
+  background: linear-gradient(100deg, rgba(255,255,255,0.52) 40%, rgba(255,255,255,0.95) 50%, rgba(255,255,255,0.52) 60%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: text-shimmer 5.5s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .text-shimmer, .text-shimmer-dim { animation: none; }
 }
 .skeleton {
   background: linear-gradient(90deg, var(--color-paper-50) 0%, var(--color-canvas-border) 50%, var(--color-paper-50) 100%);
@@ -282,6 +368,21 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
 .skeleton-text  { height: 12px; border-radius: 4px; }
 .skeleton-title { height: 18px; width: 60%; border-radius: 6px; }
 .skeleton-card  { border-radius: 12px; min-height: 80px; }
+
+/* Cool, neutral shimmer for Knowledge Hub skeletons — a soft highlight sweeps
+   across translucent ink, so the load reads as alive rather than a flat block
+   of grey. No warm paper tint. */
+.skeleton-cool {
+  background: linear-gradient(90deg,
+    rgb(15 8 30 / 0.045) 0%,
+    rgb(15 8 30 / 0.10) 50%,
+    rgb(15 8 30 / 0.045) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-cool { animation: none; background: rgb(15 8 30 / 0.07); }
+}
 
 /* ── AI thinking dots — three brand-400 dots, 900ms stagger ── */
 @keyframes ai-pulse {
@@ -339,13 +440,27 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
   text-decoration: none;
 }
 
-/* ── Editorial AI border (replaces ai-border decorative spinner) ── */
+/* ── Editorial AI border — Claude-aligned composer.
+ * 20px radius matches Claude's empty-state composer shape. Flat at
+ * rest (no shadow); the canvas-border hairline does all the work. */
 .ai-border {
   position: relative;
   background: var(--color-canvas-elevated);
-  border: 1px solid var(--color-brand-200);
-  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-canvas-border);
+  border-radius: 1.25rem; /* 20px — Claude's actual composer radius */
   isolation: isolate;
+  box-shadow: none;
+  transition: border-color 100ms ease-out;
+}
+.ai-border:has(textarea:focus) {
+  /* Claude-style focus: border tone only. No ring, no glow, no shadow
+   * change. The border darkens by one step (brand-200 → brand-300) and
+   * that's the entire focus signal — calm, editorial, in-flow.
+   * Uses :has(textarea:focus) — NOT :focus-within — so clicking the
+   * +/mode-toggle buttons inside the composer doesn't shift the border
+   * tone. Active state reflects typing, not internal button focus
+   * (those buttons get their own focus-visible:ring-2). */
+  border-color: var(--color-brand-300);
 }
 .ai-border::before,
 .ai-border::after,
@@ -379,23 +494,55 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
   mix-blend-mode: overlay;
 }
 
-/* ── Focus ring (Editorial: 4px brand-600 @ 24% alpha) ── */
+/* ── Focus ring (Editorial: 4px brand-600 @ 24% alpha) ──
+   Applies to buttons only. Inputs/textareas/selects show focus via
+   border-color change at the component level (no ring/glow). */
 .focus-ring:focus-visible,
 button:focus-visible,
-[role="button"]:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
+[role="button"]:focus-visible {
   outline: none;
   box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24);
   border-radius: var(--radius-md);
 }
 
-/* Opt-out: suppress the focus ring on inputs/textareas tagged .no-focus-ring */
+/* Opt-out: suppress the global focus ring on anything tagged .no-focus-ring
+   (e.g. full-bleed list rows that show focus via a background tint instead). */
 input.no-focus-ring:focus-visible,
 textarea.no-focus-ring:focus-visible,
-select.no-focus-ring:focus-visible {
+select.no-focus-ring:focus-visible,
+button.no-focus-ring:focus-visible,
+button.no-focus-ring:focus,
+[role="button"].no-focus-ring:focus-visible,
+[role="button"].no-focus-ring:focus,
+.no-focus-ring:focus-visible {
   box-shadow: none;
+  outline: none;
+}
+
+/* Reports: focus shows the border only — no ring/glow box-shadow. Kills both
+   the global focus-visible ring and any Tailwind focus:ring on report inputs.
+   Higher specificity than both, so the border (focus:border-*) stays. */
+.reports-focus-noring input:focus,
+.reports-focus-noring input:focus-visible,
+.reports-focus-noring textarea:focus,
+.reports-focus-noring textarea:focus-visible,
+.reports-focus-noring select:focus,
+.reports-focus-noring select:focus-visible {
+  box-shadow: none;
+}
+
+/* Knowledge Hub (+ its data-picker modal): no focus ring anywhere inside
+   (client request). Tag the page root and the picker dialog with
+   .kh-no-focus-ring — the dialog is portal-rendered to <body>, so it carries
+   the class itself rather than inheriting it from the page tree.
+   Blanket-kills every focus box-shadow — the global :focus-visible ring AND
+   any Tailwind focus:ring-* utility (rename/title/search inputs) — for all
+   focusable descendants. !important so it beats the global rule and the ring
+   utilities. Selection affordances use border / background, not box-shadow,
+   so they are untouched. */
+.kh-no-focus-ring :is(a, button, [role="button"], input, textarea, select, [tabindex]):is(:focus, :focus-visible) {
+  box-shadow: none !important;
+  outline: none !important;
 }
 
 /* ── Reduced motion ── */
@@ -470,10 +617,134 @@ select.no-focus-ring:focus-visible {
   background: #f3f4f6;
 }
 
+/* Table preview scroll — a thin, always-visible classic scrollbar so a wide
+   spreadsheet reads as scrollable from the first render (no macOS overlay that
+   only pops up on hover, and no fade obscuring the right-hand columns). */
+.kh-table-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-canvas-border) transparent;
+}
+.kh-table-scroll::-webkit-scrollbar {
+  -webkit-appearance: none;
+  width: 9px;
+  height: 9px;
+}
+.kh-table-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.kh-table-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-canvas-border);
+  border-radius: 9999px;
+}
+.kh-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-300);
+}
+.kh-table-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Remove focus outline from Recharts chart containers */
 .recharts-wrapper,
 .recharts-wrapper *,
 .recharts-surface {
   outline: none !important;
   box-shadow: none !important;
+}
+
+/* Composer attachment-chip row — horizontal scroll without the scrollbar
+   itself; a right-edge fade mask signals there's more off-screen rather than
+   leaving a hard clipped edge. Applied to both empty-state and in-thread
+   composers so attachment overflow reads as deliberate. */
+.composer-chips-row {
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+}
+.composer-chips-row::-webkit-scrollbar {
+  display: none;
+}
+
+/* react-grid-layout — match Editorial GRC styling */
+.react-grid-item.react-grid-placeholder {
+  background: var(--color-brand-200) !important;
+  opacity: 0.4 !important;
+  border-radius: 16px !important;
+  transition-duration: 100ms !important;
+}
+.react-grid-item > .react-resizable-handle {
+  width: 18px;
+  height: 18px;
+  bottom: 4px;
+  right: 4px;
+  background-image: none;
+  cursor: se-resize;
+}
+.react-grid-item > .react-resizable-handle::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid #94A3B8;
+  border-bottom: 2px solid #94A3B8;
+  border-radius: 0 0 2px 0;
+}
+.react-grid-item:hover > .react-resizable-handle::after {
+  border-color: var(--color-brand-600);
+}
+.react-grid-item.react-draggable-dragging {
+  z-index: 50;
+  cursor: grabbing !important;
+}
+.react-grid-item.resizing {
+  z-index: 50;
+  opacity: 0.95;
+}
+
+/* Print stylesheet — hide chrome (sidebar, headers, drawers, modals) and
+ * let the `.report-printable` surface print full-bleed in black ink. */
+@media print {
+  /* Hide everything that isn't the report being printed. */
+  header,
+  aside,
+  nav,
+  [role="dialog"],
+  [role="alertdialog"],
+  [data-drawer],
+  [data-sidebar],
+  [data-modal-overlay] {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  /* Force the printable report region to full-bleed black text. */
+  .report-printable,
+  .report-printable * {
+    color: #000000 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  .report-printable {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  /* Avoid awkward breaks inside cards / list items. */
+  .report-printable section,
+  .report-printable article,
+  .report-printable li {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* Strip interactive affordances. */
+  button,
+  .no-print {
+    display: none !important;
+  }
 }

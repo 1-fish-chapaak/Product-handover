@@ -21,7 +21,7 @@ function TestPill({ status }: { status: string }) {
     ineffective: { bg: 'bg-risk-50', text: 'text-risk-700', label: 'Ineffective' },
   };
   const s = map[status] || map['not-started'];
-  return <span title={s.label} className={`inline-flex items-center ${s.bg} ${s.text} px-2 py-0.5 rounded text-[12px] font-bold whitespace-nowrap`}>{s.label}</span>;
+  return <span title={s.label} className={`inline-flex items-center ${s.bg} ${s.text} px-2 py-0.5 rounded text-[0.75rem] font-bold whitespace-nowrap`}>{s.label}</span>;
 }
 
 export default function AuditExecution({ onAskAboutControl: _unused }: Props) {
@@ -51,7 +51,7 @@ export default function AuditExecution({ onAskAboutControl: _unused }: Props) {
             <button
               key={e.id}
               onClick={() => setSelectedEngId(e.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[13px] font-medium transition-all cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[0.8125rem] font-medium transition-all cursor-pointer ${
                 selectedEngId === e.id
                   ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary/20'
                   : 'border-border-light bg-white text-text-secondary hover:border-primary/20 active:scale-[0.98]'
@@ -69,11 +69,11 @@ export default function AuditExecution({ onAskAboutControl: _unused }: Props) {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-base font-semibold text-text">{eng.name}</h2>
-              <p className="text-[12px] text-text-muted mt-0.5">
+              <p className="text-[0.75rem] text-text-muted mt-0.5">
                 {eng.start} — {eng.end} · Owner: {eng.owner}
               </p>
             </div>
-            <button onClick={() => addToast({ message: 'Running control tests for selected engagement...', type: 'success' })} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer">
+            <button onClick={() => addToast({ message: 'Running control tests for selected engagement...', type: 'success' })} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
               <Play size={14} />
               Run Tests
             </button>
@@ -82,23 +82,23 @@ export default function AuditExecution({ onAskAboutControl: _unused }: Props) {
           <div className="grid grid-cols-5 gap-4">
             <div className="bg-surface-2 rounded-lg p-3 text-center hover:bg-surface-2/80 transition-colors duration-200">
               <div className="text-xl font-bold text-text">{eng.controls}</div>
-              <div className="text-[12px] text-text-muted">Total Controls</div>
+              <div className="text-[0.75rem] text-text-muted">Total Controls</div>
             </div>
             <div className="bg-surface-2 rounded-lg p-3 text-center hover:bg-surface-2/80 transition-colors duration-200">
               <div className="text-xl font-bold text-info">{eng.tested}</div>
-              <div className="text-[12px] text-text-muted">Tested</div>
+              <div className="text-[0.75rem] text-text-muted">Tested</div>
             </div>
             <div className="bg-surface-2 rounded-lg p-3 text-center hover:bg-surface-2/80 transition-colors duration-200">
               <div className="text-xl font-bold text-success">{eng.effective}</div>
-              <div className="text-[12px] text-text-muted">Effective</div>
+              <div className="text-[0.75rem] text-text-muted">Effective</div>
             </div>
             <div className="bg-surface-2 rounded-lg p-3 text-center hover:bg-surface-2/80 transition-colors duration-200">
               <div className="text-xl font-bold text-danger">{eng.deficiencies}</div>
-              <div className="text-[12px] text-text-muted">Deficiencies</div>
+              <div className="text-[0.75rem] text-text-muted">Deficiencies</div>
             </div>
             <div className="bg-surface-2 rounded-lg p-3 text-center hover:bg-surface-2/80 transition-colors duration-200">
               <div className="text-xl font-bold text-primary">{progress}%</div>
-              <div className="text-[12px] text-text-muted">Progress</div>
+              <div className="text-[0.75rem] text-text-muted">Progress</div>
               <div className="mt-1.5 h-1.5 bg-border-light rounded-full overflow-hidden">
                 <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${progress}%` }} />
               </div>
@@ -110,7 +110,7 @@ export default function AuditExecution({ onAskAboutControl: _unused }: Props) {
         <div className="flex gap-0 border-b border-border mb-4">
           <button
             onClick={() => setActiveTab('controls')}
-            className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
+            className={`px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors ${
               activeTab === 'controls'
                 ? 'border-primary text-primary'
                 : 'border-transparent text-text-muted hover:text-text-secondary'
@@ -119,12 +119,12 @@ export default function AuditExecution({ onAskAboutControl: _unused }: Props) {
             <span className="flex items-center gap-2">
               <ClipboardCheck size={14} />
               Control Testing
-              <span className={`text-[12px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'controls' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{controls.length}</span>
+              <span className={`text-[0.75rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'controls' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{controls.length}</span>
             </span>
           </button>
           <button
             onClick={() => setActiveTab('deficiencies')}
-            className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
+            className={`px-4 py-2.5 text-[0.8125rem] font-medium border-b-2 transition-colors ${
               activeTab === 'deficiencies'
                 ? 'border-primary text-primary'
                 : 'border-transparent text-text-muted hover:text-text-secondary'
@@ -133,7 +133,7 @@ export default function AuditExecution({ onAskAboutControl: _unused }: Props) {
             <span className="flex items-center gap-2">
               <AlertTriangle size={14} />
               Deficiencies
-              <span className={`text-[12px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'deficiencies' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{DEFICIENCIES.length}</span>
+              <span className={`text-[0.75rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'deficiencies' ? 'bg-primary/10 text-primary' : 'bg-paper-50 text-ink-500'}`}>{DEFICIENCIES.length}</span>
             </span>
           </button>
         </div>
@@ -148,18 +148,18 @@ export default function AuditExecution({ onAskAboutControl: _unused }: Props) {
             pageSize={10}
             columns={[
               { key: 'racm', label: 'RACM', width: '120px', render: (item) => (
-                <span className="text-text-muted text-[12px]">{String(item.racm)}</span>
+                <span className="text-text-muted text-[0.75rem]">{String(item.racm)}</span>
               )},
               { key: 'control', label: 'Control', render: (item) => (
                 <span className="text-text font-medium">{String(item.control)}</span>
               )},
               { key: 'isKey', label: 'Key', align: 'center', width: '50px', render: (item) => (
-                item.isKey ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mitigated-50 text-mitigated-700 text-[12px] font-bold">K</span> : null
+                item.isKey ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-mitigated-50 text-mitigated-700 text-[0.75rem] font-bold">K</span> : null
               )},
               { key: 'assignee', label: 'Assignee', width: '110px', render: (item) => (
                 <div className="flex items-center gap-1.5">
                   <Avatar name={String(item.assignee)} size={20} />
-                  <span className="text-text-secondary text-[12px]">{String(item.assignee).split(' ')[0]}</span>
+                  <span className="text-text-secondary text-[0.75rem]">{String(item.assignee).split(' ')[0]}</span>
                 </div>
               )},
               { key: 'wt', label: 'WT', align: 'center', width: '70px', render: (item) => <span title="Walkthrough Testing"><TestPill status={String(item.wt)} /></span> },
@@ -186,7 +186,7 @@ export default function AuditExecution({ onAskAboutControl: _unused }: Props) {
             paginated={false}
             columns={[
               { key: 'id', label: 'ID', width: '80px', render: (item) => (
-                <span className="font-mono text-text-muted text-[12px]">{String(item.id)}</span>
+                <span className="font-mono text-text-muted text-[0.75rem]">{String(item.id)}</span>
               )},
               { key: 'finding', label: 'Finding', render: (item) => (
                 <div className="text-text font-medium max-w-sm line-clamp-2">{String(item.finding)}</div>
@@ -195,7 +195,7 @@ export default function AuditExecution({ onAskAboutControl: _unused }: Props) {
               { key: 'assignee', label: 'Assignee', width: '120px', render: (item) => (
                 <div className="flex items-center gap-1.5">
                   <Avatar name={String(item.assignee)} size={20} />
-                  <span className="text-text-secondary text-[12px]">{String(item.assignee)}</span>
+                  <span className="text-text-secondary text-[0.75rem]">{String(item.assignee)}</span>
                 </div>
               )},
               { key: 'status', label: 'Status', width: '100px', render: (item) => <StatusBadge status={String(item.status)} /> },

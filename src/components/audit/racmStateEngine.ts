@@ -4,23 +4,18 @@
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
-export type RacmStatus = 'Draft' | 'Working' | 'Active' | 'Locked';
+export type RacmStatus = 'Draft' | 'In Progress' | 'Active' | 'Locked' | 'Archived';
 
 export type RacmReadiness =
-  | 'Needs Setup'
-  | 'Needs Mapping'
-  | 'Needs Key Controls'
-  | 'Needs Workflow Setup'
-  | 'Needs Attributes'
-  | 'Ready to Validate'
+  | 'Mapping Incomplete'
+  | 'Workflow Missing'
+  | 'Configuration Pending'
   | 'Ready';
 
 export type RacmAction =
-  | 'Setup'
   | 'Map'
   | 'Continue Setup'
   | 'Configure'
-  | 'Validate'
   | 'View';
 
 export interface RacmChecks {
@@ -117,19 +112,15 @@ export function computeRacmStateFromRisks(
 
 function deriveStatus(checks: RacmChecks): RacmStatus {
   if (checks.isLocked) return 'Locked';
-  if (checks.isValidated) return 'Active';
-  if (checks.hasRisks) return 'Working';
+  if (checks.isValidated && checks.allRisksMapped) return 'Active';
+  if (checks.hasRisks) return 'In Progress';
   return 'Draft';
 }
 
 function deriveReadiness(checks: RacmChecks): RacmReadiness {
-  // Priority-based — first fail wins
-  if (!checks.hasRisks) return 'Needs Setup';
-  if (!checks.allRisksMapped) return 'Needs Mapping';
-  if (!checks.hasKeyControls) return 'Needs Key Controls';
-  if (!checks.allControlsHaveWorkflows) return 'Needs Workflow Setup';
-  if (!checks.allWorkflowsHaveAttributes) return 'Needs Attributes';
-  if (!checks.isValidated) return 'Ready to Validate';
+  if (!checks.hasRisks || !checks.allRisksMapped) return 'Mapping Incomplete';
+  if (!checks.allControlsHaveWorkflows) return 'Workflow Missing';
+  if (!checks.allWorkflowsHaveAttributes || !checks.hasKeyControls) return 'Configuration Pending';
   return 'Ready';
 }
 
@@ -137,12 +128,9 @@ function deriveAction(checks: RacmChecks): RacmAction {
   if (checks.isLocked) return 'View';
   const readiness = deriveReadiness(checks);
   const actionMap: Record<RacmReadiness, RacmAction> = {
-    'Needs Setup': 'Setup',
-    'Needs Mapping': 'Map',
-    'Needs Key Controls': 'Continue Setup',
-    'Needs Workflow Setup': 'Configure',
-    'Needs Attributes': 'Configure',
-    'Ready to Validate': 'Validate',
+    'Mapping Incomplete': 'Map',
+    'Workflow Missing': 'Configure',
+    'Configuration Pending': 'Continue Setup',
     'Ready': 'View',
   };
   return actionMap[readiness];
@@ -152,26 +140,22 @@ function deriveAction(checks: RacmChecks): RacmAction {
 
 export const RACM_STATUS_STYLES: Record<RacmStatus, string> = {
   Draft: 'bg-gray-100 text-gray-600',
-  Working: 'bg-blue-50 text-blue-700',
+  'In Progress': 'bg-blue-50 text-blue-700',
   Active: 'bg-emerald-50 text-emerald-700',
   Locked: 'bg-purple-50 text-purple-700',
+  Archived: 'bg-gray-50 text-gray-400',
 };
 
 export const RACM_READINESS_STYLES: Record<RacmReadiness, string> = {
-  'Needs Setup': 'bg-gray-100 text-gray-600',
-  'Needs Mapping': 'bg-amber-50 text-amber-700',
-  'Needs Key Controls': 'bg-amber-50 text-amber-600',
-  'Needs Workflow Setup': 'bg-amber-50 text-amber-600',
-  'Needs Attributes': 'bg-amber-50 text-amber-600',
-  'Ready to Validate': 'bg-blue-50 text-blue-600',
+  'Mapping Incomplete': 'bg-amber-50 text-amber-700',
+  'Workflow Missing': 'bg-amber-50 text-amber-600',
+  'Configuration Pending': 'bg-blue-50 text-blue-600',
   'Ready': 'bg-emerald-50 text-emerald-700',
 };
 
 export const RACM_ACTION_STYLES: Record<RacmAction, string> = {
-  Setup: 'bg-gray-100 text-gray-600 hover:bg-gray-200/70',
   Map: 'bg-primary/10 text-primary hover:bg-primary/20',
   'Continue Setup': 'bg-amber-50 text-amber-700 hover:bg-amber-100/70',
   Configure: 'bg-blue-50 text-blue-700 hover:bg-blue-100/70',
-  Validate: 'bg-primary text-white hover:bg-primary/90',
   View: 'bg-gray-100 text-gray-600 hover:bg-gray-200/70',
 };

@@ -7,7 +7,7 @@ import AIAssistantPanel, { type ChatMessage, type ContextChip, type InlineClarif
 import DataSourcePanel from './DataSourcePanel';
 import UploadDataModal from './UploadDataModal';
 import SaveWorkflowModal from './SaveWorkflowModal';
-import ClarificationPanel from './ClarificationPanel';
+import ConciergeClarificationStage from './ConciergeClarificationStage';
 import { SAMPLE_WORKFLOWS } from './sampleWorkflows';
 import { generateWorkflow, getClarifyQuestions, runWorkflow, seedAlignments } from './mockApi';
 import type {
@@ -21,6 +21,8 @@ import type {
   UploadedFile,
   WorkflowDraft,
 } from './types';
+import type { QueryClarificationData } from '../chat/QueryClarificationCard';
+import type { AttachmentSelection } from '../chat/DataPickerModal';
 
 interface Props {
   onBack: () => void;
@@ -93,7 +95,6 @@ export default function WorkflowBuilderJourney({ onBack, initialPrompt, onInitia
   const [clarifyPhase, setClarifyPhase] = useState<'initial' | 'validate' | null>(null);
   const [clarifyQuestions, setClarifyQuestions] = useState<ClarifyQuestion[]>([]);
   const [clarifyAnswers, setClarifyAnswers] = useState<ClarifyAnswers>({});
-  const [clarifyIndex, setClarifyIndex] = useState(0);
   const [focusedInput, setFocusedInput] = useState<InputSpec | null>(null);
   const [mapExpandedId, setMapExpandedId] = useState<string | null>(null);
   const [mapSeededFor, setMapSeededFor] = useState<string | null>(null);
@@ -192,7 +193,6 @@ export default function WorkflowBuilderJourney({ onBack, initialPrompt, onInitia
       const questions = getClarifyQuestions(draft);
       setClarifyQuestions(questions);
       setClarifyAnswers({});
-      setClarifyIndex(0);
       setClarifyPhase('initial');
       setClarifying(true);
       const intro =
@@ -255,45 +255,74 @@ export default function WorkflowBuilderJourney({ onBack, initialPrompt, onInitia
     [tolerance, pushAssistantAfterDelay],
   );
 
-  const handleClarifyAnswer = useCallback(
-    (questionId: string, answer: string) => {
-      pushUser(answer);
-      const nextAnswers = { ...clarifyAnswers, [questionId]: answer };
-      setClarifyAnswers(nextAnswers);
-      const nextIdx = clarifyIndex + 1;
-      if (nextIdx >= clarifyQuestions.length) {
-        if (clarifyPhase === 'validate') {
-          completeValidatePhase(nextAnswers);
-        } else {
-          finishClarifying(
-            'Got it — locked those in. Drop the required data files into the upload window so I can map them.',
-          );
-        }
-      } else {
-        setClarifyIndex(nextIdx);
-      }
+  // ── Clarification card (shared QueryClarificationCard) ──
+  // Both Concierge clarify moments — the build-time full-screen stage and the
+  // validate-phase docked card — now use the same QueryClarificationCard as the
+  // chat Q&A / in-chat builder / edit-in-chat flows. The card navigates its own
+  // Back/Next and collects every answer, then commits once on Done. The
+  // builder's existing per-question state (clarifyAnswers, keyed by question id)
+  // is adapted to/from the card's index-keyed shape at the boundary.
+  const clarifyAnswersRef = useRef(clarifyAnswers);
+  clarifyAnswersRef.current = clarifyAnswers;
+
+  const clarifyCardData: QueryClarificationData = useMemo(() => {
+    const answers: Record<number, string[]> = {};
+    clarifyQuestions.forEach((q, i) => {
+      answers[i] = clarifyAnswers[q.id] ? [clarifyAnswers[q.id]] : [];
+    });
+    return {
+      intro: '',
+      questions: clarifyQuestions.map((q) => ({ question: q.title, options: q.options })),
+      answers,
+      status: 'open',
+    };
+  }, [clarifyQuestions, clarifyAnswers]);
+
+  const setClarifyCardAnswer = useCallback(
+    (qi: number, answers: string[]) => {
+      const q = clarifyQuestions[qi];
+      if (!q) return;
+      setClarifyAnswers((prev) => ({ ...prev, [q.id]: answers[0] ?? '' }));
     },
-    [clarifyIndex, clarifyQuestions.length, clarifyAnswers, clarifyPhase, pushUser, finishClarifying, completeValidatePhase],
+    [clarifyQuestions],
   );
 
-  const handleClarifySkip = useCallback(
-    (questionId: string) => {
-      const nextAnswers = { ...clarifyAnswers, [questionId]: '' };
-      setClarifyAnswers(nextAnswers);
-      const nextIdx = clarifyIndex + 1;
-      if (nextIdx >= clarifyQuestions.length) {
-        if (clarifyPhase === 'validate') {
-          completeValidatePhase(nextAnswers);
-        } else {
-          finishClarifying(
-            "OK, proceeding with defaults where you skipped. Drop the required data files into the upload window so I can map them.",
-          );
-        }
-      } else {
-        setClarifyIndex(nextIdx);
-      }
-    },
-    [clarifyIndex, clarifyQuestions.length, clarifyAnswers, clarifyPhase, finishClarifying, completeValidatePhase],
+  const submitClarifyCard = useCallback(() => {
+    const finalAnswers = clarifyAnswersRef.current;
+    if (clarifyPhase === 'validate') {
+      completeValidatePhase(finalAnswers);
+    } else {
+      finishClarifying(
+        'Got it — locked those in. Drop the required data files into the upload window so I can map them.',
+      );
+    }
+  }, [clarifyPhase, completeValidatePhase, finishClarifying]);
+
+  const cancelClarifyCard = useCallback(() => {
+    // Corner ✕ — exit the clarify. Validate dismisses back to Review; the
+    // initial build clarify returns to the AI Concierge.
+    if (clarifyPhase === 'validate') {
+      setClarifying(false);
+      setClarifyPhase(null);
+    } else {
+      onBack();
+    }
+  }, [clarifyPhase, onBack]);
+
+  const clarifyCardProps: InlineClarifyProps = useMemo(
+    () => ({
+      data: clarifyCardData,
+      onSetAnswer: setClarifyCardAnswer,
+      onSubmit: submitClarifyCard,
+      onCancel: cancelClarifyCard,
+      // "+" opens the builder's own Upload Data window (its data-entry surface).
+      onAttach: () => setUploadModalOpen(true),
+      attachedSources: [] as AttachmentSelection[],
+      files: [] as File[],
+      onRemoveSource: () => {},
+      onRemoveFile: () => {},
+    }),
+    [clarifyCardData, setClarifyCardAnswer, submitClarifyCard, cancelClarifyCard],
   );
 
   const handleGenerate = useCallback(() => {
@@ -373,7 +402,6 @@ export default function WorkflowBuilderJourney({ onBack, initialPrompt, onInitia
     pushUser(STEP_META[4].action);
     setClarifyQuestions(VALIDATE_QUESTIONS);
     setClarifyAnswers({});
-    setClarifyIndex(0);
     setClarifyPhase('validate');
     setClarifying(true);
     pushAssistantAfterDelay(
@@ -438,19 +466,10 @@ export default function WorkflowBuilderJourney({ onBack, initialPrompt, onInitia
   // primary action is unused. Kept as undefined to preserve the AIAssistantPanel prop shape.
   const primaryAction: PrimaryAction | undefined = undefined;
 
-  const inlineClarifyProps: InlineClarifyProps | undefined = useMemo(() => {
-    if (!clarifying || clarifyPhase !== 'validate') return undefined;
-    const question = clarifyQuestions[clarifyIndex];
-    if (!question) return undefined;
-    return {
-      question,
-      index: clarifyIndex,
-      total: clarifyQuestions.length,
-      stepLabel: `Step ${step} · Validate Workflow`,
-      onAnswer: handleClarifyAnswer,
-      onSkip: handleClarifySkip,
-    };
-  }, [clarifying, clarifyPhase, clarifyQuestions, clarifyIndex, step, handleClarifyAnswer, handleClarifySkip]);
+  // Validate-phase clarify docks the shared card in the assistant panel's
+  // composer slot; the build-time (initial) clarify uses the full-screen stage.
+  const inlineClarifyProps: InlineClarifyProps | undefined =
+    clarifying && clarifyPhase === 'validate' ? clarifyCardProps : undefined;
 
   // Step 3 starts with all sections collapsed; the user expands via Edit.
   useEffect(() => {
@@ -838,7 +857,7 @@ export default function WorkflowBuilderJourney({ onBack, initialPrompt, onInitia
             <button
               type="button"
               onClick={onBack}
-              className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-600 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-500 hover:text-brand-600 transition-colors cursor-pointer"
             >
               <ArrowLeft size={14} />
               Back to AI Concierge
@@ -942,14 +961,7 @@ export default function WorkflowBuilderJourney({ onBack, initialPrompt, onInitia
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                 className="absolute inset-0 z-10 bg-canvas"
               >
-                <ClarificationPanel
-                  questions={clarifyQuestions}
-                  index={clarifyIndex}
-                  answers={clarifyAnswers}
-                  onAnswer={handleClarifyAnswer}
-                  onSkip={handleClarifySkip}
-                  onBack={onBack}
-                />
+                <ConciergeClarificationStage {...clarifyCardProps} onBack={onBack} />
               </motion.div>
             )}
           </AnimatePresence>

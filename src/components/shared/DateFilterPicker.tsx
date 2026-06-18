@@ -1,4 +1,6 @@
+import DatePicker from './DatePicker';
 import { useEffect, useState } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { Calendar, ChevronDown } from 'lucide-react';
 
 // ─── Date filter model — preset windows + custom range ───────────────────────
@@ -71,44 +73,72 @@ interface DateFilterPickerProps {
   onApply: (filter: DateFilter) => void;
   /** Anchor "today" used for date input ceiling. Lets callers control mock vs real time. */
   today: Date;
+  /** Trigger corner radius (Tailwind class). Defaults to the shared `rounded-md`;
+   *  callers can override (e.g. Knowledge Hub uses `rounded-lg` to match its toolbar). */
+  triggerRounded?: string;
+  /** Trigger height (Tailwind class). Defaults to `h-9`; callers can override
+   *  (e.g. Knowledge Hub uses `h-10` to match its toolbar). */
+  triggerHeight?: string;
+  /** Popover width (Tailwind class). Defaults to `w-[280px]`. */
+  panelWidth?: string;
+  /** Stack the custom From/To inputs vertically instead of 2-up — needed when
+   *  the popover is narrow enough that two date fields won't fit side by side. */
+  rangeStacked?: boolean;
 }
 
-export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, today }: DateFilterPickerProps) {
+export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, today, triggerRounded = 'rounded-md', triggerHeight = 'h-9', panelWidth = 'w-[280px]', rangeStacked = false }: DateFilterPickerProps) {
   const active = isDateFilterActive(filter);
   const label = dateFilterLabel(filter);
   const todayIso = today.toISOString().slice(0, 10);
 
   const [from, setFrom] = useState<string>(filter.kind === 'custom' ? filter.from : '');
-  const [to, setTo] = useState<string>(filter.kind === 'custom' ? filter.to : todayIso);
+  const [to, setTo] = useState<string>(filter.kind === 'custom' ? filter.to : '');
 
   useEffect(() => {
     if (open) {
       setFrom(filter.kind === 'custom' ? filter.from : '');
-      setTo(filter.kind === 'custom' ? filter.to : todayIso);
+      setTo(filter.kind === 'custom' ? filter.to : '');
     }
-  }, [open, filter, todayIso]);
+  }, [open, filter]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onEsc);
+    return () => document.removeEventListener('keydown', onEsc);
+  }, [open, onClose]);
 
   const canApplyCustom = from !== '' && to !== '' && new Date(from) <= new Date(to);
+  const reduce = useReducedMotion();
 
   return (
     <div className="relative">
       <button
         onClick={onToggle}
-        className={`flex items-center gap-1.5 px-3 h-9 rounded-md border text-[12px] font-medium transition-colors cursor-pointer ${
+        className={`flex items-center gap-2 px-3 ${triggerHeight} ${triggerRounded} border text-[0.8125rem] font-medium transition-colors cursor-pointer ${
           active
             ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
-            : 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-brand-200'
+            : open
+              ? 'border-brand-600 bg-canvas text-brand-700'
+              : 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-brand-200'
         }`}
       >
-        <Calendar size={12} />
+        <Calendar size={14} />
         {label}
-        <ChevronDown size={12} className={`text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={14} className={`text-ink-400 transition-transform ${open ? 'rotate-180 text-brand-600' : ''}`} />
       </button>
 
+      <AnimatePresence>
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={onClose} />
-          <div className="absolute right-0 top-full mt-1 w-[280px] z-20 bg-canvas-elevated border border-canvas-border rounded-lg py-2 shadow-lg">
+          <motion.div
+            initial={reduce ? false : { opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: reduce ? 0 : 0.14, ease: [0.2, 0, 0, 1] }}
+            className={`absolute right-0 top-full mt-1 origin-top-right ${panelWidth} z-20 bg-canvas-elevated border border-canvas-border rounded-lg py-2 shadow-lg`}
+          >
             {/* Preset shortcuts */}
             <div className="px-1.5 py-1">
               {DATE_PRESETS.map(p => {
@@ -117,12 +147,12 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
                   <button
                     key={p.id}
                     onClick={() => onApply({ kind: 'preset', id: p.id })}
-                    className={`w-full flex items-center justify-between text-left px-2.5 py-1.5 rounded-md text-[12.5px] cursor-pointer transition-colors ${
-                      isCurrent ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-paper-50'
+                    className={`w-full flex items-center justify-between text-left px-2.5 py-1.5 rounded-md text-[0.75rem] cursor-pointer transition-colors ${
+                      isCurrent ? 'text-brand-700 font-semibold bg-brand-50' : 'text-ink-700 hover:bg-canvas'
                     }`}
                   >
                     <span>{p.label}</span>
-                    {isCurrent && <span className="text-[10px] font-semibold uppercase tracking-wide">Active</span>}
+                    {isCurrent && <span className="text-[0.625rem] font-semibold uppercase tracking-wide">Active</span>}
                   </button>
                 );
               })}
@@ -131,41 +161,40 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
             {/* Divider + custom range */}
             <div className="border-t border-canvas-border my-1" />
             <div className="px-3 pt-2 pb-1">
-              <div className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-500 mb-2">Custom range</div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="text-[0.75rem] font-semibold uppercase tracking-wide text-ink-500 mb-2">Custom range</div>
+              <div className={`grid gap-2 ${rangeStacked ? 'grid-cols-1' : 'grid-cols-2'}`}>
                 <div>
-                  <label className="block text-[10.5px] font-medium text-ink-500 mb-1">From</label>
-                  <input
-                    type="date"
-                    value={from}
+                  <label className="block text-[0.75rem] font-medium text-ink-500 mb-1">From</label>
+                  <DatePicker value={from}
                     max={to || todayIso}
+                    today={today}
                     onChange={(e) => setFrom(e.target.value)}
-                    className="w-full h-8 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[12px] text-ink-900 focus:outline-none focus:border-brand-600 transition-colors"
+                    className="w-full h-8 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-900 focus:outline-none focus:border-brand-600 transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10.5px] font-medium text-ink-500 mb-1">To</label>
-                  <input
-                    type="date"
-                    value={to}
+                  <label className="block text-[0.75rem] font-medium text-ink-500 mb-1">To</label>
+                  <DatePicker value={to}
                     min={from || undefined}
                     max={todayIso}
+                    today={today}
                     onChange={(e) => setTo(e.target.value)}
-                    className="w-full h-8 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[12px] text-ink-900 focus:outline-none focus:border-brand-600 transition-colors"
+                    className="w-full h-8 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-900 focus:outline-none focus:border-brand-600 transition-colors"
                   />
                 </div>
               </div>
               <button
                 onClick={() => canApplyCustom && onApply({ kind: 'custom', from, to })}
                 disabled={!canApplyCustom}
-                className="w-full mt-3 h-8 rounded-md bg-brand-600 hover:bg-brand-500 disabled:bg-paper-200 disabled:text-ink-400 disabled:cursor-not-allowed text-white text-[12px] font-semibold transition-colors cursor-pointer"
+                className="w-full mt-3 h-8 rounded-md bg-brand-600 hover:bg-brand-500 disabled:bg-paper-200 disabled:text-ink-400 disabled:cursor-not-allowed text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
               >
                 Apply custom range
               </button>
             </div>
-          </div>
+          </motion.div>
         </>
       )}
+      </AnimatePresence>
     </div>
   );
 }

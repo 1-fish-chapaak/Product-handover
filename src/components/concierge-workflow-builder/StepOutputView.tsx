@@ -9,6 +9,7 @@ import {
   Check,
 } from 'lucide-react';
 import type { WorkflowDraft, RunResult } from './types';
+import Button from '../ui/Button';
 
 interface Props {
   workflow: WorkflowDraft;
@@ -16,14 +17,24 @@ interface Props {
   running: boolean;
   onSave?: () => void;
   saved?: boolean;
+  saveLabel?: string;
+  savedLabel?: string;
 }
 
-export default function StepOutputView({ workflow, result, running, onSave, saved }: Props) {
+export default function StepOutputView({
+  workflow,
+  result,
+  running,
+  onSave,
+  saved,
+  saveLabel = 'Save Workflow',
+  savedLabel = 'Workflow saved',
+}: Props) {
   if (running && !result) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-canvas-border bg-canvas-elevated px-3 py-2.5">
         <Loader2 size={14} className="animate-spin text-brand-600 shrink-0" />
-        <div className="text-[12.5px] text-ink-700">
+        <div className="text-[13px] text-ink-700">
           Running <b className="text-brand-700">{workflow.name}</b>…
         </div>
       </div>
@@ -105,9 +116,9 @@ export default function StepOutputView({ workflow, result, running, onSave, save
     >
       {/* AI Summary */}
       <section className="rounded-xl bg-brand-50/50 border border-brand-100 p-4">
-        <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-brand-700 bg-white/80 border border-brand-100 rounded-full px-2 py-1 mb-2">
+        <div className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-brand-700 bg-canvas-elevated/80 border border-brand-100 rounded-full px-2 py-1 mb-2 uppercase tracking-wide">
           <Sparkles size={11} />
-          AI SUMMARY
+          AI Summary
         </div>
         <p className="text-[13px] text-ink-700 leading-relaxed">
           Scanned <b className="text-brand-700">12,450 invoices</b> against 6-month history.
@@ -122,7 +133,7 @@ export default function StepOutputView({ workflow, result, running, onSave, save
 
       {/* Key Observations */}
       <div>
-        <h2 className="text-[14px] font-semibold text-ink-900 mb-2">
+        <h2 className="text-[15px] font-semibold text-ink-900 mb-2">
           Key Observations &amp; Insights
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -141,9 +152,9 @@ export default function StepOutputView({ workflow, result, running, onSave, save
                   </div>
                   <div className="text-[13px] font-semibold text-ink-800">{o.title}</div>
                 </div>
-                <p className="text-[12px] text-ink-600 leading-relaxed mb-2">{o.body}</p>
+                <p className="text-[13px] text-ink-600 leading-relaxed mb-2">{o.body}</p>
                 <span
-                  className={`inline-flex items-center text-[11px] font-semibold rounded-md px-2 py-0.5 ${o.priorityColor}`}
+                  className={`inline-flex items-center text-[12px] font-semibold rounded-md px-2 py-0.5 ${o.priorityColor}`}
                 >
                   {o.priority}
                 </span>
@@ -155,15 +166,15 @@ export default function StepOutputView({ workflow, result, running, onSave, save
 
       {onSave && (
         <div className="flex items-center justify-start">
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             onClick={onSave}
             disabled={saved}
-            className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-semibold text-white bg-gradient-to-br from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 shadow-[0_8px_16px_-10px_rgba(106,18,205,0.5)] disabled:opacity-60 disabled:cursor-not-allowed transition-all cursor-pointer"
+            leadingIcon={saved ? <Check size={13} /> : <Save size={13} />}
           >
-            {saved ? <Check size={13} /> : <Save size={13} />}
-            {saved ? 'Workflow saved' : 'Save Workflow'}
-          </button>
+            {saved ? savedLabel : saveLabel}
+          </Button>
         </div>
       )}
     </motion.div>

@@ -77,15 +77,15 @@ export function CustomDropdown({
   // Size variants
   const sizeClasses = {
     sm: {
-      button: "px-2.5 py-2 text-[11px]",
+      button: "px-2.5 py-2 text-[0.6875rem]",
       icon: "size-[11px]",
-      dropdown: "text-[11px]",
+      dropdown: "text-[0.6875rem]",
       checkIcon: "size-[13px]"
     },
     md: {
-      button: "px-3 py-2 text-[12px]",
+      button: "px-3 py-2 text-[0.75rem]",
       icon: "size-[13px]",
-      dropdown: "text-[12px]",
+      dropdown: "text-[0.75rem]",
       checkIcon: "size-[14px]"
     }
   };
@@ -118,7 +118,7 @@ export function CustomDropdown({
               groups.map((group, groupIndex) => (
                 <div key={groupIndex}>
                   {group.label && (
-                    <div className="px-3 py-2 text-[10px] font-semibold text-white/50 uppercase tracking-wider border-b border-white/5">
+                    <div className="px-3 py-2 text-[0.625rem] font-semibold text-white/50 uppercase tracking-wider border-b border-white/5">
                       {group.label}
                     </div>
                   )}

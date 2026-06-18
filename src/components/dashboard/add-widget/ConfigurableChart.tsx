@@ -461,7 +461,7 @@ function TrendTooltip({ active, payload, label, yAxis }: any) {
   if (!active || !payload?.length) return null;
   const fmt = makeYFmt(yAxis);
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-[12px]">
+    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-[0.75rem]">
       <p className="font-semibold text-[#26064a] mb-2">
         {label}
       </p>
@@ -484,7 +484,7 @@ function TrendTooltip({ active, payload, label, yAxis }: any) {
 function BarTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-[12px]">
+    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-[0.75rem]">
       <p className="font-semibold text-[#26064a] mb-2">
         {label}
       </p>
@@ -507,7 +507,7 @@ function BarTooltip({ active, payload, label }: any) {
 function PieTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-[12px]">
+    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-[0.75rem]">
       <p className="font-semibold text-[#26064a]">
         {payload[0].name}
       </p>
@@ -703,12 +703,12 @@ function TablePreview() {
   );
 
   return (
-    <div className="w-full h-full flex flex-col text-[12px] font-['Inter',sans-serif]">
+    <div className="w-full h-full flex flex-col text-[0.75rem] font-['Inter',sans-serif]">
       {/* ── Filter Toolbar ── */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-[#e5e7eb] shrink-0">
         <button
           onClick={addFilter}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-medium text-ink-600 rounded-lg border border-canvas-border hover:bg-brand-50 transition-colors"
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[0.75rem] font-medium text-ink-600 rounded-lg border border-canvas-border hover:bg-brand-50 transition-colors"
         >
           <Plus size={14} />
           Add Filter
@@ -718,7 +718,7 @@ function TablePreview() {
         <div className="relative">
           <button
             onClick={() => setShowColumnDropdown((v) => !v)}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-medium text-ink-600 rounded-lg border border-canvas-border hover:bg-brand-50 transition-colors"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[0.75rem] font-medium text-ink-600 rounded-lg border border-canvas-border hover:bg-brand-50 transition-colors"
           >
             <Eye size={14} />
             Columns ({visibleColumns.length}/{ALL_COLUMNS.length})
@@ -728,7 +728,7 @@ function TablePreview() {
               {ALL_COLUMNS.map((col) => (
                 <label
                   key={col}
-                  className="flex items-center gap-2 px-3 py-1.5 text-[12px] text-ink-600 hover:bg-gray-50 cursor-pointer"
+                  className="flex items-center gap-2 px-3 py-1.5 text-[0.75rem] text-ink-600 hover:bg-gray-50 cursor-pointer"
                 >
                   <input
                     type="checkbox"
@@ -746,7 +746,7 @@ function TablePreview() {
         <button
           onClick={clearAllFilters}
           disabled={tableFilters.length === 0}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-medium text-ink-600 rounded-lg border border-canvas-border hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[0.75rem] font-medium text-ink-600 rounded-lg border border-canvas-border hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           <Filter size={14} />
           Clear All
@@ -755,7 +755,7 @@ function TablePreview() {
         <div className="ml-auto">
           <button
             onClick={handleDownload}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-medium text-ink-600 rounded-lg border border-canvas-border hover:bg-brand-50 transition-colors"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[0.75rem] font-medium text-ink-600 rounded-lg border border-canvas-border hover:bg-brand-50 transition-colors"
           >
             <Download size={14} />
             Download
@@ -773,7 +773,7 @@ function TablePreview() {
                 onChange={(e) =>
                   updateFilter(idx, "column", e.target.value)
                 }
-                className="px-2 py-1 text-[12px] text-ink-600 rounded-lg border border-canvas-border bg-white focus:outline-none focus:ring-1 focus:ring-brand-400"
+                className="px-2 py-1 text-[0.75rem] text-ink-600 rounded-lg border border-canvas-border bg-white focus:outline-none focus:ring-1 focus:ring-brand-400"
               >
                 {ALL_COLUMNS.map((col) => (
                   <option key={col} value={col}>
@@ -788,7 +788,7 @@ function TablePreview() {
                   updateFilter(idx, "value", e.target.value)
                 }
                 placeholder="Select values..."
-                className="px-2 py-1 text-[12px] text-ink-600 rounded-lg border border-canvas-border bg-white placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-400 w-40"
+                className="px-2 py-1 text-[0.75rem] text-ink-600 rounded-lg border border-canvas-border bg-white placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-400 w-40"
               />
               <button
                 onClick={() => removeFilter(idx)}
@@ -809,7 +809,7 @@ function TablePreview() {
               {displayedColumns.map((col) => (
                 <th
                   key={col}
-                  className="text-left py-2.5 px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-[0.5px] whitespace-nowrap"
+                  className="text-left py-2.5 px-3 text-[0.625rem] font-semibold text-gray-500 uppercase tracking-[0.5px] whitespace-nowrap"
                 >
                   {col}
                 </th>
@@ -882,7 +882,7 @@ function TablePreview() {
         <button
           onClick={() => setPage((p) => Math.max(1, p - 1))}
           disabled={page === 1}
-          className="px-3 py-1 text-[11px] text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 transition-colors"
+          className="px-3 py-1 text-[0.6875rem] text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 transition-colors"
         >
           Previous
         </button>
@@ -891,7 +891,7 @@ function TablePreview() {
             setPage((p) => Math.min(totalPages, p + 1))
           }
           disabled={page === totalPages}
-          className="px-3 py-1 text-[11px] text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 transition-colors"
+          className="px-3 py-1 text-[0.6875rem] text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 transition-colors"
         >
           Next
         </button>
@@ -919,6 +919,10 @@ export interface ConfigurableChartProps {
   yAxis?: string;
   /** Show numeric value labels directly on data points. Default: false */
   showLabels?: boolean;
+  /** Pie-chart outer radius (Recharts SVG units or percent of container).
+   *  Default '58%' keeps the existing dashboard sizing; bigger surfaces
+   *  (e.g. the audit-result chart card) can pass '70%' to fill the card. */
+  pieOuterRadius?: string | number;
   /** Show the target line/series. Default: true */
   showTarget?: boolean;
   /** Base chart color. Default: brand purple #7C3AED */
@@ -985,6 +989,7 @@ export function ConfigurableChart({
   xAxis = "Month",
   yAxis = "Duplicate Count",
   showLabels = false,
+  pieOuterRadius = '58%',
   showTarget = true,
   color,
   seriesColors,
@@ -1225,21 +1230,21 @@ export function ConfigurableChart({
                 <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
               </svg>
             </div>
-            <p className="text-[15px] font-semibold text-[#26064a] mb-1">Add Columns</p>
-            <p className="text-[13px] text-[#9ca3af] leading-relaxed">Drag data fields into the Columns slot to build your table.</p>
+            <p className="text-[0.9375rem] font-semibold text-[#26064a] mb-1">Add Columns</p>
+            <p className="text-[0.8125rem] text-[#9ca3af] leading-relaxed">Drag data fields into the Columns slot to build your table.</p>
           </div>
         </div>
       );
     }
     const rowCount = 8;
     return (
-      <div className="w-full h-full flex flex-col text-[12px]" style={{ fontFamily }}>
+      <div className="w-full h-full flex flex-col text-[0.75rem]" style={{ fontFamily }}>
         <div className="flex-1 overflow-auto">
           <table className="w-full border-collapse" style={{ tableLayout: cols.length <= 3 ? 'auto' : 'fixed' }}>
             <thead className="sticky top-0 bg-white z-10">
               <tr className="border-b border-[#e5e7eb] bg-[#faf5ff]/40">
                 {cols.map(col => (
-                  <th key={col} className="text-left py-2.5 px-4 text-[10px] font-bold text-[#6a12cd] uppercase tracking-[0.5px] whitespace-nowrap border-r border-[#f0f0f0] last:border-r-0">{col}</th>
+                  <th key={col} className="text-left py-2.5 px-4 text-[0.625rem] font-bold text-[#6a12cd] uppercase tracking-[0.5px] whitespace-nowrap border-r border-[#f0f0f0] last:border-r-0">{col}</th>
                 ))}
               </tr>
             </thead>
@@ -1265,7 +1270,7 @@ export function ConfigurableChart({
                   <tr className="bg-[#faf5ff] border-t-2 border-[#6a12cd]/20">
                     {cols.map((col, j) => {
                       if (!NUMERIC_COLS.has(col)) {
-                        return <td key={col} className="py-2.5 px-4 text-[11px] font-bold text-[#6a12cd] uppercase whitespace-nowrap">{j === 0 ? AGG_LABELS[aggregation] || aggregation : ''}</td>;
+                        return <td key={col} className="py-2.5 px-4 text-[0.6875rem] font-bold text-[#6a12cd] uppercase whitespace-nowrap">{j === 0 ? AGG_LABELS[aggregation] || aggregation : ''}</td>;
                       }
                       const vals = Array.from({ length: rowCount }, (_, i) => parseNum(TABLE_MOCK[col]?.[i] || '0')).filter(n => !isNaN(n));
                       let result = 0;
@@ -1281,7 +1286,7 @@ export function ConfigurableChart({
                         default: result = vals.reduce((a, b) => a + b, 0);
                       }
                       const fmt = col.includes('₹') ? `₹${result.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : col.includes('%') ? `${result.toFixed(1)}%` : col.includes('(d)') ? result.toFixed(1) : result.toLocaleString('en-IN', { maximumFractionDigits: 0 });
-                      return <td key={col} className="py-2.5 px-4 text-[12px] font-bold text-[#6a12cd] whitespace-nowrap">{fmt}</td>;
+                      return <td key={col} className="py-2.5 px-4 text-[0.75rem] font-bold text-[#6a12cd] whitespace-nowrap">{fmt}</td>;
                     })}
                   </tr>
                 </tfoot>
@@ -1289,7 +1294,7 @@ export function ConfigurableChart({
             })()}
           </table>
         </div>
-        <div className="flex items-center justify-between px-3 py-2 border-t border-[#e5e7eb] shrink-0 text-[11px] text-[#9ca3af]">
+        <div className="flex items-center justify-between px-3 py-2 border-t border-[#e5e7eb] shrink-0 text-[0.6875rem] text-[#9ca3af]">
           <span>Showing 1–{rowCount} of {rowCount}</span>
           {aggregation && <span className="text-[#6a12cd] font-medium">Aggregation: {aggregation.charAt(0).toUpperCase() + aggregation.slice(1)}</span>}
         </div>
@@ -1770,7 +1775,7 @@ export function ConfigurableChart({
     );
 
     const renderLegend = ({ payload }: any) => (
-      <div className="flex flex-wrap gap-3 justify-center mt-2">
+      <div className="flex flex-nowrap gap-3 justify-center mt-2 overflow-x-auto whitespace-nowrap px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {payload.map((e: any, i: number) => {
           const entryColor = sliceColors[i] || e.color;
           const entryName = e.value;
@@ -1782,7 +1787,7 @@ export function ConfigurableChart({
                 style={{ backgroundColor: entryColor }}
                 title="Click to change color"
               />
-              <span className="text-[11px] text-gray-600">{entryName}</span>
+              <span className="text-[0.6875rem] text-gray-600">{entryName}</span>
               {legendPickerOpen === entryName && onSeriesColorChange && (
                 <>
                   <div className="fixed inset-0 z-[60]" onClick={(ev) => { ev.stopPropagation(); setLegendPickerOpen(null); }} />
@@ -1838,7 +1843,7 @@ export function ConfigurableChart({
                     data={[entry]}
                     cx={`${50 + offsetX}%`}
                     cy={`${45 + offsetY}%`}
-                    outerRadius="52%"
+                    outerRadius={pieOuterRadius}
                     startAngle={startAngle}
                     endAngle={endAngle}
                     labelLine={false}
@@ -1864,7 +1869,7 @@ export function ConfigurableChart({
                 data={rawPie}
                 cx="50%"
                 cy="45%"
-                outerRadius="58%"
+                outerRadius={pieOuterRadius}
                 labelLine={false}
                 label={showLabels ? renderLabel : false}
                 dataKey="value"
@@ -1901,7 +1906,7 @@ export function ConfigurableChart({
                           style={{ backgroundColor: entryColor }}
                           title="Click to change color"
                         />
-                        <span className="text-[11px] text-gray-600" style={legendStyle}>{entryName}</span>
+                        <span className="text-[0.6875rem] text-gray-600" style={legendStyle}>{entryName}</span>
                         {legendPickerOpen === entryName && onSeriesColorChange && (
                           <>
                             <div className="fixed inset-0 z-[60]" onClick={(ev) => { ev.stopPropagation(); setLegendPickerOpen(null); }} />
@@ -1942,8 +1947,8 @@ export function ConfigurableChart({
             <path d="M3 15l4-4 4 4 4-6 6 6" />
           </svg>
         </div>
-        <p className="text-[13px] font-medium text-gray-500 mb-1">No Data to Display</p>
-        <p className="text-[11px] text-gray-400 leading-relaxed">Configure data fields to generate this chart.</p>
+        <p className="text-[0.8125rem] font-medium text-gray-500 mb-1">No Data to Display</p>
+        <p className="text-[0.6875rem] text-gray-400 leading-relaxed">Configure data fields to generate this chart.</p>
       </div>
     </div>
   );

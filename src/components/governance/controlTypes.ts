@@ -18,7 +18,7 @@ export interface ControlRow {
   linkedWorkflows: string[];   // workflow names
   linkedWorkflowIds: string[]; // workflow IDs from mock data
   usedInRACMs: number;
-  status: 'Ready' | 'Active' | 'Draft' | 'Under Review' | 'Missing Workflow';
+  status: 'Draft' | 'Active' | 'Archived';
   createdAt: string;
   updatedAt: string;
 }
@@ -40,12 +40,25 @@ export const NATURE_STYLES: Record<string, { bg: string; text: string }> = {
 };
 
 export const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
-  Ready:              { bg: 'bg-compliant-50',  text: 'text-compliant-700', dot: 'bg-compliant' },
-  Active:             { bg: 'bg-evidence-50',   text: 'text-evidence-700',  dot: 'bg-evidence' },
-  Draft:              { bg: 'bg-gray-100',      text: 'text-gray-600',      dot: 'bg-gray-400' },
-  'Under Review':     { bg: 'bg-mitigated-50',  text: 'text-mitigated-700', dot: 'bg-mitigated' },
-  'Missing Workflow': { bg: 'bg-risk-50',       text: 'text-risk-700',      dot: 'bg-risk' },
+  Draft:    { bg: 'bg-gray-100',      text: 'text-gray-600',      dot: 'bg-gray-400' },
+  Active:   { bg: 'bg-emerald-50',    text: 'text-emerald-700',   dot: 'bg-emerald-500' },
+  Archived: { bg: 'bg-gray-50',       text: 'text-gray-400',      dot: 'bg-gray-300' },
 };
+
+/** Derived design status — NOT stored, always computed */
+export type ControlDesignStatus = 'Complete' | 'Incomplete';
+
+export function getControlDesignStatus(control: { linkedWorkflowIds: string[]; assertions: string[] }): ControlDesignStatus {
+  if (control.linkedWorkflowIds.length > 0 && control.assertions.length > 0) return 'Complete';
+  return 'Incomplete';
+}
+
+/** Derived readiness — NOT stored, always computed */
+export type ControlReadiness = 'Ready' | 'Workflow Missing';
+
+export function getControlReadiness(control: { linkedWorkflowIds: string[] }): ControlReadiness {
+  return control.linkedWorkflowIds.length > 0 ? 'Ready' : 'Workflow Missing';
+}
 
 /* ─── RACM ↔ Control mapping ─── */
 export const RACM_CONTROL_MAP: Record<string, string[]> = {

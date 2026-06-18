@@ -115,7 +115,7 @@ function EvidenceStatusBadge({ status }: { status: string }) {
   };
   const s = map[status] || map['Pending Review'];
   return (
-    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} px-2 py-0.5 rounded-full text-[12px] font-bold whitespace-nowrap`}>
+    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} px-2 py-0.5 rounded-full text-[0.75rem] font-bold whitespace-nowrap`}>
       {s.icon}
       {status}
     </span>
@@ -131,7 +131,7 @@ function ReviewerStatusBadge({ status }: { status: string }) {
   };
   const s = map[status] || map['Not Started'];
   return (
-    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} px-2 py-0.5 rounded-full text-[12px] font-bold whitespace-nowrap`}>
+    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} px-2 py-0.5 rounded-full text-[0.75rem] font-bold whitespace-nowrap`}>
       {s.icon}
       {status}
     </span>
@@ -139,7 +139,7 @@ function ReviewerStatusBadge({ status }: { status: string }) {
 }
 
 function ConclusionBadge({ conclusion }: { conclusion: string }) {
-  if (!conclusion) return <span className="text-gray-300 text-[12px]">-</span>;
+  if (!conclusion) return <span className="text-gray-300 text-[0.75rem]">-</span>;
   const map: Record<string, { bg: string; text: string }> = {
     'Effective': { bg: 'bg-green-50', text: 'text-green-700' },
     'Ineffective': { bg: 'bg-red-50', text: 'text-red-700' },
@@ -147,7 +147,7 @@ function ConclusionBadge({ conclusion }: { conclusion: string }) {
   };
   const s = map[conclusion] || map['Pending'];
   return (
-    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} px-2 py-0.5 rounded-full text-[12px] font-bold`}>
+    <span className={`inline-flex items-center gap-1 ${s.bg} ${s.text} px-2 py-0.5 rounded-full text-[0.75rem] font-bold`}>
       {conclusion}
     </span>
   );
@@ -189,11 +189,11 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
             <p className="text-sm text-text-secondary mt-1">Manage evidence artifacts and working paper documentation.</p>
           </div>
           <div className="flex items-center gap-2">
-            <button className="flex items-center gap-2 px-3 py-2 border border-border-light bg-white text-text-secondary rounded-lg text-[12px] font-medium hover:shadow-md hover:border-primary/20 transition-all cursor-pointer">
+            <button className="flex items-center gap-2 px-3 py-2 border border-border-light bg-white text-text-secondary rounded-lg text-[0.75rem] font-medium hover:shadow-md hover:border-primary/20 transition-all cursor-pointer">
               <Sparkles size={14} className="text-purple-500" />
               Analyze with AI
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer">
+            <button className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
               <Upload size={14} />
               Upload File
             </button>
@@ -204,7 +204,7 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
         <div className="flex gap-1 mb-6 bg-surface-2/50 rounded-xl p-1 w-fit">
           <button
             onClick={() => { setActiveTab('evidence'); setSearch(''); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[0.8125rem] font-semibold transition-all cursor-pointer ${
               activeTab === 'evidence'
                 ? 'bg-white text-primary shadow-sm'
                 : 'text-text-muted hover:text-text'
@@ -212,13 +212,13 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
           >
             <FileText size={14} />
             Evidence
-            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'evidence' ? 'bg-primary/10 text-primary' : 'bg-gray-200 text-gray-500'}`}>
+            <span className={`text-[0.6875rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'evidence' ? 'bg-primary/10 text-primary' : 'bg-gray-200 text-gray-500'}`}>
               {EVIDENCE_ROWS.length}
             </span>
           </button>
           <button
             onClick={() => { setActiveTab('working-papers'); setSearch(''); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[0.8125rem] font-semibold transition-all cursor-pointer ${
               activeTab === 'working-papers'
                 ? 'bg-white text-primary shadow-sm'
                 : 'text-text-muted hover:text-text'
@@ -226,7 +226,7 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
           >
             <Database size={14} />
             Working Papers
-            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'working-papers' ? 'bg-primary/10 text-primary' : 'bg-gray-200 text-gray-500'}`}>
+            <span className={`text-[0.6875rem] font-bold px-1.5 py-0.5 rounded-full ${activeTab === 'working-papers' ? 'bg-primary/10 text-primary' : 'bg-gray-200 text-gray-500'}`}>
               {WORKING_PAPER_ROWS.length}
             </span>
           </button>
@@ -243,7 +243,7 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
             ].map(card => (
               <div key={card.label} className="bg-white rounded-xl border border-border-light p-3 text-center hover:shadow-md transition-all duration-200">
                 <div className={`text-xl font-bold ${card.color}`}>{card.value}</div>
-                <div className="text-[12px] text-text-muted uppercaser">{card.label}</div>
+                <div className="text-[0.75rem] text-text-muted uppercaser">{card.label}</div>
               </div>
             ))}
           </div>
@@ -257,7 +257,7 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
             ].map(card => (
               <div key={card.label} className="bg-white rounded-xl border border-border-light p-3 text-center hover:shadow-md transition-all duration-200">
                 <div className={`text-xl font-bold ${card.color}`}>{card.value}</div>
-                <div className="text-[12px] text-text-muted uppercaser">{card.label}</div>
+                <div className="text-[0.75rem] text-text-muted uppercaser">{card.label}</div>
               </div>
             ))}
           </div>
@@ -282,11 +282,11 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
               }`}>
                 <CloudUpload size={20} className={dragOver ? 'text-primary' : 'text-text-muted'} />
               </div>
-              <p className="text-[13px] font-medium text-text">
+              <p className="text-[0.8125rem] font-medium text-text">
                 Drop evidence files here or{' '}
                 <span className="text-primary cursor-pointer hover:underline">browse</span>
               </p>
-              <p className="text-[12px] text-text-muted mt-1">Supports XLSX, CSV, PDF, XML up to 500 MB</p>
+              <p className="text-[0.75rem] text-text-muted mt-1">Supports XLSX, CSV, PDF, XML up to 500 MB</p>
             </div>
           </motion.div>
         )}
@@ -299,7 +299,7 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
             placeholder={activeTab === 'evidence' ? 'Search evidence by name, control, or attribute...' : 'Search working papers by control, workflow, or engagement...'}
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 text-[13px] bg-white border border-border-light rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all placeholder:text-text-muted"
+            className="w-full pl-9 pr-4 py-2.5 text-[0.8125rem] bg-white border border-border-light rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all placeholder:text-text-muted"
           />
           {search && (
             <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text cursor-pointer">
@@ -312,11 +312,11 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
         {activeTab === 'evidence' && (
           <div className="bg-white rounded-xl border border-border-light overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-[12px]">
+              <table className="w-full text-[0.75rem]">
                 <thead>
                   <tr className="border-b border-border-light bg-surface-2/50">
                     {['File Name', 'Source', 'Type', 'Linked Control', 'Sample', 'Attribute', 'Status', 'Actions'].map(h => (
-                      <th key={h} className="px-3 py-3 text-left text-[12px] font-semibold text-text-muted uppercaser">{h}</th>
+                      <th key={h} className="px-3 py-3 text-left text-[0.75rem] font-semibold text-text-muted uppercaser">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -334,25 +334,25 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-2.5">
                             <FileIcon type={row.fileType} />
-                            <span className="text-text font-medium text-[12px]">{row.name}</span>
+                            <span className="text-text font-medium text-[0.75rem]">{row.name}</span>
                           </div>
                         </td>
                         <td className="px-3 py-3">
-                          <span className={`text-[12px] font-medium ${row.source === 'Manual Upload' ? 'text-text-muted' : 'text-indigo-600'}`}>
+                          <span className={`text-[0.75rem] font-medium ${row.source === 'Manual Upload' ? 'text-text-muted' : 'text-indigo-600'}`}>
                             {row.source}
                           </span>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="text-[12px] text-text-secondary bg-gray-50 px-1.5 py-0.5 rounded font-medium">{row.type}</span>
+                          <span className="text-[0.75rem] text-text-secondary bg-gray-50 px-1.5 py-0.5 rounded font-medium">{row.type}</span>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="text-[12px] font-mono text-primary bg-primary/5 px-1.5 py-0.5 rounded-md border border-primary/10 cursor-pointer hover:bg-primary/10">{row.linkedControl}</span>
+                          <span className="text-[0.75rem] font-mono text-primary bg-primary/5 px-1.5 py-0.5 rounded-md border border-primary/10 cursor-pointer hover:bg-primary/10">{row.linkedControl}</span>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="text-[11px] text-text-muted">{row.linkedSample}</span>
+                          <span className="text-[0.6875rem] text-text-muted">{row.linkedSample}</span>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="text-[11px] text-text-secondary font-medium">{row.linkedAttribute}</span>
+                          <span className="text-[0.6875rem] text-text-secondary font-medium">{row.linkedAttribute}</span>
                         </td>
                         <td className="px-3 py-3">
                           <EvidenceStatusBadge status={row.status} />
@@ -381,9 +381,9 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
               </table>
             </div>
             <div className="flex items-center justify-between px-4 py-3 border-t border-border-light bg-surface-2/30">
-              <span className="text-[12px] text-text-muted">Showing {filteredEvidence.length} of {EVIDENCE_ROWS.length} evidence items</span>
+              <span className="text-[0.75rem] text-text-muted">Showing {filteredEvidence.length} of {EVIDENCE_ROWS.length} evidence items</span>
               <div className="flex items-center gap-1">
-                <span className="text-[12px] text-text-muted">Page 1 of 1</span>
+                <span className="text-[0.75rem] text-text-muted">Page 1 of 1</span>
                 <button className="p-1 rounded hover:bg-gray-100 text-text-muted cursor-pointer"><ChevronRight size={14} /></button>
               </div>
             </div>
@@ -394,11 +394,11 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
         {activeTab === 'working-papers' && (
           <div className="bg-white rounded-xl border border-border-light overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-[12px]">
+              <table className="w-full text-[0.75rem]">
                 <thead>
                   <tr className="border-b border-border-light bg-surface-2/50">
                     {['Control', 'Engagement', 'Workflow', 'Rounds', 'Reviewer Status', 'Conclusion', 'Last Updated', 'Actions'].map(h => (
-                      <th key={h} className="px-3 py-3 text-left text-[12px] font-semibold text-text-muted uppercaser">{h}</th>
+                      <th key={h} className="px-3 py-3 text-left text-[0.75rem] font-semibold text-text-muted uppercaser">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -415,21 +415,21 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
                       >
                         <td className="px-3 py-3">
                           <div className="flex flex-col">
-                            <span className="font-mono text-[11px] text-text-muted">{row.controlId}</span>
-                            <span className="text-text font-medium text-[12px]">{row.controlName}</span>
+                            <span className="font-mono text-[0.6875rem] text-text-muted">{row.controlId}</span>
+                            <span className="text-text font-medium text-[0.75rem]">{row.controlName}</span>
                           </div>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="text-text-secondary font-mono text-[12px] bg-gray-50 px-1.5 py-0.5 rounded">{row.engagement}</span>
+                          <span className="text-text-secondary font-mono text-[0.75rem] bg-gray-50 px-1.5 py-0.5 rounded">{row.engagement}</span>
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1.5">
                             <Workflow size={11} className="text-indigo-500" />
-                            <span className="text-[12px] text-indigo-700 font-medium">{row.workflowName}</span>
+                            <span className="text-[0.75rem] text-indigo-700 font-medium">{row.workflowName}</span>
                           </div>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="text-[12px] font-medium text-text-secondary">
+                          <span className="text-[0.75rem] font-medium text-text-secondary">
                             Round {row.latestRound}/{row.totalRounds}
                           </span>
                         </td>
@@ -440,13 +440,13 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
                           <ConclusionBadge conclusion={row.conclusion} />
                         </td>
                         <td className="px-3 py-3">
-                          <span className="text-[12px] text-text-muted">{row.lastUpdated}</span>
+                          <span className="text-[0.75rem] text-text-muted">{row.lastUpdated}</span>
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => onOpenWorkingPaper?.(row.controlId)}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all cursor-pointer"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[0.6875rem] font-semibold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all cursor-pointer"
                             >
                               <Eye size={10} />
                               View
@@ -474,9 +474,9 @@ export default function EvidenceView({ onOpenWorkingPaper, onOpenWorkflow, onOpe
               </table>
             </div>
             <div className="flex items-center justify-between px-4 py-3 border-t border-border-light bg-surface-2/30">
-              <span className="text-[12px] text-text-muted">Showing {filteredWPs.length} of {WORKING_PAPER_ROWS.length} working papers</span>
+              <span className="text-[0.75rem] text-text-muted">Showing {filteredWPs.length} of {WORKING_PAPER_ROWS.length} working papers</span>
               <div className="flex items-center gap-1">
-                <span className="text-[12px] text-text-muted">Page 1 of 1</span>
+                <span className="text-[0.75rem] text-text-muted">Page 1 of 1</span>
                 <button className="p-1 rounded hover:bg-gray-100 text-text-muted cursor-pointer"><ChevronRight size={14} /></button>
               </div>
             </div>

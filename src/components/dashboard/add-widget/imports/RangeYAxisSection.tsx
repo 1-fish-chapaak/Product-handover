@@ -29,7 +29,7 @@ export default function RangeYAxisSection({ label = "Range (Y Axis)", yMin, yMax
           <div className="size-[18px] rounded-[4px] flex items-center justify-center">
             <MoveVertical className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
           </div>
-          <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#26064a]">{label}</span>
+          <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">{label}</span>
         </div>
         <ChevronDown
           className="size-[14px] text-[#6a12cd] transition-transform duration-200"
@@ -40,28 +40,28 @@ export default function RangeYAxisSection({ label = "Range (Y Axis)", yMin, yMax
         <div className="p-2.5 bg-[#fafafa] space-y-3">
           <div className="flex gap-2">
             <div className="flex-1 flex flex-col gap-1.5">
-              <label className="text-[12px] font-medium text-[#26064a]">Minimum</label>
+              <label className="text-[0.75rem] font-medium text-[#26064a]">Minimum</label>
               <input
                 type="text"
                 value={minimum}
                 onChange={(e) => { setLocalMin(e.target.value); onYMinChange?.(e.target.value); }}
                 placeholder="Auto"
-                className="w-full px-3.5 py-2 text-[12px] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
               />
             </div>
             <div className="flex-1 flex flex-col gap-1.5">
-              <label className="text-[12px] font-medium text-[#26064a]">Maximum</label>
+              <label className="text-[0.75rem] font-medium text-[#26064a]">Maximum</label>
               <input
                 type="text"
                 value={maximum}
                 onChange={(e) => { setLocalMax(e.target.value); onYMaxChange?.(e.target.value); }}
                 placeholder="Auto"
-                className="w-full px-3.5 py-2 text-[12px] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
               />
             </div>
           </div>
           <div className="flex items-center justify-between">
-            <p className="text-[12px] font-medium text-[#26064a]">Invert Range</p>
+            <p className="text-[0.75rem] font-medium text-[#26064a]">Invert Range</p>
             <button
               onClick={() => { setLocalInvert(!invert); onInvertChange?.(!invert); }}
               className={`relative w-[36px] h-[20px] rounded-[12px] transition-all ${

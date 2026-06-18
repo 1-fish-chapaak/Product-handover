@@ -6,9 +6,16 @@ import {
   Star, Layers, FileText, GripVertical, BarChart3
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
+import { useCan } from '../../context/CurrentUserContext';
+import Gated from '../shared/Gated';
 import { SEED, TYPE_META, formatDate, type DataSource } from '../data-sources/sources';
+import { DB_SCHEMAS, INTEGRATION_CONFIGS } from '../data-sources/datasetFiles';
+import { QUERY_SESSIONS, FAVOURITES } from '../../data/queryHistory';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
+
+export type DashboardSourceType = 'excel' | 'csv' | 'sql' | 'query' | 'combo';
 
 interface Dashboard {
   id: string;
@@ -18,18 +25,34 @@ interface Dashboard {
   creator: string;
   accent: string;
   sharedBy?: string;
-  dataSource?: 'excel' | 'csv' | 'sql' | 'query' | 'combo';
+  dataSource?: DashboardSourceType;
   dataSourceNames?: string[];
+  /** SEED id of the source picked at creation. Required for live-SQL dashboards. */
+  sourceId?: string;
+}
+
+export interface DashboardCreateOpts {
+  customFields?: string[];
+  sourceType?: DashboardSourceType;
+  sourceId?: string;
+  sourceName?: string;
 }
 
 type SortOption = 'recently' | 'oldest' | 'nameAZ' | 'nameZA';
 
 interface DashboardListPageProps {
   onDashboardClick: (dashboardId: string, customFields?: string[]) => void;
+  /** When set (typically from a notification deep-link), the matching
+   *  dashboard card pulses briefly to draw the user's eye. Cleared by the
+   *  parent ~3s after navigation. */
+  focusedDashboardId?: string | null;
   onImportPowerBI?: () => void;
   createdDashboards?: Dashboard[];
   onCreateDashboard?: (dashboard: Dashboard) => void;
   onDeleteDashboard?: (id: string) => void;
+  /** Persist a source-binding change made via the kebab "Change data source"
+   *  menu. Fires with a partial patch of the dashboard's source fields. */
+  onUpdateDashboardSource?: (id: string, patch: { dataSource?: DashboardSourceType; sourceId?: string; dataSourceNames?: string[] }) => void;
   onOpenChat?: (pendingDashboard?: { name: string; description: string }) => void;
 }
 
@@ -129,36 +152,6 @@ const SORT_LABELS: Record<SortOption, string> = {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-// ─── Query data ─────────────────────────────────────────────────────────────
-
-const QUERY_SESSIONS = [
-  { group: 'TODAY', items: [
-    'What are the top 5 performing categories?',
-    'Compare year-over-year growth across all states',
-  ]},
-  { group: 'YESTERDAY', items: [
-    'Show customer acquisition cost by channel',
-    'What is the average order value by product category?',
-  ]},
-  { group: 'LAST 7 DAYS', items: [
-    'Analyze revenue trends for the last 12 months',
-    'Which sales person has the highest conversion rate?',
-    'Show me the distribution of products across different regions',
-    'What is the total revenue by country?',
-    'Compare Q1 vs Q2 performance metrics',
-  ]},
-];
-
-const FAVOURITES = [
-  { group: '', items: [
-    'Monthly revenue breakdown by region',
-    'Top 10 vendors by invoice volume',
-    'Compliance score trends Q1–Q4',
-    'Duplicate invoice detection summary',
-    'Department-wise spend analysis',
-    'Year-over-year procurement savings',
-  ]},
-];
 
 const QUERY_TEMPLATES = [
   { group: 'FINANCIAL', items: [
@@ -197,7 +190,7 @@ function NavFileTree({ files }: { files: { name: string; sheets: { name: string;
             >
               <div className="flex items-center gap-2">
                 <FileText size={14} className="text-[#6a12cd]" />
-                <span className="text-[12px] font-semibold text-[#26064a]">{file.name}</span>
+                <span className="text-[0.75rem] font-semibold text-[#26064a]">{file.name}</span>
               </div>
               <ChevronDown
                 size={14}
@@ -218,8 +211,8 @@ function NavFileTree({ files }: { files: { name: string; sheets: { name: string;
                       >
                         <div className="flex items-center gap-2">
                           <LayoutGrid size={12} className="text-ink-400" />
-                          <span className="text-[11px] font-medium text-ink-700">{sheet.name}</span>
-                          <span className="text-[10px] text-ink-400">({sheet.columns.length})</span>
+                          <span className="text-[0.6875rem] font-medium text-ink-700">{sheet.name}</span>
+                          <span className="text-[0.625rem] text-ink-400">({sheet.columns.length})</span>
                         </div>
                         <ChevronDown
                           size={12}
@@ -232,7 +225,7 @@ function NavFileTree({ files }: { files: { name: string; sheets: { name: string;
                           {sheet.columns.map(col => (
                             <div key={col} className="flex items-center gap-2.5 px-6 py-1.5 hover:bg-[#f0ecff] transition-colors cursor-default">
                               <GripVertical size={11} className="text-ink-300 shrink-0" />
-                              <span className="text-[11px] text-ink-600">{col}</span>
+                              <span className="text-[0.6875rem] text-ink-600">{col}</span>
                             </div>
                           ))}
                         </div>
@@ -255,7 +248,7 @@ type AddDataTab = 'recent' | 'saved' | 'upload' | 'all' | 'files' | 'db';
 function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
   open: boolean;
   onClose: () => void;
-  onCreate: (name: string, description: string, customFields?: string[]) => void;
+  onCreate: (name: string, description: string, opts?: DashboardCreateOpts) => void;
   onOpenChat?: (pendingDashboard?: { name: string; description: string }) => void;
 }) {
   const [step, setStep] = useState<CreateStep>('details');
@@ -307,7 +300,13 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
   };
 
   const handleCreate = (withFields?: boolean) => {
-    onCreate(name, description, withFields ? parsedHeaders : undefined);
+    const fname = uploadedFile?.name || '';
+    const isCsv = fname.toLowerCase().endsWith('.csv');
+    onCreate(name, description, {
+      customFields: withFields ? parsedHeaders : undefined,
+      sourceType: uploadedFile ? (isCsv ? 'csv' : 'excel') : undefined,
+      sourceName: uploadedFile ? fname : undefined,
+    });
     handleClose();
   };
 
@@ -337,7 +336,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
           >
             {/* Header */}
             <div className="flex items-center justify-between px-7 py-4 border-b border-canvas-border">
-              <h2 className="text-[16px] font-bold text-ink-900 shrink-0">{isNavigator ? 'Navigator' : 'Create Dashboard'}</h2>
+              <h2 className="text-[1rem] font-bold text-ink-900 shrink-0">{isNavigator ? 'Navigator' : 'Create Dashboard'}</h2>
               {isAddData && (
                 <div className="flex-1 mx-5 relative">
                   <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
@@ -346,7 +345,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                     value={querySearch}
                     onChange={e => setQuerySearch(e.target.value)}
                     placeholder={activeTab === 'upload' ? 'Drop files below to upload...' : 'Search...'}
-                    className="w-full pl-10 pr-4 py-2 text-[13px] border border-canvas-border rounded-full bg-canvas-elevated text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
+                    className="w-full pl-10 pr-4 py-2 text-[0.8125rem] border border-canvas-border rounded-full bg-canvas-elevated text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
                   />
                 </div>
               )}
@@ -369,13 +368,13 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                   <button
                     key={tab.id}
                     onClick={() => { setActiveTab(tab.id); setSelectedQuery(null); setSelectedSource(null); }}
-                    className={`flex items-center gap-1.5 pb-3 pt-3 text-[13px] font-semibold transition-colors cursor-pointer relative whitespace-nowrap ${
+                    className={`flex items-center gap-1.5 pb-3 pt-3 text-[0.8125rem] font-semibold transition-colors cursor-pointer relative whitespace-nowrap ${
                       activeTab === tab.id ? 'text-brand-700' : 'text-ink-400 hover:text-ink-600'
                     }`}
                   >
                     <tab.icon size={14} />
                     {tab.label}
-                    {tab.count > 0 && <span className="text-[11px] text-ink-400 font-normal">{tab.count}</span>}
+                    {tab.count > 0 && <span className="text-[0.6875rem] text-ink-400 font-normal">{tab.count}</span>}
                     {activeTab === tab.id && (
                       <motion.div layoutId="add-data-tab" className="absolute bottom-0 left-0 right-0 h-[2px] bg-brand-600 rounded-full" />
                     )}
@@ -391,18 +390,18 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                 {step === 'details' && (
                   <motion.div key="details" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.15 }} className="space-y-5">
                     <div className="space-y-2">
-                      <label className="text-[13px] font-bold text-ink-800">Dashboard Name</label>
+                      <label className="text-[0.8125rem] font-bold text-ink-800">Dashboard Name</label>
                       <input
                         type="text"
                         value={name}
                         onChange={e => setName(e.target.value)}
                         placeholder="e.g., Q3 Financial Overview"
                         autoFocus
-                        className="w-full px-4 py-3 text-[14px] border border-canvas-border rounded-xl text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors bg-canvas-elevated"
+                        className="w-full px-4 py-3 text-[0.875rem] border border-canvas-border rounded-xl text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors bg-canvas-elevated"
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[13px] font-bold text-ink-800">
+                      <label className="text-[0.8125rem] font-bold text-ink-800">
                         Description <span className="font-normal text-ink-400">(Optional)</span>
                       </label>
                       <textarea
@@ -410,7 +409,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                         onChange={e => setDescription(e.target.value)}
                         placeholder="Briefly describe the purpose of this dashboard..."
                         rows={4}
-                        className="w-full px-4 py-3 text-[14px] border border-canvas-border rounded-xl text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors bg-canvas-elevated resize-none"
+                        className="w-full px-4 py-3 text-[0.875rem] border border-canvas-border rounded-xl text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors bg-canvas-elevated resize-none"
                       />
                     </div>
                   </motion.div>
@@ -429,7 +428,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                             if (filtered.length === 0) return null;
                             return (
                               <div key={group.group || 'ungrouped'}>
-                                {group.group && <div className="text-[11px] font-bold text-ink-500 uppercase tracking-wider mb-2">{group.group}</div>}
+                                {group.group && <div className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-2">{group.group}</div>}
                                 <div className="space-y-2">
                                   {filtered.map(q => (
                                     <button
@@ -441,7 +440,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                                     >
                                       {activeTab === 'recent' && <MessageSquare size={14} className={selectedQuery === q ? 'text-brand-600' : 'text-ink-400'} />}
                                       {activeTab === 'saved' && <Star size={14} className={selectedQuery === q ? 'text-brand-600' : 'text-ink-400'} />}
-                                      <span className={`text-[13px] ${selectedQuery === q ? 'text-brand-700 font-medium' : 'text-ink-700'}`}>{q}</span>
+                                      <span className={`text-[0.8125rem] ${selectedQuery === q ? 'text-brand-700 font-medium' : 'text-ink-700'}`}>{q}</span>
                                     </button>
                                   ))}
                                 </div>
@@ -452,10 +451,10 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                       ) : (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                           {activeTab === 'recent' ? <MessageSquare size={32} className="text-ink-200 mb-3" /> : <Star size={32} className="text-ink-200 mb-3" />}
-                          <p className="text-[14px] font-medium text-ink-500 mb-1">
+                          <p className="text-[0.875rem] font-medium text-ink-500 mb-1">
                             {activeTab === 'recent' ? 'No chats found' : 'No favourites found'}
                           </p>
-                          <p className="text-[12px] text-ink-400">
+                          <p className="text-[0.75rem] text-ink-400">
                             {querySearch ? 'Try a different search term.' : activeTab === 'recent' ? 'Start a new chat to see it here.' : 'Star a chat to add it to favourites.'}
                           </p>
                         </div>
@@ -490,13 +489,13 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                       {uploadedFile ? (
                         <div>
                           <CloudUpload size={28} className="text-green-600 mx-auto mb-3" />
-                          <h3 className="text-[15px] font-bold text-ink-900 mb-1">{uploadedFile.name}</h3>
-                          <p className="text-[13px] text-compliant font-medium mb-1">
+                          <h3 className="text-[0.9375rem] font-bold text-ink-900 mb-1">{uploadedFile.name}</h3>
+                          <p className="text-[0.8125rem] text-compliant font-medium mb-1">
                             {(uploadedFile.size / 1024).toFixed(1)} KB — File ready
                           </p>
                           <button
                             onClick={e => { e.stopPropagation(); setUploadedFile(null); }}
-                            className="text-[12px] text-ink-400 hover:text-red-500 transition-colors cursor-pointer mt-1"
+                            className="text-[0.75rem] text-ink-400 hover:text-red-500 transition-colors cursor-pointer mt-1"
                           >
                             Remove file
                           </button>
@@ -504,16 +503,16 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                       ) : (
                         <>
                           <Upload size={28} className="text-ink-300 mb-3" />
-                          <h3 className="text-[14px] font-semibold text-ink-800 mb-1">Drop files here</h3>
-                          <p className="text-[13px] text-ink-400 mb-4">or pick from your computer</p>
+                          <h3 className="text-[0.875rem] font-semibold text-ink-800 mb-1">Drop files here</h3>
+                          <p className="text-[0.8125rem] text-ink-400 mb-4">or pick from your computer</p>
                           <button
                             onClick={e => { e.stopPropagation(); document.getElementById('create-dash-file-input')?.click(); }}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold rounded-lg transition-colors cursor-pointer"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold rounded-lg transition-colors cursor-pointer"
                           >
                             <Upload size={14} />
                             Choose files
                           </button>
-                          <p className="text-[11px] text-ink-400 mt-3">CSV · Excel · ≤ 50 MB each</p>
+                          <p className="text-[0.6875rem] text-ink-400 mt-3">CSV · Excel · ≤ 50 MB each</p>
                         </>
                       )}
                     </div>
@@ -544,8 +543,8 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                                   <Icon size={14} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="text-[13px] font-medium text-ink-900 truncate">{source.name}</div>
-                                  <div className="text-[11px] text-ink-400">{source.subtype} · {formatDate(source.createdAt)}</div>
+                                  <div className="text-[0.8125rem] font-medium text-ink-900 truncate">{source.name}</div>
+                                  <div className="text-[0.6875rem] text-ink-400">{source.subtype} · {formatDate(source.createdAt)}</div>
                                 </div>
                                 {isSelected && <Check size={16} className="text-brand-600 shrink-0" />}
                               </button>
@@ -555,8 +554,8 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                       ) : (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                           <Search size={32} className="text-ink-200 mb-3" />
-                          <p className="text-[14px] font-medium text-ink-500 mb-1">No {tabLabel} found</p>
-                          <p className="text-[12px] text-ink-400">
+                          <p className="text-[0.875rem] font-medium text-ink-500 mb-1">No {tabLabel} found</p>
+                          <p className="text-[0.75rem] text-ink-400">
                             {querySearch ? 'Try a different search term.' : `No ${tabLabel} available.`}
                           </p>
                         </div>
@@ -573,7 +572,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                       <div className="px-4 pt-4 pb-3 shrink-0">
                         <div className="relative">
                           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-                          <input type="text" placeholder="Search" className="w-full pl-9 pr-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-canvas-elevated text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400" />
+                          <input type="text" placeholder="Search" className="w-full pl-9 pr-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas-elevated text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400" />
                         </div>
                       </div>
                       <div className="flex-1 overflow-y-auto px-4 pb-4">
@@ -589,7 +588,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                               {allSheetsSelected && <svg viewBox="0 0 12 12" fill="none" className="size-2.5"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                               {someSheetsSelected && !allSheetsSelected && <svg viewBox="0 0 12 12" fill="none" className="size-2.5"><path d="M3 6H9" stroke="white" strokeWidth="2" strokeLinecap="round" /></svg>}
                             </div>
-                            <span className="text-[12px] font-semibold text-brand-700 truncate" title={uploadedFile?.name}>{uploadedFile?.name || 'Uploaded_Data.xlsx'}</span>
+                            <span className="text-[0.75rem] font-semibold text-brand-700 truncate" title={uploadedFile?.name}>{uploadedFile?.name || 'Uploaded_Data.xlsx'}</span>
                           </button>
                           <div className="pl-6 space-y-0.5">
                             {sheetNames.map(sheet => {
@@ -608,7 +607,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                                   <div className={`size-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'bg-brand-600 border-brand-600' : 'border-ink-300 bg-white'}`}>
                                     {isSelected && <svg viewBox="0 0 12 12" fill="none" className="size-2.5"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                   </div>
-                                  <span className="text-[12px] truncate" title={sheet}>{sheet}</span>
+                                  <span className="text-[0.75rem] truncate" title={sheet}>{sheet}</span>
                                 </button>
                               );
                             })}
@@ -625,7 +624,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                             <thead className="sticky top-0 z-10">
                               <tr className="bg-brand-50">
                                 {displayHeaders.map((h, i) => (
-                                  <th key={i} className="text-[11px] font-bold text-brand-800 uppercase tracking-wider px-5 py-3 border-b border-brand-200 whitespace-nowrap">{h}</th>
+                                  <th key={i} className="text-[0.6875rem] font-bold text-brand-800 uppercase tracking-wider px-5 py-3 border-b border-brand-200 whitespace-nowrap">{h}</th>
                                 ))}
                               </tr>
                             </thead>
@@ -633,10 +632,10 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                               {displayRows.map((row, i) => (
                                 <tr key={i} className="border-b border-canvas-border/40 hover:bg-brand-50/20 transition-colors">
                                   {row.map((cell, j) => (
-                                    <td key={j} className={`px-5 py-2.5 text-[13px] whitespace-nowrap ${j === 0 ? 'font-semibold text-ink-900' : 'text-ink-700'}`}>{cell}</td>
+                                    <td key={j} className={`px-5 py-2.5 text-[0.8125rem] whitespace-nowrap ${j === 0 ? 'font-semibold text-ink-900' : 'text-ink-700'}`}>{cell}</td>
                                   ))}
                                   {row.length < displayHeaders.length && Array.from({ length: displayHeaders.length - row.length }).map((_, k) => (
-                                    <td key={`pad-${k}`} className="px-5 py-2.5 text-[13px] text-ink-400">—</td>
+                                    <td key={`pad-${k}`} className="px-5 py-2.5 text-[0.8125rem] text-ink-400">—</td>
                                   ))}
                                 </tr>
                               ))}
@@ -644,7 +643,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                           </table>
                         ) : (
                           <div className="flex items-center justify-center h-full text-ink-400">
-                            <p className="text-[13px]">No data to preview. Upload a CSV or XLSX file.</p>
+                            <p className="text-[0.8125rem]">No data to preview. Upload a CSV or XLSX file.</p>
                           </div>
                         )}
                       </div>
@@ -658,13 +657,13 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
             <div className="flex items-center justify-end gap-3 px-7 py-4 border-t border-canvas-border">
               {step === 'details' && (
                 <>
-                  <button onClick={handleClose} className="px-5 py-2.5 text-[13px] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer">
+                  <button onClick={handleClose} className="px-5 py-2.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer">
                     Cancel
                   </button>
                   <button
                     onClick={() => { if (name.trim()) setStep('add-data'); }}
                     disabled={!name.trim()}
-                    className={`px-6 py-2.5 rounded-xl text-[13px] font-semibold transition-colors cursor-pointer ${
+                    className={`px-6 py-2.5 rounded-xl text-[0.8125rem] font-semibold transition-colors cursor-pointer ${
                       name.trim() ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
                     }`}
                   >
@@ -674,8 +673,8 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
               )}
               {isAddData && (
                 <>
-                  <p className="text-[12px] text-ink-400 mr-auto">Pick sources or files to attach.</p>
-                  <button onClick={handleClose} className="px-5 py-2.5 text-[13px] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer">
+                  <p className="text-[0.75rem] text-ink-400 mr-auto">Pick sources or files to attach.</p>
+                  <button onClick={handleClose} className="px-5 py-2.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer">
                     Cancel
                   </button>
                   {(activeTab === 'recent' || activeTab === 'saved') && (
@@ -685,7 +684,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                         onOpenChat?.({ name, description });
                       }}
                       disabled={!selectedQuery}
-                      className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-colors cursor-pointer ${
+                      className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[0.8125rem] font-semibold transition-colors cursor-pointer ${
                         selectedQuery ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
                       }`}
                     >
@@ -729,7 +728,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                         setStep('navigator');
                       }}
                       disabled={!uploadedFile}
-                      className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-colors cursor-pointer ${
+                      className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[0.8125rem] font-semibold transition-colors cursor-pointer ${
                         uploadedFile ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
                       }`}
                     >
@@ -741,14 +740,30 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                     <button
                       onClick={() => {
                         const source = allSources.find(s => s.id === selectedSource);
-                        if (source) {
-                          const mockFields = ['Date', 'Region', 'Category', 'Vendor Name', 'Invoice Amount (₹)', 'Status', 'Department', 'Quantity'];
-                          onCreate(name, description, mockFields);
-                          handleClose();
-                        }
+                        if (!source) return;
+                        const isFile = source.type === 'file';
+                        const isCsv = isFile && source.name.toLowerCase().endsWith('.csv');
+                        const sourceType: DashboardSourceType = isFile ? (isCsv ? 'csv' : 'excel') : 'sql';
+                        // Pass non-empty customFields so the dashboard auto-opens the
+                        // Add Widget modal (DashboardView triggers on
+                        // initialCustomFields.length). For files we use the canonical
+                        // demo set; for SQL we flatten DB_SCHEMAS into a deduped column
+                        // label list so the same trigger fires.
+                        const customFields = isFile
+                          ? ['Date', 'Region', 'Category', 'Vendor Name', 'Invoice Amount (₹)', 'Status', 'Department', 'Quantity']
+                          : Array.from(new Set(
+                              (DB_SCHEMAS[source.id] ?? []).flatMap(t => t.columns.map(c => c.label))
+                            ));
+                        onCreate(name, description, {
+                          customFields,
+                          sourceType,
+                          sourceId: source.id,
+                          sourceName: source.name,
+                        });
+                        handleClose();
                       }}
                       disabled={!selectedSource}
-                      className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-colors cursor-pointer ${
+                      className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[0.8125rem] font-semibold transition-colors cursor-pointer ${
                         selectedSource ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-ink-100 text-ink-400 cursor-not-allowed'
                       }`}
                     >
@@ -760,13 +775,13 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
               )}
               {isNavigator && (
                 <>
-                  <span className="text-[12px] text-ink-500 mr-auto">{displayRows.length}{parsedRows.length > 50 ? ` of ${parsedRows.length}` : ''} rows</span>
-                  <button onClick={() => setStep('add-data')} className="px-5 py-2.5 text-[13px] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer border border-canvas-border rounded-xl">
+                  <span className="text-[0.75rem] text-ink-500 mr-auto">{displayRows.length}{parsedRows.length > 50 ? ` of ${parsedRows.length}` : ''} rows</span>
+                  <button onClick={() => setStep('add-data')} className="px-5 py-2.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-800 transition-colors cursor-pointer border border-canvas-border rounded-xl">
                     Back
                   </button>
                   <button
                     onClick={() => handleCreate(true)}
-                    className="px-8 py-2.5 rounded-xl text-[13px] font-semibold bg-brand-600 hover:bg-brand-500 text-white transition-colors cursor-pointer"
+                    className="px-8 py-2.5 rounded-xl text-[0.8125rem] font-semibold bg-brand-600 hover:bg-brand-500 text-white transition-colors cursor-pointer"
                   >
                     Load
                   </button>
@@ -782,14 +797,19 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
-export default function DashboardListPage({ onDashboardClick, onImportPowerBI, createdDashboards = [], onCreateDashboard, onDeleteDashboard, onOpenChat }: DashboardListPageProps) {
+export default function DashboardListPage({ onDashboardClick, onImportPowerBI, createdDashboards = [], onCreateDashboard, onDeleteDashboard, onUpdateDashboardSource, onOpenChat, focusedDashboardId }: DashboardListPageProps) {
+  const { can } = useCan();
   const { addToast } = useToast();
+  const { openShare } = useShare();
   const [activeTab, setActiveTab] = useState<'my' | 'shared'>('my');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<SortOption>('recently');
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  /** Dashboard id whose source is being changed via the kebab "Change data
+   *  source" menu. Null when the picker is closed. */
+  const [changeSourceDashboardId, setChangeSourceDashboardId] = useState<string | null>(null);
   const myDashboards = [...createdDashboards, ...MY_DASHBOARDS];
   const [sharedDashboards, setSharedDashboards] = useState(SHARED_DASHBOARDS);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -828,20 +848,22 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
 
         {/* ── Header ── */}
         <div className="mb-6">
-          <div className="font-mono text-[12px] text-ink-500 mb-2">Intelligence · Dashboards</div>
+          <div className="font-mono text-[0.75rem] text-ink-500 mb-2">Intelligence · Dashboards</div>
           <div className="flex items-end justify-between">
             <div>
-              <h1 className="font-display text-[34px] font-[420] text-ink-900 leading-[1.15]">Dashboards</h1>
-              <p className="text-[13px] text-ink-500 mt-1">Manage and access all analytics dashboards</p>
+              <h1 className="font-display text-[2.125rem] font-[420] text-ink-900 leading-[1.15]">Dashboards</h1>
+              <p className="text-[0.8125rem] text-ink-500 mt-1">Manage and access all analytics dashboards</p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCreateModalOpen(true)}
-                className="flex items-center gap-2 px-4 h-10 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-md text-[13px] font-semibold transition-colors cursor-pointer"
-              >
-                <Plus size={14} />
-                Create Dashboard
-              </button>
+              {can('db_add') && (
+                <button
+                  onClick={() => setCreateModalOpen(true)}
+                  className="flex items-center gap-2 px-4 h-10 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer"
+                >
+                  <Plus size={14} />
+                  Create Dashboard
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -852,7 +874,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`pb-3 text-[13px] font-semibold relative transition-colors cursor-pointer whitespace-nowrap ${
+              className={`pb-3 text-[0.8125rem] font-semibold relative transition-colors cursor-pointer whitespace-nowrap ${
                 activeTab === tab ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700'
               }`}
             >
@@ -873,13 +895,13 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
               placeholder="Search dashboards..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-canvas-border rounded-md text-[13px] text-ink-800 placeholder:text-ink-400 bg-canvas-elevated focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100 transition-all"
+              className="w-full pl-9 pr-4 py-2 border border-canvas-border rounded-md text-[0.8125rem] text-ink-800 placeholder:text-ink-400 bg-canvas-elevated focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100 transition-all"
             />
           </div>
           <div className="relative">
             <button
               onClick={() => setSortMenuOpen(!sortMenuOpen)}
-              className="flex items-center gap-2 px-3 h-9 border border-canvas-border bg-canvas-elevated rounded-md text-[13px] text-ink-700 hover:border-brand-200 transition-colors cursor-pointer"
+              className="flex items-center gap-2 px-3 h-9 border border-canvas-border bg-canvas-elevated rounded-md text-[0.8125rem] text-ink-700 hover:border-brand-200 transition-colors cursor-pointer"
             >
               {SORT_LABELS[sortOption]}
               <ChevronDown size={14} />
@@ -892,7 +914,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                     <button
                       key={option}
                       onClick={() => { setSortOption(option); setSortMenuOpen(false); }}
-                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-brand-50 text-[13px] text-ink-700 transition-colors cursor-pointer"
+                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-brand-50 text-[0.8125rem] text-ink-700 transition-colors cursor-pointer"
                     >
                       {sortOption === option ? <Check size={14} className="text-brand-600" /> : <div className="w-[14px]" />}
                       <span className={sortOption === option ? 'text-brand-700 font-medium' : ''}>{SORT_LABELS[option]}</span>
@@ -915,7 +937,9 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                 exit={{ opacity: 0 }}
                 transition={{ delay: i * 0.04 }}
                 onClick={() => onDashboardClick(dashboard.id)}
-                className="glass-card rounded-xl p-5 cursor-pointer group relative flex flex-col"
+                className={`glass-card rounded-xl p-5 cursor-pointer group relative flex flex-col transition-shadow ${
+                  focusedDashboardId === dashboard.id ? 'ring-2 ring-brand-400 shadow-lg' : ''
+                }`}
               >
                 {/* Context menu trigger */}
                 <div className="absolute top-4 right-4 z-10">
@@ -930,23 +954,36 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                       <div className="fixed inset-0 z-10" onClick={e => { e.stopPropagation(); setOpenMenuId(null); }} />
                       <div className="absolute right-0 top-full mt-1 bg-canvas-elevated border border-canvas-border rounded-lg shadow-sm py-1 z-20 min-w-[140px]">
                         <button
-                          onClick={e => { e.stopPropagation(); addToast({ message: 'Share modal opening.', type: 'info' }); setOpenMenuId(null); }}
-                          className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-brand-50 text-[13px] text-ink-700 transition-colors cursor-pointer"
+                          onClick={e => { e.stopPropagation(); openShare({ type: 'dashboard', id: dashboard.id, anchor: rectFromEvent(e) }); setOpenMenuId(null); }}
+                          className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-brand-50 text-[0.8125rem] text-ink-700 transition-colors cursor-pointer"
                         >
                           <Share2 size={14} /> Share
                         </button>
                         <button
                           onClick={e => { e.stopPropagation(); addToast({ message: 'Dashboard exported.', type: 'success' }); setOpenMenuId(null); }}
-                          className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-brand-50 text-[13px] text-ink-700 transition-colors cursor-pointer"
+                          className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-brand-50 text-[0.8125rem] text-ink-700 transition-colors cursor-pointer"
                         >
                           <Download size={14} /> Download
                         </button>
+                        {/* Change data source — only on user-created dashboards in
+                            the "my" tab (seed dashboards have hardcoded fixtures
+                            and shared dashboards aren't ours to mutate). */}
+                        {activeTab === 'my' && createdDashboards.some(d => d.id === dashboard.id) && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setChangeSourceDashboardId(dashboard.id); setOpenMenuId(null); }}
+                            className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-brand-50 text-[0.8125rem] text-ink-700 transition-colors cursor-pointer"
+                          >
+                            <Database size={14} /> Change data source
+                          </button>
+                        )}
+                        <Gated permission="db_delete" mode="disable" title="You don't have permission to delete dashboards">
                         <button
                           onClick={e => { e.stopPropagation(); setDeleteConfirmId(dashboard.id); setOpenMenuId(null); }}
-                          className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-risk-50 text-risk-700 text-[13px] transition-colors cursor-pointer"
+                          className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-risk-50 text-risk-700 text-[0.8125rem] transition-colors cursor-pointer"
                         >
                           <Trash2 size={14} /> {activeTab === 'shared' ? 'Remove' : 'Delete'}
                         </button>
+                        </Gated>
                       </div>
                     </>
                   )}
@@ -961,17 +998,17 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
 
                 {/* Title & Description */}
                 <div className="mb-4 flex-1">
-                  <h3 className="text-[15px] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors mb-1.5">
+                  <h3 className="text-[0.9375rem] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors mb-1.5">
                     {dashboard.name}
                   </h3>
-                  <p className="text-[12px] text-ink-500 leading-relaxed line-clamp-2">
+                  <p className="text-[0.75rem] text-ink-500 leading-relaxed line-clamp-2">
                     {dashboard.description}
                   </p>
                 </div>
 
                 {/* Shared by */}
                 {dashboard.sharedBy && (
-                  <div className="text-[11px] text-ink-400 mb-3">
+                  <div className="text-[0.6875rem] text-ink-400 mb-3">
                     Shared by <span className="font-medium text-ink-600">{dashboard.sharedBy}</span>
                   </div>
                 )}
@@ -981,19 +1018,29 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1.5">
                       <Clock size={13} className="text-ink-400" />
-                      <span className="text-[12px] text-ink-400">{dashboard.timeAgo}</span>
+                      <span className="text-[0.75rem] text-ink-400">{dashboard.timeAgo}</span>
                     </div>
-                    {dashboard.dataSourceNames && dashboard.dataSourceNames.length > 0 && (
+                    {(dashboard.dataSource || (dashboard.dataSourceNames && dashboard.dataSourceNames.length > 0)) && (
                       <div className="flex items-center gap-1 flex-wrap">
                         {(() => {
+                          // Prefer the explicit dataSource field. For combo dashboards
+                          // (or legacy entries without it), fall back to inferring
+                          // each badge from the individual data-source name.
                           const types = new Set<string>();
-                          dashboard.dataSourceNames!.forEach(name => {
-                            if (name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')) types.add('file');
-                            else if (name.includes('query')) types.add('query');
-                            else types.add('sql');
-                          });
+                          const ds = dashboard.dataSource;
+                          if (ds === 'excel' || ds === 'csv') {
+                            types.add('file');
+                          } else if (ds === 'sql' || ds === 'query') {
+                            types.add(ds);
+                          } else {
+                            (dashboard.dataSourceNames || []).forEach(name => {
+                              if (name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')) types.add('file');
+                              else if (name.includes('query')) types.add('query');
+                              else types.add('sql');
+                            });
+                          }
                           return Array.from(types).map(t => (
-                            <span key={t} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold ${
+                            <span key={t} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.5625rem] font-semibold ${
                               t === 'file' ? 'bg-green-50 text-green-700' :
                               t === 'query' ? 'bg-amber-50 text-amber-700' :
                               'bg-purple-50 text-purple-700'
@@ -1007,7 +1054,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                     )}
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="text-[12px] font-semibold text-brand-600">Open</span>
+                    <span className="text-[0.75rem] font-semibold text-brand-600">Open</span>
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                       <path d="M6 12L10 8L6 4" stroke="currentColor" className="text-brand-600" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
@@ -1027,20 +1074,20 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                 {activeTab === 'shared' ? <Share2 size={48} className="text-brand-300" /> : <LayoutGrid size={48} className="text-brand-300" />}
               </div>
             </div>
-            <p className="text-[16px] text-ink-700 font-semibold">
+            <p className="text-[1rem] text-ink-700 font-semibold">
               {activeTab === 'shared' ? 'No shared dashboards' : searchQuery ? 'No dashboards found' : 'No dashboards yet'}
             </p>
-            <p className="text-[13px] text-ink-400 mt-1.5 mb-5">
+            <p className="text-[0.8125rem] text-ink-400 mt-1.5 mb-5">
               {activeTab === 'shared'
                 ? 'Dashboards shared with you by your team will appear here.'
                 : searchQuery
                   ? 'Try a different search term or create a new dashboard.'
                   : 'Create your first dashboard to start visualizing your data.'}
             </p>
-            {activeTab === 'my' && (
+            {activeTab === 'my' && can('db_add') && (
               <button
                 onClick={() => setCreateModalOpen(true)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
               >
                 <Plus size={14} />
                 Create Dashboard
@@ -1051,7 +1098,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
 
       {/* ── Sample Dashboards ── */}
       <div className="mt-8 mb-6">
-        <h2 className="text-[13px] font-bold text-ink-500 uppercase tracking-wide mb-4">Sample Dashboards</h2>
+        <h2 className="text-[0.8125rem] font-bold text-ink-500 uppercase tracking-wide mb-4">Sample Dashboards</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -1068,10 +1115,10 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
 
             {/* Title & Description */}
             <div className="mb-4 flex-1">
-              <h3 className="text-[15px] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors mb-1.5">
+              <h3 className="text-[0.9375rem] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors mb-1.5">
                 Excel Sample Example
               </h3>
-              <p className="text-[12px] text-ink-500 leading-relaxed line-clamp-2">
+              <p className="text-[0.75rem] text-ink-500 leading-relaxed line-clamp-2">
                 Excel data quality — blank cells, duplicate rows, type mismatches, format errors, and sheet-level anomalies.
               </p>
             </div>
@@ -1081,15 +1128,56 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <Clock size={13} className="text-ink-400" />
-                  <span className="text-[12px] text-ink-400">30 minutes ago</span>
+                  <span className="text-[0.75rem] text-ink-400">30 minutes ago</span>
                 </div>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-green-50 text-green-700">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.5625rem] font-semibold bg-green-50 text-green-700">
                   <Upload size={8} />
                   Excel
                 </span>
               </div>
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-[12px] font-semibold text-brand-600">Open</span>
+                <span className="text-[0.75rem] font-semibold text-brand-600">Open</span>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path d="M6 12L10 8L6 4" stroke="currentColor" className="text-brand-600" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Live SQL — Vendor Risk (sample bound to db-02) */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.04 }}
+            onClick={() => onDashboardClick('sql')}
+            className="glass-card rounded-xl p-5 cursor-pointer group relative flex flex-col"
+          >
+            <div className="mb-4">
+              <div className="inline-flex p-2.5 rounded-lg bg-purple-50 text-purple-700">
+                <Database size={18} />
+              </div>
+            </div>
+            <div className="mb-4 flex-1">
+              <h3 className="text-[0.9375rem] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors mb-1.5">
+                Live SQL — Vendor Risk
+              </h3>
+              <p className="text-[0.75rem] text-ink-500 leading-relaxed line-clamp-2">
+                Live database insights — vendor performance, invoice trends, risk distribution, and category-wise spend, sourced from Vendor Master (PostgreSQL).
+              </p>
+            </div>
+            <div className="flex items-center justify-between pt-3 border-t border-canvas-border mt-auto">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <Clock size={13} className="text-ink-400" />
+                  <span className="text-[0.75rem] text-ink-400">Just now</span>
+                </div>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.5625rem] font-semibold bg-purple-50 text-purple-700">
+                  <Database size={8} />
+                  SQL
+                </span>
+              </div>
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-[0.75rem] font-semibold text-brand-600">Open</span>
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                   <path d="M6 12L10 8L6 4" stroke="currentColor" className="text-brand-600" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -1114,26 +1202,26 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-start justify-between mb-3">
-                <h3 className="text-[16px] font-bold text-brand-900">
+                <h3 className="text-[1rem] font-bold text-brand-900">
                   {activeTab === 'shared' ? 'Remove Dashboard?' : 'Delete Dashboard?'}
                 </h3>
                 <button onClick={() => setDeleteConfirmId(null)} className="p-1 rounded-lg hover:bg-surface-2 transition-colors cursor-pointer shrink-0">
                   <X size={18} className="text-ink-400" />
                 </button>
               </div>
-              <p className="text-[13px] text-ink-500 mb-6 leading-relaxed">
+              <p className="text-[0.8125rem] text-ink-500 mb-6 leading-relaxed">
                 Are you sure you want to {activeTab === 'shared' ? 'remove' : 'delete'} this dashboard? This action cannot be undone and will remove all associated data.
               </p>
               <div className="flex gap-3 justify-center">
                 <button
                   onClick={() => setDeleteConfirmId(null)}
-                  className="px-6 py-2.5 text-[13px] font-semibold text-ink-700 border border-canvas-border rounded-lg hover:bg-surface-2 transition-colors cursor-pointer"
+                  className="px-6 py-2.5 text-[0.8125rem] font-semibold text-ink-700 border border-canvas-border rounded-lg hover:bg-surface-2 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => handleDelete(deleteConfirmId)}
-                  className="px-6 py-2.5 bg-risk text-white text-[13px] font-semibold rounded-lg hover:bg-risk-700 transition-colors cursor-pointer"
+                  className="px-6 py-2.5 bg-risk text-white text-[0.8125rem] font-semibold rounded-lg hover:bg-risk-700 transition-colors cursor-pointer"
                 >
                   {activeTab === 'shared' ? 'Remove' : 'Delete'}
                 </button>
@@ -1143,24 +1231,105 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
         )}
       </AnimatePresence>
 
+      {/* ── Change data source picker ── */}
+      <AnimatePresence>
+        {changeSourceDashboardId && (() => {
+          const target = createdDashboards.find(d => d.id === changeSourceDashboardId);
+          if (!target) return null;
+          const dbOptions = SEED.filter(s => s.type === 'database');
+          return (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setChangeSourceDashboardId(null)} />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                transition={{ duration: 0.2 }}
+                className="relative bg-canvas-elevated rounded-2xl border border-canvas-border shadow-2xl w-[440px] max-h-[80vh] flex flex-col mx-4"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between px-6 pt-5 pb-3 border-b border-canvas-border">
+                  <div>
+                    <h3 className="text-[1rem] font-bold text-ink-900">Change data source</h3>
+                    <p className="text-[0.75rem] text-ink-500 mt-0.5 truncate max-w-[340px]">For dashboard "{target.name}"</p>
+                  </div>
+                  <button onClick={() => setChangeSourceDashboardId(null)} className="p-1 rounded-lg hover:bg-surface-2 transition-colors cursor-pointer shrink-0">
+                    <X size={18} className="text-ink-400" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto px-6 py-4">
+                  <div className="space-y-1.5">
+                    {dbOptions.map(db => {
+                      const cfg = INTEGRATION_CONFIGS[db.id];
+                      const tableCount = (DB_SCHEMAS[db.id] ?? []).length;
+                      const isCurrent = target.sourceId === db.id;
+                      return (
+                        <button
+                          key={db.id}
+                          onClick={() => {
+                            onUpdateDashboardSource?.(target.id, {
+                              dataSource: 'sql',
+                              sourceId: db.id,
+                              dataSourceNames: [db.name],
+                            });
+                            addToast({ message: `Source changed to ${db.name}`, type: 'success' });
+                            setChangeSourceDashboardId(null);
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer text-left ${
+                            isCurrent ? 'border-brand-500 bg-brand-50' : 'border-canvas-border bg-canvas-elevated hover:border-brand-200'
+                          }`}
+                        >
+                          <span className={`size-[8px] rounded-full shrink-0 ${
+                            cfg?.health === 'healthy' ? 'bg-emerald-500' :
+                            cfg?.health === 'degraded' ? 'bg-amber-500' :
+                            cfg?.health === 'failed' ? 'bg-red-500' :
+                            'bg-ink-300'
+                          }`} />
+                          <div className="flex-1 min-w-0">
+                            <div className={`text-[0.8125rem] truncate ${isCurrent ? 'text-brand-700 font-semibold' : 'text-ink-900 font-medium'}`}>{db.name}</div>
+                            <div className="text-[0.6875rem] text-ink-400 truncate">
+                              {cfg?.provider ?? 'Unknown provider'}
+                              {tableCount > 0 && ` · ${tableCount} ${tableCount === 1 ? 'table' : 'tables'}`}
+                            </div>
+                          </div>
+                          {isCurrent && <Check size={16} className="text-brand-600 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-3 px-6 py-3.5 border-t border-canvas-border">
+                  <button onClick={() => setChangeSourceDashboardId(null)} className="px-5 py-2 text-[0.8125rem] font-semibold text-ink-700 hover:text-ink-900 transition-colors cursor-pointer">
+                    Cancel
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
+
       {/* Create Dashboard Modal */}
       <CreateDashboardModal
         open={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
         onOpenChat={onOpenChat}
-        onCreate={(name, desc, customFields) => {
+        onCreate={(name, desc, opts) => {
           const newId = `custom-${Date.now()}`;
-          const newDashboard = {
+          const newDashboard: Dashboard = {
             id: newId,
             name,
             description: desc || 'Custom dashboard',
             timeAgo: 'Just now',
             creator: 'You',
             accent: 'bg-brand-50 text-brand-700',
+            ...(opts?.sourceType && { dataSource: opts.sourceType }),
+            ...(opts?.sourceName && { dataSourceNames: [opts.sourceName] }),
+            ...(opts?.sourceId && { sourceId: opts.sourceId }),
           };
           onCreateDashboard?.(newDashboard);
           addToast({ message: `Dashboard "${name}" created`, type: 'success' });
-          onDashboardClick(newId, customFields);
+          onDashboardClick(newId, opts?.customFields);
         }}
       />
     </div>

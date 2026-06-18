@@ -1,0 +1,21 @@
+Invoice ID,Vendor,Department,Invoice Date,Amount,Tax %,Status
+INV-100482,Acme Corporation,Procurement,2026-01-04,12450.00,5,Approved
+INV-100483,Globex Industries,Facilities,2026-01-06,8230.50,5,Pending
+INV-100484,Initech LLC,IT,2026-01-09,4100.00,12,Approved
+INV-100485,Umbrella Holdings,Logistics,2026-01-12,9999.99,5,Flagged
+INV-100486,Soylent Foods,Catering,2026-01-15,250.00,0,Approved
+INV-100487,Stark Industries,Engineering,2026-01-18,142300.75,18,Approved
+INV-100488,Wayne Enterprises,Security,2026-01-21,76210.00,18,Pending
+INV-100489,Cyberdyne Systems,IT,2026-01-23,3300.25,12,Approved
+INV-100490,Massive Dynamic,R&D,2026-01-27,58740.40,18,Approved
+INV-100491,Hooli Inc,Marketing,2026-01-29,14820.00,12,Flagged
+INV-100492,Pied Piper,IT,2026-02-02,2110.00,12,Approved
+INV-100493,Vehement Capital,Finance,2026-02-05,98300.00,18,Pending
+INV-100494,Vandelay Imports,Procurement,2026-02-08,6420.75,5,Approved
+INV-100495,Wonka Industries,Catering,2026-02-11,3890.00,5,Approved
+INV-100496,Tyrell Corporation,Engineering,2026-02-14,210450.00,18,Flagged
+INV-100497,Gekko & Co,Finance,2026-02-17,45120.00,18,Approved
+INV-100498,Oscorp,R&D,2026-02-20,33900.25,18,Pending
+INV-100499,Nakatomi Trading,Logistics,2026-02-23,17250.50,12,Approved
+INV-100500,Weyland-Yutani,Engineering,2026-02-26,302100.00,18,Approved
+INV-100501,Bluth Company,Construction,2026-03-01,7800.00,5,Flagged

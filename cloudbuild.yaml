@@ -1,6 +1,6 @@
 substitutions:
   _REGION: us-central1
-  _SERVICE: hackathon-demo
+  _SERVICE: product-handover
   _AR_REPO: cloud-run-source-deploy
 
 steps:

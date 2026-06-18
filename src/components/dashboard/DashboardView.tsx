@@ -5,12 +5,12 @@ import {
   Plus, Settings, Maximize2, FileText, DollarSign,
   XCircle, Clock, Sparkles, RefreshCw, ChevronDown,
   ShoppingCart, CreditCard, BarChart3,
-  Package, Receipt, Handshake, ShieldCheck,
+  Package, Receipt, Handshake, ShieldCheck, Briefcase,
   Send, X, Mail, Copy, CheckCircle2, ArrowLeft,
   Download, Filter, Share2, Loader2,
   MoreVertical, Edit, Trash2, ChevronUp, Eye, EyeOff,
   Search, LineChart, AreaChart, ListChecks,
-  Database, Link2, Zap, ArrowRight, Unlink,
+  Database, Link2, ArrowRight, Unlink,
   Bell, Columns,
   MessageSquare, Star, Upload, Layers, CloudUpload, Check,
   Hash, GripVertical, PieChart as PieChartIcon, LayoutGrid,
@@ -18,7 +18,17 @@ import {
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { useToast, type ToastType } from '../shared/Toast';
+import { useCan } from '../../context/CurrentUserContext';
+import Gated from '../shared/Gated';
+import { useShare, rectFromEvent } from '../../context/ShareContext';
+import { KpiTile } from '../shared/KpiTile';
 import { AddCardModal } from './add-widget/AddCardModal';
+// ─── Data model (table relationships + multi-table widgets) ───
+import { MODEL_TABLES, DEFAULT_RELATIONSHIPS } from './model/modelData';
+import type { Relationship, WidgetModelConfig, ModelFilter, ModelTable } from './model/relationshipTypes';
+import { buildWidgetRows, distinctValues, colByName, tableById } from './model/joinEngine';
+import RelationshipManagerModal from './model/RelationshipManagerModal';
+import ModelChart from './model/ModelChart';
 import { AddDataModal } from './AddDataModal';
 import { WhiteDropdown } from './add-widget/WhiteDropdown';
 import { ConfigurableChart } from './add-widget/ConfigurableChart';
@@ -27,10 +37,11 @@ import TypographySection from './add-widget/imports/TypographySection-1760-98';
 import ConditionalFormattingSection from './add-widget/imports/ConditionalFormattingSection';
 import DataSeriesFormattingSection from './add-widget/imports/DataSeriesFormattingSection';
 import { SEED, TYPE_META, formatDate } from '../data-sources/sources';
+import { INTEGRATION_CONFIGS } from '../data-sources/datasetFiles';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type DashboardId = 'p2p' | 'o2c' | 's2c' | 'grc' | 'excel';
+type DashboardId = 'p2p' | 'o2c' | 's2c' | 'grc' | 'excel' | 'sql';
 
 interface KpiDef {
   title: string;
@@ -343,6 +354,79 @@ const DASHBOARDS: DashboardDef[] = [
       ],
     },
   },
+  // ─── Live SQL — Vendor Risk ─────────────────────────────────────────────
+  // Pre-bound to db-02 (Vendor Master · PostgreSQL) via SEED_DASHBOARD_SOURCE.
+  // All field labels below come from DB_SCHEMAS['db-02'] so when the user
+  // edits a widget the DB tree shows the same column names that the dashboard
+  // already plots — one consistent dataset across every surface.
+  {
+    id: 'sql',
+    name: 'Live SQL — Vendor Risk',
+    icon: Database,
+    accent: 'from-violet-500 to-fuchsia-500',
+    accentHue: 280,
+    subtitle: 'Live SQL — vendor performance, invoice trends, risk distribution',
+    kpis: [
+      { title: 'Active Vendors',       value: '24,180', change: '+312',  trend: 'up',   icon: Briefcase,     color: 'text-evidence-700 bg-evidence-50' },
+      { title: 'Outstanding Invoices', value: '1.84M',  change: '+18%',  trend: 'up',   icon: Receipt,       color: 'text-brand-700 bg-brand-50' },
+      { title: 'Avg Risk Score',       value: 42,       change: '-3',    trend: 'down', icon: AlertTriangle, color: 'text-high-700 bg-high-50' },
+      { title: 'Avg Days to Pay',      value: '38d',    change: '-4d',   trend: 'down', icon: Clock,         color: 'text-compliant bg-compliant-50' },
+    ],
+    donut: {
+      title: 'Vendors by Region',
+      centerLabel: '24.2K',
+      segments: [
+        { label: 'North',   value: 38, color: 'var(--color-brand-500)' },
+        { label: 'South',   value: 24, color: 'var(--color-evidence)' },
+        { label: 'East',    value: 19, color: 'var(--color-compliant)' },
+        { label: 'West',    value: 12, color: 'var(--color-mitigated)' },
+        { label: 'Central', value: 7,  color: 'var(--color-high)' },
+      ],
+    },
+    lineTrend: {
+      title: 'Monthly Invoice Volume',
+      data: [1480, 1620, 1560, 1820, 1940, 2150],
+      labels: ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'],
+      color: 'var(--color-brand-500)',
+    },
+    progress: {
+      title: 'Top Categories by Spend',
+      data: [
+        { label: 'Hardware',    value: 88, color: 'var(--color-brand-500)' },
+        { label: 'Services',    value: 72, color: 'var(--color-evidence)' },
+        { label: 'Logistics',   value: 54, color: 'var(--color-compliant)' },
+        { label: 'Consulting',  value: 41, color: 'var(--color-mitigated)' },
+        { label: 'Maintenance', value: 28, color: 'var(--color-high)' },
+      ],
+    },
+    bars: {
+      title: 'Department-wise Spend (₹M)',
+      color: 'var(--color-brand-500)',
+      data: [
+        { label: 'Procurement', value: 84 },
+        { label: 'Finance',     value: 62 },
+        { label: 'IT',          value: 58 },
+        { label: 'Operations',  value: 47 },
+        { label: 'HR',          value: 24 },
+        { label: 'Logistics',   value: 38 },
+      ],
+    },
+    table: {
+      title: 'Vendor Records',
+      // Headers match DB_SCHEMAS['db-02'].public.vendors column labels.
+      headers: ['Vendor ID', 'Vendor Name', 'Region', 'Category', 'Status', 'Risk Score', 'Credit Limit', 'Outstanding Amount'],
+      rows: [
+        { cells: ['V-001', 'Acme Global Imaging',     'North',   'Hardware',    'Active',  '78', '₹12,00,000', '₹4,82,000'] },
+        { cells: ['V-002', 'Korean Technologies',     'East',    'Services',    'Active',  '71', '₹8,50,000',  '₹3,16,000'] },
+        { cells: ['V-003', 'Chintamani Paper Products','South',  'Logistics',   'Pending', '45', '₹4,00,000',  '₹1,12,000'] },
+        { cells: ['V-004', 'M Cargo Logistics',       'West',    'Logistics',   'Active',  '32', '₹6,20,000',  '₹  84,500'] },
+        { cells: ['V-005', '3tones Letter Co.',       'Central', 'Services',    'Active',  '28', '₹2,50,000',  '₹  41,200'] },
+        { cells: ['V-006', 'TechParts Ltd',           'North',   'Hardware',    'Hold',    '82', '₹15,00,000', '₹6,90,000'] },
+        { cells: ['V-007', 'Global Supplies Inc',     'East',    'Maintenance', 'Active',  '54', '₹5,40,000',  '₹2,28,000'] },
+        { cells: ['V-008', 'Atlas Manufacturing',     'South',   'Hardware',    'Pending', '—',  '₹0',          '₹0'] },
+      ],
+    },
+  },
 ];
 
 // ─── Daily Digest Data ───────────────────────────────────────────────────────
@@ -373,6 +457,12 @@ const DAILY_DIGESTS: Record<DashboardId, Array<{ type: 'change' | 'alert' | 'imp
     { type: 'new', text: 'New risk RSK-012 identified in R2R process — GL balance discrepancy', time: '2d ago' },
   ],
   excel: [],
+  sql: [
+    { type: 'alert', text: '5 vendors flagged for risk-score increase past threshold (≥70) — Acme Global, Korean Tech, +3', time: '4h ago' },
+    { type: 'change', text: 'Monthly invoice volume up 18% MoM on public.invoices — driven by Procurement department', time: '8h ago' },
+    { type: 'improvement', text: 'Avg days-to-pay dropped to 38 days (was 42) after early-payment discount uptake', time: '1d ago' },
+    { type: 'new', text: 'New vendor "Atlas Manufacturing" added to public.vendors — KYC pending', time: '2d ago' },
+  ],
 };
 
 // ─── AI Summaries for each dashboard ────────────────────────────────────────
@@ -383,28 +473,33 @@ const DASHBOARD_SUMMARIES: Record<DashboardId, string> = {
   s2c: "4 contracts expiring within 30 days, 2 are high-value (>$500K) — renegotiation must start this week. Cost savings are tracking ahead at $2.8M vs $2.4M target. 3 vendors downgraded to Medium risk after score refresh. Legal added new compliance clause to templates.",
   grc: "Material weakness DEF-002 is 6 days from deadline — remediation evidence pending. SOX progress moved to 58% after 3 controls tested yesterday. Workflow automation saved 45 person-hours this month. New risk RSK-012 identified in R2R — GL balance discrepancy across subsidiaries.",
   excel: "",
+  sql: "Vendor Master DB shows 24,180 active vendors across 5 regions, with North leading at 38%. Outstanding invoices total 1.84M across public.invoices, with avg days-to-pay improving to 38d. 5 vendors crossed the 70+ risk-score threshold this week and need review. Hardware and Services categories together account for 54% of spend.",
 };
 
 const SHARE_EMAIL_TEMPLATES: Record<DashboardId, { subject: string; body: string }> = {
   p2p: {
     subject: 'P2P Audit Alert Summary — Action Required',
-    body: `Hi Team,\n\nHere's today's P2P audit summary from Auditify Copilot:\n\nALERTS\n• 3 new duplicate invoice flags detected overnight — Acme Corp (2), Global Supplies (1)\n• New vendor "Atlas Manufacturing" onboarded — KYC verification pending\n\nIMPROVEMENTS\n• Compliance rate improved from 93.1% → 94.2%\n• Avg processing time dropped to 1.8 days (was 2.1 days)\n\nKEY METRICS\n• Invoices processed: 12,450 (+8.2%)\n• Duplicate flags: 23 (-12%)\n• Compliance rate: 94.2% (+1.4%)\n\nRECOMMENDED ACTIONS\n1. Review & assign the 3 new duplicate flags before payment batch\n2. Expedite KYC verification for Atlas Manufacturing\n3. Continue vendor master data cleanup — showing strong results\n\nGenerated by Auditify Copilot — AI-Powered Internal Audit Platform`,
+    body: `Hi Team,\n\nHere's today's P2P audit summary from Irame Copilot:\n\nALERTS\n• 3 new duplicate invoice flags detected overnight — Acme Corp (2), Global Supplies (1)\n• New vendor "Atlas Manufacturing" onboarded — KYC verification pending\n\nIMPROVEMENTS\n• Compliance rate improved from 93.1% → 94.2%\n• Avg processing time dropped to 1.8 days (was 2.1 days)\n\nKEY METRICS\n• Invoices processed: 12,450 (+8.2%)\n• Duplicate flags: 23 (-12%)\n• Compliance rate: 94.2% (+1.4%)\n\nRECOMMENDED ACTIONS\n1. Review & assign the 3 new duplicate flags before payment batch\n2. Expedite KYC verification for Atlas Manufacturing\n3. Continue vendor master data cleanup — showing strong results\n\nGenerated by Irame Copilot — AI-Powered Internal Audit Platform`,
   },
   o2c: {
     subject: 'O2C Audit Alert Summary — 2 SLA Breaches',
-    body: `Hi Team,\n\nHere's today's O2C audit summary from Auditify Copilot:\n\nALERTS\n• 2 high-value invoices ($180K+) pending approval beyond SLA\n• Revenue recognition timing discrepancy flagged in Q4 entries\n\nIMPROVEMENTS\n• DSO improved from 42 → 38 days\n• Disputed orders down 15% vs last month\n\nRECOMMENDED ACTIONS\n1. Escalate the 2 SLA-breached invoices immediately\n2. Review the Q4 revenue timing discrepancy before period close\n3. Continue collection drive momentum\n\nGenerated by Auditify Copilot`,
+    body: `Hi Team,\n\nHere's today's O2C audit summary from Irame Copilot:\n\nALERTS\n• 2 high-value invoices ($180K+) pending approval beyond SLA\n• Revenue recognition timing discrepancy flagged in Q4 entries\n\nIMPROVEMENTS\n• DSO improved from 42 → 38 days\n• Disputed orders down 15% vs last month\n\nRECOMMENDED ACTIONS\n1. Escalate the 2 SLA-breached invoices immediately\n2. Review the Q4 revenue timing discrepancy before period close\n3. Continue collection drive momentum\n\nGenerated by Irame Copilot`,
   },
   s2c: {
     subject: 'S2C Alert — 4 Contracts Expiring Within 30 Days',
-    body: `Hi Team,\n\nHere's today's S2C audit summary from Auditify Copilot:\n\nALERTS\n• 4 contracts expiring within 30 days — 2 high-value (>$500K)\n• 3 vendors downgraded to Medium risk\n\nIMPROVEMENTS\n• Cost savings: $2.8M realized vs $2.4M target (117%)\n• New compliance clause added to contract templates\n\nRECOMMENDED ACTIONS\n1. Start renegotiation on the 2 high-value expiring contracts this week\n2. Review the 3 downgraded vendors' risk mitigation plans\n\nGenerated by Auditify Copilot`,
+    body: `Hi Team,\n\nHere's today's S2C audit summary from Irame Copilot:\n\nALERTS\n• 4 contracts expiring within 30 days — 2 high-value (>$500K)\n• 3 vendors downgraded to Medium risk\n\nIMPROVEMENTS\n• Cost savings: $2.8M realized vs $2.4M target (117%)\n• New compliance clause added to contract templates\n\nRECOMMENDED ACTIONS\n1. Start renegotiation on the 2 high-value expiring contracts this week\n2. Review the 3 downgraded vendors' risk mitigation plans\n\nGenerated by Irame Copilot`,
   },
   grc: {
     subject: 'GRC Alert — DEF-002 Remediation Due in 6 Days',
-    body: `Hi Team,\n\nHere's today's GRC audit summary from Auditify Copilot:\n\nCRITICAL\n• Material weakness DEF-002 remediation due in 6 days\n• New risk RSK-012 identified — GL balance discrepancy\n\nPROGRESS\n• SOX audit progress: 58% (14/24 controls tested)\n• 3 controls tested since yesterday\n• Workflow automation saved 45 person-hours this month\n\nRECOMMENDED ACTIONS\n1. Escalate DEF-002 to ensure Mar 31 deadline is met\n2. Assign controls for RSK-012 in R2R process\n3. Prioritize remaining 10 untested controls\n\nGenerated by Auditify Copilot`,
+    body: `Hi Team,\n\nHere's today's GRC audit summary from Irame Copilot:\n\nCRITICAL\n• Material weakness DEF-002 remediation due in 6 days\n• New risk RSK-012 identified — GL balance discrepancy\n\nPROGRESS\n• SOX audit progress: 58% (14/24 controls tested)\n• 3 controls tested since yesterday\n• Workflow automation saved 45 person-hours this month\n\nRECOMMENDED ACTIONS\n1. Escalate DEF-002 to ensure Mar 31 deadline is met\n2. Assign controls for RSK-012 in R2R process\n3. Prioritize remaining 10 untested controls\n\nGenerated by Irame Copilot`,
   },
   excel: {
     subject: 'Excel Data Quality Report — Issues Found',
-    body: `Hi Team,\n\nHere's the Excel data quality report from Auditify:\n\nFILE: Invoice_Master.xlsx\n• Total rows: 24,806 across 6 sheets\n• Blank cells: 342\n• Duplicate rows: 89\n• Type mismatches: 47\n• Data completeness: 96.8%\n\nTOP ISSUES\n1. 142 issues in Invoices sheet — mostly type mismatches in Amount column\n2. 87 issues in Vendors sheet — missing email addresses\n3. Date format inconsistencies in 23 rows\n\nGenerated by Auditify`,
+    body: `Hi Team,\n\nHere's the Excel data quality report from Irame:\n\nFILE: Invoice_Master.xlsx\n• Total rows: 24,806 across 6 sheets\n• Blank cells: 342\n• Duplicate rows: 89\n• Type mismatches: 47\n• Data completeness: 96.8%\n\nTOP ISSUES\n1. 142 issues in Invoices sheet — mostly type mismatches in Amount column\n2. 87 issues in Vendors sheet — missing email addresses\n3. Date format inconsistencies in 23 rows\n\nGenerated by Irame`,
+  },
+  sql: {
+    subject: 'Live SQL — Vendor Risk Snapshot',
+    body: `Hi Team,\n\nHere's today's Vendor Risk snapshot from Irame Copilot, sourced live from Vendor Master (PostgreSQL):\n\nALERTS\n• 5 vendors crossed the 70+ risk-score threshold — review needed before next payment batch\n• Atlas Manufacturing pending KYC verification\n\nMETRICS\n• Active vendors: 24,180\n• Outstanding invoices: 1.84M\n• Avg risk score: 42\n• Avg days-to-pay: 38d (improved from 42d)\n\nTOP CATEGORIES BY SPEND\n1. Hardware\n2. Services\n3. Logistics\n\nGenerated by Irame Copilot — Live SQL`,
   },
 };
 
@@ -421,11 +516,11 @@ function IRAInlineSummary({ dashboardId }: { dashboardId: DashboardId }) {
             <div className="p-1.5 rounded-lg bg-brand-50">
               <Sparkles size={13} className="text-brand-600" />
             </div>
-            <span className="text-[12px] font-bold text-brand-700 uppercase tracking-wide">IRA Summary</span>
+            <span className="text-[0.75rem] font-bold text-brand-700 uppercase tracking-wide">IRA Summary</span>
           </div>
           <Sparkles size={13} className="text-brand-500" />
         </div>
-        <p className="text-[13px] leading-[1.65] text-ink-800">
+        <p className="text-[0.8125rem] leading-[1.65] text-ink-800">
           {summary}
         </p>
       </div>
@@ -441,6 +536,7 @@ const AI_SUMMARIES: Record<DashboardId, string> = {
   s2c: '12 contracts expire within 30 days across 3 business units. Vendor TechParts Ltd compliance score dropped below 75% threshold. 4 contracts pending legal review — recommend prioritizing the ₹2.1Cr IT services renewal.',
   grc: '2 critical risks in P2P have zero controls mapped. SOD violation detected in AP module — user JSmith has both invoice approval and payment release access. 3 audit findings from Q1 remain open past remediation deadline.',
   excel: '',
+  sql: 'Vendor Master DB carries 24,180 active vendors across 5 regions. 5 vendors crossed the 70+ risk-score threshold this week — review before next payment batch. Avg days-to-pay improved to 38d after the early-payment discount drive. Hardware + Services account for 54% of spend; Procurement department drove an 18% MoM uplift in invoice volume.',
 };
 
 function EmptyAlertsPanel() {
@@ -452,12 +548,12 @@ function EmptyAlertsPanel() {
           <div className="p-1.5 rounded-lg bg-gradient-to-br from-primary to-primary-medium">
             <Sparkles size={13} className="text-white" />
           </div>
-          <span className="text-[13px] font-semibold text-text">Alerts & Daily Digest</span>
-          <span className="text-[12px] bg-canvas-elevated text-ink-400 px-2 py-0.5 rounded-full font-bold">0 alerts</span>
-          <span className="text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">AI Summary</span>
+          <span className="text-[0.8125rem] font-semibold text-text">Alerts & Daily Digest</span>
+          <span className="text-[0.75rem] bg-canvas-elevated text-ink-400 px-2 py-0.5 rounded-full font-bold">0 alerts</span>
+          <span className="text-[0.75rem] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">AI Summary</span>
           <ChevronDown size={14} className={`text-text-muted transition-transform ${expanded ? '' : '-rotate-90'}`} />
         </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-ink-400 bg-canvas-elevated cursor-default opacity-60">
+        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold text-ink-400 bg-canvas-elevated cursor-default opacity-60">
           <Send size={11} /> Share with Team
         </button>
       </div>
@@ -468,8 +564,8 @@ function EmptyAlertsPanel() {
               <div className="size-10 rounded-xl bg-canvas-elevated flex items-center justify-center mb-3">
                 <Sparkles size={18} className="text-ink-300" />
               </div>
-              <p className="text-[13px] font-medium text-ink-500 mb-1">No alerts yet</p>
-              <p className="text-[12px] text-ink-400 max-w-xs">Alerts and AI-generated summaries will appear here once your dashboard has data.</p>
+              <p className="text-[0.8125rem] font-medium text-ink-500 mb-1">No alerts yet</p>
+              <p className="text-[0.75rem] text-ink-400 max-w-xs">Alerts and AI-generated summaries will appear here once your dashboard has data.</p>
             </div>
           </motion.div>
         )}
@@ -480,6 +576,7 @@ function EmptyAlertsPanel() {
 
 function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
   const { addToast } = useToast();
+  const { can } = useCan();
   const [expanded, setExpanded] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
   const [emailGenerating, setEmailGenerating] = useState(false);
@@ -536,14 +633,16 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
             <div className="p-1.5 rounded-lg bg-gradient-to-br from-primary to-primary-medium">
               <Sparkles size={13} className="text-white" />
             </div>
-            <span className="text-[13px] font-semibold text-text">Alerts & Daily Digest</span>
-            {alertCount > 0 && <span className="text-[12px] bg-risk-50 text-risk-700 px-2 py-0.5 rounded-full font-bold">{alertCount} alert{alertCount > 1 ? 's' : ''}</span>}
-            <span className="text-[12px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">AI Summary</span>
+            <span className="text-[0.8125rem] font-semibold text-text">Alerts & Daily Digest</span>
+            {alertCount > 0 && <span className="text-[0.75rem] bg-risk-50 text-risk-700 px-2 py-0.5 rounded-full font-bold">{alertCount} alert{alertCount > 1 ? 's' : ''}</span>}
+            <span className="text-[0.75rem] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">AI Summary</span>
             <ChevronDown size={14} className={`text-text-muted transition-transform ${expanded ? '' : '-rotate-90'}`} />
           </button>
-          <button onClick={handleShareClick} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
-            <Send size={11} /> Share with Team
-          </button>
+          {can('db_share') && (
+            <button onClick={handleShareClick} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.75rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
+              <Send size={11} /> Share with Team
+            </button>
+          )}
         </div>
 
         <AnimatePresence>
@@ -562,11 +661,11 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
                       className={`flex items-start gap-2.5 p-2.5 rounded-xl transition-colors ${item.type === 'alert' ? 'bg-high-50/50 border border-high/50' : 'hover:bg-surface-2'}`}>
                       <div className={`p-1.5 rounded-lg shrink-0 ${color}`}><Icon size={12} /></div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[12px] text-text leading-relaxed">{item.text}</div>
-                        <div className="text-[12px] text-text-muted mt-0.5">{item.time}</div>
+                        <div className="text-[0.75rem] text-text leading-relaxed">{item.text}</div>
+                        <div className="text-[0.75rem] text-text-muted mt-0.5">{item.time}</div>
                       </div>
                       {item.type === 'alert' && (
-                        <span className="text-[12px] font-bold text-high-700 bg-high-50 px-1.5 py-0.5 rounded-full shrink-0">Action needed</span>
+                        <span className="text-[0.75rem] font-bold text-high-700 bg-high-50 px-1.5 py-0.5 rounded-full shrink-0">Action needed</span>
                       )}
                     </motion.div>
                   );
@@ -594,8 +693,8 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
                 <div className="flex items-center gap-2.5">
                   <div className="p-2 bg-primary/10 text-primary rounded-xl"><Mail size={16} /></div>
                   <div>
-                    <h3 className="text-[15px] font-semibold text-text">Share Alert Summary</h3>
-                    <p className="text-[12px] text-text-muted">AI-generated email ready to send</p>
+                    <h3 className="text-[0.9375rem] font-semibold text-text">Share Alert Summary</h3>
+                    <p className="text-[0.75rem] text-text-muted">AI-generated email ready to send</p>
                   </div>
                 </div>
                 <button onClick={() => setShowShareModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">
@@ -607,19 +706,19 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
               <div className="flex-1 overflow-y-auto p-5 space-y-4">
                 {/* Recipient */}
                 <div>
-                  <label className="text-[12px] font-semibold text-text-muted block mb-1.5">Send to</label>
+                  <label className="text-[0.75rem] font-semibold text-text-muted block mb-1.5">Send to</label>
                   <input
                     value={recipient}
                     onChange={e => setRecipient(e.target.value)}
                     placeholder="e.g., karan.mehta@company.com, sneha.desai@company.com"
-                    className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[13px] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                    className="w-full px-3 py-2.5 rounded-xl border border-border-light text-[0.8125rem] text-text focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
                   />
                 </div>
 
                 {/* Generate button */}
                 {!emailGenerated && !emailGenerating && (
                   <button onClick={handleGenerateEmail}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-lg text-[13px] font-semibold transition-all cursor-pointer">
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-lg text-[0.8125rem] font-semibold transition-all cursor-pointer">
                     <Sparkles size={15} /> Generate AI Email
                   </button>
                 )}
@@ -630,8 +729,8 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
                     <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} className="inline-block mb-3">
                       <Sparkles size={24} className="text-primary" />
                     </motion.div>
-                    <div className="text-[13px] font-medium text-text mb-1">Generating email content...</div>
-                    <div className="text-[12px] text-text-muted">Summarizing alerts, metrics, and recommended actions</div>
+                    <div className="text-[0.8125rem] font-medium text-text mb-1">Generating email content...</div>
+                    <div className="text-[0.75rem] text-text-muted">Summarizing alerts, metrics, and recommended actions</div>
                     {/* Progress bar */}
                     <div className="mt-3 h-1.5 bg-surface-3 rounded-full overflow-hidden max-w-xs mx-auto">
                       <motion.div initial={{ width: '0%' }} animate={{ width: '100%' }} transition={{ duration: 2, ease: 'easeOut' }}
@@ -644,19 +743,19 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
                 {emailGenerated && (
                   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                     <div className="flex items-center justify-between mb-2">
-                      <label className="text-[12px] font-semibold text-text-muted">Generated Email</label>
-                      <button onClick={handleCopyEmail} className="flex items-center gap-1 text-[12px] font-medium text-primary hover:underline cursor-pointer">
+                      <label className="text-[0.75rem] font-semibold text-text-muted">Generated Email</label>
+                      <button onClick={handleCopyEmail} className="flex items-center gap-1 text-[0.75rem] font-medium text-primary hover:underline cursor-pointer">
                         {emailCopied ? <><CheckCircle2 size={10} /> Copied!</> : <><Copy size={10} /> Copy</>}
                       </button>
                     </div>
                     {/* Subject */}
                     <div className="px-3 py-2 bg-surface-2 rounded-t-xl border border-border-light border-b-0">
-                      <span className="text-[12px] text-text-muted font-medium">Subject: </span>
-                      <span className="text-[12px] font-semibold text-text">{emailTemplate.subject}</span>
+                      <span className="text-[0.75rem] text-text-muted font-medium">Subject: </span>
+                      <span className="text-[0.75rem] font-semibold text-text">{emailTemplate.subject}</span>
                     </div>
                     {/* Body */}
                     <div className="px-4 py-3 bg-white rounded-b-xl border border-border-light max-h-[250px] overflow-y-auto">
-                      <pre className="text-[12px] text-text leading-relaxed whitespace-pre-wrap font-sans">{emailTemplate.body}</pre>
+                      <pre className="text-[0.75rem] text-text leading-relaxed whitespace-pre-wrap font-sans">{emailTemplate.body}</pre>
                     </div>
                   </motion.div>
                 )}
@@ -666,11 +765,11 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
               {emailGenerated && (
                 <div className="px-5 py-4 border-t border-border-light flex items-center justify-between shrink-0">
                   <button onClick={() => { setEmailGenerated(false); setEmailGenerating(false); }}
-                    className="px-4 py-2 text-[12px] font-medium text-text-secondary hover:bg-surface-2 rounded-lg transition-colors cursor-pointer">
+                    className="px-4 py-2 text-[0.75rem] font-medium text-text-secondary hover:bg-surface-2 rounded-lg transition-colors cursor-pointer">
                     Regenerate
                   </button>
                   <button onClick={handleSendEmail}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-lg text-[13px] font-semibold transition-all cursor-pointer">
+                    className="flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-lg text-[0.8125rem] font-semibold transition-all cursor-pointer">
                     <Send size={13} /> Send Email
                   </button>
                 </div>
@@ -737,18 +836,18 @@ function DropZone({ label, placeholder, active, onDragOver, onDragLeave, onDrop,
       {fields.length === 0 ? (
         <div className="flex items-center gap-2">
           <svg className="size-3.5 text-ink-300 shrink-0" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1"><line x1="4" y1="3" x2="4" y2="3.01" strokeLinecap="round" /><line x1="7" y1="3" x2="7" y2="3.01" strokeLinecap="round" /><line x1="4" y1="7" x2="4" y2="7.01" strokeLinecap="round" /><line x1="7" y1="7" x2="7" y2="7.01" strokeLinecap="round" /><line x1="4" y1="11" x2="4" y2="11.01" strokeLinecap="round" /><line x1="7" y1="11" x2="7" y2="11.01" strokeLinecap="round" /></svg>
-          <span className="text-[12px] text-ink-400">{placeholder}</span>
+          <span className="text-[0.75rem] text-ink-400">{placeholder}</span>
         </div>
       ) : (
         <div className="flex items-center gap-1.5 flex-wrap">
           {fields.map(id => (
             <div key={id} className="inline-flex items-center h-[28px] bg-brand-50 border border-brand-600/30 rounded px-2.5 gap-1.5 shrink-0">
-              <span className="text-[12px] font-medium text-ink-900 whitespace-nowrap">{getLabel(id)}</span>
+              <span className="text-[0.75rem] font-medium text-ink-900 whitespace-nowrap">{getLabel(id)}</span>
               {showAgg && yAggs && setAggDropdownOpen && setYAggs && (
                 <div className="relative">
                   <button
                     onClick={() => setAggDropdownOpen(aggDropdownOpen === id ? null : id)}
-                    className="inline-flex items-center gap-0.5 px-1.5 h-[20px] rounded bg-brand-100 border border-brand-200 text-[10px] font-bold text-brand-700 cursor-pointer hover:bg-brand-200/50 transition-colors"
+                    className="inline-flex items-center gap-0.5 px-1.5 h-[20px] rounded bg-brand-100 border border-brand-200 text-[0.625rem] font-bold text-brand-700 cursor-pointer hover:bg-brand-200/50 transition-colors"
                   >
                     {AGG_OPTIONS.find(a => a.value === (yAggs[id] || 'count_d'))?.symbol || '#'} {AGG_OPTIONS.find(a => a.value === (yAggs[id] || 'count_d'))?.label || 'Count Distinct'}
                     <ChevronDown size={9} />
@@ -761,7 +860,7 @@ function DropZone({ label, placeholder, active, onDragOver, onDragLeave, onDrop,
                           <button
                             key={a.value}
                             onClick={() => { setYAggs(prev => ({ ...prev, [id]: a.value })); setAggDropdownOpen(null); }}
-                            className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] transition-colors cursor-pointer ${
+                            className={`w-full flex items-center gap-2 px-3 py-1.5 text-[0.6875rem] transition-colors cursor-pointer ${
                               yAggs[id] === a.value ? 'text-brand-700 bg-brand-50' : 'text-ink-600 hover:bg-brand-50/50'
                             }`}
                           >
@@ -796,7 +895,7 @@ function FmtSection({ title, icon, open, onToggle, children }: {
       >
         <div className="flex items-center gap-2">
           <span className="text-brand-600">{icon}</span>
-          <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-ink-900">{title}</span>
+          <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-ink-900">{title}</span>
         </div>
         <ChevronDown size={14} className={`text-brand-600 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -829,8 +928,8 @@ function BIUButtons({ bold, italic, underline, onBold, onItalic, onUnderline }: 
             btn.active ? 'bg-brand-600 text-white' : 'text-ink-600 hover:bg-brand-50'
           }`}
         >
-          <span className={`text-[12px] ${btn.cls}`}>{btn.label.charAt(0)}</span>
-          <span className="text-[10px] font-medium">{btn.label}</span>
+          <span className={`text-[0.75rem] ${btn.cls}`}>{btn.label.charAt(0)}</span>
+          <span className="text-[0.625rem] font-medium">{btn.label}</span>
         </button>
       ))}
     </div>
@@ -867,6 +966,11 @@ interface DragField {
   kind: 'dimension' | 'measure';
   group: string;
 }
+
+// Width of the docked Filters panel; the main content reserves this space so
+// the panel never overlaps the widgets. Wide enough for the two-column layout
+// (Filters on Page | Data fields).
+const FILTER_PANEL_WIDTH = 640;
 
 const DRAG_FIELDS: DragField[] = [
   { id: 'date', label: 'Date', kind: 'dimension', group: 'Time' },
@@ -929,13 +1033,13 @@ function FilterSection({ title, icon, isActive, onClear, children, defaultOpen =
       >
         <div className="flex items-center gap-2">
           <span className={isActive ? 'text-brand-600' : 'text-ink-400'}>{icon}</span>
-          <span className={`text-[11px] font-bold uppercase tracking-wider ${isActive ? 'text-brand-700' : 'text-ink-500'}`}>{title}</span>
+          <span className={`text-[0.6875rem] font-bold uppercase tracking-wider ${isActive ? 'text-brand-700' : 'text-ink-500'}`}>{title}</span>
         </div>
         <div className="flex items-center gap-1.5">
           {isActive && onClear && (
             <button
               onClick={(e) => { e.stopPropagation(); onClear(); }}
-              className="text-[11px] font-semibold text-ink-400 hover:text-brand-600 px-1.5 py-0.5 rounded hover:bg-brand-50 transition-colors cursor-pointer"
+              className="text-[0.6875rem] font-semibold text-ink-400 hover:text-brand-600 px-1.5 py-0.5 rounded hover:bg-brand-50 transition-colors cursor-pointer"
             >Clear</button>
           )}
           <ChevronDown size={13} className={`text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -973,86 +1077,78 @@ function CheckboxItem({ label, checked, onChange }: { label: string; checked: bo
           </svg>
         )}
       </div>
-      <span className={`text-[12px] ${checked ? 'text-ink-900 font-medium' : 'text-ink-600'}`}>{label}</span>
+      <span className={`text-[0.75rem] ${checked ? 'text-ink-900 font-medium' : 'text-ink-600'}`}>{label}</span>
     </button>
   );
 }
 
 function FilterPanel({
   open, onClose,
-  dateRange, onDateRangeChange,
-  status, onStatusChange,
-  risk, onRiskChange,
-  department, onDepartmentChange,
-  onResetAll,
+  modelTables,
   pageFilterFields, onPageFilterFieldsChange,
-  dataLinks, activeCrossFilters, onActiveCrossFiltersChange, onManageConnections,
+  pageFilterValues, onPageFilterValuesChange,
+  crossFilter,
+  onResetAll,
 }: {
   open: boolean;
   onClose: () => void;
-  dateRange: string;
-  onDateRangeChange: (v: string) => void;
-  status: string[];
-  onStatusChange: (v: string[]) => void;
-  risk: string[];
-  onRiskChange: (v: string[]) => void;
-  department: string[];
-  onDepartmentChange: (v: string[]) => void;
-  onResetAll: () => void;
+  modelTables: ModelTable[];
   pageFilterFields: string[];
   onPageFilterFieldsChange: (v: string[]) => void;
-  dataLinks: FieldLink[];
-  activeCrossFilters: string[];
-  onActiveCrossFiltersChange: (v: string[]) => void;
-  onManageConnections: () => void;
+  pageFilterValues: Record<string, (string | number)[]>;
+  onPageFilterValuesChange: (v: Record<string, (string | number)[]>) => void;
+  crossFilter: { table: string; column: string; value: string } | null;
+  onResetAll: () => void;
 }) {
-  const toggleItem = (arr: string[], item: string) =>
-    arr.includes(item) ? arr.filter(x => x !== item) : [...arr, item];
   const [fpPageDragOver, setFpPageDragOver] = useState(false);
-  const [fpCrossDragOver, setFpCrossDragOver] = useState(false);
   const [fpFieldSearch, setFpFieldSearch] = useState('');
-  const [fpFile1Open, setFpFile1Open] = useState(true);
-  const [fpFile2Open, setFpFile2Open] = useState(false);
-  const [fpCrossOpen, setFpCrossOpen] = useState(true);
-  const [fpCrossSearch, setFpCrossSearch] = useState('');
+  const [openTables, setOpenTables] = useState<Set<string>>(() => new Set([modelTables[0]?.id].filter(Boolean) as string[]));
 
-  const fpFilteredDimensions = DRAG_FIELDS.filter(f => f.kind === 'dimension' && f.label.toLowerCase().includes(fpFieldSearch.toLowerCase()));
-  const fpFilteredMeasures = DRAG_FIELDS.filter(f => f.kind === 'measure' && f.label.toLowerCase().includes(fpFieldSearch.toLowerCase()));
-  const getFieldLabel = (id: string) => DRAG_FIELDS.find(f => f.id === id)?.label || id;
+  const splitId = (id: string) => { const [table, column] = id.split('::'); return { table, column }; };
+  const colOf = (id: string) => { const { table, column } = splitId(id); const tbl = modelTables.find(t => t.id === table); return tbl?.columns.find(c => c.name === column); };
+  const fieldLabel = (id: string) => colOf(id)?.label ?? splitId(id).column;
+  const tableLabel = (id: string) => { const { table } = splitId(id); return modelTables.find(t => t.id === table)?.name ?? table; };
 
-  const hasAny = dateRange !== 'last-30-days' || status.length > 0 || risk.length > 0 || department.length > 0;
+  const addField = (id: string) => { if (!pageFilterFields.includes(id)) onPageFilterFieldsChange([...pageFilterFields, id]); };
+  const removeField = (id: string) => {
+    onPageFilterFieldsChange(pageFilterFields.filter(f => f !== id));
+    const { [id]: _drop, ...rest } = pageFilterValues; void _drop;
+    onPageFilterValuesChange(rest);
+  };
+  const toggleValue = (id: string, val: string | number) => {
+    const cur = pageFilterValues[id] ?? [];
+    const next = cur.some(v => String(v) === String(val)) ? cur.filter(v => String(v) !== String(val)) : [...cur, val];
+    onPageFilterValuesChange({ ...pageFilterValues, [id]: next });
+  };
+  const clearValues = (id: string) => onPageFilterValuesChange({ ...pageFilterValues, [id]: [] });
+
+  const hasAny = pageFilterFields.length > 0 || !!crossFilter;
 
   return (
     <AnimatePresence>
       {open && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-black/10"
-            onClick={onClose}
-          />
-          {/* Panel */}
-          <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed top-0 right-0 h-full w-[680px] z-50 bg-canvas border-l border-canvas-border shadow-2xl flex flex-col"
-          >
+        <motion.div
+          initial={{ x: '100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '100%' }}
+          transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+          style={{ width: FILTER_PANEL_WIDTH }}
+          className="fixed top-0 right-0 h-full z-50 bg-canvas border-l border-canvas-border shadow-2xl flex flex-col"
+        >
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-canvas-border shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="p-1.5 rounded-lg bg-brand-50">
                   <Filter size={14} className="text-brand-600" />
                 </div>
-                <span className="text-[14px] font-semibold text-ink-900">Filters</span>
+                <div>
+                  <span className="text-[0.875rem] font-semibold text-ink-900">Filters</span>
+                  <p className="text-[0.625rem] text-ink-400 leading-none mt-0.5">Slice every widget on this dashboard</p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 {hasAny && (
-                  <button onClick={onResetAll} className="text-[11px] font-semibold text-ink-400 hover:text-brand-600 px-2 py-1 rounded-lg hover:bg-brand-50 transition-colors cursor-pointer">
+                  <button onClick={onResetAll} className="text-[0.6875rem] font-semibold text-ink-400 hover:text-brand-600 px-2 py-1 rounded-lg hover:bg-brand-50 transition-colors cursor-pointer">
                     Reset all
                   </button>
                 )}
@@ -1062,215 +1158,146 @@ function FilterPanel({
               </div>
             </div>
 
-            {/* Side-by-side content */}
+            {/* Two-column content: Filters on Page | Data fields */}
             <div className="flex flex-1 overflow-hidden min-h-0">
-              {/* Left column — Drop zones */}
+              {/* Left — page slicers */}
               <div className="w-1/2 border-r border-canvas-border overflow-y-auto px-4 py-4 space-y-4">
-                {/* Filters on Page */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <div className="size-2 rounded-full bg-brand-600" />
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-ink-500">Filters on Page</span>
+                      <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-500">Filters on Page</span>
                     </div>
                     {pageFilterFields.length > 0 && (
-                      <button
-                        onClick={() => onPageFilterFieldsChange([])}
-                        className="text-[10px] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer"
-                      >
+                      <button onClick={() => { onPageFilterFieldsChange([]); onPageFilterValuesChange({}); }} className="text-[0.625rem] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer">
                         Clear all
                       </button>
                     )}
                   </div>
-                  <div
-                    className={`rounded-xl border-2 border-dashed p-4 flex flex-col items-center justify-center min-h-[100px] transition-colors ${
-                      fpPageDragOver ? 'border-brand-400 bg-brand-50/50' : 'border-ink-200 bg-canvas-elevated'
-                    }`}
-                    onDragOver={e => { e.preventDefault(); setFpPageDragOver(true); }}
-                    onDragLeave={() => setFpPageDragOver(false)}
-                    onDrop={e => {
-                      e.preventDefault();
-                      setFpPageDragOver(false);
-                      const fieldId = e.dataTransfer.getData('fieldId');
-                      if (fieldId && !pageFilterFields.includes(fieldId)) onPageFilterFieldsChange([...pageFilterFields, fieldId]);
-                    }}
-                  >
-                    {pageFilterFields.length > 0 ? (
-                      <div className="flex flex-col gap-1.5 w-full">
-                        {pageFilterFields.map(fId => (
-                          <span key={fId} className="flex items-center justify-between gap-1 bg-brand-50 border border-brand-200 text-brand-700 text-[11px] font-medium px-2.5 py-1.5 rounded-md">
-                            {getFieldLabel(fId)}
-                            <button onClick={() => onPageFilterFieldsChange(pageFilterFields.filter(f => f !== fId))} className="hover:text-brand-900 cursor-pointer"><X size={10} /></button>
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <>
-                        <span className="text-[12px] font-semibold text-ink-400">DROP FIELDS HERE</span>
-                        <span className="text-[11px] text-ink-300 mt-0.5">Drag from Data Fields</span>
-                      </>
-                    )}
-                  </div>
-                </div>
 
-                {/* Cross-Data Filters — drop zone */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="size-2 rounded-full bg-evidence" />
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-ink-500">Cross-Data Filters</span>
-                    </div>
-                    {activeCrossFilters.length > 0 && (
-                      <button
-                        onClick={() => onActiveCrossFiltersChange([])}
-                        className="text-[10px] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer"
-                      >
-                        Clear all
-                      </button>
-                    )}
-                  </div>
-                  {dataLinks.length === 0 ? (
-                    <div className="w-full rounded-xl border-2 border-dashed border-ink-100 bg-ink-50/30 p-5 flex flex-col items-center justify-center min-h-[90px]">
-                      <Link2 size={16} className="text-ink-200 mb-2" />
-                      <span className="text-[11px] font-medium text-ink-300 mb-3">No connections yet</span>
-                      <button
-                        onClick={onManageConnections}
-                        className="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-[11px] font-semibold rounded-full transition-colors cursor-pointer shadow-sm"
-                      >
-                        Connect Data Sources
-                      </button>
+                  {pageFilterFields.length === 0 ? (
+                    <div
+                      className={`rounded-xl border-2 border-dashed p-5 flex flex-col items-center justify-center min-h-[110px] transition-colors ${
+                        fpPageDragOver ? 'border-brand-400 bg-brand-50/50' : 'border-ink-200 bg-canvas-elevated'
+                      }`}
+                      onDragOver={e => { e.preventDefault(); setFpPageDragOver(true); }}
+                      onDragLeave={() => setFpPageDragOver(false)}
+                      onDrop={e => { e.preventDefault(); setFpPageDragOver(false); const id = e.dataTransfer.getData('fieldId'); if (id) addField(id); }}
+                    >
+                      <span className="text-[0.75rem] font-semibold text-ink-400">DROP A FIELD HERE</span>
+                      <span className="text-[0.6875rem] text-ink-300 mt-0.5 text-center">Drag a field from the right, or click it, to slice the whole page</span>
                     </div>
                   ) : (
                     <div
-                      className={`rounded-xl border-2 border-dashed p-4 flex flex-col items-center justify-center min-h-[80px] transition-colors ${
-                        fpCrossDragOver ? 'border-brand-400 bg-brand-50/50' : 'border-ink-200 bg-canvas-elevated'
-                      }`}
-                      onDragOver={e => { e.preventDefault(); if (e.dataTransfer.types.includes('crossLinkId')) setFpCrossDragOver(true); }}
-                      onDragLeave={() => setFpCrossDragOver(false)}
-                      onDrop={e => {
-                        e.preventDefault();
-                        setFpCrossDragOver(false);
-                        const linkId = e.dataTransfer.getData('crossLinkId');
-                        if (linkId && !activeCrossFilters.includes(linkId)) onActiveCrossFiltersChange([...activeCrossFilters, linkId]);
-                      }}
+                      className={`space-y-2.5 rounded-xl border-2 border-dashed p-2.5 transition-colors ${fpPageDragOver ? 'border-brand-400 bg-brand-50/40' : 'border-transparent'}`}
+                      onDragOver={e => { e.preventDefault(); setFpPageDragOver(true); }}
+                      onDragLeave={() => setFpPageDragOver(false)}
+                      onDrop={e => { e.preventDefault(); setFpPageDragOver(false); const id = e.dataTransfer.getData('fieldId'); if (id) addField(id); }}
                     >
-                      {activeCrossFilters.length > 0 ? (
-                        <div className="flex flex-col gap-1.5 w-full">
-                          {activeCrossFilters.map(linkId => {
-                            const link = dataLinks.find(l => l.id === linkId);
-                            if (!link) return null;
-                            const label = link.fieldA === link.fieldB ? link.fieldA : `${link.fieldA} · ${link.fieldB}`;
-                            return (
-                              <span key={linkId} className="flex items-center justify-between gap-1 bg-brand-50 border border-brand-200 text-brand-700 text-[11px] font-medium px-2.5 py-1.5 rounded-md">
-                                {label}
-                                <button onClick={() => onActiveCrossFiltersChange(activeCrossFilters.filter(id => id !== linkId))} className="hover:text-evidence-900 cursor-pointer"><X size={10} /></button>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <>
-                          <span className="text-[12px] font-semibold text-ink-400">DROP LINKS HERE</span>
-                          <span className="text-[11px] text-ink-300 mt-0.5">Drag from Cross-Data Links</span>
-                        </>
-                      )}
+                      {pageFilterFields.map(fId => {
+                        const { table, column } = splitId(fId);
+                        const values = distinctValues(modelTables, table, column);
+                        const selected = pageFilterValues[fId] ?? [];
+                        return (
+                          <div key={fId} className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
+                            <div className="flex items-center justify-between gap-1 px-2.5 py-2 bg-brand-50/60 border-b border-canvas-border">
+                              <div className="min-w-0">
+                                <div className="text-[0.75rem] font-semibold text-ink-800 truncate">{fieldLabel(fId)}</div>
+                                <div className="text-[0.5625rem] text-ink-400 truncate">{tableLabel(fId)}{selected.length > 0 ? ` · ${selected.length} selected` : ' · all'}</div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {selected.length > 0 && (
+                                  <button onClick={() => clearValues(fId)} className="text-[0.5625rem] font-semibold text-brand-600 hover:text-brand-800 px-1 cursor-pointer">Clear</button>
+                                )}
+                                <button onClick={() => removeField(fId)} className="p-1 rounded hover:bg-risk-50 text-ink-400 hover:text-risk-700 cursor-pointer"><X size={11} /></button>
+                              </div>
+                            </div>
+                            <div className="p-2 flex flex-wrap gap-1.5 max-h-[150px] overflow-y-auto">
+                              {values.map(v => {
+                                const on = selected.some(s => String(s) === String(v));
+                                return (
+                                  <button
+                                    key={String(v)}
+                                    onClick={() => toggleValue(fId, v)}
+                                    className={`inline-flex items-center gap-1 h-7 px-2 rounded-md text-[0.6875rem] font-medium border transition-colors cursor-pointer ${
+                                      on ? 'bg-brand-600 border-brand-600 text-white' : 'bg-canvas border-canvas-border text-ink-600 hover:border-brand-300 hover:text-brand-700'
+                                    }`}
+                                  >
+                                    {on && <Check size={10} />}{String(v)}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Right column — Data fields */}
+              {/* Right — data fields (drag or click to add a page filter) */}
               <div className="w-1/2 overflow-y-auto px-4 py-4 space-y-3">
-                <div className="text-[15px] font-semibold text-ink-900 px-1">Data</div>
-
-                {/* Search */}
+                <div className="text-[0.9375rem] font-semibold text-ink-900 px-1">Data fields</div>
                 <div className="relative">
                   <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
                   <input
                     type="text"
-                    placeholder="Search"
+                    placeholder="Search fields"
                     value={fpFieldSearch}
                     onChange={e => setFpFieldSearch(e.target.value)}
-                    className="w-full h-9 pl-8 pr-3 bg-canvas-elevated border border-canvas-border rounded-lg text-[12px] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
+                    className="w-full h-9 pl-8 pr-3 bg-canvas-elevated border border-canvas-border rounded-lg text-[0.75rem] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
                   />
                 </div>
 
-                <FileTreeView
-                  files={[
-                    { name: 'Invoice_Master.xlsx', icon: 'excel', sheets: [{ name: 'Sheet1', columns: fpFilteredDimensions.map(f => f.label) }] },
-                    { name: 'Vendor_Finance.xlsx', icon: 'excel', sheets: [{ name: 'Sheet1', columns: fpFilteredMeasures.map(f => f.label) }] },
-                  ]}
-                  draggable
-                  fieldIdMap={Object.fromEntries(DRAG_FIELDS.map(f => [f.label, f.id]))}
-                />
-
-                {/* Cross-Data section */}
-                {dataLinks.length > 0 && (<>
-                  <div className="text-[15px] font-semibold text-ink-900 px-1 pt-2 border-t border-canvas-border">Cross-Data</div>
-                  <div className="relative">
-                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-                    <input
-                      type="text"
-                      placeholder="Search"
-                      value={fpCrossSearch}
-                      onChange={e => setFpCrossSearch(e.target.value)}
-                      className="w-full h-9 pl-8 pr-3 bg-canvas-elevated border border-canvas-border rounded-lg text-[12px] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors"
-                    />
-                  </div>
-                </>)}
-                {dataLinks.length > 0 && (
-                  <div className="bg-canvas-elevated rounded-md border border-canvas-border overflow-hidden">
-                    <button
-                      onClick={() => setFpCrossOpen(!fpCrossOpen)}
-                      className="w-full flex items-center justify-between px-2.5 py-2 bg-gradient-to-r from-brand-50 to-white border-b border-canvas-border hover:from-brand-100/50 hover:to-white transition-all cursor-pointer"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <Link2 size={12} className="text-brand-600" />
-                        <span className="text-[11px] font-semibold text-ink-800">Cross-Data Links</span>
-                        <span className="text-[10px] text-ink-400">{dataLinks.length}</span>
+                <div className="rounded-lg border border-canvas-border overflow-hidden">
+                  {modelTables.map(tbl => {
+                    const dims = tbl.columns
+                      .filter(c => c.role === 'dimension')
+                      .filter(c => !fpFieldSearch || c.label.toLowerCase().includes(fpFieldSearch.toLowerCase()));
+                    if (dims.length === 0) return null;
+                    const isOpen = openTables.has(tbl.id) || !!fpFieldSearch;
+                    return (
+                      <div key={tbl.id} className="border-b border-canvas-border/60 last:border-b-0">
+                        <button
+                          onClick={() => setOpenTables(prev => { const n = new Set(prev); if (n.has(tbl.id)) n.delete(tbl.id); else n.add(tbl.id); return n; })}
+                          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-brand-50/40 cursor-pointer"
+                        >
+                          <ChevronDown size={12} className={`text-ink-400 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
+                          <Database size={12} className="text-brand-500" />
+                          <span className="text-[0.75rem] font-semibold text-ink-800 flex-1 text-left truncate">{tbl.name}</span>
+                        </button>
+                        {isOpen && (
+                          <div className="pb-1.5">
+                            {dims.map(c => {
+                              const id = `${tbl.id}::${c.name}`;
+                              const added = pageFilterFields.includes(id);
+                              return (
+                                <div
+                                  key={c.name}
+                                  draggable
+                                  onDragStart={e => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('fieldId', id); }}
+                                  onClick={() => (added ? removeField(id) : addField(id))}
+                                  className={`group flex items-center gap-2 pl-8 pr-3 py-1.5 cursor-grab active:cursor-grabbing transition-colors ${added ? 'bg-brand-50/60' : 'hover:bg-brand-50/40'}`}
+                                >
+                                  <Type size={11} className="text-ink-300 shrink-0" />
+                                  <span className="text-[0.75rem] text-ink-700 flex-1 truncate">{c.label}</span>
+                                  {added ? <Check size={12} className="text-brand-600" /> : <Plus size={12} className="text-ink-300 opacity-0 group-hover:opacity-100" />}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <ChevronDown size={12} className={`text-brand-600 transition-transform ${fpCrossOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {fpCrossOpen && (
-                      <div className="px-1.5 py-1">
-                        {dataLinks.filter(link => {
-                          if (!fpCrossSearch) return true;
-                          const q = fpCrossSearch.toLowerCase();
-                          return link.fieldA.toLowerCase().includes(q) || link.fieldB.toLowerCase().includes(q);
-                        }).map(link => {
-                          const label = link.fieldA === link.fieldB ? link.fieldA : `${link.fieldA} · ${link.fieldB}`;
-                          const sA = FILE_SOURCES.find(s => s.id === link.sourceA);
-                          const sB = FILE_SOURCES.find(s => s.id === link.sourceB);
-                          const isActive = activeCrossFilters.includes(link.id);
-                          return (
-                            <div
-                              key={link.id}
-                              draggable
-                              onDragStart={e => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('crossLinkId', link.id); }}
-                              className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-grab transition-colors active:cursor-grabbing ${
-                                isActive ? 'bg-brand-50/50' : 'hover:bg-brand-50/50'
-                              }`}
-                            >
-                              <svg className="shrink-0 size-3 text-ink-300" viewBox="0 0 12 12" fill="currentColor">
-                                <circle cx="4" cy="3" r="1" /><circle cx="8" cy="3" r="1" />
-                                <circle cx="4" cy="6" r="1" /><circle cx="8" cy="6" r="1" />
-                                <circle cx="4" cy="9" r="1" /><circle cx="8" cy="9" r="1" />
-                              </svg>
-                              <div className="min-w-0">
-                                <div className="text-[12px] text-ink-700 truncate">{label}</div>
-                                <div className="text-[9px] text-ink-400 truncate">{sA?.name?.split('.')[0]} ↔ {sB?.name?.split('.')[0]}</div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
+                <p className="text-[0.625rem] text-ink-400 px-1 leading-relaxed">
+                  Filters apply to every related widget through the data-model connections. A widget on an unrelated table is left unchanged — just like Power BI.
+                </p>
               </div>
             </div>
           </motion.div>
-        </>
       )}
     </AnimatePresence>
   );
@@ -1485,7 +1512,7 @@ const RISK_COLORS: Record<string, string> = {
 
 const TIME_PERIODS = ['Today', '7D', '30D', '3M', '6M', '12M'];
 
-function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit, onDelete, onPrev, onNext, hasPrev, hasNext, isTable, autoOpenEditSidebar, onEditSidebarOpened, onOpenAddData, widgetChartType, customizeState, onCustomizeChange, xField, yField, legendField, onXFieldChange, onYFieldChange, onLegendFieldChange, isExcelDashboard }: {
+function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit, onDelete, onPrev, onNext, hasPrev, hasNext, isTable, autoOpenEditSidebar, onEditSidebarOpened, onOpenAddData, widgetChartType, customizeState, onCustomizeChange, xField, yField, legendField, onXFieldChange, onYFieldChange, onLegendFieldChange, isExcelDashboard, dataSourceInfo }: {
   open: boolean;
   onClose: () => void;
   title: string;
@@ -1511,7 +1538,9 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
   onYFieldChange?: (v: string) => void;
   onLegendFieldChange?: (v: string) => void;
   isExcelDashboard?: boolean;
+  dataSourceInfo?: { type: 'sql' | 'excel' | 'csv' | 'query'; name: string; meta: string };
 }) {
+  const { can } = useCan();
   const [activeTab, setActiveTab] = useState<'visualization' | 'records' | 'summary'>(isTable ? 'records' : 'visualization');
   const [timePeriod, setTimePeriod] = useState('30D');
   const [chartType, setChartType] = useState<'line' | 'bar' | 'area'>('bar');
@@ -1677,7 +1706,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                       <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
-                        className={`flex items-center gap-1.5 px-3 py-2.5 text-[12px] font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                        className={`flex items-center gap-1.5 px-3 py-2.5 text-[0.75rem] font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
                           isActive ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500 hover:text-ink-700'
                         }`}
                       >
@@ -1699,7 +1728,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                   >
                     <Bell size={18} className="text-warning" />
                     {alerts.length > 0 && (
-                      <span className="absolute top-0.5 right-0.5 bg-warning text-white text-[8px] font-bold rounded-full flex items-center justify-center size-4">{alerts.length}</span>
+                      <span className="absolute top-0.5 right-0.5 bg-warning text-white text-[0.5rem] font-bold rounded-full flex items-center justify-center size-4">{alerts.length}</span>
                     )}
                   </button>
                   )}
@@ -1721,16 +1750,16 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                           {onEdit && (
                             <button
                               onClick={() => { setShowExpandMenu(false); setShowEditSidebar(true); setEditSidebarTab('datasource'); }}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-ink-700 hover:bg-surface-2 transition-colors text-left cursor-pointer"
+                              className="w-full flex items-center gap-3 px-4 py-2.5 text-[0.8125rem] text-ink-700 hover:bg-surface-2 transition-colors text-left cursor-pointer"
                             >
                               <Edit size={15} className="text-ink-500" />
                               Edit Widget
                             </button>
                           )}
-                          {onDelete && (
+                          {onDelete && can('db_delete') && (
                             <button
                               onClick={() => { setShowExpandMenu(false); setShowExpandDeleteConfirm(true); }}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-ink-700 hover:bg-red-50 hover:text-red-600 transition-colors text-left cursor-pointer"
+                              className="w-full flex items-center gap-3 px-4 py-2.5 text-[0.8125rem] text-ink-700 hover:bg-red-50 hover:text-red-600 transition-colors text-left cursor-pointer"
                             >
                               <Trash2 size={15} className="text-ink-500" />
                               Delete Widget
@@ -1784,18 +1813,28 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                         onChange={e => setExpandTitle(e.target.value)}
                         onBlur={() => setEditingExpandTitle(false)}
                         onKeyDown={e => { if (e.key === 'Enter') setEditingExpandTitle(false); }}
-                        className="text-[13px] font-semibold text-ink-900 bg-transparent border-none outline-none ring-0 shadow-none text-center"
+                        className="text-[0.8125rem] font-semibold text-ink-900 bg-transparent border-none outline-none ring-0 shadow-none text-center"
                         style={{ outline: 'none', boxShadow: 'none' }}
                       />
                     ) : (
                       <span className="flex items-center gap-3 pointer-events-auto">
                         <span
-                          className="text-[13px] font-semibold text-ink-900 cursor-text hover:text-brand-600 transition-colors"
+                          className="text-[0.8125rem] font-semibold text-ink-900 cursor-text hover:text-brand-600 transition-colors"
                           onClick={() => setEditingExpandTitle(true)}
                         >{expandTitle}</span>
-                        <span className="flex items-center gap-1 text-[10px] text-ink-400">
-                          <FileText size={10} className="text-green-600" /> Excel · Invoice_Master.xlsx
-                        </span>
+                        {dataSourceInfo?.type === 'sql' ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 text-[0.625rem] font-semibold" title={`${dataSourceInfo.name}${dataSourceInfo.meta ? ' · ' + dataSourceInfo.meta : ''}`}>
+                            <Database size={10} /> SQL{dataSourceInfo.name ? ` · ${dataSourceInfo.name}` : ''}
+                          </span>
+                        ) : dataSourceInfo?.type === 'query' ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[0.625rem] font-semibold">
+                            <MessageSquare size={10} /> Query{dataSourceInfo.name ? ` · ${dataSourceInfo.name}` : ''}
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[0.625rem] text-ink-400">
+                            <FileText size={10} className="text-green-600" /> Excel · Invoice_Master.xlsx
+                          </span>
+                        )}
                       </span>
                     )}
                   </div>
@@ -1830,7 +1869,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                       <button
                         ref={vizFilterBtnRef}
                         onClick={() => setShowVizFilter(!showVizFilter)}
-                        className={`flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-medium transition-colors cursor-pointer rounded-lg ${
+                        className={`flex items-center gap-1.5 px-3 py-2.5 text-[0.8125rem] font-medium transition-colors cursor-pointer rounded-lg ${
                           showVizFilter || vizFilterCount > 0
                             ? 'text-brand-700 bg-brand-50'
                             : 'text-ink-500 hover:text-ink-700 hover:bg-surface-2'
@@ -1839,7 +1878,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                         <Filter size={15} />
                         <span>Filter</span>
                         {vizFilterCount > 0 && (
-                          <span className="ml-0.5 size-4 bg-brand-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{vizFilterCount}</span>
+                          <span className="ml-0.5 size-4 bg-brand-600 text-white text-[0.5625rem] font-bold rounded-full flex items-center justify-center">{vizFilterCount}</span>
                         )}
                       </button>
 
@@ -1855,9 +1894,9 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                           >
                             {/* Header */}
                             <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-canvas-border/40">
-                              <span className="text-[12px] font-bold text-ink-900 uppercase tracking-wide">Filters</span>
+                              <span className="text-[0.75rem] font-bold text-ink-900 uppercase tracking-wide">Filters</span>
                               {vizFilterCount > 0 && (
-                                <button onClick={() => setVizFilterSelections({})} className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer">
+                                <button onClick={() => setVizFilterSelections({})} className="text-[0.6875rem] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer">
                                   Clear
                                 </button>
                               )}
@@ -1878,7 +1917,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                       onClick={() => setVizFilterOpen(prev => ({ ...prev, [section.id]: !isOpen }))}
                                       className="w-full flex items-center justify-between px-3.5 py-2.5 hover:bg-surface-2/40 transition-colors cursor-pointer"
                                     >
-                                      <span className={`text-[11px] font-bold uppercase tracking-wide ${selected.length > 0 ? 'text-brand-700' : 'text-ink-500'}`}>
+                                      <span className={`text-[0.6875rem] font-bold uppercase tracking-wide ${selected.length > 0 ? 'text-brand-700' : 'text-ink-500'}`}>
                                         {section.label}
                                       </span>
                                       <ChevronDown size={14} className={`text-ink-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -1895,7 +1934,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                             placeholder={`Search ${section.label.toLowerCase()}...`}
                                             value={search}
                                             onChange={e => setVizFilterSearch(prev => ({ ...prev, [section.id]: e.target.value }))}
-                                            className="w-full h-8 pl-8 pr-2 bg-ink-50 rounded-lg text-[11px] text-ink-800 placeholder:text-ink-400 outline-none focus:bg-white focus:ring-1 focus:ring-brand-200 transition-all"
+                                            className="w-full h-8 pl-8 pr-2 bg-ink-50 rounded-lg text-[0.6875rem] text-ink-800 placeholder:text-ink-400 outline-none focus:bg-white focus:ring-1 focus:ring-brand-200 transition-all"
                                           />
                                         </div>
 
@@ -1912,7 +1951,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                           }`}>
                                             {allSelected && <svg viewBox="0 0 12 12" fill="none" className="size-2"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                           </div>
-                                          <span className="text-[11px] font-semibold text-ink-800">Select All</span>
+                                          <span className="text-[0.6875rem] font-semibold text-ink-800">Select All</span>
                                         </button>
 
                                         {/* Options */}
@@ -1932,7 +1971,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                             }`}>
                                               {selected.includes(val) && <svg viewBox="0 0 12 12" fill="none" className="size-2"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                             </div>
-                                            <span className={`text-[11px] ${selected.includes(val) ? 'text-ink-900 font-medium' : 'text-ink-600'}`}>{val}</span>
+                                            <span className={`text-[0.6875rem] ${selected.includes(val) ? 'text-ink-900 font-medium' : 'text-ink-600'}`}>{val}</span>
                                           </button>
                                         ))}
                                       </div>
@@ -1992,7 +2031,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                           placeholder="Search by invoice, vendor, department, sheet..."
                           value={searchQuery}
                           onChange={e => setSearchQuery(e.target.value)}
-                          className="w-full pl-9 pr-4 py-2.5 text-[13px] border border-canvas-border rounded-lg bg-canvas-elevated focus:outline-none focus:border-brand-400 transition-colors"
+                          className="w-full pl-9 pr-4 py-2.5 text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas-elevated focus:outline-none focus:border-brand-400 transition-colors"
                         />
                       </div>
                     </div>
@@ -2003,7 +2042,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                         <thead>
                           <tr className="border-b border-canvas-border bg-surface-2/50">
                             {EXCEL_RAW_HEADERS.map(h => (
-                              <th key={h} className="text-[11px] font-bold text-ink-500 uppercase tracking-wider px-4 py-3 whitespace-nowrap">{h}</th>
+                              <th key={h} className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider px-4 py-3 whitespace-nowrap">{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -2018,15 +2057,15 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                               transition={{ delay: i * 0.03 }}
                               className={`border-b border-canvas-border/50 last:border-0 transition-colors cursor-pointer ${hasIssue ? 'bg-red-50/40 hover:bg-red-50/60' : 'hover:bg-brand-50/30'}`}
                             >
-                              <td className="px-4 py-3 text-[12px] font-mono text-ink-400">{r.row}</td>
-                              <td className="px-4 py-3 text-[12px] font-semibold text-brand-700">{r.invoiceId}</td>
-                              <td className={`px-4 py-3 text-[12px] ${r.vendor ? 'text-ink-800' : 'text-red-400 italic'}`}>{r.vendor || '— blank —'}</td>
-                              <td className={`px-4 py-3 text-[12px] font-medium ${r.amount.includes('INR') || r.amount.includes('9,84,500') ? 'text-red-600' : 'text-ink-900'}`}>{r.amount}</td>
-                              <td className={`px-4 py-3 text-[12px] ${r.date.includes('/25/') ? 'text-red-600' : 'text-ink-600'}`}>{r.date}</td>
-                              <td className={`px-4 py-3 text-[12px] ${r.department ? 'text-ink-600' : 'text-red-400 italic'}`}>{r.department || '— blank —'}</td>
-                              <td className={`px-4 py-3 text-[12px] font-mono ${r.gst.length < 15 ? 'text-red-600' : 'text-ink-500'}`}>{r.gst}</td>
-                              <td className="px-4 py-3 text-[12px] text-ink-600">{r.payment}</td>
-                              <td className="px-4 py-3"><span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700">{r.sheet}</span></td>
+                              <td className="px-4 py-3 text-[0.75rem] font-mono text-ink-400">{r.row}</td>
+                              <td className="px-4 py-3 text-[0.75rem] font-semibold text-brand-700">{r.invoiceId}</td>
+                              <td className={`px-4 py-3 text-[0.75rem] ${r.vendor ? 'text-ink-800' : 'text-red-400 italic'}`}>{r.vendor || '— blank —'}</td>
+                              <td className={`px-4 py-3 text-[0.75rem] font-medium ${r.amount.includes('INR') || r.amount.includes('9,84,500') ? 'text-red-600' : 'text-ink-900'}`}>{r.amount}</td>
+                              <td className={`px-4 py-3 text-[0.75rem] ${r.date.includes('/25/') ? 'text-red-600' : 'text-ink-600'}`}>{r.date}</td>
+                              <td className={`px-4 py-3 text-[0.75rem] ${r.department ? 'text-ink-600' : 'text-red-400 italic'}`}>{r.department || '— blank —'}</td>
+                              <td className={`px-4 py-3 text-[0.75rem] font-mono ${r.gst.length < 15 ? 'text-red-600' : 'text-ink-500'}`}>{r.gst}</td>
+                              <td className="px-4 py-3 text-[0.75rem] text-ink-600">{r.payment}</td>
+                              <td className="px-4 py-3"><span className="text-[0.625rem] font-semibold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700">{r.sheet}</span></td>
                             </motion.tr>
                             );
                           })}
@@ -2045,12 +2084,12 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                           placeholder="Search by invoice, vendor, department..."
                           value={searchQuery}
                           onChange={e => setSearchQuery(e.target.value)}
-                          className="w-full pl-9 pr-4 py-2.5 text-[13px] border border-canvas-border rounded-lg bg-canvas-elevated focus:outline-none focus:border-brand-400 transition-colors"
+                          className="w-full pl-9 pr-4 py-2.5 text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas-elevated focus:outline-none focus:border-brand-400 transition-colors"
                         />
                       </div>
                       <button
                         onClick={() => addToast({ message: 'Downloading records as CSV...', type: 'success' })}
-                        className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer shrink-0"
+                        className="flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer shrink-0"
                       >
                         <Download size={14} />
                         Download
@@ -2063,7 +2102,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                         <thead>
                           <tr className="border-b border-canvas-border bg-surface-2/50">
                             {['Invoice ID', 'Vendor', 'Amount', 'Date', 'Status', 'Department', 'Risk', 'Duplicate Match'].map(h => (
-                              <th key={h} className="text-[11px] font-bold text-ink-500 uppercase tracking-wider px-4 py-3">{h}</th>
+                              <th key={h} className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider px-4 py-3">{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -2076,22 +2115,22 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                               transition={{ delay: i * 0.03 }}
                               className="border-b border-canvas-border/50 last:border-0 hover:bg-brand-50/30 transition-colors cursor-pointer"
                             >
-                              <td className="px-4 py-3 text-[12px] font-semibold text-brand-700">{r.id}</td>
-                              <td className="px-4 py-3 text-[12px] text-ink-800">{r.vendor}</td>
-                              <td className="px-4 py-3 text-[12px] font-medium text-ink-900">{r.amount}</td>
-                              <td className="px-4 py-3 text-[12px] text-ink-600">{r.date}</td>
+                              <td className="px-4 py-3 text-[0.75rem] font-semibold text-brand-700">{r.id}</td>
+                              <td className="px-4 py-3 text-[0.75rem] text-ink-800">{r.vendor}</td>
+                              <td className="px-4 py-3 text-[0.75rem] font-medium text-ink-900">{r.amount}</td>
+                              <td className="px-4 py-3 text-[0.75rem] text-ink-600">{r.date}</td>
                               <td className="px-4 py-3">
-                                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[r.status] || 'bg-gray-50 text-gray-600'}`}>
+                                <span className={`text-[0.6875rem] font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[r.status] || 'bg-gray-50 text-gray-600'}`}>
                                   {r.status}
                                 </span>
                               </td>
-                              <td className="px-4 py-3 text-[12px] text-ink-600">{r.department}</td>
+                              <td className="px-4 py-3 text-[0.75rem] text-ink-600">{r.department}</td>
                               <td className="px-4 py-3">
-                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${RISK_COLORS[r.risk] || ''}`}>
+                                <span className={`text-[0.6875rem] font-semibold px-2 py-0.5 rounded-full ${RISK_COLORS[r.risk] || ''}`}>
                                   {r.risk}
                                 </span>
                               </td>
-                              <td className="px-4 py-3 text-[12px] text-ink-500 font-mono">{r.match}</td>
+                              <td className="px-4 py-3 text-[0.75rem] text-ink-500 font-mono">{r.match}</td>
                             </motion.tr>
                           ))}
                         </tbody>
@@ -2112,14 +2151,14 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                           <div className="flex items-center justify-between gap-3 mb-3">
                             <div className="flex items-center gap-3">
                               <div className="w-1 h-6 bg-brand-600 rounded-full" />
-                              <h3 className="text-[14px] font-semibold text-ink-900">Query</h3>
+                              <h3 className="text-[0.875rem] font-semibold text-ink-900">Query</h3>
                             </div>
-                            <button className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-[12px] rounded-lg transition-colors cursor-pointer font-medium">
+                            <button className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] rounded-lg transition-colors cursor-pointer font-medium">
                               Ask IRA
                               <Send size={13} className="-rotate-45" />
                             </button>
                           </div>
-                          <p className="text-[13px] text-ink-700 leading-[1.7]">
+                          <p className="text-[0.8125rem] text-ink-700 leading-[1.7]">
                             Analyze the current compliance posture across all business processes. Identify key risk areas, control gaps, and provide actionable recommendations for the audit committee.
                           </p>
                         </div>
@@ -2128,7 +2167,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                         <div>
                           <div className="flex items-center gap-3 mb-3">
                             <div className="w-1 h-6 bg-brand-600 rounded-full" />
-                            <h3 className="text-[14px] font-semibold text-ink-900">Answer</h3>
+                            <h3 className="text-[0.875rem] font-semibold text-ink-900">Answer</h3>
                           </div>
                           <div className="space-y-3">
                             {[
@@ -2139,7 +2178,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                             ].map((text, i) => (
                               <div key={i} className="flex gap-3">
                                 <span className="flex-shrink-0 w-1.5 h-1.5 bg-brand-600 rounded-full mt-2" />
-                                <p className="text-[13px] text-ink-700 leading-[1.7] flex-1">{text}</p>
+                                <p className="text-[0.8125rem] text-ink-700 leading-[1.7] flex-1">{text}</p>
                               </div>
                             ))}
                           </div>
@@ -2149,7 +2188,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                         <div>
                           <div className="flex items-center gap-3 mb-3">
                             <div className="w-1 h-6 bg-brand-600 rounded-full" />
-                            <h3 className="text-[14px] font-semibold text-ink-900">Observations</h3>
+                            <h3 className="text-[0.875rem] font-semibold text-ink-900">Observations</h3>
                           </div>
                           <div className="space-y-3">
                             {[
@@ -2160,7 +2199,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                             ].map((text, i) => (
                               <div key={i} className="flex gap-3">
                                 <span className="flex-shrink-0 w-1.5 h-1.5 bg-brand-600 rounded-full mt-2" />
-                                <p className="text-[13px] text-ink-700 leading-[1.7] flex-1">{text}</p>
+                                <p className="text-[0.8125rem] text-ink-700 leading-[1.7] flex-1">{text}</p>
                               </div>
                             ))}
                           </div>
@@ -2189,7 +2228,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                     <div className="flex shrink-0 border-b border-canvas-border">
                       <button
                         onClick={() => setEditSidebarTab('datasource')}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[12px] font-medium border-b-2 transition-colors cursor-pointer ${
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[0.75rem] font-medium border-b-2 transition-colors cursor-pointer ${
                           editSidebarTab === 'datasource' ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500 hover:text-ink-700'
                         }`}
                       >
@@ -2198,7 +2237,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                       </button>
                       <button
                         onClick={() => setEditSidebarTab('customize')}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[12px] font-medium border-b-2 transition-colors cursor-pointer ${
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[0.75rem] font-medium border-b-2 transition-colors cursor-pointer ${
                           editSidebarTab === 'customize' ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500 hover:text-ink-700'
                         }`}
                       >
@@ -2234,7 +2273,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                               >
                                 <div className="flex items-center gap-2">
                                   <Columns className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
-                                  <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#26064a]">Fields</span>
+                                  <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">Fields</span>
                                 </div>
                                 <ChevronDown
                                   className="size-[14px] text-[#6a12cd] transition-transform duration-200"
@@ -2245,7 +2284,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                               <div className="p-2.5 space-y-2.5">
                                 {editChartType !== 'pie' && editChartType !== 'kpi' && (
                                 <div className="flex flex-col gap-1">
-                                  <label className="text-[11px] font-semibold text-[#26064a]">X Axis</label>
+                                  <label className="text-[0.6875rem] font-semibold text-[#26064a]">X Axis</label>
                                   <WhiteDropdown
                                     value={xField || 'Month'}
                                     onChange={v => onXFieldChange?.(v)}
@@ -2255,7 +2294,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                 </div>
                                 )}
                                 <div className="flex flex-col gap-1">
-                                  <label className="text-[11px] font-semibold text-[#26064a]">Y Axis</label>
+                                  <label className="text-[0.6875rem] font-semibold text-[#26064a]">Y Axis</label>
                                   <WhiteDropdown
                                     value={yField || 'Duplicate Count'}
                                     onChange={v => onYFieldChange?.(v)}
@@ -2265,7 +2304,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                 </div>
                                 {editChartType !== 'kpi' && (
                                 <div className="flex flex-col gap-1">
-                                  <label className="text-[11px] font-semibold text-[#26064a]">Legend</label>
+                                  <label className="text-[0.6875rem] font-semibold text-[#26064a]">Legend</label>
                                   <WhiteDropdown
                                     value={legendField || ''}
                                     onChange={v => onLegendFieldChange?.(v)}
@@ -2287,7 +2326,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                               >
                                 <div className="flex items-center gap-2">
                                   <BarChart3 className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
-                                  <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#26064a]">Chart Type</span>
+                                  <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">Chart Type</span>
                                 </div>
                                 <ChevronDown
                                   className="size-[14px] text-[#6a12cd] transition-transform duration-200"
@@ -2300,7 +2339,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                     <button
                                       key={id}
                                       onClick={() => setEditChartType(id)}
-                                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-[12px] transition-colors cursor-pointer text-left ${
+                                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-[0.75rem] transition-colors cursor-pointer text-left ${
                                         editChartType === id
                                           ? 'bg-brand-50 text-brand-700 font-medium'
                                           : 'text-ink-700 hover:bg-surface-2'
@@ -2319,11 +2358,11 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                               <div className="flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white border-b border-[#f0f0f0]">
                                 <div className="flex items-center gap-2">
                                   <Database className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
-                                  <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#26064a]">Data Source</span>
+                                  <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">Data Source</span>
                                 </div>
                                 <button
                                   onClick={() => onOpenAddData?.()}
-                                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer shrink-0"
+                                  className="flex items-center gap-1 px-2 py-1 text-[0.625rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md transition-colors cursor-pointer shrink-0"
                                 >
                                   <Plus size={10} />
                                   Add Data
@@ -2337,7 +2376,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                     placeholder="Search fields..."
                                     value={editDataSearch}
                                     onChange={e => setEditDataSearch(e.target.value)}
-                                    className="w-full pl-7 pr-3 py-1.5 text-[11px] bg-white border border-[#e5e7eb] rounded-[6px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-200 transition-all"
+                                    className="w-full pl-7 pr-3 py-1.5 text-[0.6875rem] bg-white border border-[#e5e7eb] rounded-[6px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-200 transition-all"
                                   />
                                 </div>
                                 <FileTreeView files={FILE_TREE_DATA} search={editDataSearch} />
@@ -2357,7 +2396,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                             >
                               <div className="flex items-center gap-2">
                                 <Palette className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
-                                <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#26064a]">General</span>
+                                <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">General</span>
                               </div>
                               <ChevronDown
                                 className="size-[14px] text-[#6a12cd] transition-transform duration-200"
@@ -2368,12 +2407,12 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                               <div className="bg-[#fafafa] p-2.5 space-y-3">
                                 {/* Font Family */}
                                 <div className="flex flex-col gap-1.5">
-                                  <label className="text-[12px] font-semibold text-[#26064a]">Font Family</label>
+                                  <label className="text-[0.75rem] font-semibold text-[#26064a]">Font Family</label>
                                   <div className="relative">
                                     <select
                                       value={editFontFamily}
                                       onChange={e => setEditFontFamily(e.target.value)}
-                                      className="w-full h-[32px] px-2.5 py-1.5 text-[11px] bg-white border border-[#e5e7eb] rounded-[6px] text-[#26064a] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm appearance-none cursor-pointer pr-7"
+                                      className="w-full h-[32px] px-2.5 py-1.5 text-[0.6875rem] bg-white border border-[#e5e7eb] rounded-[6px] text-[#26064a] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm appearance-none cursor-pointer pr-7"
                                     >
                                       {['Inter', 'Poppins', 'Roboto', 'Open Sans', 'Montserrat', 'Lato', 'Nunito', 'Raleway', 'PT Sans', 'Merriweather', 'Playfair Display'].map(f => (
                                         <option key={f} value={f}>{f}</option>
@@ -2389,21 +2428,21 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                     className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border-r border-[#e5e7eb] transition-all duration-200 cursor-pointer ${editIsBold ? 'bg-[#6a12cd] text-white' : 'bg-white text-[#26064a] hover:bg-[#faf5ff]'}`}
                                   >
                                     <Bold className={`size-[14px] ${editIsBold ? 'text-white' : 'text-[#6a12cd]'}`} />
-                                    <span className="text-[11px] font-medium">Bold</span>
+                                    <span className="text-[0.6875rem] font-medium">Bold</span>
                                   </button>
                                   <button
                                     onClick={() => setEditIsItalic(!editIsItalic)}
                                     className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border-r border-[#e5e7eb] transition-all duration-200 cursor-pointer ${editIsItalic ? 'bg-[#6a12cd] text-white' : 'bg-white text-[#26064a] hover:bg-[#faf5ff]'}`}
                                   >
                                     <Italic className={`size-[14px] ${editIsItalic ? 'text-white' : 'text-[#6a12cd]'}`} />
-                                    <span className="text-[11px] font-medium">Italic</span>
+                                    <span className="text-[0.6875rem] font-medium">Italic</span>
                                   </button>
                                   <button
                                     onClick={() => setEditIsUnderline(!editIsUnderline)}
                                     className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 transition-all duration-200 cursor-pointer ${editIsUnderline ? 'bg-[#6a12cd] text-white' : 'bg-white text-[#26064a] hover:bg-[#faf5ff]'}`}
                                   >
                                     <Underline className={`size-[14px] ${editIsUnderline ? 'text-white' : 'text-[#6a12cd]'}`} />
-                                    <span className="text-[11px] font-medium">Underline</span>
+                                    <span className="text-[0.6875rem] font-medium">Underline</span>
                                   </button>
                                 </div>
                               </div>
@@ -2419,15 +2458,15 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                             >
                               <div className="flex items-center gap-2">
                                 <ArrowRight className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
-                                <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#26064a]">X Axis</span>
+                                <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">X Axis</span>
                               </div>
                               <ChevronDown className="size-[14px] text-[#6a12cd] transition-transform duration-200" style={{ transform: editXAxisOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
                             </button>
                             {editXAxisOpen && (
                               <div className="bg-[#fafafa] p-2.5 space-y-3">
                                 <div className="flex flex-col gap-1.5">
-                                  <label className="text-[12px] font-medium text-[#26064a]">Title</label>
-                                  <input type="text" value={editXAxisTitleVal} onChange={e => onCustomizeChange?.('xAxisTitle', e.target.value)} placeholder="Enter X Axis Title" className="w-full px-3.5 py-2 text-[12px] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm" />
+                                  <label className="text-[0.75rem] font-medium text-[#26064a]">Title</label>
+                                  <input type="text" value={editXAxisTitleVal} onChange={e => onCustomizeChange?.('xAxisTitle', e.target.value)} placeholder="Enter X Axis Title" className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm" />
                                 </div>
                               </div>
                             )}
@@ -2443,15 +2482,15 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                             >
                               <div className="flex items-center gap-2">
                                 <MoveVertical className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
-                                <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#26064a]">Y Axis</span>
+                                <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">Y Axis</span>
                               </div>
                               <ChevronDown className="size-[14px] text-[#6a12cd] transition-transform duration-200" style={{ transform: editYAxisOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
                             </button>
                             {editYAxisOpen && (
                               <div className="bg-[#fafafa] p-2.5 space-y-3">
                                 <div className="flex flex-col gap-1.5">
-                                  <label className="text-[12px] font-medium text-[#26064a]">Title</label>
-                                  <input type="text" value={editYAxisTitleVal} onChange={e => onCustomizeChange?.('yAxisTitle', e.target.value)} placeholder="Enter Y Axis Title" className="w-full px-3.5 py-2 text-[12px] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm" />
+                                  <label className="text-[0.75rem] font-medium text-[#26064a]">Title</label>
+                                  <input type="text" value={editYAxisTitleVal} onChange={e => onCustomizeChange?.('yAxisTitle', e.target.value)} placeholder="Enter Y Axis Title" className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm" />
                                 </div>
                               </div>
                             )}
@@ -2477,7 +2516,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                             >
                               <div className="flex items-center gap-2">
                                 <MoveVertical className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
-                                <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-[#26064a]">Range (Y Axis)</span>
+                                <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">Range (Y Axis)</span>
                               </div>
                               <ChevronDown
                                 className="size-[14px] text-[#6a12cd] transition-transform duration-200"
@@ -2488,28 +2527,28 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                               <div className="p-2.5 bg-[#fafafa] space-y-3">
                                 <div className="flex gap-2">
                                   <div className="flex-1 flex flex-col gap-1.5">
-                                    <label className="text-[12px] font-medium text-[#26064a]">Minimum</label>
+                                    <label className="text-[0.75rem] font-medium text-[#26064a]">Minimum</label>
                                     <input
                                       type="text"
                                       value={editMinimum}
                                       onChange={e => setEditMinimum(e.target.value)}
                                       placeholder="Auto"
-                                      className="w-full px-3.5 py-2 text-[12px] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                                      className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                                     />
                                   </div>
                                   <div className="flex-1 flex flex-col gap-1.5">
-                                    <label className="text-[12px] font-medium text-[#26064a]">Maximum</label>
+                                    <label className="text-[0.75rem] font-medium text-[#26064a]">Maximum</label>
                                     <input
                                       type="text"
                                       value={editMaximum}
                                       onChange={e => setEditMaximum(e.target.value)}
                                       placeholder="Auto"
-                                      className="w-full px-3.5 py-2 text-[12px] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                                      className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                                     />
                                   </div>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                  <p className="text-[12px] font-medium text-[#26064a]">Invert Range</p>
+                                  <p className="text-[0.75rem] font-medium text-[#26064a]">Invert Range</p>
                                   <button
                                     onClick={() => setEditInvertRange(!editInvertRange)}
                                     className={`relative w-[36px] h-[20px] rounded-[12px] transition-all cursor-pointer ${editInvertRange ? 'bg-[#6a12cd]' : 'bg-[#e5e7eb]'}`}
@@ -2550,7 +2589,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                     <div className="shrink-0 px-4 py-3 border-t border-canvas-border bg-white flex gap-2">
                       <button
                         onClick={() => setShowEditSidebar(false)}
-                        className="flex-1 py-2.5 bg-white border border-canvas-border hover:bg-surface-2 text-ink-700 text-[13px] font-semibold rounded-xl transition-colors cursor-pointer"
+                        className="flex-1 py-2.5 bg-white border border-canvas-border hover:bg-surface-2 text-ink-700 text-[0.8125rem] font-semibold rounded-xl transition-colors cursor-pointer"
                       >
                         Cancel
                       </button>
@@ -2559,7 +2598,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                           addToast({ message: 'Widget updated', type: 'success' });
                           setShowEditSidebar(false);
                         }}
-                        className="flex-1 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-semibold rounded-xl transition-colors cursor-pointer"
+                        className="flex-1 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold rounded-xl transition-colors cursor-pointer"
                       >
                         Update
                       </button>
@@ -2590,19 +2629,19 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
               <div className="size-10 rounded-full bg-red-50 flex items-center justify-center shrink-0">
                 <Trash2 size={18} className="text-red-500" />
               </div>
-              <h3 className="text-[16px] font-bold text-ink-900">Delete Widget</h3>
+              <h3 className="text-[1rem] font-bold text-ink-900">Delete Widget</h3>
             </div>
-            <p className="text-[13px] text-ink-500 mb-5">Are you sure you want to delete <strong>"{expandTitle}"</strong>? This action cannot be undone.</p>
+            <p className="text-[0.8125rem] text-ink-500 mb-5">Are you sure you want to delete <strong>"{expandTitle}"</strong>? This action cannot be undone.</p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setShowExpandDeleteConfirm(false)}
-                className="px-5 py-2.5 text-[13px] font-semibold text-ink-600 hover:text-ink-800 border border-canvas-border rounded-xl transition-colors cursor-pointer"
+                className="px-5 py-2.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-800 border border-canvas-border rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={() => { setShowExpandDeleteConfirm(false); onDelete?.(); }}
-                className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white text-[13px] font-semibold rounded-xl transition-colors cursor-pointer"
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white text-[0.8125rem] font-semibold rounded-xl transition-colors cursor-pointer"
               >
                 Delete
               </button>
@@ -2635,8 +2674,8 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                   <AlertTriangle size={15} className="text-[#6a12cd]" />
                 </div>
                 <div>
-                  <h2 className="text-[15px] font-bold text-[#26064a]">Alert Notifications</h2>
-                  <p className="text-[11px] text-[#9ca3af]">{alerts.length} active alert{alerts.length !== 1 ? 's' : ''}</p>
+                  <h2 className="text-[0.9375rem] font-bold text-[#26064a]">Alert Notifications</h2>
+                  <p className="text-[0.6875rem] text-[#9ca3af]">{alerts.length} active alert{alerts.length !== 1 ? 's' : ''}</p>
                 </div>
               </div>
               <button onClick={() => setShowAlertNotifications(false)} className="p-1 rounded-md hover:bg-[#f9fafb] transition-colors cursor-pointer">
@@ -2651,8 +2690,8 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                   <div className="size-12 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-3">
                     <CheckCircle2 size={20} className="text-green-500" />
                   </div>
-                  <p className="text-[13px] font-medium text-[#26064a]">All clear!</p>
-                  <p className="text-[11px] text-[#9ca3af] mt-0.5">No threshold alerts triggered.</p>
+                  <p className="text-[0.8125rem] font-medium text-[#26064a]">All clear!</p>
+                  <p className="text-[0.6875rem] text-[#9ca3af] mt-0.5">No threshold alerts triggered.</p>
                 </div>
               ) : (
                 alerts.map(alert => (
@@ -2661,9 +2700,9 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                       <AlertTriangle size={13} className="text-[#6a12cd]" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <span className="text-[12px] font-semibold text-[#26064a]">{alert.title}</span>
-                      <p className="text-[11px] text-[#6b7280] mt-0.5 leading-relaxed">{alert.message}</p>
-                      <p className="text-[10px] text-[#9ca3af] mt-1">{alert.time}</p>
+                      <span className="text-[0.75rem] font-semibold text-[#26064a]">{alert.title}</span>
+                      <p className="text-[0.6875rem] text-[#6b7280] mt-0.5 leading-relaxed">{alert.message}</p>
+                      <p className="text-[0.625rem] text-[#9ca3af] mt-1">{alert.time}</p>
                     </div>
                     <button
                       onClick={() => setAlerts(prev => prev.filter(a => a.id !== alert.id))}
@@ -2680,13 +2719,13 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
             <div className="flex items-center justify-between px-5 py-3 border-t border-[#e5e7eb]">
               <button
                 onClick={() => { setAlerts([]); }}
-                className="text-[11px] font-semibold text-[#6a12cd] hover:text-[#5a0ebd] cursor-pointer"
+                className="text-[0.6875rem] font-semibold text-[#6a12cd] hover:text-[#5a0ebd] cursor-pointer"
               >
                 Clear all
               </button>
               <button
                 onClick={() => setShowAlertNotifications(false)}
-                className="px-4 py-1.5 bg-[#6a12cd] hover:bg-[#5a0ebd] text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
+                className="px-4 py-1.5 bg-[#6a12cd] hover:bg-[#5a0ebd] text-white rounded-[8px] text-[0.75rem] font-semibold transition-colors cursor-pointer"
               >
                 Close
               </button>
@@ -2726,8 +2765,8 @@ function ThresholdAlertModal({ open, onClose, widgetTitle, addToast }: {
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-[#f0f0f0]">
             <div>
-              <h2 className="text-[14px] font-bold text-[#26064a]">Set Threshold Alert</h2>
-              <p className="text-[11px] text-[#9ca3af] mt-0.5">{widgetTitle}</p>
+              <h2 className="text-[0.875rem] font-bold text-[#26064a]">Set Threshold Alert</h2>
+              <p className="text-[0.6875rem] text-[#9ca3af] mt-0.5">{widgetTitle}</p>
             </div>
             <button onClick={onClose} className="p-1 rounded-md hover:bg-[#f9fafb] transition-colors cursor-pointer">
               <X size={16} className="text-[#9ca3af]" />
@@ -2739,21 +2778,21 @@ function ThresholdAlertModal({ open, onClose, widgetTitle, addToast }: {
             {/* Threshold + Condition in one row */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-semibold text-[#26064a] block mb-1">Threshold Value</label>
+                <label className="text-[0.6875rem] font-semibold text-[#26064a] block mb-1">Threshold Value</label>
                 <input
                   type="number"
                   value={thresholdValue}
                   onChange={e => setThresholdValue(e.target.value)}
-                  className="w-full px-3 py-2 text-[12px] border border-[rgba(38,6,74,0.2)] rounded-[8px] bg-white text-[#26064a] outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                  className="w-full px-3 py-2 text-[0.75rem] border border-[rgba(38,6,74,0.2)] rounded-[8px] bg-white text-[#26064a] outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                 />
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-[#26064a] block mb-1">Condition</label>
+                <label className="text-[0.6875rem] font-semibold text-[#26064a] block mb-1">Condition</label>
                 <div className="relative">
                   <select
                     value={condition}
                     onChange={e => setCondition(e.target.value)}
-                    className="w-full px-3 py-2 text-[12px] border border-[rgba(38,6,74,0.2)] rounded-[8px] bg-white text-[#26064a] outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all appearance-none cursor-pointer shadow-sm"
+                    className="w-full px-3 py-2 text-[0.75rem] border border-[rgba(38,6,74,0.2)] rounded-[8px] bg-white text-[#26064a] outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all appearance-none cursor-pointer shadow-sm"
                   >
                     <option value="">Select</option>
                     <option value="greater">Greater than (&gt;)</option>
@@ -2771,7 +2810,7 @@ function ThresholdAlertModal({ open, onClose, widgetTitle, addToast }: {
             <div className="flex items-center justify-between py-2">
               <div className="flex items-center gap-2">
                 <Mail size={14} className="text-[#6a12cd]" />
-                <span className="text-[12px] font-semibold text-[#26064a]">Email Notification</span>
+                <span className="text-[0.75rem] font-semibold text-[#26064a]">Email Notification</span>
               </div>
               <button
                 onClick={() => setEmailNotification(!emailNotification)}
@@ -2786,7 +2825,7 @@ function ThresholdAlertModal({ open, onClose, widgetTitle, addToast }: {
                 {emailList.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {emailList.map((email, idx) => (
-                      <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#f4f0ff] border border-[#6a12cd]/20 rounded-md text-[10px] text-[#6a12cd] font-medium">
+                      <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#f4f0ff] border border-[#6a12cd]/20 rounded-md text-[0.625rem] text-[#6a12cd] font-medium">
                         {email}
                         <button onClick={() => setEmailList(prev => prev.filter((_, i) => i !== idx))} className="hover:text-red-500 cursor-pointer"><X size={9} /></button>
                       </span>
@@ -2805,7 +2844,7 @@ function ThresholdAlertModal({ open, onClose, widgetTitle, addToast }: {
                     }
                   }}
                   placeholder={emailList.length > 0 ? "Add another email..." : "Enter email and press Enter"}
-                  className="w-full px-3 py-2 text-[12px] border border-[rgba(38,6,74,0.2)] rounded-[8px] bg-white text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                  className="w-full px-3 py-2 text-[0.75rem] border border-[rgba(38,6,74,0.2)] rounded-[8px] bg-white text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                 />
               </>
             )}
@@ -2815,7 +2854,7 @@ function ThresholdAlertModal({ open, onClose, widgetTitle, addToast }: {
           <div className="flex gap-2 px-5 py-3 border-t border-[#f0f0f0]">
             <button
               onClick={onClose}
-              className="flex-1 py-2 border border-[#e5e7eb] rounded-[8px] text-[12px] font-semibold text-[#26064a] hover:bg-[#f9fafb] transition-colors cursor-pointer"
+              className="flex-1 py-2 border border-[#e5e7eb] rounded-[8px] text-[0.75rem] font-semibold text-[#26064a] hover:bg-[#f9fafb] transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -2824,7 +2863,7 @@ function ThresholdAlertModal({ open, onClose, widgetTitle, addToast }: {
                 addToast({ message: 'Threshold alert saved', type: 'success' });
                 onClose();
               }}
-              className="flex-1 py-2 bg-[#6a12cd] hover:bg-[#5a0ebd] text-white rounded-[8px] text-[12px] font-semibold transition-colors cursor-pointer"
+              className="flex-1 py-2 bg-[#6a12cd] hover:bg-[#5a0ebd] text-white rounded-[8px] text-[0.75rem] font-semibold transition-colors cursor-pointer"
             >
               Save Alert
             </button>
@@ -2879,7 +2918,7 @@ function WidgetRefreshOverlay() {
           <circle cx="16" cy="16" r="13" stroke="#e5e7eb" strokeWidth="3" />
           <path d="M29 16a13 13 0 0 0-13-13" stroke="#7C3AED" strokeWidth="3" strokeLinecap="round" />
         </svg>
-        <span className="text-[11px] font-medium text-ink-500">Updating...</span>
+        <span className="text-[0.6875rem] font-medium text-ink-500">Updating...</span>
       </div>
     </div>
   );
@@ -2896,7 +2935,6 @@ function WidgetCard({
   onDelete,
   onFilter,
   addToast,
-  pageFilterFields,
   widgetFields,
   dataLinks: dataLinksFromParent,
   onRemovePageFilter,
@@ -2994,15 +3032,9 @@ function WidgetCard({
     }
   };
 
-  const matchingPageFilters = pageFilterFields && widgetFields
-    ? pageFilterFields.filter(f => widgetFields.includes(f))
-    : [];
-  const hasActivePageFilter = matchingPageFilters.length > 0;
-  const hasPageFiltersButNoMatch = pageFilterFields && pageFilterFields.length > 0 && !hasActivePageFilter;
-
   return (
     <div
-      className={`glass-card rounded-xl transition-all duration-300 group relative flex flex-col cursor-pointer ${colSpan === 2 ? 'lg:col-span-2' : ''} ${hasActivePageFilter ? 'ring-2 ring-brand-400/40 border-brand-200 shadow-[0_0_16px_-4px_rgba(106,18,205,0.12)]' : ''} ${hasPageFiltersButNoMatch ? 'opacity-40' : ''}`}
+      className={`glass-card rounded-xl transition-all duration-300 group relative flex flex-col cursor-pointer ${colSpan === 2 ? 'lg:col-span-2' : ''}`}
       style={{ minHeight: 260, maxHeight: 800 }}
       onClick={() => onExpand?.()}
       onMouseEnter={() => setHovered(true)}
@@ -3041,12 +3073,12 @@ function WidgetCard({
               onKeyDown={e => { if (e.key === 'Enter') { setEditingTitle(false); setEditingSubtitle(false); } }}
               onClick={e => e.stopPropagation()}
               data-rename-group=""
-              className="text-[15px] font-semibold text-ink-900 w-full bg-transparent border-none outline-none ring-0 shadow-none" style={{ outline: 'none', boxShadow: 'none' }}
+              className="text-[0.9375rem] font-semibold text-ink-900 w-full bg-transparent border-none outline-none ring-0 shadow-none" style={{ outline: 'none', boxShadow: 'none' }}
             />
           ) : (
             <div className="flex items-center gap-1.5">
               <h3
-                className="text-[15px] font-semibold text-ink-900 truncate hover:text-brand-600 transition-colors cursor-pointer"
+                className="text-[0.9375rem] font-semibold text-ink-900 truncate hover:text-brand-600 transition-colors cursor-pointer"
                 onClick={(e) => e.stopPropagation()}
                 onDoubleClick={(e) => { e.stopPropagation(); setEditingTitle(true); setEditingSubtitle(true); }}
               >{localTitle}</h3>
@@ -3062,19 +3094,29 @@ function WidgetCard({
               onClick={e => e.stopPropagation()}
               placeholder="Add description..."
               data-rename-group=""
-              className="text-[12px] text-ink-500 mt-1 w-full bg-transparent border-none outline-none ring-0 shadow-none" style={{ outline: 'none', boxShadow: 'none' }}
+              className="text-[0.75rem] text-ink-500 mt-1 w-full bg-transparent border-none outline-none ring-0 shadow-none" style={{ outline: 'none', boxShadow: 'none' }}
             />
           ) : (
             <div className="flex items-center gap-2 mt-0.5" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => { e.stopPropagation(); setEditingTitle(true); setEditingSubtitle(true); }}>
-              {localSubtitle && <p className="text-[11px] text-ink-500 truncate">{localSubtitle}</p>}
-              {localSubtitle && <span className="text-ink-300 text-[9px]">·</span>}
-              <span className="inline-flex items-center gap-1 text-[9px] text-ink-400 shrink-0"><FileText size={8} className="text-green-600" /> Excel</span>
+              {localSubtitle && <p className="text-[0.6875rem] text-ink-500 truncate">{localSubtitle}</p>}
+              {localSubtitle && <span className="text-ink-300 text-[0.5625rem]">·</span>}
+              {dataSourceInfo?.type === 'sql' ? (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 text-[0.5625rem] font-semibold shrink-0" title={`${dataSourceInfo.name}${dataSourceInfo.meta ? ' · ' + dataSourceInfo.meta : ''}`}>
+                  <Database size={8} /> SQL
+                </span>
+              ) : dataSourceInfo?.type === 'query' ? (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[0.5625rem] font-semibold shrink-0">
+                  <MessageSquare size={8} /> Query
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[0.5625rem] text-ink-400 shrink-0"><FileText size={8} className="text-green-600" /> Excel</span>
+              )}
               {dataLinksFromParent && dataLinksFromParent.length > 0 && (() => {
                 const widgetLabels = (widgetFields || []).map(id => DRAG_FIELDS.find(f => f.id === id)?.label).filter(Boolean);
                 const relevantCount = dataLinksFromParent.filter(l => widgetLabels.includes(l.fieldA) || widgetLabels.includes(l.fieldB)).length;
                 if (relevantCount === 0) return null;
                 return (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-evidence-50 text-evidence-700 text-[9px] font-semibold shrink-0">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-evidence-50 text-evidence-700 text-[0.5625rem] font-semibold shrink-0">
                     <Link2 size={8} />{relevantCount} linked
                   </span>
                 );
@@ -3111,7 +3153,7 @@ function WidgetCard({
             >
               <Filter size={13} />
               {activeFilterCount > 0 && (
-                <span className="absolute -top-1 -right-1 size-3.5 bg-brand-600 text-white text-[8px] font-bold rounded-full flex items-center justify-center">{activeFilterCount}</span>
+                <span className="absolute -top-1 -right-1 size-3.5 bg-brand-600 text-white text-[0.5rem] font-bold rounded-full flex items-center justify-center">{activeFilterCount}</span>
               )}
             </ToolbarBtn>
 
@@ -3121,9 +3163,9 @@ function WidgetCard({
                 <div className="absolute top-full right-0 z-40 mt-1 w-[220px] bg-white border border-canvas-border/50 rounded-2xl shadow-xl overflow-hidden">
                   {/* Header */}
                   <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-canvas-border/40">
-                    <span className="text-[12px] font-bold text-ink-900 uppercase tracking-wide">Filters</span>
+                    <span className="text-[0.75rem] font-bold text-ink-900 uppercase tracking-wide">Filters</span>
                     {activeFilterCount > 0 && (
-                      <button onClick={(e) => { e.stopPropagation(); setWidgetFilterSelections({}); }} className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer">
+                      <button onClick={(e) => { e.stopPropagation(); setWidgetFilterSelections({}); }} className="text-[0.6875rem] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer">
                         Clear
                       </button>
                     )}
@@ -3143,7 +3185,7 @@ function WidgetCard({
                             onClick={(e) => { e.stopPropagation(); setWidgetFilterOpen(prev => ({ ...prev, [field.id]: !isOpen })); }}
                             className="w-full flex items-center justify-between px-3.5 py-2.5 hover:bg-surface-2/40 transition-colors cursor-pointer"
                           >
-                            <span className={`text-[11px] font-bold uppercase tracking-wide ${selected.length > 0 ? 'text-brand-700' : 'text-ink-500'}`}>
+                            <span className={`text-[0.6875rem] font-bold uppercase tracking-wide ${selected.length > 0 ? 'text-brand-700' : 'text-ink-500'}`}>
                               {field.label}
                             </span>
                             <ChevronDown size={14} className={`text-ink-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -3158,7 +3200,7 @@ function WidgetCard({
                                   value={search}
                                   onChange={e => setWidgetFilterSearch(prev => ({ ...prev, [field.id]: e.target.value }))}
                                   onClick={e => e.stopPropagation()}
-                                  className="w-full h-8 pl-8 pr-2 bg-ink-50 rounded-lg text-[11px] text-ink-800 placeholder:text-ink-400 outline-none focus:bg-white focus:ring-1 focus:ring-brand-200 transition-all"
+                                  className="w-full h-8 pl-8 pr-2 bg-ink-50 rounded-lg text-[0.6875rem] text-ink-800 placeholder:text-ink-400 outline-none focus:bg-white focus:ring-1 focus:ring-brand-200 transition-all"
                                 />
                               </div>
                               <button
@@ -3172,7 +3214,7 @@ function WidgetCard({
                                 <div className={`size-4 rounded border-[1.5px] flex items-center justify-center shrink-0 transition-colors ${allSelected ? 'border-brand-600 bg-brand-600' : 'border-ink-300'}`}>
                                   {allSelected && <svg viewBox="0 0 12 12" fill="none" className="size-2"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                 </div>
-                                <span className="text-[11px] font-semibold text-ink-800">Select All</span>
+                                <span className="text-[0.6875rem] font-semibold text-ink-800">Select All</span>
                               </button>
                               {filtered.map(val => (
                                 <button
@@ -3189,7 +3231,7 @@ function WidgetCard({
                                   <div className={`size-4 rounded border-[1.5px] flex items-center justify-center shrink-0 transition-colors ${selected.includes(val) ? 'border-brand-600 bg-brand-600' : 'border-ink-300'}`}>
                                     {selected.includes(val) && <svg viewBox="0 0 12 12" fill="none" className="size-2"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                   </div>
-                                  <span className={`text-[11px] ${selected.includes(val) ? 'text-ink-900 font-medium' : 'text-ink-600'}`}>{val}</span>
+                                  <span className={`text-[0.6875rem] ${selected.includes(val) ? 'text-ink-900 font-medium' : 'text-ink-600'}`}>{val}</span>
                                 </button>
                               ))}
                             </div>
@@ -3204,7 +3246,7 @@ function WidgetCard({
                       const relevant = dataLinksFromParent.filter(l => widgetLabels.includes(l.fieldA) || widgetLabels.includes(l.fieldB));
                       if (relevant.length === 0) return null;
                       return (<><div className="border-t border-canvas-border/30 px-3.5 py-2 bg-surface-2/40">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-ink-400">Cross-Data Filters</span>
+                            <span className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-400">Cross-Data Filters</span>
                           </div>{relevant.map(link => {
                         const linkLabel = `${link.fieldA} ↔ ${link.fieldB}`;
                         const isActive = widgetFilterSelections[`xlink-${link.id}`]?.length > 0;
@@ -3226,14 +3268,14 @@ function WidgetCard({
                               onClick={(e) => { e.stopPropagation(); setWidgetFilterOpen(prev => ({ ...prev, [`xlink-${link.id}`]: !isOpen })); }}
                               className="w-full flex items-center justify-between px-3.5 py-2.5 hover:bg-evidence-50/40 transition-colors cursor-pointer"
                             >
-                              <span className={`text-[11px] font-bold uppercase tracking-wide truncate ${isActive ? 'text-brand-700' : 'text-ink-500'}`}>
+                              <span className={`text-[0.6875rem] font-bold uppercase tracking-wide truncate ${isActive ? 'text-brand-700' : 'text-ink-500'}`}>
                                 {link.fieldA === link.fieldB ? link.fieldA : `${link.fieldA} · ${link.fieldB}`}
                               </span>
                               <ChevronDown size={14} className={`text-ink-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                             </button>
                             {isOpen && (
                               <div className="px-3.5 pb-3">
-                                <div className="flex items-center gap-1.5 mb-2 text-[9px] text-ink-400">
+                                <div className="flex items-center gap-1.5 mb-2 text-[0.5625rem] text-ink-400">
                                   <span>{sA?.name?.split('.')[0]}</span>
                                   <Link2 size={7} />
                                   <span>{sB?.name?.split('.')[0]}</span>
@@ -3246,7 +3288,7 @@ function WidgetCard({
                                     value={search}
                                     onChange={e => setWidgetFilterSearch(prev => ({ ...prev, [`xlink-${link.id}`]: e.target.value }))}
                                     onClick={e => e.stopPropagation()}
-                                    className="w-full h-8 pl-8 pr-2 bg-ink-50 rounded-lg text-[11px] text-ink-800 placeholder:text-ink-400 outline-none focus:bg-white focus:ring-1 focus:ring-evidence-200 transition-all"
+                                    className="w-full h-8 pl-8 pr-2 bg-ink-50 rounded-lg text-[0.6875rem] text-ink-800 placeholder:text-ink-400 outline-none focus:bg-white focus:ring-1 focus:ring-evidence-200 transition-all"
                                   />
                                 </div>
                                 <button
@@ -3260,7 +3302,7 @@ function WidgetCard({
                                   <div className={`size-4 rounded border-[1.5px] flex items-center justify-center shrink-0 transition-colors ${allSelected ? 'border-evidence bg-evidence' : 'border-ink-300'}`}>
                                     {allSelected && <svg viewBox="0 0 12 12" fill="none" className="size-2"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                   </div>
-                                  <span className="text-[11px] font-semibold text-ink-800">Select All</span>
+                                  <span className="text-[0.6875rem] font-semibold text-ink-800">Select All</span>
                                 </button>
                                 {filtered.map(val => (
                                   <button
@@ -3277,7 +3319,7 @@ function WidgetCard({
                                     <div className={`size-4 rounded border-[1.5px] flex items-center justify-center shrink-0 transition-colors ${selected.includes(val) ? 'border-evidence bg-evidence' : 'border-ink-300'}`}>
                                       {selected.includes(val) && <svg viewBox="0 0 12 12" fill="none" className="size-2"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                     </div>
-                                    <span className={`text-[11px] ${selected.includes(val) ? 'text-ink-900 font-medium' : 'text-ink-600'}`}>{val}</span>
+                                    <span className={`text-[0.6875rem] ${selected.includes(val) ? 'text-ink-900 font-medium' : 'text-ink-600'}`}>{val}</span>
                                   </button>
                                 ))}
                               </div>
@@ -3309,7 +3351,7 @@ function WidgetCard({
                   {onEdit && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setShowMenu(false); onEdit(); }}
-                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] text-ink-700 hover:bg-brand-50 hover:text-brand-600 transition-colors text-left cursor-pointer"
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[0.75rem] text-ink-700 hover:bg-brand-50 hover:text-brand-600 transition-colors text-left cursor-pointer"
                     >
                       <Settings size={13} />
                       Edit Widget
@@ -3320,14 +3362,14 @@ function WidgetCard({
                       <div className="my-1 mx-3 border-t border-canvas-border/40" />
                       <button
                         onClick={(e) => { e.stopPropagation(); setShowMenu(false); onChangeSize(1); }}
-                        className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] transition-colors text-left cursor-pointer ${colSpan === 1 ? 'text-brand-600 bg-brand-50 font-semibold' : 'text-ink-700 hover:bg-brand-50 hover:text-brand-600'}`}
+                        className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-[0.75rem] transition-colors text-left cursor-pointer ${colSpan === 1 ? 'text-brand-600 bg-brand-50 font-semibold' : 'text-ink-700 hover:bg-brand-50 hover:text-brand-600'}`}
                       >
                         <Columns size={13} />
                         Half Width
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); setShowMenu(false); onChangeSize(2); }}
-                        className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] transition-colors text-left cursor-pointer ${colSpan === 2 ? 'text-brand-600 bg-brand-50 font-semibold' : 'text-ink-700 hover:bg-brand-50 hover:text-brand-600'}`}
+                        className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-[0.75rem] transition-colors text-left cursor-pointer ${colSpan === 2 ? 'text-brand-600 bg-brand-50 font-semibold' : 'text-ink-700 hover:bg-brand-50 hover:text-brand-600'}`}
                       >
                         <Maximize2 size={13} />
                         Full Width
@@ -3339,7 +3381,7 @@ function WidgetCard({
                       <div className="my-1 mx-3 border-t border-canvas-border/40" />
                       <button
                         onClick={(e) => { e.stopPropagation(); setShowMenu(false); setShowDeleteConfirm(true); }}
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] text-ink-700 hover:bg-red-50 hover:text-red-600 transition-colors text-left cursor-pointer"
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[0.75rem] text-ink-700 hover:bg-red-50 hover:text-red-600 transition-colors text-left cursor-pointer"
                       >
                         <Trash2 size={13} />
                         Delete Widget
@@ -3368,7 +3410,7 @@ function WidgetCard({
           <div className="flex items-center gap-1.5 px-6 pb-2">
             <Filter size={10} className="text-brand-500 shrink-0" />
             {visible.map(chip => (
-              <span key={`${chip.fieldId}-${chip.val}`} className="inline-flex items-center gap-1 bg-brand-50 border border-brand-200 text-brand-700 text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
+              <span key={`${chip.fieldId}-${chip.val}`} className="inline-flex items-center gap-1 bg-brand-50 border border-brand-200 text-brand-700 text-[0.625rem] font-medium px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
                 {chip.fieldLabel}: {chip.val}
                 <button
                   onClick={(e) => {
@@ -3385,13 +3427,13 @@ function WidgetCard({
               </span>
             ))}
             {remaining > 0 && (
-              <span className="inline-flex items-center bg-brand-100 border border-brand-200 text-brand-700 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
+              <span className="inline-flex items-center bg-brand-100 border border-brand-200 text-brand-700 text-[0.625rem] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
                 +{remaining} more
               </span>
             )}
             <button
               onClick={(e) => { e.stopPropagation(); setWidgetFilterSelections({}); }}
-              className="text-[10px] font-medium text-brand-500 hover:text-brand-700 cursor-pointer shrink-0"
+              className="text-[0.625rem] font-medium text-brand-500 hover:text-brand-700 cursor-pointer shrink-0"
             >
               Clear
             </button>
@@ -3428,19 +3470,19 @@ function WidgetCard({
                 <div className="size-10 rounded-full bg-red-50 flex items-center justify-center shrink-0">
                   <Trash2 size={18} className="text-red-500" />
                 </div>
-                <h3 className="text-[16px] font-bold text-ink-900">Delete Widget</h3>
+                <h3 className="text-[1rem] font-bold text-ink-900">Delete Widget</h3>
               </div>
-              <p className="text-[13px] text-ink-500 mb-5">Are you sure you want to delete <strong>"{localTitle}"</strong>? This action cannot be undone.</p>
+              <p className="text-[0.8125rem] text-ink-500 mb-5">Are you sure you want to delete <strong>"{localTitle}"</strong>? This action cannot be undone.</p>
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={() => setShowDeleteConfirm(false)}
-                  className="px-5 py-2.5 text-[13px] font-semibold text-ink-600 hover:text-ink-800 border border-canvas-border rounded-xl transition-colors cursor-pointer"
+                  className="px-5 py-2.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-800 border border-canvas-border rounded-xl transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => { setShowDeleteConfirm(false); onDelete?.(); }}
-                  className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white text-[13px] font-semibold rounded-xl transition-colors cursor-pointer"
+                  className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white text-[0.8125rem] font-semibold rounded-xl transition-colors cursor-pointer"
                 >
                   Delete
                 </button>
@@ -3521,9 +3563,9 @@ function DonutChart({ title, segments, centerLabel, onExpand }: { title: string;
             <div key={s.label} className="flex items-center justify-between">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: s.color }} />
-                <span className="text-[12px] text-text-secondary truncate">{s.label}</span>
+                <span className="text-[0.75rem] text-text-secondary truncate">{s.label}</span>
               </div>
-              <span className="text-[12px] font-semibold text-text shrink-0 ml-2">
+              <span className="text-[0.75rem] font-semibold text-text shrink-0 ml-2">
                 {total > 100 ? s.value : `${s.value}%`}
               </span>
             </div>
@@ -3552,7 +3594,7 @@ function BarChart({ title, data, color, onExpand }: { title: string; data: BarDa
           const height = (d.value / max) * 100;
           return (
             <div key={d.label} className="flex-1 flex flex-col items-center gap-1">
-              <span className="text-[12px] text-text-muted font-medium">
+              <span className="text-[0.75rem] text-text-muted font-medium">
                 {typeof d.value === 'number' && d.value >= 1000
                   ? `${(d.value / 1000).toFixed(1)}K`
                   : d.value}
@@ -3564,7 +3606,7 @@ function BarChart({ title, data, color, onExpand }: { title: string; data: BarDa
                 animate={{ height: `${height}%` }}
                 transition={{ duration: 0.5, delay: i * 0.06, ease: 'easeOut' }}
               />
-              <span className="text-[12px] text-text-muted">{d.label}</span>
+              <span className="text-[0.75rem] text-text-muted">{d.label}</span>
             </div>
           );
         })}
@@ -3588,8 +3630,8 @@ function ProgressChart({ title, data, onExpand }: { title: string; data: Progres
         {data.map((d, i) => (
           <div key={d.label}>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[12px] text-text-secondary">{d.label}</span>
-              <span className="text-[12px] font-semibold text-text">{d.value}%</span>
+              <span className="text-[0.75rem] text-text-secondary">{d.label}</span>
+              <span className="text-[0.75rem] font-semibold text-text">{d.value}%</span>
             </div>
             <div className="h-2 bg-surface-3 rounded-full overflow-hidden">
               <motion.div
@@ -3614,14 +3656,14 @@ function MiniTable({ title, headers, rows }: { title: string; headers: string[];
     <div className="glass-card rounded-xl p-5 transition-all duration-150 group">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-text">{title}</h3>
-        <button className="text-[12px] text-primary font-medium hover:underline cursor-pointer">View all</button>
+        <button className="text-[0.75rem] text-primary font-medium hover:underline cursor-pointer">View all</button>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-border">
               {headers.map(h => (
-                <th key={h} className="text-[12px] text-text-muted font-medium pb-2 pr-4">{h}</th>
+                <th key={h} className="text-[0.75rem] text-text-muted font-medium pb-2 pr-4">{h}</th>
               ))}
             </tr>
           </thead>
@@ -3635,7 +3677,7 @@ function MiniTable({ title, headers, rows }: { title: string; headers: string[];
                 className="border-b border-border/50 last:border-0 hover:bg-primary-xlight/50 transition-colors cursor-pointer"
               >
                 {row.cells.map((cell, j) => (
-                  <td key={j} className={`text-[12.5px] py-2.5 pr-4 ${j === 0 ? 'font-medium text-text' : 'text-text-secondary'}`}>
+                  <td key={j} className={`text-[0.75rem] py-2.5 pr-4 ${j === 0 ? 'font-medium text-text' : 'text-text-secondary'}`}>
                     {cell}
                   </td>
                 ))}
@@ -3658,7 +3700,7 @@ function Sidebar({ dashboards, activeId, onSelect }: {
   return (
     <div className="w-[200px] shrink-0 border-r border-border bg-surface-1/50 overflow-y-auto flex flex-col">
       <div className="px-4 pt-5 pb-3">
-        <div className="text-[12px] text-text-muted font-semibold">Dashboards</div>
+        <div className="text-[0.75rem] text-text-muted font-semibold">Dashboards</div>
       </div>
       <nav className="flex-1 px-2 pb-4 space-y-1">
         {dashboards.map(d => {
@@ -3668,7 +3710,7 @@ function Sidebar({ dashboards, activeId, onSelect }: {
               key={d.id}
               onClick={() => onSelect(d.id)}
               className={`
-                w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-[13px] font-medium active:scale-[0.97] transition-all duration-200 cursor-pointer
+                w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-[0.8125rem] font-medium active:scale-[0.97] transition-all duration-200 cursor-pointer
                 ${isActive
                   ? 'bg-primary/10 text-primary shadow-sm'
                   : 'text-text-secondary hover:bg-surface-2 hover:text-text'
@@ -3691,12 +3733,47 @@ interface DashboardProps {
   initialDashboardId?: string | null;
   initialDashboardName?: string | null;
   initialCustomFields?: string[] | null;
+  /** Source the dashboard was created with (DB connection, file, etc.). Drives
+   * the live-SQL chip in the header, refresh visibility, and the Add Widget
+   * data source panel. Undefined for seed dashboards from the static catalog. */
+  initialDataSource?: { type: 'excel' | 'csv' | 'sql' | 'query' | 'combo'; sourceId?: string; sourceName?: string };
+  /** All source names attached to this dashboard. Combo dashboards have many;
+   *  single-source dashboards have one. The Add Data modal renders this list
+   *  so users can pick a primary or attach more. */
+  initialDataSourceNames?: string[];
   savedWidgets?: Array<{ chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string> }>;
   onSaveWidgets?: (widgets: Array<{ chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string> }>) => void;
+  /** Persist any change to the dashboard's source binding (attach a new
+   *  source, swap primary, change DB) back into App state. */
+  onUpdateDashboardSource?: (patch: { dataSource?: 'excel' | 'csv' | 'sql' | 'query' | 'combo'; sourceId?: string; dataSourceNames?: string[] }) => void;
+  /** Navigate to Knowledge Hub, optionally focused on the given source. Wired
+   *  by the header chip click and the Add Widget empty state. */
+  onOpenKnowledgeHub?: (sourceId?: string) => void;
   onBack?: () => void;
   onImportPowerBI?: () => void;
   onShare?: () => void;
 }
+
+// Source binding for seed (catalog) dashboards. Used when `initialDataSource`
+// is not supplied (i.e. the user clicked a built-in dashboard rather than
+// creating their own). Carries `sourceId`/`sourceName` for live-SQL seeds so
+// the header chip + AddCardModal DB tree light up automatically without the
+// user having to attach a connection.
+type SeedSourceBinding = {
+  type: 'excel' | 'csv' | 'sql' | 'query' | 'combo';
+  sourceId?: string;
+  sourceName?: string;
+};
+const SEED_DASHBOARD_SOURCE: Record<'p2p' | 'o2c' | 's2c' | 'grc' | 'excel' | 'sql', SeedSourceBinding> = {
+  p2p:   { type: 'excel' },
+  o2c:   { type: 'query' },
+  s2c:   { type: 'combo' },
+  grc:   { type: 'sql' },
+  excel: { type: 'excel' },
+  // Sample SQL dashboard — pre-bound to the Vendor Master Postgres connection
+  // so the demo doesn't require the user to attach anything.
+  sql:   { type: 'sql', sourceId: 'db-02', sourceName: 'Vendor Master' },
+};
 
 // ─── Connect Tables Modal ────────────────────────────────────────────────────
 // Uses the real DRAG_FIELDS from this dashboard, split into the two actual
@@ -3749,396 +3826,41 @@ const FILE_SOURCES = [
   },
 ];
 
-function ConnectTablesModal({ open, onClose, addToast, links, setLinks }: { open: boolean; onClose: () => void; addToast: (t: { message: string; type: ToastType }) => void; links: FieldLink[]; setLinks: React.Dispatch<React.SetStateAction<FieldLink[]>> }) {
-  const [pickedA, setPickedA] = useState<string | null>(null);
-  const [pickedB, setPickedB] = useState<string | null>(null);
-  const [selectingField, setSelectingField] = useState<{ side: 'A' | 'B'; field: string } | null>(null);
-  const [detecting, setDetecting] = useState(false);
 
-  const srcA = FILE_SOURCES.find(s => s.id === pickedA);
-  const srcB = FILE_SOURCES.find(s => s.id === pickedB);
-  const inFieldMode = pickedA && pickedB && srcA && srcB;
-
-  const linkedForPair = links.filter(l =>
-    (l.sourceA === pickedA && l.sourceB === pickedB) ||
-    (l.sourceA === pickedB && l.sourceB === pickedA)
-  );
-  const linkedFieldsA = new Set(linkedForPair.map(l => l.sourceA === pickedA ? l.fieldA : l.fieldB));
-  const linkedFieldsB = new Set(linkedForPair.map(l => l.sourceB === pickedB ? l.fieldB : l.fieldA));
-
-  // Count links per source pair
-  const getLinkCount = (aId: string, bId: string) =>
-    links.filter(l => (l.sourceA === aId && l.sourceB === bId) || (l.sourceA === bId && l.sourceB === aId)).length;
-
-  const handleFieldClick = (side: 'A' | 'B', field: string) => {
-    if (!selectingField) {
-      setSelectingField({ side, field });
-      return;
-    }
-    // If clicking same side, swap selection
-    if (selectingField.side === side) {
-      setSelectingField(selectingField.field === field ? null : { side, field });
-      return;
-    }
-    // Clicking opposite side — create link
-    const fA = side === 'A' ? field : selectingField.field;
-    const fB = side === 'B' ? field : selectingField.field;
-    const sA = pickedA!;
-    const sB = pickedB!;
-    const exists = links.some(l => l.sourceA === sA && l.fieldA === fA && l.sourceB === sB && l.fieldB === fB);
-    if (!exists) {
-      setLinks(prev => [...prev, { id: `l-${Date.now()}`, sourceA: sA, fieldA: fA, sourceB: sB, fieldB: fB }]);
-      addToast({ message: `Linked ${fA} → ${fB}`, type: 'success' });
-    }
-    setSelectingField(null);
-  };
-
-  const handleAutoDetect = () => {
-    setDetecting(true);
-    setTimeout(() => {
-      const auto: FieldLink[] = [];
-      // For each pair of sources, find fields with matching names
-      for (let i = 0; i < FILE_SOURCES.length; i++) {
-        for (let j = i + 1; j < FILE_SOURCES.length; j++) {
-          const a = FILE_SOURCES[i], b = FILE_SOURCES[j];
-          a.fields.forEach(fA => {
-            b.fields.forEach(fB => {
-              if (fA.toLowerCase() === fB.toLowerCase()) {
-                auto.push({ id: `auto-${a.id}-${b.id}-${fA}`, sourceA: a.id, fieldA: fA, sourceB: b.id, fieldB: fB });
-              }
-            });
-          });
-        }
-      }
-      // Also add some semantic matches
-      auto.push({ id: 'auto-sem-1', sourceA: 'invoice-master', fieldA: 'Date', sourceB: 'vendor-finance', fieldB: 'Processing Time (d)' });
-      auto.push({ id: 'auto-sem-2', sourceA: 'invoice-master', fieldA: 'Vendor Name', sourceB: 'vendor-finance', fieldB: 'Invoice Amount (₹)' });
-      setLinks(prev => {
-        const existing = new Set(prev.map(l => `${l.sourceA}|${l.fieldA}|${l.sourceB}|${l.fieldB}`));
-        return [...prev, ...auto.filter(a => !existing.has(`${a.sourceA}|${a.fieldA}|${a.sourceB}|${a.fieldB}`))];
-      });
-      setDetecting(false);
-      addToast({ message: `${auto.length} field mappings detected`, type: 'success' });
-    }, 2000);
-  };
-
-  if (!open) return null;
-
-  return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/40 z-[200]" onClick={onClose} />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: -8 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.97 }}
-        transition={{ duration: 0.15, ease: [0.22, 0.68, 0, 1] }}
-        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-canvas-elevated rounded-2xl border border-canvas-border shadow-2xl z-[201] flex flex-col overflow-hidden"
-        style={{ width: 'min(1200px, 96vw)', height: 'min(775px, 85vh)' }}
-        role="dialog" aria-modal="true" aria-label="Connect Tables"
-      >
-        {/* Header */}
-        <div className="shrink-0 flex items-center justify-between px-6 py-3 border-b border-canvas-border">
-          <div className="flex items-center gap-2.5">
-            <div className="bg-brand-50 rounded-lg size-7 flex items-center justify-center">
-              <Database size={14} className="text-brand-600" />
-            </div>
-            {inFieldMode ? (
-              <div className="flex items-center gap-2">
-                <button onClick={() => { setPickedA(null); setPickedB(null); setSelectingField(null); }} className="text-[13px] text-ink-500 hover:text-brand-600 transition-colors cursor-pointer">
-                  All Sources
-                </button>
-                <ChevronDown size={12} className="text-ink-400 -rotate-90" />
-                <span className="text-[15px] font-semibold text-ink-900">{srcA.name} ↔ {srcB.name}</span>
-              </div>
-            ) : (
-              <span className="text-[15px] font-semibold text-ink-900">Connect Data Sources</span>
-            )}
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-2 transition-colors cursor-pointer" aria-label="Close">
-            <X size={18} className="text-ink-500" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-
-          {/* Auto-detect banner */}
-          <div className="flex items-center justify-between p-4 rounded-xl bg-brand-50/60 border border-brand-100">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-brand-600"><Zap size={15} className="text-white" /></div>
-              <div>
-                <div className="text-[13px] font-bold text-ink-900">Smart Link</div>
-                <div className="text-[12px] text-ink-500">Let IRA auto-detect field mappings across all files</div>
-              </div>
-            </div>
-            <button
-              onClick={handleAutoDetect}
-              disabled={detecting}
-              className="flex items-center gap-2 px-4 h-9 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[12px] font-semibold transition-colors cursor-pointer disabled:opacity-60"
-            >
-              {detecting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              {detecting ? 'Scanning...' : 'Auto Detect'}
-            </button>
-          </div>
-
-          {/* Step 1: File picker (when no pair selected) */}
-          {!inFieldMode && (
-            <>
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[11px] text-ink-500 uppercase tracking-wide">Choose two files to connect</span>
-                <span className="text-[12px] text-ink-400">{FILE_SOURCES.length} data sources available</span>
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 max-h-[320px] overflow-y-scroll pr-1">
-                {FILE_SOURCES.map(src => {
-                  const isA = pickedA === src.id;
-                  const isB = pickedB === src.id;
-                  const isPicked = isA || isB;
-                  const totalLinks = FILE_SOURCES.filter(s => s.id !== src.id).reduce((sum, other) => sum + getLinkCount(src.id, other.id), 0);
-                  return (
-                    <button
-                      key={src.id}
-                      onClick={() => {
-                        if (isPicked) {
-                          if (isA) setPickedA(null);
-                          else setPickedB(null);
-                        } else if (!pickedA) setPickedA(src.id);
-                        else if (!pickedB) setPickedB(src.id);
-                      }}
-                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg border transition-all cursor-pointer text-left ${
-                        isPicked
-                          ? 'border-brand-400 bg-brand-50/50'
-                          : 'border-canvas-border bg-canvas hover:border-brand-200'
-                      }`}
-                    >
-                      <div className={`p-1.5 rounded-lg ${isPicked ? 'bg-brand-600' : 'bg-canvas-elevated border border-canvas-border'}`}>
-                        <FileText size={13} className={isPicked ? 'text-white' : 'text-ink-500'} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-semibold text-ink-900">{src.name}</div>
-                        <div className="text-[11px] text-ink-500">{src.fields.length} columns</div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {totalLinks > 0 && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[10px] font-semibold">
-                            <Link2 size={9} />{totalLinks}
-                          </span>
-                        )}
-                        {isPicked && (
-                          <span className="w-5 h-5 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center">
-                            {isA ? '1' : '2'}
-                          </span>
-                        )}
-                        <ChevronDown size={12} className="text-ink-400 -rotate-90" />
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {pickedA && !pickedB && (
-                <div className="flex items-center gap-2 text-[12px] text-brand-600 justify-center py-1 bg-brand-50 rounded-lg px-3">
-                  <div className="w-2 h-2 rounded-full bg-brand-500 animate-pulse" />
-                  Now select a second file to connect with {FILE_SOURCES.find(s => s.id === pickedA)?.name}
-                </div>
-              )}
-
-              {/* Summary of all links across all pairs */}
-              {links.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-mono text-[11px] text-ink-500 uppercase tracking-wide">All Active Links ({links.length})</span>
-                    <button onClick={() => setLinks([])} className="text-[10px] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer">Clear all</button>
-                  </div>
-                  <div className="space-y-1.5">
-                    {links.map((link, i) => {
-                      const sA = FILE_SOURCES.find(s => s.id === link.sourceA);
-                      const sB = FILE_SOURCES.find(s => s.id === link.sourceB);
-                      return (
-                        <motion.div
-                          key={link.id}
-                          initial={{ opacity: 0, x: -6 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: i * 0.02 }}
-                          className="flex items-center p-2.5 rounded-lg bg-canvas border border-canvas-border group hover:border-brand-200 transition-colors"
-                        >
-                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                            <span className="text-[10px] text-ink-400 shrink-0">{sA?.name?.split('.')[0]}</span>
-                            <span className="text-[12px] font-medium text-ink-800">{link.fieldA}</span>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0 mx-2">
-                            <div className="w-3 h-px bg-brand-200" />
-                            <Link2 size={10} className="text-brand-500" />
-                            <div className="w-3 h-px bg-brand-200" />
-                          </div>
-                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                            <span className="text-[10px] text-ink-400 shrink-0">{sB?.name?.split('.')[0]}</span>
-                            <span className="text-[12px] font-medium text-ink-800">{link.fieldB}</span>
-                          </div>
-                          <button
-                            onClick={() => { setLinks(prev => prev.filter(l => l.id !== link.id)); addToast({ message: 'Link removed', type: 'info' }); }}
-                            className="p-1 rounded text-ink-300 hover:text-risk-700 hover:bg-risk-50 opacity-0 group-hover:opacity-100 transition-all cursor-pointer shrink-0 ml-2"
-                            aria-label="Remove link"
-                          ><X size={11} /></button>
-                        </motion.div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Step 2: Field-level linking (when pair selected) */}
-          {inFieldMode && (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                {/* Source A fields */}
-                <div className="rounded-xl border border-canvas-border bg-canvas overflow-hidden">
-                  <div className="flex items-center gap-2 px-4 py-3 bg-canvas-elevated border-b border-canvas-border">
-                    <FileText size={14} className="text-brand-600" />
-                    <span className="text-[13px] font-bold text-ink-900">{srcA.name}</span>
-                    <span className="text-[11px] text-ink-400 ml-auto">{srcA.fields.length} cols</span>
-                  </div>
-                  <div className="divide-y divide-canvas-border max-h-[320px] overflow-y-scroll">
-                    {srcA.fields.map(field => {
-                      const isLinked = linkedFieldsA.has(field);
-                      const isSelected = selectingField?.side === 'A' && selectingField.field === field;
-                      return (
-                        <button
-                          key={field}
-                          onClick={() => handleFieldClick('A', field)}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors cursor-pointer ${
-                            isSelected ? 'bg-brand-50 text-brand-700' :
-                            isLinked ? 'bg-compliant-50/30' :
-                            'hover:bg-brand-50/30 text-ink-700'
-                          }`}
-                        >
-                          <svg width="8" height="12" viewBox="0 0 8 12" className="text-ink-300 shrink-0">
-                            <circle cx="2" cy="3" r="1" fill="currentColor" /><circle cx="6" cy="3" r="1" fill="currentColor" />
-                            <circle cx="2" cy="6" r="1" fill="currentColor" /><circle cx="6" cy="6" r="1" fill="currentColor" />
-                            <circle cx="2" cy="9" r="1" fill="currentColor" /><circle cx="6" cy="9" r="1" fill="currentColor" />
-                          </svg>
-                          <span className={`text-[13px] ${isSelected ? 'font-semibold' : isLinked ? 'font-medium' : ''}`}>{field}</span>
-                          {isLinked && <CheckCircle2 size={12} className="text-compliant ml-auto shrink-0" />}
-                          {isSelected && <div className="ml-auto w-2 h-2 rounded-full bg-brand-500 animate-pulse shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Source B fields */}
-                <div className="rounded-xl border border-canvas-border bg-canvas overflow-hidden">
-                  <div className="flex items-center gap-2 px-4 py-3 bg-canvas-elevated border-b border-canvas-border">
-                    <FileText size={14} className="text-brand-600" />
-                    <span className="text-[13px] font-bold text-ink-900">{srcB.name}</span>
-                    <span className="text-[11px] text-ink-400 ml-auto">{srcB.fields.length} cols</span>
-                  </div>
-                  <div className="divide-y divide-canvas-border max-h-[320px] overflow-y-scroll">
-                    {srcB.fields.map(field => {
-                      const isLinked = linkedFieldsB.has(field);
-                      const isSelected = selectingField?.side === 'B' && selectingField.field === field;
-                      return (
-                        <button
-                          key={field}
-                          onClick={() => handleFieldClick('B', field)}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors cursor-pointer ${
-                            isSelected ? 'bg-brand-50 text-brand-700' :
-                            isLinked ? 'bg-compliant-50/30' :
-                            'hover:bg-brand-50/30 text-ink-700'
-                          }`}
-                        >
-                          <svg width="8" height="12" viewBox="0 0 8 12" className="text-ink-300 shrink-0">
-                            <circle cx="2" cy="3" r="1" fill="currentColor" /><circle cx="6" cy="3" r="1" fill="currentColor" />
-                            <circle cx="2" cy="6" r="1" fill="currentColor" /><circle cx="6" cy="6" r="1" fill="currentColor" />
-                            <circle cx="2" cy="9" r="1" fill="currentColor" /><circle cx="6" cy="9" r="1" fill="currentColor" />
-                          </svg>
-                          <span className={`text-[13px] ${isSelected ? 'font-semibold' : isLinked ? 'font-medium' : ''}`}>{field}</span>
-                          {isLinked && <CheckCircle2 size={12} className="text-compliant ml-auto shrink-0" />}
-                          {isSelected && <div className="ml-auto w-2 h-2 rounded-full bg-brand-500 animate-pulse shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Hint */}
-              {selectingField ? (
-                <div className="flex items-center gap-2 text-[12px] text-brand-600 justify-center py-2 bg-brand-50 rounded-lg px-3">
-                  <div className="w-2 h-2 rounded-full bg-brand-500 animate-pulse" />
-                  Selected &ldquo;{selectingField.field}&rdquo; — now click a field in {selectingField.side === 'A' ? srcB.name : srcA.name}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-[12px] text-ink-400 justify-center py-1">
-                  <Sparkles size={12} className="text-brand-400" />
-                  Click a field on either side to start linking
-                </div>
-              )}
-
-              {/* Links for this pair */}
-              {linkedForPair.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-mono text-[11px] text-ink-500 uppercase tracking-wide">Links for this pair ({linkedForPair.length})</span>
-                    <button onClick={() => setLinks(prev => prev.filter(l => !linkedForPair.some(lp => lp.id === l.id)))} className="text-[10px] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer">Clear all</button>
-                  </div>
-                  <div className="space-y-1.5">
-                    {linkedForPair.map((link, i) => (
-                      <motion.div
-                        key={link.id}
-                        initial={{ opacity: 0, x: -6 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.03 }}
-                        className="flex items-center p-2.5 rounded-lg bg-canvas border border-canvas-border group hover:border-brand-200 transition-colors"
-                      >
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <FileText size={11} className="text-brand-600 shrink-0" />
-                          <span className="text-[12px] font-medium text-ink-800">{link.sourceA === pickedA ? link.fieldA : link.fieldB}</span>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0 mx-2">
-                          <div className="w-3 h-px bg-brand-200" /><Link2 size={10} className="text-brand-500" /><div className="w-3 h-px bg-brand-200" />
-                        </div>
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <FileText size={11} className="text-brand-600 shrink-0" />
-                          <span className="text-[12px] font-medium text-ink-800">{link.sourceB === pickedB ? link.fieldB : link.fieldA}</span>
-                        </div>
-                        <button
-                          onClick={() => { setLinks(prev => prev.filter(l => l.id !== link.id)); addToast({ message: 'Link removed', type: 'info' }); }}
-                          className="p-1 rounded text-ink-300 hover:text-risk-700 hover:bg-risk-50 opacity-0 group-hover:opacity-100 transition-all cursor-pointer shrink-0 ml-2"
-                          aria-label="Remove link"
-                        ><X size={11} /></button>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-t border-canvas-border bg-canvas shrink-0">
-          <p className="text-[11px] text-ink-400 leading-relaxed max-w-[420px]">
-            Linked fields share filter context — filtering by Region on one widget updates all connected widgets.
-          </p>
-          <button onClick={onClose} className="px-5 h-9 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer">
-            Done
-          </button>
-        </div>
-      </motion.div>
-    </>
-  );
-}
-
-export default function DashboardView({ initialDashboardId, initialDashboardName, initialCustomFields, savedWidgets = [], onSaveWidgets, onBack, onImportPowerBI, onShare }: DashboardProps = {}) {
+export default function DashboardView({ initialDashboardId, initialDashboardName, initialCustomFields, initialDataSource, initialDataSourceNames, savedWidgets = [], onSaveWidgets, onUpdateDashboardSource, onOpenKnowledgeHub, onBack, onImportPowerBI }: DashboardProps = {}) {
   const { addToast } = useToast();
+  const { openShare } = useShare();
+  const { can } = useCan();
   const [loading, setLoading] = useState(true);
   const isCustomInitial = !!initialDashboardId && !DASHBOARDS.some(d => d.id === initialDashboardId);
   const [activeId, setActiveId] = useState<DashboardId>(
     !isCustomInitial && (initialDashboardId as DashboardId) && DASHBOARDS.some(d => d.id === initialDashboardId)
       ? (initialDashboardId as DashboardId)
       : 'p2p'
+  );
+
+  // Source binding is stateful inside the view so attach/set-primary actions
+  // reflect immediately. We also bubble each change up via
+  // `onUpdateDashboardSource` so App state persists across navigation.
+  // Custom dashboards carry it in `initialDataSource`; seed dashboards are
+  // looked up from SEED_DASHBOARD_SOURCE.
+  const seedKey: keyof typeof SEED_DASHBOARD_SOURCE =
+    !isCustomInitial && initialDashboardId && (initialDashboardId in SEED_DASHBOARD_SOURCE)
+      ? (initialDashboardId as keyof typeof SEED_DASHBOARD_SOURCE)
+      : 'p2p';
+  const seedBinding = SEED_DASHBOARD_SOURCE[seedKey];
+  const [dashboardSourceType, setDashboardSourceType] = useState<'excel' | 'csv' | 'sql' | 'query' | 'combo' | undefined>(
+    initialDataSource?.type ?? seedBinding.type,
+  );
+  const [dashboardSourceId, setDashboardSourceId] = useState<string | undefined>(
+    initialDataSource?.sourceId ?? seedBinding.sourceId,
+  );
+  const [dashboardSourceName, setDashboardSourceName] = useState<string | undefined>(
+    initialDataSource?.sourceName ?? seedBinding.sourceName,
+  );
+  const [dataSourceNames, setDataSourceNames] = useState<string[]>(
+    initialDataSourceNames
+      ?? (initialDataSource?.sourceName ? [initialDataSource.sourceName] : (seedBinding.sourceName ? [seedBinding.sourceName] : [])),
   );
 
   // Action bar state
@@ -4162,10 +3884,6 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
   const [editingKpiIdx, setEditingKpiIdx] = useState<number | null>(null);
   const [openEditSidebarOnExpand, setOpenEditSidebarOnExpand] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [filterDateRange, setFilterDateRange] = useState('last-30-days');
-  const [filterStatus, setFilterStatus] = useState<string[]>([]);
-  const [filterRisk, setFilterRisk] = useState<string[]>([]);
-  const [filterDepartment, setFilterDepartment] = useState<string[]>([]);
   const [pageFilterFields, setPageFilterFields] = useState<string[]>([]);
   const [addWidgetOpen, setAddWidgetOpen] = useState(!!initialCustomFields?.length);
   const [addDataOpen, setAddDataOpen] = useState(false);
@@ -4205,37 +3923,75 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
     setExpandYField(yLabel);
     setExpandLegendField('');
   }, [expandedWidget]);
-  const [editingWidget, setEditingWidget] = useState<{ index: number; data: { chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string> } } | null>(null);
+  const [editingWidget, setEditingWidget] = useState<{ index: number; data: { chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string>; model?: WidgetModelConfig } } | null>(null);
   const [customFields] = useState<string[] | null>(initialCustomFields || null);
-  const [userWidgets, setUserWidgets] = useState<Array<{ chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string> }>>(savedWidgets);
+  const [userWidgets, setUserWidgets] = useState<Array<{ chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string>; model?: WidgetModelConfig }>>(savedWidgets);
+  // Data-model relationships (table joins). Combined widgets are built directly
+  // in the Add Widget modal (no separate builder).
+  const [relationships, setRelationships] = useState<Relationship[]>(DEFAULT_RELATIONSHIPS);
   const isCustomDashboard = isCustomInitial;
   const [editingDashName, setEditingDashName] = useState(false);
   const [dashName, setDashName] = useState(isCustomDashboard ? (initialDashboardName || 'Custom Dashboard') : (initialDashboardName || ''));
   const [widgetSizes, setWidgetSizes] = useState<Record<number, 1 | 2>>({});
   const [connectTablesOpen, setConnectTablesOpen] = useState(false);
-  const [dataLinks, setDataLinks] = useState<FieldLink[]>([]);
-  const [activeCrossFilters, setActiveCrossFilters] = useState<string[]>([]);
-  const [activeFiltersCount, setActiveFiltersCount] = useState(0);
+  const [dataLinks] = useState<FieldLink[]>([]);
+  // Global page slicers: pageFilterFields holds `table::column` ids; selected
+  // values per field live in pageFilterValues (empty ⇒ all, i.e. inactive).
+  const [pageFilterValues, setPageFilterValues] = useState<Record<string, (string | number)[]>>({});
+  // Cross-filter from clicking a chart element. `source` is the originating
+  // widget index — it keeps its full axis (highlighted) while others filter.
+  const [crossFilter, setCrossFilter] = useState<{ table: string; column: string; value: string; source: number } | null>(null);
+
+  // ── Global filter context (page slicers + chart-click cross-filter) ──
+  const splitFieldId = (id: string) => { const [table, column] = id.split('::'); return { table, column }; };
+  const modelFieldLabel = (id: string) => { const { table, column } = splitFieldId(id); return colByName(tableById(MODEL_TABLES, table), column)?.label ?? column; };
+  const pageModelFilters: ModelFilter[] = pageFilterFields
+    .map(id => { const { table, column } = splitFieldId(id); return { table, column, values: pageFilterValues[id] ?? [] }; })
+    .filter(f => f.values.length > 0);
+  const crossModelFilter: ModelFilter | null = crossFilter
+    ? { table: crossFilter.table, column: crossFilter.column, values: [crossFilter.value] }
+    : null;
+  // Filters applied to widget `index`. The cross-filter SOURCE keeps its own
+  // data (every category stays clickable, the selection is highlighted) — only
+  // page slicers apply to it; every other widget also gets the cross-filter.
+  const filtersForWidget = (index: number): ModelFilter[] => {
+    const out = [...pageModelFilters];
+    if (crossModelFilter && crossFilter && crossFilter.source !== index) out.push(crossModelFilter);
+    return out;
+  };
+  const highlightForWidget = (index: number): string | null =>
+    crossFilter && crossFilter.source === index ? crossFilter.value : null;
+  // Click on a model widget element → set/toggle the cross-filter on the
+  // widget's first dimension (multi-dim labels 'A · B' map to the first dim).
+  const handleWidgetSelect = (index: number, model: WidgetModelConfig | undefined, label: string) => {
+    const dim = model?.fields.find(f => f.role === 'dimension');
+    if (!dim) return;
+    const value = label.split(' · ')[0];
+    setCrossFilter(prev =>
+      prev && prev.source === index && prev.value === value && prev.column === dim.column
+        ? null
+        : { table: dim.table, column: dim.column, value, source: index });
+  };
+  const clearAllFilters = () => { setPageFilterFields([]); setPageFilterValues({}); setCrossFilter(null); };
+  const totalActiveFilterCount = pageModelFilters.length + (crossFilter ? 1 : 0);
 
   const handleEditDefaultWidget = (widgetTitle: string, _chartType: string, subtitle?: string) => {
     setOpenEditSidebarOnExpand(true);
     setExpandedWidget({ title: widgetTitle, subtitle });
   };
 
-  // Recalculate active filter count
-  useEffect(() => {
-    let n = 0;
-    if (filterDateRange !== 'last-30-days') n++;
-    if (filterStatus.length > 0) n++;
-    if (filterRisk.length > 0) n++;
-    if (filterDepartment.length > 0) n++;
-    setActiveFiltersCount(n);
-  }, [filterDateRange, filterStatus, filterRisk, filterDepartment]);
-
   const handleRefresh = () => {
+    // Guard against overlap — if a refresh is already mid-flight (manual or
+    // auto-refresh-driven), skip this call. Without this, rapid clicks or an
+    // auto-refresh tick landing during a manual refresh produce overlapping
+    // setTimeout chains and visual thrash.
+    if (isRefreshing) return;
     setIsRefreshing(true);
-    // Set all widgets to loading
-    const widgetKeys = ['w1', 'w2', 'w3', 'w4', 'table'];
+    // Set all widgets to loading. Includes both the per-dashboard seed widgets
+    // (w1..w4 + table) and any user-added widgets, keyed by index.
+    const seedKeys = ['w1', 'w2', 'w3', 'w4', 'table'];
+    const userKeys = userWidgets.map((_, i) => `user-${i}`);
+    const widgetKeys = [...seedKeys, ...userKeys];
     const loading: Record<string, 'loading' | 'loaded' | 'error'> = {};
     widgetKeys.forEach(k => { loading[k] = 'loading'; });
     setWidgetLoadingStates(loading);
@@ -4258,6 +4014,38 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
     }, 3000);
   };
 
+  // Keep refs to the latest handleRefresh and isRefreshing so the auto-refresh
+  // interval can call without re-arming on every render, and skip ticks that
+  // would overlap with an in-flight manual refresh.
+  const handleRefreshRef = useRef(handleRefresh);
+  handleRefreshRef.current = handleRefresh;
+  const isRefreshingRef = useRef(isRefreshing);
+  isRefreshingRef.current = isRefreshing;
+
+  // Auto-refresh interval. Demo intervals are compressed (Daily=60s) so the
+  // behavior is observable in a session; real intervals would be 86_400_000
+  // (Daily) etc. Off = no interval. Ticks that land during an in-flight
+  // refresh are silently skipped — the next tick catches up.
+  useEffect(() => {
+    const intervalMs: Record<string, number | null> = {
+      Off: null,
+      Daily: 60_000,
+      Weekly: 300_000,
+      Biweekly: 600_000,
+      Monthly: 1_200_000,
+      Quarterly: 1_800_000,
+      'Semi-Annually': 2_700_000,
+      Annually: 3_600_000,
+    };
+    const ms = intervalMs[autoRefreshFrequency];
+    if (!ms) return;
+    const handle = setInterval(() => {
+      if (isRefreshingRef.current) return;
+      handleRefreshRef.current();
+    }, ms);
+    return () => clearInterval(handle);
+  }, [autoRefreshFrequency]);
+
   const handleExport = () => {
     if (isExporting) return;
     setIsExporting(true);
@@ -4279,7 +4067,26 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
   if (loading) return <DashboardSkeleton />;
 
   const dashboard = DASHBOARDS.find(d => d.id === activeId) || DASHBOARDS[0];
+  // True only for the canonical Excel sample dashboard. Drives Excel-specific
+  // UX (Summary tab in expanded widget, alerts panel hide, hasAlert flag).
+  // Distinct from `isStaticFileDashboard`, which captures excel + csv for
+  // refresh-visibility purposes.
   const isExcelDashboard = activeId === 'excel';
+  const isStaticFileDashboard = dashboardSourceType === 'excel' || dashboardSourceType === 'csv';
+  const isLiveSqlDashboard = dashboardSourceType === 'sql' && !!dashboardSourceId;
+  const sqlIntegration = isLiveSqlDashboard ? INTEGRATION_CONFIGS[dashboardSourceId!] : undefined;
+
+  // dataSourceInfo passed to every WidgetCard so each tile (and the expand
+  // modal) shows the right badge — SQL badge for live-SQL dashboards, Query
+  // for query dashboards, default Excel badge otherwise.
+  const widgetDataSourceInfo: { type: 'sql' | 'excel' | 'csv' | 'query'; name: string; meta: string } | undefined =
+    dashboardSourceType === 'sql' || dashboardSourceType === 'csv' || dashboardSourceType === 'query'
+      ? {
+          type: dashboardSourceType,
+          name: dashboardSourceName ?? '',
+          meta: sqlIntegration?.provider ?? '',
+        }
+      : undefined;
   const displayName = dashName || dashboard.name;
   const displaySubtitle = isCustomDashboard ? 'Custom dashboard' : dashboard.subtitle;
 
@@ -4291,8 +4098,12 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
 
       {/* Sidebar removed — dashboard switching handled via list page */}
 
-      {/* Main content */}
-      <div className="flex-1 overflow-y-auto relative">
+      {/* Main content — shrinks to the left when the docked Filters panel is open
+          so widgets are never overlapped; the responsive grid reflows to fit. */}
+      <div
+        className="flex-1 overflow-y-auto relative transition-[margin] duration-300 ease-out"
+        style={{ marginRight: filtersOpen ? FILTER_PANEL_WIDTH : 0 }}
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={dashboard.id}
@@ -4305,7 +4116,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
             {/* Page header — Editorial: breadcrumb · serif title · context · actions */}
             <div className={isFullScreen ? 'mb-4' : 'mb-6'}>
               {!isFullScreen && (
-                <div className="font-mono text-[12px] text-ink-500 mb-2 flex items-center gap-1">
+                <div className="font-mono text-[0.75rem] text-ink-500 mb-2 flex items-center gap-1">
                   {onBack && (
                     <button onClick={onBack} className="inline-flex items-center gap-1 hover:text-brand-600 transition-colors cursor-pointer">
                       <ArrowLeft size={12} />
@@ -4326,35 +4137,43 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                       onChange={e => setDashName(e.target.value)}
                       onBlur={() => setEditingDashName(false)}
                       onKeyDown={e => { if (e.key === 'Enter') setEditingDashName(false); }}
-                      className={`font-display font-[420] text-ink-900 leading-[1.15] bg-transparent border-none ring-0 shadow-none w-full ${isFullScreen ? 'text-[22px]' : 'text-[34px]'}`}
+                      className={`font-display font-[420] text-ink-900 leading-[1.15] bg-transparent border-none ring-0 shadow-none w-full ${isFullScreen ? 'text-[1.375rem]' : 'text-[2.125rem]'}`}
                       style={{ outline: 'none', boxShadow: 'none' }}
                     />
                   ) : (
                     <h1
-                      className={`font-display font-[420] text-ink-900 leading-[1.15] cursor-text hover:text-brand-800 transition-colors ${isFullScreen ? 'text-[22px]' : 'text-[34px]'}`}
+                      className={`font-display font-[420] text-ink-900 leading-[1.15] cursor-text hover:text-brand-800 transition-colors ${isFullScreen ? 'text-[1.375rem]' : 'text-[2.125rem]'}`}
                       onClick={() => setEditingDashName(true)}
                     >{displayName}</h1>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* Refreshed indicator — hidden for Excel */}
-                  {!isExcelDashboard && (
+                  {/* Header DB chip removed — per-widget badge surfaces the
+                      bound DB name + provider on each card and inside the
+                      expand modal instead. Less header clutter. */}
+
+                  {/* Refreshed indicator — hidden for static file dashboards */}
+                  {!isStaticFileDashboard && (
                   <button
                     onClick={handleRefresh}
-                    className="flex items-center gap-1.5 px-4 h-9 border border-canvas-border bg-white rounded-full text-[12px] text-ink-500 hover:border-brand-200 shadow-sm transition-colors cursor-pointer"
-                    title="Click to refresh"
+                    disabled={isRefreshing}
+                    aria-busy={isRefreshing}
+                    className={`flex items-center gap-1.5 px-4 h-9 border border-canvas-border bg-white rounded-full text-[0.75rem] text-ink-500 shadow-sm transition-colors ${
+                      isRefreshing ? 'opacity-60 cursor-not-allowed' : 'hover:border-brand-200 cursor-pointer'
+                    }`}
+                    title={isRefreshing ? 'Refresh in progress…' : 'Click to refresh'}
                   >
                     <RefreshCw size={13} className={isRefreshing ? 'animate-spin text-brand-600' : ''} />
-                    <span className="tabular-nums">Refreshed {lastRefreshTime}</span>
+                    <span className="tabular-nums">{isRefreshing ? 'Refreshing…' : `Refreshed ${lastRefreshTime}`}</span>
                   </button>
                   )}
 
-                  {/* Auto refresh with frequency dropdown — hidden for Excel */}
-                  {!isExcelDashboard && (
+                  {/* Auto refresh with frequency dropdown — hidden for static file dashboards */}
+                  {!isStaticFileDashboard && (
                   <div className="relative">
                     <button
                       onClick={() => setShowFrequencyDropdown(!showFrequencyDropdown)}
-                      className={`flex items-center gap-1.5 px-4 h-9 rounded-full text-[12px] font-medium transition-colors cursor-pointer border shadow-sm ${
+                      className={`flex items-center gap-1.5 px-4 h-9 rounded-full text-[0.75rem] font-medium transition-colors cursor-pointer border shadow-sm ${
                         autoRefreshFrequency !== 'Off'
                           ? 'border-brand-300 bg-brand-50 text-brand-700'
                           : 'border-canvas-border bg-white text-ink-500 hover:border-brand-200'
@@ -4376,7 +4195,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                                 setShowFrequencyDropdown(false);
                                 addToast({ message: freq === 'Off' ? 'Auto refresh disabled' : `Auto refresh set to ${freq}`, type: 'info' });
                               }}
-                              className={`w-full flex items-center justify-between px-4 py-2 text-[13px] transition-colors cursor-pointer ${
+                              className={`w-full flex items-center justify-between px-4 py-2 text-[0.8125rem] transition-colors cursor-pointer ${
                                 autoRefreshFrequency === freq
                                   ? 'bg-brand-50 text-brand-700 font-medium'
                                   : 'text-ink-700 hover:bg-brand-50 hover:text-brand-700'
@@ -4398,48 +4217,49 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   <div className="w-px h-5 bg-canvas-border" />
 
                   {/* + Add Widget — primary CTA */}
+                  <Gated permission="db_add" mode="disable" title="You don't have permission to add widgets">
                   <button
                     onClick={() => setAddWidgetOpen(true)}
-                    className="flex items-center gap-1.5 px-5 h-9 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-full text-[12px] font-semibold shadow-sm transition-colors cursor-pointer"
+                    className="flex items-center gap-1.5 px-5 h-9 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-full text-[0.75rem] font-semibold shadow-sm transition-colors cursor-pointer"
                   >
                     <Plus size={14} />
                     Add Widget
                   </button>
+                  </Gated>
 
-                  {/* Connect Tables — hidden for Excel */}
-                  {!isExcelDashboard && (
+                  {/* Connect Data Sources — manages the table relationships that
+                      power combined (multi-table) widgets; available on every dashboard. */}
                   <button
                     onClick={() => setConnectTablesOpen(true)}
                     className={`relative flex items-center justify-center size-9 rounded-lg transition-colors cursor-pointer border ${
-                      dataLinks.length > 0
+                      relationships.length > 0
                         ? 'border-brand-200 bg-brand-50 text-brand-700'
                         : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:text-brand-600 hover:border-brand-200'
                     }`}
                     title="Connect Data Sources"
                   >
                     <Link2 size={15} />
-                    {dataLinks.length > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-brand-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 tabular-nums">
-                        {dataLinks.length}
+                    {relationships.length > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-brand-600 text-white text-[0.625rem] font-bold rounded-full flex items-center justify-center px-1 tabular-nums">
+                        {relationships.length}
                       </span>
                     )}
                   </button>
-                  )}
 
                   {/* Filter */}
                   <button
                     onClick={() => setFiltersOpen(!filtersOpen)}
-                    className={`relative flex items-center gap-1.5 px-2.5 h-9 rounded-lg text-[12px] font-medium transition-colors cursor-pointer border ${
-                      activeFiltersCount > 0 || pageFilterFields.length > 0
+                    className={`relative flex items-center gap-1.5 px-2.5 h-9 rounded-lg text-[0.75rem] font-medium transition-colors cursor-pointer border ${
+                      totalActiveFilterCount > 0
                         ? 'border-brand-200 bg-brand-50 text-brand-700'
                         : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:text-brand-600 hover:border-brand-200'
                     }`}
                     title="Filters"
                   >
                     <Filter size={15} />
-                    {(activeFiltersCount + pageFilterFields.length) > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-brand-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 tabular-nums">
-                        {activeFiltersCount + pageFilterFields.length}
+                    {totalActiveFilterCount > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-brand-600 text-white text-[0.625rem] font-bold rounded-full flex items-center justify-center px-1 tabular-nums">
+                        {totalActiveFilterCount}
                       </span>
                     )}
                   </button>
@@ -4458,14 +4278,16 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   </button>
 
                   {/* Share */}
+                  {can('db_share') && (
                   <button
-                    onClick={() => onShare ? onShare() : addToast({ message: 'Share dialog opening.', type: 'info' })}
-                    className="flex items-center gap-1.5 px-2.5 h-9 border border-canvas-border bg-canvas-elevated rounded-lg text-ink-500 hover:text-brand-600 hover:border-brand-200 transition-colors cursor-pointer text-[12px] font-medium"
+                    onClick={(e) => { e.stopPropagation(); openShare({ type: 'dashboard', id: activeId, anchor: rectFromEvent(e) }); }}
+                    className="flex items-center gap-1.5 px-2.5 h-9 border border-canvas-border bg-canvas-elevated rounded-lg text-ink-500 hover:text-brand-600 hover:border-brand-200 transition-colors cursor-pointer text-[0.75rem] font-medium"
                     title="Share"
                   >
                     <Share2 size={15} />
                     <span className="hidden sm:inline">Share</span>
                   </button>
+                  )}
 
                   {/* Fullscreen */}
                   <button
@@ -4503,84 +4325,79 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   const displayTitle = override?.title || kpi.title;
                   const isEditing = editingKpiIdx === i;
                   return (
-                    <motion.div
+                    <div
                       key={i}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.12 + i * 0.05 }}
-                      className="glass-card rounded-xl px-5 py-4 cursor-pointer hover:border-brand-200 hover:shadow-md transition-all"
-                      onClick={() => { if (!isEditing) setExpandedWidget({ title: displayTitle, subtitle: 'KPI detail' }); }}
                       onDoubleClick={(e) => { e.stopPropagation(); setEditingKpiIdx(i); }}
                     >
-                      {isEditing ? (
-                        <div className="space-y-2" onClick={e => e.stopPropagation()}>
-                          <input
-                            autoFocus
-                            value={override?.title || kpi.title}
-                            onChange={e => setKpiOverrides(prev => ({ ...prev, [i]: { ...prev[i], title: e.target.value, field: prev[i]?.field || '' } }))}
-                            onKeyDown={e => { if (e.key === 'Enter') setEditingKpiIdx(null); if (e.key === 'Escape') setEditingKpiIdx(null); }}
-                            className="w-full text-[11px] font-semibold text-ink-900 uppercase tracking-wide bg-transparent border-b border-brand-300 outline-none pb-0.5"
-                            placeholder="KPI Title"
-                          />
-                          <select
-                            value={override?.field || ''}
-                            onChange={e => { setKpiOverrides(prev => ({ ...prev, [i]: { ...prev[i], title: prev[i]?.title || kpi.title, field: e.target.value } })); }}
-                            className="w-full text-[11px] text-ink-700 bg-white border border-canvas-border rounded-md px-2 py-1.5 outline-none focus:border-brand-400 cursor-pointer"
-                          >
-                            <option value="">Select source column...</option>
-                            {EXCEL_RAW_HEADERS.filter(h => h !== 'Row #').map(h => (
-                              <option key={h} value={h}>{h}</option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={() => setEditingKpiIdx(null)}
-                            className="w-full text-[11px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md py-1.5 transition-colors cursor-pointer"
-                          >
-                            Done
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <p className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide mb-2 truncate">{displayTitle}</p>
-                          <p className="text-[26px] font-bold text-ink-900 leading-none">{kpi.value}</p>
-                          {override?.field && (
-                            <p className="text-[10px] text-ink-400 mt-2">Source: {override.field}</p>
-                          )}
-                        </>
-                      )}
-                    </motion.div>
+                      <KpiTile
+                        label={displayTitle}
+                        value={String(kpi.value)}
+                        index={i}
+                        onClick={isEditing ? undefined : () => setExpandedWidget({ title: displayTitle, subtitle: 'KPI detail' })}
+                        footer={!isEditing && override?.field ? (
+                          <p className="text-[0.625rem] text-ink-400">Source: {override.field}</p>
+                        ) : undefined}
+                        editing={isEditing ? (
+                          <div className="space-y-2" onClick={e => e.stopPropagation()}>
+                            <input
+                              autoFocus
+                              value={override?.title || kpi.title}
+                              onChange={e => setKpiOverrides(prev => ({ ...prev, [i]: { ...prev[i], title: e.target.value, field: prev[i]?.field || '' } }))}
+                              onKeyDown={e => { if (e.key === 'Enter') setEditingKpiIdx(null); if (e.key === 'Escape') setEditingKpiIdx(null); }}
+                              className="w-full text-[0.6875rem] font-semibold text-ink-900 uppercase tracking-wide bg-transparent border-b border-brand-300 outline-none pb-0.5"
+                              placeholder="KPI Title"
+                            />
+                            <select
+                              value={override?.field || ''}
+                              onChange={e => { setKpiOverrides(prev => ({ ...prev, [i]: { ...prev[i], title: prev[i]?.title || kpi.title, field: e.target.value } })); }}
+                              className="w-full text-[0.6875rem] text-ink-700 bg-white border border-canvas-border rounded-md px-2 py-1.5 outline-none focus:border-brand-400 cursor-pointer"
+                            >
+                              <option value="">Select source column...</option>
+                              {EXCEL_RAW_HEADERS.filter(h => h !== 'Row #').map(h => (
+                                <option key={h} value={h}>{h}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => setEditingKpiIdx(null)}
+                              className="w-full text-[0.6875rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md py-1.5 transition-colors cursor-pointer"
+                            >
+                              Done
+                            </button>
+                          </div>
+                        ) : undefined}
+                      />
+                    </div>
                   );
                 })}
               </motion.div>
             )}
 
-            {/* Page-level filter strip */}
-            {(pageFilterFields.length > 0 || activeCrossFilters.length > 0) && (
+            {/* Page-level filter strip — global slicers + active cross-filter */}
+            {(pageModelFilters.length > 0 || crossFilter) && (
               <div className="flex items-center gap-2 flex-wrap px-5 py-3 mb-4 rounded-xl bg-brand-50/50 border border-brand-100">
                 <Filter size={13} className="text-brand-600 shrink-0" />
-                {pageFilterFields.map(fId => {
-                  const label = DRAG_FIELDS.find(f => f.id === fId)?.label || fId;
+                {pageFilterFields.filter(id => (pageFilterValues[id]?.length ?? 0) > 0).map(fId => {
+                  const vals = pageFilterValues[fId] ?? [];
+                  const summary = vals.length <= 2 ? vals.join(', ') : `${vals.length} selected`;
                   return (
-                    <span key={fId} className="flex items-center gap-1.5 bg-brand-100 border border-brand-200 text-brand-800 text-[12px] font-medium px-2.5 py-1 rounded-lg">
-                      {label}
-                      <button onClick={() => setPageFilterFields(pageFilterFields.filter(f => f !== fId))} className="hover:text-brand-900 cursor-pointer"><X size={11} /></button>
+                    <span key={fId} className="flex items-center gap-1.5 bg-brand-100 border border-brand-200 text-brand-800 text-[0.75rem] font-medium px-2.5 py-1 rounded-lg">
+                      <span className="font-semibold">{modelFieldLabel(fId)}</span>
+                      <span className="text-brand-600">·</span> {summary}
+                      <button onClick={() => setPageFilterValues(prev => ({ ...prev, [fId]: [] }))} className="hover:text-brand-900 cursor-pointer"><X size={11} /></button>
                     </span>
                   );
                 })}
-                {activeCrossFilters.map(linkId => {
-                  const link = dataLinks.find(l => l.id === linkId);
-                  if (!link) return null;
-                  const label = link.fieldA === link.fieldB ? link.fieldA : `${link.fieldA} · ${link.fieldB}`;
-                  return (
-                    <span key={linkId} className="flex items-center gap-1.5 bg-brand-100 border border-brand-200 text-brand-800 text-[12px] font-medium px-2.5 py-1 rounded-lg">
-                      {label}
-                      <button onClick={() => setActiveCrossFilters(activeCrossFilters.filter(id => id !== linkId))} className="hover:text-brand-900 cursor-pointer"><X size={11} /></button>
-                    </span>
-                  );
-                })}
+                {crossFilter && (
+                  <span className="flex items-center gap-1.5 bg-evidence-50 border border-evidence/30 text-evidence-700 text-[0.75rem] font-medium px-2.5 py-1 rounded-lg">
+                    <Link2 size={11} />
+                    <span className="font-semibold">{colByName(tableById(MODEL_TABLES, crossFilter.table), crossFilter.column)?.label ?? crossFilter.column}</span>
+                    <span className="text-evidence/60">·</span> {crossFilter.value}
+                    <button onClick={() => setCrossFilter(null)} className="hover:text-evidence-900 cursor-pointer"><X size={11} /></button>
+                  </span>
+                )}
                 <button
-                  onClick={() => { setPageFilterFields([]); setActiveCrossFilters([]); }}
-                  className="text-[11px] font-medium text-brand-600 hover:text-brand-800 ml-auto cursor-pointer transition-colors"
+                  onClick={clearAllFilters}
+                  className="text-[0.6875rem] font-medium text-brand-600 hover:text-brand-800 ml-auto cursor-pointer transition-colors"
                 >
                   Clear all
                 </button>
@@ -4597,26 +4414,29 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 <div className="size-14 rounded-2xl bg-brand-50 flex items-center justify-center mb-4">
                   <BarChart3 size={24} className="text-brand-400" />
                 </div>
-                <h3 className="text-[15px] font-semibold text-ink-700 mb-1">No widgets yet</h3>
-                <p className="text-[13px] text-ink-400 mb-5 max-w-xs">Add your first widget to start building this dashboard.</p>
+                <h3 className="text-[0.9375rem] font-semibold text-ink-700 mb-1">No widgets yet</h3>
+                <p className="text-[0.8125rem] text-ink-400 mb-5 max-w-xs">Add your first widget to start building this dashboard.</p>
+                <Gated permission="db_add" mode="disable" title="You don't have permission to add widgets">
                 <button
                   onClick={() => setAddWidgetOpen(true)}
-                  className="flex items-center gap-1.5 px-5 h-10 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-5 h-10 bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
                 >
                   <Plus size={15} />
                   Add Widget
                 </button>
+                </Gated>
               </motion.div>
             )}
 
-            {/* User-created widgets (from Create Dashboard flow) */}
-            {isCustomDashboard && userWidgets.length > 0 && (
+            {/* User-created widgets — render on any dashboard (custom or seeded)
+                so combined/model widgets added via Add Widget actually appear. */}
+            {userWidgets.length > 0 && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.25 }}
-                className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6"
-                style={{ gridAutoRows: 'minmax(420px, auto)' }}
+                className="grid gap-5 mb-6"
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gridAutoRows: 'minmax(420px, auto)' }}
               >
                 {userWidgets.map((w, i) => (
                   <WidgetCard
@@ -4624,6 +4444,9 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                     title={w.title}
                     subtitle={w.yField && w.xField ? `${w.yField} by ${w.xField}` : 'Custom widget'}
                     addToast={addToast}
+                    loading={widgetLoadingStates[`user-${i}`] === 'loading'}
+                    isFirstLoad={!hasLoadedOnce}
+                    dataSourceInfo={widgetDataSourceInfo}
                     colSpan={widgetSizes[i] || 1}
                     onChangeSize={(span) => setWidgetSizes(prev => ({ ...prev, [i]: span }))}
                     onMoveUp={i > 0 ? () => {
@@ -4653,6 +4476,13 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   >
                     {/* Render chart based on type */}
                     {(() => {
+                      // Multi-table (model) widgets render real joined+aggregated data,
+                      // filtered by global page slicers + chart-click cross-filter.
+                      if (w.model) {
+                        // stopPropagation so a chart-element click cross-filters
+                        // instead of bubbling to the card's expand handler.
+                        return <div className="h-full w-full p-3" onClick={(e) => e.stopPropagation()}><ModelChart data={buildWidgetRows(MODEL_TABLES, relationships, w.model, filtersForWidget(i))} type={w.chartType} color={w.color} onSelect={(label) => handleWidgetSelect(i, w.model, label)} highlight={highlightForWidget(i)} /></div>;
+                      }
                       const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
                       const vals = [45, 62, 38, 71, 55, 84];
                       const max = Math.max(...vals);
@@ -4669,7 +4499,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                               <text x="50" y="60" textAnchor="middle" className="fill-ink-500" fontSize="8">Total</text>
                             </svg>
                             <div className="space-y-2">
-                              {segs.map(s => (<div key={s.l} className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ background: s.c }} /><span className="text-[12px] text-ink-700">{s.l}</span><span className="text-[13px] font-bold text-ink-900 ml-2">{s.v}%</span></div>))}
+                              {segs.map(s => (<div key={s.l} className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ background: s.c }} /><span className="text-[0.75rem] text-ink-700">{s.l}</span><span className="text-[0.8125rem] font-bold text-ink-900 ml-2">{s.v}%</span></div>))}
                             </div>
                           </div>
                         );
@@ -4685,8 +4515,8 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                               <polyline points={pts} fill="none" stroke="var(--color-brand-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                               {vals.map((v, j) => <circle key={j} cx={40 + j * ((ww-80)/(vals.length-1))} cy={hh - 30 - (v / max) * (hh - 60)} r="4" fill="var(--color-brand-600)" stroke="white" strokeWidth="2" />)}
                             </svg>
-                            <div className="flex justify-between text-[11px] text-ink-500 mt-2 px-1">{labels.map(l => <span key={l}>{l}</span>)}</div>
-                            {w.xField && <div className="text-center mt-2"><span className="text-[10px] text-brand-600 bg-brand-50 px-2 py-0.5 rounded">{w.xField}</span></div>}
+                            <div className="flex justify-between text-[0.6875rem] text-ink-500 mt-2 px-1">{labels.map(l => <span key={l}>{l}</span>)}</div>
+                            {w.xField && <div className="text-center mt-2"><span className="text-[0.625rem] text-brand-600 bg-brand-50 px-2 py-0.5 rounded">{w.xField}</span></div>}
                           </div>
                         );
                       }
@@ -4695,9 +4525,9 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                         return (
                           <div className="flex items-center justify-center gap-5 py-8">
                             <div className="bg-canvas-elevated border border-canvas-border rounded-xl p-6 min-w-[180px]">
-                              <p className="text-[11px] text-ink-500 mb-1">{w.yField || 'Metric'}</p>
-                              <p className="text-[32px] font-bold text-ink-900">12,450</p>
-                              <p className="text-[12px] text-compliant font-semibold mt-1 flex items-center gap-1"><TrendingUp size={10} />+8.2%</p>
+                              <p className="text-[0.6875rem] text-ink-500 mb-1">{w.yField || 'Metric'}</p>
+                              <p className="text-[2rem] font-bold text-ink-900">12,450</p>
+                              <p className="text-[0.75rem] text-compliant font-semibold mt-1 flex items-center gap-1"><TrendingUp size={10} />+8.2%</p>
                             </div>
                           </div>
                         );
@@ -4708,9 +4538,9 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                         <div className="flex items-end gap-3 pt-6" style={{ height: '280px' }}>
                           {labels.map((l, j) => (
                             <div key={l} className="flex-1 flex flex-col items-center gap-1.5">
-                              <span className="text-[12px] text-ink-500 font-medium">{vals[j]}</span>
+                              <span className="text-[0.75rem] text-ink-500 font-medium">{vals[j]}</span>
                               <motion.div className="w-full rounded-t-md min-h-[4px]" style={{ background: 'var(--color-brand-500)' }} initial={{ height: 0 }} animate={{ height: `${(vals[j] / max) * 100}%` }} transition={{ duration: 0.5, delay: j * 0.06 }} />
-                              <span className="text-[12px] text-ink-500">{l}</span>
+                              <span className="text-[0.75rem] text-ink-500">{l}</span>
                             </div>
                           ))}
                         </div>
@@ -4736,6 +4566,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
               <WidgetCard
                 title={dashboard.lineTrend?.title || 'Detection Accuracy Goals'}
                 subtitle="Performance over time"
+                dataSourceInfo={widgetDataSourceInfo}
                 addToast={addToast}
                 onExpand={() => setExpandedWidget({ title: dashboard.lineTrend?.title || 'Detection Accuracy Goals', subtitle: 'Performance over time' })}
                 onEdit={() => handleEditDefaultWidget(dashboard.lineTrend?.title || 'Detection Accuracy Goals', 'line', 'Performance over time')}
@@ -4760,6 +4591,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
               <WidgetCard
                 title={dashboard.progress?.title || 'Invoice Volume Trend'}
                 subtitle={dashboard.progress ? 'Sheet distribution' : 'Volume over time'}
+                dataSourceInfo={widgetDataSourceInfo}
                 addToast={addToast}
                 onExpand={() => setExpandedWidget({ title: dashboard.progress?.title || 'Invoice Volume Trend', subtitle: dashboard.progress ? 'Sheet distribution' : 'Volume over time' })}
                 onEdit={() => handleEditDefaultWidget(dashboard.progress?.title || 'Invoice Volume Trend', 'area', dashboard.progress ? 'Sheet distribution' : 'Volume over time')}
@@ -4784,6 +4616,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
               <WidgetCard
                 title={dashboard.bars?.title || 'Monthly Invoice Volume'}
                 subtitle="Trend analysis"
+                dataSourceInfo={widgetDataSourceInfo}
                 addToast={addToast}
                 onExpand={() => setExpandedWidget({ title: dashboard.bars?.title || 'Monthly Invoice Volume', subtitle: 'Trend analysis' })}
                 onEdit={() => handleEditDefaultWidget(dashboard.bars?.title || 'Monthly Invoice Volume', 'clustered-column', 'Trend analysis')}
@@ -4807,6 +4640,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
               <WidgetCard
                 title={dashboard.donut?.title || 'Invoice Status'}
                 subtitle="Distribution breakdown"
+                dataSourceInfo={widgetDataSourceInfo}
                 addToast={addToast}
                 onExpand={() => setExpandedWidget({ title: dashboard.donut?.title || 'Invoice Status', subtitle: 'Distribution breakdown' })}
                 onEdit={() => handleEditDefaultWidget(dashboard.donut?.title || 'Invoice Status', 'pie', 'Distribution breakdown')}
@@ -4838,6 +4672,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
               <WidgetCard
                 title={dashboard.table.title}
                 subtitle="Detailed records"
+                dataSourceInfo={widgetDataSourceInfo}
                 addToast={addToast}
                 onExpand={() => setExpandedWidget({ title: dashboard.table.title, subtitle: 'Detailed records' })}
                 onEdit={() => handleEditDefaultWidget(dashboard.table.title, 'table', 'Detailed records')}
@@ -4858,7 +4693,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                     <thead>
                       <tr className="border-b border-canvas-border bg-surface-2/50">
                         {dashboard.table.headers.map(h => (
-                          <th key={h} className="text-[11px] font-bold text-ink-500 uppercase tracking-wider px-4 py-3">{h}</th>
+                          <th key={h} className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider px-4 py-3">{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -4871,22 +4706,22 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                           transition={{ delay: 0.3 + i * 0.04 }}
                           className="border-b border-canvas-border/50 last:border-0 hover:bg-brand-50/30 transition-colors cursor-pointer"
                         >
-                          <td className="px-4 py-3 text-[12px] font-semibold text-brand-700">{row.cells[0]}</td>
-                          <td className="px-4 py-3 text-[12px] text-ink-800">{row.cells[1]}</td>
-                          <td className="px-4 py-3 text-[12px] font-medium text-ink-900">{row.cells[2]}</td>
-                          <td className="px-4 py-3 text-[12px] text-ink-600">{row.cells[3]}</td>
+                          <td className="px-4 py-3 text-[0.75rem] font-semibold text-brand-700">{row.cells[0]}</td>
+                          <td className="px-4 py-3 text-[0.75rem] text-ink-800">{row.cells[1]}</td>
+                          <td className="px-4 py-3 text-[0.75rem] font-medium text-ink-900">{row.cells[2]}</td>
+                          <td className="px-4 py-3 text-[0.75rem] text-ink-600">{row.cells[3]}</td>
                           <td className="px-4 py-3">
-                            <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[row.cells[4]] || 'bg-gray-50 text-gray-600'}`}>
+                            <span className={`text-[0.6875rem] font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[row.cells[4]] || 'bg-gray-50 text-gray-600'}`}>
                               {row.cells[4]}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-[12px] text-ink-600">{row.cells[5]}</td>
+                          <td className="px-4 py-3 text-[0.75rem] text-ink-600">{row.cells[5]}</td>
                           <td className="px-4 py-3">
-                            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${RISK_COLORS[row.cells[6]] || ''}`}>
+                            <span className={`text-[0.6875rem] font-semibold px-2 py-0.5 rounded-full ${RISK_COLORS[row.cells[6]] || ''}`}>
                               {row.cells[6]}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-[12px] text-ink-500 font-mono">{row.cells[7]}</td>
+                          <td className="px-4 py-3 text-[0.75rem] text-ink-500 font-mono">{row.cells[7]}</td>
                         </motion.tr>
                       ))}
                     </tbody>
@@ -4894,13 +4729,13 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 </div>
                 {/* Pagination */}
                 <div className="flex items-center justify-between px-4 py-3 border-t border-canvas-border" onClick={e => e.stopPropagation()}>
-                  <span className="text-[12px] text-ink-400">Showing 1–{dashboard.table.rows.length} of {dashboard.table.rows.length}</span>
+                  <span className="text-[0.75rem] text-ink-400">Showing 1–{dashboard.table.rows.length} of {dashboard.table.rows.length}</span>
                   <div className="flex items-center gap-1">
                     <button className="size-7 flex items-center justify-center rounded text-ink-400 hover:bg-surface-2 transition-colors cursor-pointer">
                       <ChevronDown size={14} className="rotate-90" />
                     </button>
-                    <button className="size-7 flex items-center justify-center rounded-md bg-brand-600 text-white text-[12px] font-semibold">1</button>
-                    <button className="size-7 flex items-center justify-center rounded-md text-ink-600 text-[12px] font-medium hover:bg-surface-2 transition-colors cursor-pointer">2</button>
+                    <button className="size-7 flex items-center justify-center rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold">1</button>
+                    <button className="size-7 flex items-center justify-center rounded-md text-ink-600 text-[0.75rem] font-medium hover:bg-surface-2 transition-colors cursor-pointer">2</button>
                     <button className="size-7 flex items-center justify-center rounded text-ink-400 hover:bg-surface-2 transition-colors cursor-pointer">
                       <ChevronDown size={14} className="-rotate-90" />
                     </button>
@@ -4923,8 +4758,8 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 <div className="mx-auto mb-4 size-20 rounded-2xl bg-brand-50 flex items-center justify-center group-hover:bg-brand-100 transition-colors">
                   <Plus size={32} className="text-brand-400 group-hover:text-brand-600 transition-colors" />
                 </div>
-                <p className="text-[15px] font-semibold text-ink-700 mb-1">Add a New Widget</p>
-                <p className="text-[13px] text-ink-400 max-w-[260px] text-center leading-relaxed">Click here or use the + Add Widget button to create a new chart, KPI, or table.</p>
+                <p className="text-[0.9375rem] font-semibold text-ink-700 mb-1">Add a New Widget</p>
+                <p className="text-[0.8125rem] text-ink-400 max-w-[260px] text-center leading-relaxed">Click here or use the + Add Widget button to create a new chart, KPI, or table.</p>
               </div>
             </motion.div>
             </>
@@ -4978,6 +4813,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
         onYFieldChange={(v) => { setExpandYField(v); setExpandCustomize(prev => ({ ...prev, yAxisTitle: v })); }}
         onLegendFieldChange={setExpandLegendField}
         isExcelDashboard={isExcelDashboard}
+        dataSourceInfo={widgetDataSourceInfo}
         hasPrev={currentIdx > 0}
         hasNext={currentIdx < allWidgetTitles.length - 1 && currentIdx >= 0}
         onPrev={() => { if (currentIdx > 0) setExpandedWidget(allWidgetTitles[currentIdx - 1]); }}
@@ -5070,7 +4906,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                     <thead>
                       <tr className="border-b border-canvas-border bg-surface-2/50">
                         {dashboard.table.headers.map(h => (
-                          <th key={h} className="text-[11px] font-bold text-ink-500 uppercase tracking-wider px-4 py-3">{h}</th>
+                          <th key={h} className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider px-4 py-3">{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -5083,29 +4919,29 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                           transition={{ delay: i * 0.03 }}
                           className="border-b border-canvas-border/50 last:border-0 hover:bg-brand-50/30 transition-colors cursor-pointer"
                         >
-                          <td className="px-4 py-3 text-[12px] font-semibold text-brand-700">{row.cells[0]}</td>
-                          <td className="px-4 py-3 text-[12px] text-ink-800">{row.cells[1]}</td>
-                          <td className="px-4 py-3 text-[12px] font-medium text-ink-900">{row.cells[2]}</td>
-                          <td className="px-4 py-3 text-[12px] text-ink-600">{row.cells[3]}</td>
+                          <td className="px-4 py-3 text-[0.75rem] font-semibold text-brand-700">{row.cells[0]}</td>
+                          <td className="px-4 py-3 text-[0.75rem] text-ink-800">{row.cells[1]}</td>
+                          <td className="px-4 py-3 text-[0.75rem] font-medium text-ink-900">{row.cells[2]}</td>
+                          <td className="px-4 py-3 text-[0.75rem] text-ink-600">{row.cells[3]}</td>
                           <td className="px-4 py-3">
-                            <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[row.cells[4]] || 'bg-gray-50 text-gray-600'}`}>
+                            <span className={`text-[0.6875rem] font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[row.cells[4]] || 'bg-gray-50 text-gray-600'}`}>
                               {row.cells[4]}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-[12px] text-ink-600">{row.cells[5]}</td>
+                          <td className="px-4 py-3 text-[0.75rem] text-ink-600">{row.cells[5]}</td>
                           <td className="px-4 py-3">
-                            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${RISK_COLORS[row.cells[6]] || ''}`}>
+                            <span className={`text-[0.6875rem] font-semibold px-2 py-0.5 rounded-full ${RISK_COLORS[row.cells[6]] || ''}`}>
                               {row.cells[6]}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-[12px] text-ink-500 font-mono">{row.cells[7]}</td>
+                          <td className="px-4 py-3 text-[0.75rem] text-ink-500 font-mono">{row.cells[7]}</td>
                         </motion.tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3 border-t border-canvas-border shrink-0">
-                  <span className="text-[12px] text-ink-400">Showing {startRow}–{endRow} of {totalRows}</span>
+                  <span className="text-[0.75rem] text-ink-400">Showing {startRow}–{endRow} of {totalRows}</span>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setTablePage(p => Math.max(0, p - 1))}
@@ -5118,7 +4954,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                       <button
                         key={i}
                         onClick={() => setTablePage(i)}
-                        className={`size-7 flex items-center justify-center rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
+                        className={`size-7 flex items-center justify-center rounded-md text-[0.75rem] font-medium transition-colors cursor-pointer ${
                           tablePage === i ? 'bg-brand-600 text-white font-semibold' : 'text-ink-600 hover:bg-surface-2'
                         }`}
                       >
@@ -5147,32 +4983,27 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
       <FilterPanel
         open={filtersOpen}
         onClose={() => setFiltersOpen(false)}
-        dateRange={filterDateRange}
-        onDateRangeChange={setFilterDateRange}
-        status={filterStatus}
-        onStatusChange={setFilterStatus}
-        risk={filterRisk}
-        onRiskChange={setFilterRisk}
-        department={filterDepartment}
-        onDepartmentChange={setFilterDepartment}
-        onResetAll={() => {
-          setFilterDateRange('last-30-days');
-          setFilterStatus([]);
-          setFilterRisk([]);
-          setFilterDepartment([]);
-        }}
+        modelTables={MODEL_TABLES}
         pageFilterFields={pageFilterFields}
         onPageFilterFieldsChange={setPageFilterFields}
-        dataLinks={dataLinks}
-        activeCrossFilters={activeCrossFilters}
-        onActiveCrossFiltersChange={setActiveCrossFilters}
-        onManageConnections={() => { setFiltersOpen(false); setConnectTablesOpen(true); }}
+        pageFilterValues={pageFilterValues}
+        onPageFilterValuesChange={setPageFilterValues}
+        crossFilter={crossFilter}
+        onResetAll={clearAllFilters}
       />
 
-      {/* Connect Tables Modal */}
+      {/* Table relationships (data model) */}
       <AnimatePresence>
         {connectTablesOpen && (
-          <ConnectTablesModal open={connectTablesOpen} onClose={() => setConnectTablesOpen(false)} addToast={addToast} links={dataLinks} setLinks={setDataLinks} />
+          <RelationshipManagerModal
+            open={connectTablesOpen}
+            onClose={() => setConnectTablesOpen(false)}
+            tables={MODEL_TABLES}
+            relationships={relationships}
+            setRelationships={setRelationships}
+            widgets={userWidgets.map(w => ({ title: w.title, model: w.model }))}
+            addToast={addToast}
+          />
         )}
       </AnimatePresence>
 
@@ -5194,6 +5025,10 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
         initialFontFamily={editingWidget?.data?.fontFamily}
         initialName={editingWidget?.data?.title}
         initialSeriesColors={editingWidget?.data?.seriesColors}
+        initialModel={editingWidget?.data?.model}
+        modelTables={MODEL_TABLES}
+        relationships={relationships}
+        onConnectTables={() => setConnectTablesOpen(true)}
         onSelectCard={(cardType, config) => {
           const widget = {
             chartType: cardType,
@@ -5203,6 +5038,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
             color: config?.color,
             fontFamily: config?.fontFamily,
             seriesColors: config?.seriesColors,
+            model: config?.model,
           };
           if (editingWidget !== null && editingWidget.index >= 0) {
             const next = userWidgets.map((w, i) => i === editingWidget.index ? widget : w);
@@ -5220,10 +5056,49 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
         onOpenExcelUpload={() => addToast({ message: 'Upload Excel', type: 'info' })}
         onOpenQueryModal={() => addToast({ message: 'Open Query', type: 'info' })}
         onOpenAddData={() => setAddDataOpen(true)}
+        onOpenKnowledgeHub={onOpenKnowledgeHub}
+        dashboardSource={dashboardSourceType ? {
+          type: dashboardSourceType,
+          sourceId: dashboardSourceId,
+          sourceName: dashboardSourceName,
+        } : undefined}
       />
       <AddDataModal
         open={addDataOpen}
         onClose={() => setAddDataOpen(false)}
+        connectedSources={dataSourceNames.map(name => {
+          const seed = SEED.find(s => s.name === name);
+          return seed
+            ? { id: seed.id, name: seed.name, type: seed.type, subtype: seed.subtype }
+            : { name, type: name.toLowerCase().endsWith('.csv') ? ('file' as const) : name.toLowerCase().match(/\.(xlsx|xls)$/) ? ('file' as const) : name.includes('query') ? ('query' as const) : ('database' as const) };
+        })}
+        primarySourceId={dashboardSourceId}
+        onAttach={(src) => {
+          // Append to dataSourceNames; flip dashboard to 'combo' if it was
+          // single-source and the user is adding a different one.
+          if (dataSourceNames.includes(src.name)) {
+            addToast({ message: `${src.name} is already attached`, type: 'info' });
+            return;
+          }
+          const nextNames = [...dataSourceNames, src.name];
+          setDataSourceNames(nextNames);
+          const nextType: 'excel' | 'csv' | 'sql' | 'query' | 'combo' =
+            (dashboardSourceType && dashboardSourceType !== 'combo' && nextNames.length > 1) ? 'combo' : (dashboardSourceType ?? 'combo');
+          setDashboardSourceType(nextType);
+          onUpdateDashboardSource?.({ dataSource: nextType, dataSourceNames: nextNames, sourceId: dashboardSourceId });
+          addToast({ message: `Attached ${src.name}`, type: 'success' });
+        }}
+        onSetPrimary={(src) => {
+          // Swap dashboard's primary source. Updates type, sourceId, sourceName
+          // to point at the picked entry.
+          const nextType: 'excel' | 'csv' | 'sql' | 'query' | 'combo' =
+            src.type === 'database' ? 'sql' : src.type === 'file' ? (src.subtype === 'CSV' ? 'csv' : 'excel') : src.type === 'query' ? 'query' : (dashboardSourceType ?? 'sql');
+          setDashboardSourceType(nextType);
+          setDashboardSourceId(src.id);
+          setDashboardSourceName(src.name);
+          onUpdateDashboardSource?.({ dataSource: nextType, sourceId: src.id, dataSourceNames });
+          addToast({ message: `Primary source set to ${src.name}`, type: 'success' });
+        }}
       />
     </div>
   );

@@ -262,7 +262,7 @@ export function DrillBanner() {
                   : <Layers className="size-3 text-[#6a12cd]" />
                 }
               </div>
-              <span className="text-[11px] text-[#6a12cd] font-['Inter:SemiBold',sans-serif] whitespace-nowrap">
+              <span className="font-mono text-[12px] font-semibold text-[#6a12cd] whitespace-nowrap">
                 {isInteractive
                   ? doubleDrillPending
                     ? drillState.doubleDrillMode === 1 ? "DD1 — State → Category → Sub-Category → Product"
@@ -282,7 +282,7 @@ export function DrillBanner() {
               {/* Root node */}
               <button
                 onClick={resetHierarchy}
-                className="text-[11px] text-[#6a12cd]/60 hover:text-[#6a12cd] transition-colors font-['Inter:Regular',sans-serif] px-1.5 py-0.5 rounded hover:bg-[#6a12cd]/10 shrink-0"
+                className="font-mono text-[12px] text-[#6a12cd]/60 hover:text-[#6a12cd] transition-colors px-1.5 py-0.5 rounded hover:bg-[#6a12cd]/10 shrink-0"
               >
                 {DRILL_LEVEL_META[0].shortLabel}
               </button>
@@ -296,7 +296,7 @@ export function DrillBanner() {
                     <ChevronRight className="size-2.5 text-[#6a12cd]/30" />
                     <button
                       onClick={() => jumpToLevel(targetLevel)}
-                      className={`text-[11px] px-1.5 py-0.5 rounded transition-all font-['Inter:Regular',sans-serif] ${
+                      className={`font-mono text-[12px] px-1.5 py-0.5 rounded transition-all ${
                         isActive
                           ? "bg-[#6a12cd] text-white"
                           : "text-[#6a12cd]/70 hover:text-[#6a12cd] hover:bg-[#6a12cd]/10"

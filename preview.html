@@ -1,0 +1,1335 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DESIGN.md — Editorial GRC · Preview (Light)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300..900&family=Inter:wght@300..700&family=JetBrains+Mono:wght@400..700&family=Instrument+Serif:ital@0;1&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    /* ──────────────────────────────────────────────────────────
+       TOKENS
+       ────────────────────────────────────────────────────────── */
+    :root {
+      /* Brand */
+      --brand-50:  #F7F0FF;
+      --brand-100: #EDDEFE;
+      --brand-200: #DCBBFD;
+      --brand-300: #C393FA;
+      --brand-400: #A366F0;
+      --brand-500: #8838DE;
+      --brand-600: #6A12CD;
+      --brand-700: #550FA5;
+      --brand-800: #3B0B72;
+      --brand-900: #26064A;
+
+      /* Paper & Ink */
+      --paper-0:   #FFFFFF;
+      --paper-50:  #FAF7F2;
+      --paper-100: #F3EEE5;
+      --paper-200: #E5E7EB;
+      --paper-300: #D6CCB7;
+      --ink-300: #C2B9CB;
+      --ink-400: #9A8FAE;
+      --ink-500: #6B5D82;
+      --ink-600: #4A3D62;
+      --ink-700: #332848;
+      --ink-800: #1F1433;
+      --ink-900: #0F0720;
+
+      /* Semantic */
+      --risk:       #B42318;
+      --risk-50:    #FEF3F2;
+      --risk-100:   #FCD5D2;
+      --high:       #C2410C;
+      --high-50:    #FFF7ED;
+      --high-100:   #FADBC7;
+      --mitigated:  #B45309;
+      --mitigated-50: #FFFBEB;
+      --mitigated-100:#FAE5B0;
+      --compliant:  #15803D;
+      --compliant-50: #F0FDF4;
+      --compliant-100:#BEE6CB;
+      --evidence:   #0369A1;
+      --evidence-50:#F0F9FF;
+      --evidence-100:#E0F2FE;
+      --info:       #6A12CD;
+      --info-50:    #F7F0FF;
+      --info-100:   #EDDEFE;
+      --draft:      #6B5D82;
+      --draft-50:   #F4F2F7;
+      --draft-100:  #E5DFEB;
+      /* Semantic -700 inks (text/icon) — match src/index.css */
+      --risk-700: #912018; --high-700: #9A3412; --mitigated-700: #92400E; --compliant-700: #166534; --evidence-700: #075985;
+
+      /* Shadow */
+      --shadow-xs: 0 1px 0 rgba(15, 7, 32, 0.04);
+      --shadow-sm: 0 1px 2px rgba(15, 7, 32, 0.05), 0 0 0 1px rgba(15, 7, 32, 0.03);
+      --shadow-md: 0 4px 12px rgba(15, 7, 32, 0.06), 0 1px 2px rgba(15, 7, 32, 0.05);
+      --shadow-lg: 0 12px 32px rgba(15, 7, 32, 0.08), 0 4px 12px rgba(15, 7, 32, 0.05);
+      --shadow-xl: 0 24px 48px rgba(15, 7, 32, 0.12), 0 12px 24px rgba(15, 7, 32, 0.06);
+      --glow-brand: 0 0 0 4px rgba(106, 18, 205, 0.24);
+
+      /* Radius */
+      --r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px; --r-2xl: 20px;
+
+      /* Motion */
+      --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+      --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+      /* Faces */
+      --font-display: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       BASE
+       ────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--paper-50);
+      color: var(--ink-800);
+      font-family: var(--font-sans);
+      font-size:0.9375rem;
+      line-height: 1.6;
+      font-feature-settings: "cv08", "cv11", "ss01";
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
+    }
+    ::selection { background: var(--brand-100); color: var(--ink-900); }
+
+    /* Layout */
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 64px 32px 128px; }
+    .hero { padding: 96px 0 48px; border-bottom: 1px solid var(--paper-200); margin-bottom: 64px; }
+    .hero .kicker {
+      font-size:0.75rem; font-weight: 560; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--brand-700);
+    }
+    .hero h1 {
+      font-family: var(--font-display);
+      font-weight: 380;
+      font-size:4.5rem;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      color: var(--ink-900);
+      margin: 16px 0 24px;
+    }
+    .hero p {
+      font-size:1.1875rem;
+      line-height: 1.55;
+      color: var(--ink-600);
+      max-width: 66ch;
+    }
+    .hero .link-row {
+      margin-top: 32px;
+      display: flex; gap: 16px; align-items: center;
+      font-size:0.8125rem; color: var(--ink-500);
+    }
+    .hero .link-row a { color: var(--brand-700); text-decoration: none; border-bottom: 1px solid var(--brand-200); }
+    .hero .link-row a:hover { color: var(--brand-800); border-bottom-color: var(--brand-600); }
+
+    /* Section heads */
+    .section { margin: 96px 0 0; }
+    .section:first-of-type { margin-top: 0; }
+    .section > .label {
+      font-size:0.75rem; font-weight: 560; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--brand-700); margin-bottom: 8px;
+    }
+    .section > h2 {
+      font-family: var(--font-display);
+      font-weight: 420;
+      font-size:2.75rem;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      color: var(--ink-900);
+      margin: 0 0 24px;
+    }
+    .section > .intro {
+      font-size:1.0625rem;
+      line-height: 1.6;
+      color: var(--ink-600);
+      max-width: 66ch;
+      margin-bottom: 48px;
+    }
+    /* "Used in:" — maps each component to the product surfaces that use it. */
+    .used-in {
+      font-family: var(--font-mono);
+      font-size:0.75rem;
+      line-height: 1.5;
+      color: var(--ink-500);
+      margin: -12px 0 24px;
+    }
+    .used-in b { color: var(--brand-700); font-weight: 500; }
+
+    /* Grid helpers */
+    .grid { display: grid; gap: 16px; }
+    .grid-2 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .grid-4 { grid-template-columns: repeat(4, 1fr); }
+    .grid-6 { grid-template-columns: repeat(6, 1fr); }
+    .grid-12 { grid-template-columns: repeat(12, 1fr); gap: 24px; }
+    @media (max-width: 880px) {
+      .grid-4, .grid-6, .grid-12 { grid-template-columns: repeat(2, 1fr); }
+      .hero h1 { font-size:3.5rem; }
+      .section > h2 { font-size:2.25rem; }
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       COLOR SWATCHES
+       ────────────────────────────────────────────────────────── */
+    .swatch {
+      border-radius: var(--r-md);
+      border: 1px solid var(--paper-200);
+      overflow: hidden;
+      background: var(--paper-0);
+    }
+    .swatch .chip { height: 72px; border-bottom: 1px solid rgba(0,0,0,0.04); }
+    .swatch .meta { padding: 10px 12px; }
+    .swatch .name { font-size:0.8125rem; font-weight: 560; color: var(--ink-800); font-family: var(--font-mono); }
+    .swatch .hex { font-size:0.75rem; color: var(--ink-500); font-family: var(--font-mono); margin-top: 2px; }
+
+    /* ──────────────────────────────────────────────────────────
+       TYPE SCALE
+       ────────────────────────────────────────────────────────── */
+    .type-row {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 32px;
+      padding: 24px 0;
+      border-bottom: 1px solid var(--paper-200);
+      align-items: baseline;
+    }
+    .type-row .tag {
+      font-family: var(--font-mono);
+      font-size:0.75rem;
+      color: var(--ink-500);
+      padding-top: 8px;
+    }
+    .type-row .sample { color: var(--ink-900); }
+    .t-display-2xl { font-family: var(--font-display); font-weight: 320; font-size:4.5rem; line-height: 1.05; letter-spacing: -0.03em; }
+    .t-display-xl  { font-family: var(--font-display); font-weight: 380; font-size:3.5rem; line-height: 1.07; letter-spacing: -0.025em; }
+    .t-display-lg  { font-family: var(--font-display); font-weight: 420; font-size:2.75rem; line-height: 1.1;  letter-spacing: -0.02em; }
+    .t-display-md  { font-family: var(--font-display); font-weight: 480; font-size:2.25rem; line-height: 1.15; letter-spacing: -0.015em; }
+    .t-display-sm  { font-family: var(--font-display); font-weight: 520; font-size:1.75rem; line-height: 1.2;  letter-spacing: -0.01em; }
+    .t-heading-xl  { font-weight: 600; font-size:1.5rem; line-height: 1.25; letter-spacing: -0.005em; }
+    .t-heading-lg  { font-weight: 600; font-size:1.25rem; line-height: 1.3; }
+    .t-heading-md  { font-weight: 600; font-size:1.0625rem; line-height: 1.4; }
+    .t-heading-sm  { font-weight: 620; font-size:0.9375rem; line-height: 1.45; letter-spacing: 0.005em; }
+    .t-body-lg     { font-weight: 400; font-size:1.0625rem; line-height: 1.65; }
+    .t-body        { font-weight: 400; font-size:0.9375rem; line-height: 1.6; }
+    .t-body-sm     { font-weight: 440; font-size:0.8125rem; line-height: 1.55; }
+    .t-label       { font-weight: 560; font-size:0.75rem; line-height: 1.3; letter-spacing: 0.02em; text-transform: uppercase; color: var(--ink-500); }
+    .t-code        { font-family: var(--font-mono); font-weight: 420; font-size:0.8125rem; }
+    .t-numeric     { font-weight: 520; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+    /* ──────────────────────────────────────────────────────────
+       COMPONENTS
+       ────────────────────────────────────────────────────────── */
+    .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
+    /* Button */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      height: 40px; padding: 0 16px; border-radius: var(--r-md);
+      font: 500 0.875rem/1 var(--font-sans); letter-spacing: 0.005em;
+      border: 1px solid transparent; cursor: pointer;
+      transition: background 150ms var(--ease-standard), transform 75ms var(--ease-standard), box-shadow 150ms var(--ease-standard);
+    }
+    .btn-primary { background: var(--brand-600); color: var(--paper-0); }
+    .btn-primary:hover { background: var(--brand-500); }
+    .btn-primary:active { background: var(--brand-800); transform: translateY(0.5px); }
+    .btn-secondary { background: var(--paper-0); color: var(--ink-800); border-color: var(--paper-200); }
+    .btn-secondary:hover { border-color: var(--paper-300); background: var(--paper-50); }
+    .btn-ghost { background: transparent; color: var(--ink-700); }
+    .btn-ghost:hover { background: var(--brand-50); color: var(--brand-700); }
+    .btn-destructive { background: var(--risk); color: var(--paper-0); }
+    .btn-link { background: transparent; color: var(--brand-700); height: auto; padding: 0; }
+    .btn-link:hover { color: var(--brand-800); text-decoration: underline; }
+    .btn:focus-visible { outline: none; box-shadow: var(--glow-brand); }
+
+    /* Input */
+    .input {
+      height: 40px; padding: 0 12px; border-radius: var(--r-lg);
+      border: 1px solid var(--paper-200); background: var(--paper-0);
+      font: 400 0.8125rem/1 var(--font-sans); color: var(--ink-900);
+      width: 280px; transition: border-color 150ms var(--ease-standard), box-shadow 150ms var(--ease-standard);
+    }
+    .input::placeholder { color: var(--ink-300); }
+    .input:hover { border-color: var(--paper-300); }
+    .input:focus { outline: none; border-color: var(--brand-600); }
+
+    /* Card */
+    .card {
+      background: var(--paper-0);
+      border: 1px solid var(--paper-200);
+      border-radius: var(--r-lg);
+      padding: 24px;
+      transition: border-color 150ms var(--ease-standard), box-shadow 150ms var(--ease-standard);
+    }
+    .card.interactive:hover { border-color: var(--paper-300); box-shadow: var(--shadow-sm); cursor: pointer; }
+    .card.elevated { border: none; box-shadow: var(--shadow-md); }
+    .card.muted { background: var(--paper-100); border: none; }
+    .card.feature { background: var(--brand-50); border-color: var(--brand-200); }
+
+    /* Pill */
+    /* Shipped StatusBadge: flat tinted bg + -700 text, NO border, NO icon. */
+    /* The standard status chip: bordered + semibold + title-case (matches the
+       shipped Pill default — variant="bordered"). */
+    .pill {
+      display: inline-flex; align-items: center;
+      height: 24px; padding: 0 11px; border-radius: 999px;
+      font: 600 0.75rem/1 var(--font-sans); letter-spacing: 0;
+      border: 1px solid transparent;
+    }
+    .pill .glyph { display: none; }
+    .pill-risk { background: var(--risk-50); color: var(--risk-700); border-color: #F4A89F; }
+    .pill-high { background: var(--high-50); color: var(--high-700); border-color: #F8B89C; }
+    .pill-mit  { background: var(--mitigated-50); color: var(--mitigated-700); border-color: #F5C892; }
+    .pill-comp { background: var(--compliant-50); color: var(--compliant-700); border-color: #9CE0B5; }
+    .pill-info { background: var(--info-50); color: var(--brand-700); border-color: var(--brand-200); }
+    .pill-ev   { background: var(--evidence-50); color: var(--evidence-700); border-color: #7DD3FC; }
+    .pill-draft{ background: var(--draft-50); color: var(--draft); border-color: #C2B9CB; }
+
+    /* Shadow demo */
+    .shadow-demo { padding: 24px; background: var(--paper-0); border-radius: var(--r-lg); text-align: center; font-family: var(--font-mono); font-size:0.75rem; color: var(--ink-500); }
+    .s-xs { box-shadow: var(--shadow-xs); }
+    .s-sm { box-shadow: var(--shadow-sm); }
+    .s-md { box-shadow: var(--shadow-md); }
+    .s-lg { box-shadow: var(--shadow-lg); }
+    .s-xl { box-shadow: var(--shadow-xl); }
+
+    /* Radius demo */
+    .radius-demo {
+      height: 80px; background: var(--brand-100);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono); font-size:0.75rem; color: var(--brand-800);
+    }
+
+    /* Spacing demo */
+    .space-row { display: flex; align-items: flex-end; gap: 16px; height: 160px; padding: 24px; background: var(--paper-100); border-radius: var(--r-md); }
+    .space-unit { background: var(--brand-600); width: 32px; position: relative; }
+    .space-unit::after {
+      content: attr(data-label);
+      position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%);
+      font-family: var(--font-mono); font-size:0.6875rem; color: var(--ink-500); white-space: nowrap;
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       SIGNATURE: AI RESPONSE
+       ────────────────────────────────────────────────────────── */
+    .ai-response {
+      position: relative;
+      border-radius: var(--r-xl);
+      padding: 24px 28px;
+      /* Shipped: flat #FFFFFF, single 2-stop gradient border at 0.24, no tint, no shadow. */
+      background: linear-gradient(var(--paper-0), var(--paper-0)) padding-box,
+                  linear-gradient(135deg, rgba(106, 18, 205, 0.24), rgba(168, 85, 247, 0.24)) border-box;
+      border: 1px solid transparent;
+      box-shadow: none;
+    }
+    .ai-meta {
+      display: flex; align-items: center; gap: 12px;
+      font-size:0.8125rem; color: var(--ink-500); margin-bottom: 16px;
+    }
+    .ai-meta .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand-400); animation: pulse 1.4s var(--ease-spring) infinite; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.5; } 50% { transform: scale(1.4); opacity: 1; } }
+    .ai-body { font-size:1.0625rem; line-height: 1.65; color: var(--ink-800); max-width: 66ch; }
+    .ai-body p { margin: 0 0 14px; }
+    .ai-citation {
+      display: inline-block;
+      padding: 1px 7px;
+      font: 460 0.75rem/1.5 var(--font-mono);
+      color: var(--brand-700);
+      background: var(--brand-50);
+      border-radius: 4px;
+      margin: 0 2px;
+    }
+    .ai-tools {
+      margin-top: 20px;
+      background: var(--paper-100);
+      border-radius: var(--r-md);
+      padding: 12px 16px;
+      font: 460 0.75rem/1.7 var(--font-mono);
+      color: var(--ink-600);
+    }
+    .ai-tools .tool-head { color: var(--ink-500); margin-bottom: 4px; }
+    .ai-cursor {
+      display: inline-block;
+      width: 2px; height: 18px; vertical-align: -3px;
+      background: var(--brand-600);
+      margin-left: 2px;
+      animation: blink 1.2s steps(2, end) infinite;
+    }
+    @keyframes blink { 0%, 50% { opacity: 1 } 50.01%, 100% { opacity: 0 } }
+
+    /* ──────────────────────────────────────────────────────────
+       SIGNATURE: DASHBOARD HERO
+       ────────────────────────────────────────────────────────── */
+    .dash-card {
+      background: var(--paper-0);
+      border: 1px solid var(--paper-200);
+      border-radius: var(--r-lg);
+      padding: 28px 32px;
+    }
+    .dash-card .kicker { font-size:0.6875rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brand-700); font-weight: 560; }
+    .dash-card .metric {
+      font-family: var(--font-display);
+      font-weight: 320;
+      font-size:4rem;
+      line-height: 1;
+      letter-spacing: -0.03em;
+      color: var(--ink-900);
+      margin-top: 12px;
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    .dash-card .metric .denom { font-size:1.125rem; color: var(--ink-400); font-weight: 400; letter-spacing: 0; }
+    .dash-card .trend {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 8px; font-size:0.8125rem; font-weight: 520; color: var(--compliant);
+      font-variant-numeric: tabular-nums;
+    }
+    .dash-card .bar {
+      height: 6px; border-radius: 999px; background: var(--paper-200); overflow: hidden; margin-top: 24px;
+    }
+    .dash-card .bar .fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--brand-600), var(--brand-400));
+      width: 78%;
+    }
+    .dash-card .breakdown { margin-top: 20px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .dash-card .breakdown .cell { display: flex; flex-direction: column; gap: 4px; }
+    .dash-card .breakdown .num {
+      font-variant-numeric: tabular-nums; font-weight: 600; font-size:1.25rem; color: var(--ink-900);
+    }
+    .dash-card .breakdown .lbl {
+      font-size:0.6875rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-500); font-weight: 560;
+    }
+
+    /* ──────────────────────────────────────────────────────────
+       SIGNATURE: REPORT EXCERPT
+       ────────────────────────────────────────────────────────── */
+    .report {
+      background: var(--paper-0);
+      border: 1px solid var(--paper-200);
+      border-radius: var(--r-lg);
+      padding: 56px 64px 48px;
+    }
+    .report .report-kicker {
+      font-size:0.75rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brand-700); font-weight: 560;
+    }
+    .report h2 {
+      font-family: var(--font-display);
+      font-weight: 380;
+      font-size:2.75rem;
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+      color: var(--ink-900);
+      margin: 14px 0 28px;
+      max-width: 18ch;
+    }
+    .report p {
+      font-size:1.0625rem;
+      line-height: 1.7;
+      color: var(--ink-700);
+      max-width: 66ch;
+      margin: 0 0 16px;
+    }
+    .report .dropcap::first-letter {
+      font-family: var(--font-display);
+      font-weight: 320;
+      font-size:4.75rem;
+      line-height: 0.9;
+      float: left;
+      margin: 6px 10px 0 -2px;
+      color: var(--brand-700);
+    }
+    .report .eyebrow {
+      margin-top: 36px;
+      font-size:0.8125rem; color: var(--ink-500);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .report .eyebrow .divider { flex: 1; height: 1px; background: var(--paper-200); }
+
+    /* ──────────────────────────────────────────────────────────
+       SIGNATURE: DATA TABLE
+       ────────────────────────────────────────────────────────── */
+    .table-wrap { border: 1px solid var(--paper-200); border-radius: var(--r-lg); overflow: hidden; background: var(--paper-0); }
+    table.data { width: 100%; border-collapse: collapse; font-size:0.8125rem; }
+    table.data thead th {
+      background: var(--paper-100);
+      color: var(--ink-600);
+      font-weight: 560; font-size:0.6875rem; letter-spacing: 0.14em; text-transform: uppercase;
+      text-align: left; padding: 12px 16px;
+      border-bottom: 1px solid var(--paper-200);
+    }
+    table.data tbody td { padding: 12px 16px; border-bottom: 1px solid var(--paper-100); color: var(--ink-800); vertical-align: middle; }
+    table.data tbody tr:last-child td { border-bottom: none; }
+    table.data tbody tr:hover { background: var(--paper-50); }
+    table.data tbody tr.selected { background: var(--brand-50); box-shadow: inset 2px 0 0 var(--brand-600); }
+    table.data .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 520; }
+    table.data .mono { font-family: var(--font-mono); font-size:0.75rem; color: var(--ink-500); }
+
+    /* ──────────────────────────────────────────────────────────
+       FOOTER
+       ────────────────────────────────────────────────────────── */
+    .foot {
+      margin-top: 128px; padding-top: 32px;
+      border-top: 1px solid var(--paper-200);
+      font-size:0.8125rem; color: var(--ink-500);
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+    }
+    .foot a { color: var(--brand-700); text-decoration: none; }
+    .foot a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- HERO ─────────────────────────────────────────────── -->
+    <header class="hero">
+      <div class="kicker">DESIGN.md · Editorial GRC · Light</div>
+      <h1>A design system for<br/>governance, risk,<br/>and compliance.</h1>
+      <p>
+        Editorial premium in a domain that's been corporate for too long.
+        Warm paper canvas, serif display as a real character beat, calm
+        density, and purple — always purple — as the signature you can see
+        from across the room.
+      </p>
+      <div class="link-row">
+        <span>Open <a href="./DESIGN.md">DESIGN.md</a></span>
+        <span>·</span>
+        <span>Switch to <a href="./preview-dark.html">dark mode</a></span>
+      </div>
+    </header>
+
+    <!-- BRAND SCALE ──────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">01 · Color</div>
+      <h2>Brand scale</h2>
+      <p class="intro">
+        Ten stops derived from <code class="t-code">#6A12CD</code>.
+        <code class="t-code">brand-600</code> is the anchor for buttons,
+        links, and primary CTAs. <code class="t-code">brand-700</code> is
+        the accessible on-surface body variant (~7.2:1 on paper).
+      </p>
+      <div class="grid grid-6">
+        <div class="swatch"><div class="chip" style="background: var(--brand-50)"></div><div class="meta"><div class="name">brand-50</div><div class="hex">#F7F0FF</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-100)"></div><div class="meta"><div class="name">brand-100</div><div class="hex">#EDDEFE</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-200)"></div><div class="meta"><div class="name">brand-200</div><div class="hex">#DCBBFD</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-300)"></div><div class="meta"><div class="name">brand-300</div><div class="hex">#C393FA</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-400)"></div><div class="meta"><div class="name">brand-400</div><div class="hex">#A366F0</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-500)"></div><div class="meta"><div class="name">brand-500</div><div class="hex">#8838DE</div></div></div>
+        <div class="swatch" style="outline: 2px solid var(--brand-200); outline-offset: 2px;"><div class="chip" style="background: var(--brand-600)"></div><div class="meta"><div class="name">brand-600 ★</div><div class="hex">#6A12CD</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-700)"></div><div class="meta"><div class="name">brand-700</div><div class="hex">var(--brand-700)</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--brand-800)"></div><div class="meta"><div class="name">brand-800</div><div class="hex">#3B0B72</div></div></div>
+        <div class="swatch" style="outline: 2px solid var(--brand-200); outline-offset: 2px;"><div class="chip" style="background: var(--brand-900)"></div><div class="meta"><div class="name">brand-900 ★</div><div class="hex">#26064A</div></div></div>
+      </div>
+    </section>
+
+    <!-- PAPER & INK ──────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">02 · Neutrals</div>
+      <h2>Paper &amp; ink</h2>
+      <p class="intro">
+        Warm off-whites and plum-tinted darks. Pair with purple; avoid cold
+        slate. Body canvas is <code class="t-code">paper-50</code>; pure
+        white is reserved for cards sitting on tinted surfaces.
+      </p>
+      <div class="grid grid-4">
+        <div class="swatch"><div class="chip" style="background: var(--paper-0); border: 1px solid var(--paper-200)"></div><div class="meta"><div class="name">paper-0</div><div class="hex">#FFFFFF</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--paper-50)"></div><div class="meta"><div class="name">paper-50 ★</div><div class="hex">#FAF7F2</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--paper-100)"></div><div class="meta"><div class="name">paper-100</div><div class="hex">#F3EEE5</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--paper-200)"></div><div class="meta"><div class="name">paper-200</div><div class="hex">#E8E1D2</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--paper-300)"></div><div class="meta"><div class="name">paper-300</div><div class="hex">#D6CCB7</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-300)"></div><div class="meta"><div class="name">ink-300</div><div class="hex">#C2B9CB</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-400)"></div><div class="meta"><div class="name">ink-400</div><div class="hex">#9A8FAE</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-500)"></div><div class="meta"><div class="name">ink-500</div><div class="hex">#6B5D82</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-600)"></div><div class="meta"><div class="name">ink-600</div><div class="hex">#4A3D62</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-700)"></div><div class="meta"><div class="name">ink-700</div><div class="hex">#332848</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-800)"></div><div class="meta"><div class="name">ink-800</div><div class="hex">#1F1433</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--ink-900)"></div><div class="meta"><div class="name">ink-900 ★</div><div class="hex">#0F0720</div></div></div>
+      </div>
+    </section>
+
+    <!-- SEMANTIC ─────────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">03 · Semantic</div>
+      <h2>GRC severity scale</h2>
+      <p class="intro">
+        Crimson, burnt orange, old gold, moss, sky, violet — chosen for
+        colorblind separation and against the cliché of pure red-amber-green.
+      </p>
+      <div class="grid grid-6">
+        <div class="swatch"><div class="chip" style="background: var(--risk)"></div><div class="meta"><div class="name">risk</div><div class="hex">#B42318 · Critical</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--high)"></div><div class="meta"><div class="name">high</div><div class="hex">#C2410C · High</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--mitigated)"></div><div class="meta"><div class="name">mitigated</div><div class="hex">#B45309 · Medium</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--compliant)"></div><div class="meta"><div class="name">compliant</div><div class="hex">#15803D · Low</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--evidence)"></div><div class="meta"><div class="name">evidence</div><div class="hex">#0369A1 · Sources</div></div></div>
+        <div class="swatch"><div class="chip" style="background: var(--info)"></div><div class="meta"><div class="name">info</div><div class="hex">#6A12CD · Info</div></div></div>
+      </div>
+    </section>
+
+    <!-- TYPOGRAPHY ───────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">04 · Typography</div>
+      <h2>Scale &amp; faces</h2>
+      <p class="intro">
+        Source Serif 4 for display. Inter for body and UI. JetBrains Mono
+        for anything that should feel like a receipt — evidence IDs, code,
+        citations, tool-call traces.
+      </p>
+
+      <!-- 4-base type scale (rem) -->
+      <table style="border-collapse:collapse; width:100%; max-width:560px; margin:0 0 40px; font-size:0.8125rem; font-variant-numeric:tabular-nums;">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid var(--paper-200);">
+            <th style="padding:8px 12px 8px 0; font-weight:560;">Token</th>
+            <th style="padding:8px 12px; font-weight:560;">rem</th>
+            <th style="padding:8px 12px; font-weight:560;">Step</th>
+            <th style="padding:8px 12px; font-weight:560;">Role</th>
+            <th style="padding:8px 0 8px 12px; font-weight:560;">Font · wt</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-xs</td><td style="padding:8px 12px;">0.75rem</td><td style="padding:8px 12px; color:var(--ink-500);">×3</td><td style="padding:8px 12px;">Caption / meta / mono</td><td style="padding:8px 0 8px 12px;">Inter / JetBrains · 400</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-base</td><td style="padding:8px 12px;">1rem</td><td style="padding:8px 12px; color:var(--ink-500);">×4</td><td style="padding:8px 12px;">Body</td><td style="padding:8px 0 8px 12px;">Inter · 400</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-lg</td><td style="padding:8px 12px;">1.25rem</td><td style="padding:8px 12px; color:var(--ink-500);">×5</td><td style="padding:8px 12px;">Large body / subhead</td><td style="padding:8px 0 8px 12px;">Inter · 500</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-xl</td><td style="padding:8px 12px;">1.5rem</td><td style="padding:8px 12px; color:var(--ink-500);">×6</td><td style="padding:8px 12px;">Heading</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 500</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-2xl</td><td style="padding:8px 12px;">1.75rem</td><td style="padding:8px 12px; color:var(--ink-500);">×7</td><td style="padding:8px 12px;">KPI / large heading</td><td style="padding:8px 0 8px 12px;">Inter · 700</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-3xl</td><td style="padding:8px 12px;">2rem</td><td style="padding:8px 12px; color:var(--ink-500);">×8</td><td style="padding:8px 12px;">Display — small</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 480</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-4xl</td><td style="padding:8px 12px;">2.25rem</td><td style="padding:8px 12px; color:var(--ink-500);">×9</td><td style="padding:8px 12px;">Display</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 460</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-5xl</td><td style="padding:8px 12px;">2.5rem</td><td style="padding:8px 12px; color:var(--ink-500);">×10</td><td style="padding:8px 12px;">Display</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 440</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-6xl</td><td style="padding:8px 12px;">2.75rem</td><td style="padding:8px 12px; color:var(--ink-500);">×11</td><td style="padding:8px 12px;">Display — large</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 420</td></tr>
+          <tr style="border-bottom:1px solid var(--paper-100);"><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">text-7xl</td><td style="padding:8px 12px;">3rem</td><td style="padding:8px 12px; color:var(--ink-500);">×12</td><td style="padding:8px 12px;">Display — large</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 400</td></tr>
+          <tr><td style="padding:8px 12px 8px 0; font-family:var(--font-mono);">display</td><td style="padding:8px 12px;">3.5rem</td><td style="padding:8px 12px; color:var(--ink-500);">×14</td><td style="padding:8px 12px;">Hero — once / page</td><td style="padding:8px 0 8px 12px;">Source Serif 4 · 420</td></tr>
+        </tbody>
+      </table>
+
+      <div class="type-row"><div class="tag">display-2xl</div><div class="sample t-display-2xl">Assessment</div></div>
+      <div class="type-row"><div class="tag">display-xl</div><div class="sample t-display-xl">Operational Risk</div></div>
+      <div class="type-row"><div class="tag">display-lg</div><div class="sample t-display-lg">Control Coverage</div></div>
+      <div class="type-row"><div class="tag">display-md</div><div class="sample t-display-md">Findings &amp; Remediations</div></div>
+      <div class="type-row"><div class="tag">display-sm</div><div class="sample t-display-sm">Delete this audit?</div></div>
+      <div class="type-row"><div class="tag">heading-xl</div><div class="sample t-heading-xl">Quarterly review dashboard</div></div>
+      <div class="type-row"><div class="tag">heading-lg</div><div class="sample t-heading-lg">Open findings by severity</div></div>
+      <div class="type-row"><div class="tag">heading-md</div><div class="sample t-heading-md">Enterprise risk register</div></div>
+      <div class="type-row"><div class="tag">heading-sm</div><div class="sample t-heading-sm">Your pending approvals</div></div>
+      <div class="type-row"><div class="tag">body-lg</div><div class="sample t-body-lg">A comprehensive review of control effectiveness across business units, with findings prioritized by impact and remediation velocity.</div></div>
+      <div class="type-row"><div class="tag">body</div><div class="sample t-body">Default UI copy. Interface descriptions, form helper text, list items, tooltip prose, and everything else that needs to read well at 15 pixels without calling attention.</div></div>
+      <div class="type-row"><div class="tag">body-sm</div><div class="sample t-body-sm">Compact dense-data copy for tables running at row-height 32, secondary meta rows, and micro captions.</div></div>
+      <div class="type-row"><div class="tag">label</div><div class="sample"><span class="t-label">Enterprise Risk Score</span></div></div>
+      <div class="type-row"><div class="tag">code</div><div class="sample t-code">audit_trail_q1_2026.json · evt_8c3f2b · confidence 0.94</div></div>
+      <div class="type-row"><div class="tag">numeric</div><div class="sample t-numeric" style="font-size:2.25rem;">  12,481,306.44  </div></div>
+    </section>
+
+    <!-- SPACING ──────────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">05 · Layout</div>
+      <h2>Spacing grid</h2>
+      <p class="intro">8pt base. 4pt sub-grid where icons demand it. Nothing between.</p>
+      <div class="space-row">
+        <div class="space-unit" style="height: 4px"  data-label="4"></div>
+        <div class="space-unit" style="height: 8px"  data-label="8"></div>
+        <div class="space-unit" style="height: 12px" data-label="12"></div>
+        <div class="space-unit" style="height: 16px" data-label="16"></div>
+        <div class="space-unit" style="height: 24px" data-label="24"></div>
+        <div class="space-unit" style="height: 32px" data-label="32"></div>
+        <div class="space-unit" style="height: 48px" data-label="48"></div>
+        <div class="space-unit" style="height: 64px" data-label="64"></div>
+        <div class="space-unit" style="height: 96px" data-label="96"></div>
+        <div class="space-unit" style="height: 128px" data-label="128"></div>
+      </div>
+    </section>
+
+    <!-- RADIUS ───────────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">06 · Radius</div>
+      <h2>Radii</h2>
+      <div class="grid grid-6">
+        <div class="radius-demo" style="border-radius: var(--r-xs)">xs · 4</div>
+        <div class="radius-demo" style="border-radius: var(--r-sm)">sm · 6</div>
+        <div class="radius-demo" style="border-radius: var(--r-md)">md · 8</div>
+        <div class="radius-demo" style="border-radius: var(--r-lg)">lg · 12</div>
+        <div class="radius-demo" style="border-radius: var(--r-xl)">xl · 16</div>
+        <div class="radius-demo" style="border-radius: 999px">full</div>
+      </div>
+    </section>
+
+    <!-- ELEVATION ────────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">07 · Depth</div>
+      <h2>Elevation</h2>
+      <p class="intro">Borders first. Shadow sparingly. Tint never.</p>
+      <div class="grid grid-4" style="gap: 32px;">
+        <div class="shadow-demo s-xs">shadow-xs</div>
+        <div class="shadow-demo s-sm">shadow-sm</div>
+        <div class="shadow-demo s-md">shadow-md</div>
+        <div class="shadow-demo s-lg">shadow-lg</div>
+        <div class="shadow-demo s-xl">shadow-xl</div>
+        <div class="shadow-demo" style="box-shadow: var(--glow-brand)">glow-brand</div>
+      </div>
+    </section>
+
+    <!-- BUTTONS ──────────────────────────────────────────── -->
+    <section class="section">
+      <div class="label">08 · Primitives</div>
+      <h2>Buttons</h2>
+      <p class="used-in"><b>Used in:</b> every surface — Ask IRA composer send, Dashboard widget actions, RACM toolbars, Report export, modal footers.</p>
+      <div class="row">
+        <button class="btn btn-primary">Save assessment</button>
+        <button class="btn btn-secondary">Cancel</button>
+        <button class="btn btn-ghost">Details</button>
+        <button class="btn btn-destructive">Delete audit</button>
+        <button class="btn btn-link">View all risks →</button>
+      </div>
+    </section>
+
+    <!-- INPUT ────────────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Input</h2>
+      <p class="used-in"><b>Used in:</b> Knowledge Hub search, RACM / Control Library filters, form fields across Engagements & Admin. (The Ask IRA composer is the one input that uses border-tone focus, not the ring.)</p>
+      <div class="row">
+        <input class="input" placeholder="Search risks…" />
+        <input class="input" value="IT-GEN-04" style="width: 180px;" />
+      </div>
+    </section>
+
+    <!-- DROPDOWNS ──────────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Dropdowns</h2>
+      <p class="used-in"><b>Used in:</b> <code class="t-code">AdminSelect</code> (the canonical styled dropdown — Admin, forms, filters) · <code class="t-code">ui/Select</code> (native primitive) · <code class="t-code">ColumnFilter</code> (table headers) · date pickers. Same field chrome; trigger opens a floating listbox. See §7.10.7.</p>
+      <div style="display:flex; flex-wrap:wrap; gap:48px; align-items:flex-start; margin-top:8px;">
+        <div>
+          <div style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-400); margin-bottom:10px;">Closed</div>
+          <div style="width:240px; display:flex; align-items:center; justify-content:space-between; height:40px; padding:0 10px 0 12px; border-radius:var(--r-lg); border:1px solid var(--paper-200); background:var(--paper-0);">
+            <span style="font-size:0.8125rem; color:var(--ink-800);">Audit Lead</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-400)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-400); margin-bottom:10px;">Single-select · check (no checkbox)</div>
+          <div style="width:240px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; height:40px; padding:0 10px 0 12px; border-radius:var(--r-lg); border:1px solid var(--brand-600); background:var(--paper-0);">
+              <span style="font-size:0.8125rem; color:var(--ink-800);">Audit Lead</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--brand-600)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(180deg);"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div style="margin-top:6px; border:1px solid var(--paper-200); background:var(--paper-0); border-radius:var(--r-xl); box-shadow:0 10px 30px -12px rgba(15,8,30,0.28); padding:4px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; height:32px; padding:0 10px; border-radius:var(--r-md); font-size:0.8125rem; font-weight:600; color:var(--brand-700); background:var(--brand-50);">Audit Lead <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--brand-600)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+              <div style="display:flex; align-items:center; height:32px; padding:0 10px; border-radius:var(--r-md); font-size:0.8125rem; color:var(--ink-700);">Reviewer</div>
+              <div style="display:flex; align-items:center; height:32px; padding:0 10px; border-radius:var(--r-md); font-size:0.8125rem; color:var(--ink-700);">Contributor</div>
+              <div style="display:flex; align-items:center; height:32px; padding:0 10px; border-radius:var(--r-md); font-size:0.8125rem; color:var(--ink-700);">Viewer</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-400); margin-bottom:10px;">Multi-select · checkbox</div>
+          <div style="width:240px;">
+            <div style="display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 10px; border-radius:var(--r-md); border:1px solid var(--brand-600); background:var(--paper-0);">
+              <span style="font-size:0.75rem; font-weight:500; color:var(--ink-700);">Status</span>
+              <span style="display:inline-flex; align-items:center; justify-content:center; min-width:16px; height:16px; padding:0 4px; border-radius:9999px; background:var(--brand-600); color:#fff; font-size:0.625rem; font-family:var(--font-mono);">2</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--brand-600)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(180deg);"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div style="margin-top:6px; border:1px solid var(--paper-200); background:var(--paper-0); border-radius:var(--r-xl); box-shadow:0 10px 30px -12px rgba(15,8,30,0.28); padding:4px;">
+              <div style="display:flex; align-items:center; gap:10px; height:32px; padding:0 8px; border-radius:var(--r-lg); font-size:0.75rem; font-weight:500; color:var(--ink-800); background:var(--brand-50);"><span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:5px; background:var(--brand-600); border:1px solid var(--brand-600);"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Active</div>
+              <div style="display:flex; align-items:center; gap:10px; height:32px; padding:0 8px; border-radius:var(--r-lg); font-size:0.75rem; font-weight:500; color:var(--ink-800); background:var(--brand-50);"><span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:5px; background:var(--brand-600); border:1px solid var(--brand-600);"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Suspended</div>
+              <div style="display:flex; align-items:center; gap:10px; height:32px; padding:0 8px; border-radius:var(--r-lg); font-size:0.75rem; color:var(--ink-800);"><span style="display:inline-block; width:16px; height:16px; border-radius:5px; border:1px solid var(--paper-200); background:var(--paper-0);"></span>Invited</div>
+              <div style="display:flex; align-items:center; gap:10px; height:32px; padding:0 8px; border-radius:var(--r-lg); font-size:0.75rem; color:var(--ink-800);"><span style="display:inline-block; width:16px; height:16px; border-radius:5px; border:1px solid var(--paper-200); background:var(--paper-0);"></span>Inactive</div>
+              <div style="margin-top:2px; display:flex; align-items:center; height:32px; padding:0 10px; border-top:1px solid var(--paper-200); font-size:0.6875rem; font-weight:500; color:var(--brand-700);">Clear</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FORM CONTROLS ─────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Form controls</h2>
+      <p class="used-in"><b>Used in:</b> <code class="t-code">Checkbox</code> (multi-select, permission matrices) · <code class="t-code">Toggle</code> (role / permission switches) · <code class="t-code">Textarea</code> (descriptions, notes). Flat DS tokens — brand-600 on, canvas-border off.</p>
+      <div style="display:flex; flex-wrap:wrap; gap:48px; align-items:flex-start; margin-top:8px;">
+        <div>
+          <div style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-400); margin-bottom:12px;">Checkbox</div>
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <label style="display:flex; align-items:center; gap:10px; font-size:0.8125rem; color:var(--ink-800);"><span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:5px; background:var(--brand-600); border:1px solid var(--brand-600);"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Checked</label>
+            <label style="display:flex; align-items:center; gap:10px; font-size:0.8125rem; color:var(--ink-800);"><span style="display:inline-block; width:16px; height:16px; border-radius:5px; border:1px solid var(--paper-200); background:var(--paper-0);"></span>Unchecked</label>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-400); margin-bottom:12px;">Toggle</div>
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            <div style="display:flex; align-items:center; gap:10px;"><span style="position:relative; display:inline-block; width:40px; height:22px; border-radius:9999px; background:var(--brand-600);"><span style="position:absolute; top:3px; left:21px; width:16px; height:16px; border-radius:9999px; background:#fff;"></span></span><span style="font-size:0.8125rem; color:var(--ink-800);">On</span></div>
+            <div style="display:flex; align-items:center; gap:10px;"><span style="position:relative; display:inline-block; width:40px; height:22px; border-radius:9999px; background:var(--paper-200);"><span style="position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:9999px; background:#fff;"></span></span><span style="font-size:0.8125rem; color:var(--ink-500);">Off</span></div>
+          </div>
+        </div>
+        <div style="flex:1 1 280px; min-width:260px;">
+          <div style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-400); margin-bottom:12px;">Textarea</div>
+          <div style="width:100%; min-height:84px; padding:8px 12px; border-radius:var(--r-lg); border:1px solid var(--paper-200); background:var(--paper-0); font-size:0.8125rem; color:var(--ink-400);">Enter a description…</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EMPTY STATE ────────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Empty state</h2>
+      <p class="used-in"><b>Used in:</b> <code class="t-code">EmptyState</code> — registries/tables with no rows, drawers, search no-results. <b>Inter title (not serif)</b>, brand-50 icon disc; content-sized + centered.</p>
+      <div style="border:1px solid var(--paper-200); border-radius:var(--r-lg); background:var(--paper-0); max-width:520px; padding:48px 24px; display:flex; flex-direction:column; align-items:center; text-align:center;">
+        <div style="width:48px; height:48px; border-radius:9999px; background:var(--brand-50); display:flex; align-items:center; justify-content:center; margin-bottom:16px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand-700)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></div>
+        <h3 style="font-family:Inter,sans-serif; font-size:1.25rem; font-weight:600; color:var(--ink-900); letter-spacing:-0.01em; margin:0 0 8px;">No data sources yet</h3>
+        <p style="font-size:0.84375rem; color:var(--ink-500); line-height:1.55; max-width:420px; margin:0;">Connect a source or upload a file to start building evidence for this engagement.</p>
+        <button class="btn btn-primary" style="margin-top:16px;">Add data source</button>
+      </div>
+    </section>
+
+    <!-- PILLS ────────────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Severity pills</h2>
+      <p class="used-in"><b>Used in:</b> Risk Register rows, Findings (Execution), Control Library status, chat Sources type pills. Spelled-out labels, no RAG ramp.</p>
+      <div class="row">
+        <span class="pill pill-risk"><span class="glyph">●</span> Critical</span>
+        <span class="pill pill-high"><span class="glyph">▲</span> High</span>
+        <span class="pill pill-mit"><span class="glyph">◆</span> Medium</span>
+        <span class="pill pill-comp"><span class="glyph">■</span> Low</span>
+        <span class="pill pill-ev"><span class="glyph">◧</span> Evidence</span>
+        <span class="pill pill-info"><span class="glyph">○</span> Informational</span>
+        <span class="pill pill-draft"><span class="glyph">▢</span> Draft</span>
+      </div>
+    </section>
+
+    <!-- STATUS PILL · ALERT VARIANT ───────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Status pill — the standard chip</h2>
+      <p class="used-in">The bordered pill is now the <b>default status everywhere</b> — <code class="t-code">&lt;Pill tone="…"&gt;</code> (and every <code class="t-code">StatusBadge</code>/<code class="t-code">SeverityBadge</code>/… ) renders this with no extra props. Semibold + a soft tone border, full radius, title-case, no icon. A <code class="t-code">variant="flat"</code> opt-out exists for the rare spot a border is too heavy. All tones:</p>
+      <div style="display:flex; flex-wrap:wrap; gap:8px; padding-top:8px;">
+        <span style="display:inline-flex; align-items:center; height:24px; padding:0 11px; border-radius:9999px; font-size:0.75rem; font-weight:600; font-variant-numeric:tabular-nums; background:var(--risk-50); color:var(--risk-700); border:1px solid #F4A89F;">Risk</span>
+        <span style="display:inline-flex; align-items:center; height:24px; padding:0 11px; border-radius:9999px; font-size:0.75rem; font-weight:600; font-variant-numeric:tabular-nums; background:var(--high-50); color:var(--high-700); border:1px solid #F8B89C;">High</span>
+        <span style="display:inline-flex; align-items:center; height:24px; padding:0 11px; border-radius:9999px; font-size:0.75rem; font-weight:600; font-variant-numeric:tabular-nums; background:var(--mitigated-50); color:var(--mitigated-700); border:1px solid #F5C892;">Mitigated</span>
+        <span style="display:inline-flex; align-items:center; height:24px; padding:0 11px; border-radius:9999px; font-size:0.75rem; font-weight:600; font-variant-numeric:tabular-nums; background:var(--compliant-50); color:var(--compliant-700); border:1px solid #9CE0B5;">Compliant</span>
+        <span style="display:inline-flex; align-items:center; height:24px; padding:0 11px; border-radius:9999px; font-size:0.75rem; font-weight:600; font-variant-numeric:tabular-nums; background:var(--evidence-50); color:var(--evidence-700); border:1px solid #7DD3FC;">Evidence</span>
+        <span style="display:inline-flex; align-items:center; height:24px; padding:0 11px; border-radius:9999px; font-size:0.75rem; font-weight:600; font-variant-numeric:tabular-nums; background:var(--brand-50); color:var(--brand-700); border:1px solid var(--brand-200);">Info</span>
+        <span style="display:inline-flex; align-items:center; height:24px; padding:0 11px; border-radius:9999px; font-size:0.75rem; font-weight:600; font-variant-numeric:tabular-nums; background:var(--draft-50); color:#6B5D82; border:1px solid #C2B9CB;">Draft</span>
+      </div>
+    </section>
+
+    <!-- CARDS ────────────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Cards</h2>
+      <p class="used-in"><b>Used in:</b> Dashboard KPI tiles, Knowledge Hub gallery preview cards, chat SourceCards, Home tiles. Feature variant = highlighted AI suggestion / KPI.</p>
+      <div class="grid grid-4">
+        <div class="card">
+          <div class="t-label">Outlined</div>
+          <div class="t-heading-md" style="margin-top: 8px">Default</div>
+          <p class="t-body-sm" style="color: var(--ink-500); margin: 8px 0 0;">1px border, no shadow, 12px radius, 24px padding.</p>
+        </div>
+        <div class="card elevated">
+          <div class="t-label">Elevated</div>
+          <div class="t-heading-md" style="margin-top: 8px">Shadow md</div>
+          <p class="t-body-sm" style="color: var(--ink-500); margin: 8px 0 0;">Rare — use for floating content, never static cards.</p>
+        </div>
+        <div class="card muted">
+          <div class="t-label">Muted</div>
+          <div class="t-heading-md" style="margin-top: 8px">paper-100</div>
+          <p class="t-body-sm" style="color: var(--ink-500); margin: 8px 0 0;">Backgrounded group on a paper canvas.</p>
+        </div>
+        <div class="card feature">
+          <div class="t-label" style="color: var(--brand-700)">Feature</div>
+          <div class="t-heading-md" style="margin-top: 8px; color: var(--ink-900)">brand-50</div>
+          <p class="t-body-sm" style="color: var(--ink-600); margin: 8px 0 0;">AI suggestions, KPI highlight, signature moments.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- KPI CARDS (family) ─────────────────────────────────── -->
+    <section class="section">
+      <h2>KPI cards</h2>
+      <p class="intro">Four KPI shapes, one per surface — all tabular-nums with a count-up, differing only in chrome and scale.</p>
+      <div style="display:flex; flex-wrap:wrap; gap:24px; align-items:flex-start; margin-top:8px;">
+        <div>
+          <div style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-400); margin-bottom:10px;">KpiTile · Dashboard (26px)</div>
+          <div style="width:200px; background:var(--paper-0); border:1px solid var(--paper-200); border-radius:12px; padding:16px 20px;">
+            <p style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-500); margin:0 0 8px;">Open findings</p>
+            <p style="font-size:1.625rem; font-weight:700; line-height:1; color:var(--ink-900); font-variant-numeric:tabular-nums; margin:0;">24</p>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-400); margin-bottom:10px;">AdminKpiCard · Admin (18px)</div>
+          <div style="width:200px; display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid var(--paper-200); background:var(--paper-0);">
+            <div style="display:flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:6px; background:var(--brand-50); color:var(--brand-600);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg></div>
+            <div style="display:flex; align-items:baseline; gap:6px;"><span style="font-size:1.125rem; font-weight:700; color:var(--ink-900); font-variant-numeric:tabular-nums;">9</span><span style="font-size:0.75rem; color:var(--ink-500);">Roles</span></div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-400); margin-bottom:10px;">KpiCard · widget builder (32px)</div>
+          <div style="width:200px; background:#fff; border:1px solid var(--paper-200); border-radius:16px; padding:24px;">
+            <div style="font-size:0.875rem; color:#26064a; margin-bottom:16px;">Total exposure</div>
+            <div style="font-size:2rem; font-weight:700; line-height:1; letter-spacing:-0.02em; color:#26064A; font-variant-numeric:tabular-nums;">$4.8M</div>
+          </div>
+        </div>
+        <div style="flex:1 1 240px; min-width:240px;">
+          <div style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-400); margin-bottom:10px;">StatLedger · Admin (inline)</div>
+          <div style="display:flex; align-items:center; gap:14px; padding:10px 0; font-size:0.8125rem;">
+            <span><span style="color:var(--ink-500);">Active</span> <span style="font-weight:600; color:var(--ink-900); font-variant-numeric:tabular-nums;">96</span></span>
+            <span style="color:var(--ink-300);">·</span>
+            <span><span style="color:var(--ink-500);">Invited</span> <span style="font-weight:600; color:var(--ink-900); font-variant-numeric:tabular-nums;">18</span></span>
+            <span style="color:var(--ink-300);">·</span>
+            <span><span style="color:var(--ink-500);">Suspended</span> <span style="font-weight:600; color:var(--ink-900); font-variant-numeric:tabular-nums;">6</span></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───── SIGNATURE: DASHBOARD CARD ───── -->
+    <section class="section">
+      <div class="label">09 · Signature</div>
+      <h2>Enterprise risk score</h2>
+      <p class="intro">How a dashboard hero card feels when paper, serif, and purple are composed carefully.</p>
+      <p class="used-in"><b>Used in:</b> Dashboard (<code>DashboardView</code>) — KPI tiles + the <code>ConfigurableChart</code> graph (Line / Area / Bar / Pie / Table / KPI) on a react-grid-layout canvas.</p>
+      <div class="grid grid-12">
+        <div class="dash-card" style="grid-column: span 7;">
+          <div class="kicker">Enterprise Risk · Q1 2026</div>
+          <div class="metric">78 <span class="denom">/ 100</span></div>
+          <div class="trend">↑ 12% this quarter</div>
+          <div class="bar"><div class="fill"></div></div>
+          <div class="breakdown">
+            <div class="cell"><span class="num">4</span><span class="lbl">Critical</span></div>
+            <div class="cell"><span class="num">12</span><span class="lbl">High</span></div>
+            <div class="cell"><span class="num">23</span><span class="lbl">Medium</span></div>
+            <div class="cell"><span class="num">47</span><span class="lbl">Low</span></div>
+          </div>
+        </div>
+        <div class="dash-card" style="grid-column: span 5; display: flex; flex-direction: column; gap: 20px;">
+          <div>
+            <div class="kicker">Audit timeline</div>
+            <div class="t-heading-lg" style="margin-top: 8px">Q1 closes in 14 days</div>
+            <p class="t-body-sm" style="color: var(--ink-500); margin: 8px 0 0;">
+              Fieldwork complete for SOX IT General Controls. Three
+              remediations pending sign-off from Cristina.
+            </p>
+          </div>
+          <div class="row">
+            <span class="pill pill-comp"><span class="glyph">■</span> On track</span>
+            <span class="pill pill-ev"><span class="glyph">◧</span> 4 sources</span>
+          </div>
+          <button class="btn btn-link" style="align-self: flex-start;">Open audit plan →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODALS & CONFIRMATIONS ─────────────────────────────── -->
+    <section class="section">
+      <h2>Modals &amp; confirmations</h2>
+      <p class="intro">Two shells over one overlay (<code class="t-code">ink-900/40</code> + <code class="t-code">backdrop-blur-[2px]</code>), 180ms ease-out entrance. <b>Inter titles, never serif.</b> Feature dialogs compose these — the overlay and panel chrome are never hand-rolled.</p>
+      <p class="used-in"><b>Used in:</b> <code>shared/Modal</code> (create / edit — e.g. Admin “Create role”, Share) + <code>shared/ConfirmationModal</code> (every confirm / destructive action across the app).</p>
+      <div style="display:flex; flex-wrap:wrap; gap:28px; align-items:flex-start; margin-top:8px;">
+        <div style="flex:0 0 auto;">
+          <div style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-400); margin-bottom:10px;">ConfirmationModal · <code class="t-code">rounded-2xl</code>, no icon/X</div>
+          <div style="width:420px; max-width:100%; background:var(--paper-0); border:1px solid var(--paper-200); border-radius:16px; box-shadow:0 10px 30px -12px rgba(15,8,30,0.28); padding:24px; display:flex; flex-direction:column; min-height:160px;">
+            <h2 style="font-family:Inter,sans-serif; font-size:1.125rem; font-weight:600; color:var(--ink-900); letter-spacing:-0.01em; margin:0;">Delete this control?</h2>
+            <p style="font-family:Inter,sans-serif; font-size:0.875rem; line-height:1.5; color:var(--ink-500); margin:8px 0 0;">Removes IT-GEN-04 and its 3 linked tests. This can’t be undone.</p>
+            <div style="margin-top:auto; padding-top:24px; display:flex; justify-content:flex-end; gap:8px;">
+              <button class="btn btn-secondary" style="height:40px;">Cancel</button>
+              <button class="btn btn-destructive" style="height:40px;">Delete control</button>
+            </div>
+          </div>
+        </div>
+        <div style="flex:0 0 auto;">
+          <div style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-400); margin-bottom:10px;">Modal shell · <code class="t-code">rounded-2xl</code>, px-7 header/footer</div>
+          <div style="width:460px; max-width:100%; background:var(--paper-0); border:1px solid var(--paper-200); border-radius:16px; box-shadow:0 20px 50px -20px rgba(15,8,30,0.32); overflow:hidden;">
+            <header style="display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 28px; border-bottom:1px solid var(--paper-200);">
+              <h2 style="font-family:Inter,sans-serif; font-size:1.25rem; font-weight:600; color:var(--ink-900); letter-spacing:-0.01em; margin:0;">Create role</h2>
+              <span style="width:32px; height:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:var(--ink-500);">✕</span>
+            </header>
+            <div style="padding:20px 28px; font-family:Inter,sans-serif; font-size:0.875rem; color:var(--ink-700);">Form fields, pickers, content — scrolls within <code class="t-code">max-h-[85vh]</code>.</div>
+            <footer style="display:flex; justify-content:flex-end; gap:8px; padding:12px 28px; border-top:1px solid var(--paper-200);">
+              <button class="btn btn-secondary">Cancel</button>
+              <button class="btn btn-primary">Create role</button>
+            </footer>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DRAWER ─────────────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Drawer</h2>
+      <p class="used-in"><b>Used in:</b> <code class="t-code">Drawer</code> — right-side panel for detail / create / edit (RACM detail, exceptions, controls). Same API as <code class="t-code">Modal</code>, slides from the right; <b>Inter title</b> (unified with Modal), <code class="t-code">max-w-[580px]</code>, px-7.</p>
+      <div style="width:440px; max-width:100%; border:1px solid var(--paper-200); border-radius:16px; background:var(--paper-0); overflow:hidden; box-shadow:0 20px 50px -20px rgba(15,8,30,0.32);">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:24px 28px 18px; border-bottom:1px solid var(--paper-200);">
+          <div><div style="font-family:Inter,sans-serif; font-size:1.25rem; font-weight:600; line-height:1.25; color:var(--ink-900); letter-spacing:-0.01em;">Control IT-GEN-04</div><div style="font-size:0.8125rem; color:var(--ink-500); margin-top:4px;">Access review · Quarterly</div></div>
+          <span style="width:32px; height:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:var(--ink-500); flex-shrink:0;">✕</span>
+        </div>
+        <div style="padding:24px 28px; font-size:0.8125rem; color:var(--ink-700);">Detail fields, evidence, and activity — scrolls within the panel.</div>
+        <div style="display:flex; justify-content:flex-end; gap:8px; padding:16px 28px; border-top:1px solid var(--paper-200);"><button class="btn btn-secondary">Close</button><button class="btn btn-primary">Save</button></div>
+      </div>
+    </section>
+
+    <!-- TOAST ───────────────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Toast</h2>
+      <p class="used-in"><b>Used in:</b> <code class="t-code">useToast</code> — transient confirmations everywhere. <code class="t-code">w-[400px]</code>, auto-dismiss. Two styles: the <b>flat</b> line-icon toast that ships today, and a <b>filled</b> variant — solid tone disc + auto-dismiss progress bar.</p>
+      <div style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-400); margin-bottom:10px;">Flat · shipped</div>
+      <div style="display:flex; flex-direction:column; gap:10px; max-width:400px;">
+        <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; border:1px solid var(--paper-200); border-radius:12px; background:var(--paper-0); box-shadow:0 10px 30px -12px rgba(15,8,30,0.28);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-600)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <div style="flex:1;"><div style="font-size:0.8125rem; font-weight:600; color:var(--ink-900);">Saved</div><div style="font-size:0.75rem; color:var(--ink-500);">Role permissions updated.</div></div>
+          <span style="color:var(--ink-400); font-size:0.75rem;">✕</span>
+        </div>
+        <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; border:1px solid var(--paper-200); border-radius:12px; background:var(--paper-0); box-shadow:0 10px 30px -12px rgba(15,8,30,0.28);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--evidence)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1px;"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+          <div style="flex:1;"><div style="font-size:0.8125rem; font-weight:600; color:var(--ink-900);">Heads up</div><div style="font-size:0.75rem; color:var(--ink-500);">3 files skipped — too large to parse inline.</div></div>
+          <span style="color:var(--ink-400); font-size:0.75rem;">✕</span>
+        </div>
+        <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; border:1px solid var(--paper-200); border-radius:12px; background:var(--paper-0); box-shadow:0 10px 30px -12px rgba(15,8,30,0.28);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--risk-700)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1px;"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+          <div style="flex:1;"><div style="font-size:0.8125rem; font-weight:600; color:var(--ink-900);">Couldn't remove user</div><div style="font-size:0.75rem; color:var(--ink-500);">At least one active administrator is required.</div></div>
+          <span style="color:var(--ink-400); font-size:0.75rem;">✕</span>
+        </div>
+      </div>
+
+      <div style="font-size:0.6875rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-400); margin:28px 0 10px;">Filled · with progress bar (proposed — not yet in <code class="t-code">Toast.tsx</code>)</div>
+      <div style="display:flex; flex-direction:column; gap:12px; max-width:400px;">
+        <div style="position:relative; display:flex; align-items:center; gap:14px; padding:16px 18px; border:1px solid var(--paper-200); border-radius:16px; background:var(--paper-0); box-shadow:0 10px 30px -12px rgba(15,8,30,0.28); overflow:hidden;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:9999px; background:var(--brand-600); flex-shrink:0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div style="flex:1;"><div style="font-size:1rem; font-weight:600; color:var(--ink-900);">Success</div><div style="font-size:0.875rem; color:var(--ink-500); margin-top:2px;">Your changes have been saved.</div></div>
+          <span style="color:var(--ink-400); font-size:0.875rem; align-self:flex-start;">✕</span>
+          <span style="position:absolute; left:0; bottom:0; height:3px; width:35%; background:var(--brand-600); border-top-right-radius:3px;"></span>
+        </div>
+        <div style="position:relative; display:flex; align-items:center; gap:14px; padding:16px 18px; border:1px solid var(--paper-200); border-radius:16px; background:var(--paper-0); box-shadow:0 10px 30px -12px rgba(15,8,30,0.28); overflow:hidden;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:9999px; background:var(--risk); flex-shrink:0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg></span>
+          <div style="flex:1;"><div style="font-size:1rem; font-weight:600; color:var(--ink-900);">Error</div><div style="font-size:0.875rem; color:var(--ink-500); margin-top:2px;">Something went wrong — please try again.</div></div>
+          <span style="color:var(--ink-400); font-size:0.875rem; align-self:flex-start;">✕</span>
+          <span style="position:absolute; left:0; bottom:0; height:3px; width:60%; background:var(--risk); border-top-right-radius:3px;"></span>
+        </div>
+        <div style="position:relative; display:flex; align-items:center; gap:14px; padding:16px 18px; border:1px solid var(--paper-200); border-radius:16px; background:var(--paper-0); box-shadow:0 10px 30px -12px rgba(15,8,30,0.28); overflow:hidden;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:9999px; background:var(--evidence); flex-shrink:0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="11" y2="16"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg></span>
+          <div style="flex:1;"><div style="font-size:1rem; font-weight:600; color:var(--ink-900);">Heads up</div><div style="font-size:0.875rem; color:var(--ink-500); margin-top:2px;">3 files were skipped during import.</div></div>
+          <span style="color:var(--ink-400); font-size:0.875rem; align-self:flex-start;">✕</span>
+          <span style="position:absolute; left:0; bottom:0; height:3px; width:80%; background:var(--evidence); border-top-right-radius:3px;"></span>
+        </div>
+        <div style="position:relative; display:flex; align-items:center; gap:14px; padding:16px 18px; border:1px solid var(--paper-200); border-radius:16px; background:var(--paper-0); box-shadow:0 10px 30px -12px rgba(15,8,30,0.28); overflow:hidden;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:9999px; background:var(--mitigated); flex-shrink:0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="7" y2="13"/><line x1="12" x2="12.01" y1="16.5" y2="16.5"/></svg></span>
+          <div style="flex:1;"><div style="font-size:1rem; font-weight:600; color:var(--ink-900);">Warning</div><div style="font-size:0.875rem; color:var(--ink-500); margin-top:2px;">This action needs reviewer approval.</div></div>
+          <span style="color:var(--ink-400); font-size:0.875rem; align-self:flex-start;">✕</span>
+          <span style="position:absolute; left:0; bottom:0; height:3px; width:45%; background:var(--mitigated); border-top-right-radius:3px;"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- COMMAND PALETTE ─────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Command palette</h2>
+      <p class="used-in"><b>Used in:</b> <code class="t-code">CommandPalette</code> — global ⌘K / Ctrl+K jump to processes, RACMs, risks, controls. <code class="t-code">w-[600px]</code>, search + grouped results.</p>
+      <div style="width:600px; max-width:100%; border:1px solid var(--paper-200); border-radius:16px; background:var(--paper-0); overflow:hidden; box-shadow:0 24px 48px -20px rgba(15,8,30,0.4);">
+        <div style="display:flex; align-items:center; gap:10px; padding:16px 20px; border-bottom:1px solid var(--paper-200);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-400)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <span style="font-size:0.875rem; color:var(--ink-400);">Search processes, RACMs, risks, controls…</span>
+        </div>
+        <div style="padding:4px 0 8px;">
+          <div style="padding:12px 20px 4px; font-size:0.625rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-500);">Risks</div>
+          <div style="display:flex; align-items:center; gap:12px; padding:10px 20px; background:var(--brand-50);"><span style="font-family:var(--font-mono); font-size:0.75rem; color:var(--brand-700);">R-142</span><span style="font-size:0.875rem; color:var(--ink-800);">Access review overdue — privileged accounts</span></div>
+          <div style="display:flex; align-items:center; gap:12px; padding:10px 20px;"><span style="font-family:var(--font-mono); font-size:0.75rem; color:var(--ink-500);">R-141</span><span style="font-size:0.875rem; color:var(--ink-800);">Vendor SOC 2 Type II unreceived</span></div>
+          <div style="padding:12px 20px 4px; font-size:0.625rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-500);">Controls</div>
+          <div style="display:flex; align-items:center; gap:12px; padding:10px 20px;"><span style="font-family:var(--font-mono); font-size:0.75rem; color:var(--ink-500);">IT-GEN-04</span><span style="font-size:0.875rem; color:var(--ink-800);">Access review — privileged accounts</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BREADCRUMBS ─────────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Breadcrumbs</h2>
+      <p class="used-in"><b>Used in:</b> <code class="t-code">Breadcrumbs</code> — nav trail on detail surfaces. Mono 12px, Home icon, <code class="t-code">ink-300</code> separators, current crumb <code class="t-code">ink-900</code>.</p>
+      <div style="display:flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:0.75rem; color:var(--ink-500);">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span style="color:var(--ink-300);">/</span><span>Governance</span>
+        <span style="color:var(--ink-300);">/</span><span>RACM</span>
+        <span style="color:var(--ink-300);">/</span><span style="color:var(--ink-900); font-weight:540;">IT-GEN-04</span>
+      </div>
+    </section>
+
+    <!-- DATE FILTER ─────────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Date filter</h2>
+      <p class="used-in"><b>Used in:</b> <code class="t-code">DateFilterPicker</code> / <code class="t-code">DatePicker</code> — preset windows + custom range (Recents, Data Sources, audit log). <code class="t-code">w-[280px]</code> panel.</p>
+      <div style="width:280px; border:1px solid var(--paper-200); border-radius:12px; background:var(--paper-0); padding:4px; box-shadow:0 10px 30px -12px rgba(15,8,30,0.28);">
+        <div style="display:flex; align-items:center; height:32px; padding:0 12px; border-radius:var(--r-md); font-size:0.75rem; color:var(--ink-700);">Today</div>
+        <div style="display:flex; align-items:center; height:32px; padding:0 12px; border-radius:var(--r-md); font-size:0.75rem; color:var(--ink-700);">Last 7 days</div>
+        <div style="display:flex; align-items:center; height:32px; padding:0 12px; border-radius:var(--r-md); font-size:0.75rem; font-weight:500; color:var(--brand-700); background:var(--brand-50);">Last 30 days</div>
+        <div style="display:flex; align-items:center; height:32px; padding:0 12px; border-radius:var(--r-md); font-size:0.75rem; color:var(--ink-700);">Last quarter</div>
+        <div style="display:flex; align-items:center; height:32px; padding:0 12px; border-radius:var(--r-md); font-size:0.75rem; color:var(--ink-700); border-top:1px solid var(--paper-200); margin-top:2px;">Custom range…</div>
+      </div>
+    </section>
+
+    <!-- INLINE RENAME ───────────────────────────────────────── -->
+    <section class="section" style="margin-top: 56px;">
+      <h2 style="font-size:1.75rem;">Inline rename</h2>
+      <p class="used-in"><b>Used in:</b> <code class="t-code">InlineRename</code> — click-to-rename in place (Knowledge Hub data sources). Enter / blur commits, Esc cancels; brand-600 border while editing.</p>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="display:inline-flex; align-items:center; width:240px; height:32px; padding:0 10px; border-radius:var(--r-lg); border:1px solid var(--brand-600); background:var(--paper-0); font-size:0.875rem; font-weight:600; color:var(--ink-900);">Vendor contracts — Q1</span>
+        <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:var(--r-md); color:var(--brand-700);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+        <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:var(--r-md); color:var(--ink-500);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg></span>
+      </div>
+    </section>
+
+    <!-- ───── SIGNATURE: AI RESPONSE ───── -->
+    <section class="section">
+      <h2>AI response</h2>
+      <p class="intro">Not a chat bubble. Considered prose with citations, streaming cursor, and pulse-thinking — the signature surface for GRC Copilot.</p>
+      <p class="used-in"><b>Used in:</b> Ask IRA chat (<code>ChatView</code>) — the answer surface inside the 52.5rem thread; prose capped at 66ch. Produced by the flat 20px <code>ai-border</code> composer.</p>
+      <div class="ai-response">
+        <div class="ai-meta">
+          <span class="dot"></span>
+          Answered in 1.2s · 4 sources · model: risk-analyst-4
+        </div>
+        <div class="ai-body">
+          <p>
+            Three SOX IT General Controls failed in Q1 2026:
+            <span class="ai-citation">IT-GEN-04</span>
+            (privileged access review — evidence stale by 47 days),
+            <span class="ai-citation">IT-GEN-07</span>
+            (change management — two emergency changes lack retrospective
+            approval), and
+            <span class="ai-citation">IT-GEN-11</span>
+            (backup restoration — last test was 94 days ago against a
+            90-day SLA).
+          </p>
+          <p>
+            Remediation is straightforward for IT-GEN-04 and IT-GEN-11
+            (run the review, run the test). IT-GEN-07 requires a policy
+            decision — should emergency changes be permitted without
+            retrospective approval in narrow incident windows?<span class="ai-cursor"></span>
+          </p>
+        </div>
+        <div class="ai-tools">
+          <div class="tool-head">// tool calls</div>
+          <div>retrieve(control_ids=["IT-GEN-*"], quarter="Q1-2026")  →  47 controls</div>
+          <div>filter(status="failed")                               →  3 matches</div>
+          <div>rank(by="remediation_effort", order="asc")            →  ok</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───── SIGNATURE: DATA TABLE ───── -->
+    <section class="section">
+      <h2>Data table</h2>
+      <p class="intro">Comfortable density. Tabular numerics. Zebra off by default, on by density. Row selection signaled by a single violet left border — no heavy background swap.</p>
+      <p class="used-in"><b>Used in:</b> RACM &amp; Control Library (Governance), Risk Register, Findings / Control Testing (Execution), and the Dashboard Table widget.</p>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th style="width: 64px;">#</th>
+              <th>Risk</th>
+              <th>Owner</th>
+              <th>Severity</th>
+              <th class="num">Exposure</th>
+              <th>Due</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="selected">
+              <td class="mono">R-142</td>
+              <td>Access review overdue — privileged accounts</td>
+              <td>J. Mendoza</td>
+              <td><span class="pill pill-risk"><span class="glyph">●</span> Critical</span></td>
+              <td class="num">$ 2,400,000</td>
+              <td>Apr 28</td>
+            </tr>
+            <tr>
+              <td class="mono">R-141</td>
+              <td>Vendor SOC 2 Type II unreceived</td>
+              <td>M. Lee</td>
+              <td><span class="pill pill-high"><span class="glyph">▲</span> High</span></td>
+              <td class="num">$ 870,000</td>
+              <td>May 10</td>
+            </tr>
+            <tr>
+              <td class="mono">R-140</td>
+              <td>DR runbook untested this quarter</td>
+              <td>K. Ray</td>
+              <td><span class="pill pill-mit"><span class="glyph">◆</span> Medium</span></td>
+              <td class="num">$ 410,000</td>
+              <td>Jun 02</td>
+            </tr>
+            <tr>
+              <td class="mono">R-139</td>
+              <td>Annual penetration test scoping pending</td>
+              <td>A. Park</td>
+              <td><span class="pill pill-high"><span class="glyph">▲</span> High</span></td>
+              <td class="num">$ 1,120,000</td>
+              <td>Apr 22</td>
+            </tr>
+            <tr>
+              <td class="mono">R-138</td>
+              <td>Policy training attestation — Q1</td>
+              <td>Cristina R.</td>
+              <td><span class="pill pill-comp"><span class="glyph">■</span> Low</span></td>
+              <td class="num">$ 84,000</td>
+              <td>Apr 30</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ───── SIGNATURE: REPORT EXCERPT ───── -->
+    <section class="section">
+      <h2>Report reader</h2>
+      <p class="intro">Editorial long-form. 66-character column, drop-cap on section one, serif body option for audit deliverables that will be read — really read — by someone across the boardroom.</p>
+      <p class="used-in"><b>Used in:</b> Report (<code>ReportsView</code>) + report reader — the only surfaces on warm paper (<code>paper-50/100</code>), ~960px column.</p>
+      <div class="report">
+        <div class="report-kicker">Q1 2026 · Operational Risk Assessment</div>
+        <h2>Three controls failed the quarter — none of them fatal.</h2>
+        <p class="dropcap">
+          Across fourteen business units and 312 tested controls, operational
+          risk closed Q1 2026 at a score of 78, up from 66 in Q4 2025. The
+          improvement is meaningful but uneven: IT General Controls and
+          Third-Party Risk both advanced materially, while Change
+          Management regressed slightly on the back of two emergency
+          deployments in late March.
+        </p>
+        <p>
+          The three failed controls are routine remediations, not structural
+          breakdowns. Privileged access reviews (IT-GEN-04) slipped by
+          forty-seven days while the access governance team absorbed an
+          unplanned head-count change. Backup restoration testing
+          (IT-GEN-11) fell four days past SLA, a symptom of the annual
+          calendar rather than of a testing failure. Change management
+          (IT-GEN-07) is the only finding that warrants policy attention.
+        </p>
+        <div class="eyebrow">
+          <span>Published Apr 2, 2026 · 12 min read</span>
+          <span class="divider"></span>
+          <span>By the Risk &amp; Compliance desk</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───── SURFACE: ADMINISTRATION ───── -->
+    <section class="section">
+      <div class="label">Surface · Access Console</div>
+      <h2>Administration</h2>
+      <p class="intro">Crisp-flat, not editorial-floating: hairline cards, flat fills, <code>h-10</code> spine actions. People · Teams · Roles · Audit Log, each on one skeleton — KPI band → toolbar (search left · CTA right) → SmartTable. Invite → role assignment only; no impersonation surface.</p>
+      <p class="used-in"><b>Used in:</b> <code>admin/AdminView</code>, <code>RolesWorkspace</code>; classes in <code>adminTokens.ts</code>, widgets in <code>AdminPrimitives.tsx</code>. See DESIGN.md §7.11.</p>
+
+      <!-- KPI band (AdminKpiRow): one active filter tile + one 'attention' tile -->
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;">
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid var(--paper-200); background:var(--paper-0);">
+          <div style="display:flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:6px; background:var(--brand-50); color:var(--brand-600);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+          <div style="display:flex; align-items:baseline; gap:6px; min-width:0;"><span style="font-size:1.125rem; font-weight:700; color:var(--ink-900); font-variant-numeric:tabular-nums;">128</span><span style="font-size:0.75rem; color:var(--ink-500);">People</span></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid var(--paper-200); background:var(--paper-0);">
+          <div style="display:flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:6px; background:var(--brand-50); color:var(--brand-600);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 21a8 8 0 0 0-16 0"/><circle cx="10" cy="8" r="5"/><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"/></svg></div>
+          <div style="display:flex; align-items:baseline; gap:6px;"><span style="font-size:1.125rem; font-weight:700; color:var(--ink-900); font-variant-numeric:tabular-nums;">14</span><span style="font-size:0.75rem; color:var(--ink-500);">Teams</span></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid var(--paper-200); background:var(--paper-0);">
+          <div style="display:flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:6px; background:var(--brand-50); color:var(--brand-600);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg></div>
+          <div style="display:flex; align-items:baseline; gap:6px;"><span style="font-size:1.125rem; font-weight:700; color:var(--ink-900); font-variant-numeric:tabular-nums;">9</span><span style="font-size:0.75rem; color:var(--ink-500);">Roles</span></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid rgba(146,64,14,0.25); background:var(--mitigated-50);">
+          <div style="display:flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:6px; background:rgba(146,64,14,0.12); color:var(--mitigated-700);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" x2="16" y1="11" y2="11"/></svg></div>
+          <div style="display:flex; align-items:baseline; gap:6px;"><span style="font-size:1.125rem; font-weight:700; color:var(--mitigated-700); font-variant-numeric:tabular-nums;">3</span><span style="font-size:0.75rem; color:var(--mitigated-700);">No team</span></div>
+        </div>
+      </div>
+
+      <!-- toolbar: search left · flat h-10 CTA right -->
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px;">
+        <input class="input" placeholder="Search people…" style="max-width:280px;" />
+        <button class="btn btn-primary">+ Invite people</button>
+      </div>
+
+      <!-- People table — monochrome InitialsAvatar + semantic status pills + row action -->
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr><th>Member</th><th>Email</th><th>Role</th><th>Status</th><th class="num"></th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span style="display:inline-flex; align-items:center; gap:10px;"><span style="display:inline-flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:9999px; background:var(--brand-100); color:var(--brand-700); font-size:0.6875rem; font-weight:600; box-shadow:inset 0 0 0 1px rgba(106,18,205,0.10);">JM</span> J. Mendoza</span></td>
+              <td class="mono">j.mendoza@acme.co</td><td>Audit Lead</td>
+              <td><span class="pill pill-comp"><span class="glyph">■</span> Active</span></td>
+              <td class="num"><button class="btn btn-secondary" style="height:28px; padding:0 10px; font-size:0.75rem;">Edit</button></td>
+            </tr>
+            <tr>
+              <td><span style="display:inline-flex; align-items:center; gap:10px;"><span style="display:inline-flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:9999px; background:var(--brand-100); color:var(--brand-700); font-size:0.6875rem; font-weight:600; box-shadow:inset 0 0 0 1px rgba(106,18,205,0.10);">ML</span> M. Lee</span></td>
+              <td class="mono">m.lee@acme.co</td><td>Reviewer</td>
+              <td><span class="pill pill-info"><span class="glyph">○</span> Invited</span></td>
+              <td class="num"><button class="btn btn-secondary" style="height:28px; padding:0 10px; font-size:0.75rem;">Edit</button></td>
+            </tr>
+            <tr>
+              <td><span style="display:inline-flex; align-items:center; gap:10px;"><span style="display:inline-flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:9999px; background:var(--brand-100); color:var(--brand-700); font-size:0.6875rem; font-weight:600; box-shadow:inset 0 0 0 1px rgba(106,18,205,0.10);">KR</span> K. Ray</span></td>
+              <td class="mono">k.ray@acme.co</td><td>Contributor</td>
+              <td><span class="pill pill-high"><span class="glyph">▲</span> Suspended</span></td>
+              <td class="num"><button class="btn btn-secondary" style="height:28px; padding:0 10px; font-size:0.75rem;">Edit</button></td>
+            </tr>
+            <tr>
+              <td><span style="display:inline-flex; align-items:center; gap:10px;"><span style="display:inline-flex; width:28px; height:28px; align-items:center; justify-content:center; border-radius:9999px; background:var(--brand-100); color:var(--brand-700); font-size:0.6875rem; font-weight:600; box-shadow:inset 0 0 0 1px rgba(106,18,205,0.10);">AP</span> A. Park</span></td>
+              <td class="mono">a.park@acme.co</td><td>Viewer</td>
+              <td><span class="pill pill-draft"><span class="glyph">▢</span> Inactive</span></td>
+              <td class="num"><button class="btn btn-secondary" style="height:28px; padding:0 10px; font-size:0.75rem;">Edit</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="used-in" style="margin-top:12px;"><b>Rules in play:</b> avatar is monochrome (<code>brand-100 / brand-700</code>) — never per-person colour; status is a noun, so each pill wears its own semantic tone, not a brand fill; the only dark surface remains the sidebar.</p>
+    </section>
+
+    <!-- ───── SURFACE: AUTH — WORKSPACE CHOOSER ───── -->
+    <section class="section">
+      <div class="label">Surface · Entry gate</div>
+      <h2>Auth — Workspace chooser</h2>
+      <p class="intro">The one sanctioned second dark surface, mirroring the sidebar shell. No backend auth — pick a workspace and enter; the invited account's role drives all access. Approved cascade-reveal on mount (the chat follow-up chip spring).</p>
+      <p class="used-in"><b>Used in:</b> <code>auth/LoginView</code> + <code>BrandPanelFX</code>. See DESIGN.md §7.12.</p>
+      <div style="display:grid; grid-template-columns:44% 1fr; border-radius:16px; overflow:hidden; border:1px solid var(--paper-200); min-height:320px;">
+        <!-- dark brand panel -->
+        <div style="position:relative; background:var(--brand-900); color:#fff; padding:32px; overflow:hidden;">
+          <div style="position:absolute; top:-80px; right:-60px; width:260px; height:260px; border-radius:9999px; background:rgba(106,18,205,0.30); filter:blur(80px);"></div>
+          <div style="position:absolute; bottom:-70px; left:-50px; width:220px; height:220px; border-radius:9999px; background:rgba(136,56,222,0.15); filter:blur(80px);"></div>
+          <div style="position:relative; display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,var(--brand-500),var(--brand-400)); display:flex; align-items:center; justify-content:center;">✦</div>
+            <span style="font-size:0.875rem; font-weight:700; letter-spacing:-0.01em;">IRAME.AI</span>
+          </div>
+          <div style="position:relative; margin-top:56px;">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+              <span style="height:1px; width:40px; background:rgba(255,255,255,0.2);"></span>
+              <span style="font-size:0.6875rem; font-weight:600; letter-spacing:0.18em; text-transform:uppercase; color:rgba(255,255,255,0.45);">Auditify · Ask IRA</span>
+            </div>
+            <div style="font-family:'Source Serif 4',Georgia,serif; font-size:2.5rem; line-height:1.08; letter-spacing:-0.02em;">Audit smarter.<br>Not harder.</div>
+            <p style="margin-top:16px; max-width:34ch; font-size:0.875rem; line-height:1.6; color:rgba(255,255,255,0.55);">On-dark text uses white at fixed alphas — 0.55 dim, 0.45 muted, 0.06 fills — never opaque grey.</p>
+          </div>
+        </div>
+        <!-- workspace chooser -->
+        <div style="padding:32px; background:var(--paper-0); display:flex; flex-direction:column; justify-content:center; gap:10px;">
+          <div class="t-label" style="margin-bottom:6px;">Choose a workspace</div>
+          <div style="display:flex; align-items:center; gap:12px; padding:14px 16px; border-radius:12px; border:1px solid var(--brand-600); background:var(--brand-50);">
+            <span style="font-size:1.125rem; color:var(--brand-700);">▣</span>
+            <div style="flex:1;"><div style="font-size:0.875rem; font-weight:600; color:var(--ink-900);">Acme Corp — Internal Audit</div><div style="font-size:0.75rem; color:var(--ink-500);">128 members · 14 teams</div></div>
+            <span style="color:var(--brand-600);">✓</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; padding:14px 16px; border-radius:12px; border:1px solid var(--paper-200); background:var(--paper-0);">
+            <span style="font-size:1.125rem; color:var(--ink-400);">▣</span>
+            <div style="flex:1;"><div style="font-size:0.875rem; font-weight:600; color:var(--ink-800);">Acme Corp — Compliance</div><div style="font-size:0.75rem; color:var(--ink-500);">42 members · 5 teams</div></div>
+          </div>
+          <button class="btn btn-primary" style="align-self:flex-start; margin-top:8px;">Enter workspace →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOT ─────────────────────────────────────────────── -->
+    <footer class="foot">
+      <div>DESIGN.md — Editorial GRC · Light preview · refined 2026-06-08</div>
+      <div>
+        <a href="./DESIGN.md">DESIGN.md</a> ·
+        <a href="./preview-dark.html">Dark preview</a> ·
+        <a href="./README.md">README</a>
+      </div>
+    </footer>
+
+  </div>
+</body>
+</html>
