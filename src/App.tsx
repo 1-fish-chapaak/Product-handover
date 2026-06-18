@@ -59,6 +59,7 @@ import MedicalReportReaderView from './components/intelligence/concierge/tools/M
 import InsightsAnomalyView from './components/intelligence/concierge/tools/InsightsAnomalyView';
 import RACMGeneratorView from './components/intelligence/concierge/tools/RACMGeneratorView';
 import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
+import type { ComposerContext } from './components/chat/composerContext';
 import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
 import WorkflowExecutor from './components/workflow/WorkflowExecutor';
@@ -190,6 +191,10 @@ function AppInner() {
   const mainScrollRef = useRef<HTMLDivElement>(null);
   const chatSplitContainerRef = useRef<HTMLDivElement>(null);
   const [viewLoading, setViewLoading] = useState(false);
+  // One-shot canvas → composer handoff. A right-side workspace CTA (Plan ▸
+  // Edit, Code ▸ Edit, a Source's Chat / Pick) sets this; the chat composer
+  // consumes it into a focused "context mode", then clears it.
+  const [chatComposerContext, setChatComposerContext] = useState<ComposerContext | null>(null);
 
   // Artifact panel width in pixels (only meaningful when both panes are
   // visible). Persisted to localStorage so the user's resize choice survives
@@ -385,6 +390,7 @@ function AppInner() {
       <ChatWorkflowWorkspace
         onClose={() => setShowArtifacts(false)}
         workflowType={state.workflowType ?? undefined}
+        onCanvasAction={setChatComposerContext}
       />
     ) : (
       <ArtifactPanel
@@ -396,6 +402,7 @@ function AppInner() {
         onShareResults={() => setShowShareModal(true, { type: 'workflow-output', id: 'result-1' })}
         onOpenInKnowledgeHub={() => { setShowArtifacts(false); setView('knowledge-hub'); }}
         onComposeInChat={(draft) => { setShowArtifacts(false); setChatComposerDraft(draft); }}
+        onCanvasAction={setChatComposerContext}
       />
     );
 
@@ -491,6 +498,8 @@ function AppInner() {
               onWorkflowRunSeedConsumed={() => setChatWorkflowRunSeed(null)}
               composerDraft={state.chatComposerDraft}
               onComposerDraftConsumed={() => setChatComposerDraft(null)}
+              composerContextSeed={chatComposerContext}
+              onComposerContextSeedConsumed={() => setChatComposerContext(null)}
               selectedChatId={state.selectedChatId}
               onChatLoaded={() => setSelectedChatId(null)}
               setView={setView}
