@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
 import Gated from '../shared/Gated';
 import {
-  X, FileText, Plus, Check, ChevronRight, Search, Lock,
+  X, FileText, Plus, Check, ChevronRight, ChevronDown, Search, Lock,
 } from 'lucide-react';
 import type { AuditResultData, GranularSelection } from './AddToDashboardModal';
 import {
@@ -26,12 +26,15 @@ export interface ReportOption {
   generatedBy?: string;
 }
 
+export type Severity = 'high' | 'medium' | 'low';
+
 export interface ReportConfirmPayload {
   reportId: string;
   reportName: string;
   isNew: boolean;
   newName?: string;
   newDescription?: string;
+  newSeverity?: Severity;
   selection: GranularSelection;
 }
 
@@ -64,6 +67,7 @@ export function AddToReportModal({
   const [search, setSearch] = useState('');
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newSeverity, setNewSeverity] = useState<Severity | null>(null);
   const [nameTouched, setNameTouched] = useState(false);
 
   const [selKpis, setSelKpis] = useState<Set<string>>(new Set((resultData?.kpis || []).map(k => k.label)));
@@ -87,6 +91,7 @@ export function AddToReportModal({
     setSearch('');
     setNewName('');
     setNewDesc('');
+    setNewSeverity(null);
     setNameTouched(false);
     setSelKpis(new Set((resultData?.kpis || []).map(k => k.label)));
     setSelCharts(new Set((resultData?.charts || []).map(c => c.id)));
@@ -144,6 +149,7 @@ export function AddToReportModal({
       isNew,
       newName: isNew ? trimmedName : undefined,
       newDescription: isNew ? newDesc.trim() : undefined,
+      newSeverity: isNew ? (newSeverity ?? undefined) : undefined,
       selection: { kpis: [...selKpis], charts: [...selCharts], columns: [...selCols] },
     };
 
@@ -462,6 +468,10 @@ export function AddToReportModal({
                     </span>
                   </div>
                 </div>
+                <div>
+                  <label id="new-rpt-severity-label" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Severity</label>
+                  <SeveritySelect value={newSeverity} onChange={setNewSeverity} labelledBy="new-rpt-severity-label" />
+                </div>
               </div>
             )}
           </div>
@@ -672,5 +682,90 @@ function Highlighted({ text, query }: { text: string; query: string }) {
       </mark>
       {text.slice(idx + query.length)}
     </>
+  );
+}
+
+// ─── Severity select ───────────────────────────────────────────────────────────
+// Single-select dropdown matching the modal's inputs + the app's popover idiom
+// (DateFilterPicker): trigger with a rotating chevron, full-screen click-catcher to
+// dismiss, Escape closes the menu (not the modal). Dots use the app's audit severity
+// palette — low/compliant, medium/mitigated, high/risk — never a bright traffic-light
+// ramp (DESIGN.md "No-RAG rule").
+
+const SEVERITY_OPTIONS: { value: Severity; label: string; dot: string }[] = [
+  { value: 'low', label: 'Low', dot: 'bg-compliant' },
+  { value: 'medium', label: 'Medium', dot: 'bg-mitigated' },
+  { value: 'high', label: 'High', dot: 'bg-risk' },
+];
+
+function SeveritySelect({
+  value, onChange, labelledBy,
+}: {
+  value: Severity | null;
+  onChange: (v: Severity) => void;
+  labelledBy?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = SEVERITY_OPTIONS.find(o => o.value === value) ?? null;
+
+  return (
+    <div
+      className="relative"
+      onKeyDown={e => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-labelledby={labelledBy}
+        className={`w-full h-10 px-3 flex items-center justify-between gap-2 rounded-lg border bg-white text-[0.8125rem] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200 ${
+          open ? 'border-brand-300 ring-2 ring-brand-200' : 'border-canvas-border hover:border-brand-200'
+        }`}
+      >
+        {selected ? (
+          <span className="flex items-center gap-2 text-ink-800">
+            <span className={`w-2 h-2 rounded-full ${selected.dot}`} aria-hidden="true" />
+            {selected.label}
+          </span>
+        ) : (
+          <span className="text-ink-400">Select…</span>
+        )}
+        <ChevronDown size={15} className={`shrink-0 text-ink-400 transition-transform ${open ? 'rotate-180 text-brand-600' : ''}`} />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden="true" />
+          {/* Opens upward: this is the last field in an overflow-y-auto modal body,
+              so a downward menu would be clipped. Room above (Name + Description). */}
+          <div
+            role="listbox"
+            aria-labelledby={labelledBy}
+            className="absolute left-0 right-0 bottom-full mb-1 z-20 bg-white border border-canvas-border rounded-lg py-1 shadow-lg"
+          >
+            {SEVERITY_OPTIONS.map(o => {
+              const isSel = o.value === value;
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="option"
+                  aria-selected={isSel}
+                  onClick={() => { onChange(o.value); setOpen(false); }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-[0.8125rem] cursor-pointer transition-colors ${
+                    isSel ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-700 hover:bg-paper-50'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${o.dot}`} aria-hidden="true" />
+                  {o.label}
+                  {isSel && <Check size={13} className="ml-auto text-brand-600" />}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
   );
 }

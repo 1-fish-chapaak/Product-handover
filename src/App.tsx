@@ -1,7 +1,8 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sparkles } from 'lucide-react';
-import { useAppState } from './hooks/useAppState';
+import { useAppState, type View } from './hooks/useAppState';
+import type { ControlDetail } from './components/engagement/engagementData';
 import { ToastProvider } from './components/shared/Toast';
 import { BulkRunProgressProvider } from './components/shared/BulkRunProgress';
 import { CurrentUserProvider, useCurrentUser } from './context/CurrentUserContext';
@@ -23,7 +24,7 @@ import RiskRegister from './components/audit/RiskRegister';
 import AuditExecution from './components/audit/AuditExecution';
 import DashboardView from './components/dashboard/DashboardView';
 import DashboardListPage from './components/dashboard/DashboardListPage';
-import ReportsView, { CUSTOM_TEMPLATES } from './components/reports/ReportsView';
+import ReportsView, { CUSTOM_TEMPLATES, SEED_APPROVED_TEMPLATE } from './components/reports/ReportsView';
 import { REPORT_TEMPLATES } from './data/mockData';
 import HomeView from './components/home/HomeView';
 import RecentsView from './components/recents/RecentsView';
@@ -33,7 +34,6 @@ import EmailPreviewModal from './components/modals/EmailPreviewModal';
 import ShareModal from './components/modals/ShareModal';
 import PowerBIImportWizard from './components/modals/PowerBIImportWizard';
 import ReportBuilder from './components/reports/ReportBuilder';
-import AuditPlanningView from './components/audit/AuditPlanningView';
 import AuditPlanningPage from './components/audit/AuditPlanningPage';
 import EngagementsView from './components/audit/EngagementsView';
 import SoxIcfrApp from './components/sox-icfr/SoxIcfrApp';
@@ -51,16 +51,21 @@ import ControlLibraryView from './components/governance/ControlLibraryView';
 import ControlTestingView from './components/execution/ControlTestingView';
 import EvidenceView from './components/execution/EvidenceView';
 import AIConciergeView from './components/intelligence/AIConciergeView';
+import DocumentForensicsView from './components/intelligence/concierge/tools/DocumentForensicsView';
+import ImageAnalyticsView from './components/intelligence/concierge/tools/ImageAnalyticsView';
+import SpeechAuditorView from './components/intelligence/concierge/tools/SpeechAuditorView';
+import TableExtractorView from './components/intelligence/concierge/tools/TableExtractorView';
+import MedicalReportReaderView from './components/intelligence/concierge/tools/MedicalReportReaderView';
+import InsightsAnomalyView from './components/intelligence/concierge/tools/InsightsAnomalyView';
+import RACMGeneratorView from './components/intelligence/concierge/tools/RACMGeneratorView';
 import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
 import type { ComposerContext } from './components/chat/composerContext';
 import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
 import WorkflowExecutor from './components/workflow/WorkflowExecutor';
 import WorkflowEditInChatJourney from './components/workflow-edit-in-chat/WorkflowEditInChatJourney';
-import EngagementDetailView from './components/engagement/EngagementDetailView';
 import ControlDetailDrawer from './components/engagement/ControlDetailDrawer';
 // V2 Execution placeholder — old execution UI detached from main flow
-import EngagementExecutionV2Placeholder from './components/engagement-execution-v2/EngagementExecutionV2Placeholder';
 import EngagementExecutionV2 from './components/engagement-execution-v2/EngagementExecutionV2';
 import ManageExceptionsView from './components/exceptions/ManageExceptionsView';
 import WorkingPaperPanel from './components/execution/WorkingPaperPanel';
@@ -158,6 +163,7 @@ function AppInner() {
     closeExecutionPanel,
     setExceptionRole,
     launchWorkflowBuilderWithPrompt,
+    launchWorkflowBuilderInChat,
     setWorkflowBuilderSeedPrompt,
     openNotificationDrawer,
     closeNotificationDrawer,
@@ -233,57 +239,60 @@ function AppInner() {
     document.addEventListener('mouseup', onUp);
   }, [artifactPanelPx]);
   const [controlDrawerId, setControlDrawerId] = useState<string | null>(null);
-  const [controlDrawerData, setControlDrawerData] = useState<any>(null);
+  const [controlDrawerData, setControlDrawerData] = useState<ControlDetail | null>(null);
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
   const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
-  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' };
-  const [racmEditorContext, setRacmEditorContext] = useState<RacmEditorContext | null>(null);
+  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm'; backLabel?: string; sourceFiles?: string[] };
+  // Deep-link support: when this tab is opened at ?view=racm-full-editor (the
+  // "Open in editor" new tab), restore the editor context at init so there's no
+  // mount-time setState / double render. getInitialView (useAppState) already
+  // selects the matching view for racm-full-editor and audit-risk-register.
+  const [racmEditorContext, setRacmEditorContext] = useState<RacmEditorContext | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') !== 'racm-full-editor') return null;
+    return {
+      racmId: params.get('racmId') ?? '',
+      racmName: params.get('racmName') ?? 'RACM',
+      processLabel: params.get('processLabel') ?? '',
+      backView: (params.get('backView') as RacmEditorContext['backView']) ?? 'business-processes',
+      backLabel: params.get('backLabel') ?? undefined,
+    };
+  });
   const openRacmFullEditor = (ctx: RacmEditorContext) => {
     setRacmEditorContext(ctx);
     setView('racm-full-editor');
   };
-  // Deep-link support: when this tab is opened at ?view=racm-full-editor (the
-  // "Open in editor" new tab), restore the editor context and show it. Back goes
-  // to the Process Hub.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('view') === 'racm-full-editor') {
-      setRacmEditorContext({
-        racmId: params.get('racmId') ?? '',
-        racmName: params.get('racmName') ?? 'RACM',
-        processLabel: params.get('processLabel') ?? '',
-        backView: 'business-processes',
-      });
-      setView('racm-full-editor');
-    } else if (params.get('view') === 'audit-risk-register') {
-      // Deep-link: "open risk detail in a new tab" lands here with ?risk=RSK-xxx.
-      // RiskRegister reads the risk param itself and shows its full detail page.
-      setView('audit-risk-register');
-    }
-  }, []); // run once on mount
   type CustomTemplate = typeof CUSTOM_TEMPLATES[number];
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
   // The old demo seeds — filtered out of any previously persisted blob so the
   // Custom section only ever shows templates the user actually created.
   const DEMO_TEMPLATE_IDS = new Set(['ct-custom-01', 'ct-custom-02', 'ct-003', 'ct-004', 'ct-005', 'ct-006']);
+  // A seeded approved-format template so the §5 format-match verdict is clickable
+  // without first uploading twice. Prepended if absent (a manual delete sticks
+  // for the session; it returns on a fresh load — it's a demo fixture).
+  const seed = SEED_APPROVED_TEMPLATE as unknown as CustomTemplate;
+  const withSeed = (list: CustomTemplate[]) =>
+    list.some(t => t.id === seed.id) ? list : [seed, ...list];
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>(() => {
     try {
       const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          return (parsed as CustomTemplate[]).filter(t => !DEMO_TEMPLATE_IDS.has(t.id));
+          return withSeed((parsed as CustomTemplate[]).filter(t => !DEMO_TEMPLATE_IDS.has(t.id)));
         }
       }
     } catch { /* ignore */ }
-    return [];
+    return withSeed([]);
   });
   useEffect(() => {
     try { localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(customTemplates)); } catch { /* ignore */ }
   }, [customTemplates]);
   const addCustomTemplate = (t: CustomTemplate) => setCustomTemplates(prev => [t, ...prev]);
   const removeCustomTemplate = (id: string) => setCustomTemplates(prev => prev.filter(t => t.id !== id));
+  const updateCustomTemplate = (t: CustomTemplate) => setCustomTemplates(prev => prev.map(x => x.id === t.id ? t : x));
 
   useEffect(() => {
     if (mainScrollRef.current) {
@@ -305,6 +314,9 @@ function AppInner() {
   // switching to the Reports view and passing the id down so ReportsView
   // can open the report in its full-page view.
   const [focusReportId, setFocusReportId] = useState<string | null>(null);
+  // One-shot: when the SOX report flow routes to Engagements, open it pre-filtered
+  // to Compliance. Cleared on consume so plain visits stay unfiltered.
+  const [engagementsSoxFilter, setEngagementsSoxFilter] = useState(false);
   useEffect(() => {
     const handler = (e: Event) => {
       const id = (e as CustomEvent<{ id: string }>).detail?.id;
@@ -332,7 +344,7 @@ function AppInner() {
       if (detail.kind === 'process' && detail.bpId) {
         setSelectedBP(detail.bpId);
       } else {
-        setView(detail.view as any);
+        setView(detail.view as View);
         // Pass the picked id along as a deep-link focus hint — same pattern
         // the notification drawer uses to highlight the destination row.
         setFocusedNotificationRefId(detail.id);
@@ -344,6 +356,10 @@ function AppInner() {
 
   useEffect(() => {
     if (state.view === 'chat' || state.view === 'home') return;
+    // Intentional: flash a 400ms skeleton on every view change. The extra render
+    // this triggers is the desired behaviour (skeleton in, then out), not the
+    // accidental cascading-render the rule guards against.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setViewLoading(true);
     const t = setTimeout(() => setViewLoading(false), 400);
     return () => clearTimeout(t);
@@ -556,6 +572,9 @@ function AppInner() {
                     status: 'draft',
                     pages: 1,
                     queries: 1,
+                    // Render the added result as a query card (carries the
+                    // severity chosen in the Add-to-Report form).
+                    generatedQueries: payload.generatedQuery ? [payload.generatedQuery] : undefined,
                   };
                   try {
                     const key = GENERATED_REPORTS_KEY;
@@ -624,7 +643,7 @@ function AppInner() {
                   window.history.pushState({ section: 'workflows' }, '', '?section=workflows');
                 }
                 setSelectedWorkflow(null);
-                setView('business-processes' as any);
+                setView('business-processes');
                 setWorkflowBackView(null);
               } else if (fromLibrary) {
                 setView('workflow-library');
@@ -662,7 +681,7 @@ function AppInner() {
                   window.history.pushState({ section: 'workflows' }, '', '?section=workflows');
                 }
                 setSelectedWorkflow(null);
-                setView('business-processes' as any);
+                setView('business-processes');
               } else {
                 setSelectedWorkflow(null);
               }
@@ -705,7 +724,7 @@ function AppInner() {
             onNavigateToExecution={(engId) => {
               setEngagementBackView('programs');
               openAuditExecution(engId);
-              setView('engagement-detail' as any);
+              setView('engagement-detail');
             }}
           />
         );
@@ -720,7 +739,7 @@ function AppInner() {
             onOpenEngagement={(engId) => {
               setEngagementBackView('business-processes');
               openAuditExecution(engId);
-              setView('engagement-detail' as any);
+              setView('engagement-detail');
             }}
             onOpenWorkflowDetail={(wfId) => {
               setWorkflowBackView('business-processes');
@@ -743,7 +762,7 @@ function AppInner() {
       case 'audit-risk-register':
         return (
           <RiskRegister
-            onNavigate={(v) => setView(v as any)}
+            onNavigate={(v) => setView(v as View)}
           />
         );
 
@@ -817,8 +836,10 @@ function AppInner() {
             customTemplates={customTemplates}
             onAddCustomTemplate={addCustomTemplate}
             onRemoveCustomTemplate={removeCustomTemplate}
+            onUpdateCustomTemplate={updateCustomTemplate}
             focusReportId={focusReportId}
             onFocusReportConsumed={() => setFocusReportId(null)}
+            onOpenSox={() => { setEngagementsSoxFilter(true); setView('engagements'); }}
           />
         );
 
@@ -843,13 +864,15 @@ function AppInner() {
         );
 
       case 'sox-icfr':
-        return <SoxIcfrApp onBack={() => setView('engagements')} />;
+        return <SoxIcfrApp engagementId={state.selectedEngagementId ?? undefined} onBack={() => setView('engagements')} />;
 
       case 'engagements':
         return (
           <EngagementsView
             onOpenAuditPlanning={() => setView('audit-planning')}
             onOpenEngagement={openEngagement}
+            initialTypeFilter={engagementsSoxFilter ? 'Compliance' : undefined}
+            onInitialFilterConsumed={() => setEngagementsSoxFilter(false)}
           />
         );
 
@@ -861,7 +884,7 @@ function AppInner() {
             onOpenExecution={(engId) => {
               setEngagementBackView('audit-planning');
               openAuditExecution(engId);
-              setView('engagement-detail' as any);
+              setView('engagement-detail');
             }}
             onOpenCaseManagement={openCaseManagement}
             onOpenRacmFullEditor={(override) => openRacmFullEditor({
@@ -913,7 +936,7 @@ function AppInner() {
           onNavigateToExecution={(engId) => {
           setEngagementBackView('audit-planning');
           openAuditExecution(engId);
-          setView('engagement-detail' as any);
+          setView('engagement-detail');
         }} />;
 
       case 'knowledge-hub':
@@ -935,9 +958,12 @@ function AppInner() {
         return (
           <RacmFullPageEditor
             onBack={() => setView(racmEditorContext?.backView ?? 'engagement-overview')}
+            backView={racmEditorContext?.backView}
+            backLabel={racmEditorContext?.backLabel}
             racmName={racmEditorContext?.racmName ?? 'Procurement SOP · Budget to Payment RACM'}
             racmId={racmEditorContext?.racmId}
             processLabel={racmEditorContext?.processLabel}
+            sourceFiles={racmEditorContext?.sourceFiles}
           />
         );
 
@@ -969,9 +995,35 @@ function AppInner() {
 
       // Intelligence — AI Concierge
       case 'ai-concierge':
+        // The "Workflow Builder" tile redirects into the Ask IRA chat (Workflow
+        // mode + Recent Workflows launcher) rather than the standalone journey.
+        return <AIConciergeView setView={setView} onLaunchWorkflowBuilder={launchWorkflowBuilderInChat} />;
       case 'ai-concierge-forensics':
+        return <DocumentForensicsView onBack={() => setView('ai-concierge')} />;
       case 'ai-concierge-table-extractor':
-        return <AIConciergeView setView={setView} onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt} />;
+        return <TableExtractorView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-image':
+        return <ImageAnalyticsView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-speech':
+        return <SpeechAuditorView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-medical':
+        return <MedicalReportReaderView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-insights':
+        return <InsightsAnomalyView onBack={() => setView('ai-concierge')} />;
+      case 'ai-concierge-racm':
+        return (
+          <RACMGeneratorView
+            onBack={() => setView('ai-concierge')}
+            onOpenEditor={(name, sourceFiles) => openRacmFullEditor({
+              racmId: 'racm-generated',
+              racmName: name,
+              processLabel: '',
+              backView: 'ai-concierge-racm',
+              backLabel: 'Back to RACM Generator',
+              sourceFiles,
+            })}
+          />
+        );
 
       case 'ai-concierge-workflow-builder':
         return (
@@ -1131,7 +1183,7 @@ function AppInner() {
           {controlDrawerId && (
             <ControlDetailDrawer
               controlId={controlDrawerId}
-              controlData={controlDrawerData}
+              controlData={controlDrawerData ?? undefined}
               onClose={() => { setControlDrawerId(null); setControlDrawerData(null); }}
             />
           )}

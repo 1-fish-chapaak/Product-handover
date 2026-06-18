@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, type ElementType } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft,
@@ -14,9 +14,13 @@ import {
   UserPlus,
   CalendarClock,
   Workflow,
+  ClipboardList,
+  MessageSquare,
+  Send,
+  X,
 } from 'lucide-react';
-import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, GRC_BULK_ACTIONS, type GrcException, type GrcExceptionSeverity, type GrcActivityEntry, type GrcExceptionClassification, type GrcReviewStatus, type GrcDueDateRevision, type GrcActionStatus, type GrcCaseDetail } from '../../data/mockData';
-import { deriveStatus, requiresActionPlan, isMemberEligibleForDrawer, nextActionableId, type ExceptionActionKind, type DrawerActionType } from './statusModel';
+import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, GRC_BULK_ACTIONS, type GrcException, type GrcExceptionSeverity, type GrcActivityEntry, type GrcActivityAuthorRole, type GrcExceptionClassification, type GrcReviewStatus, type GrcDueDateRevision, type GrcActionStatus, type GrcCaseDetail } from '../../data/mockData';
+import { deriveStatus, requiresActionPlan, isMemberEligibleForDrawer, nextActionableId, auditorReviewStage, type ExceptionActionKind, type DrawerActionType } from './statusModel';
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
 import { QUERY_TABLES } from '../../data/queryGraphs';
 import type { ExceptionRole } from '../../hooks/useAppState';
@@ -33,16 +37,18 @@ import {
   BulkRequestDueDateDrawer,
   BulkReviewDueDateDrawer,
   BulkScopeChooser,
+  BulkReviewDrawer,
   type ScopeCandidate,
+  type BulkReviewSubmission,
 } from './ReviewDrawers';
 import ActionHubView, { CircularProgress } from './ActionHubView';
 import GenerateATRModal from './GenerateATRModal';
 import ExceptionsTable from './ExceptionsTable';
 import SampleDataModal, { type SampleDataPayload } from './SampleDataModal';
-import BulkClassifyModal, { type BulkClassifyPayload } from './BulkClassifyModal';
 import BulkAssignDrawer, { type BulkAssignPayload } from './BulkAssignDrawer';
 import ExceptionDetailDrawer from './ExceptionDetailDrawer';
 import ActivityTimelineDrawer from './ActivityTimelineDrawer';
+import { markCommentUnread, clearCommentUnread } from './commentStore';
 import { useToast } from '../shared/Toast';
 // ─── Assignment & Approval Workflow module (configurable, data-driven) ───
 import { WorkflowProvider } from './workflow/WorkflowContext';
@@ -54,8 +60,15 @@ import type { Assignment } from './workflow/workflowTypes';
 // `scopeIds` is the set of cases the action applies to — always includes
 // `exceptionId` (the opened/primary case that drives the drawer's content).
 // Defaults to `[exceptionId]` for non-bulk cases (today's single-case behavior).
+// `bulkSkipped` (bulk classify only) carries how many selected cases were left
+// out because they're locked by the auditor flow — surfaced in the drawer.
 type DrawerState =
-  | { type: DrawerActionType; exceptionId: string; scopeIds: string[] }
+  | {
+      type: DrawerActionType;
+      exceptionId: string;
+      scopeIds: string[];
+      bulkSkipped?: { awaitingReview: number; approved: number };
+    }
   | null;
 
 // Human label per action — used in the bulk scope chooser header.
@@ -67,6 +80,41 @@ const ACTION_LABEL: Record<DrawerActionType, string> = {
   requestDueDate: 'Request Date Change',
   reviewDueDate: 'Review Date Change',
 };
+
+// The Auditor review state-transition — the single source of truth shared by the
+// single Review drawer and Bulk Review, so both flows move a case identically.
+function reviewTransition(
+  ex: GrcException,
+  input: { decision: 'approve' | 'reject'; implementation: 'Implemented' | 'Partially Implemented' | null },
+): { actionStatus: GrcActionStatus; patch: Partial<GrcException>; log: string } {
+  const actionable = requiresActionPlan(ex.classification);
+  const approved = input.decision === 'approve';
+
+  // Stage 1 · Plan review — accept/reject the management action plan.
+  if (actionable && ex.actionPhase === 'plan-review') {
+    if (approved) return {
+      actionStatus: 'Pending',
+      patch: { actionPhase: 'in-progress', status: deriveStatus(ex.classification, 'Pending', 'Pending') },
+      log: 'Accepted the management action plan — Risk Owner to implement before the due date.',
+    };
+    return {
+      actionStatus: 'Discrepancy',
+      patch: { actionReview: 'Rejected', actionPhase: undefined, status: deriveStatus(ex.classification, 'Rejected', 'Discrepancy') },
+      log: 'Rejected the management action plan — reopened for the Risk Owner to revise.',
+    };
+  }
+
+  // Stage 2 · Completion review (actionable) / disposition review (non-actionable).
+  const actionReview: GrcReviewStatus = approved ? 'Approved' : 'Rejected';
+  const actionStatus: GrcActionStatus = approved
+    ? (actionable ? (input.implementation ?? 'Implemented') : 'Implemented')
+    : 'Discrepancy';
+  const nextPhase = (approved && actionable && input.implementation === 'Partially Implemented') ? ('in-progress' as const) : undefined;
+  const log = approved
+    ? (actionable ? `Reviewed the completed action — ${input.implementation ?? 'Implemented'}` : 'Approved the classification — no action plan required')
+    : (actionable ? 'Marked the completed action as Discrepancy — reopened for the Risk Owner' : 'Rejected the classification — back to the Risk Owner');
+  return { actionStatus, patch: { actionReview, actionPhase: nextPhase, status: deriveStatus(ex.classification, actionReview, actionStatus) }, log };
+}
 
 interface ManageExceptionsViewProps {
   role: ExceptionRole;
@@ -233,16 +281,12 @@ function deriveExceptionsFromOutputTable(
       const pct = parseFloat(String(row[matchCol]).replace('%', ''));
       if (!Number.isNaN(pct)) severity = pct >= 95 ? 'High' : pct >= 85 ? 'Medium' : 'Low';
     }
-    // Seed flags + dueDate on a few rows so the demo shows Overdue/Bulk chips
-    // the same way the default GRC_EXCEPTIONS mock does.
+    // Seed dueDate on a few rows so the demo shows the dynamic Overdue chip.
+    // Bulk grouping is NOT seeded — the Bulk chip appears only once a Risk Owner
+    // actually bulk-classifies cases together (select cases → Bulk Classify).
     const flags: Array<'Overdue' | 'Bulk'> = [];
-    let bulkId: string | undefined;
+    const bulkId: string | undefined = undefined;
     let dueDate: string | undefined;
-    // Two demoable bulk groups so the scope chooser has genuinely linked cases:
-    //   ACT002 — two unclassified cases (the Risk Owner can classify them together)
-    //   ACT001 — two classified cases awaiting plan review (the Auditor reviews them together)
-    if (i === 0 || i === 5) { flags.push('Bulk'); bulkId = 'ACT002'; }
-    else if (i === 2 || i === 3) { flags.push('Bulk'); bulkId = 'ACT001'; }
     if (i % 5 === 0) {
       // Past due date so the dynamic Overdue chip renders via the dueDate path.
       dueDate = '2026-04-15';
@@ -291,11 +335,11 @@ function deriveExceptionsFromOutputTable(
       };
     }
 
-    // Seed an Actionable ID for the pre-classified actionable rows. The two
-    // ACT001-bundled rows (i=2,3) share one ID, mirroring a bulk classification.
+    // Seed a distinct Actionable ID for each pre-classified actionable row (they
+    // are independent until a Risk Owner bulk-classifies cases together).
     let actionableId: string | undefined;
     if (requiresActionPlan(classification)) {
-      actionableId = (i === 2 || i === 3) ? 'ACT-0002' : i === 1 ? 'ACT-0001' : i === 4 ? 'ACT-0003' : undefined;
+      actionableId = i === 1 ? 'ACT-0001' : i === 2 ? 'ACT-0002' : i === 3 ? 'ACT-0003' : i === 4 ? 'ACT-0004' : undefined;
     }
 
     return {
@@ -373,16 +417,25 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
   const [activityDrawerOpen, setActivityDrawerOpen] = useState(false);
   const { addToast } = useToast();
   const logEvent = useAuditLog();
-  const [bulkClassifyOpen, setBulkClassifyOpen] = useState(false);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [bulkRequestDueOpen, setBulkRequestDueOpen] = useState(false);
   const [bulkReviewDueOpen, setBulkReviewDueOpen] = useState(false);
+  // Auditor Bulk Review — the reviewable cases + a breakdown of what was skipped.
+  const [bulkReview, setBulkReview] = useState<
+    { cases: GrcException[]; skipped: { awaitingRiskOwner: number; alreadyReviewed: number } } | null
+  >(null);
   /** When set, opens the BulkAssignDrawer scoped to just this one case
    *  (from a per-row "Assign" click). Mutually exclusive with bulkAssignOpen
    *  at the UI level — closing either clears both. */
   const [singleAssignCase, setSingleAssignCase] = useState<GrcException | null>(null);
   const [detailExceptionId, setDetailExceptionId] = useState<string | null>(null);
-  const [nextActionableNum, setNextActionableNum] = useState(2);
+  // Cross-persona comment channel — bump forces a re-render after we mutate a
+  // case's activity log in place (same pattern the action handlers use).
+  const [, setCommentTick] = useState(0);
+  const [commentModalOpen, setCommentModalOpen] = useState(false);
+  const [bulkCommentText, setBulkCommentText] = useState('');
+  // Bulk Actions dropdown — one CTA grouping every multi-select action.
+  const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
   const [atrExpanded, setAtrExpanded] = useState(false);
 
   const sourceQuery = useMemo(() => {
@@ -439,6 +492,73 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
   // Suffix appended to each case's activity log when an action spans a bulk group.
   const bulkSuffix = (n: number) => (n > 1 ? ` · applied to ${n} linked cases` : '');
 
+  // ── Always-on comment channel ───────────────────────────────────────────
+  // Either persona can comment on any case — individually or in bulk — no matter
+  // its status, phase, or review outcome. The comment lands in the case's
+  // activity log and the OTHER persona is notified (row indicator) until they
+  // open the case. This is never disabled: it's how the two personas talk.
+  const personaName = (r: ExceptionRole) => (r === 'auditor' ? 'Auditor' : 'Risk Owner');
+  const postComment = (text: string, ids: string[], attachment?: { name: string }) => {
+    const body = text.trim();
+    if ((!body && !attachment) || ids.length === 0) return;
+    const authorRole: GrcActivityAuthorRole = persona === 'auditor' ? 'Auditor' : 'Risk Owner';
+    const recipient: ExceptionRole = persona === 'risk-owner' ? 'auditor' : 'risk-owner';
+    const stamp = fmtStamp(new Date().toISOString());
+    const baseMessage = ids.length > 1 ? `Commented · sent to ${ids.length} cases` : 'Added a comment';
+    ids.forEach((id, i) => {
+      const entry: GrcActivityEntry = {
+        id: `act-comment-${id}-${Date.now()}-${i}`,
+        author: 'You',
+        role: authorRole,
+        timestamp: stamp,
+        message: baseMessage,
+        kind: 'comment',
+        ...(body ? { comment: body } : {}),
+        ...(attachment ? { attachment } : {}),
+      };
+      const detail = GRC_CASE_DETAILS[id];
+      if (detail) detail.activityLog = [entry, ...detail.activityLog];
+      else GRC_CASE_DETAILS[id] = {
+        classificationJustification: '', actionTitle: '', actionDueDate: '',
+        actionDescription: '', actionStatus: 'Pending', activityLog: [entry],
+      };
+    });
+    markCommentUnread(ids, recipient);
+    setCommentTick(t => t + 1);
+    logEvent({
+      action: 'Update',
+      description: ids.length > 1
+        ? `Commented on ${ids.length} exceptions as the ${authorRole}`
+        : `Commented on ${ids[0]} as the ${authorRole}`,
+      module: 'Exceptions', entity: 'Exception',
+    });
+    addToast({ type: 'success', message: ids.length > 1
+      ? `Comment shared on ${ids.length} cases — the ${personaName(recipient)} will see it.`
+      : `Comment shared — the ${personaName(recipient)} will see it.` });
+  };
+
+  // Open a case's detail and clear this persona's unread comment badge for it.
+  const openDetail = (id: string) => {
+    clearCommentUnread(id, persona);
+    setDetailExceptionId(id);
+    setCommentTick(t => t + 1);
+  };
+
+  // Opening a Classify/Action review modal counts as reading the case's comments
+  // → clear this persona's unread badge for the open case (and any linked scope).
+  useEffect(() => {
+    if (!drawer) return;
+    const ids = drawer.scopeIds ?? [drawer.exceptionId];
+    ids.forEach(id => clearCommentUnread(id, persona));
+    setCommentTick(t => t + 1);
+  }, [drawer, persona]);
+
+  // The Bulk Actions menu only makes sense with a selection — close it when the
+  // selection clears so it never lingers open against an inactive button.
+  useEffect(() => {
+    if (selected.size === 0) setBulkMenuOpen(false);
+  }, [selected.size]);
+
   // ── Bulk-action funnel ──────────────────────────────────────────────────
   // Every single action routes through beginAction. If the case belongs to a
   // bulk group with more than one applicable member, the scope chooser opens
@@ -449,7 +569,174 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     setDrawer({ type, exceptionId: ex.id, scopeIds });
   };
 
+  // Launch the shared Classify drawer over the selected cases — this IS the bulk
+  // classify (same UI as the single classify, applied to every editable case).
+  //
+  // Once an exception is in the auditor flow it must not be silently overwritten:
+  // cases awaiting auditor review and auditor-approved cases are LOCKED and skipped.
+  // Only editable cases (unclassified, or auditor-rejected) are carried forward —
+  // and the Risk Owner gets a clear, numbered breakdown of what was left out.
+  const beginBulkClassify = () => {
+    const selectedCases = exceptions.filter(e => selected.has(e.id));
+    if (selectedCases.length === 0) return;
+
+    const eligible = selectedCases.filter(e => isMemberEligibleForDrawer(e, 'classify', persona));
+    const locked = selectedCases.filter(e => !isMemberEligibleForDrawer(e, 'classify', persona));
+    const isApproved = (e: GrcException) => e.actionReview === 'Approved' || e.actionReview === 'Implemented';
+    const approved = locked.filter(isApproved);
+    const awaitingReview = locked.filter(e => !isApproved(e));
+
+    // Record the skip decision on every locked case so the trail is complete.
+    if (locked.length > 0) {
+      const nowIso = new Date().toISOString();
+      locked.forEach(e => {
+        const reason = isApproved(e) ? 'auditor-approved' : 'awaiting auditor review';
+        const entry: GrcActivityEntry = {
+          id: `act-bulkskip-${e.id}-${Date.now()}`,
+          author: 'You',
+          role: 'Risk Owner',
+          timestamp: fmtStamp(nowIso),
+          message: `Excluded from a bulk classification — case is ${reason} and is locked from re-classification.`,
+        };
+        const detail = GRC_CASE_DETAILS[e.id];
+        if (detail) detail.activityLog = [entry, ...detail.activityLog];
+        else GRC_CASE_DETAILS[e.id] = {
+          classificationJustification: '', actionTitle: '', actionDueDate: '',
+          actionDescription: '', actionStatus: 'Pending', activityLog: [entry],
+        };
+      });
+      logEvent({
+        action: 'Update',
+        description: `Bulk classify: ${eligible.length} editable case${eligible.length === 1 ? '' : 's'} included; ${locked.length} skipped (${awaitingReview.length} awaiting auditor review, ${approved.length} auditor-approved)`,
+        module: 'Exceptions', entity: 'Exception',
+      });
+    }
+
+    // Nothing editable in the selection → don't open the drawer; explain why.
+    if (eligible.length === 0) {
+      addToast({
+        type: 'info',
+        message: `None of the ${selectedCases.length} selected case${selectedCases.length === 1 ? '' : 's'} can be re-classified — ${awaitingReview.length} awaiting auditor review and ${approved.length} auditor-approved are locked.`,
+      });
+      setSelected(new Set());
+      return;
+    }
+
+    // Some were skipped → proceed with the editable ones and report the breakdown.
+    if (locked.length > 0) {
+      addToast({
+        type: 'info',
+        message: `Bulk classify applies to ${eligible.length} editable case${eligible.length === 1 ? '' : 's'}. Skipped ${locked.length}: ${awaitingReview.length} awaiting auditor review, ${approved.length} auditor-approved (locked to protect the auditor's decision).`,
+      });
+    }
+
+    setDrawer({
+      type: 'classify',
+      exceptionId: eligible[0].id,
+      scopeIds: eligible.map(e => e.id),
+      bulkSkipped: locked.length > 0 ? { awaitingReview: awaitingReview.length, approved: approved.length } : undefined,
+    });
+  };
+
+  // ── Auditor Bulk Review ─────────────────────────────────────────────────
+  // Review many selected cases at once. Only cases that actually need the
+  // Auditor's review are carried forward; the rest are skipped with a clear,
+  // numbered breakdown. A single reviewable case opens the focused single drawer.
+  const beginBulkReview = () => {
+    const selectedCases = exceptions.filter(e => selected.has(e.id));
+    if (selectedCases.length === 0) return;
+
+    const reviewable = selectedCases.filter(e => auditorReviewStage(e) !== null);
+    const locked = selectedCases.filter(e => auditorReviewStage(e) === null);
+    const isDone = (e: GrcException) => e.actionReview === 'Approved' || e.actionReview === 'Implemented';
+    const alreadyReviewed = locked.filter(isDone);
+    const awaitingRiskOwner = locked.filter(e => !isDone(e));
+
+    if (locked.length > 0) {
+      logEvent({
+        action: 'Update',
+        description: `Bulk review: ${reviewable.length} ready; ${locked.length} skipped (${awaitingRiskOwner.length} awaiting Risk Owner, ${alreadyReviewed.length} already reviewed)`,
+        module: 'Exceptions', entity: 'Exception',
+      });
+    }
+
+    if (reviewable.length === 0) {
+      addToast({
+        type: 'info',
+        message: `None of the ${selectedCases.length} selected case${selectedCases.length === 1 ? '' : 's'} are ready for your review — ${awaitingRiskOwner.length} awaiting the Risk Owner, ${alreadyReviewed.length} already reviewed.`,
+      });
+      setSelected(new Set());
+      return;
+    }
+
+    // Exactly one reviewable case → the focused single Review drawer is clearer.
+    if (reviewable.length === 1) {
+      setSelected(new Set());
+      beginAction('action', reviewable[0]);
+      return;
+    }
+
+    if (locked.length > 0) {
+      addToast({
+        type: 'info',
+        message: `Bulk review covers ${reviewable.length} case${reviewable.length === 1 ? '' : 's'} ready for review. Skipped ${locked.length}: ${awaitingRiskOwner.length} awaiting the Risk Owner, ${alreadyReviewed.length} already reviewed.`,
+      });
+    }
+
+    setBulkReview({ cases: reviewable, skipped: { awaitingRiskOwner: awaitingRiskOwner.length, alreadyReviewed: alreadyReviewed.length } });
+  };
+
+  // Apply every Bulk Review decision in one pass, reusing the shared transition so
+  // each case moves exactly as it would through the single Review drawer.
+  const applyBulkReview = (subs: BulkReviewSubmission[]) => {
+    if (subs.length === 0) return;
+    const nowIso = new Date().toISOString();
+    const byId = new Map(subs.map(s => [s.id, s]));
+    let approvedCount = 0;
+    let rejectedCount = 0;
+
+    subs.forEach(s => {
+      const ex = exceptions.find(e => e.id === s.id);
+      if (!ex) return;
+      const t = reviewTransition(ex, { decision: s.decision, implementation: s.implementation });
+      if (s.decision === 'approve') approvedCount += 1; else rejectedCount += 1;
+      const detail = GRC_CASE_DETAILS[s.id];
+      if (detail) {
+        detail.actionStatus = t.actionStatus;
+        detail.activityLog = [{
+          id: `act-bulkrev-${s.id}-${Date.now()}`,
+          author: 'You', role: 'Auditor', timestamp: fmtStamp(nowIso),
+          message: `${t.log} · part of a bulk review of ${subs.length} cases`,
+          comment: s.comment || undefined,
+        }, ...detail.activityLog];
+      }
+    });
+
+    updateExceptions(list => list.map(e => {
+      const s = byId.get(e.id);
+      if (!s) return e;
+      const t = reviewTransition(e, { decision: s.decision, implementation: s.implementation });
+      return { ...e, ...t.patch, lastUpdated: nowIso.slice(0, 10) };
+    }));
+
+    logEvent({
+      action: 'Update',
+      description: `Bulk review submitted — ${subs.length} case${subs.length === 1 ? '' : 's'} reviewed (${approvedCount} approved/accepted, ${rejectedCount} rejected)`,
+      module: 'Exceptions', entity: 'Exception',
+    });
+    addToast({
+      type: 'success',
+      message: `Bulk review submitted — ${subs.length} case${subs.length === 1 ? '' : 's'} reviewed (${approvedCount} approved, ${rejectedCount} rejected).`,
+    });
+    setSelected(new Set());
+    setBulkReview(null);
+  };
+
   const beginAction = (type: DrawerActionType, ex: GrcException) => {
+    // A per-row Classify always acts on just that case — bulk classification is
+    // done explicitly via the toolbar (select cases → Bulk Classify). No chooser.
+    if (type === 'classify') { openDrawerWithScope(type, ex, [ex.id]); return; }
+
     // Resolve the group from the LIVE exceptions sharing this bulkId — robust to
     // both the default mock and query-derived rows (whose bulkId assignment may
     // differ from the static GRC_BULK_ACTIONS.caseIds).
@@ -463,10 +750,20 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
       isOpened: m.id === ex.id,
       eligible: m.id === ex.id || isMemberEligibleForDrawer(m, type, persona, ex),
       statusLabel: statusLabelFor(m),
+      classification: m.classification,
+      actionableId: m.actionableId,
     }));
     const eligibleCount = candidates.filter(c => c.eligible).length;
     // Only the opened case applies → no chooser needed.
     if (eligibleCount <= 1) { openDrawerWithScope(type, ex, [ex.id]); return; }
+
+    // Mark Action Complete applies to every linked case automatically — once the
+    // plan is approved, the action taken covers all linked exceptions. No chooser;
+    // the drawer surfaces the grouped cases instead.
+    if (type === 'complete') {
+      openDrawerWithScope(type, ex, candidates.filter(c => c.eligible).map(c => c.id));
+      return;
+    }
 
     setScopeChooser({ type, exceptionId: ex.id, candidates });
   };
@@ -596,7 +893,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
         <div className={`max-w-[1600px] mx-auto px-8 ${embedded ? 'pt-4 pb-0' : 'pt-8 pb-0'}`}>
           <div className="flex items-start justify-between gap-6">
             <div className="min-w-0">
-              {!embedded && <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">Manage Exceptions</h1>}
+              {!embedded && <h1 className="text-[34px] font-semibold tracking-tight text-ink-900 leading-[1.15]">Manage Exceptions</h1>}
               {embedded ? (
                 <h2 className="text-[16px] font-semibold text-ink-900 mb-3">Exceptions & Cases</h2>
               ) : (
@@ -800,81 +1097,95 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 setSingleAssignCase(ex);
               }}
               extraColumns={sourceQuery ? QUERY_TABLES[sourceQuery.id] : undefined}
-              onOpenDetail={(ex) => setDetailExceptionId(ex.id)}
+              onOpenDetail={(ex) => openDetail(ex.id)}
               headerLeading={
-                <div className="flex items-center gap-1.5">
-                  {/* Assignment & Approval Workflow — additive bulk action (both personas). */}
+                <div className="flex items-center gap-2">
+                  {/* Assignment & Approval Workflow — distinct workflow action. */}
                   <WorkflowAssignButton selectedIds={[...selected]} />
-                  {/* Bulk Classify — permission-gated. */}
-                  {can('exc_classify') && selected.size > 0 && (
-                    <button
-                      onClick={() => setBulkClassifyOpen(true)}
-                      title={`Bulk classify ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
-                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer transition-colors"
-                    >
-                      <Tag size={13} />
-                      Bulk Classify
-                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
-                        {selected.size}
-                      </span>
-                    </button>
-                  )}
-                  {/* Bulk Assign — permission-gated. */}
-                  {can('exc_assign') && selected.size > 0 && (
-                    <button
-                      onClick={() => setBulkAssignOpen(true)}
-                      title={`Bulk assign ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
-                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer transition-colors"
-                    >
-                      <UserPlus size={13} />
-                      Bulk Assign
-                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
-                        {selected.size}
-                      </span>
-                    </button>
-                  )}
-                  {/* Risk owner: bulk request a revised due date for eligible selected cases. */}
-                  {role === 'risk-owner' && bulkRequestEligible.length > 0 && (
-                    <button
-                      onClick={() => setBulkRequestDueOpen(true)}
-                      title={`Request a revised due date for ${bulkRequestEligible.length} selected case${bulkRequestEligible.length === 1 ? '' : 's'}`}
-                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-brand-700 bg-canvas-elevated border-canvas-border hover:border-brand-200 cursor-pointer transition-colors"
-                    >
-                      <CalendarClock size={13} />
-                      Request Date Change
-                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full tabular-nums">
-                        {bulkRequestEligible.length}
-                      </span>
-                    </button>
-                  )}
-                  {/* Auditor: bulk review pending revised-due-date requests. */}
-                  {role !== 'risk-owner' && bulkReviewEligible.length > 0 && (
-                    <button
-                      onClick={() => setBulkReviewDueOpen(true)}
-                      title={`Review ${bulkReviewEligible.length} pending due-date request${bulkReviewEligible.length === 1 ? '' : 's'}`}
-                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-white bg-mitigated border-mitigated hover:bg-mitigated-700 cursor-pointer transition-colors"
-                    >
-                      <CalendarClock size={13} />
-                      Review Date Changes
-                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
-                        {bulkReviewEligible.length}
-                      </span>
-                    </button>
-                  )}
-                  {/* Triage — permission-gated, available to any reviewing role. */}
-                  {can('exc_triage') && selected.size > 0 && (
-                    <button
-                      onClick={() => { logEvent({ action: 'Update', description: `Triaged ${selected.size} exception${selected.size === 1 ? '' : 's'}`, module: 'Exceptions', entity: 'Exception' }); addToast({ message: `Triaged ${selected.size} case${selected.size === 1 ? '' : 's'}.`, type: 'success' }); }}
-                      title={`Triage ${selected.size} selected case${selected.size === 1 ? '' : 's'}`}
-                      className="flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-[8px] border text-ink-700 bg-white border-border hover:bg-surface-2 cursor-pointer transition-colors"
-                    >
-                      <FlaskConical size={13} />
-                      Triage
-                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-ink-900/10 rounded-full tabular-nums">
-                        {selected.size}
-                      </span>
-                    </button>
-                  )}
+                  {/* Bulk Actions — one CTA grouping every multi-select action.
+                      Always visible; inactive until a case is selected, then it
+                      activates (and reveals the persona's applicable actions). */}
+                  {(() => {
+                    const active = selected.size > 0;
+                    const items: { key: string; label: string; icon: ElementType; count: number; onClick: () => void }[] = [
+                      { key: 'comment', label: 'Comment', icon: MessageSquare, count: selected.size, onClick: () => { setBulkCommentText(''); setCommentModalOpen(true); } },
+                      ...(role === 'risk-owner' && can('exc_classify')
+                        ? [{ key: 'classify', label: 'Bulk Classify', icon: Tag, count: selected.size, onClick: beginBulkClassify }]
+                        : []),
+                      ...(role !== 'risk-owner'
+                        ? [{ key: 'review', label: 'Bulk Review', icon: ClipboardList, count: selected.size, onClick: beginBulkReview }]
+                        : []),
+                      ...(can('exc_assign')
+                        ? [{ key: 'assign', label: 'Bulk Assign', icon: UserPlus, count: selected.size, onClick: () => setBulkAssignOpen(true) }]
+                        : []),
+                      ...(role === 'risk-owner' && bulkRequestEligible.length > 0
+                        ? [{ key: 'reqdue', label: 'Request Date Change', icon: CalendarClock, count: bulkRequestEligible.length, onClick: () => setBulkRequestDueOpen(true) }]
+                        : []),
+                      ...(role !== 'risk-owner' && bulkReviewEligible.length > 0
+                        ? [{ key: 'revdue', label: 'Review Date Changes', icon: CalendarClock, count: bulkReviewEligible.length, onClick: () => setBulkReviewDueOpen(true) }]
+                        : []),
+                    ];
+                    return (
+                      <div className="relative">
+                        <button
+                          type="button"
+                          disabled={!active}
+                          onClick={() => active && setBulkMenuOpen(o => !o)}
+                          aria-haspopup="menu"
+                          aria-expanded={bulkMenuOpen && active}
+                          title={active ? `Bulk actions for ${selected.size} selected case${selected.size === 1 ? '' : 's'}` : 'Select one or more cases to enable bulk actions'}
+                          className={`flex items-center gap-1.5 h-8 px-3 text-[12px] font-medium rounded-[8px] border transition-colors ${
+                            active
+                              ? 'text-white bg-brand-600 border-brand-600 hover:bg-brand-500 cursor-pointer'
+                              : 'text-ink-400 bg-canvas-elevated border-canvas-border cursor-not-allowed'
+                          }`}
+                        >
+                          <Layers size={13} />
+                          Bulk Actions
+                          {active && (
+                            <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-white/20 rounded-full tabular-nums">
+                              {selected.size}
+                            </span>
+                          )}
+                          <ChevronDown size={13} className={`transition-transform ${bulkMenuOpen && active ? 'rotate-180' : ''}`} />
+                        </button>
+                        <AnimatePresence>
+                          {bulkMenuOpen && active && (
+                            <>
+                              <div className="fixed inset-0 z-[55]" onClick={() => setBulkMenuOpen(false)} />
+                              <motion.div
+                                initial={{ opacity: 0, y: -4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -4 }}
+                                transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }}
+                                className="absolute left-0 top-full mt-1.5 z-[56] w-60 bg-canvas-elevated border border-canvas-border rounded-[10px] shadow-lg py-1"
+                                role="menu"
+                              >
+                                {items.map((item) => {
+                                  const Icon = item.icon;
+                                  return (
+                                    <button
+                                      key={item.key}
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => { setBulkMenuOpen(false); item.onClick(); }}
+                                      className="w-full flex items-center gap-2.5 px-3 h-9 text-[12.5px] font-medium text-ink-700 hover:bg-brand-50 hover:text-brand-700 cursor-pointer transition-colors text-left"
+                                    >
+                                      <Icon size={14} className="text-ink-500 shrink-0" />
+                                      <span className="flex-1">{item.label}</span>
+                                      <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full tabular-nums">
+                                        {item.count}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </motion.div>
+                            </>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })()}
                 </div>
               }
               headerExtras={
@@ -907,8 +1218,16 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
           <ClassifyExceptionDrawer
             key="classify-drawer"
             exception={drawerException}
+            onPostComment={(text, attachment) => postComment(text, drawer?.scopeIds ?? [drawerException.id], attachment)}
             actionableId={plannedActionableId}
             scopeCount={clScope.length}
+            bulkSkipped={drawer.bulkSkipped}
+            linkedCases={clScope.length > 1
+              ? clScope
+                  .map(id => exceptions.find(e => e.id === id))
+                  .filter((e): e is GrcException => !!e)
+                  .map(e => ({ id: e.id, title: e.title, classification: e.classification, statusLabel: statusLabelFor(e) }))
+              : []}
             onClose={() => setDrawer(null)}
             onSave={(payload) => {
               const classification = payload.classification as GrcException['classification'];
@@ -919,6 +1238,31 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               const scope = drawer?.scopeIds ?? [drawerException.id];
               // Actionable → all scoped cases share the planned Actionable ID; non-actionable clears it.
               const assignedActionableId = actionable ? plannedActionableId : undefined;
+
+              // Bulk classify (>1 case) links the scoped cases into a bulk group:
+              // they share a bulkId, carry the Bulk chip, and the group is registered
+              // so every bulk-aware surface treats them as linked. For an actionable
+              // classification the bulk group IS the management action plan, so it
+              // reuses the shared Actionable ID — keeping the ID identical across the
+              // classify panel, the bulk banner and the Mark Action Complete drawer.
+              const isBulk = scope.length > 1;
+              const bulkGroupId = isBulk
+                ? (scope.map(id => exceptions.find(e => e.id === id)?.bulkId).find(Boolean)
+                    ?? assignedActionableId
+                    ?? `ACT${String(
+                        (Object.keys(GRC_BULK_ACTIONS)
+                          .map(k => parseInt(k.replace(/\D/g, ''), 10))
+                          .filter(n => !Number.isNaN(n))
+                          .reduce((a, b) => Math.max(a, b), 0)) + 1,
+                      ).padStart(3, '0')}`)
+                : undefined;
+              if (isBulk && bulkGroupId) {
+                GRC_BULK_ACTIONS[bulkGroupId] = {
+                  id: bulkGroupId,
+                  caseIds: [...scope],
+                  title: first?.name?.trim() || `${classification} · bulk action`,
+                };
+              }
               const planNote = actionable
                 ? ` · submitted ${plans.length} management action plan${plans.length === 1 ? '' : 's'} for review${first?.dueDate ? ` · due ${fmtDue(first.dueDate)}` : ''}`
                 : ' · no action plan required';
@@ -963,6 +1307,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                       actionPhase: actionable ? ('plan-review' as const) : undefined,
                       status: deriveStatus(classification, 'Pending', 'Pending'),
                       actionableId: assignedActionableId,
+                      // A bulk classify links the cases (shared bulkId + Bulk chip).
+                      bulkId: isBulk ? bulkGroupId : e.bulkId,
+                      flags: isBulk
+                        ? (e.flags?.includes('Bulk') ? e.flags : [...(e.flags ?? []), 'Bulk' as const])
+                        : e.flags,
                       dueDate: (actionable && first?.dueDate) ? first.dueDate : (payload.dueDate ?? e.dueDate),
                       lastUpdated: nowIso.slice(0, 10),
                     }
@@ -1079,6 +1428,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             key="classification-drawer"
             exception={drawerException}
             role={role}
+            onPostComment={(text, attachment) => postComment(text, drawer?.scopeIds ?? [drawerException.id], attachment)}
             onClose={() => setDrawer(null)}
             onDecision={() => setDrawer(null)}
           />
@@ -1088,6 +1438,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             key="action-drawer"
             exception={drawerException}
             role={role}
+            onPostComment={(text, attachment) => postComment(text, drawer?.scopeIds ?? [drawerException.id], attachment)}
             onClose={() => setDrawer(null)}
             onDecision={(decision, { implementation, comment }) => {
               const nowIso = new Date().toISOString();
@@ -1154,10 +1505,21 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             onViewBulk={(bulkId) => setBulkModalId(bulkId)}
           />
         )}
-        {drawer?.type === 'complete' && drawerException && (
+        {drawer?.type === 'complete' && drawerException && (() => {
+          const scopeIds = drawer?.scopeIds ?? [drawerException.id];
+          const linkedCases = scopeIds.length > 1
+            ? scopeIds
+                .map(id => exceptions.find(e => e.id === id))
+                .filter((e): e is GrcException => !!e)
+                .map(e => ({ id: e.id, title: e.title, classification: e.classification, statusLabel: statusLabelFor(e) }))
+            : [];
+          return (
           <CompleteActionDrawer
             key="complete-drawer"
             exception={drawerException}
+            bulkId={drawerException.bulkId}
+            linkedCases={linkedCases}
+            onPostComment={(text, attachment) => postComment(text, drawer?.scopeIds ?? [drawerException.id], attachment)}
             onClose={() => setDrawer(null)}
             onSubmit={({ note, evidence, implementation, comment }) => {
               const nowIso = new Date().toISOString();
@@ -1186,7 +1548,8 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               setDrawer(null);
             }}
           />
-        )}
+          );
+        })()}
         {scopeChooser && (() => {
           const opened = exceptions.find(e => e.id === scopeChooser.exceptionId);
           if (!opened || !opened.bulkId) return null;
@@ -1204,6 +1567,15 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             />
           );
         })()}
+        {bulkReview && (
+          <BulkReviewDrawer
+            key="bulk-review-drawer"
+            cases={bulkReview.cases}
+            skipped={bulkReview.skipped}
+            onClose={() => setBulkReview(null)}
+            onSubmit={applyBulkReview}
+          />
+        )}
         {bulkModalId && (
           <BulkActionGroupModal
             key="bulk-modal"
@@ -1225,36 +1597,6 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               setSampleCountLeft(c => Math.max(0, c - 1));
               setSampleModalOpen(false);
               addToast({ type: 'success', message: `Sample sheet "${payload.name}" has been created` });
-            }}
-          />
-        )}
-        {bulkClassifyOpen && (
-          <BulkClassifyModal
-            key="bulk-classify-modal"
-            selectedCases={exceptions.filter(e => selected.has(e.id))}
-            actionableId={`ACT${String(nextActionableNum).padStart(3, '0')}`}
-            onClose={() => setBulkClassifyOpen(false)}
-            onApply={(payload: BulkClassifyPayload) => {
-              payload.caseIds.forEach(id => { const d = GRC_CASE_DETAILS[id]; if (d) d.actionStatus = 'Pending'; });
-              updateExceptions(prev => prev.map(e =>
-                payload.caseIds.includes(e.id)
-                  ? {
-                      ...e,
-                      severity: payload.severity,
-                      classification: payload.classification,
-                      classificationReview: 'Approved' as const,
-                      actionReview: 'Pending' as const,
-                      actionPhase: requiresActionPlan(payload.classification) ? ('plan-review' as const) : undefined,
-                      status: deriveStatus(payload.classification, 'Pending', 'Pending'),
-                      dueDate: payload.dueDate ?? e.dueDate,
-                      lastUpdated: new Date().toISOString().slice(0, 10),
-                    }
-                  : e
-              ));
-              setNextActionableNum(n => n + 1);
-              setSelected(new Set());
-              setBulkClassifyOpen(false);
-              logEvent({ action: 'Update', description: `Classified ${payload.caseIds.length} exception${payload.caseIds.length === 1 ? '' : 's'} as ${payload.classification}`, module: 'Exceptions', entity: 'Exception' });
             }}
           />
         )}
@@ -1354,6 +1696,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
           <BulkAssignDrawer
             key={singleAssignCase ? `single-assign-${singleAssignCase.id}` : 'bulk-assign-drawer'}
             cases={singleAssignCase ? [singleAssignCase] : exceptions.filter(e => selected.has(e.id))}
+            initialAssignees={singleAssignCase ? (singleAssignCase.assignees ?? (singleAssignCase.assignedTo ? [singleAssignCase.assignedTo] : [])) : undefined}
             onClose={() => { setBulkAssignOpen(false); setSingleAssignCase(null); }}
             onApply={(payload: BulkAssignPayload) => {
               if (payload.assignees.length === 0) return;
@@ -1377,12 +1720,16 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               payload.caseIds.forEach(caseId => {
                 const detail = GRC_CASE_DETAILS[caseId];
                 if (!detail) return;
+                const wasAssigned = (() => {
+                  const tgt = exceptions.find(e => e.id === caseId);
+                  return !!(tgt?.assignees && tgt.assignees.length > 0) || !!tgt?.assignedTo;
+                })();
                 const entry: GrcActivityEntry = {
                   id: `act-assign-${caseId}-${Date.now()}`,
                   author: 'You',
-                  role: 'Auditor',
+                  role: role === 'risk-owner' ? 'Risk Owner' : 'Auditor',
                   timestamp: fmtStamp(nowIso),
-                  message: `Assigned to ${assigneeNames}`,
+                  message: `${wasAssigned ? 'Reassigned' : 'Assigned'} to ${assigneeNames}`,
                   comment: payload.note,
                 };
                 detail.activityLog = [entry, ...detail.activityLog];
@@ -1415,6 +1762,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               extraColumns={sourceQuery ? QUERY_TABLES[sourceQuery.id] : undefined}
               role={role}
               onAction={(kind, target) => { setDetailExceptionId(null); runExceptionAction(kind, target); }}
+              onComment={(text, attachment) => postComment(text, [ex.id], attachment)}
               onClose={() => setDetailExceptionId(null)}
             />
           );
@@ -1430,6 +1778,59 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             key="atr-modal"
             onClose={() => setAtrModalOpen(false)}
           />
+        )}
+        {commentModalOpen && (
+          <div key="bulk-comment-modal">
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50"
+              onClick={() => setCommentModalOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[520px] bg-canvas-elevated shadow-xl border border-canvas-border rounded-[16px] z-[60] flex flex-col"
+              role="dialog" aria-label="Comment on selected cases"
+            >
+              <header className="shrink-0 px-6 pt-5 pb-4 flex items-start justify-between gap-4 border-b border-canvas-border">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full"><MessageSquare size={11} /> Bulk</span>
+                    <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight">Comment on {selected.size} case{selected.size === 1 ? '' : 's'}</h2>
+                  </div>
+                  <p className="text-[12.5px] text-ink-500 leading-snug">
+                    Posts to every selected case as the {personaName(persona)}. The {personaName(persona === 'risk-owner' ? 'auditor' : 'risk-owner')} will be notified and can reply on each case.
+                  </p>
+                </div>
+                <button onClick={() => setCommentModalOpen(false)} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close"><X size={16} /></button>
+              </header>
+              <div className="px-6 py-5">
+                <label htmlFor="bulk-comment" className="sr-only">Comment</label>
+                <textarea
+                  id="bulk-comment"
+                  autoFocus
+                  value={bulkCommentText}
+                  onChange={(e) => setBulkCommentText(e.target.value)}
+                  onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && bulkCommentText.trim()) { e.preventDefault(); postComment(bulkCommentText, [...selected]); setCommentModalOpen(false); } }}
+                  rows={4}
+                  placeholder="Write a comment for the selected cases…"
+                  className="w-full resize-y rounded-[8px] border border-canvas-border bg-canvas-elevated px-3 py-2.5 text-[13px] text-ink-900 leading-relaxed placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-[3px] focus:ring-brand-600/20 transition-colors"
+                />
+              </div>
+              <footer className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center justify-end gap-3">
+                <button type="button" onClick={() => setCommentModalOpen(false)} className="h-9 px-5 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-[#F4F2F7] cursor-pointer transition-colors">Cancel</button>
+                <button
+                  type="button"
+                  disabled={!bulkCommentText.trim()}
+                  onClick={() => { postComment(bulkCommentText, [...selected]); setCommentModalOpen(false); }}
+                  className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-[8px] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send size={14} /> Post comment
+                </button>
+              </footer>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

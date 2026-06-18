@@ -1333,7 +1333,7 @@ function SOPDetailPage({ sop, onGoToRacm }: {
               <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span>
               <span className="font-mono text-[0.6875rem] text-ink-500">{sop.id}</span>
             </div>
-            <h1 className="font-display text-[1.625rem] font-[420] tracking-tight text-ink-900 leading-[1.2]">{sop.name}</h1>
+            <h1 className="text-[1.625rem] font-semibold tracking-tight text-ink-900 leading-[1.2]">{sop.name}</h1>
           </div>
           {rels.racm && onGoToRacm && (
             <Button
@@ -2514,7 +2514,7 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack }: {
               <span className="font-mono text-[0.6875rem] text-ink-500">{ctrl.id}</span>
               <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ${ctrl.classification === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'}`}>{ctrl.classification}</span>
             </div>
-            <h1 className="font-display text-[1.625rem] font-[420] tracking-tight text-ink-900 leading-[1.2]">{ctrl.name}</h1>
+            <h1 className="text-[1.625rem] font-semibold tracking-tight text-ink-900 leading-[1.2]">{ctrl.name}</h1>
           </div>
           {/* Status + Nature + Automation tags */}
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -5541,7 +5541,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
           <span className="text-ink-700 truncate">{bp.name}</span>
         </div>
         <div className="pb-5 flex items-end justify-between gap-4 flex-wrap">
-          <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
+          <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
           <div className="flex items-center gap-3 flex-wrap pb-1.5">
           {/* Process-meta (code · owner · status) — shown on all tabs for orientation.
               Full size on Overview; compact/quieter on section tabs. */}

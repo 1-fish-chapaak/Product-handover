@@ -39,6 +39,7 @@ import {
   type GrcActionStatus,
 } from '../../data/mockData';
 import type { ExceptionRole } from '../../hooks/useAppState';
+import { unreadCommentCount } from './commentStore';
 import { useToast } from '../shared/Toast';
 
 // ─── Tokens ───
@@ -549,6 +550,26 @@ function renderCell(
     ? `Due date was ${new Date(dueDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
     : 'Past action due date';
 
+  // Unread-comment badge on the Classify & Action CTAs. It appears ONLY for the
+  // receiver — the persona who has comments waiting from the other reviewer.
+  // The author of a comment never sees a badge for their own post; it surfaces
+  // for the recipient and clears once they open the case's review modal.
+  const unreadComments = unreadCommentCount(ex.id, role);
+  const withCommentBadge = (node: React.ReactNode) => {
+    if (unreadComments === 0) return node;
+    return (
+      <span className="relative inline-flex">
+        {node}
+        <span
+          title={`${unreadComments} new comment${unreadComments === 1 ? '' : 's'} from the other reviewer`}
+          className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-semibold tabular-nums bg-brand-600 text-white ring-2 ring-canvas-elevated"
+        >
+          {unreadComments}
+        </span>
+      </span>
+    );
+  };
+
   // Dynamic data column from the source-query output table.
   if (col.startsWith('data:')) {
     const name = col.slice(5);
@@ -573,12 +594,9 @@ function renderCell(
     case 'id':
       return (
         <div className="flex flex-col gap-1">
-          <button
-            onClick={() => onOpenDetail?.(ex)}
-            className="text-brand-700 font-medium text-[12.5px] font-mono hover:underline cursor-pointer text-left"
-          >
+          <span className="text-ink-800 font-medium text-[12.5px] font-mono">
             {ex.id}
-          </button>
+          </span>
           {(isOverdue || isBulk || ex.dueDateRevision?.status === 'Pending') && (
             <div className="flex items-center gap-1 flex-wrap">
               {isOverdue && (
@@ -653,7 +671,12 @@ function renderCell(
         const overflow = allAssignees.length - visible.length;
         const overflowNames = allAssignees.slice(MAX_VISIBLE).map(a => a.name).join(', ');
         return (
-          <div className="inline-flex items-center min-w-0">
+          <button
+            type="button"
+            onClick={onAssign}
+            title="Change assignees"
+            className="group/asg inline-flex items-center min-w-0 rounded-[8px] px-1 -mx-1 py-0.5 hover:bg-brand-50/60 cursor-pointer transition-colors"
+          >
             {visible.map((a, i) => (
               <span
                 key={`${a.name}-${i}`}
@@ -683,16 +706,23 @@ function renderCell(
                 </span>
               </span>
             )}
-          </div>
+            <span className="ml-1.5 opacity-0 group-hover/asg:opacity-100 transition-opacity text-brand-600 shrink-0"><Pencil size={12} /></span>
+          </button>
         );
       }
       return allAssignees.length === 1 ? (
-        <div className="inline-flex items-center gap-2 min-w-0">
+        <button
+          type="button"
+          onClick={onAssign}
+          title="Change assignee"
+          className="group/asg inline-flex items-center gap-2 min-w-0 rounded-[8px] px-1.5 -mx-1.5 py-0.5 hover:bg-brand-50/60 cursor-pointer transition-colors"
+        >
           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-50 text-brand-700 text-[10px] font-semibold shrink-0">
             {allAssignees[0].initials}
           </span>
           <span className="text-ink-700 text-[12.5px] truncate">{allAssignees[0].name}</span>
-        </div>
+          <span className="opacity-0 group-hover/asg:opacity-100 transition-opacity text-brand-600 shrink-0"><Pencil size={11} /></span>
+        </button>
       ) : (
         <button
           type="button"
@@ -706,45 +736,47 @@ function renderCell(
       );
     }
     case 'classify': {
+      let cta: React.ReactNode;
       if (role === 'risk-owner') {
         if (ex.classification === 'Unclassified') {
-          return <PrimaryButton icon={<Tag size={12} />} onClick={onOpenClassification}>Classify</PrimaryButton>;
+          cta = <PrimaryButton icon={<Tag size={12} />} onClick={onOpenClassification}>Classify</PrimaryButton>;
+        } else if (ex.actionReview === 'Rejected') {
+          // Auditor rejected the action/plan (Discrepancy) → reopened for the Risk Owner.
+          cta = <PrimaryButton icon={<RotateCcw size={12} />} onClick={onOpenClassification}>Re-Classify</PrimaryButton>;
+        } else if (ex.actionPhase === 'in-progress') {
+          // Plan accepted → Risk Owner implements, then marks the action complete (with evidence).
+          cta = <PrimaryButton icon={<CheckCircle2 size={12} />} onClick={() => onMarkComplete?.()}>Mark Complete</PrimaryButton>;
+        } else {
+          cta = <GhostButton icon={<Eye size={12} />} onClick={onOpenClassification}>View</GhostButton>;
         }
-        // Auditor rejected the action/plan (Discrepancy) → reopened for the Risk Owner.
-        if (ex.actionReview === 'Rejected') {
-          return <PrimaryButton icon={<RotateCcw size={12} />} onClick={onOpenClassification}>Re-Classify</PrimaryButton>;
-        }
-        // Plan accepted → Risk Owner implements, then marks the action complete (with evidence).
-        if (ex.actionPhase === 'in-progress') {
-          return <PrimaryButton icon={<CheckCircle2 size={12} />} onClick={() => onMarkComplete?.()}>Mark Complete</PrimaryButton>;
-        }
-        return <GhostButton icon={<Eye size={12} />} onClick={onOpenClassification}>View</GhostButton>;
+      } else {
+        cta = ex.classificationReview === 'Pending' && ex.classification !== 'Unclassified'
+          ? <PrimaryButton icon={<Tag size={12} />} onClick={onOpenClassification}>Review Classification</PrimaryButton>
+          : <GhostButton icon={<Eye size={12} />} onClick={onOpenClassification}>View</GhostButton>;
       }
-      return ex.classificationReview === 'Pending' && ex.classification !== 'Unclassified' ? (
-        <PrimaryButton icon={<Tag size={12} />} onClick={onOpenClassification}>Review Classification</PrimaryButton>
-      ) : (
-        <GhostButton icon={<Eye size={12} />} onClick={onOpenClassification}>View</GhostButton>
-      );
+      return withCommentBadge(cta);
     }
     case 'action': {
       const phase = ex.actionPhase;
       const actionableClass = ex.classification === 'Design Deficiency' || ex.classification === 'System Deficiency' || ex.classification === 'Procedural Non-Compliance';
+      let cta: React.ReactNode;
       // Risk Owner has no Action column (only the Classify column); its CTA lives there.
       if (role === 'risk-owner') {
-        return <GhostButton icon={<Eye size={12} />} onClick={onOpenAction}>View</GhostButton>;
+        cta = <GhostButton icon={<Eye size={12} />} onClick={onOpenAction}>View</GhostButton>;
+      } else {
+        // Auditor: review the plan, then the completion; single review for non-actionable.
+        const planStage = phase === 'plan-review' || (actionableClass && !phase && ex.actionReview === 'Pending' && ex.classification !== 'Unclassified');
+        if (planStage) {
+          cta = <PrimaryButton icon={<ClipboardCheck size={12} />} onClick={onOpenAction}>Review Plan</PrimaryButton>;
+        } else if (phase === 'completion-review') {
+          cta = <PrimaryButton icon={<ArrowLeft size={12} className="rotate-180" />} onClick={onOpenAction}>Review Action</PrimaryButton>;
+        } else if (!actionableClass && ex.actionReview === 'Pending' && ex.classification !== 'Unclassified') {
+          cta = <PrimaryButton icon={<ArrowLeft size={12} className="rotate-180" />} onClick={onOpenAction}>Review</PrimaryButton>;
+        } else {
+          cta = <GhostButton icon={<Eye size={12} />} onClick={onOpenAction}>View</GhostButton>;
+        }
       }
-      // Auditor: review the plan, then the completion; single review for non-actionable.
-      const planStage = phase === 'plan-review' || (actionableClass && !phase && ex.actionReview === 'Pending' && ex.classification !== 'Unclassified');
-      if (planStage) {
-        return <PrimaryButton icon={<ClipboardCheck size={12} />} onClick={onOpenAction}>Review Plan</PrimaryButton>;
-      }
-      if (phase === 'completion-review') {
-        return <PrimaryButton icon={<ArrowLeft size={12} className="rotate-180" />} onClick={onOpenAction}>Review Action</PrimaryButton>;
-      }
-      if (!actionableClass && ex.actionReview === 'Pending' && ex.classification !== 'Unclassified') {
-        return <PrimaryButton icon={<ArrowLeft size={12} className="rotate-180" />} onClick={onOpenAction}>Review</PrimaryButton>;
-      }
-      return <GhostButton icon={<Eye size={12} />} onClick={onOpenAction}>View</GhostButton>;
+      return withCommentBadge(cta);
     }
     case 'dueDate': {
       const due = ex.dueDate;

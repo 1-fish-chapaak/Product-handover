@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import { seedIcfrEngagement } from './mockData';
+import { seedIcfrEngagement, type SeedMeta } from './mockData';
 import { validationQA } from './helpers';
 import type {
   Attestation, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
-  EvidenceFile, EvidenceMode, HandoffTask, IcfrEngagement, OperatingStep, Override, Population, Role, Sampling, TestResult, TrackConclusion,
+  EvidenceFile, EvidenceMode, ExceptionStatus, HandoffTask, IcfrEngagement, MaterialityRules, OperatingStep,
+  Override, Population, Role, Sampling, TestResult, TrackConclusion,
 } from './types';
 
 let _uid = 0;
@@ -62,8 +63,14 @@ interface IcfrCtx {
   clearTask: (taskId: string) => void;
   raiseQuery: (controlId: string, title: string, detail: string) => void;
   requestDesignDocs: (controlIds: string[]) => void;
-  // deficiencies + engagement
+  // materiality rules
+  updateRules: (patch: Partial<MaterialityRules>) => void;
+  updateMateriality: (patch: { materiality?: number; performanceMateriality?: number }) => void;
+  // deficiencies / exception lifecycle
   updateDeficiency: (id: string, patch: Partial<Deficiency>) => void;
+  setExceptionStatus: (id: string, status: ExceptionStatus) => void;
+  recordRetest: (id: string, result: 'Pass' | 'Fail') => void;
+  signOffException: (id: string) => void;
   togglePeriod: () => void;
   rollForward: () => void;
   createEngagement: (eng: IcfrEngagement) => void;
@@ -77,8 +84,8 @@ export function useIcfr(): IcfrCtx {
   return c;
 }
 
-export function IcfrProvider({ children, initialRole = 'auditor' }: { children: ReactNode; initialRole?: Role }) {
-  const [eng, setEng] = useState<IcfrEngagement>(() => seedIcfrEngagement());
+export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { children: ReactNode; initialRole?: Role; seedMeta?: SeedMeta }) {
+  const [eng, setEng] = useState<IcfrEngagement>(() => seedIcfrEngagement(seedMeta));
   const [role, setRole] = useState<Role>(initialRole);
   const [view, setView] = useState<View>(initialRole === 'risk-owner' ? 'portal' : 'register');
   const [selectedControlId, setSelectedControlId] = useState<string | null>(null);
@@ -284,6 +291,21 @@ export function IcfrProvider({ children, initialRole = 'auditor' }: { children: 
   const updateDeficiency = useCallback<IcfrCtx['updateDeficiency']>((id, patch) => {
     setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => (d.id === id ? { ...d, ...patch } : d)) }));
   }, []);
+  const updateRules = useCallback<IcfrCtx['updateRules']>((patch) => {
+    setEng(prev => ({ ...prev, rules: { ...prev.rules, ...patch } }));
+  }, []);
+  const updateMateriality = useCallback<IcfrCtx['updateMateriality']>((patch) => {
+    setEng(prev => ({ ...prev, ...patch }));
+  }, []);
+  const setExceptionStatus = useCallback<IcfrCtx['setExceptionStatus']>((id, status) => {
+    setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, status } : d) }));
+  }, []);
+  const recordRetest = useCallback<IcfrCtx['recordRetest']>((id, result) => {
+    setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, retest: { result, at: 'just now', by: me }, status: result === 'Pass' ? 'Closed' : 'Remediation', remediation: { ...d.remediation, status: result === 'Pass' ? 'Done' : d.remediation.status } } : d) }));
+  }, [me]);
+  const signOffException = useCallback<IcfrCtx['signOffException']>((id) => {
+    setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, signoff: { by: me, at: 'just now' }, status: 'Closed' } : d) }));
+  }, [me]);
 
   const togglePeriod = useCallback(() => {
     setEng(prev => ({ ...prev, period: prev.period === 'Interim' ? 'Year-end' : 'Interim' }));
@@ -314,8 +336,9 @@ export function IcfrProvider({ children, initialRole = 'auditor' }: { children: 
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
-    updateDeficiency, togglePeriod, rollForward, createEngagement,
-  }), [eng, role, view, selectedControlId, me, changeRole, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateDeficiency, togglePeriod, rollForward, createEngagement]);
+    updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException,
+    togglePeriod, rollForward, createEngagement,
+  }), [eng, role, view, selectedControlId, me, changeRole, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, togglePeriod, rollForward, createEngagement]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -31,6 +31,7 @@ const TYPE_TINT: Record<Engagement['type'], string> = {
   Compliance: 'border-brand-100 bg-brand-50/40',
   'Internal Audit': 'border-evidence-100 bg-evidence-50/40',
   Automation: 'border-compliant-100 bg-compliant-50/40',
+  'SOX / ICFR': 'border-brand-200 bg-brand-100/40',
 };
 
 const HEALTH_BAR = (h: number): string =>
@@ -66,7 +67,7 @@ export default function EngagementCompareView({ onBack }: Props) {
         <div className="mb-5 flex items-end justify-between">
           <div>
             <div className="text-[0.6875rem] font-semibold text-text-muted tracking-wider uppercase mb-1">Audit Quality</div>
-            <h1 className="font-display text-[2rem] font-bold text-text leading-tight flex items-center gap-3">
+            <h1 className="text-[2rem] font-bold text-text leading-tight flex items-center gap-3">
               <GitCompare size={28} className="text-primary" />
               Engagement compare
             </h1>

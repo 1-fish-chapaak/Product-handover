@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { Filter, Check, ChevronDown, Search, X } from 'lucide-react';
+import { Filter, Check, ChevronDown, Search, X, SlidersHorizontal } from 'lucide-react';
 import Checkbox from './Checkbox';
 
 interface Props {
@@ -22,9 +22,12 @@ interface Props {
   /** Force the inline search on (or off) regardless of option count. Defaults to
       auto: shown when there are more than 5 options. */
   searchable?: boolean;
+  /** Show the sliders icon in the `button` variant, matching ToolbarFilterMenu's
+      Filters button. Off by default; opted into in the Reports toolbar only. */
+  icon?: boolean;
 }
 
-export default function ColumnFilter({ label, options, value, onChange, align = 'start', variant = 'icon', renderOption, selectIndicator = 'check', searchable }: Props) {
+export default function ColumnFilter({ label, options, value, onChange, align = 'start', variant = 'icon', renderOption, selectIndicator = 'check', searchable, icon = false }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   // Snapshot of what was selected when the menu opened — used to float those
@@ -78,23 +81,24 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
-          className={`no-focus-ring inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-[12px] font-medium cursor-pointer transition-colors ${
+          className={`no-focus-ring inline-flex items-center gap-2 h-10 px-3 rounded-[10px] border text-[12.5px] font-medium cursor-pointer transition-colors ${
             hasFilter
-              ? 'border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-50/80'
+              ? 'bg-brand-50 border-brand-200 text-brand-700'
               : open
-                ? 'border-brand-600 bg-canvas text-brand-700'
-                : 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-brand-200 hover:bg-canvas'
+                ? 'bg-canvas-elevated border-brand-300 text-brand-700'
+                : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-300'
           }`}
           aria-haspopup="true"
           aria-expanded={open}
         >
+          {icon && <SlidersHorizontal size={15} className={hasFilter || open ? 'text-brand-600' : 'text-ink-400'} />}
           <span>{label}</span>
           {hasFilter && (
-            <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-brand-600 text-white text-[10px] font-mono tabular-nums">
+            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-brand-600 text-white text-[10px] font-bold tabular-nums">
               {value.length}
             </span>
           )}
-          <ChevronDown size={13} className={`text-ink-400 transition-transform ${open ? 'rotate-180 text-brand-600' : ''}`} aria-hidden />
+          <ChevronDown size={12} strokeWidth={2.5} className={`text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
         </button>
       ) : (
         <button
@@ -120,7 +124,7 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.98 }}
           transition={{ duration: reduce ? 0 : 0.14, ease: [0.2, 0, 0, 1] }}
-          className={`absolute top-full mt-1.5 z-50 overflow-hidden bg-canvas-elevated border border-canvas-border rounded-xl shadow-[0_10px_30px_-12px_rgba(15,8,30,0.28)] normal-case tracking-normal ${showSearch ? 'w-[224px]' : 'min-w-full w-max max-w-[240px]'} ${align === 'end' ? 'right-0 origin-top-right' : 'left-0 origin-top-left'}`}
+          className={`absolute top-full mt-1.5 z-50 overflow-hidden bg-canvas-elevated border border-canvas-border rounded-[10px] shadow-[0_10px_30px_-12px_rgba(15,8,30,0.28)] normal-case tracking-normal ${showSearch ? 'w-[224px]' : 'min-w-full w-max max-w-[240px]'} ${align === 'end' ? 'right-0 origin-top-right' : 'left-0 origin-top-left'}`}
           onClick={(e) => e.stopPropagation()}
         >
           {showSearch && (
@@ -173,7 +177,13 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
                     type="button"
                     onClick={() => toggle(opt)}
                     className={`no-focus-ring flex items-center gap-2.5 w-full text-left px-2 h-8 rounded-lg text-[12px] cursor-pointer transition-colors ${
-                      checked ? 'bg-brand-50 text-brand-800 font-medium' : 'text-ink-800 hover:bg-canvas'
+                      // Checkbox variant: the box itself signals selection, so the
+                      // row stays untinted (only hover). Check variant keeps the row fill.
+                      checked
+                        ? selectIndicator === 'checkbox'
+                          ? 'text-ink-800 font-medium hover:bg-canvas'
+                          : 'bg-brand-50 text-brand-800 font-medium'
+                        : 'text-ink-800 hover:bg-canvas'
                     }`}
                   >
                     {selectIndicator === 'checkbox' && <Checkbox checked={checked} />}
@@ -195,9 +205,11 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
             <button
               type="button"
               onClick={() => onChange([])}
-              className="no-focus-ring w-full text-left px-3 h-8 border-t border-canvas-border text-[11px] font-medium text-brand-700 hover:bg-canvas cursor-pointer transition-colors"
+              className="no-focus-ring flex items-center gap-2 w-full px-3 h-9 border-t border-canvas-border text-[12px] font-medium text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors"
             >
-              Clear ({value.length})
+              <X size={13} strokeWidth={2.5} className="shrink-0" />
+              <span>Clear all</span>
+              <span className="ml-auto text-[11px] font-normal text-ink-400 tabular-nums">{value.length}</span>
             </button>
           )}
         </motion.div>

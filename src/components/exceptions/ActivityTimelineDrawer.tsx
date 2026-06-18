@@ -83,17 +83,17 @@ export default function ActivityTimelineDrawer({ onClose }: { onClose: () => voi
         onClick={onClose}
       />
       <motion.aside
-        initial={{ x: 24, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        exit={{ x: 24, opacity: 0 }}
-        transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-[640px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
+        initial={{ opacity: 0, scale: 0.98, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.98, y: 8 }}
+        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[760px] max-h-[88vh] bg-canvas-elevated shadow-xl border border-canvas-border rounded-[16px] flex flex-col z-50"
         role="dialog"
         aria-label="Activity timeline"
       >
         <header className="shrink-0 px-6 pt-5 pb-4 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div>
-            <h2 className="font-display text-[1.25rem] font-semibold text-ink-900 tracking-tight">Activity Timeline</h2>
+            <h2 className="text-[1.25rem] font-semibold text-ink-900 tracking-tight">Activity Timeline</h2>
             <p className="text-[0.75rem] text-ink-500 mt-0.5">Chronological log of every action across all exceptions.</p>
           </div>
           <button
