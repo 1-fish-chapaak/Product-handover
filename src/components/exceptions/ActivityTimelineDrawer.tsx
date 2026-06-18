@@ -93,7 +93,7 @@ export default function ActivityTimelineDrawer({ onClose }: { onClose: () => voi
       >
         <header className="shrink-0 px-6 pt-5 pb-4 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div>
-            <h2 className="font-display text-[1.25rem] font-semibold text-ink-900 tracking-tight">Activity Timeline</h2>
+            <h2 className="text-[1.25rem] font-semibold text-ink-900 tracking-tight">Activity Timeline</h2>
             <p className="text-[0.75rem] text-ink-500 mt-0.5">Chronological log of every action across all exceptions.</p>
           </div>
           <button

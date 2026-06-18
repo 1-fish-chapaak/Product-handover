@@ -210,7 +210,7 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <Sparkles size={16} className="text-brand-600 shrink-0" />
-                <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight">Create Engagement</h2>
+                <h2 className="text-[1.125rem] font-semibold text-ink-900 tracking-tight">Create Engagement</h2>
               </div>
               <p className="text-[0.75rem] text-ink-500">Step {step} of 5</p>
             </div>

@@ -1,9 +1,11 @@
-import { Sparkles, Calendar, PenLine, Eye } from 'lucide-react';
+import { Calendar, PenLine, Eye, Lightbulb } from 'lucide-react';
 import type {
   AtrMeta, AtrObservation, AtrActionPlan, AtrInsight,
   AtrClassification, AtrObservationStatus, AtrActionStatus,
 } from './atrTypes';
 import { computeExecSummary } from './atrTemplate';
+import FloatingLines from '../shared/FloatingLines';
+import { ReportMetaPanel } from './ReportDocumentChrome';
 
 // ─── Token maps (theme defines base / -50 / -700 only for semantic colors) ───
 const OBS_STATUS_PILL: Record<AtrObservationStatus, { cls: string; dot: string }> = {
@@ -17,7 +19,7 @@ const ACTION_STATUS: Record<AtrActionStatus, { pill: string; border: string; dot
   'Partially Implemented': { pill: 'bg-mitigated-50 text-mitigated-700', border: 'border-t-mitigated', dot: 'bg-mitigated' },
   Pending:                 { pill: 'bg-risk-50 text-risk-700',           border: 'border-t-risk',      dot: 'bg-risk' },
   Overdue:                 { pill: 'bg-risk-50 text-risk-700',           border: 'border-t-risk',      dot: 'bg-risk' },
-  'Not Due':               { pill: 'bg-[#EEEEF1] text-ink-600',          border: 'border-t-ink-300',   dot: 'bg-ink-400' },
+  'Not Due':               { pill: 'bg-paper-100 text-ink-600',          border: 'border-t-ink-300',   dot: 'bg-ink-400' },
 };
 const CLASSIFICATION_PILL: Record<AtrClassification, string> = {
   'Design Deficiency': 'bg-high-50 text-high-700',
@@ -46,20 +48,8 @@ function NumberedHeading({ n, title, subtitle }: { n: number; title: string; sub
     <div className="flex items-start gap-3 mb-5">
       <span className="shrink-0 w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[0.8125rem] font-bold flex items-center justify-center mt-0.5">{n}</span>
       <div>
-        <h2 className="text-[1.0625rem] font-bold text-ink-900 tracking-tight leading-tight">{title}</h2>
+        <h2 className="text-[1.1875rem] font-semibold text-ink-900 tracking-tight leading-tight">{title}</h2>
         <p className="text-[0.75rem] text-ink-500">{subtitle}</p>
-      </div>
-    </div>
-  );
-}
-
-function MetaCell({ label, value }: { label: string; value?: string }) {
-  if (!value) return null;
-  return (
-    <div>
-      <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-1.5">{label}</div>
-      <div className="border-l-[3px] border-brand-500 pl-3">
-        <div className="text-[0.8125rem] font-bold text-ink-900">{value}</div>
       </div>
     </div>
   );
@@ -70,7 +60,7 @@ function FieldRow({ label, children, italic }: { label: string; children: React.
   return (
     <>
       <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ink-500 pt-2">{label}</div>
-      <p className={`pt-2 text-[0.75rem] text-ink-800 leading-relaxed ${italic ? 'italic text-ink-700' : ''}`}>{children}</p>
+      <p className={`pt-2 text-[0.875rem] text-ink-800 leading-relaxed ${italic ? 'italic text-ink-600' : ''}`}>{children}</p>
     </>
   );
 }
@@ -107,42 +97,79 @@ export default function AtrDocument({
     s === 'Closed' ? 'Closed' : s === 'In Progress' ? 'In Progress' : 'Open';
 
   return (
-    <article className={`report-printable ${maxWidthClass} mx-auto bg-canvas-elevated border border-canvas-border rounded-[12px] shadow-sm overflow-hidden`}>
-      {/* Brand banner */}
-      <div className="relative px-9 py-7 bg-gradient-to-br from-brand-700 to-brand-600 text-white overflow-hidden">
-        <div className="absolute -right-6 -top-10 w-48 h-48 rounded-full bg-white/5" aria-hidden="true" />
-        <div className="relative flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-8 h-8 rounded-[8px] bg-white/15 flex items-center justify-center"><Sparkles size={15} /></div>
-              <div className="leading-none">
-                <div className="text-[0.8125rem] font-bold tracking-wide">IRAME.AI</div>
-                <div className="text-[0.5rem] font-semibold tracking-[0.22em] text-white/70 mt-0.5">AUDIT INTELLIGENCE</div>
-              </div>
-            </div>
-            <h1 className="text-[1.75rem] font-bold tracking-tight leading-tight">Action Taken Report</h1>
+    <article className={`report-printable ${maxWidthClass} mx-auto bg-canvas-elevated border border-canvas-border rounded-[12px] overflow-hidden`}>
+      {/* Purple gradient letterhead — title over the woven line art, matching
+          the report covers. */}
+      <div
+        className="relative overflow-hidden px-9 pt-9 pb-8"
+        style={{ backgroundImage: 'linear-gradient(125deg, #3b0b72 0%, #6a12cd 62%, #6a12cd 100%)' }}
+      >
+        <div
+          className="absolute inset-0 z-0 print:hidden"
+          style={{ backgroundImage: 'radial-gradient(135% 160% at 100% -10%, rgba(255,255,255,0.20), rgba(255,255,255,0) 52%), radial-gradient(120% 130% at 0% 120%, rgba(8,2,24,0.32), rgba(8,2,24,0) 55%)' }}
+          aria-hidden="true"
+        />
+        <div
+          className="absolute inset-0 z-0 print:hidden"
+          style={{ maskImage: 'linear-gradient(to right, transparent 18%, white 56%)', WebkitMaskImage: 'linear-gradient(to right, transparent 18%, white 56%)' }}
+          aria-hidden="true"
+        >
+          <FloatingLines enabledWaves={['top', 'middle', 'bottom']} lineCount={[7, 8, 7]} lineDistance={5} interactive={false} parallax={false} color="#c084fc" opacity={0.22} />
+          <FloatingLines enabledWaves={['top', 'middle']} lineCount={6} lineDistance={7} interactive={false} parallax={false} color="#f5d0fe" opacity={0.4} />
+        </div>
+        {/* Readability scrim — darkens the left so the title and byline keep
+            full contrast while the weave stays dense on the right. */}
+        <div
+          className="absolute inset-0 z-0"
+          style={{ backgroundImage: 'linear-gradient(to right, rgba(17,5,42,0.48), rgba(17,5,42,0.14) 40%, rgba(17,5,42,0) 62%)' }}
+          aria-hidden="true"
+        />
+        <div className="relative z-10 flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <h1 className="text-[2rem] font-semibold tracking-tight leading-tight text-white">Action Taken Report</h1>
             {(meta.auditEntity || meta.auditPeriod) && (
-              <p className="text-[0.8125rem] text-white/80 mt-1">
+              <p className="text-[0.8125rem] text-white/70 mt-1.5">
                 {[meta.auditEntity, meta.auditPeriod].filter(Boolean).join(' · ')}
               </p>
             )}
           </div>
-          {headerActions && <div className="shrink-0 flex items-center gap-2 print:hidden">{headerActions}</div>}
+          <div className="shrink-0 flex flex-col items-end gap-3">
+            {headerActions && <div className="flex items-center gap-2 print:hidden">{headerActions}</div>}
+            {/* Key facts — glanceable headline numbers on the banner right. */}
+            {ex.totalObservations > 0 && (
+              <div className="flex items-stretch rounded-[12px] border border-white/20 bg-white/10 overflow-hidden">
+                {[
+                  { value: ex.totalObservations, label: 'Observations' },
+                  { value: totalExceptions, label: 'Exceptions' },
+                  { value: ex.totalActionPlans, label: 'Action Plans' },
+                ].map((s, i) => (
+                  <div key={s.label} className={`px-5 py-3 text-center ${i > 0 ? 'border-l border-white/15' : ''}`}>
+                    <div className="text-[1.5rem] font-bold text-white tabular-nums leading-none">{s.value}</div>
+                    <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-white/65 mt-1.5 whitespace-nowrap">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Metadata grid */}
-      <div className="px-9 py-6 grid grid-cols-3 gap-x-8 gap-y-5 border-b border-canvas-border">
-        <MetaCell label="Report ID" value={meta.reportId} />
-        <MetaCell label="Audit Title" value={meta.auditTitle} />
-        <MetaCell label="Audit Period" value={meta.auditPeriod} />
-        <MetaCell label="Prepared By" value={meta.preparedBy} />
-        <MetaCell label="Generated On" value={meta.generatedOn} />
-        <MetaCell label="Audit Entity" value={meta.auditEntity} />
+      {/* Metadata — structured report-facts panel. Audit Entity + Period live in
+          the banner subtitle, so the panel carries only the unique facts. */}
+      <div className="px-9 py-6 border-b border-canvas-border">
+        <ReportMetaPanel
+          columns={4}
+          items={[
+            { label: 'Report ID', value: meta.reportId },
+            { label: 'Audit Title', value: meta.auditTitle },
+            { label: 'Prepared By', value: meta.preparedBy },
+            { label: 'Generated On', value: meta.generatedOn },
+          ]}
+        />
       </div>
 
       {/* Section 1 — Executive Summary */}
-      <section className="px-9 pt-7 pb-6">
+      <section id="section-atr-exec" className="px-9 pt-7 pb-6 scroll-mt-20">
         <NumberedHeading n={1} title="Executive Summary" subtitle="Overall observation and management action plan rollup" />
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {kpis.map(k => (
@@ -155,7 +182,7 @@ export default function AtrDocument({
       </section>
 
       {/* Section 2 — Observation Wise Summary */}
-      <section className="px-9 pt-2 pb-6 border-t border-canvas-border">
+      <section id="section-atr-obs-summary" className="px-9 pt-2 pb-6 border-t border-canvas-border scroll-mt-20">
         <div className="pt-6">
           <NumberedHeading n={2} title="Observation Wise Summary" subtitle="Exceptions, management action plans and status — per observation" />
         </div>
@@ -187,7 +214,7 @@ export default function AtrDocument({
                   </tr>
                 );
               })}
-              <tr className="border-t border-canvas-border bg-[#FAFAFB] font-semibold">
+              <tr className="border-t border-canvas-border bg-paper-50 font-semibold">
                 <td className="px-4 py-3 text-brand-700">TOTAL · {ex.totalObservations} observation{ex.totalObservations === 1 ? '' : 's'}</td>
                 <td className="px-3 py-3 text-center tabular-nums">{totalExceptions}</td>
                 <td className="px-3 py-3 text-center tabular-nums">{ex.totalActionPlans}</td>
@@ -201,7 +228,7 @@ export default function AtrDocument({
       </section>
 
       {/* Section 3 — Observation Details */}
-      <section className="px-9 pt-2 pb-6 border-t border-canvas-border">
+      <section id="section-atr-obs-details" className="px-9 pt-2 pb-6 border-t border-canvas-border scroll-mt-20">
         <div className="pt-6">
           <NumberedHeading n={3} title="Observation Details" subtitle="Issue, risk, management action plan, evidence and verification" />
         </div>
@@ -214,15 +241,18 @@ export default function AtrDocument({
 
       {/* Section 4 — Key Insights (only when provided) */}
       {insights.length > 0 && (
-        <section className="px-9 pt-2 pb-6 border-t border-canvas-border">
+        <section id="section-atr-insights" className="px-9 pt-2 pb-6 border-t border-canvas-border scroll-mt-20">
           <div className="pt-6">
             <NumberedHeading n={4} title="Key Insights & Recommendations" subtitle="Auditor observations and forward-looking guidance" />
           </div>
           <div className="space-y-3">
             {insights.map((ins, i) => (
-              <div key={i} className="bg-brand-50/40 border border-canvas-border border-l-[3px] border-l-brand-500 rounded-[10px] p-4">
-                <div className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5">{ins.title}</div>
-                <p className="text-[0.75rem] text-ink-700 leading-relaxed">{ins.body}</p>
+              <div key={i} className="flex gap-3.5 bg-canvas-elevated border border-canvas-border rounded-[10px] p-4 hover:border-brand-200 transition-colors">
+                <span className="shrink-0 mt-0.5 w-6 h-6 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center"><Lightbulb size={13} /></span>
+                <div className="min-w-0">
+                  <div className="text-[0.9375rem] font-semibold text-ink-900 mb-1 leading-snug">{ins.title}</div>
+                  <p className="text-[0.875rem] text-ink-700 leading-relaxed">{ins.body}</p>
+                </div>
               </div>
             ))}
           </div>
@@ -230,7 +260,7 @@ export default function AtrDocument({
       )}
 
       {/* Section 5 — Approvals & Sign-Off */}
-      <section className="px-9 pt-2 pb-9 border-t border-canvas-border">
+      <section id="section-atr-signoff" className="px-9 pt-2 pb-9 border-t border-canvas-border scroll-mt-20">
         <div className="pt-6">
           <NumberedHeading n={insights.length > 0 ? 5 : 4} title="Approvals & Sign-Off" subtitle="Digital authorisation of this Action Taken Report" />
         </div>
@@ -270,7 +300,7 @@ function ObservationCard({ index, obs }: { index: number; obs: AtrObservation })
         <div className="flex items-center gap-2.5 flex-wrap min-w-0">
           <span className="shrink-0 w-7 h-7 rounded-[8px] bg-brand-600 text-white text-[0.8125rem] font-bold flex items-center justify-center">{index}</span>
           <div className="min-w-0">
-            <h3 className="text-[0.9375rem] font-bold text-ink-900 leading-tight">{obs.title}</h3>
+            <h3 className="text-[1.0625rem] font-semibold text-ink-900 leading-tight">{obs.title}</h3>
             {obs.process && <div className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-ink-500 mt-0.5">{obs.process}</div>}
           </div>
         </div>

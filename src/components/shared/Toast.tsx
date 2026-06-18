@@ -30,7 +30,9 @@ const DISMISS_MS: Record<ToastType, number | null> = {
   info: 5000,
   success: 5000,
   warning: 8000,
-  error: null,
+  // Errors linger a little longer than success so they're readable, but they
+  // still auto-dismiss — a stuck error toast reads as a broken UI.
+  error: 8000,
 };
 
 const DEFAULT_TITLES: Record<ToastType, string | null> = {

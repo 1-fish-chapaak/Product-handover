@@ -461,7 +461,7 @@ function SourceRow({
         type="button"
         onClick={handleCardClick}
         aria-pressed={selected || undefined}
-        className="group w-full flex items-center gap-3 px-3 h-10 transition-colors cursor-pointer text-left hover:bg-canvas"
+        className="group w-full flex items-center gap-3 px-3 h-10 transition-colors cursor-pointer text-left hover:bg-brand-50"
       >
         {/* Hover-revealed checkbox overlaying the type-icon tile. Same layout
             slot regardless of state so nothing shifts. */}
@@ -1369,7 +1369,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
             <div className="w-14 h-14 rounded-lg border border-paper-200 bg-paper-0 flex items-center justify-center mb-6">
               <Layers size={24} className="text-ink-400" strokeWidth={1.4} />
             </div>
-            <h2 className="font-display text-[1.375rem] font-[420] text-ink-900 leading-tight">
+            <h2 className="text-[1.375rem] font-semibold text-ink-900 leading-tight">
               Your Knowledge Hub is empty
             </h2>
             <p className="text-[0.9375rem] text-ink-500 mt-3 max-w-xl leading-relaxed">

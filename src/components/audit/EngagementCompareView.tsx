@@ -67,7 +67,7 @@ export default function EngagementCompareView({ onBack }: Props) {
         <div className="mb-5 flex items-end justify-between">
           <div>
             <div className="text-[0.6875rem] font-semibold text-text-muted tracking-wider uppercase mb-1">Audit Quality</div>
-            <h1 className="font-display text-[2rem] font-bold text-text leading-tight flex items-center gap-3">
+            <h1 className="text-[2rem] font-bold text-text leading-tight flex items-center gap-3">
               <GitCompare size={28} className="text-primary" />
               Engagement compare
             </h1>
