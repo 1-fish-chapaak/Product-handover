@@ -28,6 +28,12 @@ import ListPlaceholder from '../shared/ListPlaceholder';
 
 interface Props {
   onBack: () => void;
+  /**
+   * The view the Back control navigates to. Used to scope concierge-only header
+   * affordances: when 'ai-concierge-racm' the editor was opened from the AI
+   * Concierge RACM Generator and shows a "Generate new" shortcut.
+   */
+  backView?: string;
   /** Optional label shown beside the back arrow (e.g. "Back to RACM"). Icon-only when omitted. */
   backLabel?: string;
   /** RACM display name shown in the page header */
@@ -99,7 +105,7 @@ const GROUP_BY_OPTIONS: { value: GroupByMode; label: string }[] = [
   { value: 'riskRating', label: 'Risk Rating' },
 ];
 
-export default function RacmFullPageEditor({ onBack, backLabel, racmName, racmId, processLabel, sourceFiles }: Props) {
+export default function RacmFullPageEditor({ onBack, backView, backLabel, racmName, racmId, processLabel, sourceFiles }: Props) {
   const { openShare } = useShare();
   // When generated from 2+ files, show a trailing "Ref" column and tag each row
   // with its source file (round-robin across the uploaded files for this mock).
@@ -134,6 +140,9 @@ export default function RacmFullPageEditor({ onBack, backLabel, racmName, racmId
   const [detailRowId, setDetailRowId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'edited'>('saved');
   const [showImportToast, setShowImportToast] = useState(false);
+  // Transient "Changes saved" toast fired after each cell commit (distinct from
+  // the persistent label that was deliberately removed earlier).
+  const [savedToast, setSavedToast] = useState(false);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -184,6 +193,14 @@ export default function RacmFullPageEditor({ onBack, backLabel, racmName, racmId
   const pagedRows = useMemo(() => filteredRows.slice(pageStart, pageEnd), [filteredRows, pageStart, pageEnd]);
   // Reset to the first page whenever the filtered set or page size changes.
   useEffect(() => { setPage(1); }, [search, showOnlyKey, columnFilters, perPage]);
+
+  // Close the group-by popover on Escape (mirrors the outside-click backdrop).
+  useEffect(() => {
+    if (!groupByOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setGroupByOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [groupByOpen]);
 
   const grouped = useMemo(() => {
     if (groupBy === 'none') return [{ label: 'All Controls', rows: pagedRows, count: pagedRows.length }];
@@ -258,7 +275,7 @@ export default function RacmFullPageEditor({ onBack, backLabel, racmName, racmId
   const updateCell = (rowKey: string, colKey: keyof ProcurementRacmRow, value: string) => {
     setSaveStatus('saving');
     setRows(prev => prev.map(r => (`${r.riskId}-${r.controlId}`) === rowKey ? { ...r, [colKey]: value } : r));
-    window.setTimeout(() => setSaveStatus('saved'), 600);
+    window.setTimeout(() => { setSaveStatus('saved'); setSavedToast(true); }, 600);
   };
 
   const addRow = () => {
@@ -359,7 +376,7 @@ export default function RacmFullPageEditor({ onBack, backLabel, racmName, racmId
       </div>
 
       {/* RACM name section — title + inline meta; actions on the right */}
-      <div className="bg-white px-6 pt-0 pb-3.5 flex items-center justify-between gap-4 shrink-0">
+      <div className="bg-white px-6 pt-0 pb-3.5 flex items-center justify-between gap-4 flex-wrap gap-y-2 shrink-0">
         <div className="min-w-0 flex items-center gap-3">
           {editingTitle ? (
             <input
@@ -375,8 +392,9 @@ export default function RacmFullPageEditor({ onBack, backLabel, racmName, racmId
           ) : (
             <button
               onDoubleClick={() => setEditingTitle(true)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); setEditingTitle(true); } }}
               title="Double-click to rename"
-              className="text-[1.375rem] font-bold text-ink-900 leading-tight truncate min-w-0 hover:bg-brand-50 rounded px-1 -mx-1 cursor-text transition-colors">
+              className="text-[1.375rem] font-bold text-ink-900 leading-tight truncate min-w-0 hover:bg-brand-50 rounded px-1 -mx-1 cursor-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1">
               {displayTitle}
             </button>
           )}
@@ -389,6 +407,12 @@ export default function RacmFullPageEditor({ onBack, backLabel, racmName, racmId
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {/* Concierge-only: start another generation. Reuses Back (to 'ai-concierge-racm'). */}
+          {backView === 'ai-concierge-racm' && (
+            <Button variant="outline" size="md" leftIcon={<Plus size={14} />} onClick={onBack}>
+              Generate new
+            </Button>
+          )}
           <Gated permission="racm_share">
           <Button variant="outline" size="md" leftIcon={<Share2 size={14} />}
             onClick={(e) => openShare({ type: 'racm', id: racmId ?? 'racm', anchor: rectFromEvent(e) })}>
@@ -407,13 +431,13 @@ export default function RacmFullPageEditor({ onBack, backLabel, racmName, racmId
       </div>
 
       {/* Toolbar */}
-      <div className="bg-white border-b border-border-light px-6 py-2.5 flex items-center justify-between gap-3 shrink-0">
+      <div className="bg-white border-b border-border-light px-6 py-2.5 flex items-center justify-between gap-3 flex-wrap gap-y-2 shrink-0">
         {/* Left — search */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <div className="relative max-w-md flex-1">
             <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search all columns…"
+              placeholder="Search all columns…" aria-label="Search all columns"
               className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-xs bg-white outline-none focus:border-primary/40 transition-all" />
           </div>
         </div>
@@ -431,7 +455,8 @@ export default function RacmFullPageEditor({ onBack, backLabel, racmName, racmId
           {/* Group-by — themed popover, matches the Column-groups panel */}
           <div className="relative">
             <button onClick={() => setGroupByOpen(o => !o)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5 ${groupByOpen ? 'bg-primary/10 text-primary ring-1 ring-primary/30' : 'border border-border text-text-secondary hover:bg-surface-2'}`}>
+              aria-haspopup="menu" aria-expanded={groupByOpen}
+              className={`px-2.5 h-7 rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 ${groupByOpen ? 'bg-primary/10 text-primary ring-1 ring-primary/30' : 'border border-border text-text-secondary hover:bg-surface-2'}`}>
               <Layers size={12} className={groupByOpen ? 'text-primary' : 'text-ink-400'} />
               {groupBy === 'none' ? 'No grouping' : `Group by ${GROUP_BY_LABELS[groupBy]}`}
               <ChevronDown size={12} className="opacity-60" />
@@ -462,7 +487,8 @@ export default function RacmFullPageEditor({ onBack, backLabel, racmName, racmId
           {/* Columns */}
           <div className="relative">
             <button onClick={() => setShowColumnPanel(v => !v)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5 ${showColumnPanel ? 'bg-primary/10 text-primary ring-1 ring-primary/30' : 'border border-border text-text-secondary hover:bg-surface-2'}`}>
+              aria-haspopup="dialog" aria-expanded={showColumnPanel}
+              className={`px-2.5 h-7 rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 ${showColumnPanel ? 'bg-primary/10 text-primary ring-1 ring-primary/30' : 'border border-border text-text-secondary hover:bg-surface-2'}`}>
               <Columns3 size={12} />
               Columns ({visibleColumns.length}/{PROCUREMENT_RACM_COLUMNS.length})
             </button>
@@ -477,7 +503,7 @@ export default function RacmFullPageEditor({ onBack, backLabel, racmName, racmId
             )}
           </div>
           {/* Add */}
-          <Button variant="primary" size="md" leftIcon={<Plus size={14} />} onClick={addRow}>
+          <Button variant="primary" size="sm" leftIcon={<Plus size={14} />} onClick={addRow}>
             Add Risk-Control
           </Button>
         </div>
@@ -552,10 +578,10 @@ export default function RacmFullPageEditor({ onBack, backLabel, racmName, racmId
           {totalPages > 1 && (
             <div className="flex items-center gap-2">
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
-                className="px-2.5 py-1 rounded-sm border border-border text-text-secondary hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors">Prev</button>
+                className="px-2.5 py-1 rounded-sm border border-border text-text-secondary hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1">Prev</button>
               <span className="tabular-nums text-text-secondary">Page {safePage} / {totalPages}</span>
               <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
-                className="px-2.5 py-1 rounded-sm border border-border text-text-secondary hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors">Next</button>
+                className="px-2.5 py-1 rounded-sm border border-border text-text-secondary hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1">Next</button>
             </div>
           )}
         </div>
@@ -581,6 +607,18 @@ export default function RacmFullPageEditor({ onBack, backLabel, racmName, racmId
             className="fixed bottom-4 left-1/2 -translate-x-1/2 px-3 py-2 rounded-lg bg-text text-white text-[0.6875rem] shadow-lg z-50 flex items-center gap-2">
             <AlertTriangle size={11} className="text-mitigated" aria-hidden="true" />
             Import / export wired in production. This prototype uses the in-memory dataset.
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* "Changes saved" toast — transient confirmation after a cell commit */}
+      <AnimatePresence>
+        {savedToast && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
+            onAnimationComplete={() => setTimeout(() => setSavedToast(false), 1800)}
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 px-3 py-2 rounded-lg bg-text text-white text-[0.6875rem] shadow-lg z-50 flex items-center gap-2">
+            <Check size={11} className="text-compliant" aria-hidden="true" />
+            Changes saved
           </motion.div>
         )}
       </AnimatePresence>
@@ -619,13 +657,15 @@ function ColumnFilterControl({ colKey: _colKey, label, mode, options, value, onC
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => { const t = e.target as Node; if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return; setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
   }, [open]);
   return (
     <>
-      <button ref={btnRef} type="button" onClick={(e) => { e.stopPropagation(); toggle(); }} aria-label={`Filter ${label}`}
-        className={`shrink-0 w-4 h-4 flex items-center justify-center rounded-md cursor-pointer ${active ? 'text-brand-700 bg-brand-50' : 'text-ink-400 hover:text-brand-700 hover:bg-brand-50'}`}>
+      <button ref={btnRef} type="button" onClick={(e) => { e.stopPropagation(); toggle(); }} aria-label={`Filter ${label}`} aria-expanded={open}
+        className={`shrink-0 w-4 h-4 flex items-center justify-center rounded-md cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 ${active ? 'text-brand-700 bg-brand-50' : 'text-ink-400 hover:text-brand-700 hover:bg-brand-50'}`}>
         <Filter size={10} />
       </button>
       {open && createPortal(
@@ -681,15 +721,17 @@ function ColumnVisibilityPanel({
   onReset: () => void;
   onClose: () => void;
 }) {
-  // close on outside click
+  // close on outside click or Escape
   const ref = useRef<HTMLDivElement>(null);
   const [q, setQ] = useState('');
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('mousedown', handler);
-    return () => window.removeEventListener('mousedown', handler);
+    document.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('mousedown', handler); document.removeEventListener('keydown', onKey); };
   }, [onClose]);
 
   const term = q.trim().toLowerCase();
@@ -704,7 +746,7 @@ function ColumnVisibilityPanel({
       <div className="px-2.5 pt-2 pb-1">
         <div className="relative">
           <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search columns…"
+          <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search columns…" aria-label="Search columns"
             className="w-full pl-7 pr-2 py-1.5 border border-border rounded-lg text-xs bg-white outline-none focus:border-primary/40 transition-colors" />
         </div>
       </div>
@@ -800,7 +842,7 @@ function RacmGrid({
           <div key={group.label}>
             {showGroupHeaders && (
               <button onClick={() => onToggleGroup(group.label)}
-                className="sticky left-0 z-10 w-full text-left flex items-center gap-2 px-4 py-1.5 bg-primary/5 border-b border-primary/15 hover:bg-primary/10 transition-colors cursor-pointer"
+                className="sticky left-0 z-10 w-full text-left flex items-center gap-2 px-4 py-1.5 bg-primary/5 border-b border-primary/15 hover:bg-primary/10 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1"
                 style={{ minWidth: totalWidth }}>
                 {collapsed ? <ChevronRight size={12} className="text-primary" /> : <ChevronDown size={12} className="text-primary" />}
                 <span className="text-[0.6875rem] font-bold text-primary truncate">{group.label}</span>
@@ -910,6 +952,12 @@ function AttributeEditModal({ value, onSave, onClose }: { value: string; onSave:
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
+  // Close on Escape (today only the X button and backdrop click dismiss it).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const addAttr = () => {
     const trimmed = input.trim();
@@ -930,10 +978,11 @@ function AttributeEditModal({ value, onSave, onClose }: { value: string; onSave:
         initial={{ opacity: 0, scale: 0.97, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        role="dialog" aria-modal="true" aria-labelledby="attr-modal-title"
         className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[440px] bg-white rounded-xl border border-border-light shadow-xl overflow-hidden"
       >
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-light">
-          <h3 className="text-[1rem] font-bold text-ink-900">Edit Attributes</h3>
+          <h3 id="attr-modal-title" className="text-[1rem] font-bold text-ink-900">Edit Attributes</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
         </div>
         <div className="px-6 py-5 space-y-4">
@@ -992,7 +1041,7 @@ function CellContent({
   if (isId) {
     return (
       <button onClick={onOpenDetail}
-        className="font-mono text-[0.6875rem] text-primary hover:underline cursor-pointer inline-flex items-center gap-1">
+        className="font-mono text-[0.6875rem] text-primary hover:underline cursor-pointer inline-flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset">
         {col.key === 'controlId' && row.isKey && (
           <span title="Key control" className="inline-flex shrink-0">
             <Star size={10} className="text-mitigated fill-mitigated" aria-label="Key control" />
@@ -1014,7 +1063,8 @@ function CellContent({
             : 'bg-paper-100 text-ink-600 border-border-light';
     return (
       <button onDoubleClick={onEdit}
-        className={`px-2 h-5 rounded-full text-[0.5625rem] font-bold inline-flex items-center border ${cls} cursor-pointer`}>
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); onEdit(); } }}
+        className={`px-2 h-5 rounded-full text-[0.5625rem] font-bold inline-flex items-center border ${cls} cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset`}>
         {val || '—'}
       </button>
     );
@@ -1022,10 +1072,10 @@ function CellContent({
 
   // Attributes — render comma-separated values as individual chips, click to edit via modal
   if (col.key === 'attributes') {
-    if (!val) return <button onClick={onEdit} className="text-[0.625rem] text-primary hover:underline cursor-pointer">+ Add attributes</button>;
+    if (!val) return <button onClick={onEdit} className="text-[0.625rem] text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset rounded">+ Add attributes</button>;
     const items = val.split(',').map(s => s.trim()).filter(Boolean);
     return (
-      <button onClick={onEdit} className="flex flex-wrap gap-1 py-0.5 -mx-1 px-1 cursor-pointer hover:bg-white/60 rounded transition-colors w-full text-left">
+      <button onClick={onEdit} className="flex flex-wrap gap-1 py-0.5 -mx-1 px-1 cursor-pointer hover:bg-white/60 rounded transition-colors w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset">
         {items.map((attr, idx) => (
           <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded text-[0.5625rem] font-medium bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap">
             {attr}
@@ -1038,7 +1088,7 @@ function CellContent({
   // Plain text — single line truncated, double click to edit
   return (
     <button onDoubleClick={onEdit} onClick={onEdit}
-      className="w-full h-full text-left text-[0.6875rem] text-text truncate cursor-text hover:bg-white/60 -mx-3 px-3 rounded transition-colors">
+      className="w-full h-full text-left text-[0.6875rem] text-text truncate cursor-text hover:bg-white/60 -mx-3 px-3 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset">
       {val || <span className="text-ink-300">—</span>}
     </button>
   );
@@ -1054,10 +1104,20 @@ function DetailPanel({
   onImport?: () => void;
 }) {
   const sections: { group: ColumnGroup; label: string }[] = COLUMN_GROUP_ORDER.map(g => ({ group: g, label: COLUMN_GROUP_LABELS[g] }));
+  // Non-modal side panel: the grid behind stays interactive (no backdrop / focus
+  // trap / aria-modal). We only close on Escape and move initial focus to Close.
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  useEffect(() => { closeRef.current?.focus(); }, []);
 
   return (
     <motion.div initial={{ x: 480, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 480, opacity: 0 }}
       transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+      role="dialog" aria-label={`Risk & control detail — ${row.riskId} · ${row.controlId}`}
       className="fixed right-0 top-0 bottom-0 w-[520px] bg-white border-l border-border shadow-2xl z-40 flex flex-col">
       {/* header */}
       <div className="px-5 py-3 border-b border-border-light flex items-start justify-between">
@@ -1071,7 +1131,7 @@ function DetailPanel({
           <h2 className="text-[0.8125rem] font-bold text-text truncate">{row.controlObjective || row.controlActivity?.slice(0, 80) || '(No objective)'}</h2>
           <p className="text-[0.625rem] text-text-muted mt-0.5 truncate">{row.subProcess}</p>
         </div>
-        <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0 -mr-1"><X size={16} /></button>
+        <button ref={closeRef} onClick={onClose} aria-label="Close detail panel" className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0 -mr-1"><X size={16} /></button>
       </div>
 
       {/* body */}

@@ -647,6 +647,13 @@ export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
   };
 
   const resetAll = () => {
+    // A stop/cancel mid-flight: reconcile the in-progress history row to CANCELLED
+    // (the row stays, with a grey "Cancelled" tag) rather than leaving it stuck "In progress".
+    if (jobIdRef.current) {
+      const id = jobIdRef.current;
+      setHistory((prev) => prev.map((h) => (h.id === id ? { ...h, status: 'CANCELLED' } : h)));
+      jobIdRef.current = null;
+    }
     job.reset();
     setFiles([]);
     setOptions({});
@@ -752,7 +759,12 @@ export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
               {renderHistory ? renderHistory({
                 jobs: history,
                 onDelete: (id) => setHistory((prev) => prev.filter((h) => h.id !== id)),
-                onOpen: () => { setShowHistory(false); job.complete(buildResult([], {})); },
+                onOpen: (id) => {
+                  setShowHistory(false);
+                  const clicked = history.find((h) => h.id === id);
+                  const f = (clicked?.files ?? []).map((name) => ({ name, size: 0, type: '' } as PickedFile));
+                  job.complete(buildResult(f, {}));
+                },
               }) : (
                 <JobHistory
                   jobs={history}
