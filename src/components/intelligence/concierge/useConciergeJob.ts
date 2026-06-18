@@ -89,7 +89,7 @@ export function useConciergeJob<I, R>(cfg: Cfg<I, R>) {
           status: 'PROCESSING',
           progress: 0,
           stageIndex: 0,
-          message: st[0]?.label ?? 'Processing…',
+          message: cfgRef.current.messages?.[0] ?? st[0]?.label ?? 'Processing…',
           activity: st[0] ? [st[0].label] : [],
         }));
 

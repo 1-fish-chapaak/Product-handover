@@ -935,6 +935,7 @@ function AppInner() {
         return (
           <RacmFullPageEditor
             onBack={() => setView(racmEditorContext?.backView ?? 'engagement-overview')}
+            backView={racmEditorContext?.backView}
             backLabel={racmEditorContext?.backLabel}
             racmName={racmEditorContext?.racmName ?? 'Procurement SOP · Budget to Payment RACM'}
             racmId={racmEditorContext?.racmId}
@@ -995,7 +996,7 @@ function AppInner() {
               racmName: name,
               processLabel: '',
               backView: 'ai-concierge-racm',
-              backLabel: 'Back to RACM',
+              backLabel: 'Back to RACM Generator',
               sourceFiles,
             })}
           />
