@@ -732,9 +732,7 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
           <div className="space-y-2.5">
             {checking.map((c) => (
               <div key={c} className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-md inline-flex items-center justify-center shrink-0 mt-px bg-paper-100">
-                  <span className="w-1.5 h-1.5 rounded-full bg-ink-300" />
-                </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-ink-300 shrink-0 mt-[0.4375rem]" />
                 <span className="text-[0.75rem] leading-relaxed text-ink-600">{c}</span>
               </div>
             ))}
