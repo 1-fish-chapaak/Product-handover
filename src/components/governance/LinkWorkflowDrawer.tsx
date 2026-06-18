@@ -61,7 +61,7 @@ export default function LinkWorkflowDrawer({ onClose, onLink, alreadyLinkedIds }
             <div>
               <div className="flex items-center gap-2">
                 <Link2 size={18} className="text-brand-600" />
-                <h2 className="font-display text-[1.25rem] font-semibold text-ink-900 tracking-tight">Link Workflow</h2>
+                <h2 className="text-[1.25rem] font-semibold text-ink-900 tracking-tight">Link Workflow</h2>
               </div>
               <p className="text-[0.75rem] text-ink-500 mt-0.5">Select a workflow from the Workflow Library to link to this control.</p>
             </div>

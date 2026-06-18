@@ -1104,7 +1104,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
         </div>
 
         {/* Title */}
-        <h1 className="font-display text-[28px] font-[420] tracking-tight text-ink-900 leading-[1.15]">
+        <h1 className="text-[28px] font-semibold tracking-tight text-ink-900 leading-[1.15]">
           {wf.name}
         </h1>
 

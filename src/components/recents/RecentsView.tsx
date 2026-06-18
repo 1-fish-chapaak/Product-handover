@@ -261,7 +261,7 @@ export default function RecentsView({ setView, openChat, openWorkflowExecutor }:
 
           <div className="flex items-end justify-between mb-6">
             <div>
-              <h1 className="font-display text-[2.5rem] font-[420] tracking-tight text-ink-900 leading-[1.1]">
+              <h1 className="text-[2.5rem] font-semibold tracking-tight text-ink-900 leading-[1.1]">
                 {TABS.find(t => t.id === tab)!.label}
               </h1>
             </div>

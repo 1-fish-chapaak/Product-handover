@@ -77,7 +77,7 @@ export default function ClarificationCard({
     >
       {/* Header — serif title + labeled Back/Next + close */}
       <div className="flex items-center justify-between px-5 pt-4 pb-3 gap-4">
-        <h3 className="font-display text-[1.0625rem] font-semibold text-ink-800 leading-snug flex-1 tracking-tight">
+        <h3 className="text-[1.0625rem] font-semibold text-ink-800 leading-snug flex-1 tracking-tight">
           {current.question}
         </h3>
         <div className="flex items-center gap-1 shrink-0">
