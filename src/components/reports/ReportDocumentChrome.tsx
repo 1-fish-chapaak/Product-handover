@@ -177,8 +177,10 @@ export function CoverBanner({ title, gradient, description, byline, actions, fac
   );
 }
 
-export function ReportBrandBanner({ title, actions, children, className = '', gradient, headerText, facts }: {
+export function ReportBrandBanner({ title, back, actions, children, className = '', gradient, headerText, facts }: {
   title: string;
+  /** Optional "Back to Reports" affordance rendered above the title (top-left). */
+  back?: React.ReactNode;
   /** CTAs rendered top-right on the banner, like the ATR document. */
   actions?: React.ReactNode;
   /** Description / byline content rendered under the title. */
@@ -223,6 +225,7 @@ export function ReportBrandBanner({ title, actions, children, className = '', gr
         style={{ backgroundImage: 'linear-gradient(to right, rgba(17,5,42,0.48), rgba(17,5,42,0.14) 40%, rgba(17,5,42,0) 62%)' }}
         aria-hidden="true"
       />
+      {back && <div className="relative z-10 mb-3 print:hidden">{back}</div>}
       <div className="relative z-10 flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0 flex-1">
           <h1 className="text-[2.0625rem] font-bold tracking-[-0.02em] leading-[1.08] text-white mb-1.5" style={{ textShadow: '0 1px 2px rgba(10,2,30,0.22)' }}>{title}</h1>

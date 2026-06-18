@@ -1,7 +1,8 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sparkles } from 'lucide-react';
-import { useAppState } from './hooks/useAppState';
+import { useAppState, type View } from './hooks/useAppState';
+import type { ControlDetail } from './components/engagement/engagementData';
 import { ToastProvider } from './components/shared/Toast';
 import { BulkRunProgressProvider } from './components/shared/BulkRunProgress';
 import { CurrentUserProvider, useCurrentUser } from './context/CurrentUserContext';
@@ -23,7 +24,7 @@ import RiskRegister from './components/audit/RiskRegister';
 import AuditExecution from './components/audit/AuditExecution';
 import DashboardView from './components/dashboard/DashboardView';
 import DashboardListPage from './components/dashboard/DashboardListPage';
-import ReportsView, { CUSTOM_TEMPLATES } from './components/reports/ReportsView';
+import ReportsView, { CUSTOM_TEMPLATES, SEED_APPROVED_TEMPLATE } from './components/reports/ReportsView';
 import { REPORT_TEMPLATES } from './data/mockData';
 import HomeView from './components/home/HomeView';
 import RecentsView from './components/recents/RecentsView';
@@ -233,51 +234,52 @@ function AppInner() {
     document.addEventListener('mouseup', onUp);
   }, [artifactPanelPx]);
   const [controlDrawerId, setControlDrawerId] = useState<string | null>(null);
-  const [controlDrawerData, setControlDrawerData] = useState<any>(null);
+  const [controlDrawerData, setControlDrawerData] = useState<ControlDetail | null>(null);
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
   const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
   type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge'; sourceFiles?: string[] };
-  const [racmEditorContext, setRacmEditorContext] = useState<RacmEditorContext | null>(null);
+  // Deep-link support: when this tab is opened at ?view=racm-full-editor (the
+  // "Open in editor" new tab), restore the editor context at init so there's no
+  // mount-time setState / double render. getInitialView (useAppState) already
+  // selects the matching view for racm-full-editor and audit-risk-register.
+  const [racmEditorContext, setRacmEditorContext] = useState<RacmEditorContext | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') !== 'racm-full-editor') return null;
+    return {
+      racmId: params.get('racmId') ?? '',
+      racmName: params.get('racmName') ?? 'RACM',
+      processLabel: params.get('processLabel') ?? '',
+      backView: 'business-processes',
+    };
+  });
   const openRacmFullEditor = (ctx: RacmEditorContext) => {
     setRacmEditorContext(ctx);
     setView('racm-full-editor');
   };
-  // Deep-link support: when this tab is opened at ?view=racm-full-editor (the
-  // "Open in editor" new tab), restore the editor context and show it. Back goes
-  // to the Process Hub.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('view') === 'racm-full-editor') {
-      setRacmEditorContext({
-        racmId: params.get('racmId') ?? '',
-        racmName: params.get('racmName') ?? 'RACM',
-        processLabel: params.get('processLabel') ?? '',
-        backView: 'business-processes',
-      });
-      setView('racm-full-editor');
-    } else if (params.get('view') === 'audit-risk-register') {
-      // Deep-link: "open risk detail in a new tab" lands here with ?risk=RSK-xxx.
-      // RiskRegister reads the risk param itself and shows its full detail page.
-      setView('audit-risk-register');
-    }
-  }, []); // run once on mount
   type CustomTemplate = typeof CUSTOM_TEMPLATES[number];
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
   // The old demo seeds — filtered out of any previously persisted blob so the
   // Custom section only ever shows templates the user actually created.
   const DEMO_TEMPLATE_IDS = new Set(['ct-custom-01', 'ct-custom-02', 'ct-003', 'ct-004', 'ct-005', 'ct-006']);
+  // A seeded approved-format template so the §5 format-match verdict is clickable
+  // without first uploading twice. Prepended if absent (a manual delete sticks
+  // for the session; it returns on a fresh load — it's a demo fixture).
+  const seed = SEED_APPROVED_TEMPLATE as unknown as CustomTemplate;
+  const withSeed = (list: CustomTemplate[]) =>
+    list.some(t => t.id === seed.id) ? list : [seed, ...list];
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>(() => {
     try {
       const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          return (parsed as CustomTemplate[]).filter(t => !DEMO_TEMPLATE_IDS.has(t.id));
+          return withSeed((parsed as CustomTemplate[]).filter(t => !DEMO_TEMPLATE_IDS.has(t.id)));
         }
       }
     } catch { /* ignore */ }
-    return [];
+    return withSeed([]);
   });
   useEffect(() => {
     try { localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(customTemplates)); } catch { /* ignore */ }
@@ -336,7 +338,7 @@ function AppInner() {
       if (detail.kind === 'process' && detail.bpId) {
         setSelectedBP(detail.bpId);
       } else {
-        setView(detail.view as any);
+        setView(detail.view as View);
         // Pass the picked id along as a deep-link focus hint — same pattern
         // the notification drawer uses to highlight the destination row.
         setFocusedNotificationRefId(detail.id);
@@ -348,6 +350,10 @@ function AppInner() {
 
   useEffect(() => {
     if (state.view === 'chat' || state.view === 'home') return;
+    // Intentional: flash a 400ms skeleton on every view change. The extra render
+    // this triggers is the desired behaviour (skeleton in, then out), not the
+    // accidental cascading-render the rule guards against.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setViewLoading(true);
     const t = setTimeout(() => setViewLoading(false), 400);
     return () => clearTimeout(t);
@@ -624,7 +630,7 @@ function AppInner() {
                   window.history.pushState({ section: 'workflows' }, '', '?section=workflows');
                 }
                 setSelectedWorkflow(null);
-                setView('business-processes' as any);
+                setView('business-processes');
                 setWorkflowBackView(null);
               } else if (fromLibrary) {
                 setView('workflow-library');
@@ -662,7 +668,7 @@ function AppInner() {
                   window.history.pushState({ section: 'workflows' }, '', '?section=workflows');
                 }
                 setSelectedWorkflow(null);
-                setView('business-processes' as any);
+                setView('business-processes');
               } else {
                 setSelectedWorkflow(null);
               }
@@ -705,7 +711,7 @@ function AppInner() {
             onNavigateToExecution={(engId) => {
               setEngagementBackView('programs');
               openAuditExecution(engId);
-              setView('engagement-detail' as any);
+              setView('engagement-detail');
             }}
           />
         );
@@ -720,7 +726,7 @@ function AppInner() {
             onOpenEngagement={(engId) => {
               setEngagementBackView('business-processes');
               openAuditExecution(engId);
-              setView('engagement-detail' as any);
+              setView('engagement-detail');
             }}
             onOpenWorkflowDetail={(wfId) => {
               setWorkflowBackView('business-processes');
@@ -743,7 +749,7 @@ function AppInner() {
       case 'audit-risk-register':
         return (
           <RiskRegister
-            onNavigate={(v) => setView(v as any)}
+            onNavigate={(v) => setView(v as View)}
           />
         );
 
@@ -865,7 +871,7 @@ function AppInner() {
             onOpenExecution={(engId) => {
               setEngagementBackView('audit-planning');
               openAuditExecution(engId);
-              setView('engagement-detail' as any);
+              setView('engagement-detail');
             }}
             onOpenCaseManagement={openCaseManagement}
             onOpenRacmFullEditor={(override) => openRacmFullEditor({
@@ -917,7 +923,7 @@ function AppInner() {
           onNavigateToExecution={(engId) => {
           setEngagementBackView('audit-planning');
           openAuditExecution(engId);
-          setView('engagement-detail' as any);
+          setView('engagement-detail');
         }} />;
 
       case 'knowledge-hub':
@@ -1161,7 +1167,7 @@ function AppInner() {
           {controlDrawerId && (
             <ControlDetailDrawer
               controlId={controlDrawerId}
-              controlData={controlDrawerData}
+              controlData={controlDrawerData ?? undefined}
               onClose={() => { setControlDrawerId(null); setControlDrawerData(null); }}
             />
           )}

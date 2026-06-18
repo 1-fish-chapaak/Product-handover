@@ -323,40 +323,98 @@ export function BulkAuditVariantView({
     setPendingDelete(null);
   };
 
+  // ─── Reader workspace: scroll-spy outline ───
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  useEffect(() => {
+    const root = scrollRef.current; if (!root) return;
+    const els = Array.from(root.querySelectorAll<HTMLElement>('[id^="bulk-"],[id^="workflow-chapter-"]'));
+    if (els.length === 0) return;
+    const obs = new IntersectionObserver((entries) => {
+      const lead = entries.filter(e => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (lead) setActiveSectionId(lead.target.id);
+    }, { root, rootMargin: '-84px 0px -62% 0px', threshold: 0 });
+    els.forEach(el => obs.observe(el));
+    return () => obs.disconnect();
+  }, [successfulWorkflows.length, observations.length]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
       className="h-full overflow-y-auto bg-canvas"
+      ref={scrollRef}
     >
-      <BulkReportHeader onBack={onBack} onShare={onShare} onExport={handleExport} templates={templates} />
+      {/* Report actions — pinned to the top of the scroll area (page-coloured,
+          borderless — no header-bar chrome) so they stay reachable on scroll. */}
+      <div className="sticky top-0 z-30 bg-canvas max-w-[1480px] mx-auto px-6 lg:px-10 h-16 flex items-center justify-between gap-4 print:hidden">
+        <BulkBackLink onBack={onBack} />
+        {!allFailed && (
+          <div className="flex items-center gap-2">
+            <BulkCoverActions onShare={onShare} onExport={handleExport} templates={templates} />
+          </div>
+        )}
+      </div>
+
       {allFailed ? (
-        <AllFailedEmpty report={report} failedWorkflows={failedWorkflows} />
+        <div className="max-w-[1480px] mx-auto px-6 lg:px-10 pt-3 pb-8">
+          <AllFailedEmpty report={report} failedWorkflows={failedWorkflows} onBack={onBack} />
+        </div>
       ) : (
-        <EditorialLayout
-          report={report}
-          workflows={successfulWorkflows}
-          failedWorkflows={failedWorkflows}
-          totals={totals}
-          onOpenWorkflow={handleOpenWorkflow}
-          onRequestDelete={handleRequestDelete}
-          onReorderWorkflows={setWorkflows}
-          observations={observations}
-          onAddObservation={openAddObservation}
-          onEditObservation={openEditObservation}
-          onToggleObservationAttachment={toggleObservationAttachment}
-          onDeleteObservation={(obs) => setPendingDeleteObs(obs)}
-          onReorderObservations={setObservations}
-          contentsEditingId={contentsEditingId}
-          contentsDraft={contentsDraft}
-          onDraftChange={setContentsDraft}
-          onStartContentsRename={handleStartContentsRename}
-          onSaveContentsRename={handleSaveContentsRename}
-          onCancelContentsRename={handleCancelContentsRename}
-          onScrollToContent={scrollToContent}
-          onGenerateAtr={() => setAtrModalOpen(true)}
-        />
+        <div className="max-w-[1480px] mx-auto px-6 lg:px-10 pt-3 pb-8 flex items-start gap-8 xl:gap-10">
+          <aside className="hidden xl:block w-[252px] shrink-0 sticky top-[72px] self-start max-h-[calc(100vh-96px)] overflow-y-auto pr-1 -mr-1 print:hidden">
+            <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-3.5">
+              <EditorialContents
+                workflows={successfulWorkflows}
+                observations={observations}
+                onAddObservation={openAddObservation}
+                onReorderWorkflows={setWorkflows}
+                onRequestDeleteWorkflow={handleRequestDelete}
+                onReorderObservations={setObservations}
+                onEditObservation={openEditObservation}
+                onDeleteObservation={(obs) => setPendingDeleteObs(obs)}
+                contentsEditingId={contentsEditingId}
+                contentsDraft={contentsDraft}
+                onDraftChange={setContentsDraft}
+                onStartContentsRename={handleStartContentsRename}
+                onSaveContentsRename={handleSaveContentsRename}
+                onCancelContentsRename={handleCancelContentsRename}
+                onScrollToContent={scrollToContent}
+                activeId={activeSectionId}
+              />
+            </div>
+          </aside>
+          <div className="min-w-0 flex-1 max-w-[920px]">
+            <EditorialLayout
+              report={report}
+              workflows={successfulWorkflows}
+              failedWorkflows={failedWorkflows}
+              totals={totals}
+              onOpenWorkflow={handleOpenWorkflow}
+              onRequestDelete={handleRequestDelete}
+              onReorderWorkflows={setWorkflows}
+              observations={observations}
+              onAddObservation={openAddObservation}
+              onEditObservation={openEditObservation}
+              onToggleObservationAttachment={toggleObservationAttachment}
+              onDeleteObservation={(obs) => setPendingDeleteObs(obs)}
+              onReorderObservations={setObservations}
+              contentsEditingId={contentsEditingId}
+              contentsDraft={contentsDraft}
+              onDraftChange={setContentsDraft}
+              onStartContentsRename={handleStartContentsRename}
+              onSaveContentsRename={handleSaveContentsRename}
+              onCancelContentsRename={handleCancelContentsRename}
+              onScrollToContent={scrollToContent}
+              onGenerateAtr={() => setAtrModalOpen(true)}
+              onBack={onBack}
+              onShare={onShare}
+              onExport={handleExport}
+              templates={templates}
+            />
+          </div>
+        </div>
       )}
 
       {atrModalOpen && <GenerateATRModal onClose={() => setAtrModalOpen(false)} />}
@@ -611,15 +669,25 @@ function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, 
   );
 }
 
-// Report top bar — back link + Apply Template / Share / Download, matching the
-// internal audit report header. Apply Template is a UX match here: a bulk audit
-// report has a fixed editorial layout, so applying a template animates + toasts
-// without swapping sections.
-function BulkReportHeader({ onBack, onShare, onExport, templates = REPORT_TEMPLATES }: {
-  onBack: () => void;
+// Back affordance + report actions, shown plainly on the light page surface
+// (no header bar — the platform doesn't use page headers).
+function BulkBackLink({ onBack }: { onBack: () => void }) {
+  return (
+    <button
+      onClick={onBack}
+      className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+    >
+      <ArrowLeft size={14} /> Back to Reports
+    </button>
+  );
+}
+
+// Apply Template / Share / Download — rendered in the cover banner's action slot.
+// Apply Template is a UX match here: a bulk audit report has a fixed editorial
+// layout, so applying a template animates + toasts without swapping sections.
+function BulkCoverActions({ onShare, onExport, templates = REPORT_TEMPLATES }: {
   onShare?: () => void;
   onExport: (ext: 'pdf' | 'doc' | 'ppt' | 'html' | 'xlsx') => void;
-  /** Options listed in the Apply Template dropdown (standard + custom). */
   templates?: typeof REPORT_TEMPLATES[number][];
 }) {
   const { addToast } = useToast();
@@ -639,94 +707,71 @@ function BulkReportHeader({ onBack, onShare, onExport, templates = REPORT_TEMPLA
 
   return (
     <>
-      <div className="px-[124px] pt-8 pb-4">
-        <div className="flex items-center justify-between gap-4">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 text-[0.8125rem] text-ink-500 hover:text-brand-600 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded"
-          >
-            <ArrowLeft size={14} /> Back to Reports
-          </button>
-          <div className="flex items-center gap-2 relative">
-            {/* Apply Template */}
-            <div className="relative">
-              <button
-                onClick={() => setShowApplyTemplate(p => !p)}
-                disabled={applyingTemplate}
-                aria-busy={applyingTemplate || undefined}
-                className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
-              >
-                {applyingTemplate ? (
-                  <Loader2 size={14} className="animate-spin text-brand-600" />
-                ) : (
-                  <Layout size={14} />
-                )}
-                <span className="truncate max-w-[220px]">
-                  {applyingTemplate ? 'Applying…' : (appliedTemplate?.name ?? 'Apply Template')}
-                </span>
-                <motion.span
-                  animate={{ rotate: showApplyTemplate ? 180 : 0 }}
-                  transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                  className="inline-flex"
-                >
-                  <ChevronDown size={14} />
-                </motion.span>
-              </button>
-              <AnimatePresence>
-                {showApplyTemplate && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowApplyTemplate(false)} />
-                    <ApplyTemplateDropdown
-                      templates={templates}
-                      activeId={appliedTemplate?.id ?? null}
-                      onSelect={handleApplyTemplate}
-                      onClose={() => setShowApplyTemplate(false)}
-                    />
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
-            {/* Share */}
-            {onShare && (
-              <button
-                onClick={onShare}
-                className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
-              >
-                <Share2 size={14} /> Share
-              </button>
-            )}
-            {/* Download */}
-            <div className="relative">
-              <button
-                onClick={() => setShowDownloadDropdown(p => !p)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
-              >
-                <Download size={14} /> Download <ChevronDown size={12} className={`transition-transform ${showDownloadDropdown ? 'rotate-180' : ''}`} />
-              </button>
-              {showDownloadDropdown && (
-                <div className="absolute right-0 top-full mt-1 bg-white border border-canvas-border shadow-xl z-50 py-1 w-48 rounded-[8px]">
-                  {([
-                    { label: 'Download as PDF', ext: 'pdf' },
-                    { label: 'Download as DOCX', ext: 'doc' },
-                    { label: 'Download as PPTX', ext: 'ppt' },
-                    { label: 'Download as HTML', ext: 'html' },
-                    { label: 'Download as Excel', ext: 'xlsx' },
-                  ] as const).map(({ label, ext }) => (
-                    <button
-                      key={ext}
-                      onClick={() => { onExport(ext); setShowDownloadDropdown(false); }}
-                      className="w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 transition-colors cursor-pointer"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {/* Apply Template */}
+      <div className="relative">
+        <button
+          onClick={() => setShowApplyTemplate(p => !p)}
+          disabled={applyingTemplate}
+          aria-busy={applyingTemplate || undefined}
+          className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 disabled:opacity-60 disabled:cursor-wait transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+        >
+          {applyingTemplate ? <Loader2 size={14} className="animate-spin" /> : <Layout size={14} />}
+          <span className="truncate max-w-[200px] hidden md:inline">{applyingTemplate ? 'Applying…' : (appliedTemplate?.name ?? 'Apply Template')}</span>
+          <motion.span animate={{ rotate: showApplyTemplate ? 180 : 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }} className="inline-flex">
+            <ChevronDown size={14} />
+          </motion.span>
+        </button>
+        <AnimatePresence>
+          {showApplyTemplate && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowApplyTemplate(false)} />
+              <ApplyTemplateDropdown
+                templates={templates}
+                activeId={appliedTemplate?.id ?? null}
+                onSelect={handleApplyTemplate}
+                onClose={() => setShowApplyTemplate(false)}
+              />
+            </>
+          )}
+        </AnimatePresence>
       </div>
-
+      {/* Share */}
+      {onShare && (
+        <button
+          onClick={onShare}
+          className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+        >
+          <Share2 size={14} /> Share
+        </button>
+      )}
+      {/* Download */}
+      <div className="relative">
+        <button
+          onClick={() => setShowDownloadDropdown(p => !p)}
+          className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-500 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+        >
+          <Download size={14} /> Download <ChevronDown size={12} className={`transition-transform ${showDownloadDropdown ? 'rotate-180' : ''}`} />
+        </button>
+        {showDownloadDropdown && (
+          <div className="absolute right-0 top-full mt-1 bg-white border border-canvas-border shadow-xl z-50 py-1 w-48 rounded-[8px]">
+            {([
+              { label: 'Download as PDF', ext: 'pdf' },
+              { label: 'Download as DOCX', ext: 'doc' },
+              { label: 'Download as PPTX', ext: 'ppt' },
+              { label: 'Download as HTML', ext: 'html' },
+              { label: 'Download as Excel', ext: 'xlsx' },
+            ] as const).map(({ label, ext }) => (
+              <button
+                key={ext}
+                onClick={() => { onExport(ext); setShowDownloadDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 transition-colors cursor-pointer"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       {/* Applying Template Overlay */}
       <AnimatePresence>
         {applyingTemplate && (
@@ -758,12 +803,13 @@ function BulkReportHeader({ onBack, onShare, onExport, templates = REPORT_TEMPLA
 // Empty state shown when *every* workflow in the bulk run failed. Replaces the
 // normal report layout — no audit content to show, just the cover and a list of
 // the failed runs so the reader knows what was attempted.
-function AllFailedEmpty({ report, failedWorkflows }: {
+function AllFailedEmpty({ report, failedWorkflows, onBack }: {
   report: Report;
   failedWorkflows: WorkflowResult[];
+  onBack: () => void;
 }) {
   return (
-    <div className="px-[124px] pt-2 pb-24">
+    <div className="pb-10">
       {/* Cover — same light letterhead as the editorial layout, but slimmer */}
       <ReportBrandBanner
         title={report.name}
@@ -800,9 +846,9 @@ function AllFailedEmpty({ report, failedWorkflows }: {
 }
 
 function EditorialLayout({
-  report, workflows, failedWorkflows, totals, onOpenWorkflow, onRequestDelete, onReorderWorkflows,
-  observations, onAddObservation, onEditObservation, onToggleObservationAttachment, onDeleteObservation, onReorderObservations,
-  contentsEditingId, contentsDraft, onDraftChange, onStartContentsRename, onSaveContentsRename, onCancelContentsRename, onScrollToContent, onGenerateAtr,
+  report, workflows, failedWorkflows, totals, onOpenWorkflow, onRequestDelete,
+  observations, onEditObservation, onToggleObservationAttachment, onDeleteObservation,
+  onGenerateAtr, onBack, onShare, onExport, templates,
 }: {
   report: Report;
   workflows: WorkflowResult[];
@@ -825,10 +871,14 @@ function EditorialLayout({
   onCancelContentsRename: () => void;
   onScrollToContent: (id: string) => void;
   onGenerateAtr: () => void;
+  onBack: () => void;
+  onShare?: () => void;
+  onExport: (ext: 'pdf' | 'doc' | 'ppt' | 'html' | 'xlsx') => void;
+  templates?: typeof REPORT_TEMPLATES[number][];
 }) {
   const { addToast } = useToast();
   return (
-    <div className="px-[124px] pt-2 pb-24">
+    <div className="pb-10">
       {/* Cover — light letterhead with theme accent + key facts, rounded top only so the white body below attaches cleanly */}
       <ReportBrandBanner
         title={report.name}
@@ -901,35 +951,16 @@ function EditorialLayout({
         />
       </div>
 
-      {/* Editorial body — white card attached to the header (no gap) */}
+      {/* Editorial body — white card attached to the header (no gap). The table
+          of contents now lives in the persistent outline rail, not inline. */}
       <article className="bg-white border-x border-b border-canvas-border rounded-b-[12px] px-8 py-8">
-        <EditorialContents
-          workflows={workflows}
-          observations={observations}
-          onAddObservation={onAddObservation}
-          onReorderWorkflows={onReorderWorkflows}
-          onRequestDeleteWorkflow={onRequestDelete}
-          onReorderObservations={onReorderObservations}
-          onEditObservation={onEditObservation}
-          onDeleteObservation={onDeleteObservation}
-          contentsEditingId={contentsEditingId}
-          contentsDraft={contentsDraft}
-          onDraftChange={onDraftChange}
-          onStartContentsRename={onStartContentsRename}
-          onSaveContentsRename={onSaveContentsRename}
-          onCancelContentsRename={onCancelContentsRename}
-          onScrollToContent={onScrollToContent}
-        />
-
-        <hr className="my-10 border-0 border-t border-ink-900/15" />
-
-        <div id="bulk-exec-summary" className="scroll-mt-6">
+        <div id="bulk-exec-summary" className="scroll-mt-20">
           <EditorialSummary totals={totals} />
         </div>
 
         <hr className="my-10 border-0 border-t border-ink-900/15" />
 
-        <div id="bulk-workflow-status" className="scroll-mt-6">
+        <div id="bulk-workflow-status" className="scroll-mt-20">
           <EditorialWorkflowStatus workflows={workflows} failedWorkflows={failedWorkflows} auditDate={report.generatedAt} />
         </div>
 
@@ -952,7 +983,7 @@ function EditorialLayout({
             <hr className="mt-10 mb-4 border-0 border-t border-ink-900/15" />
             <div className="space-y-0">
               {observations.map((o, i) => (
-                <div key={o.id} id={`bulk-observation-${o.id}`} className="scroll-mt-6">
+                <div key={o.id} id={`bulk-observation-${o.id}`} className="scroll-mt-20">
                   <ObservationCard
                     obs={o}
                     index={i}
@@ -998,6 +1029,7 @@ function EditorialContents({
   onSaveContentsRename,
   onCancelContentsRename,
   onScrollToContent,
+  activeId,
 }: {
   workflows: WorkflowResult[];
   observations: ObservationCardData[];
@@ -1014,6 +1046,8 @@ function EditorialContents({
   onSaveContentsRename: () => void;
   onCancelContentsRename: () => void;
   onScrollToContent: (id: string) => void;
+  /** Anchor id of the section currently in view, for scroll-spy highlighting. */
+  activeId?: string | null;
 }) {
   // Pinned rows above the reorderable groups. Derived from workflow data so
   // they don't get drag/edit/delete chrome — same as IA reports treat their
@@ -1032,34 +1066,30 @@ function EditorialContents({
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 mb-6">
-        <div className="flex items-center gap-2">
-          <List size={16} className="text-brand-600" />
-          <h3 className="text-[0.9375rem] leading-[20px] font-bold text-ink-800">Contents</h3>
-        </div>
-        <button
-          onClick={onAddObservation}
-          className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-        >
-          <Plus size={14} />
-          Add Observation
-        </button>
+      <div className="flex items-center gap-2 mb-3 px-1">
+        <List size={13} className="text-ink-400" />
+        <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.13em] text-ink-400">On this page</span>
+        <span className="ml-auto text-[0.6875rem] font-semibold tabular-nums text-ink-400">{runningIndex}</span>
       </div>
 
       {/* Fixed header rows — Exec Summary, Workflow Status */}
       <ol className="list-none p-0 m-0 space-y-0.5">
-        {fixedRows.map((r, i) => (
-          <li key={r.id}>
-            <button
-              type="button"
-              onClick={() => onScrollToContent(r.anchor)}
-              className="flex items-center gap-2 w-full py-2.5 pl-1 pr-1 rounded-[8px] hover:bg-brand-50/30 transition-colors text-left cursor-pointer"
-            >
-              <span className="shrink-0 w-6 text-[0.625rem] text-ink-400/70 font-mono tabular-nums text-right">{String(fixedStart + i + 1).padStart(2, '0')}</span>
-              <span className="flex-1 min-w-0 text-[0.75rem] text-ink-500 truncate">{r.label}</span>
-            </button>
-          </li>
-        ))}
+        {fixedRows.map((r, i) => {
+          const isActive = activeId === r.anchor;
+          return (
+            <li key={r.id}>
+              <button
+                type="button"
+                onClick={() => onScrollToContent(r.anchor)}
+                aria-current={isActive ? 'true' : undefined}
+                className={`flex items-center gap-1.5 w-full py-2 pl-1 pr-1 rounded-[8px] transition-colors text-left cursor-pointer ${isActive ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
+              >
+                <span className={`shrink-0 w-5 text-[0.6875rem] font-mono tabular-nums text-right ${isActive ? 'text-brand-700 font-semibold' : 'text-brand-500 font-semibold'}`}>{String(fixedStart + i + 1).padStart(2, '0')}</span>
+                <span className={`flex-1 min-w-0 text-[0.78125rem] truncate ${isActive ? 'font-semibold text-brand-700' : 'font-medium text-ink-600'}`}>{r.label}</span>
+              </button>
+            </li>
+          );
+        })}
       </ol>
 
       {/* Workflow chapters — reorderable, inline rename, delete */}
@@ -1085,6 +1115,7 @@ function EditorialContents({
               onCancelEdit={onCancelContentsRename}
               onScroll={() => onScrollToContent(`workflow-chapter-${w.id}`)}
               onDelete={() => onRequestDeleteWorkflow(w)}
+              active={activeId === `workflow-chapter-${w.id}`}
             />
           ))}
         </Reorder.Group>
@@ -1113,10 +1144,19 @@ function EditorialContents({
               onCancelEdit={onCancelContentsRename}
               onScroll={() => onScrollToContent(`bulk-observation-${o.id}`)}
               onDelete={() => onDeleteObservation(o)}
+              active={activeId === `bulk-observation-${o.id}`}
             />
           ))}
         </Reorder.Group>
       )}
+
+      <button
+        onClick={onAddObservation}
+        className="mt-3 w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+      >
+        <Plus size={14} />
+        Add Observation
+      </button>
     </div>
   );
 }
@@ -1136,6 +1176,7 @@ function BulkContentsRow<T extends { id: string }>({
   onCancelEdit,
   onScroll,
   onDelete,
+  active = false,
 }: {
   value: T;
   displayId: number;
@@ -1148,6 +1189,7 @@ function BulkContentsRow<T extends { id: string }>({
   onCancelEdit: () => void;
   onScroll: () => void;
   onDelete: () => void;
+  active?: boolean;
 }) {
   const controls = useDragControls();
   return (
@@ -1155,16 +1197,16 @@ function BulkContentsRow<T extends { id: string }>({
       value={value}
       dragControls={controls}
       dragListener={false}
-      className="group/crow relative flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-[8px] hover:bg-brand-50/30 transition-colors list-none cursor-default"
+      className={`group/crow relative flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px] transition-colors list-none cursor-default ${active ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
     >
       <button
         onPointerDown={(e) => { controls.start(e); }}
         aria-label="Drag to reorder"
-        className="shrink-0 p-1 text-ink-400/40 hover:text-ink-400 cursor-grab active:cursor-grabbing opacity-20 group-hover/crow:opacity-100 transition-opacity touch-none"
+        className="shrink-0 p-0.5 text-ink-400/40 hover:text-ink-400 cursor-grab active:cursor-grabbing opacity-0 group-hover/crow:opacity-100 transition-opacity touch-none"
       >
-        <GripVertical size={14} />
+        <GripVertical size={13} />
       </button>
-      <span className="shrink-0 w-6 text-[0.625rem] text-ink-400/70 font-mono tabular-nums text-right">{String(displayId).padStart(2, '0')}</span>
+      <span className={`shrink-0 w-5 text-[0.6875rem] font-mono tabular-nums text-right font-semibold ${active ? 'text-brand-700' : 'text-brand-500'}`}>{String(displayId).padStart(2, '0')}</span>
       {isEditing ? (
         <input
           value={draftValue}
@@ -1181,7 +1223,8 @@ function BulkContentsRow<T extends { id: string }>({
       ) : (
         <button
           onClick={onScroll}
-          className="flex-1 min-w-0 text-left text-[0.75rem] text-ink-500 truncate transition-colors cursor-pointer"
+          aria-current={active ? 'true' : undefined}
+          className={`flex-1 min-w-0 text-left text-[0.78125rem] truncate transition-colors cursor-pointer ${active ? 'font-semibold text-brand-700' : 'font-medium text-ink-600 group-hover/crow:text-brand-700'}`}
         >
           {label}
         </button>
@@ -1354,7 +1397,7 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
   };
 
   return (
-    <section id={`workflow-chapter-${workflow.id}`} className="mt-4 scroll-mt-6">
+    <section id={`workflow-chapter-${workflow.id}`} className="mt-4 scroll-mt-20">
       {/* Meta row — fonts/treatment mirror QueryCard */}
       <div className="flex items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5 text-[0.6875rem] min-w-0">

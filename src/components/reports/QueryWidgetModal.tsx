@@ -78,7 +78,7 @@ export default function QueryWidgetModal({
           role="dialog"
           aria-modal="true"
           aria-labelledby="query-widget-title"
-          className="relative bg-white rounded-[16px] border border-canvas-border shadow-xl w-[840px] max-w-[calc(100vw-48px)] max-h-[calc(100vh-48px)] flex flex-col overflow-hidden"
+          className="relative bg-white rounded-[16px] border border-canvas-border shadow-xl w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] flex flex-col overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-canvas-border">

@@ -1,7 +1,7 @@
 // Single source of truth for the user's "Recent Chats" and "Favourites" lists
-// surfaced in any chat/data picker (Dashboard's AddDataModal + CreateDashboardModal,
-// Reports' AddQueryModal). Keeping one canonical history avoids the same UI surface
-// returning different items depending on entry point.
+// surfaced in any chat/data picker (Dashboard's AddDataModal + CreateDashboardModal).
+// Keeping one canonical history avoids the same UI surface returning different
+// items depending on entry point.
 
 export type QueryGroup = { group: string; items: string[] };
 

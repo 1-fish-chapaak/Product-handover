@@ -36,7 +36,101 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Analytics: 'text-brand-700 bg-brand-50',
   Audit: 'text-risk-700 bg-risk-50',
   Executive: 'text-indigo-600 bg-indigo-50',
+  SOX: 'text-evidence-700 bg-evidence-50',
+  ATR: 'text-brand-700 bg-brand-50',
+  Other: 'text-ink-500 bg-paper-50',
 };
+
+/** Controlled vocabulary for a template's report type. Fixed for now (a clean
+ *  taxonomy keeps filtering/reporting useful); "Other" is the escape hatch. */
+export const REPORT_TYPES = ['Audit', 'Compliance', 'SOX', 'ATR', 'Risk', 'Other'] as const;
+export type ReportTypeName = typeof REPORT_TYPES[number];
+
+// ── Report type → required / recommended sections (PRD §4.6) ─────────────────
+// Each type carries a curated set, split into `required` (the must-haves that
+// define the type) and `recommended` (the usual rest). Picking a type pre-fills
+// these in the editor, and on upload shows the user what their document is
+// missing for the chosen type. `match` keeps presence-detection tolerant of
+// naming variants (a detected "Detailed Findings" satisfies the Audit
+// "Findings / Observations"). First-pass set, to confirm with auditors.
+export type SectionTier = 'required' | 'recommended';
+export type TypeSection = { name: string; icon: string; tier: SectionTier; match: RegExp };
+
+export const TYPE_SECTION_MAP: Record<ReportTypeName, TypeSection[]> = {
+  Audit: [
+    { name: 'Executive Summary',          icon: 'file-text',      tier: 'recommended', match: /executive|summary/i },
+    { name: 'Scope & Objectives',         icon: 'file-text',      tier: 'recommended', match: /scope|objective/i },
+    { name: 'Testing Methodology',        icon: 'file-text',      tier: 'recommended', match: /methodology/i },
+    { name: 'Findings / Observations',    icon: 'check-circle',   tier: 'required',    match: /finding|observation|audit quer/i },
+    { name: 'Recommendations',            icon: 'trending-up',    tier: 'required',    match: /recommendation/i },
+    { name: 'Management Response',         icon: 'book-open',      tier: 'recommended', match: /management response|response/i },
+    { name: 'Conclusion / Audit Opinion', icon: 'shield',         tier: 'required',    match: /conclusion|opinion/i },
+    { name: 'Sign-off',                   icon: 'shield',         tier: 'recommended', match: /sign-?off|approval/i },
+  ],
+  SOX: [
+    { name: 'Executive Summary',                 icon: 'file-text',      tier: 'recommended', match: /executive|summary/i },
+    { name: 'Scope & Methodology',               icon: 'file-text',      tier: 'recommended', match: /scope|methodology/i },
+    { name: 'Control Environment Overview',      icon: 'file-text',      tier: 'recommended', match: /control environment/i },
+    { name: 'Control Testing Results',           icon: 'check-circle',   tier: 'required',    match: /control testing|testing results/i },
+    { name: 'Deficiencies / Exceptions',         icon: 'alert-triangle', tier: 'required',    match: /deficienc|exception/i },
+    { name: 'Remediation Plan',                  icon: 'check-circle',   tier: 'recommended', match: /remediation/i },
+    { name: 'Conclusion / Management Assertion', icon: 'shield',         tier: 'required',    match: /conclusion|assertion/i },
+    { name: 'Sign-off',                          icon: 'shield',         tier: 'recommended', match: /sign-?off|approval/i },
+  ],
+  Compliance: [
+    { name: 'Executive Summary',            icon: 'file-text',      tier: 'recommended', match: /executive|summary/i },
+    { name: 'Regulatory Scope & Framework', icon: 'file-text',      tier: 'recommended', match: /scope|framework|regulat/i },
+    { name: 'Compliance Assessment',        icon: 'check-circle',   tier: 'required',    match: /compliance assessment|assessment|testing/i },
+    { name: 'Gaps / Non-compliance',        icon: 'alert-triangle', tier: 'required',    match: /gap|non-?compliance/i },
+    { name: 'Remediation / Action Plan',    icon: 'check-circle',   tier: 'recommended', match: /remediation|action plan/i },
+    { name: 'Conclusion',                   icon: 'shield',         tier: 'required',    match: /conclusion/i },
+    { name: 'Sign-off',                     icon: 'shield',         tier: 'recommended', match: /sign-?off|approval/i },
+  ],
+  Risk: [
+    { name: 'Executive Summary',           icon: 'file-text',      tier: 'recommended', match: /executive|summary/i },
+    { name: 'Risk Methodology',            icon: 'file-text',      tier: 'recommended', match: /methodology/i },
+    { name: 'Risk Findings / Register',    icon: 'check-circle',   tier: 'required',    match: /risk (finding|register)|register|finding/i },
+    { name: 'Risk Rating / Significance',  icon: 'alert-triangle', tier: 'required',    match: /rating|significance/i },
+    { name: 'Risk Heatmap / Summary',      icon: 'bar-chart',      tier: 'recommended', match: /heatmap/i },
+    { name: 'Mitigation / Treatment Plan', icon: 'check-circle',   tier: 'required',    match: /mitigation|treatment/i },
+    { name: 'Conclusion',                  icon: 'shield',         tier: 'recommended', match: /conclusion/i },
+  ],
+  ATR: [
+    { name: 'Observation / Finding',           icon: 'check-circle',   tier: 'required',    match: /observation|finding/i },
+    { name: 'Action Taken',                    icon: 'check-circle',   tier: 'required',    match: /action taken|action/i },
+    { name: 'Closure / Classification Status', icon: 'bar-chart',      tier: 'required',    match: /closure|classification|status/i },
+    { name: 'Original Recommendation (MAP)',   icon: 'trending-up',    tier: 'recommended', match: /recommendation|management action|map/i },
+    { name: 'Risk Significance',               icon: 'alert-triangle', tier: 'recommended', match: /risk significance|significance|severity/i },
+    { name: 'Due Date',                        icon: 'file-text',      tier: 'recommended', match: /due date|timeline|due/i },
+    { name: 'Auditor Verification / Comments', icon: 'book-open',      tier: 'recommended', match: /verification|auditor comment|management comment/i },
+    { name: 'Supporting Evidence',             icon: 'file-text',      tier: 'recommended', match: /evidence/i },
+  ],
+  Other: [],
+};
+
+/** The curated section set for a type (required + recommended). Empty for Other. */
+export function typeSectionsFor(type: ReportTypeName): TypeSection[] {
+  return TYPE_SECTION_MAP[type] ?? [];
+}
+
+/** Coverage of a type's sections against the current/detected section names.
+ *  `match` makes detection tolerant of naming variants. */
+export function sectionCoverage(type: ReportTypeName, sectionNames: string[]) {
+  const spec = typeSectionsFor(type);
+  const present = (e: TypeSection) => sectionNames.some(n => e.match.test(n));
+  const required = spec.filter(s => s.tier === 'required');
+  const recommended = spec.filter(s => s.tier === 'recommended');
+  return {
+    spec,
+    requiredTotal: required.length,
+    requiredPresent: required.filter(present).length,
+    recommendedTotal: recommended.length,
+    recommendedPresent: recommended.filter(present).length,
+    missingRequired: required.filter(s => !present(s)),
+    missingRecommended: recommended.filter(s => !present(s)),
+    allMissing: spec.filter(s => !present(s)),
+  };
+}
 
 export const SECTION_ICONS: Record<string, ElementType> = {
   'file-text': FileText,
@@ -160,6 +254,36 @@ export type EditableTemplate = typeof REPORT_TEMPLATES[number] & {
   theme?: string;
   headerText?: string;
   footerText?: string;
+  /** The "golden copy": section names of the reference sample this template is
+   *  validated against. Set when a Smart Upload is marked as the reference format;
+   *  drives the format-match verdict on later uploads (Template Studio §5).
+   *  (Field name kept as `approvedSections` for stored-data compatibility.) */
+  approvedSections?: string[];
+  referenceFileName?: string;
+};
+
+// A seeded custom template that already has a reference format, so the
+// format-match verdict (Template Studio §5) is demonstrable without first
+// uploading twice. Mirrors the Air India "Annual Safety Audit" example: its
+// reference format expects a "Corrective Actions" section, which the scripted
+// drifted upload is missing. App.tsx prepends it to the custom-templates list.
+export const SEED_APPROVED_TEMPLATE: EditableTemplate = {
+  id: 'ct-seed-safety-audit',
+  name: 'Annual Safety Audit Report',
+  desc: 'Built from Annual_Safety_Audit_2025.pdf — 7 sections, set as the reference format.',
+  category: 'Audit',
+  icon: 'shield',
+  sections: [
+    { name: 'Executive Summary', icon: 'file-text' },
+    { name: 'Scope & Objectives', icon: 'file-text' },
+    { name: 'Testing Methodology', icon: 'file-text' },
+    { name: 'Control Testing Results', icon: 'check-circle' },
+    { name: 'Detailed Findings', icon: 'alert-triangle' },
+    { name: 'Corrective Actions', icon: 'check-circle' },
+    { name: 'Appendix', icon: 'file-text' },
+  ],
+  approvedSections: ['Executive Summary', 'Scope & Objectives', 'Testing Methodology', 'Control Testing Results', 'Detailed Findings', 'Corrective Actions', 'Appendix'],
+  referenceFileName: 'Annual_Safety_Audit_2025.pdf',
 };
 
 export type QueryShape = { id: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; answer: string; chartData: number[] };
@@ -195,8 +319,6 @@ export type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   /** Authoritative report framework/type, frozen at creation. Preferred over
    *  any name- or template-based inference (see `reportKind`). */
   kind?: 'atr' | 'sox' | 'ia';
-  isEmpty?: boolean;
-  attachedQueries?: AttachedQuery[];
   /** Queries the Generate wizard baked into this report — when present, the
    *  report body renders these instead of the demo DEFAULT_QUERIES. */
   generatedQueries?: GeneratedQueryDef[];

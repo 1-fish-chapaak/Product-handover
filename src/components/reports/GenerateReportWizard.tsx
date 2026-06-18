@@ -116,6 +116,9 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
   // fade-out finishes — set by the panel's onAnimationComplete. Cleared the
   // instant we un-suppress so the fade-in is interactive again.
   const [suppressedSettled, setSuppressedSettled] = useState(false);
+  // Intentional reset-on-prop-change: clear the settled flag the instant the
+  // wizard un-suppresses, so the fade-in is interactive again.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (!suppressed) setSuppressedSettled(false); }, [suppressed]);
 
   const rows = useMemo(() => {
@@ -213,7 +216,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
         exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
         onAnimationComplete={() => { if (suppressed) setSuppressedSettled(true); }}
-        className={`fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[840px] max-w-[94vw] h-[78vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col ${suppressed ? 'pointer-events-none' : ''}`}
+        className={`fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col ${suppressed ? 'pointer-events-none' : ''}`}
         role="dialog" aria-modal="true" aria-label={`Generate ${template.name}`}
         aria-hidden={suppressed}
         inert={suppressedSettled}
@@ -266,6 +269,8 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
 
         {step === 1 ? (
           <>
+            <div className="flex-1 min-h-0 flex">
+              <div className="flex-1 min-w-0 flex flex-col md:border-r border-canvas-border">
             {/* Search + severity filter */}
             <div className="shrink-0 px-6 pt-4 pb-1 border-t border-canvas-border flex items-center justify-between gap-3">
               <div className="relative w-[260px] shrink-0">
@@ -419,6 +424,43 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                     </div>
                   );
               })()}
+            </div>
+              </div>
+              {/* Selection panel — the rail analog: the report assembles here as
+                  you pick, so step 1 is no longer a blind pick before review. */}
+              <aside className="hidden md:flex w-[312px] shrink-0 flex-col bg-paper-50/40">
+                <div className="shrink-0 px-4 pt-4 pb-3 flex items-center gap-2">
+                  <FileText size={13} className="text-ink-400" />
+                  <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.13em] text-ink-400">In this report</span>
+                  <span className="ml-auto text-[0.6875rem] font-semibold tabular-nums text-ink-400">{selectedKeyCount}</span>
+                </div>
+                <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3">
+                  {selected.length === 0 ? (
+                    <div className="h-full flex items-center justify-center px-5 text-center">
+                      <p className="text-[0.75rem] text-ink-400 leading-relaxed">Nothing selected yet. Pick queries from the left and they'll line up here in order.</p>
+                    </div>
+                  ) : (
+                    <ul className="space-y-1">
+                      {selected.map((s, i) => (
+                        <li key={s.uid} className="group/sel flex items-center gap-2 px-2.5 py-2 rounded-[9px] bg-white border border-canvas-border">
+                          <span className="w-5 shrink-0 text-[0.625rem] font-bold font-mono tabular-nums text-brand-600/60 text-right">{String(i + 1).padStart(2, '0')}</span>
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-[0.75rem] font-medium text-ink-800 truncate">{s.label}</span>
+                            <span className="block text-[0.625rem] text-ink-400 truncate">{s.kind === 'workflow' ? 'Workflow' : 'Query'} · {s.sourceLabel}</span>
+                          </span>
+                          <button
+                            onClick={() => toggle(s)}
+                            aria-label={`Remove ${s.label}`}
+                            className="shrink-0 w-6 h-6 rounded-[6px] flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 opacity-0 group-hover/sel:opacity-100 focus-visible:opacity-100 transition-all cursor-pointer"
+                          >
+                            <X size={13} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </aside>
             </div>
 
             {/* Footer — left: live selection count + a clear-all reset once

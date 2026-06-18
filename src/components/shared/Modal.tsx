@@ -15,6 +15,9 @@ interface ModalProps {
   subtitle?: ReactNode;
   /** Tailwind max-width class for the panel. Defaults to 560px. */
   width?: string;
+  /** Optional fixed-height class (e.g. `h-[662px]`). When set, the panel locks
+   *  to a fixed box instead of growing with content. */
+  height?: string;
   onClose: () => void;
   /** Sticky footer action row (usually Cancel + a primary button). */
   footer?: ReactNode;
@@ -26,6 +29,7 @@ export default function Modal({
   title,
   subtitle,
   width = 'max-w-[560px]',
+  height,
   onClose,
   footer,
   children,
@@ -60,7 +64,7 @@ export default function Modal({
         className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 pointer-events-none"
       >
         <div
-          className={`pointer-events-auto w-full ${width} max-h-[85vh] bg-canvas-elevated rounded-2xl border border-canvas-border shadow-xl flex flex-col`}
+          className={`pointer-events-auto w-full ${width} ${height ? `${height} max-h-[90vh]` : 'max-h-[85vh]'} bg-canvas-elevated rounded-2xl border border-canvas-border shadow-xl flex flex-col`}
           role="dialog"
           aria-modal="true"
           aria-label={ariaLabel ?? title}

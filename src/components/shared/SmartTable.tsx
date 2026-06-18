@@ -74,6 +74,10 @@ interface SmartTableProps<T extends Record<string, unknown>> {
    *  by surfaces that own selection externally (e.g. Admin checkboxes). Off by
    *  default, so every other SmartTable is unaffected. */
   isRowSelected?: (item: T, index: number) => boolean;
+  /** Opt-in `table-layout: fixed`. Column `width` values are then honoured
+   *  exactly and the table always fills its container, so a width-less column
+   *  takes the remainder. Off by default (auto layout) for existing callers. */
+  fixedLayout?: boolean;
 }
 
 /* ─── Sort Icon ─── */
@@ -100,6 +104,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
   paginated = true,
   pageSize = 8,
   striped = true,
+  fixedLayout = false,
   stickyHeader = false,
   stickyHeaderTop = 'top-0',
   noRowHover = false,
@@ -227,7 +232,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
       {/* Table — `overflow-x-auto` also forces overflow-y to `auto`, which would
           trap the sticky header; drop it when the header is pinned. */}
       <div className={stickyHeader ? '' : 'overflow-x-auto'}>
-        <table className={`w-full ${isModern ? 'text-[13px]' : 'text-[12.5px]'}`}>
+        <table className={`w-full ${fixedLayout ? 'table-fixed' : ''} ${isModern ? 'text-[13px]' : 'text-[12.5px]'}`}>
           <thead>
             <tr className="bg-surface-2 border-b border-border-light">
               {expandable && <th className={`w-8 ${stickyHeader ? `sticky ${stickyHeaderTop} z-10 bg-surface-2` : ''}`} />}

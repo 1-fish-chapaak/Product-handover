@@ -64,10 +64,10 @@ export default function ReportCard({
       animate={{ opacity: 1, y: 0, transition: { delay: index * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
       onClick={() => { if (selectable && isSelecting) onToggleSelect?.(); else onClick?.(); }}
       aria-pressed={selectable ? (selected || undefined) : undefined}
-      className={`relative overflow-hidden bg-canvas-elevated border rounded-[12px] ${accent ? 'pl-6 pr-5 py-5' : 'p-5'} transition-colors duration-200 group cursor-pointer flex flex-col min-h-[176px] ${selected ? 'border-brand-400' : 'border-canvas-border hover:border-brand-200'}`}
+      className={`relative overflow-hidden bg-canvas-elevated border rounded-[12px] ${accent ? 'pl-6 pr-5 py-5' : 'p-5'} transition-colors duration-200 group cursor-pointer flex flex-col min-h-[164px] ${selected ? 'border-brand-400' : 'border-canvas-border hover:border-brand-200'}`}
     >
       {accent && <span aria-hidden className={`pointer-events-none absolute inset-y-0 left-0 w-[3px] ${accent}`} />}
-      <div className="flex items-start justify-between gap-3 mb-4">
+      <div className="flex items-start justify-between gap-3 mb-3.5">
         <div className="relative w-9 h-9 flex items-center justify-center shrink-0">
           {/* Type tile — present at rest, fades out so the checkbox sits cleanly on the card. */}
           <span aria-hidden="true" className={`absolute inset-0 rounded-[10px] flex items-center justify-center ${iconBg} transition-opacity duration-200 ${selectable ? (selected || isSelecting ? 'opacity-0' : 'opacity-100 group-hover:opacity-0') : 'opacity-100'}`}>
@@ -98,18 +98,18 @@ export default function ReportCard({
             <span className={`text-[10px] font-semibold uppercase tracking-[0.14em] transition-opacity duration-200 group-hover:opacity-0 ${tone}`}>
               {eyebrow}
             </span>
-            <span aria-hidden className="absolute right-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary/[0.07] text-primary opacity-0 -translate-x-1.5 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 ease-out">
+            <span aria-hidden className="absolute right-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-600/[0.07] text-brand-600 opacity-0 -translate-x-1.5 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200 ease-out">
               <ArrowRight size={14} />
             </span>
           </div>
         )}
       </div>
 
-      <h3 className="text-[15px] leading-[1.35] font-semibold text-text group-hover:text-primary transition-colors mb-1.5 truncate" title={title}>{title}</h3>
-      {subtitle && <p className="text-[12px] text-text-secondary leading-[1.55] line-clamp-1">{subtitle}</p>}
-      {description && <p className="text-[12px] text-text-secondary leading-[1.55] line-clamp-2" title={typeof description === 'string' ? description : undefined}>{description}</p>}
+      <h3 className="text-[15px] leading-[1.3] font-semibold tracking-tight text-ink-900 group-hover:text-brand-600 transition-colors mb-1.5 truncate" title={title}>{title}</h3>
+      {subtitle && <p className="text-[12px] text-ink-500 leading-[1.55] line-clamp-1">{subtitle}</p>}
+      {description && <p className="text-[12px] text-ink-500 leading-[1.55] line-clamp-2" title={typeof description === 'string' ? description : undefined}>{description}</p>}
 
-      <div className="mt-auto pt-4 flex items-end justify-between gap-3">
+      <div className="mt-auto pt-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
           {shown.map(p => (
             p === 'Bulk Audit' ? (

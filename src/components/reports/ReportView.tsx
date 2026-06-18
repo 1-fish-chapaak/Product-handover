@@ -10,21 +10,20 @@ import {
   FileText, Shield, AlertTriangle, CheckCircle2, BarChart3,
   TrendingUp, Download, Share2, ArrowLeft, ChevronDown,
   ChevronLeft, ChevronRight,
-  Layout, X, Edit3, BookOpen, Upload, Lightbulb, Loader2, Trash2,
+  Layout, X, Edit3, BookOpen, Loader2, Trash2,
   List, LayoutGrid, GripVertical, Plus,
-  MoreVertical, Eye, EyeOff, Database, PackageOpen, ExternalLink,
+  MoreVertical, Eye, EyeOff, ExternalLink,
   MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
   Layers, Check, RefreshCw, Lock, Sparkles,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
 import { ManageExceptionsLaunchButton } from './ManageExceptionsLaunchButton';
-import UploadReportModal from './UploadReportModal';
 import ConfirmDialog from './ConfirmDialog';
 import GenerateATRModal from '../exceptions/GenerateATRModal';
 import type { AtrReportData } from './atrTypes';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { REPORT_TEMPLATES } from '../../data/mockData';
-import { REPORT_QUERIES_ATR, type ReportQueryAtr } from '../../data/reportQueries';
+import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
 import { QUERY_GRAPHS, QUERY_TABLES } from '../../data/queryGraphs';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { reportDisplayName } from './reportName';
@@ -32,11 +31,10 @@ import { ApplyTemplateDropdown } from './TemplateEditor';
 import {
   SECTION_ICONS, TEMPLATE_THEME_GRADIENT, mergeTemplateOptions,
   computeQueryKpis, reportKind,
-  type AttachedQuery, type WorkflowResult,
+  type WorkflowResult,
   CUSTOM_TEMPLATES,
   type QueryShape, type QueryComment, type GeneratedReport,
 } from './reportShared';
-import AddQueryModal from './AddQueryModal';
 import QueryWidgetModal from './QueryWidgetModal';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
@@ -44,7 +42,7 @@ import { KpiCountUp } from '../shared/KpiTile';
 import { ReportBrandBanner, ReportMetaPanel, ReportNumberedHeading, ReportKpiTiles } from './ReportDocumentChrome';
 import { statTone } from './reportTones';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
-import { composeExecSummary, composeSectionContent, defForKey, workflowToQueryDef, type GeneratedQueryDef } from './templateQueryPool';
+import { composeExecSummary, composeSectionContent, workflowToQueryDef } from './templateQueryPool';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import AddObservationModal, {
   computeNextObservationId,
@@ -664,7 +662,9 @@ function CommentDrawer({
 
 // ─── Draggable query section (main content area reorder) ───
 type SectionProps = {
-  key: string;
+  // `key` is never passed through props (React strips it); callers set it
+  // directly on each element. Kept optional so the shared props object type-checks.
+  key?: string;
   value: unknown;
   id: string;
   layout: true;
@@ -866,6 +866,7 @@ function ContentsRow({
   onCancelEdit,
   onScroll,
   onDelete,
+  active = false,
 }: {
   section: { id: string; title: string; kind: string };
   index: number;
@@ -877,23 +878,24 @@ function ContentsRow({
   onCancelEdit: () => void;
   onScroll: () => void;
   onDelete: () => void;
+  active?: boolean;
 }) {
   const controls = useDragControls();
   return (
     <Reorder.Item
       value={section}
       dragControls={controls}
+      className={`group/crow relative flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px] transition-colors list-none cursor-default ${active ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
       dragListener={false}
-      className="group/crow relative flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-[8px] hover:bg-brand-50/30 transition-colors list-none cursor-default"
     >
       <button
         onPointerDown={(e) => { controls.start(e); }}
         aria-label="Drag to reorder"
-        className="shrink-0 p-1 text-ink-400/40 hover:text-ink-400 cursor-grab active:cursor-grabbing opacity-20 group-hover/crow:opacity-100 transition-opacity touch-none"
+        className="shrink-0 p-0.5 text-ink-400/40 hover:text-ink-400 cursor-grab active:cursor-grabbing opacity-0 group-hover/crow:opacity-100 transition-opacity touch-none"
       >
-        <GripVertical size={14} />
+        <GripVertical size={13} />
       </button>
-      <span className="shrink-0 w-6 text-[0.6875rem] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(index).padStart(2, '0')}</span>
+      <span className={`shrink-0 w-5 text-[0.6875rem] font-semibold font-mono tabular-nums text-right ${active ? 'text-brand-700' : 'text-brand-500'}`}>{String(index).padStart(2, '0')}</span>
       {isEditing ? (
         <input
           value={draftValue}
@@ -910,7 +912,8 @@ function ContentsRow({
       ) : (
         <button
           onClick={onScroll}
-          className="flex-1 min-w-0 text-left text-[0.78125rem] font-medium text-ink-700 truncate transition-colors cursor-pointer group-hover/crow:text-brand-700"
+          aria-current={active ? 'true' : undefined}
+          className={`flex-1 min-w-0 text-left text-[0.78125rem] truncate transition-colors cursor-pointer ${active ? 'font-semibold text-brand-700' : 'font-medium text-ink-600 group-hover/crow:text-brand-700'}`}
         >
           {section.title}
         </button>
@@ -1570,194 +1573,9 @@ function DraggableQuerySection({
 
 // ─── Attached Query Card — compact pending card for queries the user just attached ───
 
-function AttachedQueryCard({ query, index, onRemove }: {
-  query: AttachedQuery;
-  index: number;
-  onRemove: (id: string) => void;
-}) {
-  const KindIcon = query.kind === 'query' ? MessageSquare : query.kind === 'upload' ? Upload : Database;
-  const kindLabel = query.kind === 'query' ? 'Saved Query' : query.kind === 'upload' ? 'Uploaded File' : 'Data Source';
-  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
-
-  // Resolve the modal label to a REPORT_QUERIES_ATR entry. Only saved queries
-  // map to canned data; uploads and ad-hoc data sources have no preview.
-  const resolved: ReportQueryAtr | null =
-    query.kind === 'query' && QUERY_LABEL_TO_KEY[query.label]
-      ? REPORT_QUERIES_ATR[QUERY_LABEL_TO_KEY[query.label]]
-      : null;
-
-  type Phase = 'syncing' | 'ready' | 'noPreview';
-  const [phase, setPhase] = useState<Phase>('syncing');
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setPhase(resolved ? 'ready' : 'noPreview');
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [resolved]);
-
-  return (
-    <motion.section
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04 }}
-      className="bg-white border border-canvas-border rounded-[12px] px-6 py-5"
-    >
-      <div className="flex items-start gap-3">
-        <div className="size-9 rounded-[8px] bg-brand-50 flex items-center justify-center shrink-0 mt-0.5">
-          <KindIcon size={16} className="text-brand-600" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[0.625rem] font-bold tracking-[0.08em] uppercase text-brand-600/80">{kindLabel}</span>
-            <span className="text-[0.625rem] text-ink-400">·</span>
-            <span className="text-[0.625rem] text-ink-400">Attached {query.attachedAt} by {query.attachedBy}</span>
-          </div>
-          <h3 className="text-[0.875rem] font-bold text-ink-800 tracking-tight leading-snug">{query.label}</h3>
-        </div>
-        <button
-          onClick={() => setShowRemoveConfirm(true)}
-          aria-label="Remove attached query"
-          className="p-1.5 rounded-[8px] text-ink-400 hover:text-high-700 hover:bg-high-50 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-        >
-          <X size={14} />
-        </button>
-      </div>
-      <ConfirmDialog
-        open={showRemoveConfirm}
-        onClose={() => setShowRemoveConfirm(false)}
-        onConfirm={() => { setShowRemoveConfirm(false); onRemove(query.id); }}
-        title="Remove attached query?"
-        description={<>This will detach <span className="font-semibold text-ink-800">{query.label}</span> from the report. You can re-attach it later.</>}
-        confirmLabel="Remove"
-        destructive
-      />
-
-      <AnimatePresence mode="wait">
-        {phase === 'syncing' && (
-          <motion.div
-            key="syncing"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="mt-4 border border-dashed border-brand-200 rounded-[12px] bg-brand-50/40 px-5 py-4 flex items-center gap-3"
-          >
-            <Loader2 size={14} className="text-brand-600 animate-spin shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[0.75rem] font-semibold text-brand-600 mb-0.5">Data syncing</p>
-              <p className="text-[0.6875rem] text-ink-400">Running query against your data — preview will appear in a moment.</p>
-            </div>
-          </motion.div>
-        )}
-
-        {phase === 'ready' && resolved && (
-          <motion.div
-            key="ready"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="mt-4 space-y-4"
-          >
-            {/* Summary */}
-            <div>
-              <div className="text-[0.625rem] font-bold tracking-[0.08em] uppercase text-ink-400 mb-1.5">Summary</div>
-              <p className="text-[0.75rem] leading-relaxed text-ink-800">{resolved.summary}</p>
-            </div>
-
-            {/* Findings */}
-            {resolved.findings.length > 0 && (
-              <div>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <Lightbulb size={12} className="text-evidence-700" />
-                  <span className="text-[0.625rem] font-bold tracking-[0.08em] uppercase text-ink-400">Findings</span>
-                  <span className="text-[0.625rem] text-ink-400">·</span>
-                  <span className="text-[0.625rem] text-ink-400">{resolved.findings.length}</span>
-                </div>
-                <ul className="space-y-1.5">
-                  {resolved.findings.map((f, i) => (
-                    <li key={i} className="flex gap-2 text-[0.75rem] text-ink-800 leading-relaxed">
-                      <span className="text-evidence-700 shrink-0 mt-1">•</span>
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Observations */}
-            {resolved.observations.length > 0 && (
-              <div>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <Eye size={12} className="text-brand-600" />
-                  <span className="text-[0.625rem] font-bold tracking-[0.08em] uppercase text-ink-400">Observations</span>
-                  <span className="text-[0.625rem] text-ink-400">·</span>
-                  <span className="text-[0.625rem] text-ink-400">{resolved.observations.length}</span>
-                </div>
-                <ul className="space-y-1.5">
-                  {resolved.observations.map((o, i) => (
-                    <li key={i} className="flex gap-2 text-[0.75rem] text-ink-800 leading-relaxed">
-                      <span className="text-brand-600 shrink-0 mt-1">•</span>
-                      <span>{o}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </motion.div>
-        )}
-
-        {phase === 'noPreview' && (
-          <motion.div
-            key="noPreview"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="mt-4 border border-dashed border-canvas-border rounded-[12px] bg-canvas/40 px-5 py-4 flex items-center gap-3"
-          >
-            <PackageOpen size={14} className="text-ink-400 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[0.75rem] font-semibold text-ink-800 mb-0.5">Preview not available</p>
-              <p className="text-[0.6875rem] text-ink-400">
-                {query.kind === 'upload'
-                  ? 'Uploaded files render once the parser finishes — wire your data pipeline to enable preview.'
-                  : query.kind === 'source'
-                    ? 'Connected data sources render once a query is run against them.'
-                    : 'This query has no canned preview yet — connect it to your data to see results.'}
-              </p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.section>
-  );
-}
-
-// ─── Add Query Modal — picker for attaching a query/source to a report ───
-
-// Maps modal labels to REPORT_QUERIES_ATR keys so the AttachedQueryCard can
-// resolve to real summary/findings/observations after the simulated sync.
-const QUERY_LABEL_TO_KEY: Record<string, keyof typeof REPORT_QUERIES_ATR> = {
-  'Detect duplicate invoice entries across vendors': 'Q01',
-  'Duplicate invoice detection summary': 'Q01',
-  'Show unauthorized vendor master changes — last 90 days': 'Q02',
-  'Unauthorized vendor master changes — quarterly review': 'Q02',
-  'Risk identification across P2P, O2C, R2R, S2C processes': 'RA01',
-  'Risk register — 12 critical risks across processes': 'RA01',
-  'Mitigation strategy effectiveness — partially mitigated high risks': 'RA02',
-  'Control testing results — effectiveness across 87 controls': 'CE01',
-  'Control testing — effective vs requires remediation': 'CE01',
-  'Workflow execution performance — runs and accuracy': 'WA01',
-  'Exception trend analysis — flagged vs resolved': 'WA02',
-  'Board-level GRC posture summary': 'EX01',
-  'GRC posture for board reporting': 'EX01',
-};
-
-
 // ─── Report View (with multiple queries) ───
-export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onAddQuery, onRemoveQuery, onUpdateDescription, onSaveAsTemplate, onSaveAtrVersion }: {
+export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onSaveAsTemplate, onSaveAtrVersion }: {
   report: GeneratedReport;
-  onAddQuery: (reportId: string, query: AttachedQuery) => void;
-  onRemoveQuery: (reportId: string, queryId: string) => void;
   onBack: () => void;
   onShare?: () => void;
   onManageExceptions?: () => void;
@@ -2163,6 +1981,10 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   const [sections, setSections] = useState<SectionItem[]>(() => buildInitialSections(seededQueries));
   const appliedTemplateId = appliedTemplate?.id ?? null;
 
+  // Summary lifecycle — "Generate Summary" (header) and "Regenerate" (section)
+  // are the same control at two stages, so only one shows at a time: Generate
+  // first, then Regenerate once a summary exists.
+  const [summaryGenerated, setSummaryGenerated] = useState(false);
   // Regenerate summary mock — overrides the summary section's content with an
   // alternative blurb after a short simulated delay so the action feels real.
   const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
@@ -2326,25 +2148,20 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     setSectionPendingDelete(null);
   };
 
+  // The live, reorderable outline that powers the sticky rail on the normal
+  // report path. Renumbers and reorders the document, renames in place, deletes,
+  // and seeds new observations — the same affordances the inline TOC carried,
+  // now persistent alongside the reading column.
   const ContentsBlock = () => {
     const coverSection = sections.find(s => s.kind === 'cover');
     const nonCoverSections = sections.filter(s => s.kind !== 'cover');
     if (nonCoverSections.length === 0) return null;
     return (
-      <div className="border-x border-b border-canvas-border bg-white p-6">
-        <div className="flex items-center justify-between gap-3 mb-4 pb-4 border-b border-canvas-border">
-          <div className="flex items-center gap-2.5">
-            <span className="w-7 h-7 rounded-[8px] bg-brand-50 text-brand-600 flex items-center justify-center"><List size={15} /></span>
-            <h3 className="text-[0.9375rem] leading-[20px] font-bold text-ink-900">Contents</h3>
-            <span className="inline-flex items-center h-5 px-2 rounded-full bg-canvas text-[0.6875rem] font-semibold text-ink-400 tabular-nums">{nonCoverSections.length}</span>
-          </div>
-          <button
-            onClick={openAddObservation}
-            className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer"
-          >
-            <Plus size={14} />
-            Add Observation
-          </button>
+      <div>
+        <div className="flex items-center gap-2 mb-3 px-1">
+          <List size={13} className="text-ink-400" />
+          <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.13em] text-ink-400">On this page</span>
+          <span className="ml-auto text-[0.6875rem] font-semibold tabular-nums text-ink-400">{nonCoverSections.length}</span>
         </div>
         <Reorder.Group
           axis="y"
@@ -2360,6 +2177,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               key={section.id}
               section={section}
               index={i + 1}
+              active={activeSectionId === section.id}
               isEditing={contentsEditingId === section.id}
               draftValue={contentsDraft}
               onDraftChange={setContentsDraft}
@@ -2371,6 +2189,98 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             />
           ))}
         </Reorder.Group>
+        {!isReadOnly && (
+          <button
+            onClick={openAddObservation}
+            className="mt-3 w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer"
+          >
+            <Plus size={14} />
+            Add Observation
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  // Shared rail chrome — header eyebrow + count.
+  const RailHeader = ({ count }: { count: number }) => (
+    <div className="flex items-center gap-2 mb-3 px-1">
+      <List size={13} className="text-ink-400" />
+      <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.13em] text-ink-400">On this page</span>
+      <span className="ml-auto text-[0.6875rem] font-semibold tabular-nums text-ink-400">{count}</span>
+    </div>
+  );
+  const RailAddObservation = () => !isReadOnly ? (
+    <button
+      onClick={openAddObservation}
+      className="mt-3 w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer"
+    >
+      <Plus size={14} />
+      Add Observation
+    </button>
+  ) : null;
+
+  // The rail wrapper — a sticky card hosting the live, reorderable outline
+  // (normal path), or the applied-template / empty outlines. The applied-template
+  // case keeps observation reorder + rename + delete that the old inline TOC had.
+  const OutlineRail = () => {
+    const railCls = 'rounded-[14px] border border-canvas-border bg-canvas-elevated p-3.5';
+    if (!appliedTemplate) {
+      if (sections.filter(s => s.kind !== 'cover').length === 0) return null;
+      return <div className={railCls}><ContentsBlock /></div>;
+    }
+    if (appliedTemplate) {
+      const tmplSections = appliedTemplate.sections ?? [];
+      if (tmplSections.length === 0 && appliedObservations.length === 0) return null;
+      return (
+        <div className={railCls}>
+          <RailHeader count={tmplSections.length + appliedObservations.length} />
+          <Reorder.Group axis="y" values={appliedObservations} onReorder={setAppliedObservations} as="ol" className="list-none p-0 m-0 space-y-0.5">
+            {tmplSections.map((s, i) => (
+              <li key={`${s.name}-${i}`} className="flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px] hover:bg-brand-50/30 transition-colors">
+                <span className="shrink-0 w-5 text-[0.6875rem] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
+                <span className="flex-1 min-w-0 text-[0.78125rem] font-medium text-ink-600 truncate">{s.name}</span>
+              </li>
+            ))}
+            {appliedObservations.map((o, i) => (
+              <ContentsRow
+                key={o.id}
+                section={o}
+                index={tmplSections.length + i + 1}
+                active={activeSectionId === o.id}
+                isEditing={contentsEditingId === o.id}
+                draftValue={contentsDraft}
+                onDraftChange={setContentsDraft}
+                onStartEdit={() => handleStartContentsRename(o as unknown as SectionItem)}
+                onSaveEdit={() => {
+                  if (!contentsEditingId) return;
+                  const trimmed = contentsDraft.trim();
+                  if (trimmed) setAppliedObservations(prev => prev.map(x => x.id === contentsEditingId ? { ...x, title: trimmed } : x));
+                  setContentsEditingId(null);
+                }}
+                onCancelEdit={handleCancelContentsRename}
+                onScroll={() => scrollToSection(o.id)}
+                onDelete={() => setAppliedObservations(prev => prev.filter(x => x.id !== o.id))}
+              />
+            ))}
+          </Reorder.Group>
+          <RailAddObservation />
+        </div>
+      );
+    }
+    // Empty path — static list of the template's defined sections.
+    if (outlineEntries.length === 0) return null;
+    return (
+      <div className={railCls}>
+        <RailHeader count={outlineEntries.length} />
+        <ol className="list-none p-0 m-0 space-y-0.5">
+          {outlineEntries.map((e, i) => (
+            <li key={e.id} className="flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px]">
+              <span className="shrink-0 w-5 text-[0.6875rem] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
+              <span className="flex-1 min-w-0 text-[0.78125rem] font-medium text-ink-600 truncate">{e.title}</span>
+            </li>
+          ))}
+        </ol>
       </div>
     );
   };
@@ -2391,14 +2301,6 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     window.history.replaceState({}, '', url.toString());
   }, [activityLogOpen]);
 
-  // Add Query modal — shown from the empty-state report layout.
-  const [addQueryOpen, setAddQueryOpen] = useState(false);
-  // Upload Report → Generate ATR flow — only offered on the ATR template (rt-007).
-  const [uploadReportOpen, setUploadReportOpen] = useState(false);
-  const isAtrReport = report.templateId === 'rt-007';
-  // SOX reports aren't assembled from queries — they're filled section by
-  // section — so the empty-state cover doesn't offer "Add Query".
-  const isSoxReport = reportKind(report) === 'sox';
   // ATR generation is offered on IA + Bulk reports (and ATRs themselves), never
   // on SOX — SOX is a separate report type that does not convert into an ATR.
   const canGenerateAtr = reportKind(report) !== 'sox';
@@ -2428,12 +2330,111 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   };
 
   const isReadOnly = report.isReadOnly === true || report.tag === 'Shared';
-  const sharedByName = report.sharedByName ?? (report as { sharedBy?: string }).sharedBy;
 
   // ATR-style section numbering — position in the stream, cover excluded.
   // Reordering renumbers, like a real document.
   const sectionNumber = (id: string) =>
     sections.filter(s => s.kind !== 'cover').findIndex(s => s.id === id) + 1;
+
+  // ─── Reader workspace: scroll-spy outline + scroll-revealed command-bar title ───
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+
+  // Scroll-spy — highlight the outline entry whose section currently leads the
+  // viewport. Re-binds whenever the rendered section set changes.
+  useEffect(() => {
+    const root = scrollRef.current;
+    if (!root) return;
+    const els = Array.from(root.querySelectorAll<HTMLElement>('[id^="section-"]'));
+    if (els.length === 0) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const lead = entries
+          .filter(e => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (lead) setActiveSectionId(lead.target.id.replace(/^section-/, ''));
+      },
+      { root, rootMargin: '-84px 0px -62% 0px', threshold: 0 },
+    );
+    els.forEach(el => obs.observe(el));
+    return () => obs.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sections, appliedTemplate]);
+
+  // The outline entries the rail shows, per render path. Cover is excluded — the
+  // command bar's Back + title already anchor the top.
+  const outlineEntries: { id: string; title: string; scrollable: boolean }[] = appliedTemplate
+      ? [
+          ...(appliedTemplate.sections ?? []).map((s, i) => ({ id: `as-${i}`, title: s.name, scrollable: false })),
+          ...appliedObservations.map(o => ({ id: o.id, title: o.title, scrollable: true })),
+        ]
+      : sections.filter(s => s.kind !== 'cover').map(s => ({ id: s.id, title: s.title, scrollable: true }));
+
+  // Back affordance + the report's primary actions live in a light sticky top
+  // command bar above the letterhead banner (not inside the purple box).
+  const backLink = (
+    <button
+      onClick={onBack}
+      className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+    >
+      <ArrowLeft size={14} /> Back to Reports
+    </button>
+  );
+  const coverActions = (
+    <>
+      {!isReadOnly && (
+        <div className="relative">
+          <button
+            onClick={() => setShowApplyTemplate(p => !p)}
+            className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+          >
+            <Layout size={14} />
+            <span className="truncate max-w-[160px] hidden md:inline">{appliedTemplate?.name ?? reportTemplate?.name ?? 'Apply Template'}</span>
+            <motion.span
+              animate={{ rotate: showApplyTemplate ? 180 : 0 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              className="inline-flex"
+            >
+              <ChevronDown size={14} />
+            </motion.span>
+          </button>
+          <AnimatePresence>
+            {showApplyTemplate && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowApplyTemplate(false)} />
+                <ApplyTemplateDropdown
+                  templates={mergeTemplateOptions(REPORT_TEMPLATES, customTemplates, [reportTemplate])}
+                  activeId={appliedTemplate?.id ?? reportTemplate?.id ?? null}
+                  onSelect={handleApplyTemplate}
+                  onClose={() => setShowApplyTemplate(false)}
+                />
+              </>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+      {onShare && can('rp_share') && (
+        <button onClick={onShare} className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30">
+          <Share2 size={14} /> <span className="hidden sm:inline">Share</span>
+        </button>
+      )}
+      {!isReadOnly && onSaveAsTemplate && (
+        <button
+          onClick={handleSaveAsTemplate}
+          title="Save this report's structure as a custom template"
+          className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+        >
+          <BookOpen size={14} /> <span className="hidden lg:inline">Save as template</span>
+        </button>
+      )}
+      <button
+        onClick={() => setShowDownloadModal(true)}
+        className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-500 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+      >
+        <Download size={14} /> Download
+      </button>
+    </>
+  );
 
   return (
     <motion.div
@@ -2441,78 +2442,8 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       animate={launching ? { opacity: 0.88, x: 16 } : { opacity: 1, x: 0 }}
       transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
       className="report-printable h-full overflow-y-auto bg-canvas"
+      ref={scrollRef}
     >
-      <div className="px-[124px] py-8 flex-col md:flex-row">
-        {/* Top bar */}
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
-          <div className="flex items-center gap-3 flex-wrap">
-            <button onClick={onBack} className="flex items-center gap-1.5 text-[0.8125rem] text-ink-500 hover:text-brand-600 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded">
-              <ArrowLeft size={14} /> Back to Reports
-            </button>
-            {isReadOnly && (
-              <span className="bg-canvas border border-canvas-border px-3 h-8 inline-flex items-center gap-2 rounded-full text-[0.6875rem] text-ink-500">
-                <Lock size={12} aria-hidden="true" />
-                <span>
-                  View-only{sharedByName ? <> · shared by {sharedByName}</> : ''}
-                </span>
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 relative">
-            {!isReadOnly && (
-              <div className="relative">
-                <button
-                  onClick={() => setShowApplyTemplate(p => !p)}
-                  className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px]"
-                >
-                  <Layout size={14} />
-                  <span className="truncate max-w-[220px]">{appliedTemplate?.name ?? reportTemplate?.name ?? 'Apply Template'}</span>
-                  <motion.span
-                    animate={{ rotate: showApplyTemplate ? 180 : 0 }}
-                    transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                    className="inline-flex"
-                  >
-                    <ChevronDown size={14} />
-                  </motion.span>
-                </button>
-                <AnimatePresence>
-                  {showApplyTemplate && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShowApplyTemplate(false)} />
-                      <ApplyTemplateDropdown
-                        templates={mergeTemplateOptions(REPORT_TEMPLATES, customTemplates, [reportTemplate])}
-                        activeId={appliedTemplate?.id ?? reportTemplate?.id ?? null}
-                        onSelect={handleApplyTemplate}
-                        onClose={() => setShowApplyTemplate(false)}
-                      />
-                    </>
-                  )}
-                </AnimatePresence>
-              </div>
-            )}
-            {onShare && can('rp_share') && (
-              <button onClick={onShare} className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white rounded-[8px]">
-                <Share2 size={14} /> Share
-              </button>
-            )}
-            <button
-              onClick={() => setShowDownloadModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white rounded-[8px]"
-            >
-              <Download size={14} /> Download
-            </button>
-            {!isReadOnly && !report.isEmpty && onSaveAsTemplate && (
-              <button
-                onClick={handleSaveAsTemplate}
-                title="Save this report's structure as a custom template"
-                className="flex items-center gap-1.5 px-3 py-2 border border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-white hover:border-brand-600/30 transition-colors cursor-pointer bg-white rounded-[8px]"
-              >
-                <BookOpen size={14} /> Save as template
-              </button>
-            )}
-          </div>
-        </div>
-
         {/* Applying Template Overlay */}
         <AnimatePresence>
           {applyingTemplate && (
@@ -2573,204 +2504,24 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           )}
         </AnimatePresence>
 
-        {report.isEmpty ? (
-          <>
-            {/* Empty-state Cover — light letterhead, simpler body */}
-            <div className="rounded-[12px] overflow-hidden mb-5 border border-canvas-border bg-white">
-              <ReportBrandBanner
-                title={reportDisplayName(report.name)}
-                gradient={report.theme ? TEMPLATE_THEME_GRADIENT[report.theme] : undefined}
-                actions={!isReadOnly && (
-                  <>
-                    {isAtrReport && (
-                      <button
-                        onClick={() => setUploadReportOpen(true)}
-                        className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                      >
-                        <Upload size={14} />
-                        Upload Report
-                      </button>
-                    )}
-                    {!isSoxReport && (
-                      <button
-                        onClick={() => setAddQueryOpen(true)}
-                        className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-                      >
-                        <Plus size={14} />
-                        Add Query
-                      </button>
-                    )}
-                  </>
-                )}
-              >
-                {reportTemplate?.desc && <p className="text-[0.8125rem] text-white/75 mb-3">{reportTemplate.desc}</p>}
-                <div className="flex items-center gap-1.5 text-[0.8125rem] flex-wrap">
-                  <span className="font-semibold text-white">{report.generatedBy}</span>
-                  <span className="text-white/30 mx-0.5">|</span>
-                  <span className="text-white/70">{report.generatedAt}</span>
-                  <span className="text-white/30 mx-0.5">|</span>
-                  <span className="text-white/70">{reportTemplate?.sections.length ?? 0} {reportTemplate?.sections.length === 1 ? 'section' : 'sections'}</span>
-                  {report.tag === 'Bulk Audit' && (
-                    <span className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[0.625rem] font-semibold whitespace-nowrap rounded-full bg-white/15 text-white border border-white/25">
-                      Bulk Audit
-                    </span>
-                  )}
-                </div>
-              </ReportBrandBanner>
-              <div className="px-9 py-6">
-                {/* Prepared By / Generated On live in the banner byline. */}
-                <ReportMetaPanel
-                  items={[
-                    { label: 'Report ID', value: report.id?.toUpperCase() },
-                    { label: 'Template', value: reportTemplate?.name },
-                    { label: 'Report Type', value: report.tag ?? 'Internal Audit' },
-                    { label: 'Audit Period', value: report.reportPeriod },
-                  ]}
-                />
-              </div>
-            </div>
+      {/* Report actions — pinned to the top of the scroll area so they stay
+          reachable while the document scrolls under them. No header-bar chrome:
+          page-coloured + borderless, so content slides cleanly beneath it. */}
+      <div className="sticky top-0 z-30 bg-canvas max-w-[1480px] mx-auto px-6 lg:px-10 h-16 flex items-center justify-between gap-4 print:hidden">
+        {backLink}
+        <div className="flex items-center gap-2">{coverActions}</div>
+      </div>
 
-            {/* Section blocks — render template sections with empty placeholders.
-                When a section is the "queries" section (e.g., Audit Queries) and
-                queries have been attached, the cards slot inside that section. */}
-            {(() => {
-              const sections = reportTemplate?.sections ?? [];
-              const attached = report.attachedQueries ?? [];
-              const queriesSectionIndex = sections.findIndex(s => /quer(y|ies)/i.test(s.name));
-              const hasQueriesSection = queriesSectionIndex !== -1;
-
-              // Resolve attached saved queries to their rich content (same
-              // label→key lookup AttachedQueryCard uses) so the surrounding
-              // sections can compose real content instead of placeholders.
-              // Recomputes on every attach/remove since attachedQueries flows
-              // through props.
-              const seenKeys = new Set<string>();
-              const attachedDefs = attached
-                .filter(q => q.kind === 'query')
-                .map(q => QUERY_LABEL_TO_KEY[q.label])
-                .filter((k): k is keyof typeof REPORT_QUERIES_ATR => Boolean(k) && !seenKeys.has(k) && Boolean(seenKeys.add(k)))
-                .map(k => defForKey(k))
-                .filter((d): d is GeneratedQueryDef => d !== null);
-              const execText = attachedDefs.length > 0
-                ? composeExecSummary(reportTemplate?.name ?? report.name, attachedDefs)
-                : null;
-              const recBullets = attachedDefs.flatMap(d => d.observations).slice(0, 6);
-
-              return (
-                <div className="space-y-4">
-                  {sections.map((section, i) => {
-                    const Icon = SECTION_ICONS[section.icon] || FileText;
-                    const isQueriesSection = i === queriesSectionIndex;
-                    const renderQueriesHere = isQueriesSection && attached.length > 0;
-
-                    if (renderQueriesHere) {
-                      return (
-                        <motion.div
-                          key={`${section.name}-${i}`}
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: i * 0.04 }}
-                          className="space-y-3"
-                        >
-                          <div className="flex items-center gap-2.5 px-1">
-                            <Icon size={16} className="text-brand-600" />
-                            <h3 className="text-[0.875rem] font-bold text-ink-800 tracking-tight">{section.name}</h3>
-                            <span className="text-[0.625rem] text-ink-400">·</span>
-                            <span className="text-[0.625rem] text-ink-400">{attached.length}</span>
-                          </div>
-                          <AnimatePresence>
-                            {attached.map((q, qi) => (
-                              <AttachedQueryCard
-                                key={q.id}
-                                query={q}
-                                index={qi}
-                                onRemove={(id) => onRemoveQuery(report.id, id)}
-                              />
-                            ))}
-                          </AnimatePresence>
-                        </motion.div>
-                      );
-                    }
-
-                    return (
-                      <motion.section
-                        key={`${section.name}-${i}`}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.04 }}
-                        className="bg-white border border-canvas-border rounded-[12px] px-6 py-5"
-                      >
-                        <div className="flex items-center gap-2.5 mb-3">
-                          <Icon size={16} className="text-brand-600" />
-                          <h3 className="text-[0.875rem] font-bold text-ink-800 tracking-tight">{section.name}</h3>
-                        </div>
-                        {/* Composed from attached queries where the section maps to
-                            query content; dashed placeholder otherwise. */}
-                        {/executive summary/i.test(section.name) && execText ? (
-                          <p className="text-[0.875rem] text-ink-700 leading-relaxed">{execText}</p>
-                        ) : /recommendation|insight/i.test(section.name) && recBullets.length > 0 ? (
-                          <ul className="space-y-2">
-                            {recBullets.map((b, bi) => (
-                              <li key={bi} className="flex gap-2.5 text-[0.875rem] text-ink-700 leading-relaxed">
-                                <span className="text-brand-600 mt-px shrink-0">•</span>
-                                <span>{b}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : /appendix/i.test(section.name) && attached.length > 0 ? (
-                          <ul className="space-y-1.5">
-                            {attached.map(q => (
-                              <li key={q.id} className="flex items-baseline gap-2 text-[0.78125rem] text-ink-500">
-                                <span className="font-medium text-ink-800">{q.label}</span>
-                                <span className="text-[0.6875rem] text-ink-400">Attached {q.attachedAt} by {q.attachedBy}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="border border-dashed border-canvas-border rounded-[12px] bg-canvas/40 px-6 py-7 text-center">
-                            <p className="text-[0.75rem] text-ink-400/80">
-                              {attached.length > 0
-                                ? `${section.name} will be generated from your attached queries.`
-                                : `Section content generated from ${report.name} data`}
-                            </p>
-                          </div>
-                        )}
-                      </motion.section>
-                    );
-                  })}
-
-                  {/* Fallback — template has no queries section, so render attached queries above remaining sections */}
-                  {!hasQueriesSection && attached.length > 0 && (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2.5 px-1">
-                        <MessageSquare size={16} className="text-brand-600" />
-                        <h3 className="text-[0.875rem] font-bold text-ink-800 tracking-tight">Attached Queries</h3>
-                        <span className="text-[0.625rem] text-ink-400">·</span>
-                        <span className="text-[0.625rem] text-ink-400">{attached.length}</span>
-                      </div>
-                      <AnimatePresence>
-                        {attached.map((q, qi) => (
-                          <AttachedQueryCard
-                            key={q.id}
-                            query={q}
-                            index={qi}
-                            onRemove={(id) => onRemoveQuery(report.id, id)}
-                          />
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  )}
-
-                  {(!reportTemplate || sections.length === 0) && (
-                    <div className="bg-white border border-canvas-border rounded-[12px] px-6 py-12 text-center">
-                      <p className="text-[0.8125rem] text-ink-400">This template has no sections defined.</p>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </>
-        ) : appliedTemplate ? (
+      {/* Reader workspace — a persistent outline rail plus a constrained,
+          centered document column. The rail tracks scroll position and jumps
+          between sections; the document keeps a comfortable reading measure
+          instead of spanning the full page. */}
+      <div className="max-w-[1480px] mx-auto px-6 lg:px-10 pt-3 pb-8 flex items-start gap-8 xl:gap-10">
+        <aside className="hidden xl:block w-[252px] shrink-0 sticky top-[72px] self-start max-h-[calc(100vh-96px)] overflow-y-auto pr-1 -mr-1 print:hidden">
+          <OutlineRail />
+        </aside>
+        <div className="min-w-0 flex-1 max-w-[920px]">
+        {appliedTemplate ? (
           <>
             {/* Report Cover — light letterhead with theme accent,
                 metadata grid attached below. */}
@@ -2798,13 +2549,15 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     >
                       <History size={16} />
                     </button>
+                    {!summaryGenerated && (
                     <button
-                      onClick={() => addToast({ type: 'success', message: 'Generating report summary…' })}
+                      onClick={() => { setSummaryGenerated(true); addToast({ type: 'success', message: 'Generating report summary…' }); }}
                       className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.78125rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                     >
                       <Sparkles size={13} />
                       Generate Summary
                     </button>
+                    )}
                   </>
                 }
               >
@@ -2833,66 +2586,6 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               </div>
             </div>
 
-            {/* Contents — read-only list of template-defined sections */}
-            {appliedTemplate.sections && appliedTemplate.sections.length > 0 && (
-              <div className="border border-canvas-border rounded-[12px] bg-white p-6 mb-5">
-                <div className="flex items-center justify-between gap-3 mb-4 pb-4 border-b border-canvas-border">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-7 h-7 rounded-[8px] bg-brand-50 text-brand-600 flex items-center justify-center"><List size={15} /></span>
-                    <h3 className="text-[0.9375rem] leading-[20px] font-bold text-ink-900">Contents</h3>
-                    <span className="inline-flex items-center h-5 px-2 rounded-full bg-canvas text-[0.6875rem] font-semibold text-ink-400 tabular-nums">{(appliedTemplate.sections?.length ?? 0) + appliedObservations.length}</span>
-                  </div>
-                  {!isReadOnly && (
-                    <button
-                      onClick={openAddObservation}
-                      className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-                    >
-                      <Plus size={14} />
-                      Add Observation
-                    </button>
-                  )}
-                </div>
-                <Reorder.Group
-                  axis="y"
-                  values={appliedObservations}
-                  onReorder={setAppliedObservations}
-                  as="ol"
-                  className="list-none p-0 m-0 space-y-0.5"
-                >
-                  {appliedTemplate.sections.map((s, i) => (
-                    <li key={`${s.name}-${i}`} className="flex items-center gap-2 py-2.5 pl-1 pr-1 rounded-[8px] hover:bg-brand-50/30 transition-colors">
-                      <span className="shrink-0 w-6 text-[0.6875rem] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
-                      <span className="flex-1 min-w-0 text-[0.78125rem] font-medium text-ink-700 truncate">{s.name}</span>
-                    </li>
-                  ))}
-                  {appliedObservations.map((o, i) => {
-                    const idx = (appliedTemplate.sections?.length ?? 0) + i + 1;
-                    return (
-                      <ContentsRow
-                        key={o.id}
-                        section={o}
-                        index={idx}
-                        isEditing={contentsEditingId === o.id}
-                        draftValue={contentsDraft}
-                        onDraftChange={setContentsDraft}
-                        onStartEdit={() => handleStartContentsRename(o as unknown as SectionItem)}
-                        onSaveEdit={() => {
-                          if (!contentsEditingId) return;
-                          const trimmed = contentsDraft.trim();
-                          if (trimmed) {
-                            setAppliedObservations(prev => prev.map(x => x.id === contentsEditingId ? { ...x, title: trimmed } : x));
-                          }
-                          setContentsEditingId(null);
-                        }}
-                        onCancelEdit={handleCancelContentsRename}
-                        onScroll={() => scrollToSection(o.id)}
-                        onDelete={() => setAppliedObservations(prev => prev.filter(x => x.id !== o.id))}
-                      />
-                    );
-                  })}
-                </Reorder.Group>
-              </div>
-            )}
 
             {/* Summary Stats Bar — ATR-style KPI tiles */}
             <div className="mb-5">
@@ -2976,7 +2669,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     animate: { opacity: 1, y: 0 },
                     exit: { opacity: 0, y: -4, scale: 0.98 },
                     transition: { duration: 0.25, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
-                    className: 'scroll-mt-4 list-none',
+                    className: 'scroll-mt-20 list-none',
                     dragListener: false as const,
                   };
 
@@ -2988,7 +2681,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                       <Reorder.Item {...sectionProps} key={`${section.id}-item`}>
                         <ReportBrandBanner
                           title={reportDisplayName(report.name)}
-                          className="rounded-t-[12px]"
+                                    className="rounded-t-[12px]"
                           gradient={report.theme ? TEMPLATE_THEME_GRADIENT[report.theme] : undefined}
                           actions={
                             <>
@@ -3010,14 +2703,16 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                               >
                                 <History size={16} />
                               </button>
+                              {!summaryGenerated && (
                               <button
-                                onClick={() => addToast({ type: 'success', message: 'Generating report summary…' })}
+                                onClick={() => { setSummaryGenerated(true); addToast({ type: 'success', message: 'Generating report summary…' }); }}
                                 className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.78125rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                               >
                                 <Sparkles size={13} />
                                 Generate Summary
                               </button>
-                            </>
+                              )}
+                                      </>
                           }
                         >
                           <EditableDescription onDark />
@@ -3046,7 +2741,6 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                           ]}
                         />
                       </div>,
-                      <ContentsBlock key={`${section.id}-contents`} />,
                     ];
                   }
 
@@ -3059,7 +2753,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                             n={sectionNumber(section.id)}
                             title={section.title}
                             subtitle={isBulkAudit ? 'Overall workflow result rollup' : 'Overall observation and action plan rollup'}
-                            right={hasQueries && (
+                            right={hasQueries && summaryGenerated && (
                               <button
                                 onClick={() => {
                                   if (isRegeneratingSummary) return;
@@ -3189,6 +2883,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             </main>
           </div>
         )}
+        </div>
       </div>
 
       {/* Report-level activity log drawer */}
@@ -3278,26 +2973,6 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         )}
       </AnimatePresence>
 
-      {/* Add Query modal — opened from empty-state cover */}
-      <AddQueryModal
-        open={addQueryOpen}
-        onClose={() => setAddQueryOpen(false)}
-        onAttach={(selection) => {
-          const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          onAddQuery(report.id, {
-            id: `aq-${Date.now()}`,
-            kind: selection.kind,
-            label: selection.label,
-            attachedAt: today,
-            attachedBy: report.generatedBy,
-          });
-          const verb = selection.kind === 'upload' ? 'Uploaded' : 'Attached';
-          addToast({ type: 'success', message: `${verb} "${selection.label}" — data syncing…` });
-        }}
-      />
-
-      {/* Upload Report → Generate ATR modal — opened from the ATR report cover */}
-      {uploadReportOpen && <UploadReportModal onClose={() => setUploadReportOpen(false)} />}
 
       {/* Generate ATR — editable Action Taken Report preview (same as Action Hub) */}
       {atrModalOpen && <GenerateATRModal onClose={() => setAtrModalOpen(false)} onSaveVersion={onSaveAtrVersion} />}

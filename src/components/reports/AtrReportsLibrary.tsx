@@ -44,7 +44,6 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
 }) {
   const [q, setQ] = useState('');
   const [area, setArea] = useState('All');
-  const [status, setStatus] = useState('All');
   const [auditor, setAuditor] = useState('All');
   const [riskOwner, setRiskOwner] = useState('All');
   const [dateRange, setDateRange] = useState('all');
@@ -83,7 +82,6 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
     const range = DATE_RANGES.find(r => r.key === dateRange);
     return atrs.filter(a => {
       if (area !== 'All' && a.area !== area) return false;
-      if (status !== 'All' && a.status !== status) return false;
       if (auditor !== 'All' && a.generatedBy !== auditor) return false;
       if (riskOwner !== 'All' && a.riskOwner !== riskOwner) return false;
       if (range && range.days > 0) {
@@ -93,14 +91,14 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
       if (s && !(blobs.get(a.id) ?? '').includes(s)) return false;
       return true;
     });
-  }, [atrs, q, area, status, auditor, riskOwner, dateRange, blobs, nowMs]);
+  }, [atrs, q, area, auditor, riskOwner, dateRange, blobs, nowMs]);
 
-  const activeFilters = area !== 'All' || status !== 'All' || auditor !== 'All' || riskOwner !== 'All' || dateRange !== 'all' || !!q.trim();
+  const activeFilters = area !== 'All' || auditor !== 'All' || riskOwner !== 'All' || dateRange !== 'all' || !!q.trim();
   // Count only the dropdown filters (not the search) for the Filters badge.
   const activeFilterCount =
-    (area !== 'All' ? 1 : 0) + (status !== 'All' ? 1 : 0) + (auditor !== 'All' ? 1 : 0) +
+    (area !== 'All' ? 1 : 0) + (auditor !== 'All' ? 1 : 0) +
     (riskOwner !== 'All' ? 1 : 0) + (dateRange !== 'all' ? 1 : 0);
-  const clearFilters = () => { setArea('All'); setStatus('All'); setAuditor('All'); setRiskOwner('All'); setDateRange('all'); };
+  const clearFilters = () => { setArea('All'); setAuditor('All'); setRiskOwner('All'); setDateRange('all'); };
   const clearAll = () => { setQ(''); clearFilters(); };
 
   return (
@@ -113,7 +111,6 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
           <>
             <ToolbarFilterMenu activeCount={activeFilterCount} onClear={clearFilters}>
               <ToolbarSelect block label="Area" value={area} onChange={setArea} options={areaOpts} />
-              <ToolbarSelect block label="Status" value={status} onChange={setStatus} options={['All', 'final', 'draft']} />
               <ToolbarSelect block label="Auditor" value={auditor} onChange={setAuditor} options={auditorOpts} />
               <ToolbarSelect block label="Risk owner" value={riskOwner} onChange={setRiskOwner} options={riskOwnerOpts} />
               <ToolbarSelect block label="Date" value={dateRange} onChange={setDateRange} options={DATE_RANGES.map(r => ({ value: r.key, label: r.label }))} />
@@ -141,9 +138,10 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
           keyField="id"
           paginated
           pageSize={20}
+          fixedLayout
           hideResultCount
           columns={[
-            { key: 'name', label: 'Report', truncate: true, render: (item) => {
+            { key: 'name', label: 'Report', render: (item) => {
               const atr = item as unknown as AtrLibraryReport;
               const plans = atr.atrData.observations.reduce((n, o) => n + o.actionPlans.length, 0);
               return (
@@ -161,10 +159,6 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
             { key: 'area', label: 'Area', width: '180px', render: (item) => {
               const atr = item as unknown as AtrLibraryReport;
               return <ReportPill tone={AREA_TONE_MAP[atr.area] ?? 'draft'}>{atr.area}</ReportPill>;
-            }},
-            { key: 'status', label: 'Status', width: '128px', render: (item) => {
-              const atr = item as unknown as AtrLibraryReport;
-              return <ReportPill tone={atr.status === 'final' ? 'compliant' : 'draft'}>{atr.status === 'final' ? 'Final' : 'Draft'}</ReportPill>;
             }},
             { key: 'generatedAt', label: 'Generated', width: '150px', render: (item) => (
               <span className="text-[0.75rem] tabular-nums text-ink-500 whitespace-nowrap">{String((item as unknown as AtrLibraryReport).generatedAt)}</span>
@@ -193,10 +187,9 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
                 icon={FileText}
                 iconClass="bg-info-50 text-info-700"
                 eyebrow="ATR"
-                accent="bg-evidence-600"
                 title={reportDisplayName(atr.name)}
                 description={`${atr.atrData.meta.auditEntity} — ${atr.atrData.meta.auditPeriod}`}
-                pills={[atr.status === 'final' ? 'Final' : 'Draft', `${atr.atrData.observations.length} observations`, `${plans} action plans`, `${ev} evidence`]}
+                pills={[`${atr.atrData.observations.length} observations`, `${plans} action plans`, `${ev} evidence`]}
                 footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{atr.generatedAt}</span>}
                 onClick={() => onOpen(atr)}
                 actions={<>

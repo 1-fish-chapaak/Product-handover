@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import FloatingLines from '../shared/FloatingLines';
-import ListToolbar, { ToolbarChips, ToolbarViewToggle } from '../shared/ListToolbar';
+import ListToolbar, { ToolbarViewToggle } from '../shared/ListToolbar';
 import ColumnFilter from '../shared/ColumnFilter';
 import ReportCard from '../shared/ReportCard';
 import { BTN_CTA_PRIMARY, BTN_CTA_OUTLINE } from '../admin/adminTokens';
+import { KpiCountUp } from '../shared/KpiTile';
 import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
-  Sparkles, X, Edit3, BookOpen, Upload, Trash2, Plus, Search, Layers, Check,
-  WifiOff, FileCheck2, FolderArchive, Copy,
+  X, Edit3, BookOpen, Upload, Trash2, Plus, Search, Layers, Check,
+  WifiOff, FileCheck2, FolderArchive, Copy, ShieldCheck,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
@@ -30,20 +31,19 @@ import { TemplateEditor } from './TemplateEditor';
 import {
   ICON_MAP, CATEGORY_COLORS, BLANK_TEMPLATE, mergeTemplateOptions,
   templateKind, reportKind, startReportDownload,
-  type AttachedQuery, type EditableTemplate, type GeneratedReport,
+  type EditableTemplate, type GeneratedReport,
 } from './reportShared';
 import SmartTable from '../shared/SmartTable';
 import { useToast } from '../shared/Toast';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useCan } from '../../context/CurrentUserContext';
-import ReportBuilder from './ReportBuilder';
 import { BulkAuditVariantView } from './BulkAuditVariants';
 import GenerateReportWizard, { type WizardCreatePayload } from './GenerateReportWizard';
 import { defForKey, DEMO_REPORT_QUERY_KEYS, type GeneratedQueryDef, type PickableQuery } from './templateQueryPool';
 import ReportView from './ReportView';
 // CUSTOM_TEMPLATES now lives in the shared keystone; re-exported so existing
 // importers (App.tsx) keep working.
-export { CUSTOM_TEMPLATES } from './reportShared';
+export { CUSTOM_TEMPLATES, SEED_APPROVED_TEMPLATE } from './reportShared';
 
 
 
@@ -80,6 +80,9 @@ interface ReportsViewProps {
 // ─── Query Card Component ───
 
 
+
+// SEED_APPROVED_TEMPLATE lives in the shared keystone (re-exported above) so this
+// component file exports only components — keeping React Fast Refresh intact.
 
 // ─── Main Reports View ───
 export default function ReportsView({
@@ -143,6 +146,9 @@ export default function ReportsView({
   const [editingTemplate, setEditingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const [editingAsCopy, setEditingAsCopy] = useState(false);
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
+  // Fallback store, used only when no customTemplates prop is supplied. In the
+  // app, App.tsx owns the canonical list (and seeds SEED_APPROVED_TEMPLATE), so
+  // this branch stays seedless to avoid two sources of truth.
   const [customTemplatesLocal, setCustomTemplatesLocal] = useState<EditableTemplate[]>(() => {
     try {
       const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
@@ -172,10 +178,9 @@ export default function ReportsView({
     else setCustomTemplatesLocal(prev => prev.map(x => x.id === t.id ? t : x));
   };
   const [templateToDelete, setTemplateToDelete] = useState<{ id: string; name: string } | null>(null);
-  // Templates tab: Standard and Custom are split into one switchable view so a
-  // growing Custom list never makes the page scroll past Standard. Search lives
-  // only on Custom (the list that scales); Standard is a fixed 3-card gallery.
-  const [templatesSubTab, setTemplatesSubTab] = useState<'standard' | 'custom'>('standard');
+  // Templates tab: Standard and Custom galleries render together on one page.
+  // Grid/list is the section-wide `viewMode` (shared with My Reports / Shared),
+  // so the view preference and its `list` default stay consistent across tabs.
   const [templateSearch, setTemplateSearch] = useState('');
 
   // Save with collision-proof naming — upload + save-as-template flows suffix
@@ -194,7 +199,7 @@ export default function ReportsView({
       const raw = localStorage.getItem(GENERATED_REPORTS_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed as GeneratedReport[];
+        if (Array.isArray(parsed)) return (parsed as GeneratedReport[]).filter(r => !(r as { isEmpty?: boolean }).isEmpty);
       }
     } catch {
       // Defer to an effect so the toast call can happen after mount.
@@ -289,6 +294,7 @@ export default function ReportsView({
     bulk: boolean;
     description: string;
     pills: string[];
+    status: 'draft' | 'final';
     date: string;
     sortDate: number;
     open: () => void;
@@ -320,6 +326,7 @@ export default function ReportsView({
       rows.push({
         id: r.id, kind: k, name: r.name, bulk: r.tag === 'Bulk Audit',
         description: reportDesc(r), pills: reportPills(r),
+        status: r.status === 'final' ? 'final' : 'draft',
         date: r.generatedAt, sortDate: ts(r.generatedAt),
         open: () => setViewingReport(r),
         download: () => startReportDownload(addToast, updateToast, r.name),
@@ -332,6 +339,7 @@ export default function ReportsView({
       rows.push({
         id: a.id, kind: 'atr', name: a.name, bulk: false,
         description: atrDesc(a), pills: atrPills(a),
+        status: a.status === 'final' ? 'final' : 'draft',
         date: a.generatedAt, sortDate: ts(a.generatedAt),
         open: () => openAtr(a),
         download: () => { exportAtrWord(a.atrData.meta, a.atrData.observations); addToast({ type: 'success', message: `Downloading “${a.name}”.` }); },
@@ -505,32 +513,6 @@ export default function ReportsView({
     }
   }, [focusReportId, generatedReports, onFocusReportConsumed]);
 
-  const addQueryToReport = (reportId: string, query: AttachedQuery) => {
-    setGeneratedReports(prev => prev.map(r =>
-      r.id === reportId
-        ? { ...r, attachedQueries: [...(r.attachedQueries ?? []), query] }
-        : r
-    ));
-    setViewingReport(prev =>
-      prev && prev.id === reportId
-        ? { ...prev, attachedQueries: [...(prev.attachedQueries ?? []), query] }
-        : prev
-    );
-  };
-
-  const removeAttachedQuery = (reportId: string, queryId: string) => {
-    setGeneratedReports(prev => prev.map(r =>
-      r.id === reportId
-        ? { ...r, attachedQueries: (r.attachedQueries ?? []).filter(q => q.id !== queryId) }
-        : r
-    ));
-    setViewingReport(prev =>
-      prev && prev.id === reportId
-        ? { ...prev, attachedQueries: (prev.attachedQueries ?? []).filter(q => q.id !== queryId) }
-        : prev
-    );
-  };
-
   const updateReportDescription = (reportId: string, description: string) => {
     setGeneratedReports(prev => prev.map(r =>
       r.id === reportId ? { ...r, description } : r
@@ -633,17 +615,13 @@ export default function ReportsView({
     });
   };
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [showNewReportTemplateSelector, setShowNewReportTemplateSelector] = useState(false);
-  const [showBuilderModal, setShowBuilderModal] = useState(false);
-  const [newReportName, setNewReportName] = useState('');
-  const [newReportDesc, setNewReportDesc] = useState('');
-  const [newReportTemplate, setNewReportTemplate] = useState('');
-  const [newReportTemplatePrefilled, setNewReportTemplatePrefilled] = useState(false);
-
-  const closeNewReportModal = () => {
-    setShowNewReportTemplateSelector(false);
+  // When set, the upload modal runs in format-check mode against this approved
+  // reference instead of creating a fresh template (Template Studio §5).
+  const [uploadReference, setUploadReference] = useState<{ templateName: string; sections: string[] } | null>(null);
+  const checkFileAgainst = (t: EditableTemplate) => {
+    setUploadReference({ templateName: t.name, sections: (t.approvedSections ?? t.sections?.map(s => s.name)) ?? [] });
+    setShowUploadModal(true);
   };
-
   const filteredReports = (() => {
     const q = gridSearch.trim().toLowerCase();
     // Only the SOX / IA sub-tabs render this list; scope to my own reports of the active type.
@@ -666,6 +644,36 @@ export default function ReportsView({
       </span>
     </span>
   );
+
+  // Canonical KPI-family filter tile (§7.11.2 shape, §526 stroke-free selection)
+  // shared by the report-type band and the SOX / IA breakdown band so they stay
+  // identical. Selection = brand border + wash + solid icon chip; no baseline.
+  const renderKpiTile = (o: { key: string; active: boolean; icon: React.ElementType; value: number; label: string; onClick: () => void; index?: number; fixed?: boolean; animate?: boolean }) => {
+    const Icon = o.icon;
+    return (
+      <button
+        key={o.key}
+        type="button"
+        onClick={o.onClick}
+        aria-pressed={o.active}
+        className={`group/kpi flex items-center gap-2.5 rounded-lg border px-3 py-2 cursor-pointer transition-[border-color,box-shadow,background-color] duration-300 ${o.fixed ? 'shrink-0 w-[184px]' : ''} ${
+          o.active
+            ? 'border-brand-300 bg-brand-50/50'
+            : 'border-canvas-border bg-canvas-elevated hover:border-brand-200 hover:shadow-[0_12px_28px_-14px_rgba(15,8,30,0.22)]'
+        }`}
+      >
+        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${o.active ? 'bg-brand-600 text-white shadow-sm' : 'bg-brand-50 text-brand-600 group-hover/kpi:bg-brand-100'}`}>
+          <Icon size={14} strokeWidth={2} />
+        </span>
+        <span className="min-w-0 flex items-baseline gap-1.5">
+          <span className={`text-[1.125rem] font-bold leading-none tabular-nums ${o.active ? 'text-brand-800' : 'text-ink-900'}`}>
+            {o.animate === false ? o.value : <KpiCountUp value={String(o.value)} delay={120 + (o.index ?? 0) * 80} />}
+          </span>
+          <span className="text-[0.75rem] font-medium text-ink-500 truncate">{o.label}</span>
+        </span>
+      </button>
+    );
+  };
 
   // Canonical "Report" name cell shared by every list-view table (All · SOX · IA
   // · Shared) so the lists never drift: brand tile + type icon, 14.5px name with
@@ -721,6 +729,11 @@ export default function ReportsView({
   // cross-cutting engagement type. Routed through the canonical ReportPill
   // (§7.10.4) rather than a hand-rolled span.
   const BULK_PILL = <ReportPill tone="mitigated">Bulk Audit</ReportPill>;
+  // One column-width scheme for every report table (All · SOX/IA · Shared · ATR)
+  // so columns line up tab to tab. The Report (name) column has no fixed width,
+  // so under SmartTable `fixedLayout` it absorbs the slack — the detail columns
+  // and actions stay packed together on the right with no empty gap.
+  const COL_W = { type: '180px', status: '128px', queries: '112px', sharedBy: '200px', generated: '150px', actions: '120px' };
   // Muted placeholder for the Type column when a row has no special type.
 
 
@@ -757,8 +770,6 @@ export default function ReportsView({
         onManageExceptions={onManageExceptions}
         onOpenQuery={onOpenQuery}
         customTemplates={customTemplates}
-        onAddQuery={addQueryToReport}
-        onRemoveQuery={removeAttachedQuery}
         onUpdateDescription={updateReportDescription}
         onSaveAsTemplate={addCustomTemplateUnique}
         onSaveAtrVersion={saveAtrVersion}
@@ -842,8 +853,8 @@ export default function ReportsView({
             className="flex flex-wrap gap-6 -mb-px">
           {([
             { id: 'my-reports', label: 'My Reports', icon: BookOpen, count: generatedReports.length },
-            { id: 'templates', label: 'Templates', icon: FileText, count: REPORT_TEMPLATES.length + customTemplates.length },
             { id: 'shared-reports', label: 'Shared Reports', icon: Share2, count: SHARED_REPORTS.length },
+            { id: 'templates', label: 'Templates', icon: FileText, count: REPORT_TEMPLATES.length + customTemplates.length },
           ] as const).map(tab => {
             const TabIcon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -899,39 +910,30 @@ export default function ReportsView({
           </div>
         )}
 
-        {/* My Reports sub-tabs — segregated by report type (ATR · SOX · IA) plus
-            the linked evidence repository. Styled as Knowledge Hub's filter-chip
-            group: a light track holding pills, the active one a white pill with a
-            springing layoutId background + brand text and plain tabular counts. */}
+        {/* Report-type band — KPI-family tiles (shared shape & typography, §7.11.2)
+            that double as the report-type filter. Selection is a clean brand
+            border + wash + solid icon chip (the design's stroke-free selection
+            pattern, §526) — no 2px bottom baseline. */}
         {activeTab === 'my-reports' && (
-          <div className="mb-6 flex items-center justify-between gap-3">
-            <ToolbarChips
-              layoutId="reports-type-pill-bg"
-              value={reportType}
-              onChange={setReportType}
-              options={[
-                { key: 'all', label: 'All', icon: Layers, count: allReportsUnified.length },
-                { key: 'ia', label: 'Internal Audit', icon: BookOpen, count: typeCounts.ia },
-                { key: 'atr', label: 'ATR', icon: FileCheck2, count: allAtrs.length },
-                { key: 'sox', label: 'SOX', icon: Shield, count: typeCounts.sox },
-              ]}
-            />
-            {/* Evidence is a linked repository, not a report type — rendered as a
-                standalone button on the right so it reads as its own destination. */}
-            <button
-              type="button"
-              onClick={() => setReportType('evidence')}
-              aria-pressed={reportType === 'evidence'}
-              className={`shrink-0 inline-flex items-center gap-2.5 h-9 px-3.5 rounded-lg border text-[0.875rem] font-semibold cursor-pointer transition-colors ${
-                reportType === 'evidence'
-                  ? 'bg-brand-600 border-brand-600 text-white'
-                  : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-300'
-              }`}
-            >
-              <FolderArchive size={15} className={reportType === 'evidence' ? 'text-white' : 'text-ink-400'} />
-              Evidence
-              <span className={`tabular-nums font-bold text-[0.8125rem] ${reportType === 'evidence' ? 'text-white/90' : 'text-ink-400'}`}>{EVIDENCE_LIBRARY.length}</span>
-            </button>
+          <div className="flex items-start gap-3 mb-5">
+            <div className="flex-1 min-w-0 grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {([
+                { key: 'all', label: 'All reports', value: allReportsUnified.length, icon: Layers },
+                { key: 'ia', label: 'Internal Audit', value: typeCounts.ia, icon: BookOpen },
+                { key: 'atr', label: 'ATR', value: allAtrs.length, icon: FileCheck2 },
+                { key: 'sox', label: 'SOX', value: typeCounts.sox, icon: Shield },
+              ] as const).map((t, i) => renderKpiTile({
+                key: t.key, active: reportType === t.key, icon: t.icon, value: t.value,
+                label: t.label, onClick: () => setReportType(t.key), index: i,
+              }))}
+            </div>
+            {/* Evidence — a linked repository, not a report type; same tile shape,
+                set apart on the right so it reads as its own destination. */}
+            {renderKpiTile({
+              key: 'evidence', active: reportType === 'evidence', icon: FolderArchive,
+              value: EVIDENCE_LIBRARY.length, label: 'Evidence',
+              onClick: () => setReportType('evidence'), fixed: true, animate: false,
+            })}
           </div>
         )}
 
@@ -980,7 +982,6 @@ export default function ReportsView({
                       icon={m.icon}
                       iconClass={m.classes}
                       eyebrow={m.label}
-                      accent={row.kind === 'sox' ? 'bg-mitigated' : row.kind === 'atr' ? 'bg-evidence-600' : undefined}
                       title={reportDisplayName(row.name)}
                       description={row.description}
                       pills={row.bulk ? ['Bulk Audit', ...row.pills] : row.pills}
@@ -1014,6 +1015,7 @@ export default function ReportsView({
             pageSize={20}
             stickyHeader
             stickyHeaderTop="top-0"
+            fixedLayout
             hideResultCount
             emptyContent={
               <EmptyState
@@ -1024,7 +1026,7 @@ export default function ReportsView({
               />
             }
             columns={[
-              { key: 'name', label: 'Report', truncate: true, render: (item) => {
+              { key: 'name', label: 'Report', render: (item) => {
                 const row = item as unknown as UnifiedRow;
                 return (
                   <ReportNameCell
@@ -1040,7 +1042,7 @@ export default function ReportsView({
                   />
                 );
               }},
-              { key: 'kind', label: 'Type', width: '220px', render: (item) => {
+              { key: 'kind', label: 'Type', width: COL_W.type, render: (item) => {
                 const k = item.kind as UnifiedKind;
                 return (
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -1050,10 +1052,9 @@ export default function ReportsView({
                   </div>
                 );
               }},
-              { key: 'date', label: 'Generated', width: '150px', render: (item) => (
+              { key: 'date', label: 'Generated', width: COL_W.generated, render: (item) => (
                 <span className="text-[0.75rem] tabular-nums text-ink-500 whitespace-nowrap">{String(item.date)}</span>
-              )},
-              { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => {
+              )},              { key: 'actions', label: '', width: COL_W.actions, sortable: false, align: 'right', render: (item) => {
                 const row = item as unknown as UnifiedRow;
                 return (
                   <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
@@ -1132,6 +1133,7 @@ export default function ReportsView({
             pageSize={20}
             stickyHeader
             stickyHeaderTop="top-0"
+            fixedLayout
             hideResultCount
             emptyContent={generatedReports.length === 0 ? (
               <EmptyState
@@ -1163,7 +1165,7 @@ export default function ReportsView({
               </div>
             )}
             columns={[
-              { key: 'name', label: 'Report', truncate: true, render: (item) => (
+              { key: 'name', label: 'Report', render: (item) => (
                 <ReportNameCell
                   icon={UNIFIED_KIND_META[reportType].icon}
                   iconClass={UNIFIED_KIND_META[reportType].classes}
@@ -1180,20 +1182,19 @@ export default function ReportsView({
               // what distinguishes those rows). Plain rows show their framework
               // type pill rather than a bare dash, which read as missing data.
               ...(filteredReports.some(r => r.tag === 'Bulk Audit') ? [{
-                key: 'tag', label: 'Type', width: '150px', sortable: false, render: (item: Record<string, unknown>) => (
+                key: 'tag', label: 'Type', width: COL_W.type, sortable: false, render: (item: Record<string, unknown>) => (
                   item.tag === 'Bulk Audit' ? BULK_PILL : TYPE_PILL(KIND_FULL_LABEL[reportType], KIND_TONE[reportType])
                 ),
               }] : []),
-              { key: 'queries', label: 'Queries', width: '104px', render: (item) => {
+              { key: 'queries', label: 'Queries', width: COL_W.queries, render: (item) => {
                 const n = Number(item.queries) || 0;
                 return (
                   <span className={`inline-flex items-center justify-center min-w-[26px] h-[22px] px-2 rounded-full text-[0.71875rem] font-semibold tabular-nums ${n > 0 ? 'bg-paper-100 text-ink-600' : 'bg-paper-100 text-ink-400'}`}>{n}</span>
                 );
               }},
-              { key: 'generatedAt', label: 'Generated', width: '150px', render: (item) => (
+              { key: 'generatedAt', label: 'Generated', width: COL_W.generated, render: (item) => (
                 <span className="text-[0.75rem] tabular-nums text-ink-500 whitespace-nowrap">{String(item.generatedAt)}</span>
-              )},
-              { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => (
+              )},              { key: 'actions', label: '', width: COL_W.actions, sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                   <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, String(item.name)); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
                   {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: String(item.id), anchor: rectFromEvent(e) }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
@@ -1263,7 +1264,6 @@ export default function ReportsView({
                     icon={m.icon}
                     iconClass={m.classes}
                     eyebrow={m.label}
-                    accent={reportKind(r) === 'sox' ? 'bg-mitigated' : undefined}
                     title={reportDisplayName(r.name)}
                     description={reportDesc(r)}
                     pills={r.tag === 'Bulk Audit' ? ['Bulk Audit', ...reportPills(r)] : reportPills(r)}
@@ -1322,6 +1322,7 @@ export default function ReportsView({
             keyField="id"
             paginated
             pageSize={20}
+            fixedLayout
             hideResultCount
             emptyContent={SHARED_REPORTS.length === 0 ? (
               <EmptyState
@@ -1341,7 +1342,7 @@ export default function ReportsView({
               </div>
             )}
             columns={[
-              { key: 'name', label: 'Report', truncate: true, render: (item) => (
+              { key: 'name', label: 'Report', render: (item) => (
                 <ReportNameCell
                   icon={UNIFIED_KIND_META[(item.kind as UnifiedKind) ?? 'ia'].icon}
                   iconClass={UNIFIED_KIND_META[(item.kind as UnifiedKind) ?? 'ia'].classes}
@@ -1350,11 +1351,11 @@ export default function ReportsView({
                   onClick={() => openSharedReport(item as unknown as typeof SHARED_REPORTS[number])}
                 />
               )},
-              { key: 'kind', label: 'Type', width: '180px', render: (item) => {
+              { key: 'kind', label: 'Type', width: COL_W.type, render: (item) => {
                 const k = (item.kind as UnifiedKind) ?? 'ia';
                 return TYPE_PILL(KIND_FULL_LABEL[k], KIND_TONE[k]);
               }},
-              { key: 'sharedBy', label: 'Shared by', width: '220px', render: (item) => (
+              { key: 'sharedBy', label: 'Shared by', width: COL_W.sharedBy, render: (item) => (
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 rounded-full bg-brand-600/10 text-brand-600 text-[0.5625rem] font-semibold flex items-center justify-center shrink-0">
                     {String(item.sharedBy).split(' ').map((n: string) => n[0]).join('')}
@@ -1362,10 +1363,9 @@ export default function ReportsView({
                   <span className="text-ink-500 text-[0.75rem] truncate">{String(item.sharedBy)}</span>
                 </div>
               )},
-              { key: 'sharedAt', label: 'Shared', width: '150px', render: (item) => (
+              { key: 'sharedAt', label: 'Shared', width: COL_W.generated, render: (item) => (
                 <span className="text-[0.75rem] tabular-nums text-ink-500 whitespace-nowrap">{String(item.sharedAt)}</span>
-              )},
-              { key: 'actions', label: '', width: '110px', sortable: false, align: 'right', render: (item) => (
+              )},              { key: 'actions', label: '', width: COL_W.actions, sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                   <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, String(item.name)); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
                   {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: String(item.id), anchor: rectFromEvent(e) }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
@@ -1467,18 +1467,20 @@ export default function ReportsView({
             addToast({ type: 'info', message: 'Open a SOX / ICFR engagement to generate its report.' });
             onOpenSox?.();
           };
-          const renderCard = (rt: typeof REPORT_TEMPLATES[0], i: number, fixedWidth?: boolean, isCustom?: boolean) => {
+          const renderCard = (rt: typeof REPORT_TEMPLATES[0], i: number, isCustom?: boolean) => {
             const Icon = ICON_MAP[rt.icon] || FileText;
             const color = CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50';
             const eyebrowTone = color.split(' ')[0];
             const tintBg = color.split(' ')[1] ?? 'bg-paper-50';
             const sectionNames = rt.sections?.map(s => s.name) ?? [];
+            const approvedSections = (rt as EditableTemplate).approvedSections;
+            const hasApprovedFormat = isCustom && !!approvedSections?.length;
             return (
               <motion.div
                 key={rt.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0, transition: { delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
-                className={`bg-canvas-elevated border border-canvas-border rounded-[12px] p-5 transition-colors duration-200 group cursor-pointer flex flex-col min-h-[164px] hover:border-brand-200 ${fixedWidth ? 'w-[200px] shrink-0' : ''}`}
+                className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-5 transition-colors duration-200 group cursor-pointer flex flex-col min-h-[164px] hover:border-brand-200"
                 onClick={() => {
                   // Whole card = the primary action. Each report type generates
                   // its own way: ATR via upload/observations, SOX from a SOX/ICFR
@@ -1514,7 +1516,13 @@ export default function ReportsView({
                         <span className="inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-600 tabular-nums whitespace-nowrap shrink-0">
                           {sectionNames.length} {sectionNames.length === 1 ? 'section' : 'sections'}
                         </span>
-                        <span className="text-[0.6875rem] text-ink-400 leading-none truncate">{sectionNames.slice(0, 2).join(' · ')}</span>
+                        {hasApprovedFormat ? (
+                          <span className="inline-flex items-center gap-1 h-6 px-2 rounded-full border border-compliant/40 bg-compliant-50 text-[0.625rem] font-semibold text-compliant-700 whitespace-nowrap shrink-0">
+                            <ShieldCheck size={11} /> Reference format
+                          </span>
+                        ) : (
+                          <span className="text-[0.6875rem] text-ink-400 leading-none truncate">{sectionNames.slice(0, 2).join(' · ')}</span>
+                        )}
                       </>
                     ) : (
                       <span className="inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-400 whitespace-nowrap shrink-0">
@@ -1523,11 +1531,22 @@ export default function ReportsView({
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    {hasApprovedFormat && (
+                      <ActionTooltip label="Check a file against this format">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); checkFileAgainst(rt as EditableTemplate); }}
+                          aria-label={`Check a file against the ${rt.name} reference format`}
+                          className="w-7 h-7 flex items-center justify-center rounded-full text-ink-400 hover:text-compliant-700 hover:bg-compliant-50 transition-colors duration-200 cursor-pointer"
+                        >
+                          <ShieldCheck size={13} />
+                        </button>
+                      </ActionTooltip>
+                    )}
                     <ActionTooltip label={isCustom ? 'Edit' : 'Clone to edit'}>
                       <button
                         onClick={(e) => { e.stopPropagation(); if (isCustom) editCustomTemplate(rt); else cloneStandardTemplate(rt); }}
                         aria-label={`${isCustom ? 'Edit' : 'Clone'} template ${rt.name}`}
-                        className="w-7 h-7 flex items-center justify-center rounded-full text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer"
+                        className="w-7 h-7 flex items-center justify-center rounded-full text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] transition-colors duration-200 cursor-pointer"
                       >
                         {isCustom ? <Edit3 size={13} /> : <Copy size={13} />}
                       </button>
@@ -1537,7 +1556,7 @@ export default function ReportsView({
                         <button
                           onClick={(e) => { e.stopPropagation(); setTemplateToDelete({ id: rt.id, name: rt.name }); }}
                           aria-label={`Delete template ${rt.name}`}
-                          className="w-7 h-7 flex items-center justify-center rounded-full text-ink-400 hover:text-risk-700 hover:bg-risk-50 opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer"
+                          className="w-7 h-7 flex items-center justify-center rounded-full text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors duration-200 cursor-pointer"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -1548,6 +1567,98 @@ export default function ReportsView({
               </motion.div>
             );
           };
+
+          // Dense list row — same data as the card, one line per template.
+          const renderRow = (rt: typeof REPORT_TEMPLATES[0], i: number, isCustom?: boolean) => {
+            const Icon = ICON_MAP[rt.icon] || FileText;
+            const color = CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50';
+            const eyebrowTone = color.split(' ')[0];
+            const tintBg = color.split(' ')[1] ?? 'bg-paper-50';
+            const sectionCount = rt.sections?.length ?? 0;
+            const approvedSections = (rt as EditableTemplate).approvedSections;
+            const hasApprovedFormat = isCustom && !!approvedSections?.length;
+            return (
+              <motion.div
+                key={rt.id}
+                initial={{ opacity: 0, y: 3 }}
+                animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 14) * 0.018, duration: 0.22, ease: [0.22, 1, 0.36, 1] } }}
+                className="group relative flex items-center gap-3 pl-3 pr-2.5 py-2.5 cursor-pointer hover:bg-canvas transition-colors"
+                onClick={() => {
+                  const kind = templateKind(rt);
+                  if (kind === 'atr') { setAtrWizardOpen(true); return; }
+                  if (kind === 'sox') { openSoxFromEngagement(); return; }
+                  setWizardTemplate(rt);
+                }}
+              >
+                <div className={`shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-[8px] ${tintBg}`}>
+                  <Icon size={15} className={eyebrowTone} strokeWidth={1.75} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[0.8125rem] font-semibold text-ink-900 truncate group-hover:text-brand-700 transition-colors">{rt.name}</span>
+                    {hasApprovedFormat && (
+                      <span className="shrink-0 inline-flex items-center gap-1 h-[1.125rem] px-1.5 rounded-full border border-compliant/40 bg-compliant-50 text-[0.625rem] font-semibold text-compliant-700">
+                        <ShieldCheck size={10} /> Approved
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[0.75rem] text-ink-400 truncate leading-snug">{rt.desc}</p>
+                </div>
+                {/* Meta + actions — always visible (no hover fade). */}
+                <div className="shrink-0 flex items-center gap-3">
+                  <span className={`hidden md:inline w-[5.5rem] text-right text-[0.625rem] font-semibold uppercase tracking-[0.12em] ${eyebrowTone}`}>{rt.category}</span>
+                  <span className="hidden sm:inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-600 tabular-nums whitespace-nowrap">
+                    {sectionCount} {sectionCount === 1 ? 'section' : 'sections'}
+                  </span>
+                  <div className="flex items-center gap-0.5 pl-1">
+                    {hasApprovedFormat && (
+                      <ActionTooltip label="Check a file against this format">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); checkFileAgainst(rt as EditableTemplate); }}
+                          aria-label={`Check a file against the ${rt.name} reference format`}
+                          className="w-7 h-7 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-compliant-700 hover:bg-compliant-50 transition-colors cursor-pointer"
+                        >
+                          <ShieldCheck size={14} />
+                        </button>
+                      </ActionTooltip>
+                    )}
+                    <ActionTooltip label={isCustom ? 'Edit' : 'Clone to edit'}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); if (isCustom) editCustomTemplate(rt); else cloneStandardTemplate(rt); }}
+                        aria-label={`${isCustom ? 'Edit' : 'Clone'} template ${rt.name}`}
+                        className="w-7 h-7 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] transition-colors cursor-pointer"
+                      >
+                        {isCustom ? <Edit3 size={14} /> : <Copy size={14} />}
+                      </button>
+                    </ActionTooltip>
+                    {isCustom && (
+                      <ActionTooltip label="Delete template">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setTemplateToDelete({ id: rt.id, name: rt.name }); }}
+                          aria-label={`Delete template ${rt.name}`}
+                          className="w-7 h-7 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </ActionTooltip>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            );
+          };
+
+          // Galleries switch between a 3-up card grid and a flat row list.
+          const renderGallery = (rows: typeof REPORT_TEMPLATES[number][], isCustom: boolean) =>
+            viewMode === 'grid' ? (
+              <div className="grid grid-cols-3 gap-4">
+                {rows.map((rt, i) => renderCard(rt, i, isCustom))}
+              </div>
+            ) : (
+              <div className="rounded-[10px] border border-canvas-border bg-canvas-elevated divide-y divide-canvas-border [&>*:first-child]:rounded-t-[10px] [&>*:last-child]:rounded-b-[10px]">
+                {rows.map((rt, i) => renderRow(rt, i, isCustom))}
+              </div>
+            );
 
           const q = templateSearch.trim().toLowerCase();
           const filteredCustom = q
@@ -1569,74 +1680,70 @@ export default function ReportsView({
             </>
           );
 
+          const noSearchMatch = (
+            <div className="flex flex-col items-center gap-2 py-10 text-center">
+              <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
+                <Search size={20} className="text-ink-400" />
+              </div>
+              <div className="text-[0.8125rem] font-medium text-ink-700">No templates match &ldquo;{templateSearch}&rdquo;.</div>
+              <button type="button" onClick={() => setTemplateSearch('')} className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer mt-1">Clear search</button>
+            </div>
+          );
+
+          // Small section label above each gallery.
+          const sectionLabel = (label: string, count: number) => (
+            <div className="flex items-center gap-2 mb-3">
+              <h3 className="text-[0.8125rem] font-semibold text-ink-900">{label}</h3>
+              <span className="inline-flex items-center justify-center h-[1.125rem] min-w-[1.125rem] px-1.5 rounded-full bg-paper-100 text-[0.6875rem] font-semibold text-ink-500 tabular-nums">
+                {count}
+              </span>
+            </div>
+          );
+
           return (
-            <div className="space-y-6">
-              {/* Standard / Custom split — one gallery at a time so a growing
-                  Custom list never pushes Standard off-screen (same pill group
-                  My Reports uses for its type sub-tabs). */}
-              <ToolbarChips
-                layoutId="reports-template-subtab-bg"
-                value={templatesSubTab}
-                onChange={(v) => setTemplatesSubTab(v as 'standard' | 'custom')}
-                options={[
-                  { key: 'standard', label: 'Standard', icon: FileText, count: REPORT_TEMPLATES.length },
-                  { key: 'custom', label: 'Custom', icon: Layers, count: customTemplates.length },
-                ]}
-              />
+            <div>
+              {/* One page — search + actions pin to the top of the scroll area
+                  so they stay put while the card galleries scroll underneath.
+                  pb-7 is both the gap to the first gallery and the scroll
+                  cushion, matching the space-y-7 between galleries below. */}
+              <div className="sticky top-0 z-20 -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-6 pt-6 pb-5 bg-canvas">
+                <ListToolbar
+                  search={templateSearch}
+                  onSearch={setTemplateSearch}
+                  searchPlaceholder="Search templates…"
+                  trailing={
+                    <>
+                      <ToolbarViewToggle mode={viewMode} onChange={setViewMode} />
+                      {templateToolbarActions}
+                    </>
+                  }
+                />
+              </div>
 
-              {templatesSubTab === 'standard' && (
-                <div className="space-y-4">
-                  <ListToolbar
-                    search={templateSearch}
-                    onSearch={setTemplateSearch}
-                    searchPlaceholder="Search standard templates…"
-                  />
-                  {filteredStandard.length === 0 ? (
-                    <div className="flex flex-col items-center gap-2 py-10 text-center">
-                      <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
-                        <Search size={20} className="text-ink-400" />
-                      </div>
-                      <div className="text-[0.8125rem] font-medium text-ink-700">No templates match &ldquo;{templateSearch}&rdquo;.</div>
-                      <button type="button" onClick={() => setTemplateSearch('')} className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer mt-1">Clear search</button>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-3 gap-4">
-                      {filteredStandard.map((rt, i) => renderCard(rt, i, false, false))}
-                    </div>
-                  )}
-                </div>
-              )}
+              <div className="space-y-5">
+              {/* Standard gallery. */}
+              <section>
+                {sectionLabel('Standard', REPORT_TEMPLATES.length)}
+                {filteredStandard.length === 0 ? noSearchMatch : renderGallery(filteredStandard, false)}
+              </section>
 
-              {templatesSubTab === 'custom' && (
-                <div className="space-y-4">
-                  <ListToolbar
-                    search={templateSearch}
-                    onSearch={setTemplateSearch}
-                    searchPlaceholder="Search custom templates…"
-                    trailing={templateToolbarActions}
+              {/* Custom gallery. */}
+              <section>
+                {sectionLabel('Custom', customTemplates.length)}
+                {customTemplates.length === 0 ? (
+                  <EmptyState
+                    icon={Upload}
+                    title="No custom templates"
+                    body="Create a template from scratch or upload one to reuse it across reports."
+                    size="compact"
                   />
-                  {customTemplates.length === 0 ? (
-                    <EmptyState
-                      icon={Upload}
-                      title="No custom templates"
-                      body="Create a template from scratch or upload one to reuse it across reports."
-                      size="compact"
-                    />
-                  ) : filteredCustom.length === 0 ? (
-                    <div className="flex flex-col items-center gap-2 py-10 text-center">
-                      <div className="w-10 h-10 rounded-[8px] bg-paper-50 flex items-center justify-center mb-1">
-                        <Search size={20} className="text-ink-400" />
-                      </div>
-                      <div className="text-[0.8125rem] font-medium text-ink-700">No templates match &ldquo;{templateSearch}&rdquo;.</div>
-                      <button type="button" onClick={() => setTemplateSearch('')} className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer mt-1">Clear search</button>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-3 gap-4">
-                      {filteredCustom.map((rt, i) => renderCard(rt as typeof REPORT_TEMPLATES[number], i, false, true))}
-                    </div>
-                  )}
-                </div>
-              )}
+                ) : filteredCustom.length === 0 ? (
+                  noSearchMatch
+                ) : (
+                  renderGallery(filteredCustom, true)
+                )}
+              </section>
+              </div>
             </div>
           );
         })()}
@@ -1680,7 +1787,12 @@ export default function ReportsView({
       {/* Upload Template Modal */}
       <AnimatePresence>
         {showUploadModal && (
-          <UploadTemplateModal onClose={() => setShowUploadModal(false)} onSave={addCustomTemplateUnique} />
+          <UploadTemplateModal
+            onClose={() => { setShowUploadModal(false); setUploadReference(null); }}
+            onSave={addCustomTemplateUnique}
+            reference={uploadReference ?? undefined}
+            existingNames={[...REPORT_TEMPLATES.map(t => t.name), ...customTemplates.map(t => t.name)]}
+          />
         )}
       </AnimatePresence>
 
@@ -1712,157 +1824,6 @@ export default function ReportsView({
           }}
         />
       )}
-
-      {/* New Report Modal */}
-      <AnimatePresence>
-        {showNewReportTemplateSelector && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center" onClick={closeNewReportModal}>
-            <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              role="dialog" aria-modal="true" aria-label="New Report"
-              className="relative bg-white shadow-xl w-[560px] overflow-hidden flex flex-col rounded-[16px]"
-              onClick={e => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="px-6 py-4 border-b border-canvas-border flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 bg-brand-600/10 text-brand-600 rounded-[8px]"><FileText size={16} /></div>
-                  <div>
-                    <h3 className="text-[0.9375rem] font-semibold text-ink-800">New Report</h3>
-                    <p className="text-[0.6875rem] text-ink-400">Set up your report</p>
-                  </div>
-                </div>
-                <button onClick={closeNewReportModal} className="p-1.5 hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer"><X size={16} className="text-ink-400" /></button>
-              </div>
-
-              {/* Form */}
-              <div className="p-6 space-y-5">
-                <div>
-                  <label className="block text-[0.75rem] font-semibold text-ink-800 mb-1.5">Report <span className="text-risk">*</span></label>
-                  <input
-                    value={newReportName}
-                    onChange={e => setNewReportName(e.target.value)}
-                    placeholder="Report 01 — April 23, 2026"
-                    aria-invalid={reportNameTaken(newReportName)}
-                    className={`w-full px-3 py-2.5 border text-[0.8125rem] text-ink-800 placeholder:text-ink-400/60 outline-none focus:ring-2 transition-all rounded-[8px] ${reportNameTaken(newReportName) ? 'border-risk-300 focus:border-risk-400 focus:ring-risk-100' : 'border-canvas-border focus:border-brand-600/40 focus:ring-brand-600/10'}`}
-                  />
-                  {reportNameTaken(newReportName) && (
-                    <p className="mt-1.5 text-[0.6875rem] text-risk-700">A report named “{newReportName.trim()}” already exists — choose a different name.</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-[0.75rem] font-semibold text-ink-800 mb-1.5">Description</label>
-                  <textarea
-                    value={newReportDesc}
-                    onChange={e => setNewReportDesc(e.target.value)}
-                    placeholder="Report Description goes here"
-                    rows={3}
-                    className="w-full px-3 py-2.5 border border-canvas-border text-[0.8125rem] text-ink-800 placeholder:text-ink-400/60 outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10 transition-all resize-none rounded-[8px]"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-[0.75rem] font-semibold text-ink-800">Template</label>
-                    {newReportTemplatePrefilled && newReportTemplate && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-brand-600/10 text-brand-600 text-[0.625rem] font-semibold">
-                        <Sparkles size={12} /> Pre-filled from selection
-                      </span>
-                    )}
-                  </div>
-                  <select
-                    value={newReportTemplate}
-                    onChange={e => { setNewReportTemplate(e.target.value); setNewReportTemplatePrefilled(false); }}
-                    className={`w-full px-3 py-2.5 border text-[0.8125rem] text-ink-800 appearance-none outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10 transition-all cursor-pointer bg-white rounded-[8px] ${
-                      newReportTemplatePrefilled && newReportTemplate ? 'border-brand-600/50' : 'border-canvas-border'
-                    }`}
-                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236a12cd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
-                  >
-                    <option value="">Select a template</option>
-                    {REPORT_TEMPLATES.map(rt => (
-                      <option key={rt.id} value={rt.id}>{rt.name}</option>
-                    ))}
-                    <option value="__custom__">Custom Template</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="px-6 py-4 border-t border-canvas-border shrink-0 flex justify-end">
-                <button
-                  onClick={() => {
-                    if (newReportTemplate === '__custom__') {
-                      closeNewReportModal();
-                      setShowBuilderModal(true);
-                      return;
-                    }
-                    const template = REPORT_TEMPLATES.find(t => t.id === newReportTemplate);
-                    if (!template) return;
-                    closeNewReportModal();
-                    addToast({ type: 'info', message: `Generating "${newReportName}"...` });
-                    setTimeout(() => {
-                      const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                      const sectionsCount = template.sections?.length ?? 0;
-                      const tagFromTemplate = template.category === 'Risk' ? 'Bulk Audit' : 'Internal Audit';
-                      const newReport: GeneratedReport = {
-                        id: `gr-gen-${Date.now()}`,
-                        templateId: template.id,
-                        kind: templateKind(template),
-                        name: newReportName.trim(),
-                        tag: tagFromTemplate,
-                        generatedBy: 'You',
-                        generatedAt: today,
-                        status: 'draft',
-                        pages: Math.max(1, sectionsCount),
-                        queries: 0,
-                        isEmpty: true,
-                      };
-                      setGeneratedReports(prev => [newReport, ...prev]);
-                      setViewingReport(newReport);
-                      addToast({ type: 'success', message: 'Report generated.' });
-                    }, 1200);
-                  }}
-                  disabled={!newReportName.trim() || !newReportTemplate || reportNameTaken(newReportName)}
-                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer rounded-[8px]"
-                >
-                  Continue <ArrowRight size={14} />
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Report Builder Modal */}
-      <AnimatePresence>
-        {showBuilderModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-6"
-          >
-            <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.97, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.97, y: 16 }}
-              className="relative bg-white overflow-hidden shadow-xl flex flex-col w-[560px] max-h-[80vh] rounded-[16px]"
-              onClick={e => e.stopPropagation()}
-            >
-              <ReportBuilder
-                context="new"
-                onBack={() => setShowBuilderModal(false)}
-                initialTitle={newReportName.trim() || undefined}
-                onSaveAsTemplate={(t) => addCustomTemplate(t as typeof REPORT_TEMPLATES[number])}
-                existingTemplateNames={[...REPORT_TEMPLATES.map(t => t.name), ...customTemplates.map(t => t.name)]}
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <ConfirmDialog
         open={!!templateToDelete}

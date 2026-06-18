@@ -168,7 +168,7 @@ export default function ReportDownloadModal({
           aria-modal="true"
           aria-label={`Download preview for ${reportName}`}
           tabIndex={-1}
-          className="relative w-full max-w-[840px] h-[88vh] flex flex-col bg-white rounded-[16px] shadow-xl overflow-hidden"
+          className="relative w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] flex flex-col bg-white rounded-[16px] shadow-xl overflow-hidden"
         >
           {/* Header */}
           <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-4">

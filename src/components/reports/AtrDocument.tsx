@@ -169,7 +169,7 @@ export default function AtrDocument({
       </div>
 
       {/* Section 1 — Executive Summary */}
-      <section className="px-9 pt-7 pb-6">
+      <section id="section-atr-exec" className="px-9 pt-7 pb-6 scroll-mt-20">
         <NumberedHeading n={1} title="Executive Summary" subtitle="Overall observation and management action plan rollup" />
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {kpis.map(k => (
@@ -182,7 +182,7 @@ export default function AtrDocument({
       </section>
 
       {/* Section 2 — Observation Wise Summary */}
-      <section className="px-9 pt-2 pb-6 border-t border-canvas-border">
+      <section id="section-atr-obs-summary" className="px-9 pt-2 pb-6 border-t border-canvas-border scroll-mt-20">
         <div className="pt-6">
           <NumberedHeading n={2} title="Observation Wise Summary" subtitle="Exceptions, management action plans and status — per observation" />
         </div>
@@ -228,7 +228,7 @@ export default function AtrDocument({
       </section>
 
       {/* Section 3 — Observation Details */}
-      <section className="px-9 pt-2 pb-6 border-t border-canvas-border">
+      <section id="section-atr-obs-details" className="px-9 pt-2 pb-6 border-t border-canvas-border scroll-mt-20">
         <div className="pt-6">
           <NumberedHeading n={3} title="Observation Details" subtitle="Issue, risk, management action plan, evidence and verification" />
         </div>
@@ -241,7 +241,7 @@ export default function AtrDocument({
 
       {/* Section 4 — Key Insights (only when provided) */}
       {insights.length > 0 && (
-        <section className="px-9 pt-2 pb-6 border-t border-canvas-border">
+        <section id="section-atr-insights" className="px-9 pt-2 pb-6 border-t border-canvas-border scroll-mt-20">
           <div className="pt-6">
             <NumberedHeading n={4} title="Key Insights & Recommendations" subtitle="Auditor observations and forward-looking guidance" />
           </div>
@@ -260,7 +260,7 @@ export default function AtrDocument({
       )}
 
       {/* Section 5 — Approvals & Sign-Off */}
-      <section className="px-9 pt-2 pb-9 border-t border-canvas-border">
+      <section id="section-atr-signoff" className="px-9 pt-2 pb-9 border-t border-canvas-border scroll-mt-20">
         <div className="pt-6">
           <NumberedHeading n={insights.length > 0 ? 5 : 4} title="Approvals & Sign-Off" subtitle="Digital authorisation of this Action Taken Report" />
         </div>
