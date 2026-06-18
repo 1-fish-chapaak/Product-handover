@@ -342,6 +342,10 @@ export interface ChatViewProps {
     isNew: boolean;
     newName?: string;
     newDescription?: string;
+    newSeverity?: 'high' | 'medium' | 'low';
+    /** A query card projected from the added result so a brand-new report
+     *  renders it (carrying the severity chosen at create time). */
+    generatedQuery?: import('../reports/templateQueryPool').GeneratedQueryDef;
     selection: import('./AddToDashboardModal').GranularSelection;
   }) => void;
   /** Navigate to a dashboard detail view */
@@ -3676,7 +3680,33 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
         };
       }));
     }
-    onAddResultToReport?.(payload);
+    // For a brand-new report, project the added result into a query card so the
+    // report actually renders it — stamped with the severity chosen at create
+    // time (the badge surfaces at query-card level). Defaults to Medium if the
+    // optional Severity field was left unset.
+    let outgoing = payload;
+    if (payload.isNew) {
+      const sevMap = { high: 'High', medium: 'Medium', low: 'Low' } as const;
+      const picked = AUDIT_RESULT.kpis.filter(k => payload.selection.kpis.includes(k.label));
+      const kpis = (picked.length ? picked : AUDIT_RESULT.kpis).map(k => ({ label: k.label, value: k.value, color: k.color }));
+      outgoing = {
+        ...payload,
+        generatedQuery: {
+          id: `cq-${payload.reportId}`,
+          risk: 'Financial Risk',
+          severity: payload.newSeverity ? sevMap[payload.newSeverity] : 'Medium',
+          title: 'Duplicate invoice analysis',
+          summary: 'Ad-hoc analysis carried over from a chat result. Review the flagged records and confirm classification during sign-off.',
+          findings: kpis.slice(0, 4).map(k => `${k.label}: ${k.value}`),
+          observations: ['Carried over from a chat result — confirm scope and severity during review.'],
+          answer: '',
+          addedBy: 'You',
+          kpis,
+          chartData: [5, 2, 1, 0],
+        },
+      };
+    }
+    onAddResultToReport?.(outgoing);
     const undoMsgId = activeAddMsgId;
     const itemCount = payload.selection.kpis.length + payload.selection.charts.length + payload.selection.columns.length;
     addToast({

@@ -563,6 +563,9 @@ function AppInner() {
                     status: 'draft',
                     pages: 1,
                     queries: 1,
+                    // Render the added result as a query card (carries the
+                    // severity chosen in the Add-to-Report form).
+                    generatedQueries: payload.generatedQuery ? [payload.generatedQuery] : undefined,
                   };
                   try {
                     const key = GENERATED_REPORTS_KEY;
