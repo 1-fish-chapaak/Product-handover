@@ -11,6 +11,7 @@ import {
   Search,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   Info,
   Sparkles,
   Plus,
@@ -23,6 +24,7 @@ import type {
   ColumnAlignment,
   ColumnDType,
 } from '../concierge-workflow-builder/types';
+import SlotFunctionTag from './SlotFunctionTag';
 
 interface Props {
   workflow: WorkflowDraft;
@@ -50,7 +52,7 @@ function tierForConfidence(value: number) {
       bar: 'bg-compliant',
     };
   }
-  if (value >= 75) {
+  if (value >= 70) {
     return {
       text: 'text-mitigated-700',
       pillBg: 'bg-mitigated-50',
@@ -159,7 +161,7 @@ export default function ExecutorColumnMapping({
 
   const targetOptions = (inputId: string) => {
     const input = workflow.inputs.find((i) => i.id === inputId);
-    const cols = input?.columns ?? [];
+    const cols = input?.columns ?? input?.columnSpecs?.map((c) => c.name) ?? [];
     const set = new Set<string>();
     cols.forEach((c) => {
       set.add(c);
@@ -188,8 +190,11 @@ export default function ExecutorColumnMapping({
     >
       {workflow.inputs.map((input) => {
         const inputAlignments = alignments[input.id] ?? [];
+        // Three confidence slabs: ≥90 auto-mapped, 70–89 review (auto-mapped but
+        // worth a glance), <70 needs attention (manual mapping).
         const auto = inputAlignments.filter((a) => a.confidence >= 90);
-        const attention = inputAlignments.filter((a) => a.confidence < 90);
+        const review = inputAlignments.filter((a) => a.confidence >= 70 && a.confidence < 90);
+        const attention = inputAlignments.filter((a) => a.confidence < 70);
         const mapped = inputAlignments.filter((a) => a.confidence >= 70).length;
         const total = inputAlignments.length;
         const matchPct = total
@@ -198,7 +203,9 @@ export default function ExecutorColumnMapping({
         const matchTier = tierForConfidence(matchPct);
         const isOpen = expanded === input.id;
         const uploaded = files[input.id] ?? [];
-        const autoOpen = autoExpanded[input.id] ?? true;
+        // Auto-mapped group is collapsed by default — high-confidence rows need
+        // no review, so they stay tucked away until the user expands them.
+        const autoOpen = autoExpanded[input.id] ?? false;
         const avgAuto = auto.length
           ? Math.round(auto.reduce((sum, a) => sum + a.confidence, 0) / auto.length)
           : 0;
@@ -218,7 +225,10 @@ export default function ExecutorColumnMapping({
               className="w-full flex items-start justify-between px-5 py-4 cursor-pointer hover:bg-brand-50/30 transition-colors text-left"
             >
               <div className="min-w-0">
-                <div className="text-[14px] font-bold text-ink-900">{input.name}</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[14px] font-bold text-ink-900">{input.name}</span>
+                  <SlotFunctionTag input={input} />
+                </div>
                 <p className="text-[11.5px] text-ink-400 mt-0.5 line-clamp-1">{input.description}</p>
               </div>
               <div className="flex items-center gap-3 shrink-0 ml-4">
@@ -409,10 +419,43 @@ export default function ExecutorColumnMapping({
                   </>
                 )}
 
-                {/* Needs attention group */}
+                {/* Review group (70–89) — auto-mapped but flagged for a glance */}
+                {review.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-2 px-5 py-2 bg-mitigated-50/60 border-y border-mitigated/20 text-[11.5px] font-bold uppercase tracking-[0.1em] text-mitigated-700">
+                      <AlertCircle size={13} />
+                      Review recommended ({review.length})
+                    </div>
+                    <div className="divide-y divide-canvas-border/40">
+                      {review.map((a) => (
+                        <AlignmentRow
+                          key={a.id}
+                          alignment={a}
+                          inputId={input.id}
+                          tone="attention"
+                          userMapped={userMapped.has(a.id)}
+                          targetOptions={targetOptions(input.id)}
+                          isPickerOpen={targetPickerFor === a.id}
+                          onTogglePicker={() =>
+                            setTargetPickerFor(targetPickerFor === a.id ? null : a.id)
+                          }
+                          onPickTarget={(name) => {
+                            updateAlignmentTarget(input.id, a.id, name);
+                            setTargetPickerFor(null);
+                          }}
+                          onShowJustification={(rect) =>
+                            setJustification({ rect, alignmentId: a.id })
+                          }
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Needs attention group (<70) — not auto-mapped, manual required */}
                 {attention.length > 0 && (
                   <>
-                    <div className="flex items-center gap-2 px-5 py-2 bg-mitigated-50 border-y border-mitigated/20 text-[11.5px] font-bold uppercase tracking-[0.1em] text-mitigated-700">
+                    <div className="flex items-center gap-2 px-5 py-2 bg-risk-50 border-y border-risk/20 text-[11.5px] font-bold uppercase tracking-[0.1em] text-risk-700">
                       <AlertTriangle size={13} />
                       Needs attention ({attention.length})
                     </div>

@@ -9,10 +9,12 @@ import {
   TrendingUp, Users, Percent, CalendarDays, Pencil, AlertCircle,
   Link2, RefreshCw, Info, Wand2, Upload, Folder, ScanLine,
   MessageSquare, ArrowUp, Layers, Plus, PanelRightClose,
+  Table2, Type as TypeIcon, Hash,
 } from 'lucide-react';
 import type { WorkflowRunSeed } from './workflowRunSeed';
 import { PlanSection, type ExecutorParameters } from '../concierge-workflow-builder/PlanPanel';
 import ExecutorColumnMapping from './ExecutorColumnMapping';
+import SlotFunctionTag from './SlotFunctionTag';
 import ArtifactPanel from '../artifacts/ArtifactPanel';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { seedAlignments } from '../concierge-workflow-builder/mockApi';
@@ -22,6 +24,8 @@ import type {
   JourneyFiles,
   JourneyAlignments,
   ColumnAlignment,
+  ColumnSpec,
+  ColumnDataType,
   UploadedFile,
 } from '../concierge-workflow-builder/types';
 import { DATA_SOURCES } from '../../data/mockData';
@@ -141,82 +145,6 @@ const EXECUTOR_WORKFLOW: WorkflowDraft = {
 // Sandbox workflow whose inputs are all PDFs. Selected by id from the
 // Workflow Library so we can exercise the unstructured-document mapping
 // surfaces end-to-end without bolting onto a real workflow.
-const PDF_TESTER_WORKFLOW: WorkflowDraft = {
-  id: 'lw-pdf-tester',
-  name: 'PDF tester',
-  description:
-    'Sandbox workflow whose required inputs are all PDFs. Use this to exercise the unstructured-document mapping journey end-to-end.',
-  category: 'Sandbox',
-  tags: ['PDF', 'manual mapping'],
-  logicPrompt:
-    'Extract structured fields from unstructured PDF documents (invoices, vendor packets, ledgers) and reconcile them. Every input is a PDF — auto-mapping is disabled by design so the manual review flow runs every time.',
-  inputs: [
-    {
-      id: 'pdf_invoice_batch',
-      name: 'Invoice PDF Batch',
-      type: 'pdf',
-      description:
-        'Scanned or born-digital invoices. Each page is an invoice; we extract vendor, amount, invoice number, date, GL account and entered-by.',
-      required: true,
-      multiple: true,
-      columns: ['Invoice No', 'Vendor ID', 'Amount', 'GL Account', 'Invoice Date', 'Entered By'],
-    },
-    {
-      id: 'pdf_vendor_packet',
-      name: 'Vendor Packet PDF',
-      type: 'pdf',
-      description:
-        'Onboarding packets for vendors — used to extract vendor ID, name, bank account and status for validation.',
-      required: true,
-      columns: ['Vendor ID', 'Name', 'Bank Account', 'Status', 'Created On'],
-    },
-    {
-      id: 'pdf_ledger_export',
-      name: 'GL Ledger PDF Export',
-      type: 'pdf',
-      description:
-        'Period-end trial balance exported as PDF — used to reconcile AP postings against the GL.',
-      required: true,
-      columns: ['Account', 'Description', 'Debit', 'Credit', 'Balance'],
-    },
-  ],
-  steps: [
-    {
-      id: 's1',
-      name: 'Extract invoice fields from PDFs',
-      description: 'OCR + field extraction on the invoice PDF batch.',
-      type: 'extract',
-      dataFiles: ['pdf_invoice_batch'],
-    },
-    {
-      id: 's2',
-      name: 'Validate vendors against packet',
-      description: 'Cross-reference extracted vendor IDs with the vendor packet PDF.',
-      type: 'validate',
-      dataFiles: ['pdf_invoice_batch', 'pdf_vendor_packet'],
-    },
-    {
-      id: 's3',
-      name: 'Reconcile against GL ledger',
-      description: 'Tie extracted invoice postings to the GL ledger PDF export.',
-      type: 'compare',
-      dataFiles: ['pdf_invoice_batch', 'pdf_ledger_export'],
-    },
-    {
-      id: 's4',
-      name: 'Flag exceptions',
-      description: 'Emit a flag for each invoice that fails validation or reconciliation.',
-      type: 'flag',
-      dataFiles: ['pdf_invoice_batch', 'pdf_vendor_packet', 'pdf_ledger_export'],
-    },
-  ],
-  output: {
-    type: 'flags',
-    title: 'PDF Extraction Findings',
-    description: 'Invoices flagged for missing vendor, low extraction confidence, or GL mismatches.',
-  },
-};
-
 // Sandbox workflow whose single required input is one *consolidated* workbook
 // — multiple datasets (AP register, vendor master, GL) packed into one file as
 // separate sheets/sections. Selected by id from the Workflow Library so we can
@@ -225,7 +153,7 @@ const PDF_TESTER_WORKFLOW: WorkflowDraft = {
 // workflow is single-run only and never appears in Bulk Run.
 const CONSOLIDATED_FILE_WORKFLOW: WorkflowDraft = {
   id: 'lw-consolidated-file',
-  name: 'Consolidated file testing',
+  name: 'Consolidated file testing- consolidate 1 file',
   description:
     'Sandbox workflow that takes a single consolidated workbook (multiple datasets in one file) and runs the dedicated consolidated-file execution journey end-to-end.',
   category: 'Sandbox',
@@ -241,20 +169,20 @@ const CONSOLIDATED_FILE_WORKFLOW: WorkflowDraft = {
         'A single file bundling the AP invoice register, vendor master, and GL trial balance as separate sheets/sections. The executor splits this into its datasets before mapping. Accepts multiple same-schema files — they are unioned.',
       required: true,
       multiple: true,
-      columns: [
-        'Invoice No',
-        'Vendor ID',
-        'Amount',
-        'GL Account',
-        'Invoice Date',
-        'Entered By',
-        'Vendor Name',
-        'Bank Account',
-        'Status',
-        'Account',
-        'Debit',
-        'Credit',
-        'Balance',
+      columnSpecs: [
+        { name: 'Invoice No', dataType: 'text', sample: 'INV-2026-4871' },
+        { name: 'Vendor ID', dataType: 'text', sample: 'V-1234' },
+        { name: 'Amount', dataType: 'number', sample: '14,250.00' },
+        { name: 'GL Account', dataType: 'text', sample: '5230-001' },
+        { name: 'Invoice Date', dataType: 'date', sample: '2026-09-30' },
+        { name: 'Entered By', dataType: 'text', sample: 'j.martinez' },
+        { name: 'Vendor Name', dataType: 'text', sample: 'Apex Industrial Supplies' },
+        { name: 'Bank Account', dataType: 'text', sample: 'XXXX-9012' },
+        { name: 'Status', dataType: 'text', sample: 'Active' },
+        { name: 'Account', dataType: 'text', sample: '5230-001' },
+        { name: 'Debit', dataType: 'number', sample: '14,250.00' },
+        { name: 'Credit', dataType: 'number', sample: '0.00' },
+        { name: 'Balance', dataType: 'number', sample: '14,250.00' },
       ],
     },
   ],
@@ -293,6 +221,109 @@ const CONSOLIDATED_FILE_WORKFLOW: WorkflowDraft = {
     title: 'Consolidated File Findings',
     description: 'Records flagged after splitting and reconciling the consolidated workbook.',
   },
+};
+
+// Clone of the consolidated-file workflow tuned for the "multiple files" case —
+// the auditor uploads several same-schema workbooks that are unioned before the
+// split → identify → map → reconcile journey runs. Identical shape to the
+// single-file variant (the input already accepts multiple files); only the
+// identity and framing differ.
+const CONSOLIDATED_FILE_MULTI_WORKFLOW: WorkflowDraft = {
+  ...CONSOLIDATED_FILE_WORKFLOW,
+  id: 'lw-consolidated-file-multi',
+  name: 'Consolidated file testing- multiple files',
+  description:
+    'Sandbox workflow with one multi-file input (the consolidated workbook, unioned across files) plus two single-file reference inputs. Runs the dedicated consolidated-file execution journey end-to-end.',
+  logicPrompt:
+    'The auditor uploads SEVERAL consolidated workbooks for the primary input (same schema — unioned before processing) along with one Vendor Master and one GL Trial Balance file. Union the consolidated workbooks, split them into their constituent datasets, identify and map each to the expected schema, then reconcile across them and against the vendor master and GL. Built as a dedicated single-run journey — bulk execution is intentionally not supported.',
+  // One multi-file input (inherits multiple: true from the base workflow) plus
+  // two single-file reference inputs. Only the consolidated workbook carries the
+  // "Multiple files" affordance; the reference files take exactly one file each.
+  inputs: [
+    ...CONSOLIDATED_FILE_WORKFLOW.inputs,
+    {
+      id: 'vendor_master',
+      name: 'Vendor Master',
+      type: 'csv',
+      description:
+        'Vendor master export used to validate vendor IDs, names, and bank details. One file expected.',
+      required: true,
+      columnSpecs: [
+        { name: 'Vendor ID', dataType: 'text', sample: 'V-1234' },
+        { name: 'Name', dataType: 'text', sample: 'Apex Industrial Supplies' },
+        { name: 'Bank Account', dataType: 'text', sample: 'XXXX-9012' },
+        { name: 'Status', dataType: 'text', sample: 'Active' },
+        { name: 'Created On', dataType: 'date', sample: '2024-02-11' },
+      ],
+    },
+    {
+      id: 'gl_trial_balance',
+      name: 'GL Trial Balance',
+      type: 'csv',
+      description:
+        'Period-end trial balance used to reconcile AP postings against the GL. One file expected.',
+      required: true,
+      columnSpecs: [
+        { name: 'Account', dataType: 'text', sample: '5230-001' },
+        { name: 'Description', dataType: 'text', sample: 'AP Liability' },
+        { name: 'Debit', dataType: 'number', sample: '14,250.00' },
+        { name: 'Credit', dataType: 'number', sample: '0.00' },
+        { name: 'Balance', dataType: 'number', sample: '14,250.00' },
+      ],
+    },
+  ],
+};
+
+// Clone of the multi-file workflow with the primary slot reframed as a
+// REFERENCE role — one master source, joined/looked-up against the other inputs
+// rather than unioned. The two reference inputs are unchanged.
+const CONSOLIDATED_FILE_REFERENCE_WORKFLOW: WorkflowDraft = {
+  ...CONSOLIDATED_FILE_MULTI_WORKFLOW,
+  id: 'lw-consolidated-file-reference',
+  name: 'Consolidated file testing- reference',
+  description:
+    'Sandbox workflow whose primary input is a reference/master table — a single source joined against the transaction inputs rather than unioned. Plus two single-file reference inputs.',
+  logicPrompt:
+    'The primary input is a reference/master table (one source). Validate and look up the transaction inputs (Vendor Master, GL Trial Balance) against it by key — never union the master into the transactions. Built as a dedicated single-run journey — bulk execution is intentionally not supported.',
+  inputs: CONSOLIDATED_FILE_MULTI_WORKFLOW.inputs.map((inp) =>
+    inp.id === 'consolidated_workbook'
+      ? { ...inp, func: 'reference' as const, multiple: false }
+      : inp,
+  ),
+};
+
+// Clone of the multi-file workflow with the primary slot reframed as a COMPARE
+// role — two or more same-schema sources kept distinct and aligned for diff
+// (e.g. Q1 vs Q2, budget vs actuals), never concatenated.
+const CONSOLIDATED_FILE_COMPARE_WORKFLOW: WorkflowDraft = {
+  ...CONSOLIDATED_FILE_MULTI_WORKFLOW,
+  id: 'lw-consolidated-file-compare',
+  name: 'Consolidated file testing- compare',
+  description:
+    'Sandbox workflow with two compare slots (same schema, e.g. prior vs current period) kept distinct and aligned for diff — never unioned — plus two single-file reference inputs. A comparison needs at least two sources.',
+  logicPrompt:
+    'Two same-schema sources occupy distinct compare slots and must be kept apart and aligned for comparison (e.g. Q1 vs Q2, budget vs actuals) — never concatenated. Diff the two aligned sources, then reconcile against the Vendor Master and GL Trial Balance. Built as a dedicated single-run journey — bulk execution is intentionally not supported.',
+  // Compare needs ≥2 sources, so it's modelled as TWO distinct single-file
+  // compare slots (not one multi-file slot) — each takes exactly one file and
+  // the two are diffed, never merged.
+  inputs: [
+    {
+      ...CONSOLIDATED_FILE_MULTI_WORKFLOW.inputs[0], // consolidated_workbook
+      func: 'compare' as const,
+      multiple: false,
+    },
+    {
+      id: 'comparison_workbook',
+      name: 'Comparison Workbook',
+      type: 'csv',
+      description:
+        'Second same-schema workbook compared against the Consolidated Workbook — kept distinct and aligned for diff (e.g. prior period vs current). Comparison needs at least two sources.',
+      required: true,
+      func: 'compare' as const,
+      columnSpecs: CONSOLIDATED_FILE_WORKFLOW.inputs[0].columnSpecs,
+    },
+    ...CONSOLIDATED_FILE_MULTI_WORKFLOW.inputs.filter((i) => i.id !== 'consolidated_workbook'),
+  ],
 };
 
 const EXECUTION_STEPS: ExecutionStep[] = [
@@ -348,6 +379,98 @@ function seededRows(name: string): number {
 }
 
 const fmtRows = (n: number) => n.toLocaleString('en-US');
+
+// ─── File-mapping match confidence ───────────────────────────────────────
+// Per-input file→input match score for the file-mapping step. Mirrors the
+// column-mapping confidence model: ≥90 auto-mapped (green, no review), 70–89
+// auto-mapped but flagged (amber), <70 not auto-mapped → manual (red badge,
+// still inside the yellow review section). Seeded by input id so the demo
+// surfaces all three tiers deterministically.
+const FILE_MATCH_SEED: Record<string, number> = {
+  ap_invoice_register: 96,
+  vendor_master: 82,
+  gl_trial_balance: 64,
+  consolidated_workbook: 93,
+  comparison_workbook: 88,
+};
+
+type FileMatchBreakdown = {
+  nameSimilarity: number;
+  typeCompatibility: number;
+  statisticalProfile: number;
+  semanticSimilarity: number;
+};
+
+type FileMatch = { confidence: number; breakdown: FileMatchBreakdown; verdict: string };
+
+function seedFileMatch(inputId: string): FileMatch {
+  let confidence = FILE_MATCH_SEED[inputId];
+  if (confidence == null) {
+    let h = 0;
+    for (let i = 0; i < inputId.length; i++) h = (h * 31 + inputId.charCodeAt(i)) >>> 0;
+    confidence = 62 + (h % 36); // 62–97
+  }
+  const clamp = (n: number) => Math.max(20, Math.min(100, Math.round(n)));
+  const breakdown: FileMatchBreakdown = {
+    nameSimilarity: clamp(confidence + 4),
+    typeCompatibility: clamp(confidence + 7),
+    statisticalProfile: clamp(confidence - 6),
+    semanticSimilarity: clamp(confidence - 9),
+  };
+  const verdict =
+    confidence >= 90
+      ? 'Strong match — file name, schema and value profiles align with this input. Auto-mapped, no review needed.'
+      : confidence >= 70
+        ? 'Good match — auto-mapped, but a few signals diverge. A quick confirmation is recommended.'
+        : 'Weak match — name and value patterns diverge from this input. Map this file manually before continuing.';
+  return { confidence, breakdown, verdict };
+}
+
+// Tier styling for a file-match score. Both sub-90 tiers keep the yellow
+// (mitigated) card border — only the score pill turns red below 70.
+function fileMatchTier(confidence: number) {
+  if (confidence >= 90) {
+    return {
+      pillText: 'text-compliant-700',
+      pillBg: 'bg-compliant-50',
+      pillBorder: 'border-compliant/30',
+      cardBorder: 'border-compliant/30',
+      cardBg: 'bg-compliant-50/20',
+      iconBg: 'bg-compliant-50 text-compliant',
+    };
+  }
+  if (confidence >= 70) {
+    return {
+      pillText: 'text-mitigated-700',
+      pillBg: 'bg-mitigated-50',
+      pillBorder: 'border-mitigated-200',
+      cardBorder: 'border-mitigated-200',
+      cardBg: 'bg-mitigated-50/30',
+      iconBg: 'bg-mitigated-50 text-mitigated-700',
+    };
+  }
+  return {
+    pillText: 'text-risk-700',
+    pillBg: 'bg-risk-50',
+    pillBorder: 'border-risk/30',
+    cardBorder: 'border-mitigated-200',
+    cardBg: 'bg-mitigated-50/30',
+    iconBg: 'bg-risk-50 text-risk',
+  };
+}
+
+const FILE_MATCH_METRICS: { key: keyof FileMatchBreakdown; label: string; weight: number; description: string }[] = [
+  { key: 'nameSimilarity', label: 'Name Similarity', weight: 35, description: 'Filename & header token comparison' },
+  { key: 'typeCompatibility', label: 'Type Compatibility', weight: 25, description: 'Column type inference & format alignment' },
+  { key: 'statisticalProfile', label: 'Statistical Profile', weight: 20, description: 'Row volume, cardinality & null ratio' },
+  { key: 'semanticSimilarity', label: 'Semantic Similarity', weight: 20, description: 'Embedding-based meaning comparison' },
+];
+
+function matchBarColor(value: number): string {
+  if (value >= 90) return 'bg-compliant';
+  if (value >= 70) return 'bg-mitigated';
+  return 'bg-risk';
+}
 
 // Separate type for PDFs/unstructured docs — they can't be auto-mapped to an
 // input slot from filename alone, and once mapped have no columns to align
@@ -455,29 +578,6 @@ const PDF_EXTRACTED_FIELDS: Record<string, ExtractedField[]> = {
     { target: 'Credit', sampleValue: '0.00', confidence: 70, reason: 'Multiple credit columns detected — picked the first' },
     { target: 'Balance', sampleValue: null, confidence: 0, reason: 'Balance column not detected' },
   ],
-  // PDF tester sandbox inputs
-  pdf_invoice_batch: [
-    { target: 'Invoice No', sampleValue: 'INV-2026-4871', confidence: 96 },
-    { target: 'Vendor ID', sampleValue: 'V-1234', confidence: 87 },
-    { target: 'Amount', sampleValue: '$14,250.00', confidence: 93 },
-    { target: 'GL Account', sampleValue: '5230-001', confidence: 90 },
-    { target: 'Invoice Date', sampleValue: '30/09/26', confidence: 58, reason: 'Ambiguous date format (DD/MM/YY vs MM/DD/YY)' },
-    { target: 'Entered By', sampleValue: null, confidence: 0, reason: 'Initials block on page 3 unreadable — OCR confidence below threshold' },
-  ],
-  pdf_vendor_packet: [
-    { target: 'Vendor ID', sampleValue: 'V-1234', confidence: 94 },
-    { target: 'Name', sampleValue: 'Apex Industrial Supplies', confidence: 91 },
-    { target: 'Bank Account', sampleValue: 'XXXX-9012', confidence: 86 },
-    { target: 'Status', sampleValue: 'Active', confidence: 64, reason: 'Inferred from context — packet was signed but not stamped' },
-    { target: 'Created On', sampleValue: null, confidence: 0, reason: 'No creation date present on the packet' },
-  ],
-  pdf_ledger_export: [
-    { target: 'Account', sampleValue: '5230-001', confidence: 97 },
-    { target: 'Description', sampleValue: 'AP Liability', confidence: 88 },
-    { target: 'Debit', sampleValue: '14,250.00', confidence: 92 },
-    { target: 'Credit', sampleValue: '0.00', confidence: 71, reason: 'Two credit columns detected on this layout — used the leftmost' },
-    { target: 'Balance', sampleValue: null, confidence: 0, reason: 'Balance column was truncated when the PDF was exported' },
-  ],
 };
 
 function isPdfName(name: string): boolean {
@@ -492,10 +592,6 @@ const FILES_LIBRARY: { name: string; size: number }[] = [
   { name: 'invoice_batch_sep2026.pdf', size: 48_100_000 },
   { name: 'ap_invoice_register_jun2026.csv', size: 9_100_000 },
   { name: 'trial_balance_q2_2026.xlsx', size: 1_600_000 },
-  // PDF tester fixtures
-  { name: 'invoices_scanned_batch.pdf', size: 52_300_000 },
-  { name: 'vendor_onboarding_packet.pdf', size: 14_700_000 },
-  { name: 'gl_ledger_export_q3.pdf', size: 9_900_000 },
 ];
 
 const RESULTS_DATA: ResultRow[] = [
@@ -543,22 +639,357 @@ function ConfidenceChip({ value }: { value: number }) {
   );
 }
 
+// Infer a column's data type from its name when an input only carries plain
+// column-name strings (no explicit columnSpecs).
+function inferColumnType(name: string): ColumnDataType {
+  const n = name.toLowerCase();
+  if (/(date|_on|_at|timestamp)\b/.test(n) || n.endsWith('date')) return 'date';
+  if (/(amount|balance|debit|credit|qty|quantity|total|rate|price|count|no\.?$|number|#)/.test(n)) return 'number';
+  return 'text';
+}
+
+// Resolve an input's columns into a uniform ColumnSpec[] — prefers the rich
+// columnSpecs, falling back to plain `columns` names with an inferred type.
+function resolveColumnSpecs(input: InputSpec): ColumnSpec[] {
+  if (input.columnSpecs?.length) return input.columnSpecs;
+  return (input.columns ?? []).map((name) => ({ name, dataType: inferColumnType(name) }));
+}
+
+function ColumnTypeIcon({ dataType }: { dataType: ColumnDataType }) {
+  if (dataType === 'number') return <Hash size={13} className="text-brand-600 shrink-0" />;
+  if (dataType === 'date') return <CalendarDays size={13} className="text-brand-600 shrink-0" />;
+  return <TypeIcon size={13} className="text-ink-400 shrink-0" />;
+}
+
+// Popover listing an input's expected columns (name · type · sample value),
+// opened from the "View N columns" button on a Required Files card.
+function ExpectedColumnsPopover({
+  input,
+  cols,
+  onClose,
+}: {
+  input: InputSpec;
+  cols: ColumnSpec[];
+  onClose: () => void;
+}) {
+  return (
+    <div className="absolute z-30 mt-2 w-[320px] rounded-xl border border-canvas-border bg-canvas-elevated shadow-lg overflow-hidden">
+      <div className="flex items-start justify-between gap-2 px-3.5 py-2.5 border-b border-canvas-border">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[13px] font-bold text-ink-800">Expected columns</span>
+            <span className="text-[12px] font-semibold text-ink-400">{cols.length}</span>
+          </div>
+          <p className="text-[11.5px] text-ink-400 truncate">{input.name}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-ink-400 hover:text-ink-700 cursor-pointer shrink-0"
+          aria-label="Close columns list"
+        >
+          <X size={15} />
+        </button>
+      </div>
+      <div className="max-h-[280px] overflow-y-auto py-1">
+        {cols.map((col) => (
+          <div key={col.name} className="flex items-start gap-2.5 px-3.5 py-2 hover:bg-canvas">
+            <span className="mt-0.5"><ColumnTypeIcon dataType={col.dataType} /></span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[12.5px] font-semibold text-ink-800">{col.name}</span>
+                <span className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">
+                  {col.dataType}
+                </span>
+              </div>
+              {col.sample != null && (
+                <p className="text-[11.5px] font-mono text-ink-400 truncate">{col.sample}</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// "X% MATCH" pill + info button shown on each structured file-mapping card.
+// Clicking the info button toggles the AI-justification popover.
+function FileMatchBadge({
+  match,
+  open,
+  onToggle,
+}: {
+  match: FileMatch;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const tier = fileMatchTier(match.confidence);
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.08em] ${tier.pillText} ${tier.pillBg}`}
+      >
+        {match.confidence}% match
+      </span>
+      <button
+        type="button"
+        onClick={onToggle}
+        title="Why this score? — AI justification"
+        className={`rounded-full p-0.5 transition-colors cursor-pointer ${open ? 'text-brand-600' : 'text-ink-400 hover:text-ink-600'}`}
+      >
+        <Info size={13} />
+      </button>
+    </span>
+  );
+}
+
+// AI-justification popover for a file-match score — mirrors the column-mapping
+// justification (weighted metric breakdown + overall + verdict).
+function FileMatchPopover({
+  match,
+  label,
+  onClose,
+}: {
+  match: FileMatch;
+  label: string;
+  onClose: () => void;
+}) {
+  const tier = fileMatchTier(match.confidence);
+  return (
+    <div className="absolute right-0 z-40 mt-2 w-[340px] rounded-2xl border border-canvas-border bg-canvas-elevated shadow-xl overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-canvas-border">
+        <span className="inline-flex items-center gap-1.5 rounded-md bg-brand-50 px-2 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-brand-700">
+          <Wand2 size={12} /> AI Justification
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-ink-400 hover:text-ink-700 cursor-pointer"
+          aria-label="Close justification"
+        >
+          <X size={15} />
+        </button>
+      </div>
+      <div className="px-4 py-3 flex flex-col gap-3">
+        {FILE_MATCH_METRICS.map((m) => {
+          const value = match.breakdown[m.key];
+          return (
+            <div key={m.key}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-bold text-ink-800">
+                  {m.label} <span className="text-ink-400 font-semibold">×{m.weight}%</span>
+                </span>
+                <span className="text-[13px] font-bold tabular-nums text-ink-800">{value}%</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-canvas mt-1 overflow-hidden">
+                <div className={`h-full rounded-full ${matchBarColor(value)}`} style={{ width: `${value}%` }} />
+              </div>
+              <p className="text-[11px] text-ink-400 mt-1">{m.description}</p>
+            </div>
+          );
+        })}
+        <p className="text-[12px] text-ink-500 leading-relaxed">{match.verdict}</p>
+      </div>
+      <div className="flex items-center gap-2 px-4 py-2.5 border-t border-canvas-border">
+        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${tier.pillText} ${tier.pillBg} ${tier.pillBorder}`}>
+          Overall: {match.confidence}%
+        </span>
+        <span className="text-[11.5px] text-ink-400 truncate">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+// One structured-file card in the "Confirm file mapping" step. Tier-driven by
+// its file-match confidence: ≥90 green/auto, 70–89 amber/auto-with-review,
+// <70 manual (red badge, yellow card). Carries the AI-justification popover.
+function StructuredFileCard({
+  input,
+  sources,
+  match,
+  isMismatch,
+  uploadedFiles,
+  popoverOpen,
+  onAddSource,
+  onRemoveSource,
+  onTogglePopover,
+  onClosePopover,
+}: {
+  input: InputSpec;
+  sources: MappedSource[];
+  match: FileMatch | null;
+  isMismatch: boolean;
+  uploadedFiles: UploadedFile[];
+  popoverOpen: boolean;
+  onAddSource: (name: string, type: MappedSource['type'], rows: number) => void;
+  onRemoveSource: (name: string) => void;
+  onTogglePopover: () => void;
+  onClosePopover: () => void;
+}) {
+  const hasSources = sources.length > 0;
+  const conf = match?.confidence ?? null;
+  const tier = match ? fileMatchTier(match.confidence) : null;
+
+  const isGreen = conf != null && conf >= 90;
+  const isAmber = conf != null && conf >= 70 && conf < 90;
+  const isLow = conf != null && conf < 70;
+
+  // Below 70% the auto-detected source is too uncertain to surface as a
+  // mapping — we show the match score + a manual-mapping prompt, but hide the
+  // candidate so the file reads as unmapped until the user confirms it.
+  const shownSources = isLow ? [] : sources;
+  const unionRows = shownSources.reduce((n, s) => n + s.rows, 0);
+  const selectedNames = new Set(shownSources.map((s) => s.name));
+
+  return (
+    <div
+      className={[
+        'rounded-xl border p-4 transition-colors',
+        !hasSources ? 'border-risk/30 bg-risk-50/20' : `${tier!.cardBorder} ${tier!.cardBg}`,
+      ].join(' ')}
+    >
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className={[
+            'w-7 h-7 rounded-lg flex items-center justify-center shrink-0',
+            !hasSources ? 'bg-risk-50 text-risk' : tier!.iconBg,
+          ].join(' ')}>
+            {isGreen ? <CheckCircle2 size={14} /> : isAmber ? <AlertCircle size={14} /> : isLow ? <AlertTriangle size={14} /> : <AlertCircle size={14} />}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-[13px] font-semibold text-ink-800">{input.name}</span>
+              <SlotFunctionTag input={input} />
+            </div>
+            <div className="text-[11px] text-ink-400">
+              {resolveColumnSpecs(input).length} columns · {input.type.toUpperCase()} · {input.required ? 'Required' : 'Optional'}
+            </div>
+          </div>
+        </div>
+        <div className="relative flex items-center gap-2 shrink-0">
+          {match && <FileMatchBadge match={match} open={popoverOpen} onToggle={onTogglePopover} />}
+          {isGreen && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[10.5px] font-semibold border border-compliant/25">
+              <Check size={10} strokeWidth={3} /> Auto-mapped
+            </span>
+          )}
+          {isAmber && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700 text-[10.5px] font-semibold border border-mitigated-200">
+              <Check size={10} strokeWidth={3} /> Auto-mapped · review
+            </span>
+          )}
+          {isLow && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-risk-50 text-risk text-[10.5px] font-semibold border border-risk/25">
+              <AlertTriangle size={10} /> Manual mapping required
+            </span>
+          )}
+          {!hasSources && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-risk-50 text-risk text-[10.5px] font-semibold border border-risk/25">
+              <AlertCircle size={10} /> Unmapped
+            </span>
+          )}
+          {match && popoverOpen && (
+            <FileMatchPopover match={match} label={`${input.name} · file match`} onClose={onClosePopover} />
+          )}
+        </div>
+      </div>
+
+      {shownSources.length > 1 && (
+        <div className="flex items-center gap-1.5 mt-1.5 mb-2 text-[11px] text-ink-500">
+          <Layers size={11} className="text-brand-600 shrink-0" />
+          <span>
+            <span className="font-semibold text-ink-700">Unioned</span> · {shownSources.length} sources · ~{fmtRows(unionRows)} combined rows
+          </span>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 mt-2.5">
+        {shownSources.length === 0 ? (
+          <span className="inline-flex items-center gap-2 rounded-lg border border-dashed border-canvas-border px-3 py-2 text-[12px] text-ink-400 italic">
+            <Link2 size={12} className="text-ink-300" />
+            No source mapped
+          </span>
+        ) : (
+          shownSources.map((s) => (
+            <span
+              key={s.name}
+              className={[
+                'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px]',
+                s.schemaOk === false
+                  ? 'border-mitigated-200 bg-mitigated-50/60 text-mitigated-700'
+                  : 'border-canvas-border bg-canvas text-ink-700',
+              ].join(' ')}
+              title={s.schemaOk === false ? 'Schema diverges from the other sources' : undefined}
+            >
+              {s.type === 'datasource' ? (
+                <Database size={12} className="text-brand-600 shrink-0" />
+              ) : (
+                <FileIcon size={12} className="text-ink-400 shrink-0" />
+              )}
+              <span className="font-medium truncate max-w-[200px]">{s.name}</span>
+              <span className="text-[10px] text-ink-400 tabular-nums">~{fmtRows(s.rows)}</span>
+              {s.schemaOk === false && <AlertTriangle size={11} className="text-mitigated-700 shrink-0" />}
+              <button
+                type="button"
+                onClick={() => onRemoveSource(s.name)}
+                className="text-ink-400 hover:text-risk transition-colors cursor-pointer shrink-0"
+                aria-label={`Remove ${s.name}`}
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))
+        )}
+
+        <AddSourceDropdown
+          uploadedFiles={uploadedFiles}
+          selectedNames={selectedNames}
+          onAdd={(name, type, rows) => onAddSource(name, type, rows)}
+          onRemove={(name) => onRemoveSource(name)}
+        />
+      </div>
+
+      {isLow && (
+        <div className="flex items-start gap-2 mt-2.5 px-1">
+          <AlertTriangle size={11} className="text-risk shrink-0 mt-0.5" />
+          <span className="text-[11px] text-risk-700 leading-relaxed">
+            Low match confidence — we couldn&apos;t auto-map a file to this input with certainty. Map a source from your files manually before continuing.
+          </span>
+        </div>
+      )}
+
+      {isMismatch && (
+        <div className="flex items-start gap-2 mt-2.5 px-1">
+          <AlertTriangle size={11} className="text-mitigated-700 shrink-0 mt-0.5" />
+          <span className="text-[11px] text-mitigated-700 leading-relaxed">
+            One source&apos;s schema diverges from the others — its columns won&apos;t line up in the union. Remove it or re-map it before continuing.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Component ──────────────────────────────────────
 
 export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, onFollowUp, onShareResults, onOpenInKnowledgeHub, onComposeInChat }: WorkflowExecutorProps) {
   const { can } = useCan();
   const { addToast } = useToast();
-  // Most workflow IDs resolve to the AP duplicate-detection mock. The PDF
-  // tester is a dedicated sandbox whose inputs are all PDFs so the manual
-  // mapping journey fires on every Execute. The consolidated-file tester is a
-  // dedicated single-run journey driven by one bundled workbook — its own flow
-  // is built out separately from the multi-input default executor.
+  // Most workflow IDs resolve to the AP duplicate-detection mock. The
+  // consolidated-file tester is a dedicated single-run journey driven by one
+  // bundled workbook — its own flow is built out separately from the
+  // multi-input default executor.
   const workflow =
-    workflowId === 'lw-pdf-tester'
-      ? PDF_TESTER_WORKFLOW
-      : workflowId === 'lw-consolidated-file'
-        ? CONSOLIDATED_FILE_WORKFLOW
-        : EXECUTOR_WORKFLOW;
+    workflowId === 'lw-consolidated-file'
+      ? CONSOLIDATED_FILE_WORKFLOW
+      : workflowId === 'lw-consolidated-file-multi'
+        ? CONSOLIDATED_FILE_MULTI_WORKFLOW
+        : workflowId === 'lw-consolidated-file-reference'
+          ? CONSOLIDATED_FILE_REFERENCE_WORKFLOW
+          : workflowId === 'lw-consolidated-file-compare'
+            ? CONSOLIDATED_FILE_COMPARE_WORKFLOW
+            : EXECUTOR_WORKFLOW;
 
   // When the executor is opened from the Audit Logs new-tab flow, the URL
   // carries ?state=completed — boot directly into the "complete" output view
@@ -591,6 +1022,12 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
   // Column-mapping pause (runs after file mapping is confirmed)
   const [columnMapPending, setColumnMapPending] = useState(false);
   const [alignments, setAlignments] = useState<JourneyAlignments>(() => seedAlignments(workflow));
+
+  // Which Required Files card has its "Expected columns" popover open (input id).
+  const [columnsViewFor, setColumnsViewFor] = useState<string | null>(null);
+
+  // Which file-mapping card has its AI-justification popover open (input id).
+  const [fileMatchFor, setFileMatchFor] = useState<string | null>(null);
 
   const [files, setFiles] = useState<JourneyFiles>(() => {
     if (!isPreCompleted) return {};
@@ -744,15 +1181,19 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     s.name.toLowerCase().includes(search.toLowerCase()),
   );
 
-  // Backend-mapping simulation: assign the next incoming file to the first
-  // required input that doesn't yet have a file. Fall back to the first input.
+  // Backend-mapping simulation: give every required input one file first, then
+  // route any extras to the multi-file input (the slot tagged "Multiple files")
+  // so single-file inputs stay at one file while the consolidated workbook
+  // accumulates the rest. Falls back to the first input when no slot is
+  // multi-file.
   const pickTargetInputId = useCallback(
     (current: JourneyFiles): string => {
       const reqInputs = workflow.inputs.filter((i) => i.required);
       for (const inp of reqInputs) {
         if ((current[inp.id] ?? []).length === 0) return inp.id;
       }
-      return workflow.inputs[0].id;
+      const multiInput = workflow.inputs.find((i) => i.multiple);
+      return (multiInput ?? workflow.inputs[0]).id;
     },
     [workflow.inputs],
   );
@@ -1150,6 +1591,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                             <span className="text-[11px] font-semibold uppercase rounded-md bg-canvas border border-canvas-border text-ink-500 px-1.5 py-0.5">
                               {input.type}
                             </span>
+                            <SlotFunctionTag input={input} />
                             {isPdfExecutor && uploaded > 0 && (
                               <CheckCircle2 size={12} className="text-compliant" />
                             )}
@@ -1175,6 +1617,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                               <span className="text-[11px] font-semibold uppercase rounded-md bg-canvas border border-canvas-border text-ink-500 px-1.5 py-0.5">
                                 {input.type}
                               </span>
+                              <SlotFunctionTag input={input} />
                               {input.required && (
                                 <span className="text-[10px] font-bold uppercase tracking-wider text-risk">
                                   Required
@@ -1189,6 +1632,36 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                             <p className="text-[12px] text-ink-500 leading-relaxed">
                               {input.description}
                             </p>
+                            {(() => {
+                              const cols = resolveColumnSpecs(input);
+                              if (cols.length === 0) return null;
+                              const open = columnsViewFor === input.id;
+                              return (
+                                <div className="relative mt-2.5">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setColumnsViewFor((v) => (v === input.id ? null : input.id))
+                                    }
+                                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[12px] font-semibold cursor-pointer transition-colors ${
+                                      open
+                                        ? 'border-brand-200 bg-brand-50 text-brand-700'
+                                        : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:bg-canvas'
+                                    }`}
+                                  >
+                                    <Table2 size={13} />
+                                    View {cols.length} columns
+                                  </button>
+                                  {open && (
+                                    <ExpectedColumnsPopover
+                                      input={input}
+                                      cols={cols}
+                                      onClose={() => setColumnsViewFor(null)}
+                                    />
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })}
@@ -1770,150 +2243,154 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     <span className="text-[12px] text-ink-400 shrink-0">Step 1 of 2</span>
                   </div>
 
-                  {/* Section header: structured (auto) — distinguishes the
-                      auto-mapping cards below from the unstructured manual
-                      flow that follows. Only rendered when both sections
-                      will appear (otherwise the header is redundant). */}
-                  {unstructuredMappings.length > 0 && workflow.inputs.some(i => i.type !== 'pdf') && (
-                    <div className="flex items-center gap-2 mt-4 mb-2">
-                      <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-500">
-                        Structured files
-                      </span>
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[10px] font-semibold border border-compliant/20">
-                        Auto-mapped
-                      </span>
-                      <div className="flex-1 h-px bg-canvas-border" />
-                    </div>
-                  )}
-
-                  <div className={`flex flex-col gap-2.5 ${unstructuredMappings.length > 0 ? '' : 'mt-4'}`}>
-                    {workflow.inputs.filter(i => i.type !== 'pdf').map((input) => {
-                      const mapping = fileMappings.find(m => m.inputId === input.id);
-                      const isMapped = mapping?.status === 'mapped';
-                      const isMismatch = mapping?.status === 'mismatch';
-                      const isUnmapped = !mapping || mapping.status === 'unmapped';
-                      const sources = mapping?.sources ?? [];
-                      const unionRows = sources.reduce((n, s) => n + s.rows, 0);
-                      const selectedNames = new Set(sources.map(s => s.name));
-                      return (
-                        <div
-                          key={input.id}
-                          className={[
-                            'rounded-xl border p-4 transition-colors',
-                            isMapped
-                              ? 'border-compliant/30 bg-compliant-50/20'
-                              : isMismatch
-                                ? 'border-mitigated-200 bg-mitigated-50/30'
-                                : 'border-risk/30 bg-risk-50/20',
-                          ].join(' ')}
-                        >
-                          <div className="flex items-center justify-between gap-3 mb-2">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div className={[
-                                'w-7 h-7 rounded-lg flex items-center justify-center shrink-0',
-                                isMapped ? 'bg-compliant-50 text-compliant' : isMismatch ? 'bg-mitigated-50 text-mitigated-700' : 'bg-risk-50 text-risk',
-                              ].join(' ')}>
-                                {isMapped ? <CheckCircle2 size={14} /> : isMismatch ? <AlertTriangle size={14} /> : <AlertCircle size={14} />}
+                  {/* Your Files — the inventory of everything added to this run,
+                      shown up front so the user can see what they brought before
+                      reviewing how each was mapped. */}
+                  {(() => {
+                    const all: UploadedFile[] = [];
+                    const seen = new Set<string>();
+                    Object.values(files).flat().forEach((f) => {
+                      if (seen.has(f.name)) return;
+                      seen.add(f.name);
+                      all.push(f);
+                    });
+                    if (all.length === 0) return null;
+                    const ext = (name: string) => {
+                      const m = name.match(/\.([a-z0-9]+)$/i);
+                      return m ? m[1].toUpperCase() : 'FILE';
+                    };
+                    const removeEverywhere = (name: string) => {
+                      setFiles((prev) => {
+                        const next: JourneyFiles = {};
+                        Object.entries(prev).forEach(([inputId, list]) => {
+                          next[inputId] = list.filter((x) => x.name !== name);
+                        });
+                        return next;
+                      });
+                      setFileMappings((prev) =>
+                        prev.map((m) => {
+                          const srcs = m.sources.filter((s) => s.name !== name);
+                          return { ...m, sources: srcs, status: mappingStatus(srcs) };
+                        }),
+                      );
+                    };
+                    return (
+                      <div className="mt-4 mb-1">
+                        <div className="flex items-center gap-2 mb-2.5">
+                          <span className="text-[13px] font-bold text-ink-800">Your Files</span>
+                          <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-canvas border border-canvas-border text-[11px] font-semibold text-ink-500">
+                            {all.length}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                          {all.map((f) => (
+                            <div
+                              key={f.name}
+                              className="flex items-center gap-2.5 rounded-xl border border-canvas-border bg-canvas-elevated px-3 py-2.5"
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+                                <FileIcon size={15} />
                               </div>
-                              <div className="min-w-0">
-                                <div className="text-[13px] font-semibold text-ink-800">{input.name}</div>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[13px] font-semibold text-ink-800 truncate">{f.name}</div>
                                 <div className="text-[11px] text-ink-400">
-                                  {input.columns?.length ?? 0} columns · {input.type.toUpperCase()} · {input.required ? 'Required' : 'Optional'}
+                                  {f.linkedSource ? 'Linked from data source' : `Uploaded · ${humanSize(f.size)}`}
                                 </div>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              {isMapped && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[10.5px] font-semibold border border-compliant/25">
-                                  <Check size={10} strokeWidth={3} /> Mapped
-                                </span>
-                              )}
-                              {isMismatch && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700 text-[10.5px] font-semibold border border-mitigated-200">
-                                  <AlertTriangle size={10} /> Needs review
-                                </span>
-                              )}
-                              {isUnmapped && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-risk-50 text-risk text-[10.5px] font-semibold border border-risk/25">
-                                  <AlertCircle size={10} /> Unmapped
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Union summary — only meaningful once >1 source is
-                              attached. Reassures the user that multiple files
-                              are concatenated, not replacing one another. */}
-                          {sources.length > 1 && (
-                            <div className="flex items-center gap-1.5 mt-1.5 mb-2 text-[11px] text-ink-500">
-                              <Layers size={11} className="text-brand-600 shrink-0" />
-                              <span>
-                                <span className="font-semibold text-ink-700">Unioned</span> · {sources.length} sources · ~{fmtRows(unionRows)} combined rows
+                              <span className="text-[10px] font-semibold uppercase tracking-wide rounded-md bg-canvas border border-canvas-border text-ink-500 px-1.5 py-0.5 shrink-0">
+                                {ext(f.name)}
                               </span>
+                              <button
+                                type="button"
+                                onClick={() => removeEverywhere(f.name)}
+                                className="text-ink-400 hover:text-risk transition-colors cursor-pointer shrink-0"
+                                aria-label={`Remove ${f.name}`}
+                              >
+                                <X size={15} />
+                              </button>
                             </div>
-                          )}
-
-                          {/* Mapped sources — each unioned source as a removable
-                              chip. Same-schema sources stack; a divergent one is
-                              flagged so the user can drop or re-map it. */}
-                          <div className="flex flex-wrap items-center gap-2 mt-2.5">
-                            {sources.length === 0 ? (
-                              <span className="inline-flex items-center gap-2 rounded-lg border border-dashed border-canvas-border px-3 py-2 text-[12px] text-ink-400 italic">
-                                <Link2 size={12} className="text-ink-300" />
-                                No source mapped
-                              </span>
-                            ) : (
-                              sources.map((s) => (
-                                <span
-                                  key={s.name}
-                                  className={[
-                                    'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px]',
-                                    s.schemaOk === false
-                                      ? 'border-mitigated-200 bg-mitigated-50/60 text-mitigated-700'
-                                      : 'border-canvas-border bg-canvas text-ink-700',
-                                  ].join(' ')}
-                                  title={s.schemaOk === false ? 'Schema diverges from the other sources' : undefined}
-                                >
-                                  {s.type === 'datasource' ? (
-                                    <Database size={12} className="text-brand-600 shrink-0" />
-                                  ) : (
-                                    <FileIcon size={12} className="text-ink-400 shrink-0" />
-                                  )}
-                                  <span className="font-medium truncate max-w-[200px]">{s.name}</span>
-                                  <span className="text-[10px] text-ink-400 tabular-nums">~{fmtRows(s.rows)}</span>
-                                  {s.schemaOk === false && <AlertTriangle size={11} className="text-mitigated-700 shrink-0" />}
-                                  <button
-                                    type="button"
-                                    onClick={() => removeSource(input.id, s.name)}
-                                    className="text-ink-400 hover:text-risk transition-colors cursor-pointer shrink-0"
-                                    aria-label={`Remove ${s.name}`}
-                                  >
-                                    <X size={12} />
-                                  </button>
-                                </span>
-                              ))
-                            )}
-
-                            <AddSourceDropdown
-                              uploadedFiles={files[input.id] ?? []}
-                              selectedNames={selectedNames}
-                              onAdd={(name, type, rows) => addSource(input.id, { name, type, rows })}
-                              onRemove={(name) => removeSource(input.id, name)}
-                            />
-                          </div>
-
-                          {isMismatch && (
-                            <div className="flex items-start gap-2 mt-2.5 px-1">
-                              <AlertTriangle size={11} className="text-mitigated-700 shrink-0 mt-0.5" />
-                              <span className="text-[11px] text-mitigated-700 leading-relaxed">
-                                One source&apos;s schema diverges from the others — its columns won&apos;t line up in the union. Remove it or re-map it before continuing.
-                              </span>
-                            </div>
-                          )}
+                          ))}
                         </div>
-                      );
-                    })}
-                  </div>
+                        <div className="border-t border-canvas-border mt-4" />
+                      </div>
+                    );
+                  })()}
+
+                  {(() => {
+                    // Build each structured input's mapping + file-match score,
+                    // then split into the ≥90 (green, auto) and <90 (yellow,
+                    // review) confidence sections.
+                    const items = workflow.inputs
+                      .filter((i) => i.type !== 'pdf')
+                      .map((input) => {
+                        const mapping = fileMappings.find((m) => m.inputId === input.id);
+                        const sources = mapping?.sources ?? [];
+                        const match = sources.length > 0 ? seedFileMatch(input.id) : null;
+                        return {
+                          input,
+                          sources,
+                          match,
+                          isMismatch: mapping?.status === 'mismatch',
+                        };
+                      });
+                    const green = items.filter((x) => x.match && x.match.confidence >= 90);
+                    const yellow = items.filter((x) => !x.match || x.match.confidence < 90);
+
+                    const renderCard = (x: (typeof items)[number]) => (
+                      <StructuredFileCard
+                        key={x.input.id}
+                        input={x.input}
+                        sources={x.sources}
+                        match={x.match}
+                        isMismatch={x.isMismatch}
+                        uploadedFiles={files[x.input.id] ?? []}
+                        popoverOpen={fileMatchFor === x.input.id}
+                        onAddSource={(name, type, rows) => addSource(x.input.id, { name, type, rows })}
+                        onRemoveSource={(name) => removeSource(x.input.id, name)}
+                        onTogglePopover={() => setFileMatchFor((v) => (v === x.input.id ? null : x.input.id))}
+                        onClosePopover={() => setFileMatchFor(null)}
+                      />
+                    );
+
+                    return (
+                      <>
+                        {/* Auto-mapped (≥90% match) — green, no review needed */}
+                        {green.length > 0 && (
+                          <>
+                            <div className="flex items-center gap-2 mt-4 mb-2">
+                              <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-500">
+                                Structured files
+                              </span>
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[10px] font-semibold border border-compliant/20">
+                                Auto-mapped
+                              </span>
+                              <div className="flex-1 h-px bg-canvas-border" />
+                            </div>
+                            <div className="flex flex-col gap-2.5">{green.map(renderCard)}</div>
+                          </>
+                        )}
+
+                        {/* Needs review (&lt;90% match) — yellow section. 70–89
+                            stays auto-mapped; &lt;70 needs manual mapping. */}
+                        {yellow.length > 0 && (
+                          <>
+                            <div className="flex items-center gap-2 mt-5 mb-2">
+                              <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-500">
+                                Needs review
+                              </span>
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700 text-[10px] font-semibold border border-mitigated-200">
+                                Match &lt; 90%
+                              </span>
+                              <div className="flex-1 h-px bg-canvas-border" />
+                            </div>
+                            <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/15 p-2.5 flex flex-col gap-2.5">
+                              {yellow.map(renderCard)}
+                            </div>
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
 
                   {/* Unstructured documents (PDFs) — manual mapping required.
                       Auto-detection can't guess what's in a PDF from filename,
