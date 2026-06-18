@@ -559,6 +559,16 @@ export interface ConciergeFlowProps<R> {
   historyAsDrawer?: boolean;
 
   historySeed?: HistoryJob[];
+
+  /**
+   * Opt-in (RACM-only): replace the default JobHistory table with a custom list
+   * (e.g. a stacked, drawer-friendly history). Receives the jobs + handlers.
+   */
+  renderHistory?: (api: {
+    jobs: HistoryJob[];
+    onOpen: (id: string) => void;
+    onDelete: (id: string) => void;
+  }) => ReactNode;
 }
 
 export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
@@ -568,6 +578,7 @@ export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
     stages, messages, totalMs, checking = [], tips = [],
     buildResult, renderResult, resultActions, historyMeta,
     preUpload, extraControls, canRun, renderUpload, renderProgress, onComplete, historyAsDrawer, historySeed = [],
+    renderHistory,
   } = props;
 
   const [tab, setTab] = useState('tool');
@@ -636,6 +647,13 @@ export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
   };
 
   const resetAll = () => {
+    // A stop/cancel mid-flight: reconcile the in-progress history row to CANCELLED
+    // (the row stays, with a grey "Cancelled" tag) rather than leaving it stuck "In progress".
+    if (jobIdRef.current) {
+      const id = jobIdRef.current;
+      setHistory((prev) => prev.map((h) => (h.id === id ? { ...h, status: 'CANCELLED' } : h)));
+      jobIdRef.current = null;
+    }
     job.reset();
     setFiles([]);
     setOptions({});
@@ -659,11 +677,17 @@ export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
       ) : undefined}
     >
       {!historyAsDrawer && tab === 'history' ? (
-        <JobHistory
-          jobs={history}
-          onDelete={(id) => setHistory((prev) => prev.filter((h) => h.id !== id))}
-          onOpen={() => { job.complete(buildResult([], {})); setTab('tool'); }}
-        />
+        renderHistory ? renderHistory({
+          jobs: history,
+          onDelete: (id) => setHistory((prev) => prev.filter((h) => h.id !== id)),
+          onOpen: () => { job.complete(buildResult([], {})); setTab('tool'); },
+        }) : (
+          <JobHistory
+            jobs={history}
+            onDelete={(id) => setHistory((prev) => prev.filter((h) => h.id !== id))}
+            onOpen={() => { job.complete(buildResult([], {})); setTab('tool'); }}
+          />
+        )
       ) : job.state.status === 'IDLE' ? (
         <div className="h-full">
           {preUpload}
@@ -732,11 +756,22 @@ export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
         <AnimatePresence>
           {showHistory && (
             <Drawer title="Generation history" onClose={() => setShowHistory(false)}>
-              <JobHistory
-                jobs={history}
-                onDelete={(id) => setHistory((prev) => prev.filter((h) => h.id !== id))}
-                onOpen={() => { setShowHistory(false); job.complete(buildResult([], {})); }}
-              />
+              {renderHistory ? renderHistory({
+                jobs: history,
+                onDelete: (id) => setHistory((prev) => prev.filter((h) => h.id !== id)),
+                onOpen: (id) => {
+                  setShowHistory(false);
+                  const clicked = history.find((h) => h.id === id);
+                  const f = (clicked?.files ?? []).map((name) => ({ name, size: 0, type: '' } as PickedFile));
+                  job.complete(buildResult(f, {}));
+                },
+              }) : (
+                <JobHistory
+                  jobs={history}
+                  onDelete={(id) => setHistory((prev) => prev.filter((h) => h.id !== id))}
+                  onOpen={() => { setShowHistory(false); job.complete(buildResult([], {})); }}
+                />
+              )}
             </Drawer>
           )}
         </AnimatePresence>

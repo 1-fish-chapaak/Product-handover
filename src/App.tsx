@@ -238,7 +238,7 @@ function AppInner() {
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
   const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
-  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge'; sourceFiles?: string[] };
+  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm'; backLabel?: string; sourceFiles?: string[] };
   // Deep-link support: when this tab is opened at ?view=racm-full-editor (the
   // "Open in editor" new tab), restore the editor context at init so there's no
   // mount-time setState / double render. getInitialView (useAppState) already
@@ -251,7 +251,8 @@ function AppInner() {
       racmId: params.get('racmId') ?? '',
       racmName: params.get('racmName') ?? 'RACM',
       processLabel: params.get('processLabel') ?? '',
-      backView: 'business-processes',
+      backView: (params.get('backView') as RacmEditorContext['backView']) ?? 'business-processes',
+      backLabel: params.get('backLabel') ?? undefined,
     };
   });
   const openRacmFullEditor = (ctx: RacmEditorContext) => {
@@ -851,7 +852,7 @@ function AppInner() {
         );
 
       case 'sox-icfr':
-        return <SoxIcfrApp onBack={() => setView('engagements')} />;
+        return <SoxIcfrApp engagementId={state.selectedEngagementId ?? undefined} onBack={() => setView('engagements')} />;
 
       case 'engagements':
         return (
@@ -945,6 +946,8 @@ function AppInner() {
         return (
           <RacmFullPageEditor
             onBack={() => setView(racmEditorContext?.backView ?? 'engagement-overview')}
+            backView={racmEditorContext?.backView}
+            backLabel={racmEditorContext?.backLabel}
             racmName={racmEditorContext?.racmName ?? 'Procurement SOP · Budget to Payment RACM'}
             racmId={racmEditorContext?.racmId}
             processLabel={racmEditorContext?.processLabel}
@@ -1003,7 +1006,8 @@ function AppInner() {
               racmId: 'racm-generated',
               racmName: name,
               processLabel: '',
-              backView: 'ai-concierge',
+              backView: 'ai-concierge-racm',
+              backLabel: 'Back to RACM Generator',
               sourceFiles,
             })}
           />

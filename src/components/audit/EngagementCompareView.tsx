@@ -31,6 +31,7 @@ const TYPE_TINT: Record<Engagement['type'], string> = {
   Compliance: 'border-brand-100 bg-brand-50/40',
   'Internal Audit': 'border-evidence-100 bg-evidence-50/40',
   Automation: 'border-compliant-100 bg-compliant-50/40',
+  'SOX / ICFR': 'border-brand-200 bg-brand-100/40',
 };
 
 const HEALTH_BAR = (h: number): string =>

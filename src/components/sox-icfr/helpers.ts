@@ -1,6 +1,6 @@
 import type {
   Conclusion, Control, Court, Deficiency, DesignTrack, HandoffTask, IcfrEngagement,
-  Likelihood, OperatingTrack, Role, Severity, TrackConclusion,
+  Likelihood, MaterialityRules, OperatingTrack, Role, Severity, TrackConclusion,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
@@ -13,8 +13,11 @@ export function computeSeverity(likelihood: Likelihood, magnitude: number, mater
   if (magnitude >= materiality * band) return 'Significant Deficiency';
   return 'Deficiency';
 }
-export function severityOf(d: Deficiency, materiality: number): Severity {
-  return computeSeverity(d.likelihood, d.magnitude, materiality, d.mwIndicators);
+export function isClearlyTrivial(magnitude: number, rules: MaterialityRules): boolean {
+  return magnitude <= rules.clearlyTrivial;
+}
+export function severityOf(d: Deficiency, materiality: number, rules?: MaterialityRules): Severity {
+  return computeSeverity(d.likelihood, d.magnitude, materiality, d.mwIndicators, rules ? rules.sdBandPct / 100 : 0.2);
 }
 
 // ─── Track + control conclusions (override wins) ─────────────────────────────────

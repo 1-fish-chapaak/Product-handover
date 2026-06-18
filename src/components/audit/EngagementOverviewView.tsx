@@ -91,6 +91,8 @@ function tabsForType(type: EngType): { id: TabId; label: string; icon: React.Ele
     case 'Automation':
       return [mk('overview', 'Overview'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Compliance':
+    case 'SOX / ICFR':
+      // SOX/ICFR opens its own dedicated experience; this fallback keeps the type exhaustive.
       // Workflows tab removed — attribute→workflow mapping now lives inline on the Controls tab.
       return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('evidence', 'Evidence'), mk('working-paper', 'Working Paper'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Internal Audit':
@@ -188,11 +190,13 @@ const TYPE_CLS: Record<EngType, string> = {
   Compliance: 'bg-brand-50 text-brand-700 border-brand-100',
   'Internal Audit': 'bg-evidence-50 text-evidence-700 border-evidence-100',
   Automation: 'bg-compliant-50 text-compliant-700 border-compliant-100',
+  'SOX / ICFR': 'bg-brand-100 text-brand-800 border-brand-200',
 };
 const TYPE_LABEL: Record<EngType, string> = {
   Compliance: 'Compliance',
   'Internal Audit': 'Internal Audit',
   Automation: 'Automation',
+  'SOX / ICFR': 'SOX / ICFR',
 };
 const SUBTYPE_LABEL: Record<AutomationSubtype, string> = {
   CCM: 'CCM',

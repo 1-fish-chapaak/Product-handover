@@ -204,16 +204,38 @@ export interface Deficiency {
   compensatingControlId?: string;
   aggregationGroup?: string;
   remediation: { action: string; date: string | null; owner: string; status: 'Open' | 'In progress' | 'Done' };
+  // exception lifecycle
+  status: ExceptionStatus;
+  retest?: { result: 'Pass' | 'Fail'; at: string; by: string };
+  signoff?: { by: string; at: string };
 }
+export type ExceptionStatus = 'Identified' | 'Remediation' | 'Retest' | 'Closed';
 
 export interface SignificantAccount {
   id: string; name: string; balance: number; inScope: boolean; assertions: Assertion[];
+}
+
+/** The engagement-level "ground rules" that drive how every exception is evaluated and routed. */
+export const MW_INDICATOR_CATALOGUE = [
+  'Restatement of previously issued financial statements',
+  'Material misstatement identified by audit, not the control',
+  'Fraud of any magnitude by senior management',
+  'Ineffective control environment / oversight',
+  'Ineffective period-end financial reporting process',
+] as const;
+export interface MaterialityRules {
+  clearlyTrivial: number;        // de-minimis threshold (₹) — below this, an exception is clearly trivial
+  sdBandPct: number;             // significant-deficiency lower band, as % of overall materiality (e.g. 20)
+  aggregate: boolean;            // aggregate individually-minor deficiencies by commonality
+  autoRoute: boolean;            // auto-route an exception to the owner/reviewer by computed severity
+  mwIndicators: string[];        // MW indicators in force for this engagement (from the catalogue)
 }
 
 export interface IcfrEngagement {
   id: string; code: string; name: string; entity: string; framework: string;
   periodStart: string; periodEnd: string; period: 'Interim' | 'Year-end';
   materiality: number; performanceMateriality: number; preparer: string; reviewer: string;
+  rules: MaterialityRules;
   accounts: SignificantAccount[];
   controls: Control[];
   deficiencies: Deficiency[];
