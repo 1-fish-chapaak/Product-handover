@@ -46,7 +46,7 @@ function snakeCase(s: string): string {
 }
 
 export function autoAlignColumns(input: InputSpec): ColumnAlignment[] {
-  const cols = input.columns ?? [];
+  const cols = input.columns ?? input.columnSpecs?.map((c) => c.name) ?? [];
   return cols.map((col, idx) => {
     const seed = hashString(`${input.id}:${col}:${idx}`);
     const base = 52 + Math.floor(seededRand(seed) * 43); // 52–95
