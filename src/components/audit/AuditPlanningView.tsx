@@ -474,7 +474,7 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
         <header className="shrink-0 px-6 pt-5 pb-0 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
-              <div className="flex items-center gap-2"><Upload size={18} className="text-brand-600" /><h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight">Import RACM</h2></div>
+              <div className="flex items-center gap-2"><Upload size={18} className="text-brand-600" /><h2 className="text-[1.125rem] font-semibold text-ink-900 tracking-tight">Import RACM</h2></div>
               <p className="text-[0.75rem] text-ink-500 mt-0.5">Upload an Excel or CSV file containing risk and control data.</p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
@@ -1171,7 +1171,7 @@ function CreateRacmModal({ onClose, onCreate }: { onClose: () => void; onCreate:
 
           <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between">
             <div>
-              <h2 className="font-display text-[1.125rem] font-semibold text-ink-900">Create RACM</h2>
+              <h2 className="text-[1.125rem] font-semibold text-ink-900">Create RACM</h2>
               <p className="text-[0.75rem] text-ink-500 mt-0.5">Define a new Risk & Control Matrix for audit governance.</p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>

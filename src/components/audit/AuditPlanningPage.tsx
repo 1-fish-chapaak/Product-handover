@@ -389,7 +389,7 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
                       <div className="w-3 h-3 rounded" style={{ background: previewEng.color }} />
                       <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ${STATUS_CLS[previewEng.status]}`}>{previewEng.status}</span>
                     </div>
-                    <h2 className="font-display text-[1.0625rem] font-semibold text-ink-900">{previewEng.name}</h2>
+                    <h2 className="text-[1.0625rem] font-semibold text-ink-900">{previewEng.name}</h2>
                   </div>
                   <button onClick={() => setPreviewEng(null)} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
                 </div>
@@ -532,7 +532,7 @@ function PlanEngagementDrawer({ onClose, onCreate, existingCount }: {
         <header className="shrink-0 px-6 pt-5 pb-4 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2"><Calendar size={18} className="text-brand-600" /><h2 className="font-display text-[1.125rem] font-semibold text-ink-900">Plan Engagement</h2></div>
+              <div className="flex items-center gap-2"><Calendar size={18} className="text-brand-600" /><h2 className="text-[1.125rem] font-semibold text-ink-900">Plan Engagement</h2></div>
               <p className="text-[0.75rem] text-ink-500 mt-0.5">Create a new audit engagement. All controls will start fresh after activation.</p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
@@ -796,7 +796,7 @@ function EngagementPlanTab({ onNavigateToExecution, engagements, onPlanNew, onAc
                       <div className="w-3 h-3 rounded" style={{ background: detailRow.color }} />
                       <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ${PLAN_STATUS_CLS[detailRow.status]}`}>{detailRow.status}</span>
                     </div>
-                    <h2 className="font-display text-[1.0625rem] font-semibold text-ink-900">{detailRow.name}</h2>
+                    <h2 className="text-[1.0625rem] font-semibold text-ink-900">{detailRow.name}</h2>
                   </div>
                   <button onClick={() => setDetailRow(null)} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
                 </div>

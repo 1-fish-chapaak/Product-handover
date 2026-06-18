@@ -205,7 +205,7 @@ export default function NotificationDrawer({
       >
         {/* Header */}
         <header className="shrink-0 px-6 h-14 flex items-center justify-between gap-4 border-b border-canvas-border">
-          <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight">Notifications</h2>
+          <h2 className="text-[1.125rem] font-semibold text-ink-900 tracking-tight">Notifications</h2>
           <div className="flex items-center gap-1">
             <button
               onClick={onMarkAllRead}

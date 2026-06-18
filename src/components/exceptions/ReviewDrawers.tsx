@@ -264,7 +264,7 @@ export function ModalShell({
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="font-display text-[20px] font-semibold text-ink-900 tracking-tight">{title}</h2>
+              <h2 className="text-[20px] font-semibold text-ink-900 tracking-tight">{title}</h2>
               {step && step.total > 1 && (
                 <span className="inline-flex items-center gap-2 text-[11.5px] font-medium text-ink-500">
                   <span className="flex items-center gap-1">
@@ -3103,7 +3103,7 @@ export function BulkScopeChooser({
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full"><LinkIcon size={11} /> Bulk</span>
-              <h2 className="font-display text-[19px] font-semibold text-ink-900 tracking-tight truncate">{actionLabel}</h2>
+              <h2 className="text-[19px] font-semibold text-ink-900 tracking-tight truncate">{actionLabel}</h2>
             </div>
             <p className="text-[12.5px] text-ink-500 leading-snug">
               <span className="font-mono tabular-nums">ID: {groupId}</span> · {candidates.length} linked cases{groupTitle ? <> · <span className="text-ink-600">{groupTitle}</span></> : null}
@@ -3278,7 +3278,7 @@ export function BulkActionGroupModal({
       >
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div>
-            <h2 className="font-display text-[20px] font-semibold text-ink-900 tracking-tight">Bulk Action Group</h2>
+            <h2 className="text-[20px] font-semibold text-ink-900 tracking-tight">Bulk Action Group</h2>
             <p className="text-[12.5px] text-ink-500 mt-0.5 font-mono tabular-nums">
               ID: {bulk.id} · {cases.length} cases
             </p>

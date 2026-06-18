@@ -773,7 +773,7 @@ function AttributeModal({ existing, onClose, onSave }: {
           transition={{ duration: 0.2 }} className="bg-white rounded-2xl shadow-xl border border-canvas-border w-full max-w-[560px] max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
           <div className="px-6 pt-5 pb-4 border-b border-canvas-border flex items-start justify-between">
             <div>
-              <h2 className="font-display text-[1.125rem] font-semibold text-ink-900">{isEdit ? 'Edit Attribute' : 'Add Attribute'}</h2>
+              <h2 className="text-[1.125rem] font-semibold text-ink-900">{isEdit ? 'Edit Attribute' : 'Add Attribute'}</h2>
               <p className="text-[0.75rem] text-ink-500 mt-0.5">Define a test condition for the linked workflow.</p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer"><X size={16} /></button>
