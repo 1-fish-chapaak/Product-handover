@@ -19,14 +19,17 @@ export interface ListToolbarProps {
   searchPlaceholder?: string;
   /** Right-aligned controls — filter dropdowns, view toggle, clear-all, etc. */
   trailing?: ReactNode;
+  /** Compact, fixed-width search (instead of full-width). The trailing controls
+   *  then push to the right edge of the row. */
+  compactSearch?: boolean;
 }
 
 export default function ListToolbar({
-  search, onSearch, searchPlaceholder = 'Search…', trailing,
+  search, onSearch, searchPlaceholder = 'Search…', trailing, compactSearch,
 }: ListToolbarProps) {
   return (
     <div className="mb-5 flex items-center gap-3 flex-wrap shrink-0">
-      <div className="relative flex-1 min-w-[240px]">
+      <div className={`relative ${compactSearch ? 'w-full sm:w-[320px]' : 'flex-1 min-w-[240px]'}`}>
         <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
         <input
           value={search}
@@ -35,7 +38,7 @@ export default function ListToolbar({
           className="w-full h-10 pl-10 pr-3 bg-canvas-elevated border border-canvas-border rounded-[10px] text-[13px] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all"
         />
       </div>
-      {trailing && <div className="flex items-center gap-2 shrink-0 flex-wrap">{trailing}</div>}
+      {trailing && <div className={`flex items-center gap-2 shrink-0 flex-wrap ${compactSearch ? 'sm:ml-auto' : ''}`}>{trailing}</div>}
     </div>
   );
 }

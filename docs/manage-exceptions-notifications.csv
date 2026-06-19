@@ -1,0 +1,43 @@
+Ref,Stage,Trigger Condition,Email Sent To,Email Purpose,Recipient Role,Channel,CTA / Deep-link,Timing
+1.1,Case intake,Exception case(s) created from an ATR-upload hand-off (per observation),Assigned Risk Owner,New exception cases assigned to you for review,RO,Email + In-app,Open case list filtered to the new cases,Immediate
+1.2,Case intake,Case created from a query / bulk import,Assigned RO (+ AU watcher),New exceptions require classification,"RO, AU",In-app (Email digest),Open Manage Exceptions,Digest
+1.3,Case intake,Case created but no owner assigned,Admin / team lead,Unassigned exceptions need an owner,ADM,Email + In-app,Open unassigned queue,Reminder (daily)
+2.1,Classification,RO classifies a case (any disposition) -> awaiting auditor,Auditor,A classification is ready for your review,AU,Email + In-app,Open Review Classification drawer,Immediate
+2.2,Classification,Case left Unclassified past its SLA,Risk Owner,Exception still needs classification,RO,In-app (Email reminder),Open Classify drawer,Reminder
+2.3,Classification review,AU approves a non-actionable classification (BAU / False Positive) -> case Closed,RO (+ source report owner),Exception closed - no action plan needed,"RO, RPT",Email + In-app,Open closed case,Immediate
+2.4,Classification review,AU approves an actionable classification -> action plan now required,Risk Owner,Classification approved - please submit an action plan,RO,Email + In-app,Open Action Plan drawer,Immediate
+2.5,Classification review,AU rejects the classification -> reopens for re-classification,Risk Owner,Classification rejected - please re-classify,RO,Email + In-app,Open Re-Classify drawer (with AU comment),Immediate
+3.1,Action plan,RO submits a management action plan + due date,Auditor,An action plan is ready for your review,AU,Email + In-app,Open Review Plan drawer,Immediate
+3.2,Plan review,AU approves the plan -> RO to implement,Risk Owner,Action plan approved - implementation can begin,RO,Email + In-app,Open case / Mark Complete,Immediate
+3.3,Plan review,AU rejects the plan (discrepancy) -> reopens at RO,Risk Owner,Action plan rejected - see auditor comments,RO,Email + In-app,Open plan drawer with comment,Immediate
+4.1,Completion,RO marks the action complete (action taken + evidence),Auditor,An action is ready for completion review,AU,Email + In-app,Open Review Action drawer,Immediate
+4.2,Completion review,AU verifies Implemented -> case Closed,RO (+ source report owner),Exception verified and closed,"RO, RPT",Email + In-app,Open closed case,Immediate
+4.3,Completion review,AU marks Partially Implemented -> back to RO (In-Progress),Risk Owner,Action partially accepted - further work needed,RO,Email + In-app,Open case with auditor note,Immediate
+4.4,Completion review,AU rejects (Discrepancy) -> case reopens at RO,Risk Owner,"Action rejected - discrepancy found, please redo",RO,Email + In-app,Open case with comment,Immediate
+5.1,Due date,RO requests a due-date revision,Auditor,A due-date extension needs your approval,AU,Email + In-app,Open Review Due Date drawer,Immediate
+5.2,Due date,AU approves the revision,Risk Owner,Due-date extension approved - new date set,RO,Email + In-app,Open case,Immediate
+5.3,Due date,AU rejects the revision,Risk Owner,Due-date extension rejected - original date stands,RO,Email + In-app,Open case,Immediate
+5.4,Due date,Action due date approaching (e.g. T-3 / T-1 day),RO (+ AU cc),Action due soon,"RO, AU",In-app (Email reminder),Open case,Reminder
+5.5,Due date,Action due date passed -> Overdue,RO + AU,Exception is overdue and needs attention,"RO, AU",Email + In-app,Open Action Hub -> Overdue,Reminder (daily until cleared)
+6.1,Assignment,Assigner assigns a case (single or bulk) to a team member,Assignee,A case has been assigned to you,ASE,Email + In-app,Open assigned case (drafting),Immediate
+6.2,Assignment,Assignment replaces an existing owner (re-assignment),Previous owner,A case was reassigned away from you,prev ASE,In-app,Open case (read-only),Immediate
+6.3,Approval submit,Assignee submits drafted work -> enters approval at L1,L1 Approver(s),An item is awaiting your approval,APV (L1),Email + In-app,Open Approval Inbox,Immediate
+6.4,Approval,Level approved but more approvers remain (parallel all),Remaining approvers at level,Your approval is still needed,APV,In-app,Open Approval Inbox,Immediate
+6.5,Approval,Level fully approved -> advances to next level,Next-level approver(s),An item has advanced to your level for approval,APV (Ln+1),Email + In-app,Open Approval Inbox,Immediate
+6.6,Approval,Sequential mode - it is the next approver's turn,Next approver in sequence,It is your turn to approve,APV,Email + In-app,Open Approval Inbox,Immediate
+6.7,Approval final,Final level approved -> case advances to next platform stage,Assignee + Assigner,Approved - case finalized and advanced,"ASE, ASG",Email + In-app,Open case,Immediate
+6.8,Approval reject,An approver rejects -> returns to assignee,Assignee (+ Assigner cc),Your submission was rejected - see comments,"ASE, ASG",Email + In-app,Open case (drafting) with comment,Immediate
+6.9,Send-back,Approver sends back to the previous level,That level's approver(s),An item was sent back to your level,APV (Ln-1),Email + In-app,Open Approval Inbox with comment,Immediate
+6.10,Send-back,Send-back at L1 -> bounced to assignee to revise,Assignee,Revisions requested before approval,ASE,Email + In-app,Open case (drafting),Immediate
+6.11,Escalation,Send-back limit (3) reached -> escalated to assigner,Assigner,Approval loop escalated - your decision needed,ASG,Email + In-app,Open escalated case,Immediate
+6.12,Pull-back,Assigner recalls an in-flight assignment,Assignee + pending approvers,An assignment was recalled by the assigner,"ASE, APV",In-app,—,Immediate
+6.13,Reassignment,Assignee deactivated mid-flight -> needs reassignment,Assigner / Admin,An assignee is inactive - case needs reassignment,"ASG, ADM",Email + In-app,Open case to reassign,Immediate
+6.14,Approval SLA,Current level SLA at-risk (<=25% time left),Current approver(s),Approval due soon,APV,In-app (Email reminder),Open Approval Inbox,Reminder
+6.15,Approval SLA,Current level SLA overdue,Current approver(s) + Assigner,Approval is overdue,"APV, ASG",Email + In-app,Open Approval Inbox,Reminder (until acted)
+7.1,Comment,One persona posts a comment on a case,The other persona,New comment on an exception you are working,RO or AU (counterpart),In-app (Email digest),Open case thread (unread badge),Immediate in-app / Digest email
+7.2,Comment,Comment posted with an attachment,Counterpart,New comment with an attachment,RO or AU,In-app (Email digest),Open case thread,Immediate / Digest
+7.3,Comment,Bulk comment posted across multiple cases,Each affected counterpart,New comments across N exceptions,RO/AU per case,In-app (Email digest),Open filtered cases,Digest
+8.1,Bulk action,Bulk classify / review / complete applied to a group,Each affected case's counterpart,Bulk action applied - items need your attention,RO/AU per case,In-app (Email digest),Open filtered cases,Digest
+8.2,Closure,Case reaches Closed (any path),RO + AU + source report owner,Exception closed,"RO, AU, RPT",In-app (Email digest),Open closed case,Digest
+8.3,Reopen,Case reopens (rejection / discrepancy),Risk Owner,An exception was reopened and needs rework,RO,Email + In-app,Open case,Immediate
+8.4,Digest,End-of-day open workload summary,"RO, AU, APV",Your open exceptions / approvals for today,all actors,Email,Open Action Hub,Digest (daily)
