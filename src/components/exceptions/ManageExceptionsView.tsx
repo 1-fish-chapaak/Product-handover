@@ -2,6 +2,8 @@ import { useMemo, useState, useEffect, type ElementType } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft,
+  ArrowRight,
+  FileText,
   AlertTriangle,
   Tag,
   Clock,
@@ -56,6 +58,7 @@ import WorkflowModule from './workflow/WorkflowModule';
 import AssignmentModal from './workflow/AssignmentModal';
 import WorkflowAssignButton from './workflow/WorkflowAssignButton';
 import type { Assignment } from './workflow/workflowTypes';
+import { hasAtrDraft, requestAtrResume } from '../reports/atrDraft';
 
 // `scopeIds` is the set of cases the action applies to — always includes
 // `exceptionId` (the opened/primary case that drives the drawer's content).
@@ -402,6 +405,12 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
 
   const [activeNav, setActiveNav] = useState<'exceptions' | 'action-hub' | 'workflow'>('exceptions');
   const [atrModalOpen, setAtrModalOpen] = useState(false);
+  // Persistent return-to-ATR affordance when the user came here mid-ATR-build.
+  const [fromAtrBuild] = useState(() => hasAtrDraft());
+  const returnToAtr = () => {
+    requestAtrResume();
+    window.dispatchEvent(new CustomEvent('irame:command-palette-navigate', { detail: { view: 'reports', id: '', kind: 'risk' } }));
+  };
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [drawer, setDrawer] = useState<DrawerState>(null);
   // When a single action targets a case in a bulk group, the chooser asks which
@@ -886,6 +895,20 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
           </button>
           <div className="flex-1" />
         </header>
+      )}
+
+      {/* Return-to-ATR banner — shown when the user is reviewing exceptions
+          mid-ATR-build, so they can finalize the parked report when done. */}
+      {fromAtrBuild && (
+        <div className="shrink-0 px-6 py-2.5 bg-brand-50 border-b border-brand-200 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 min-w-0 text-[0.8125rem] text-brand-800">
+            <FileText size={15} className="shrink-0 text-brand-700" />
+            <span className="truncate"><span className="font-semibold">You're managing exceptions for ATR generation.</span> Review the cases, then return to generate the report.</span>
+          </div>
+          <button onClick={returnToAtr} className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-500 transition-colors cursor-pointer">
+            Return to ATR &amp; generate <ArrowRight size={14} />
+          </button>
+        </div>
       )}
 
       {/* Page header — title + subtitle + tabs (Knowledge Hub pattern) */}

@@ -1,191 +1,398 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
-  X, FileText, FileSpreadsheet, CloudUpload, Loader2, CheckCircle2, AlertCircle,
-  Sparkles, ArrowRight, ArrowLeft, Check,
+  X, FileText, FileSpreadsheet, CloudUpload, Loader2, CheckCircle2, Sparkles,
+  ArrowRight, ArrowLeft, Check, Download, ChevronDown, Lock, Save, FilePenLine,
+  Upload, LayoutTemplate, Paperclip, ClipboardList, ListChecks, AlertTriangle, FileCheck2,
+  PencilLine, Briefcase, Image as ImageIcon, Palette, Calendar, RefreshCw, SlidersHorizontal, Plus,
 } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useToast } from '../shared/Toast';
-import ComprehensiveAtrModal from './ComprehensiveAtrModal';
+import AtrDocument from './AtrDocument';
+import AtrItemsEditor from './AtrItemsEditor';
+import AtrValidationStep from './AtrValidationStep';
+import AtrAnnexureStep from './AtrAnnexureStep';
 import {
-  REQUIRED_FIELDS, downloadExcelTemplate, downloadWordTemplate,
-  parseObservationsFromFile, SAMPLE_OBSERVATIONS, SAMPLE_INSIGHTS,
+  REQUIRED_FIELDS, downloadExcelTemplate, downloadWordTemplate, parseObservationsFromFile,
+  exportAtrExcel, exportAtrWord, SAMPLE_OBSERVATIONS, SAMPLE_INSIGHTS,
 } from './atrTemplate';
-import type { AtrMeta, AtrObservation, AtrInsight } from './atrTypes';
+import {
+  type AtrWorkObs, type AtrAnnexure, toWorkObs, toAtrObservations,
+  parseAnnexureFiles, extractEmbeddedAnnexures, ANNEXURE_POOL, unresolvedCount, selectedCount, totalExceptionRows,
+  ENGAGEMENT_SOURCES, regenerateInsights,
+} from './atrBuilder';
+import { saveAtrDraft } from './atrDraft';
+import type { AtrMeta, AtrObservation, AtrInsight, AtrReportData } from './atrTypes';
+import { PEOPLE } from '../../data/grc-domain';
 
-const ACCEPT = '.pdf,.docx,.doc,.xlsx,.xls,.csv';
-const ACCEPT_EXT = ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'csv'];
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+// Status rollup for an observation set — 'Closed' surfaces as "Complete".
+function statusBreakdown(obs: AtrObservation[]) {
+  const out = { Complete: 0, 'In Progress': 0, Open: 0, Overdue: 0 } as Record<string, number>;
+  obs.forEach(o => {
+    const s = o.status === 'Closed' ? 'Complete' : (o.status ?? 'Open');
+    if (s in out) out[s]++;
+  });
+  return out;
 }
 
-type Step = 'template' | 'upload' | 'extracting' | 'generated';
-const STEP_LABELS: { key: Step; label: string }[] = [
-  { key: 'template', label: 'Template' },
-  { key: 'upload', label: 'Upload' },
-  { key: 'generated', label: 'Review' },
+const REPORT_ACCEPT = '.pdf,.docx,.doc,.xlsx,.xls,.csv,.ppt,.pptx';
+const TEMPLATE_ACCEPT = '.xlsx,.xls,.docx,.doc,.csv';
+const ANNEX_ACCEPT = '.xlsx,.xls,.csv';
+
+const PROCESS_MESSAGES = ['Reading your report…', 'Identifying observations…', 'Extracting annexures…', 'Almost there…'];
+
+type StartMode = 'template' | 'upload' | 'manual' | 'engagement';
+
+type Stage =
+  | 'entry' | 'template-upload' | 'report-upload' | 'engagement-pick' | 'manual-edit'
+  | 'processing' | 'validation' | 'annexures' | 'decision' | 'customize' | 'preview';
+
+const STEPPER: { key: string; label: string; stages: Stage[] }[] = [
+  { key: 'start', label: 'Start', stages: ['entry', 'template-upload', 'report-upload', 'engagement-pick', 'processing'] },
+  { key: 'validate', label: 'Validate', stages: ['validation', 'manual-edit'] },
+  { key: 'annexures', label: 'Annexures', stages: ['annexures'] },
+  { key: 'generate', label: 'Generate', stages: ['decision', 'customize', 'preview'] },
 ];
 
+const STEP_TIP: Record<string, string> = {
+  start: 'Choose your input source — template, upload, manual, or engagement',
+  validate: 'Review and select the extracted observations',
+  annexures: 'Link exception annexures to observations',
+  generate: 'Customize branding and generate the ATR',
+};
+
+const THEME_PRESETS: { name: string; color: string }[] = [
+  { name: 'Purple', color: '#6a12cd' },
+  { name: 'Indigo', color: '#3949ab' },
+  { name: 'Teal', color: '#0f766e' },
+  { name: 'Slate', color: '#334155' },
+];
+
+function formatBytes(b: number): string {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+}
+function baseName(name: string): string {
+  return name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+}
+
 /**
- * Upload Report → Generate ATR (guided 3-step flow).
- *  1. Template  — download the Excel/Word template of required observation fields,
- *                 or pick an existing report as the source (skips upload).
- *  2. Upload    — upload the filled template (or any report) + confirm report meta.
- *  3. Review    — extracted observations rendered into the standard ATR format.
+ * ATR Builder — the full guided journey:
+ *   Stage 0  Entry         — IRAME template vs upload existing report
+ *   Stage 1A Template       — pick format, download, upload the filled template
+ *   Stage 1B Upload         — upload report (+ optional annexures)
+ *   Stage 2  Validation     — extraction summary, selection, missing-field resolve
+ *   Stage 3  Annexures       — confirm observation → annexure mapping
+ *   Stage 4  Decision        — Generate ATR vs Manage Exceptions first
+ *   Stage 5A Preview         — editable ATR + Download / Save / Finalize
  */
-export default function UploadReportModal({ onClose, onAddToReport }: {
+export default function UploadReportModal({ onClose, onAddToReport, onFreeze, onManageExceptions, resumeDraft }: {
   onClose: () => void;
-  /** When provided, the review step shows "Add to Report" (instead of Download)
-   *  and hands the generated ATR back to be saved into My Reports. */
   onAddToReport?: (meta: AtrMeta, observations: AtrObservation[], insights: AtrInsight[]) => void;
+  onFreeze?: (meta: AtrMeta, observations: AtrObservation[], insights: AtrInsight[]) => void;
+  /** Stage 4 — "Manage Exceptions first" hands off to the case-management view. */
+  onManageExceptions?: () => void;
+  /** When returning from Manage Exceptions, resume the parked ATR at the preview. */
+  resumeDraft?: AtrReportData | null;
 }) {
   const { addToast } = useToast();
-  const [step, setStep] = useState<Step>('template');
-
+  const [stage, setStage] = useState<Stage>(resumeDraft ? 'preview' : 'entry');
+  const [startMode, setStartMode] = useState<StartMode>('template');
   const [file, setFile] = useState<File | null>(null);
+  const [annexFiles, setAnnexFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
-  const [auditTitle, setAuditTitle] = useState('');
-  const [auditPeriod, setAuditPeriod] = useState('');
-  const [preparedBy, setPreparedBy] = useState('');
-  const [auditEntity, setAuditEntity] = useState('');
-  const [showErrors, setShowErrors] = useState(false);
-  const [observations, setObservations] = useState<AtrObservation[]>([]);
-  const [insights, setInsights] = useState<AtrInsight[]>([]);
+  const [annexDragOver, setAnnexDragOver] = useState(false);
+  const [fileError, setFileError] = useState(false);
+  const [downloadedTmpls, setDownloadedTmpls] = useState<Set<string>>(() => {
+    try { const r = localStorage.getItem('irame.atr.tmplDownloaded'); return new Set<string>(r ? JSON.parse(r) : []); } catch { return new Set<string>(); }
+  });
+  const markDownloaded = (k: string) => setDownloadedTmpls(prev => {
+    const next = new Set(prev); next.add(k);
+    try { localStorage.setItem('irame.atr.tmplDownloaded', JSON.stringify([...next])); } catch { /* ignore */ }
+    return next;
+  });
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [procMsg, setProcMsg] = useState(0);
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [workObs, setWorkObs] = useState<AtrWorkObs[]>(() => resumeDraft ? toWorkObs(resumeDraft.observations) : []);
+  const [manualObs, setManualObs] = useState<AtrObservation[]>([{ title: '', description: '', risk: 'Medium', status: 'Open', actionPlans: [{ text: '' }] }]);
+  const [annexurePool, setAnnexurePool] = useState<AtrAnnexure[]>(ANNEXURE_POOL);
+  const [embeddedAnnex, setEmbeddedAnnex] = useState<AtrAnnexure[]>([]);
+  const [insights, setInsights] = useState<AtrInsight[]>(() => resumeDraft?.insights ?? []);
+  const [previewObs, setPreviewObs] = useState<AtrObservation[]>(() => resumeDraft?.observations ?? []);
+  const [previewEditing, setPreviewEditing] = useState(false);
+  const [showFormats, setShowFormats] = useState(false);
+
+  // Report metadata / customization (Stage: Customize). Restored from a parked draft.
+  const rm = resumeDraft?.meta;
+  const [auditTitle, setAuditTitle] = useState(rm?.auditTitle ?? '');
+  const [auditPeriod, setAuditPeriod] = useState(rm?.auditPeriod ?? '');
+  const [periodFrom, setPeriodFrom] = useState('');
+  const [periodTo, setPeriodTo] = useState('');
+  const [preparedBy, setPreparedBy] = useState(rm?.preparedBy ?? 'Internal Audit Team');
+  const [reviewedBy, setReviewedBy] = useState(rm?.reviewedBy ?? '');
+  const [auditEntity, setAuditEntity] = useState(rm?.auditEntity ?? 'Acme Corp — Internal Audit');
+  const [brandColor, setBrandColor] = useState<string>(rm?.brandColor ?? '');
+  const [hexDraft, setHexDraft] = useState<string>(rm?.brandColor ?? '');
+  const [reviewerOpen, setReviewerOpen] = useState(false);
+  const [logoDataUrl, setLogoDataUrl] = useState<string>(rm?.logoDataUrl ?? '');
+  const pickBrand = (c: string) => { setBrandColor(c); setHexDraft(c); };
+  const onHexChange = (v: string) => {
+    let s = v.trim(); if (s && !s.startsWith('#')) s = '#' + s;
+    setHexDraft(s);
+    if (/^#[0-9a-fA-F]{6}$/.test(s)) setBrandColor(s);
+    else if (s === '' || s === '#') setBrandColor('');
+  };
+  const reviewerMatches = PEOPLE.filter(p => p.name.toLowerCase().includes(reviewedBy.trim().toLowerCase()));
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+  // PDF export options.
+  const [pdfOrientation, setPdfOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [pdfFontScale, setPdfFontScale] = useState<number>(100);
+
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const annexRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  useFocusTrap(containerRef, step === 'template' || step === 'upload', onClose);
+
+  // Closing with work-in-progress prompts a discard confirmation.
+  const isDirty = stage !== 'entry' && (workObs.length > 0 || !!file || previewObs.length > 0);
+  const requestClose = () => { if (isDirty) setConfirmClose(true); else onClose(); };
+  useFocusTrap(containerRef, stage !== 'processing', requestClose);
 
   const { reportId, generatedOn } = useMemo(() => {
     const now = new Date();
-    const quarter = Math.floor(now.getMonth() / 3) + 1;
+    const q = Math.floor(now.getMonth() / 3) + 1;
     return {
-      reportId: `ATR-${now.getFullYear()}-Q${quarter}-001`,
+      reportId: `ATR-${now.getFullYear()}-Q${q}-001`,
       generatedOn: now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
     };
   }, []);
 
-  const fields = [
-    { id: 'ur-audit-title',  label: 'Audit Title',  value: auditTitle,  set: setAuditTitle,  placeholder: 'e.g. Procurement, Inventory & Dispatch Process A' },
-    { id: 'ur-audit-period', label: 'Audit Period', value: auditPeriod, set: setAuditPeriod, placeholder: 'e.g. Q3 FY 2024-25' },
-    { id: 'ur-prepared-by',  label: 'Prepared By',  value: preparedBy,  set: setPreparedBy,  placeholder: 'e.g. Internal Audit Team' },
-    { id: 'ur-audit-entity', label: 'Audit Entity', value: auditEntity, set: setAuditEntity, placeholder: 'e.g. ABC Manufacturing Cements Ltd' },
-  ];
+  // Cycle the processing status messages (procMsg is reset at the transition).
+  useEffect(() => {
+    if (stage !== 'processing') return;
+    const t = setInterval(() => setProcMsg(m => Math.min(m + 1, PROCESS_MESSAGES.length - 1)), 540);
+    return () => clearInterval(t);
+  }, [stage]);
 
-  const missing: { id: string; label: string }[] = [];
-  if (!file) missing.push({ id: 'ur-dropzone', label: 'Report file' });
-  fields.forEach(f => { if (!f.value.trim()) missing.push({ id: f.id, label: f.label }); });
 
-  const scrollToField = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); (el as HTMLInputElement).focus?.(); }
+  const meta: AtrMeta = {
+    reportId,
+    auditTitle: auditTitle || 'Action Taken Report',
+    auditPeriod: auditPeriod || `Q${Math.floor(new Date().getMonth() / 3) + 1} FY ${new Date().getFullYear()}`,
+    preparedBy: preparedBy || 'Internal Audit Team',
+    reviewedBy: reviewedBy || undefined,
+    generatedOn,
+    auditEntity: auditEntity || undefined,
+    brandColor: brandColor || undefined,
+    logoDataUrl: logoDataUrl || undefined,
   };
 
-  const acceptFile = (f: File | undefined) => {
+  const onLogoPick = (f?: File) => {
+    if (!f) return;
+    if (!/^image\//.test(f.type)) { addToast({ type: 'error', message: 'Logo must be an image (PNG/JPG/SVG).' }); return; }
+    const reader = new FileReader();
+    reader.onload = () => setLogoDataUrl(String(reader.result));
+    reader.readAsDataURL(f);
+  };
+
+  // Optional annexures uploader — reused on both the upload and template paths.
+  const annexureSection = (
+    <div className="mt-4 shrink-0">
+      <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5">
+        <Paperclip size={12} /> Upload Annexures <span className="text-ink-400 font-normal">(optional)</span>
+        {embeddedAnnex.length > 0 && <span className="ml-1 text-[0.625rem] font-semibold text-compliant-700">· {embeddedAnnex.length} auto-added from report</span>}
+      </label>
+      <input ref={annexRef} type="file" accept={ANNEX_ACCEPT} multiple className="sr-only" onChange={e => { const fs = Array.from(e.target.files ?? []); setAnnexFiles(prev => [...prev, ...fs]); }} />
+      {(embeddedAnnex.length > 0 || annexFiles.length > 0) && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {embeddedAnnex.map(a => (
+            <span key={a.id} className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-[7px] bg-compliant-50 border border-compliant/30 text-[0.6875rem] text-compliant-700">
+              <FileSpreadsheet size={11} /><span className="truncate max-w-[150px]" title={a.name}>{a.name.replace(" (from report)", "")}</span>
+              <span className="text-[0.5625rem] font-semibold bg-compliant/15 px-1 rounded-full">from report · {a.rows}</span>
+              <button onClick={() => setEmbeddedAnnex(prev => prev.filter(x => x.id !== a.id))} className="w-4 h-4 rounded-full text-compliant-700/60 hover:text-risk-700 flex items-center justify-center cursor-pointer"><X size={9} /></button>
+            </span>
+          ))}
+          {annexFiles.map((a, i) => (
+            <span key={i} className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-[7px] bg-paper-50 border border-canvas-border text-[0.6875rem] text-ink-700">
+              <FileSpreadsheet size={11} className="text-compliant-700" /><span className="truncate max-w-[160px]" title={a.name}>{a.name}</span>
+              <button onClick={() => setAnnexFiles(prev => prev.filter((_, j) => j !== i))} className="w-4 h-4 rounded-full text-ink-400 hover:text-risk-700 flex items-center justify-center cursor-pointer"><X size={9} /></button>
+            </span>
+          ))}
+        </div>
+      )}
+      <button
+        onClick={() => annexRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setAnnexDragOver(true); }}
+        onDragLeave={() => setAnnexDragOver(false)}
+        onDrop={e => {
+          e.preventDefault(); setAnnexDragOver(false);
+          const fs = Array.from(e.dataTransfer.files ?? []).filter(f => ['xlsx', 'xls', 'csv'].includes(f.name.split('.').pop()?.toLowerCase() ?? ''));
+          if (fs.length) setAnnexFiles(prev => [...prev, ...fs]);
+        }}
+        className={`w-full flex flex-col items-center justify-center gap-1.5 py-4 rounded-[10px] border-2 border-dashed text-[0.75rem] font-medium transition-colors cursor-pointer ${annexDragOver ? 'border-brand-500 bg-brand-50/60 text-brand-700' : 'border-canvas-border text-ink-500 hover:border-brand-300 hover:text-brand-700'}`}
+      >
+        <Paperclip size={16} className={annexDragOver ? 'text-brand-600' : 'text-ink-400'} />
+        Drag &amp; drop or <span className="text-brand-700">browse</span> annexure Excel / CSV files
+      </button>
+    </div>
+  );
+
+  const acceptInto = (set: (f: File) => void, accept: string[], f?: File) => {
     if (!f) return;
     const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
-    if (!ACCEPT_EXT.includes(ext)) {
-      addToast({ type: 'error', message: `Unsupported file type ".${ext}". Upload a PDF, Word, Excel or CSV file.` });
-      return;
-    }
-    setFile(f);
-    if (showErrors) setShowErrors(false);
+    if (!accept.includes(ext)) { addToast({ type: 'error', message: `Unsupported file ".${ext}".` }); return; }
+    set(f);
+    setFileError(false);
+    // Auto-detect annexures already embedded as extra sheets in the report.
+    extractEmbeddedAnnexures(f).then(setEmbeddedAnnex);
   };
 
-  const handleGenerate = async () => {
-    if (missing.length > 0) {
-      setShowErrors(true);
-      window.requestAnimationFrame(() => scrollToField(missing[0].id));
-      return;
-    }
-    setStep('extracting');
-    addToast({ type: 'info', message: `Extracting observations from ${file?.name}…` });
+  const runExtraction = async () => {
+    if (!auditTitle && file) setAuditTitle(baseName(file.name));
+    setProcMsg(0);
+    setStage('processing');
     const parsed = file ? await parseObservationsFromFile(file) : null;
     const useReal = !!parsed && parsed.length > 0;
     const obs = useReal ? parsed! : SAMPLE_OBSERVATIONS;
     const ins = useReal ? [] : SAMPLE_INSIGHTS;
+    // Annexure pool: first whatever's embedded in the report file, then any
+    // separately-uploaded annexures; fall back to the demo pool only if neither.
+    const uploaded = annexFiles.length > 0 ? await parseAnnexureFiles(annexFiles) : [];
+    const combined = [...embeddedAnnex, ...uploaded];
+    const pool = combined.length > 0 ? combined : ANNEXURE_POOL;
     window.setTimeout(() => {
-      setObservations(obs);
+      if (obs.length === 0) { setStage('report-upload'); addToast({ type: 'error', message: 'No structured observations found. Try the template, or a clearer report.' }); return; }
+      setAnnexurePool(pool);
+      setWorkObs(toWorkObs(obs, pool));
       setInsights(ins);
-      setStep('generated');
-      addToast({
-        type: 'success',
-        message: useReal
-          ? `Action Taken Report generated from ${obs.length} observation${obs.length === 1 ? '' : 's'}.`
-          : 'Action Taken Report generated from the uploaded report.',
-      });
-    }, 1300);
+      setStage('validation');
+      addToast({ type: 'success', message: `Extracted ${obs.length} observation${obs.length === 1 ? '' : 's'}.` });
+      if (embeddedAnnex.length > 0) addToast({ type: 'info', message: `Fetched ${embeddedAnnex.length} annexure${embeddedAnnex.length === 1 ? '' : 's'} embedded in the report.` });
+    }, 2200);
   };
 
-  // Final step — hand off to the comprehensive ATR document.
-  if (step === 'generated') {
-    const meta: AtrMeta = { reportId, auditTitle, auditPeriod, preparedBy, generatedOn, auditEntity };
-    return (
-      <ComprehensiveAtrModal
-        meta={meta}
-        observations={observations}
-        insights={insights}
-        onClose={onClose}
-        onAddToReport={onAddToReport ? () => onAddToReport(meta, observations, insights) : undefined}
-      />
-    );
-  }
+  const importEngagement = (id: string) => {
+    const eng = ENGAGEMENT_SOURCES.find(e => e.id === id);
+    if (!eng) return;
+    const obs = eng.observations();
+    if (!auditTitle) setAuditTitle(eng.name);
+    // Pre-fill the Audit Period date fields from the engagement's fiscal range;
+    // keep the friendly quarter label as the display string. User can override.
+    setPeriodFrom(eng.periodStart);
+    setPeriodTo(eng.periodEnd);
+    setAuditPeriod(eng.period);
+    setAnnexurePool(ANNEXURE_POOL);
+    setWorkObs(toWorkObs(obs, ANNEXURE_POOL));
+    setInsights(regenerateInsights(obs));
+    setStage('validation');
+    addToast({ type: 'success', message: `Imported ${obs.length} observation${obs.length === 1 ? '' : 's'} from ${eng.name}.` });
+  };
+
+  const continueManual = () => {
+    const valid = manualObs.filter(o => o.title.trim());
+    if (valid.length === 0) { addToast({ type: 'error', message: 'Add at least one observation with a title.' }); return; }
+    setAnnexurePool(ANNEXURE_POOL);
+    setWorkObs(toWorkObs(valid, ANNEXURE_POOL));
+    setInsights(regenerateInsights(valid));
+    setStage('annexures');
+  };
+
+  // Switching the input path resets any path-scoped validation so a red error
+  // from one path never bleeds into another (e.g. the "upload a file" error).
+  const selectPath = (mode: StartMode) => {
+    if (mode === startMode) return;
+    setStartMode(mode);
+    setFileError(false);
+  };
+
+  // Back clears any path-specific validation state so it doesn't bleed across paths.
+  const goBack = () => { setFileError(false); setReviewerOpen(false); setStage(backStage(stage)); };
+  const goPreview = () => { setPreviewObs(toAtrObservations(workObs)); setPreviewEditing(false); setStage('preview'); };
+  const goManageExceptions = (observations: AtrObservation[]) => {
+    if (!onManageExceptions) { addToast({ type: 'info', message: 'Manage Exceptions is not available here.' }); return; }
+    // Park the in-progress ATR so the user can return and finalize after review.
+    saveAtrDraft({ meta, observations, insights });
+    addToast({ type: 'info', message: 'ATR saved — finish reviewing exceptions, then return to generate it.' });
+    onManageExceptions();
+    onClose();
+  };
+  const regenInsights = () => { setInsights(regenerateInsights(previewObs)); addToast({ type: 'success', message: 'Key Insights regenerated.' }); };
+
+  const setPeriod = (from: string, to: string) => {
+    setPeriodFrom(from); setPeriodTo(to);
+    const f = (d: string) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    setAuditPeriod(from && to ? `${f(from)} – ${f(to)}` : (f(from) || f(to)));
+  };
+
+  const handleDownload = (kind: 'pdf' | 'word' | 'excel') => {
+    setShowFormats(false);
+    if (kind === 'excel') { exportAtrExcel(meta, previewObs); addToast({ type: 'success', message: 'ATR exported to Excel.' }); return; }
+    if (kind === 'word') { exportAtrWord(meta, previewObs); addToast({ type: 'success', message: 'ATR exported to Word.' }); return; }
+    // Apply the chosen page orientation + font scale via an injected @page rule.
+    const prev = document.getElementById('atr-print-opts');
+    if (prev) prev.remove();
+    const styleEl = document.createElement('style');
+    styleEl.id = 'atr-print-opts';
+    styleEl.textContent = `@page { size: A4 ${pdfOrientation}; } @media print { .report-printable { font-size: ${pdfFontScale}% !important; } }`;
+    document.head.appendChild(styleEl);
+    addToast({ type: 'info', message: `Opening print dialog — ${pdfOrientation}, ${pdfFontScale}% font. Choose “Save as PDF”.` });
+    window.setTimeout(() => window.print(), 250);
+  };
+
+  // ── Stepper active index ──
+  const activeStep = STEPPER.findIndex(s => s.stages.includes(stage));
+  const stepBackTarget = (key: string): Stage =>
+    key === 'start' ? 'entry' : key === 'validate' ? (startMode === 'manual' ? 'manual-edit' : 'validation') : key === 'annexures' ? 'annexures' : 'decision';
+  const canContinueValidation = selectedCount(workObs) > 0 && unresolvedCount(workObs) === 0;
+  const selForAnnex = workObs.filter(o => o.selected);
+  const linkedRows = totalExceptionRows(workObs);
 
   return (
     <>
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        transition={{ duration: 0.15 }}
-        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50"
-        onClick={onClose}
-      />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50" onClick={requestClose} />
       <motion.div
         ref={containerRef}
         initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Upload Report to Generate ATR"
-        tabIndex={-1}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[680px] max-h-[92vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col"
+        role="dialog" aria-modal="true" aria-label="ATR Builder" tabIndex={-1}
       >
-        {/* Title bar + stepper */}
+        {/* Header + stepper */}
         <header className="shrink-0 px-6 pt-3.5 pb-3 border-b border-canvas-border">
           <div className="flex items-center justify-between gap-4 mb-3">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
-                <Sparkles size={16} />
-              </div>
+              <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Sparkles size={16} /></div>
               <div>
-                <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Generate ATR from Observations</h2>
-                <p className="text-[0.75rem] text-ink-500 leading-snug">Download the template, fill in your observations, and upload to generate the report.</p>
+                <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Build an Action Taken Report</h2>
+                <p className="text-[0.75rem] text-ink-500 leading-snug">Start from a template or report, validate, link annexures, then generate.</p>
               </div>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Close">
-              <X size={16} />
-            </button>
+            <button onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Close"><X size={16} /></button>
           </div>
-          {/* Stepper */}
           <div className="flex items-center gap-2">
-            {STEP_LABELS.map((s, i) => {
-              const activeIdx = step === 'template' ? 0 : 1; // 'review' only reached after unmount
-              const state = i < activeIdx ? 'done' : i === activeIdx ? 'active' : 'todo';
+            {STEPPER.map((s, i) => {
+              const state = i < activeStep ? 'done' : i === activeStep ? 'active' : 'todo';
+              const canGoBack = state === 'done' && stage !== 'processing';
+              const tip = state === 'done' ? 'Click to go back to this step'
+                : state === 'active' ? STEP_TIP[s.key]
+                : `Complete Step ${activeStep + 1} to unlock`;
               return (
                 <div key={s.key} className="flex items-center gap-2">
-                  <span className={`inline-flex items-center gap-1.5 h-7 pl-1.5 pr-2.5 rounded-full text-[0.75rem] font-semibold ${
-                    state === 'active' ? 'bg-brand-50 text-brand-700' : state === 'done' ? 'bg-compliant-50 text-compliant-700' : 'bg-draft-50 text-ink-500'
-                  }`}>
-                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[0.625rem] ${
-                      state === 'active' ? 'bg-brand-600 text-white' : state === 'done' ? 'bg-compliant text-white' : 'bg-ink-300 text-white'
-                    }`}>
-                      {state === 'done' ? <Check size={10} /> : i + 1}
-                    </span>
+                  <button
+                    type="button"
+                    title={tip}
+                    aria-label={canGoBack ? `Go back to ${s.label}` : undefined}
+                    aria-disabled={!canGoBack}
+                    onClick={() => canGoBack && setStage(stepBackTarget(s.key))}
+                    className={`group inline-flex items-center gap-1.5 h-7 pl-1.5 pr-2.5 rounded-full text-[0.75rem] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${state === 'active' ? 'bg-brand-50 text-brand-700' : state === 'done' ? 'bg-compliant-50 text-compliant-700 hover:bg-compliant-100 cursor-pointer' : 'bg-draft-50 text-ink-500 hover:bg-draft-100 cursor-not-allowed'}`}
+                  >
+                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[0.625rem] ${state === 'active' ? 'bg-brand-600 text-white' : state === 'done' ? 'bg-compliant text-white' : 'bg-ink-300 text-white'}`}>{state === 'done' ? <Check size={10} /> : i + 1}</span>
                     {s.label}
-                  </span>
-                  {i < STEP_LABELS.length - 1 && <span className="w-5 h-px bg-canvas-border" />}
+                    {canGoBack && <ArrowLeft size={11} className="-mr-0.5 max-w-0 opacity-0 group-hover:max-w-[14px] group-hover:opacity-100 transition-all duration-150" />}
+                  </button>
+                  {i < STEPPER.length - 1 && <span className="w-5 h-px bg-canvas-border" />}
                 </div>
               );
             })}
@@ -194,174 +401,538 @@ export default function UploadReportModal({ onClose, onAddToReport }: {
 
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-y-auto">
-          {step === 'extracting' ? (
-            <div className="flex flex-col items-center justify-center gap-4 px-6 py-20">
-              <div className="relative">
-                <Loader2 size={32} className="text-brand-600 animate-spin" />
-                <Sparkles size={14} className="text-brand-500 absolute -top-1 -right-1" />
-              </div>
-              <div className="text-center">
-                <p className="text-[0.9375rem] font-semibold text-ink-900 mb-1">Extracting observations…</p>
-                <p className="text-[0.8125rem] text-ink-500">
-                  Reading <span className="font-mono text-ink-700">{file?.name}</span> and mapping it into the ATR format.
-                </p>
-              </div>
-            </div>
-          ) : step === 'template' ? (
-            <div className="p-6 grid md:grid-cols-2 gap-6">
-              {/* Required fields */}
-              <div>
-                <div className="text-[0.75rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-3">Required details per observation</div>
-                <ul className="space-y-2">
-                  {REQUIRED_FIELDS.map(f => (
-                    <li key={f.key} className="flex items-start gap-2.5">
-                      <span className="mt-0.5 w-4 h-4 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Check size={11} /></span>
+          {/* Stage 0 — Entry (merged with the template detail) */}
+          {stage === 'entry' && (
+            <div className="p-6">
+              <h3 className="text-[1rem] font-semibold text-ink-900 text-center mb-0.5">How would you like to start?</h3>
+              <p className="text-[0.75rem] text-ink-500 text-center mb-4">Choose the input that matches what you have.</p>
+
+              {/* Compact, horizontal start cards — 4 input paths */}
+              <div className="grid grid-cols-2 gap-3">
+                {([
+                  { mode: 'template' as const, icon: LayoutTemplate, tint: 'brand', title: 'Use IRAME Template', rec: true, desc: 'Download our structured template, fill offline, and upload it back.' },
+                  { mode: 'upload' as const, icon: Upload, tint: 'evidence', title: 'Upload Existing Report', rec: false, desc: "Already have an audit report? Upload it and we'll extract the observations." },
+                  { mode: 'manual' as const, icon: PencilLine, tint: 'brand', title: 'Enter Observations Manually', rec: false, desc: 'Type observations straight into an editable table — no file needed.' },
+                  { mode: 'engagement' as const, icon: Briefcase, tint: 'evidence', title: 'Import from Engagement', rec: false, desc: 'Pull observations from an existing audit engagement.' },
+                ]).map(c => {
+                  const active = startMode === c.mode;
+                  return (
+                    <button key={c.mode} onClick={() => selectPath(c.mode)} aria-pressed={active} className={`flex items-start gap-3 rounded-[12px] border p-3.5 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/50 ${active ? 'border-brand-500 ring-2 ring-brand-600/15 bg-brand-50/40' : 'border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/20'}`}>
+                      <span className={`w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors ${active ? (c.tint === 'brand' ? 'bg-brand-600 text-white' : 'bg-evidence-600 text-white') : (c.tint === 'brand' ? 'bg-brand-50 text-brand-700' : 'bg-evidence-50 text-evidence-700')}`}><c.icon size={17} /></span>
                       <div className="min-w-0">
-                        <div className="text-[0.8125rem] font-semibold text-ink-800 leading-tight">{f.label}</div>
-                        <div className="text-[0.6875rem] text-ink-500 leading-snug">{f.hint}</div>
+                        <div className="text-[0.875rem] font-semibold text-ink-900 leading-tight flex items-center gap-1.5 flex-wrap">{c.title}{c.rec && <span className="text-[0.5625rem] font-semibold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded-full">Recommended</span>}</div>
+                        <p className="text-[0.6875rem] text-ink-500 leading-snug mt-1">{c.desc}</p>
                       </div>
-                    </li>
-                  ))}
-                </ul>
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* Download template */}
-              <div className="flex flex-col gap-3">
-                <div className="rounded-[12px] border border-canvas-border bg-canvas p-5">
-                  <div className="text-[0.875rem] font-semibold text-ink-900 mb-1">Download the template</div>
-                  <p className="text-[0.75rem] text-ink-500 leading-relaxed mb-4">Fill one row per observation, then upload it in the next step. The Excel sheet includes an example row and an Instructions tab.</p>
-                  <div className="flex flex-col gap-2.5">
-                    <button
-                      onClick={() => { downloadExcelTemplate(); addToast({ type: 'success', message: 'Excel template downloaded.' }); }}
-                      className="inline-flex items-center justify-between gap-2 h-11 px-4 rounded-[10px] border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40 transition-colors cursor-pointer group"
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <span className="w-8 h-8 rounded-[8px] bg-compliant-50 text-compliant-700 flex items-center justify-center"><FileSpreadsheet size={16} /></span>
-                        <span className="text-[0.8125rem] font-semibold text-ink-800">Excel template</span>
-                      </span>
-                      <span className="text-[0.6875rem] font-semibold text-brand-700">.xlsx</span>
-                    </button>
-                    <button
-                      onClick={() => { downloadWordTemplate(); addToast({ type: 'success', message: 'Word template downloaded.' }); }}
-                      className="inline-flex items-center justify-between gap-2 h-11 px-4 rounded-[10px] border border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40 transition-colors cursor-pointer"
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <span className="w-8 h-8 rounded-[8px] bg-brand-50 text-brand-700 flex items-center justify-center"><FileText size={16} /></span>
-                        <span className="text-[0.8125rem] font-semibold text-ink-800">Word template</span>
-                      </span>
-                      <span className="text-[0.6875rem] font-semibold text-brand-700">.doc</span>
-                    </button>
+              {/* Required observation details + (dynamic) right panel */}
+              {(startMode === 'template' || startMode === 'upload') && (
+              <div className="grid md:grid-cols-[1.5fr_1fr] gap-x-6 gap-y-4 mt-5 pt-4 border-t border-canvas-border">
+                <div>
+                  <div className="flex items-center gap-1.5 mb-2.5">
+                    <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500">Required details per observation</span>
+                    <span className="inline-flex items-center h-4 px-1.5 rounded-full bg-brand-50 text-brand-700 text-[0.5625rem] font-bold tabular-nums">11</span>
                   </div>
-                </div>
-                <p className="text-[0.6875rem] text-ink-500 leading-relaxed px-1">
-                  Already have a report? You can also upload a PDF, Word, Excel or CSV directly in the next step — we'll extract the observations from it.
-                </p>
-              </div>
-            </div>
-          ) : (
-            /* step === 'upload' */
-            <div className="p-6 space-y-5">
-              {showErrors && missing.length > 0 && (
-                <div role="alert" className="border border-risk/30 bg-risk-50 rounded-[8px] px-3 py-2 text-[0.75rem] text-risk-700">
-                  <div className="font-semibold mb-0.5 flex items-center gap-1.5"><AlertCircle size={13} />{missing.length === 1 ? 'One field needs attention' : `${missing.length} fields need attention`}</div>
-                  <ul className="space-y-0.5">
-                    {missing.map(m => (
-                      <li key={m.id}>
-                        <button type="button" onClick={() => scrollToField(m.id)} className="underline underline-offset-2 hover:text-risk cursor-pointer">{m.label} is required</button>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                    {[
+                      { key: 'title', label: 'Observation Title', hint: REQUIRED_FIELDS[0].hint },
+                      { key: 'category', label: 'Observation Category / Area', hint: 'Audited process or function (e.g. Accounts Payable).' },
+                      ...REQUIRED_FIELDS.slice(1).map(f => ({ key: f.key as string, label: f.label, hint: f.hint })),
+                    ].map(f => (
+                      <li key={f.key} className="flex items-start gap-2">
+                        <span className="mt-[3px] w-3.5 h-3.5 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Check size={9} /></span>
+                        <div className="min-w-0">
+                          <div className="text-[0.75rem] font-semibold text-ink-800 leading-tight">{f.label}</div>
+                          <div className="text-[0.625rem] text-ink-500 leading-snug">{f.hint}</div>
+                        </div>
                       </li>
                     ))}
                   </ul>
                 </div>
-              )}
 
-              {/* Dropzone */}
-              <div>
-                <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">Upload filled template or report <span className="text-risk">*</span></label>
-                <input ref={fileInputRef} id="ur-file-input" type="file" accept={ACCEPT} className="sr-only" onChange={e => acceptFile(e.target.files?.[0])} />
-                {file ? (
-                  <div className="flex items-center gap-3 px-4 py-3 border border-canvas-border rounded-[10px] bg-canvas">
-                    <div className="w-9 h-9 rounded-[8px] bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[0.8125rem] font-semibold text-ink-900 truncate">{file.name}</div>
-                      <div className="text-[0.6875rem] text-ink-500 flex items-center gap-1.5"><CheckCircle2 size={11} className="text-compliant" /> Ready · {formatBytes(file.size)}</div>
+                {startMode === 'template' ? (
+                  <div className="flex flex-col gap-2.5">
+                    <div className="rounded-[12px] border border-canvas-border bg-canvas p-4">
+                      <div className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5">Download the template</div>
+                      <p className="text-[0.625rem] text-ink-500 leading-relaxed mb-3">Fill one row per observation, then upload it in the next step. Includes an example row and Instructions tab.</p>
+                      <div className="flex flex-col gap-2">
+                        <button
+                          onClick={() => { downloadExcelTemplate(); markDownloaded('excel'); addToast({ type: 'success', message: 'Excel template downloaded.' }); }}
+                          className={`inline-flex items-center justify-between gap-2 h-10 px-3.5 rounded-[10px] border transition-colors cursor-pointer ${downloadedTmpls.has('excel') ? 'border-compliant/40 bg-compliant-50/40' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40'}`}
+                        >
+                          <span className="flex items-center gap-2.5"><span className="w-7 h-7 rounded-[8px] bg-compliant-50 text-compliant-700 flex items-center justify-center"><FileSpreadsheet size={15} /></span><span className="text-[0.8125rem] font-semibold text-ink-800">Excel template</span></span>
+                          {downloadedTmpls.has('excel') ? <span className="text-[0.625rem] font-semibold text-compliant-700 flex items-center gap-1"><Check size={11} /> Downloaded</span> : <span className="text-[0.625rem] font-semibold text-brand-700">.xlsx</span>}
+                        </button>
+                        <button
+                          onClick={() => { downloadWordTemplate(); markDownloaded('word'); addToast({ type: 'success', message: 'Word template downloaded.' }); }}
+                          className={`inline-flex items-center justify-between gap-2 h-10 px-3.5 rounded-[10px] border transition-colors cursor-pointer ${downloadedTmpls.has('word') ? 'border-compliant/40 bg-compliant-50/40' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40'}`}
+                        >
+                          <span className="flex items-center gap-2.5"><span className="w-7 h-7 rounded-[8px] bg-brand-50 text-brand-700 flex items-center justify-center"><FileText size={15} /></span><span className="text-[0.8125rem] font-semibold text-ink-800">Word template</span></span>
+                          {downloadedTmpls.has('word') ? <span className="text-[0.625rem] font-semibold text-compliant-700 flex items-center gap-1"><Check size={11} /> Downloaded</span> : <span className="text-[0.625rem] font-semibold text-brand-700">.doc</span>}
+                        </button>
+                      </div>
+                      <button onClick={() => { exportAtrExcel({ reportId: 'ATR-SAMPLE' }, SAMPLE_OBSERVATIONS); markDownloaded('sample'); addToast({ type: 'success', message: 'Filled sample downloaded.' }); }} className="mt-2.5 text-[0.625rem] font-semibold text-brand-700 hover:underline cursor-pointer inline-flex items-center gap-1">
+                        {downloadedTmpls.has('sample') ? <><Check size={11} /> Sample downloaded</> : <>↓ Download a filled sample (example data)</>}
+                      </button>
                     </div>
-                    <button onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} className="w-7 h-7 rounded-full text-ink-500 hover:text-risk-700 hover:bg-risk-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Remove file"><X size={14} /></button>
                   </div>
                 ) : (
-                  <button
-                    id="ur-dropzone"
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                    onDragLeave={() => setDragOver(false)}
-                    onDrop={e => { e.preventDefault(); setDragOver(false); acceptFile(e.dataTransfer.files?.[0]); }}
-                    className={`w-full flex flex-col items-center justify-center gap-2 px-4 py-7 rounded-[10px] border-2 border-dashed transition-colors cursor-pointer ${
-                      dragOver ? 'border-brand-500 bg-brand-50/60' : showErrors && !file ? 'border-risk/50 bg-risk-50/40' : 'border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/30'
-                    }`}
-                  >
-                    <CloudUpload size={22} className={dragOver ? 'text-brand-600' : 'text-ink-400'} />
-                    <div className="text-center">
-                      <div className="text-[0.8125rem] font-semibold text-ink-800">Drag & drop or <span className="text-brand-700">browse</span></div>
-                      <div className="text-[0.6875rem] text-ink-500 mt-0.5">Excel / CSV is read for real · PDF / Word is auto-extracted</div>
-                    </div>
-                  </button>
+                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-4">
+                    <div className="flex items-center gap-2 mb-1.5"><FileCheck2 size={15} className="text-brand-600" /><div className="text-[0.8125rem] font-semibold text-ink-900">What we'll extract</div></div>
+                    <p className="text-[0.625rem] text-ink-500 leading-relaxed mb-3">Upload any PDF, Word, Excel or CSV report. We read it and pull out:</p>
+                    <ul className="space-y-1.5">
+                      {['Observations & their descriptions', 'Risk significance & classification', 'Recommendations / action plans', 'Evidence & verification notes'].map(t => (
+                        <li key={t} className="flex items-center gap-2 text-[0.6875rem] text-ink-700"><Check size={12} className="text-compliant-700 shrink-0" /> {t}</li>
+                      ))}
+                    </ul>
+                    <p className="text-[0.625rem] text-ink-400 leading-relaxed mt-3">You'll review and edit everything before anything is finalized.</p>
+                  </div>
                 )}
               </div>
+              )}
 
-              {/* Report metadata */}
-              <div className="grid grid-cols-2 gap-4">
-                {fields.map(f => {
-                  const invalid = showErrors && !f.value.trim();
-                  return (
-                    <div key={f.id} className={f.id === 'ur-audit-title' ? 'col-span-2' : ''}>
-                      <label htmlFor={f.id} className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">{f.label} <span className="text-risk">*</span></label>
-                      <input
-                        id={f.id}
-                        value={f.value}
-                        onChange={e => { f.set(e.target.value); if (showErrors && e.target.value.trim()) setShowErrors(false); }}
-                        placeholder={f.placeholder}
-                        className={`w-full px-3 py-2.5 rounded-[8px] border text-[0.8125rem] text-ink-900 focus:outline-none focus:ring-4 transition-colors ${
-                          invalid ? 'border-risk/50 focus:border-risk focus:ring-risk/15' : 'border-canvas-border focus:border-brand-600 focus:ring-brand-600/15'
-                        }`}
-                      />
+              {/* Contextual panel for the manual / engagement paths */}
+              {(startMode === 'manual' || startMode === 'engagement') && (
+              <div className="grid md:grid-cols-[1.5fr_1fr] gap-x-6 gap-y-4 mt-5 pt-4 border-t border-canvas-border">
+                <div>
+                  <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-2.5">
+                    {startMode === 'manual' ? 'How manual entry works' : 'What we pull from the engagement'}
+                  </div>
+                  <ul className="space-y-2">
+                    {(startMode === 'manual'
+                      ? ['Each row becomes one observation in your ATR.', 'Add as many rows as you need — no file required.', 'Fill title, risk, classification, status and action plans inline.', 'Review everything before the ATR is generated.']
+                      : ['All findings and their descriptions.', 'Risk significance and classification.', 'Action plans and remediation status.', 'Linked evidence and exception annexures.']
+                    ).map(t => (
+                      <li key={t} className="flex items-start gap-2 text-[0.75rem] text-ink-700">
+                        <span className="mt-[3px] w-3.5 h-3.5 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Check size={9} /></span>
+                        {t}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {startMode === 'manual' ? (
+                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-4">
+                    <div className="flex items-center gap-2 mb-2"><PencilLine size={15} className="text-brand-600" /><div className="text-[0.8125rem] font-semibold text-ink-900">You'll fill a table like this</div></div>
+                    <div className="rounded-[8px] border border-canvas-border overflow-hidden text-[0.625rem]">
+                      <div className="grid grid-cols-[1.6fr_0.7fr_0.9fr] bg-paper-50 border-b border-canvas-border px-2 py-1 font-semibold uppercase tracking-[0.08em] text-ink-500">
+                        <span>Observation</span><span>Risk</span><span>Status</span>
+                      </div>
+                      {[['Duplicate vendor records', 'High', 'Open'], ['Missing 3-way match', 'Medium', 'In Progress']].map((r, ri) => (
+                        <div key={ri} className="grid grid-cols-[1.6fr_0.7fr_0.9fr] px-2 py-1.5 border-b border-canvas-border items-center">
+                          <span className="text-ink-700 truncate">{r[0]}</span>
+                          <span className="text-ink-600">{r[1]}</span>
+                          <span className="text-ink-600">{r[2]}</span>
+                        </div>
+                      ))}
+                      <div className="px-2 py-1.5 text-brand-700 font-semibold flex items-center gap-1"><Plus size={10} /> Add row</div>
                     </div>
+                    <p className="text-[0.625rem] text-ink-500 leading-relaxed mt-2.5">Each row becomes an observation. Add as many rows as needed.</p>
+                  </div>
+                ) : (
+                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-4">
+                    <div className="flex items-center gap-2 mb-1.5"><Briefcase size={15} className="text-evidence-600" /><div className="text-[0.8125rem] font-semibold text-ink-900">Straight from your engagement</div></div>
+                    <p className="text-[0.625rem] text-ink-500 leading-relaxed mb-3">We'll pull all findings, classifications, and action plans from your selected engagement — pre-filled and ready for you to review.</p>
+                    <div className="flex items-center gap-2 rounded-[8px] bg-evidence-50/60 px-2.5 py-2 text-[0.625rem] text-evidence-700"><FileCheck2 size={12} className="shrink-0" /> Nothing is finalized until you review and confirm.</div>
+                  </div>
+                )}
+              </div>
+              )}
+            </div>
+          )}
+
+          {/* Stage 1A.2/3 — Upload filled template */}
+          {stage === 'template-upload' && (
+            <div className="p-6 h-full flex flex-col">
+              <div className="flex items-start gap-2 border border-brand-200 bg-brand-50/40 rounded-[8px] px-3 py-2 mb-4 text-[0.75rem] text-brand-700">
+                <ClipboardList size={14} className="mt-0.5 shrink-0" />
+                <span>Once you've filled the template, upload it below. We'll extract every observation and let you review before anything is finalized.</span>
+              </div>
+              <Dropzone
+                grow
+                id="ur-template-dz" file={file} dragOver={dragOver} setDragOver={setDragOver} error={fileError}
+                onPick={() => fileRef.current?.click()}
+                onDrop={f => acceptInto(setFile, ['xlsx', 'xls', 'docx', 'doc', 'csv'], f)}
+                onClear={() => { setFile(null); setEmbeddedAnnex([]); if (fileRef.current) fileRef.current.value = ""; }}
+                label="Upload filled template" hint="Excel / Word / CSV · max 25 MB" />
+              <input ref={fileRef} type="file" accept={TEMPLATE_ACCEPT} className="sr-only" onChange={e => acceptInto(setFile, ['xlsx', 'xls', 'docx', 'doc', 'csv'], e.target.files?.[0])} />
+              {annexureSection}
+            </div>
+          )}
+
+          {/* Stage 1B — Upload report */}
+          {stage === 'report-upload' && (
+            <div className="p-6 h-full flex flex-col">
+              <div className="flex items-start gap-2 text-[0.75rem] text-ink-500 border border-canvas-border bg-canvas rounded-[8px] px-3 py-2 mb-4">
+                <FileCheck2 size={14} className="mt-0.5 shrink-0 text-brand-600" />
+                <span>We'll attempt to extract all required ATR details. You'll review before anything is finalized.</span>
+              </div>
+              <Dropzone
+                grow
+                id="ur-report-dz" file={file} dragOver={dragOver} setDragOver={setDragOver} error={fileError}
+                onPick={() => fileRef.current?.click()}
+                onDrop={f => acceptInto(setFile, ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'csv', 'ppt', 'pptx'], f)}
+                onClear={() => { setFile(null); setEmbeddedAnnex([]); if (fileRef.current) fileRef.current.value = ""; }}
+                label="Upload report" hint="PDF / Word / Excel / PPT · Excel & CSV read for real" />
+              <input ref={fileRef} type="file" accept={REPORT_ACCEPT} className="sr-only" onChange={e => acceptInto(setFile, ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'csv', 'ppt', 'pptx'], e.target.files?.[0])} />
+              {annexureSection}
+            </div>
+          )}
+
+          {/* Stage: Import from Engagement */}
+          {stage === 'engagement-pick' && (
+            <div className="p-6">
+              <h3 className="text-[0.9375rem] font-semibold text-ink-900 mb-1">Import from an engagement</h3>
+              <p className="text-[0.75rem] text-ink-500 mb-4">Pick an engagement — we'll pull its observations into the ATR for you to review.</p>
+              <div className="space-y-2.5">
+                {ENGAGEMENT_SOURCES.map(eng => {
+                  const obs = eng.observations();
+                  const n = obs.length;
+                  const st = statusBreakdown(obs);
+                  const ready = n > 0 && st.Complete === n; // all findings remediated
+                  // Report-readiness at a glance: how many findings are remediated.
+                  const chips = ([
+                    ['Complete', st.Complete, 'bg-compliant-50 text-compliant-700'],
+                    ['In Progress', st['In Progress'], 'bg-mitigated-50 text-mitigated-700'],
+                    ['Open', st.Open, 'bg-paper-50 text-ink-600 border border-canvas-border'],
+                    ['Overdue', st.Overdue, 'bg-risk-50 text-risk-700'],
+                  ] as const).filter(([, c]) => c > 0);
+                  return (
+                    <button key={eng.id} onClick={() => importEngagement(eng.id)} className="w-full flex items-center gap-3 px-4 py-3 rounded-[12px] border border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/30 transition-colors cursor-pointer text-left">
+                      <span className="w-9 h-9 rounded-[10px] bg-evidence-50 text-evidence-700 flex items-center justify-center shrink-0"><Briefcase size={17} /></span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[0.875rem] font-semibold text-ink-900 truncate">{eng.name}</span>
+                        <span className="mt-0.5 flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[0.6875rem] text-ink-500">{eng.period} · {n} observation{n === 1 ? '' : 's'}</span>
+                          {chips.map(([label, count, cls]) => (
+                            <span key={label} className={`inline-flex items-center h-[18px] px-1.5 rounded-full text-[0.5625rem] font-semibold tabular-nums ${cls}`}>{count} {label}</span>
+                          ))}
+                        </span>
+                      </span>
+                      {ready && <span className="inline-flex items-center gap-1 h-6 px-2 rounded-full bg-compliant-50 text-compliant-700 border border-compliant/30 text-[0.625rem] font-semibold shrink-0" title="All observations are remediated"><CheckCircle2 size={11} /> ATR ready</span>}
+                      <ArrowRight size={16} className="text-ink-400 shrink-0" />
+                    </button>
                   );
                 })}
-                <div>
-                  <div className="text-[0.75rem] font-semibold text-ink-800 mb-1.5">Report ID</div>
-                  <div className="px-3 py-2.5 rounded-[8px] border border-dashed border-canvas-border bg-canvas text-[0.8125rem] font-mono text-ink-600">{reportId}</div>
-                </div>
-                <div>
-                  <div className="text-[0.75rem] font-semibold text-ink-800 mb-1.5">Generated On</div>
-                  <div className="px-3 py-2.5 rounded-[8px] border border-dashed border-canvas-border bg-canvas text-[0.8125rem] text-ink-600">{generatedOn}</div>
-                </div>
               </div>
             </div>
+          )}
+
+          {/* Stage: Manual observation entry */}
+          {stage === 'manual-edit' && (
+            <div>
+              <div className="px-6 pt-5 pb-1">
+                <div className="flex items-start gap-2 text-[0.75rem] text-ink-500 border border-canvas-border bg-canvas rounded-[8px] px-3 py-2">
+                  <PencilLine size={14} className="mt-0.5 shrink-0 text-brand-600" />
+                  <span>Enter your observations directly. Add as many as you need — each becomes a section in the ATR.</span>
+                </div>
+              </div>
+              <AtrItemsEditor observations={manualObs} onChange={setManualObs} />
+            </div>
+          )}
+
+          {/* Processing */}
+          {stage === 'processing' && (
+            <div className="flex flex-col items-center justify-center gap-4 px-6 py-24">
+              <div className="relative"><Loader2 size={32} className="text-brand-600 animate-spin" /><Sparkles size={14} className="text-brand-500 absolute -top-1 -right-1" /></div>
+              <div className="text-center">
+                <p className="text-[0.9375rem] font-semibold text-ink-900 mb-1">{PROCESS_MESSAGES[procMsg]}</p>
+                <p className="text-[0.8125rem] text-ink-500">Reading <span className="font-mono text-ink-700">{file?.name ?? 'your report'}</span> and mapping it into the ATR format.</p>
+              </div>
+              <div className="w-56 h-1 rounded-full bg-draft-50 overflow-hidden"><div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${((procMsg + 1) / PROCESS_MESSAGES.length) * 100}%` }} /></div>
+            </div>
+          )}
+
+          {/* Stage 2 */}
+          {stage === 'validation' && <AtrValidationStep observations={workObs} onChange={setWorkObs} />}
+
+          {/* Stage 3 */}
+          {stage === 'annexures' && <AtrAnnexureStep observations={workObs} pool={annexurePool} onChange={setWorkObs} />}
+
+          {/* Stage 4 — Decision */}
+          {stage === 'decision' && (
+            <div className="p-6">
+              <h3 className="text-[1.0625rem] font-semibold text-ink-900 text-center mb-1">How would you like to proceed?</h3>
+              <p className="text-[0.8125rem] text-ink-500 text-center mb-6">{selForAnnex.length} observations · {linkedRows} linked exception rows.</p>
+              <div className="grid grid-cols-2 gap-4 max-w-[720px] mx-auto">
+                <button onClick={() => setStage('customize')} className="text-left rounded-[14px] border border-canvas-border bg-canvas p-5 hover:border-brand-400 hover:bg-brand-50/30 hover:shadow-lg hover:shadow-brand-900/5 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40">
+                  <span className="w-11 h-11 rounded-[12px] bg-brand-50 text-brand-700 flex items-center justify-center mb-3 group-hover:bg-brand-600 group-hover:text-white transition-colors"><FileText size={20} /></span>
+                  <div className="text-[0.9375rem] font-semibold text-ink-900 mb-1">Generate ATR Only</div>
+                  <p className="text-[0.75rem] text-ink-500 leading-relaxed">Skip case management and go directly to the ATR preview. You can come back and manage exceptions later.</p>
+                </button>
+                <button
+                  onClick={() => goManageExceptions(toAtrObservations(workObs))}
+                  className="text-left rounded-[14px] border border-canvas-border bg-canvas p-5 hover:border-brand-400 hover:bg-brand-50/30 hover:shadow-lg hover:shadow-brand-900/5 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40">
+                  <span className="w-11 h-11 rounded-[12px] bg-evidence-50 text-evidence-700 flex items-center justify-center mb-3 group-hover:bg-evidence-600 group-hover:text-white transition-colors"><ListChecks size={20} /></span>
+                  <div className="text-[0.9375rem] font-semibold text-ink-900 mb-1">Manage Exceptions First</div>
+                  <p className="text-[0.75rem] text-ink-500 leading-relaxed">Review the exception cases linked to observations before generating. Classify, assign action plans, and review evidence.</p>
+                  <p className="mt-2 inline-flex items-center gap-1.5 text-[0.6875rem] font-medium text-evidence-700 bg-evidence-50 rounded-[6px] px-2 py-1">
+                    <ArrowRight size={11} className="shrink-0" /> Takes you to the Manage Exceptions screen — generate the ATR after reviewing.
+                  </p>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Stage: Customize */}
+          {stage === 'customize' && (
+            <div className="p-6 space-y-5">
+              <div>
+                <h3 className="text-[0.9375rem] font-semibold text-ink-900 mb-0.5">Customize the report</h3>
+                <p className="text-[0.75rem] text-ink-500">Cover details, audit period, reviewer and branding — all optional.</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 flex items-center justify-between">
+                    <span>Audit Title <span className="text-ink-400 font-normal">· report name</span></span>
+                    {!auditTitle && <button onClick={() => setAuditTitle(`Action Taken Report — ${new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}`)} className="text-[0.6875rem] font-semibold text-brand-700 hover:underline cursor-pointer">Suggest a name</button>}
+                  </label>
+                  <input value={auditTitle} onChange={e => setAuditTitle(e.target.value)} placeholder="e.g. Procure-to-Pay Controls Review" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                  <div className="text-[0.625rem] text-ink-500 mt-1">Saved to My Reports as this name.</div>
+                </div>
+                <div className="col-span-2">
+                  <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">Audit Entity</label>
+                  <input value={auditEntity} onChange={e => setAuditEntity(e.target.value)} placeholder="e.g. Acme Corp — Internal Audit" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5"><Calendar size={12} /> Audit Period</label>
+                  <div className="flex items-center gap-2">
+                    <input type="date" value={periodFrom} onChange={e => setPeriod(e.target.value, periodTo)} className="flex-1 px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                    <span className="text-ink-400 text-[0.75rem]">to</span>
+                    <input type="date" value={periodTo} onChange={e => setPeriod(periodFrom, e.target.value)} className="flex-1 px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                  </div>
+                  {auditPeriod && <div className="text-[0.6875rem] text-ink-500 mt-1">Shows as: <span className="font-medium text-ink-700">{auditPeriod}</span></div>}
+                </div>
+                <div>
+                  <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">Prepared By</label>
+                  <input value={preparedBy} onChange={e => setPreparedBy(e.target.value)} placeholder="Internal Audit Team" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                </div>
+                <div className="relative">
+                  <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">Reviewed By</label>
+                  <input value={reviewedBy} onChange={e => { setReviewedBy(e.target.value); setReviewerOpen(true); }} onFocus={() => setReviewerOpen(true)} placeholder="Search team members…" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                  {reviewerOpen && reviewerMatches.length > 0 && (
+                    <>
+                      <div className="fixed inset-0 z-[65]" onClick={() => setReviewerOpen(false)} />
+                      <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-[70] max-h-44 overflow-y-auto bg-white border border-canvas-border shadow-xl rounded-[10px] p-1">
+                        {reviewerMatches.map(p => (
+                          <button key={p.id} onClick={() => { setReviewedBy(p.name); setReviewerOpen(false); }} className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[7px] hover:bg-brand-50 text-left cursor-pointer">
+                            <span className="w-6 h-6 rounded-full bg-brand-100 text-brand-700 text-[0.5625rem] font-bold flex items-center justify-center shrink-0">{p.initials}</span>
+                            <span className="min-w-0 flex-1"><span className="block text-[0.75rem] font-medium text-ink-800 truncate">{p.name}</span><span className="block text-[0.5625rem] text-ink-400">{p.role}</span></span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  <div className="text-[0.625rem] text-ink-500 mt-1">Pick from people at Irame, or type a name.</div>
+                </div>
+              </div>
+
+              {/* Brand color */}
+              <div>
+                <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5"><Palette size={12} /> Brand color</label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {THEME_PRESETS.map(t => (
+                    <button key={t.color} onClick={() => pickBrand(t.color)} title={t.name} className={`w-9 h-9 rounded-[8px] border-2 transition-transform ${brandColor === t.color ? 'border-ink-900 scale-105' : 'border-transparent'}`} style={{ backgroundColor: t.color }} />
+                  ))}
+                  <div className="flex items-center gap-1.5 ml-1 pl-1.5 pr-2.5 h-9 rounded-[8px] border border-canvas-border">
+                    <input type="color" value={brandColor || '#6a12cd'} onChange={e => pickBrand(e.target.value)} className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0" aria-label="Pick a color" />
+                    <input type="text" value={hexDraft} onChange={e => onHexChange(e.target.value)} placeholder="#6a12cd" maxLength={7} spellCheck={false} className="w-[74px] text-[0.75rem] font-mono text-ink-700 bg-transparent focus:outline-none placeholder:text-ink-400" aria-label="Hex color code" />
+                  </div>
+                  {brandColor && <button onClick={() => { setBrandColor(''); setHexDraft(''); }} className="text-[0.6875rem] text-ink-500 hover:text-ink-800 cursor-pointer">Reset</button>}
+                </div>
+              </div>
+
+              {/* Logo */}
+              <div>
+                <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5"><ImageIcon size={12} /> Company logo</label>
+                <input ref={logoInputRef} type="file" accept="image/*" className="sr-only" onChange={e => onLogoPick(e.target.files?.[0])} />
+                {logoDataUrl ? (
+                  <div className="flex items-center gap-3 px-3 py-2.5 border border-canvas-border rounded-[10px] bg-canvas">
+                    <img src={logoDataUrl} alt="Logo preview" className="h-8 max-w-[120px] object-contain" />
+                    <span className="text-[0.75rem] text-ink-600 flex-1">Logo added — shows on the cover.</span>
+                    <button onClick={() => setLogoDataUrl('')} className="text-[0.6875rem] text-ink-500 hover:text-risk-700 cursor-pointer">Remove</button>
+                  </div>
+                ) : (
+                  <button onClick={() => logoInputRef.current?.click()} className="w-full py-3 rounded-[10px] border border-dashed border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">+ Upload logo (PNG / JPG / SVG)</button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Stage 5A — Preview */}
+          {stage === 'preview' && (
+            previewEditing
+              ? <AtrItemsEditor observations={previewObs} onChange={setPreviewObs} />
+              : (
+                <div className="bg-draft-50 min-h-full">
+                  {resumeDraft && (
+                    <div className="mx-6 mt-4 flex items-center gap-2 border border-compliant/30 bg-compliant-50 rounded-[8px] px-3 py-2 text-[0.75rem] text-compliant-700">
+                      <CheckCircle2 size={14} className="shrink-0" />
+                      <span><span className="font-semibold">Exceptions reviewed.</span> Your ATR is ready — finalize or save it below.</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-end px-6 pt-4">
+                    <button onClick={regenInsights} className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-300 transition-colors cursor-pointer" title="Regenerate just the Key Insights section">
+                      <RefreshCw size={13} /> Regenerate Key Insights
+                    </button>
+                  </div>
+                  <div className="py-4"><AtrDocument meta={meta} observations={previewObs} insights={insights} /></div>
+                </div>
+              )
           )}
         </div>
 
         {/* Footer */}
-        {step !== 'extracting' && (
+        {stage !== 'processing' && (
           <footer className="shrink-0 px-6 py-3.5 border-t border-canvas-border flex items-center justify-between gap-2">
-            {step === 'upload' ? (
-              <button onClick={() => setStep('template')} className="inline-flex items-center gap-1.5 h-10 px-4 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer">
-                <ArrowLeft size={14} /> Back
-              </button>
+            {/* Left / back */}
+            {stage === 'entry' ? (
+              <button onClick={requestClose} className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer">Cancel</button>
             ) : (
-              <button onClick={onClose} className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer">Cancel</button>
+              <button onClick={goBack} className="inline-flex items-center gap-1.5 h-10 px-4 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><ArrowLeft size={14} /> Back</button>
             )}
-            {step === 'template' ? (
-              <button onClick={() => setStep('upload')} className="inline-flex items-center gap-1.5 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">
-                Next: Upload <ArrowRight size={14} />
-              </button>
-            ) : (
-              <button onClick={handleGenerate} className="inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">
-                <Sparkles size={14} /> Generate ATR
+
+            {/* Right / primary */}
+            {stage === 'entry' && (
+              <button onClick={() => setStage(startMode === 'template' ? 'template-upload' : startMode === 'upload' ? 'report-upload' : startMode === 'manual' ? 'manual-edit' : 'engagement-pick')} className="inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">
+                {startMode === 'template' ? 'Next: Upload filled template' : startMode === 'upload' ? 'Next: Upload report' : startMode === 'manual' ? 'Next: Enter observations' : 'Next: Pick engagement'} <ArrowRight size={14} />
               </button>
             )}
+            {stage === 'manual-edit' && (
+              <button onClick={continueManual} className="inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">Continue <ArrowRight size={14} /></button>
+            )}
+            {stage === 'customize' && (
+              <button onClick={goPreview} className="inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">Preview ATR <ArrowRight size={14} /></button>
+            )}
+            {(stage === 'template-upload' || stage === 'report-upload') && (
+              <div className="flex items-center gap-2.5">
+                {fileError && !file && <span className="text-[0.6875rem] text-risk-700 flex items-center gap-1"><AlertTriangle size={11} /> Upload a file to continue</span>}
+                <button onClick={() => { if (!file) { setFileError(true); addToast({ type: 'error', message: 'Please upload a file to continue.' }); return; } runExtraction(); }} className={`inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold rounded-[8px] transition-colors cursor-pointer ${file ? 'text-white bg-brand-600 hover:bg-brand-500' : 'text-brand-700 bg-brand-50 hover:bg-brand-100'}`}><Sparkles size={14} /> Extract observations</button>
+              </div>
+            )}
+            {stage === 'validation' && (
+              <div className="flex items-center gap-2.5">
+                {!canContinueValidation && <span className="text-[0.6875rem] text-ink-500 flex items-center gap-1"><AlertTriangle size={11} className="text-risk" /> {selectedCount(workObs) === 0 ? 'Select at least one' : 'Resolve missing fields'}</span>}
+                <button onClick={() => setStage('annexures')} disabled={!canContinueValidation} className="inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Continue <ArrowRight size={14} /></button>
+              </div>
+            )}
+            {stage === 'annexures' && (
+              <div className="flex items-center gap-2.5">
+                <button onClick={() => setStage('decision')} className="h-10 px-4 text-[0.8125rem] font-medium text-ink-600 hover:text-ink-900 cursor-pointer" title="Manage Exceptions will not be available without annexures">Skip annexures</button>
+                <button onClick={() => setStage('decision')} className="inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer"><CheckCircle2 size={14} /> Confirm annexure mapping</button>
+              </div>
+            )}
+            {stage === 'preview' && (
+              <div className="flex items-center gap-2.5">
+                {onManageExceptions && !resumeDraft && (
+                  <button onClick={() => goManageExceptions(previewObs)} title="Park this ATR and review exception cases first" className="inline-flex items-center gap-2 h-10 px-3.5 text-[0.8125rem] font-semibold text-evidence-700 bg-evidence-50 border border-evidence-200 rounded-[8px] hover:bg-evidence-100 transition-colors cursor-pointer"><ListChecks size={14} /> Manage Exceptions</button>
+                )}
+                <button onClick={() => setPreviewEditing(e => !e)} className="inline-flex items-center gap-2 h-10 px-3.5 text-[0.8125rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><FilePenLine size={14} /> {previewEditing ? 'Done editing' : 'Edit items'}</button>
+                <div className="relative">
+                  <button onClick={() => setShowFormats(s => !s)} className="inline-flex items-center gap-2 h-10 px-3.5 text-[0.8125rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><Download size={14} /> Preview &amp; Download <ChevronDown size={12} className={showFormats ? 'rotate-180' : ''} /></button>
+                  {showFormats && (
+                    <>
+                      <div className="fixed inset-0 z-[65]" onClick={() => setShowFormats(false)} />
+                      <div className="absolute right-0 bottom-full mb-1.5 z-[70] bg-white border border-canvas-border shadow-xl py-2 w-60 rounded-[10px] overflow-hidden">
+                        {/* PDF page options */}
+                        <div className="px-3 pb-2 mb-1 border-b border-canvas-border">
+                          <div className="flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-ink-500 mb-2"><SlidersHorizontal size={11} /> PDF options</div>
+                          <div className="flex gap-1.5 mb-2">
+                            {(['portrait', 'landscape'] as const).map(o => (
+                              <button key={o} onClick={() => setPdfOrientation(o)} className={`flex-1 h-7 rounded-[6px] text-[0.6875rem] font-semibold capitalize transition-colors cursor-pointer ${pdfOrientation === o ? 'bg-brand-600 text-white' : 'bg-paper-50 text-ink-600 hover:bg-paper-100'}`}>{o}</button>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[0.625rem] text-ink-500 shrink-0">Font</span>
+                            <input type="range" min={80} max={120} step={5} value={pdfFontScale} onChange={e => setPdfFontScale(Number(e.target.value))} className="flex-1 accent-brand-600 cursor-pointer" />
+                            <span className="text-[0.625rem] font-mono text-ink-600 w-9 text-right">{pdfFontScale}%</span>
+                          </div>
+                        </div>
+                        {[{ k: 'pdf' as const, l: 'Print / Save as PDF' }, { k: 'word' as const, l: 'Download as Word' }, { k: 'excel' as const, l: 'Download as Excel' }].map(f => (
+                          <button key={f.k} onClick={() => handleDownload(f.k)} className="w-full text-left px-3 py-2 text-[0.75rem] text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer">{f.l}</button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+                {onAddToReport && <button onClick={() => onAddToReport(meta, previewObs, insights)} className="inline-flex items-center gap-2 h-10 px-3.5 text-[0.8125rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><Save size={14} /> Save Version</button>}
+                {onFreeze && <button onClick={() => onFreeze(meta, previewObs, insights)} className="inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer"><Lock size={14} /> Finalize &amp; Sign-off</button>}
+              </div>
+            )}
+            {(stage === 'decision' || stage === 'engagement-pick') && <span />}
           </footer>
+        )}
+
+        {/* Discard-draft confirmation */}
+        {confirmClose && (
+          <div className="absolute inset-0 z-[80] flex items-center justify-center bg-ink-900/40 rounded-[16px]">
+            <div className="w-[344px] bg-canvas-elevated rounded-[14px] border border-canvas-border shadow-xl p-5">
+              <div className="text-[0.9375rem] font-semibold text-ink-900 mb-1">Discard this ATR draft?</div>
+              <p className="text-[0.8125rem] text-ink-500 mb-4">Your progress in this builder will be lost. This can't be undone.</p>
+              <div className="flex items-center justify-end gap-2">
+                <button onClick={() => setConfirmClose(false)} className="h-9 px-4 text-[0.8125rem] font-medium text-ink-700 bg-canvas border border-canvas-border rounded-[8px] hover:border-brand-200 cursor-pointer">Keep editing</button>
+                <button onClick={() => { setConfirmClose(false); onClose(); }} className="h-9 px-4 text-[0.8125rem] font-semibold text-white bg-risk rounded-[8px] hover:bg-risk-700 cursor-pointer">Discard</button>
+              </div>
+            </div>
+          </div>
         )}
       </motion.div>
     </>
+  );
+}
+
+function backStage(stage: Stage): Stage {
+  switch (stage) {
+    case 'template-upload': return 'entry';
+    case 'report-upload': return 'entry';
+    case 'engagement-pick': return 'entry';
+    case 'manual-edit': return 'entry';
+    case 'validation': return 'report-upload';
+    case 'annexures': return 'validation';
+    case 'decision': return 'annexures';
+    case 'customize': return 'decision';
+    case 'preview': return 'customize';
+    default: return 'entry';
+  }
+}
+
+function Dropzone({ id, file, dragOver, setDragOver, onPick, onDrop, onClear, label, hint, grow, error }: {
+  id: string; file: File | null; dragOver: boolean; setDragOver: (v: boolean) => void;
+  onPick: () => void; onDrop: (f?: File) => void; onClear: () => void; label: string; hint: string;
+  /** Fill the available vertical space with a large drop target. */
+  grow?: boolean;
+  /** Show the required-error treatment (red border + inline message). */
+  error?: boolean;
+}) {
+  return (
+    <div className={grow ? 'flex-1 flex flex-col min-h-0' : ''}>
+      <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">{label} <span className="text-risk">*</span></label>
+      {file ? (
+        <div className="flex items-center gap-3 px-4 py-3 border border-canvas-border rounded-[10px] bg-canvas">
+          <div className="w-9 h-9 rounded-[8px] bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[0.8125rem] font-semibold text-ink-900 truncate">{file.name}</div>
+            <div className="text-[0.6875rem] text-ink-500 flex items-center gap-1.5"><CheckCircle2 size={11} className="text-compliant" /> Ready · {formatBytes(file.size)}</div>
+          </div>
+          <button onClick={onClear} className="w-7 h-7 rounded-full text-ink-500 hover:text-risk-700 hover:bg-risk-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Remove file"><X size={14} /></button>
+        </div>
+      ) : (
+        <button id={id} type="button" onClick={onPick}
+          onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)}
+          onDrop={e => { e.preventDefault(); setDragOver(false); onDrop(e.dataTransfer.files?.[0]); }}
+          className={`w-full flex flex-col items-center justify-center gap-2.5 px-4 rounded-[12px] border-2 border-dashed transition-colors cursor-pointer ${grow ? 'flex-1 min-h-[180px] py-10' : 'py-8'} ${dragOver ? 'border-brand-500 bg-brand-50/60' : error ? 'border-risk/60 bg-risk-50/40' : 'border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/30'}`}>
+          <span className={`rounded-full flex items-center justify-center transition-colors ${grow ? 'w-14 h-14' : 'w-11 h-11'} ${dragOver ? 'bg-brand-100 text-brand-600' : error ? 'bg-risk-50 text-risk-700' : 'bg-paper-50 text-ink-400'}`}><CloudUpload size={grow ? 26 : 20} /></span>
+          <div className="text-center">
+            <div className={`font-semibold text-ink-800 ${grow ? 'text-[0.9375rem]' : 'text-[0.8125rem]'}`}>Drag &amp; drop or <span className="text-brand-700">browse</span></div>
+            <div className="text-[0.6875rem] text-ink-500 mt-0.5">{hint}</div>
+          </div>
+        </button>
+      )}
+      {error && !file && <div className="text-[0.6875rem] text-risk-700 mt-1.5 flex items-center gap-1"><AlertTriangle size={11} /> Please upload a file to continue.</div>}
+    </div>
   );
 }

@@ -57,10 +57,16 @@ export interface AtrMeta {
   auditTitle?: string;
   auditPeriod?: string;
   preparedBy?: string;
+  /** Reviewer name — surfaces in the Approvals & Sign-Off "Reviewed by" block. */
+  reviewedBy?: string;
   generatedOn?: string;
   auditEntity?: string;
   /** Optional override for the Total Exceptions KPI (else summed from observations). */
   totalExceptions?: number;
+  /** Customize: brand accent (hex) applied to the cover banner. */
+  brandColor?: string;
+  /** Customize: company logo (data URL) shown on the cover/header. */
+  logoDataUrl?: string;
 }
 
 /** Everything needed to re-render a generated ATR as a saved report. Stored on

@@ -43,6 +43,17 @@ function fmt(iso?: string): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// Lighten/darken a #rrggbb hex by amt (−255..255) — used to derive the cover
+// gradient from a custom brand color.
+function shade(hex: string, amt: number): string {
+  const m = hex.replace('#', '');
+  if (m.length !== 6) return hex;
+  const num = parseInt(m, 16);
+  const clamp = (v: number) => Math.max(0, Math.min(255, v));
+  const r = clamp((num >> 16) + amt), g = clamp(((num >> 8) & 0xff) + amt), b = clamp((num & 0xff) + amt);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
 function NumberedHeading({ n, title, subtitle }: { n: number; title: string; subtitle: string }) {
   return (
     <div className="flex items-start gap-3 mb-5">
@@ -96,13 +107,18 @@ export default function AtrDocument({
   const displayStatus = (s?: AtrObservationStatus): 'Open' | 'In Progress' | 'Closed' =>
     s === 'Closed' ? 'Closed' : s === 'In Progress' ? 'In Progress' : 'Open';
 
+  const riskTotal = ex.risk.High + ex.risk.Medium + ex.risk.Low;
+  const bannerBg = meta.brandColor
+    ? `linear-gradient(125deg, ${shade(meta.brandColor, -70)} 0%, ${meta.brandColor} 62%, ${meta.brandColor} 100%)`
+    : 'linear-gradient(125deg, #3b0b72 0%, #6a12cd 62%, #6a12cd 100%)';
+
   return (
     <article className={`report-printable ${maxWidthClass} mx-auto bg-canvas-elevated border border-canvas-border rounded-[12px] overflow-hidden`}>
       {/* Purple gradient letterhead — title over the woven line art, matching
           the report covers. */}
       <div
         className="relative overflow-hidden px-9 pt-9 pb-8"
-        style={{ backgroundImage: 'linear-gradient(125deg, #3b0b72 0%, #6a12cd 62%, #6a12cd 100%)' }}
+        style={{ backgroundImage: bannerBg }}
       >
         <div
           className="absolute inset-0 z-0 print:hidden"
@@ -126,6 +142,7 @@ export default function AtrDocument({
         />
         <div className="relative z-10 flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
+            {meta.logoDataUrl && <img src={meta.logoDataUrl} alt="Company logo" className="h-9 max-w-[180px] object-contain mb-3 rounded-[4px] bg-white/90 px-2 py-1" />}
             <h1 className="text-[2rem] font-semibold tracking-tight leading-tight text-white">Action Taken Report</h1>
             {(meta.auditEntity || meta.auditPeriod) && (
               <p className="text-[0.8125rem] text-white/70 mt-1.5">
@@ -179,6 +196,38 @@ export default function AtrDocument({
             </div>
           ))}
         </div>
+
+        {/* Risk Significance breakdown — High / Medium / Low across observations */}
+        {riskTotal > 0 && (
+          <div className="mt-4 rounded-[10px] border border-canvas-border bg-canvas-elevated p-4">
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-600">Risk Significance Breakdown</div>
+              <div className="text-[0.6875rem] text-ink-500">{riskTotal} classified observation{riskTotal === 1 ? '' : 's'}</div>
+            </div>
+            <div className="flex h-3 rounded-full overflow-hidden mb-3 bg-paper-100">
+              {([
+                { key: 'High', n: ex.risk.High, cls: 'bg-high' },
+                { key: 'Medium', n: ex.risk.Medium, cls: 'bg-mitigated' },
+                { key: 'Low', n: ex.risk.Low, cls: 'bg-compliant' },
+              ] as const).map(s => s.n > 0 && (
+                <div key={s.key} className={s.cls} style={{ width: `${(s.n / riskTotal) * 100}%` }} title={`${s.key}: ${s.n}`} />
+              ))}
+            </div>
+            <div className="flex items-center gap-5">
+              {([
+                { key: 'High', n: ex.risk.High, dot: 'bg-high', tone: 'text-high-700' },
+                { key: 'Medium', n: ex.risk.Medium, dot: 'bg-mitigated', tone: 'text-mitigated-700' },
+                { key: 'Low', n: ex.risk.Low, dot: 'bg-compliant', tone: 'text-compliant-700' },
+              ] as const).map(s => (
+                <div key={s.key} className="flex items-center gap-1.5">
+                  <span className={`w-2.5 h-2.5 rounded-full ${s.dot}`} />
+                  <span className="text-[0.75rem] text-ink-600">{s.key}</span>
+                  <span className={`text-[0.75rem] font-bold tabular-nums ${s.tone}`}>{s.n}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Section 2 — Observation Wise Summary */}
@@ -267,7 +316,7 @@ export default function AtrDocument({
         <div className="grid grid-cols-2 gap-4">
           {[
             { Icon: PenLine, role: 'Prepared by', name: meta.preparedBy },
-            { Icon: Eye, role: 'Reviewed by', name: '' },
+            { Icon: Eye, role: 'Reviewed by', name: meta.reviewedBy ?? '' },
           ].map(c => (
             <div key={c.role} className="rounded-[10px] border border-canvas-border p-5">
               <div className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-3">

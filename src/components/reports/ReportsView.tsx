@@ -15,6 +15,7 @@ import {
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
 import UploadReportModal from './UploadReportModal';
+import { loadAtrDraft, clearAtrDraft, consumeAtrResume } from './atrDraft';
 import UploadTemplateModal from './UploadTemplateModal';
 import ConfirmDialog from './ConfirmDialog';
 import AtrReportView from './AtrReportView';
@@ -129,6 +130,14 @@ export default function ReportsView({
   const [viewingReport, setViewingReport] = useState<GeneratedReport | null>(null);
   // ATR template "Generate" opens the Generate-ATR-from-Observations wizard.
   const [atrWizardOpen, setAtrWizardOpen] = useState(false);
+  const [atrResumeDraft, setAtrResumeDraft] = useState<AtrReportData | null>(null);
+  // Returning from Manage Exceptions: reopen the parked ATR at its preview.
+  useEffect(() => {
+    if (consumeAtrResume()) {
+      const d = loadAtrDraft();
+      if (d) { setAtrResumeDraft(d); setReportType('atr'); setActiveTab('my-reports'); setAtrWizardOpen(true); }
+    }
+  }, []);
   const [reportToDelete, setReportToDelete] = useState<{ id: string; name: string } | null>(null);
   // Multi-select for the My Reports list — checkbox-on-tile + floating bulk bar,
   // mirroring the Knowledge Hub data-source selection pattern.
@@ -250,7 +259,7 @@ export default function ReportsView({
         tag: 'Internal Audit',
         generatedBy: r.generatedBy,
         generatedAt: r.generatedAt,
-        status: r.status === 'final' ? 'final' : 'draft',
+        status: r.status === 'final' ? 'final' : r.status === 'frozen' ? 'frozen' : 'draft',
         pages: r.pages ?? 1,
         queries: r.queries ?? 0,
         area: r.atrData!.meta.auditTitle ?? 'Custom ATR',
@@ -339,7 +348,7 @@ export default function ReportsView({
       rows.push({
         id: a.id, kind: 'atr', name: a.name, bulk: false,
         description: atrDesc(a), pills: atrPills(a),
-        status: a.status === 'final' ? 'final' : 'draft',
+        status: a.status === 'draft' ? 'draft' : 'final',
         date: a.generatedAt, sortDate: ts(a.generatedAt),
         open: () => openAtr(a),
         download: () => { exportAtrWord(a.atrData.meta, a.atrData.observations); addToast({ type: 'success', message: `Downloading “${a.name}”.` }); },
@@ -746,6 +755,7 @@ export default function ReportsView({
           report={{ ...viewingReport, atrData: viewingReport.atrData }}
           onBack={() => setViewingReport(null)}
           onShare={onShare ? () => onShare(viewingReport.id) : undefined}
+          onManageExceptions={onManageExceptions}
         />
       );
     }
@@ -1796,34 +1806,47 @@ export default function ReportsView({
         )}
       </AnimatePresence>
 
-      {/* Generate ATR from Observations — opened by the ATR template "Generate".
-          The review step's "Add to Report" saves the ATR into My Reports. */}
-      {atrWizardOpen && (
-        <UploadReportModal
-          onClose={() => setAtrWizardOpen(false)}
-          onAddToReport={(meta: AtrMeta, observations: AtrObservation[], insights: AtrInsight[]) => {
-            const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-            const name = uniqueReportName(meta.auditTitle ? meta.auditTitle : 'Action Taken Report');
-            const newReport: GeneratedReport = {
-              id: `gr-atr-${Date.now()}`,
-              templateId: 'rt-007',
-              kind: 'atr',
-              name,
-              tag: 'Internal Audit',
-              generatedBy: 'You',
-              generatedAt: today,
-              status: 'draft',
-              pages: Math.max(1, observations.length),
-              queries: observations.length,
-              atrData: { meta, observations, insights },
-            };
-            setGeneratedReports(prev => [newReport, ...prev]);
-            setViewingReport(newReport);
-            setAtrWizardOpen(false);
-            addToast({ type: 'success', message: 'Action Taken Report added to My Reports.' });
-          }}
-        />
-      )}
+      {/* ATR Builder — opened by the ATR template "Generate". Source actionable
+          items from an iRAME report or upload, edit them, then save a draft or
+          freeze a locked version into My Reports. */}
+      {atrWizardOpen && (() => {
+        const buildAtr = (
+          meta: AtrMeta, observations: AtrObservation[], insights: AtrInsight[],
+          frozen: boolean,
+        ) => {
+          const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const name = uniqueReportName(meta.auditTitle ? meta.auditTitle : 'Action Taken Report');
+          const newReport: GeneratedReport = {
+            id: `gr-atr-${Date.now()}`,
+            templateId: 'rt-007',
+            kind: 'atr',
+            name,
+            tag: 'Internal Audit',
+            generatedBy: 'You',
+            generatedAt: today,
+            status: frozen ? 'frozen' : 'draft',
+            isReadOnly: frozen || undefined,
+            pages: Math.max(1, observations.length),
+            queries: observations.length,
+            atrData: { meta, observations, insights },
+          };
+          setGeneratedReports(prev => [newReport, ...prev]);
+          setViewingReport(newReport);
+          setAtrWizardOpen(false);
+          setAtrResumeDraft(null);
+          clearAtrDraft();
+          addToast({ type: 'success', message: frozen ? 'Action Taken Report frozen and added to My Reports.' : 'Draft Action Taken Report added to My Reports.' });
+        };
+        return (
+          <UploadReportModal
+            onClose={() => { setAtrWizardOpen(false); setAtrResumeDraft(null); }}
+            onManageExceptions={onManageExceptions}
+            resumeDraft={atrResumeDraft}
+            onAddToReport={(meta, observations, insights) => buildAtr(meta, observations, insights, false)}
+            onFreeze={(meta, observations, insights) => buildAtr(meta, observations, insights, true)}
+          />
+        );
+      })()}
 
       <ConfirmDialog
         open={!!templateToDelete}

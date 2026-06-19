@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion } from 'motion/react';
-import { ArrowLeft, Share2, Download, List } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { ArrowLeft, Share2, Download, List, MessageSquare, GitBranch, Link2, ListChecks } from 'lucide-react';
 import AtrDocument from './AtrDocument';
 import type { AtrReportData } from './atrTypes';
 import { useToast } from '../shared/Toast';
+import AtrReviewDrawer from './AtrReviewDrawer';
+import { loadVersions, nowStamp, type AtrVersionStatus } from './atrReview';
 
 interface AtrReport {
   id: string;
@@ -11,16 +13,18 @@ interface AtrReport {
   generatedBy?: string;
   generatedAt?: string;
   tag?: string;
+  status?: string;
   atrData: AtrReportData;
 }
 
 /** Saved-ATR report page. Renders the generated Action Taken Report inside the
  *  shared reader workspace: plain page-level actions (no header bar), a persistent
  *  scroll-spy outline rail, and a constrained document column. */
-export default function AtrReportView({ report, onBack, onShare }: {
+export default function AtrReportView({ report, onBack, onShare, onManageExceptions }: {
   report: AtrReport;
   onBack: () => void;
   onShare?: () => void;
+  onManageExceptions?: () => void;
 }) {
   const { addToast } = useToast();
   const { meta, observations, insights } = report.atrData;
@@ -63,6 +67,21 @@ export default function AtrReportView({ report, onBack, onShare }: {
     window.setTimeout(() => window.print(), 250);
   };
 
+  const [review, setReview] = useState<'comments' | 'versions' | null>(null);
+  const [versions] = useState(() => loadVersions(report.id, { status: (report.status as AtrVersionStatus) ?? 'draft', by: report.generatedBy ?? 'You', at: report.generatedAt ?? nowStamp() }));
+
+  const copyLink = () => {
+    const url = `${window.location.origin}${window.location.pathname}?view=reports&tab=my-reports&atr=${encodeURIComponent(report.id)}`;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url).then(
+        () => addToast({ type: 'success', message: 'Report link copied to clipboard.' }),
+        () => addToast({ type: 'info', message: url }),
+      );
+    } else {
+      addToast({ type: 'info', message: url });
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
@@ -81,6 +100,12 @@ export default function AtrReportView({ report, onBack, onShare }: {
           <ArrowLeft size={14} /> Back to Reports
         </button>
         <div className="flex items-center gap-2">
+          {onManageExceptions && (
+            <button onClick={onManageExceptions} title="Review exception cases for this ATR" className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-evidence-700 bg-evidence-50 border border-evidence-200 rounded-[8px] hover:bg-evidence-100 transition-colors cursor-pointer"><ListChecks size={14} /> Manage Exceptions</button>
+          )}
+          <button onClick={() => setReview('comments')} className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer"><MessageSquare size={14} /> Comments</button>
+          <button onClick={() => setReview('versions')} className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer"><GitBranch size={14} /> v{versions[versions.length - 1]?.version ?? 1}</button>
+          <button onClick={copyLink} className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer"><Link2 size={14} /> Copy link</button>
           {onShare && (
             <button
               onClick={onShare}
@@ -97,6 +122,20 @@ export default function AtrReportView({ report, onBack, onShare }: {
           </button>
         </div>
       </div>
+
+      <AnimatePresence>
+        {review && (
+          <AtrReviewDrawer
+            reportId={report.id}
+            reportName={report.name}
+            tab={review}
+            onTab={setReview}
+            onClose={() => setReview(null)}
+            initialVersions={versions}
+            me={report.generatedBy || 'You'}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Reader workspace — outline rail + constrained document column. */}
       <div className="max-w-[1480px] mx-auto px-6 lg:px-10 pt-3 pb-8 flex items-start gap-8 xl:gap-10">
