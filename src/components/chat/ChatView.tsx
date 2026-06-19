@@ -12,7 +12,8 @@ import {
   Square, ArrowDown, ArrowUp, Copy, RotateCcw, ThumbsUp, ThumbsDown, Check,
   Bookmark, BookmarkCheck,
   Search, GitCompare, ShieldCheck, Info, Loader2, AlertTriangle, type LucideIcon,
-  LayoutDashboard,
+  LayoutDashboard, ListChecks, FileCode,
+  Layers, Compass,
 } from 'lucide-react';
 import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS, WORKFLOWS } from '../../data/mockData';
 import {
@@ -21,6 +22,7 @@ import {
 import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
 import { KpiTile } from '../shared/KpiTile';
+import AuditResultBody from './AuditResultBody';
 import type { WorkflowTypeId } from '../../data/mockData';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { TextShimmer } from '../shared/TextShimmer';
@@ -28,6 +30,20 @@ import { AuditifyHelloEffect } from '../shared/HelloEffect';
 import FloatingLines from '../shared/FloatingLines';
 // Persona removed — Rive WebGL crashes in some browsers
 import DataPickerModal, { type AttachmentSelection } from './DataPickerModal';
+import { type ComposerContext, type ComposerIconKey, type ComposerTone, editPlanContext } from './composerContext';
+
+// Tone palette + icon map for the composer "context mode" banner and the
+// Perplexity-style attached-context chip (Plan ▸ Edit, Code ▸ Edit, Source
+// Chat / Pick). Keyed by ComposerContext.tone / .icon.
+const COMPOSER_TONE: Record<ComposerTone, { pill: string; chip: string; iconTile: string; badge: string }> = {
+  amber:   { pill: 'border-amber-200 bg-amber-50 text-amber-700',   chip: 'border-amber-200',   iconTile: 'bg-amber-100 text-amber-700',   badge: 'bg-amber-100 text-amber-700' },
+  brand:   { pill: 'border-brand-200 bg-brand-50 text-brand-700',   chip: 'border-brand-200',   iconTile: 'bg-brand-100 text-brand-700',   badge: 'bg-brand-100 text-brand-700' },
+  emerald: { pill: 'border-emerald-200 bg-emerald-50 text-emerald-700', chip: 'border-emerald-200', iconTile: 'bg-emerald-100 text-emerald-700', badge: 'bg-emerald-100 text-emerald-700' },
+  slate:   { pill: 'border-ink-200 bg-ink-100 text-ink-700',        chip: 'border-ink-200',     iconTile: 'bg-ink-100 text-ink-600',       badge: 'bg-ink-100 text-ink-600' },
+};
+const COMPOSER_ICON: Record<ComposerIconKey, LucideIcon> = {
+  pencil: Pencil, message: MessageSquare, columns: ListChecks, code: FileCode,
+};
 import QueryClarificationCard, { type QueryClarificationData } from './QueryClarificationCard';
 import { AddToDashboardModal } from './AddToDashboardModal';
 import { AddToReportModal } from './AddToReportModal';
@@ -78,6 +94,13 @@ export interface ChatMessage {
   hasArtifact?: boolean;
   artifactType?: 'workflow' | 'query' | 'report';
   followUps?: string[];
+  // Categorised follow-ups for data results. `depth` drills into the OUTPUT
+  // the run just produced (e.g. the flagged pairs); `breadth` explores
+  // adjacent dimensions of the INPUT sources the run hasn't touched yet. When
+  // present, the "What next?" block renders two labelled groups ("Go deeper" /
+  // "Go wider") instead of a flat card grid. Falls back to `followUps` for
+  // conversational quick-replies that don't split this way.
+  followUpTracks?: { depth: string[]; breadth: string[] };
   timestamp: Date;
   // Files / data sources attached to a user message — rendered as chips
   // above the bubble (not baked into the message text).
@@ -259,14 +282,94 @@ const AUDIT_RESULT = {
   },
 };
 
-const AUDIT_FOLLOWUPS = [
-  'Show match-method breakdown for the top 3 flags',
-  'Drill into Acme Corp’s flagged invoices',
-  'Build a recurring duplicate-invoice monitoring workflow',
-  'Compare these flags against last quarter’s run',
-  'Generate a report draft for the audit committee',
-  'Cross-check against vendor master changes in the same window',
-];
+// Two-track follow-ups for the audit result. DEPTH questions interrogate the
+// OUTPUT the run just surfaced (the 8 flagged pairs); BREADTH questions point
+// outward at adjacent dimensions of the INPUT sources (POs, vendor master,
+// credit notes) the run never looked at. Keeping them as separate lists lets
+// the "What next?" UI group them under "Go deeper" / "Go wider".
+const AUDIT_FOLLOWUP_TRACKS: { depth: string[]; breadth: string[] } = {
+  depth: [
+    'Drill into Acme Corp’s 4 flagged pairs',
+    'Rank all 8 pairs by exposure amount',
+    'Which pairs cleared the same approval limit?',
+  ],
+  breadth: [
+    'Check the same vendors for split purchase orders',
+    'Cross-check flags against vendor-master changes',
+    'Scan credit notes for the same pattern',
+  ],
+};
+
+// Header metadata for each follow-up track. The distinction is carried by the
+// group header (icon badge + label + caption), NOT by tinting the cards —
+// DESIGN.md keeps result chips a single neutral family. Depth leads with the
+// brand tint (the most likely immediate next step); breadth gets a quieter
+// neutral badge (the "what else?" move).
+const FOLLOWUP_TRACK_META: Record<
+  'depth' | 'breadth',
+  { Icon: LucideIcon; label: string; caption: string; badge: string }
+> = {
+  depth: {
+    Icon: Layers,
+    label: 'Go deeper',
+    caption: 'Drill into the results you just got',
+    badge: 'bg-brand-50 text-brand-600',
+  },
+  breadth: {
+    Icon: Compass,
+    label: 'Go wider',
+    caption: 'Run adjacent checks across your sources',
+    badge: 'bg-ink-100 text-ink-500',
+  },
+};
+
+// A single follow-up suggestion card. Shared by the flat list and the two
+// grouped tracks so the visual + motion contract stays identical everywhere.
+// `delayIndex` drives the one-by-one entrance cascade; pass a running index
+// across groups so the whole "What next?" block reveals as one sequence.
+function FollowUpCard({
+  q,
+  delayIndex,
+  isSelected,
+  onClick,
+  reduced,
+}: {
+  q: string;
+  delayIndex: number;
+  isSelected: boolean;
+  onClick: () => void;
+  reduced: boolean;
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      aria-pressed={isSelected}
+      // Mount cascade — NOT gated on reduced motion: the popup arrival is the
+      // signal that "follow-up suggestions are ready". Expo-out, no spring on
+      // entrance so it lands clean.
+      initial={{ opacity: 0, y: 12, scale: 0.9 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay: 0.4 + delayIndex * 0.1, duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+      whileHover={reduced ? undefined : {
+        y: -1,
+        scale: 1.012,
+        transition: { type: 'spring', stiffness: 700, damping: 32, mass: 0.12 },
+      }}
+      whileTap={reduced ? undefined : {
+        scale: 0.985,
+        transition: { type: 'spring', stiffness: 800, damping: 34, mass: 0.12 },
+      }}
+      className={`flex h-full items-start text-left px-4 py-3 rounded-xl text-[0.8125rem] leading-snug cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+        isSelected
+          ? 'bg-brand-50 text-brand-700 border border-brand-200'
+          : 'bg-canvas-elevated text-ink-700 border border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
+      }`}
+    >
+      <span>{q}</span>
+    </motion.button>
+  );
+}
 
 export interface ChatViewProps {
   showChatHistory: boolean;
@@ -290,6 +393,9 @@ export interface ChatViewProps {
    *  workspace panel's "Edit assumptions" affordance. */
   composerDraft?: string | null;
   onComposerDraftConsumed?: () => void;
+  /** One-shot "context mode" seed handed off from a right-side canvas CTA. */
+  composerContextSeed?: ComposerContext | null;
+  onComposerContextSeedConsumed?: () => void;
   /** When set, ChatView loads CHAT_CONVERSATIONS[selectedChatId] on mount/change. */
   selectedChatId?: string | null;
   /** Called once the selected chat has been loaded so the parent can clear the id. */
@@ -342,6 +448,10 @@ export interface ChatViewProps {
     isNew: boolean;
     newName?: string;
     newDescription?: string;
+    newSeverity?: 'high' | 'medium' | 'low';
+    /** A query card projected from the added result so a brand-new report
+     *  renders it (carrying the severity chosen at create time). */
+    generatedQuery?: import('../reports/templateQueryPool').GeneratedQueryDef;
     selection: import('./AddToDashboardModal').GranularSelection;
   }) => void;
   /** Navigate to a dashboard detail view */
@@ -2703,7 +2813,7 @@ ${transcriptHtml}
   );
 }
 
-export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext, initialMessages, onMessagesChange }: ChatViewProps) {
+export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, composerContextSeed, onComposerContextSeedConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext, initialMessages, onMessagesChange }: ChatViewProps) {
   const { addToast } = useToast();
   const { can } = useCan();
   const prefersReducedMotion = useReducedMotion();
@@ -2763,9 +2873,11 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   const [wfRunning, setWfRunning] = useState(false);
   const [wfResult, setWfResult] = useState<RunResult | null>(null);
   const [wfSaved, setWfSaved] = useState(false);
-  // "Revise" on the plan preview → plan-refine mode: the next message is
-  // treated as feedback that updates the plan rather than a new build.
-  const [wfRefiningPlan, setWfRefiningPlan] = useState(false);
+  // Focused composer "context mode". Set by "Revise" on the plan preview, or
+  // handed off from a right-side canvas CTA (Plan ▸ Edit, Code ▸ Edit, a
+  // Source's Chat / Pick). While set, the composer shows a toned banner + an
+  // attached-context chip; the next message resolves it (or Cancel clears it).
+  const [composerContext, setComposerContext] = useState<ComposerContext | null>(null);
   const [wfMapExpanded, setWfMapExpanded] = useState<string | null>(null);
   const [wfSaveModalOpen, setWfSaveModalOpen] = useState(false);
   const [wfUploadModalOpen, setWfUploadModalOpen] = useState(false);
@@ -3145,6 +3257,21 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [composerDraft]);
 
+  // Canvas → composer context handoff. A right-side CTA seeds a context mode;
+  // enter it, clear any stale draft, and focus the composer so the user can
+  // type their feedback immediately. Does NOT auto-submit.
+  useEffect(() => {
+    if (!composerContextSeed) return;
+    setComposerContext(composerContextSeed);
+    setInput('');
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) { el.style.height = 'auto'; el.focus(); }
+    });
+    onComposerContextSeedConsumed?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composerContextSeed]);
+
   // Clear all pending timers
   const clearTimers = () => {
     timersRef.current.forEach(t => clearTimeout(t));
@@ -3375,9 +3502,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }, 80);
 
     if (flow.purpose === 'save-workflow') {
-      // Stash the five clarification answers (risk, population, frequency,
-      // output, configuration) so the modal can seed its name / description /
-      // Configuration section from them.
+      // Stash the four clarification answers (objective & exception rule, input
+      // source, same-schema handling, population/period) so the modal can seed
+      // its name / description / Configuration section from them.
       saveWorkflowAnswersRef.current = {
         kind: saveWorkflowAnswersRef.current.kind,
         pairs: consolidated,
@@ -3506,26 +3633,32 @@ Scanned **1.2M invoice records** across the last **90 days** and surfaced **8 hi
 - **Two tail vendors** — single flags each, lower priority but worth a glance before sign-off.
 
 The full plan, SQL, and sources are in the Workspace on the right. Promote any pair to a formal finding from the \`Flagged pairs\` table, or open the [duplicate-payment SOP](https://docs.auditify.example/sops/duplicate-payment) for the standard remediation path.`,
-        followUps: AUDIT_FOLLOWUPS,
+        followUpTracks: AUDIT_FOLLOWUP_TRACKS,
         richType: 'audit-result',
         richData: AUDIT_RESULT,
       };
     }));
 
-    // Claude-aligned scroll behavior: drive the same multi-fire snap-to-
-    // bottom window here as the regular post-generation path. The
-    // audit-result mount swaps the message in place (no isTyping toggle),
-    // so the messages/isTyping effect doesn't fire — we kick off the
-    // snaps directly so the "What next?" chip row at the bottom of the
-    // (often tall) audit-result message lands in view once its rich
-    // content + chip stagger has settled.
+    // Reveal-aware scroll. The result now streams in — prose typewriter first,
+    // then the KPI / chart / table cards. The old behavior (built for the
+    // instant card) snapped to the bottom, which glued the viewport to the tall
+    // result so the user missed the typewriter entirely. Instead we anchor the
+    // TOP of the result in view and park the user there: auto-follow stands down
+    // (treated as "scrolled up") so the prose plays uninterrupted while the
+    // cards brew below the fold, and the scroll-to-bottom button gives a one-tap
+    // jump to the KPIs / table when they're ready.
     if (!isUserScrolledUp.current) {
-      schedule(() => snapToBottom(true), 0);
-      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 120);
-      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 280);
-      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 500);
-      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 750);
-      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 1000);
+      isUserScrolledUp.current = true;
+      setShowScrollToBottom(true);
+      schedule(() => {
+        const container = messagesContainerRef.current;
+        const el = container?.querySelector(`[data-msg-id="${targetId}"]`) as HTMLElement | null;
+        if (!container || !el) return;
+        const delta = el.getBoundingClientRect().top - container.getBoundingClientRect().top;
+        const top = Math.max(0, container.scrollTop + delta - 24);
+        container.scrollTo({ top, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+        lastScrollTopRef.current = top;
+      }, 60);
     }
   };
 
@@ -3676,7 +3809,33 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
         };
       }));
     }
-    onAddResultToReport?.(payload);
+    // For a brand-new report, project the added result into a query card so the
+    // report actually renders it — stamped with the severity chosen at create
+    // time (the badge surfaces at query-card level). Defaults to Medium if the
+    // optional Severity field was left unset.
+    let outgoing = payload;
+    if (payload.isNew) {
+      const sevMap = { high: 'High', medium: 'Medium', low: 'Low' } as const;
+      const picked = AUDIT_RESULT.kpis.filter(k => payload.selection.kpis.includes(k.label));
+      const kpis = (picked.length ? picked : AUDIT_RESULT.kpis).map(k => ({ label: k.label, value: k.value, color: k.color }));
+      outgoing = {
+        ...payload,
+        generatedQuery: {
+          id: `cq-${payload.reportId}`,
+          risk: 'Financial Risk',
+          severity: payload.newSeverity ? sevMap[payload.newSeverity] : 'Medium',
+          title: 'Duplicate invoice analysis',
+          summary: 'Ad-hoc analysis carried over from a chat result. Review the flagged records and confirm classification during sign-off.',
+          findings: kpis.slice(0, 4).map(k => `${k.label}: ${k.value}`),
+          observations: ['Carried over from a chat result — confirm scope and severity during review.'],
+          answer: '',
+          addedBy: 'You',
+          kpis,
+          chartData: [5, 2, 1, 0],
+        },
+      };
+    }
+    onAddResultToReport?.(outgoing);
     const undoMsgId = activeAddMsgId;
     const itemCount = payload.selection.kpis.length + payload.selection.charts.length + payload.selection.columns.length;
     addToast({
@@ -3729,71 +3888,69 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
   // of running an audit. The captured answers seed the modal's
   // Configuration section.
   const openSaveAsWorkflowModal = () => {
-    // Five single-question clarifications captured inline before the modal
-    // opens, so the saved workflow ships as a governed control rather than a
-    // bare saved query: the risk it detects (+ assertion), the population /
-    // period it runs over, its cadence, the output each run renders (KPIs are
-    // part of the output), and which config stays adjustable vs locked. The
-    // existing clarification machinery auto-submits once the last answer
-    // lands; submitClarification (purpose 'save-workflow') then opens the
-    // modal, and the captured answers seed its name / description / config.
+    // Four single-question clarifications captured inline before the modal
+    // opens, organised around three themes that let us save the workflow as a
+    // governed control rather than a bare saved query:
+    //   1. Objective & exception rule — what each run flags and what makes
+    //      something an exception (risk + assertion + the threshold that
+    //      defines a hit).
+    //   2. Input contract — where each run's data comes from (re-pull vs fresh
+    //      upload vs frozen file/columns) and, when same-schema files exist,
+    //      whether to consolidate / compare / reference them. The same-schema
+    //      question is always shown for the prototype.
+    //   3. Scope per run — the population & period each run covers.
+    // Cadence, output and config-locking are demoted out of the mandatory gate
+    // (default Manual / on-demand, all params adjustable) and stay editable in
+    // the modal + settings. The existing clarification machinery auto-submits
+    // once the last answer lands; submitClarification (purpose 'save-workflow')
+    // then opens the modal seeded from these answers.
     saveWorkflowAnswersRef.current = { kind: 'exception', pairs: [] };
 
     const questions = [
       {
-        // 1 — Risk & assertion: why the control exists.
-        question: 'What risk should this workflow detect?',
+        // 1 — Objective & exception rule: the risk + the threshold that makes
+        // a row a hit. One question now carries risk, assertion and rule.
+        question: 'What should each run flag, and what makes something an exception?',
         options: [
-          'Duplicate / overpayment to vendors — Occurrence & Accuracy',
-          'Fictitious or unauthorized vendor — Validity',
-          'Off-contract / unapproved spend — Validity',
-          'Price or quantity variance vs PO — Accuracy',
+          'Duplicate / overpayment — same vendor, amount & date within tolerance',
+          'Fictitious / unauthorized vendor — payee not in the approved master',
+          'Off-contract / unapproved spend — no matching PO or contract',
+          'Price or quantity variance vs PO — line exceeds ±5% tolerance',
         ],
       },
       {
-        // 2 — Population & period: over what data each run executes.
-        question: 'What population and period should each run cover?',
+        // 2a — Input contract: where each run gets its data, and whether the
+        // file/columns are frozen as the contract.
+        question: 'Where does each run get its data?',
+        options: [
+          'Re-pull from the connected source each run — picks up new rows',
+          'Upload a fresh file each run — manual drop',
+          'Freeze this exact file & columns as the contract — schema locked',
+        ],
+      },
+      {
+        // 2b — Same-schema files: consolidate / compare / reference. Always
+        // shown for the prototype.
+        question: 'We found multiple files with the same schema — consolidate, compare, or reference?',
+        options: [
+          'Consolidate — merge into a single population',
+          'Compare — keep the files separate as required inputs',
+          'Reference — keep one as the rule/reference table',
+        ],
+      },
+      {
+        // 3 — Scope per run: the population & period each run covers.
+        question: 'What population and period does each run cover?',
         options: [
           'Full population (100%), since last run — by invoice & posting date',
-          'Full population (100%), current month',
-          'Full population (100%), current quarter',
-          'Monetary-unit sample, current quarter',
-        ],
-      },
-      {
-        // 3 — Frequency: how often it runs.
-        question: 'How often should this workflow run?',
-        options: [
-          'Monthly, 2 days after period close',
-          'Continuous — on every new invoice batch',
-          'Weekly',
-          'Quarterly',
-        ],
-      },
-      {
-        // 4 — Output: what each run renders (KPIs are part of the output).
-        question: 'What should each run output?',
-        options: [
-          'KPIs + Exception Register + trend chart',
-          'KPIs + Exception Register only',
-          'KPIs + summary-by-vendor table',
-          'Full pack — KPIs, register, reconciliation, aging & trend',
-        ],
-      },
-      {
-        // 5 — Configuration: which params stay adjustable vs locked.
-        question: 'Which values stay adjustable each run? Others lock behind re-certification.',
-        options: [
-          'Period, entity & recipients — tolerances & materiality locked',
-          'All detection thresholds adjustable',
-          'Everything locked — fixed control',
-          'Set a materiality floor first',
+          'Full population (100%), current period (month or quarter)',
+          'Monetary-unit sample, current period',
         ],
       },
     ];
 
     const data: QueryClarificationData = {
-      intro: 'Before I save this as a reusable control, let’s lock in five essentials — I’ve pre-filled my best guess from the analysis we just ran.',
+      intro: 'Before I save this as a reusable control, let’s lock in the essentials — I’ve pre-filled my best guess from the analysis we just ran. Cadence, output and locked parameters stay editable later.',
       questions,
       answers: {},
       status: 'open',
@@ -3806,7 +3963,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
       text: '',
       thinking: [
         'Preparing to save this query as a governed workflow',
-        'Drafting 5 clarifications — risk, population, cadence, output, configuration',
+        'Drafting clarifications — objective & exception rule, input contract, scope per run',
       ],
       timestamp: new Date(),
       richType: 'clarification',
@@ -4227,21 +4384,41 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     if (!trimmed && files.length === 0) return;
     const text = trimmed;
 
-    // Plan-refine mode (user clicked "Revise" on the plan preview): the next
-    // message is feedback that updates the plan — not a new build or query.
-    // Record it, acknowledge, then re-show the (updated) plan preview.
-    if (wfRefiningPlan && trimmed) {
-      setMessages(m => [...m, { id: `msg-${Date.now()}`, role: 'user', text: trimmed, timestamp: new Date() }]);
+    // Composer "context mode" — the user clicked a canvas CTA (Plan ▸ Edit,
+    // Code ▸ Edit, a Source's Chat / Pick) or "Revise" on the plan preview.
+    // The next message is scoped to that artifact, not a new build or query.
+    // Record it (with the target carried as a chip on the bubble), then ack
+    // with copy tailored to the kind — re-showing the plan card for edits.
+    if (composerContext && trimmed) {
+      const ctx = composerContext;
+      const ctxAttachments: ChatMessage['attachments'] = ctx.target
+        ? [{ kind: 'source' as const, name: ctx.target.title, type: 'file' }]
+        : undefined;
+      setMessages(m => [...m, {
+        id: `msg-${Date.now()}`,
+        role: 'user',
+        text: trimmed,
+        timestamp: new Date(),
+        ...(ctxAttachments ? { attachments: ctxAttachments } : {}),
+      }]);
       setInput('');
       setFiles([]);
       setAttachedSources([]);
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
-      setWfRefiningPlan(false);
+      setComposerContext(null);
       setIsTyping(true);
+      const targetName = ctx.target?.title ?? 'that';
+      const ack =
+        ctx.kind === 'edit-plan' ? 'Updated the execution plan with your changes.'
+        : ctx.kind === 'edit-code' ? 'Updated the generated code with your changes.'
+        : ctx.kind === 'source-pick' ? `Updated the columns in use for ${targetName}.`
+        : `Here's what I found in ${targetName}.`;
       window.setTimeout(() => {
         setIsTyping(false);
-        wfPushAssistant('Updated the plan with your changes.');
-        wfPushCard('workflow-map');
+        wfPushAssistant(ack);
+        // Re-show the plan card only in workflow-build mode; in query mode the
+        // ack stands alone (there's no workflow-map card to refresh).
+        if (ctx.kind === 'edit-plan' && buildWorkflowMode) wfPushCard('workflow-map');
       }, 900);
       return;
     }
@@ -5619,48 +5796,44 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       </div>
                     ) : msg.richType === 'audit-result' ? (
                       <div className="space-y-4 w-full">
-                        {/* Body text */}
-                        {msg.text && (
-                          <div className="text-[0.9375rem] leading-[1.65] text-ink-800 max-w-[66ch]">{renderAssistantText(msg.text)}</div>
-                        )}
-
-                        {/* Affordance: link inline result to the auto-opened panel.
-                            Hidden when the panel is already open (the link would
-                            no-op against itself and duplicates what's already
-                            on screen). */}
-                        {!showArtifacts && (
-                          <button
-                            onClick={() => setShowArtifacts(true)}
-                            className="inline-flex items-center gap-1.5 text-xs text-ink-500 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm"
-                          >
-                            <span>Plan, query, and sources are in the Workspace</span>
-                            <ArrowUpRight size={12} />
-                          </button>
-                        )}
-
-                        {/* KPI scoreboard — mirrors DashboardView's KPI grid
-                            exactly: glass-cards (rounded-xl, hairline border,
-                            brand-200 hover) in a 2/4-col grid. 11px uppercase
-                            label over a 26px bold ink-900 value. Scales to N
-                            rows when the result carries many KPIs — same
-                            widget, same typography on both surfaces. */}
-                        <div role="list" aria-label="Key results" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                          {AUDIT_RESULT.kpis.map((kpi, ki) => (
-                            <KpiTile key={kpi.label} label={kpi.label} value={kpi.value} index={ki} />
-                          ))}
-                        </div>
-
-                        {/* Chart — ChartGroup carries its own widget shell
-                            (title, toggle, expand button), matched to the
-                            ResultsTable below so they read as a pair. */}
-                        <ChartGroup charts={AUDIT_RESULT.charts} embedded />
-
-                        {/* Table preview */}
-                        <ResultsTable
-                          columns={AUDIT_RESULT.table.columns}
-                          rows={AUDIT_RESULT.table.rows}
-                          totalRows={AUDIT_RESULT.table.totalRows}
-                          onDownload={() => addToast({ type: 'success', message: 'CSV download started.' })}
+                        {/* Streamed composite output — prose typewriter, KPI
+                            count-up, chart draw-in and a row-streamed table all
+                            brew in parallel with staggered onsets. Render-prop
+                            slots keep ChartGroup / ResultsTable owned here so
+                            the shared widgets (and the right workspace) are
+                            untouched. */}
+                        <AuditResultBody
+                          messageId={msg.id}
+                          text={msg.text}
+                          kpis={AUDIT_RESULT.kpis}
+                          previewRowCount={Math.min(PREVIEW_ROW_COUNT, AUDIT_RESULT.table.rows.length)}
+                          forceComplete={msg.stopped}
+                          afterProse={
+                            /* Affordance: link inline result to the auto-opened
+                               panel. Hidden when the panel is already open (the
+                               link would no-op against itself and duplicate
+                               what's already on screen). */
+                            !showArtifacts ? (
+                              <button
+                                onClick={() => setShowArtifacts(true)}
+                                className="inline-flex items-center gap-1.5 text-xs text-ink-500 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm"
+                              >
+                                <span>Plan, query, and sources are in the Workspace</span>
+                                <ArrowUpRight size={12} />
+                              </button>
+                            ) : null
+                          }
+                          renderChart={() => (
+                            <ChartGroup charts={AUDIT_RESULT.charts} embedded />
+                          )}
+                          renderTable={(revealedRows) => (
+                            <ResultsTable
+                              columns={AUDIT_RESULT.table.columns}
+                              rows={AUDIT_RESULT.table.rows.slice(0, revealedRows)}
+                              totalRows={AUDIT_RESULT.table.totalRows}
+                              onDownload={() => addToast({ type: 'success', message: 'CSV download started.' })}
+                            />
+                          )}
                         />
 
                         {/* Action bar — explicit row of actions per PRD action-bar spec.
@@ -5992,13 +6165,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                       thinking: undefined,
                                       richType: 'audit-result',
                                       richData: AUDIT_RESULT,
+                                      followUpTracks: AUDIT_FOLLOWUP_TRACKS,
                                     }
                                   : msg,
                               ));
                             }, 2200);
                           }}
                           onViewWorkspace={() => { setArtifactMode("workflow"); setShowArtifacts(true); }}
-                          onRevise={() => setWfRefiningPlan(true)}
+                          onRevise={() => setComposerContext(editPlanContext())}
                         />
                       ) : null
                     ) : msg.richType === 'workflow-review' ? (
@@ -6388,12 +6562,15 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     )}
                     </div>
 
-                    {/* Follow-up suggestions — wrapping horizontal flex of
-                        small rounded pills under a quiet "What next?" label.
-                        Hover lifts the chip to brand-50 and tints the border
-                        to brand-200. In our theme: canvas-elevated fill +
-                        canvas-border at rest, brand-50 + brand-200 on hover. */}
-                    {msg.role === 'assistant' && msg.followUps && msg.followUps.length > 0 && (
+                    {/* Follow-up suggestions under a quiet "What next?" label.
+                        When the message carries `followUpTracks`, they split
+                        into two labelled groups — "Go deeper" (drill into the
+                        result) and "Go wider" (explore adjacent input sources).
+                        Otherwise a flat card grid renders for conversational
+                        quick-replies. Cards stay one neutral family per
+                        DESIGN.md; the depth/breadth signal lives in the group
+                        header's icon badge + label. */}
+                    {msg.role === 'assistant' && (msg.followUpTracks || (msg.followUps && msg.followUps.length > 0)) && (
                       <div
                         role="region"
                         aria-labelledby={`followups-heading-${msg.id}`}
@@ -6409,60 +6586,76 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         >
                           What next?
                         </motion.h3>
-                        <div className="flex flex-wrap gap-2">
-                        {msg.followUps.map((q, i) => {
-                          const isSelected = selectedFollowUpByMsgId[msg.id] === q;
-                          return (
-                            <motion.button
-                              key={`${msg.id}-followup-${i}`}
-                              type="button"
-                              onClick={() => {
-                                setSelectedFollowUpByMsgId(prev => ({ ...prev, [msg.id]: q }));
-                                handleFollowUpClick(q);
-                              }}
-                              aria-pressed={isSelected}
-                              // Mount cascade — runs every time the chip mounts.
-                              // NOT gated on prefersReducedMotion: the user
-                              // explicitly asked for the popup animation to
-                              // play on chat generation; the cascade is the
-                              // signal that "follow-up suggestions arrived".
-                              initial={{ opacity: 0, y: 12, scale: 0.9 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              transition={{
-                                // Modern one-by-one popup cascade. Each chip
-                                // scales + rises over ~480ms with a 130ms
-                                // stagger so the eye can clearly track each
-                                // chip as it appears. Vercel/Linear expo-out
-                                // curve, no spring on entrance so it lands
-                                // clean (no wobble at rest).
-                                delay: 0.4 + i * 0.13,
-                                duration: 0.48,
-                                ease: [0.22, 1, 0.36, 1],
-                              }}
-                              whileHover={prefersReducedMotion ? undefined : {
-                                y: -1,
-                                scale: 1.012,
-                                // Featherweight — near-zero mass + very high
-                                // stiffness means the chip is at its hover
-                                // state almost instantly, like there's nothing
-                                // to move. Heavy damping kills any wobble.
-                                transition: { type: 'spring', stiffness: 700, damping: 32, mass: 0.12 },
-                              }}
-                              whileTap={prefersReducedMotion ? undefined : {
-                                scale: 0.985,
-                                transition: { type: 'spring', stiffness: 800, damping: 34, mass: 0.12 },
-                              }}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[0.8125rem] leading-tight cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                                isSelected
-                                  ? 'bg-brand-50 text-brand-700 border border-brand-200'
-                                  : 'bg-canvas-elevated text-ink-700 border border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
-                              }`}
-                            >
-                              <span>{q}</span>
-                            </motion.button>
-                          );
-                        })}
-                        </div>
+
+                        {msg.followUpTracks ? (
+                          (() => {
+                            const tracks = (['depth', 'breadth'] as const).filter(
+                              t => msg.followUpTracks![t]?.length,
+                            );
+                            // Running index across BOTH groups so the entrance
+                            // cascade reads as one continuous sequence rather
+                            // than two competing staggers.
+                            let cascade = 0;
+                            return (
+                              <div className="space-y-4">
+                                {tracks.map(track => {
+                                  const meta = FOLLOWUP_TRACK_META[track];
+                                  const BadgeIcon = meta.Icon;
+                                  return (
+                                    <div key={`${msg.id}-track-${track}`}>
+                                      <motion.div
+                                        initial={{ opacity: 0, y: 6 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.3, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                                        className="mb-2 flex items-center gap-2"
+                                      >
+                                        <span className={`inline-flex items-center justify-center size-6 rounded-md ${meta.badge}`}>
+                                          <BadgeIcon size={13} strokeWidth={2} />
+                                        </span>
+                                        <span className="text-[0.8125rem] font-semibold text-ink-900">{meta.label}</span>
+                                        <span className="text-[0.75rem] text-ink-400">{meta.caption}</span>
+                                      </motion.div>
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                        {msg.followUpTracks![track].map(q => {
+                                          const delayIndex = cascade++;
+                                          return (
+                                            <FollowUpCard
+                                              key={`${msg.id}-${track}-${delayIndex}`}
+                                              q={q}
+                                              delayIndex={delayIndex}
+                                              isSelected={selectedFollowUpByMsgId[msg.id] === q}
+                                              reduced={!!prefersReducedMotion}
+                                              onClick={() => {
+                                                setSelectedFollowUpByMsgId(prev => ({ ...prev, [msg.id]: q }));
+                                                handleFollowUpClick(q);
+                                              }}
+                                            />
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {msg.followUps!.map((q, i) => (
+                              <FollowUpCard
+                                key={`${msg.id}-followup-${i}`}
+                                q={q}
+                                delayIndex={i}
+                                isSelected={selectedFollowUpByMsgId[msg.id] === q}
+                                reduced={!!prefersReducedMotion}
+                                onClick={() => {
+                                  setSelectedFollowUpByMsgId(prev => ({ ...prev, [msg.id]: q }));
+                                  handleFollowUpClick(q);
+                                }}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -6547,26 +6740,66 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             messages column's true 52.5rem width so both surfaces span
             edge-to-edge identically. px-4 retained on mobile only. */}
         <div className="shrink-0 pb-2 max-w-[52.5rem] mx-auto w-full px-4 sm:px-0">
-          {/* Plan-refine banner — shown after "Revise" on the plan preview.
-              The next message updates the plan; Cancel exits with no change. */}
-          {wfRefiningPlan && (
-            <div className="mb-2 flex items-center gap-2.5 px-1">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[0.8125rem] font-semibold text-amber-700 shrink-0">
-                <Pencil size={12} />
-                Refining plan
-              </span>
-              <span className="flex-1 min-w-0 text-[0.8125rem] text-ink-500 truncate">
-                Type your feedback — the next message updates this plan.
-              </span>
-              <button
-                type="button"
-                onClick={() => setWfRefiningPlan(false)}
-                className="shrink-0 text-[0.8125rem] font-medium text-ink-500 hover:text-ink-800 underline underline-offset-2 cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
+          {/* Composer "context mode" — set by a canvas CTA (Plan ▸ Edit, Code ▸
+              Edit, a Source's Chat / Pick) or "Revise". A toned banner states
+              the mode + Cancel, and a Perplexity-style chip shows exactly which
+              artifact the next message acts on. */}
+          {composerContext && (() => {
+            const tone = COMPOSER_TONE[composerContext.tone];
+            const Icon = COMPOSER_ICON[composerContext.icon];
+            const target = composerContext.target;
+            return (
+              <div className="mb-2 space-y-1.5">
+                <div className="flex items-center gap-2.5 px-1">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.8125rem] font-semibold shrink-0 ${tone.pill}`}>
+                    <Icon size={12} />
+                    {composerContext.label}
+                  </span>
+                  <span className="flex-1 min-w-0 text-[0.8125rem] text-ink-500 truncate">
+                    {composerContext.helper}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setComposerContext(null)}
+                    className="shrink-0 text-[0.8125rem] font-medium text-ink-500 hover:text-ink-800 underline underline-offset-2 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {target && (
+                  <div className={`flex items-start gap-2.5 rounded-xl border bg-canvas-elevated px-3 py-2.5 ${tone.chip}`}>
+                    <span className={`inline-flex items-center justify-center size-7 rounded-md shrink-0 ${tone.iconTile}`}>
+                      <Icon size={14} />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[0.8125rem] font-semibold text-ink-900 truncate">{target.title}</span>
+                        {target.badge && (
+                          <span className={`text-[0.625rem] font-bold uppercase tracking-wider rounded px-1 py-0.5 shrink-0 ${tone.badge}`}>
+                            {target.badge}
+                          </span>
+                        )}
+                      </div>
+                      {target.subtitle && (
+                        <div className="text-[0.75rem] text-ink-500 truncate mt-0.5">{target.subtitle}</div>
+                      )}
+                      {target.excerpt && (
+                        <div className="text-[0.75rem] text-ink-400 italic leading-snug mt-1 line-clamp-2">“{target.excerpt}”</div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setComposerContext(null)}
+                      aria-label="Remove context"
+                      className="shrink-0 inline-flex items-center justify-center size-6 -mr-0.5 -mt-0.5 rounded-md text-ink-400 hover:text-ink-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {/* Legacy phase-based workflow clarification — now rendered through the
               shared QueryClarificationCard so it matches the chat Q&A flow. */}
           <AnimatePresence>
@@ -6795,7 +7028,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     onChange={e => { setInput(e.target.value); handleTextareaInput(); }}
                     onKeyDown={handleKeyDown}
                     onPaste={handleComposerPaste}
-                    placeholder={buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Reply to Ira…'}
+                    placeholder={composerContext?.placeholder ?? (buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Reply to Ira…')}
                     aria-label="Message Ira"
                     className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-5 pt-4 pb-2 text-[0.9375rem] leading-[1.5] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]"
                     rows={1}
@@ -6897,23 +7130,22 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
       <AnimatePresence>
         {showSaveAsWfModal && (() => {
           // Seed the modal's name / description / configurable keys from the
-          // five save-workflow clarification answers (risk, population/period,
-          // frequency, output, configuration). Each answer becomes a
-          // configurable key; name + description summarise the control. Falls
-          // back to legacy tolerance keys when no clarification answers were
-          // captured — e.g. the modal was opened from a deep-link or test
-          // harness.
+          // four save-workflow clarification answers (objective & exception
+          // rule, input source, same-schema handling, scope per run). Each
+          // answer becomes a configurable key; name + description summarise the
+          // control. Falls back to legacy tolerance keys when no clarification
+          // answers were captured — e.g. the modal was opened from a deep-link
+          // or test harness.
           const clarif = saveWorkflowAnswersRef.current;
           const findAns = (kw: string): string =>
             clarif.pairs.find(p => p.question.toLowerCase().includes(kw.toLowerCase()))?.answer ?? '';
 
-          const riskAns = findAns('risk should this');
+          const riskAns = findAns('each run flag');
+          const inputAns = findAns('get its data');
+          const schemaAns = findAns('same schema');
           const popAns = findAns('population and period');
-          const freqAns = findAns('how often');
-          const outputAns = findAns('each run output');
-          const configAns = findAns('stay adjustable');
 
-          // Risk text reads "<label> — <assertion>"; the label seeds a clean
+          // Objective text reads "<label> — <rule>"; the label seeds a clean
           // workflow name, the full answer seeds the description + a config key.
           const riskShort = (riskAns.split('—')[0] || '').trim();
           const defaultName =
@@ -6923,20 +7155,19 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             : /variance/i.test(riskAns) ? 'PO Price/Quantity Variance Detection'
             : 'Audit Workflow';
           const defaultDescription = [
-            `Detects ${(riskShort || 'duplicate / overpayment to vendors').toLowerCase()}`,
+            `Detects ${(riskShort || 'duplicate / overpayment').toLowerCase()}`,
             popAns ? ` over ${popAns.toLowerCase()}` : '',
-            freqAns ? `. Runs ${freqAns.toLowerCase()}` : '',
-            outputAns ? `; outputs ${outputAns.toLowerCase()}` : '',
+            inputAns ? `. Input: ${inputAns.toLowerCase()}` : '',
+            schemaAns ? `; same-schema files ${schemaAns.split('—')[0].trim().toLowerCase()}` : '',
             '.',
           ].join('');
 
           type ConfigEntry = { key: string; type: 'float' | 'int' | 'str' | 'list_str' | 'bool'; value: string };
           let defaultConfigurables: ConfigEntry[] = [
-            ...(riskAns ? [{ key: 'control_risk', type: 'str' as const, value: riskAns }] : []),
+            ...(riskAns ? [{ key: 'control_objective', type: 'str' as const, value: riskAns }] : []),
+            ...(inputAns ? [{ key: 'input_contract', type: 'str' as const, value: inputAns }] : []),
+            ...(schemaAns ? [{ key: 'same_schema_handling', type: 'str' as const, value: schemaAns }] : []),
             ...(popAns ? [{ key: 'population_period', type: 'str' as const, value: popAns }] : []),
-            ...(freqAns ? [{ key: 'run_frequency', type: 'str' as const, value: freqAns }] : []),
-            ...(outputAns ? [{ key: 'output_artifacts', type: 'str' as const, value: outputAns }] : []),
-            ...(configAns ? [{ key: 'adjustable_config', type: 'str' as const, value: configAns }] : []),
           ];
 
           if (defaultConfigurables.length === 0) {

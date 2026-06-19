@@ -4,10 +4,13 @@ import DataSourcePanel from '../concierge-workflow-builder/DataSourcePanel';
 import { generateWorkflow } from '../concierge-workflow-builder/mockApi';
 import type { JourneyFiles } from '../concierge-workflow-builder/types';
 import type { WorkflowTypeId } from '../../data/mockData';
+import type { ComposerContext } from './composerContext';
 
 interface Props {
   onClose: () => void;
   workflowType?: WorkflowTypeId;
+  /** Hands a canvas CTA off to the chat composer as a focused context mode. */
+  onCanvasAction?: (ctx: ComposerContext) => void;
 }
 
 const TYPE_PROMPT: Record<WorkflowTypeId, string> = {
@@ -17,7 +20,7 @@ const TYPE_PROMPT: Record<WorkflowTypeId, string> = {
   compliance: 'Segregation of duties compliance check',
 };
 
-export default function ChatWorkflowWorkspace({ onClose, workflowType }: Props) {
+export default function ChatWorkflowWorkspace({ onClose, workflowType, onCanvasAction }: Props) {
   const workflow = useMemo(
     () => generateWorkflow(workflowType ? TYPE_PROMPT[workflowType] : 'detection'),
     [workflowType],
@@ -31,6 +34,7 @@ export default function ChatWorkflowWorkspace({ onClose, workflowType }: Props) 
         files={files}
         setFiles={setFiles}
         step={3}
+        onCanvasAction={onCanvasAction}
       />
       <button
         onClick={onClose}

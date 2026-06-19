@@ -36,6 +36,7 @@ import { Plus, X } from 'lucide-react';
 import ChatView, { type ChatMessage, type ChatViewProps } from './ChatView';
 import ArtifactPanel from '../artifacts/ArtifactPanel';
 import ChatWorkflowWorkspace from './ChatWorkflowWorkspace';
+import type { ComposerContext } from './composerContext';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { CHAT_HISTORY, CHAT_CONVERSATIONS, type WorkflowTypeId } from '../../data/mockData';
 import {
@@ -170,6 +171,11 @@ export default function ChatTabsView({
   const messagesRef = useRef<Record<string, ChatMessage[]>>({});
   const tabsRef = useRef(tabs);
   useEffect(() => { tabsRef.current = tabs; }, [tabs]);
+
+  // One-shot canvas → composer handoff. A right-side canvas CTA (Plan ▸ Edit,
+  // Code ▸ Edit, a Source's Chat / Pick) sets this; the active ChatView
+  // consumes it into a focused composer "context mode", then clears it.
+  const [canvasContext, setCanvasContext] = useState<ComposerContext | null>(null);
 
   // Results-panel resize — single shared width, persisted to localStorage.
   const splitRef = useRef<HTMLDivElement>(null);
@@ -308,7 +314,11 @@ export default function ChatTabsView({
   const renderActivePanel = () => {
     if (!active.showArtifacts || !activeApi) return null;
     const inner = active.artifactMode === 'workflow' ? (
-      <ChatWorkflowWorkspace onClose={() => activeApi.setShowArtifacts(false)} workflowType={active.workflowType ?? undefined} />
+      <ChatWorkflowWorkspace
+        onClose={() => activeApi.setShowArtifacts(false)}
+        workflowType={active.workflowType ?? undefined}
+        onCanvasAction={setCanvasContext}
+      />
     ) : (
       <ArtifactPanel
         activeTab={active.activeArtifactTab}
@@ -414,6 +424,8 @@ export default function ChatTabsView({
                   onWorkflowRunSeedConsumed={isActive ? onWorkflowRunSeedConsumed : undefined}
                   composerDraft={isActive ? composerDraft : null}
                   onComposerDraftConsumed={isActive ? onComposerDraftConsumed : undefined}
+                  composerContextSeed={isActive ? canvasContext : null}
+                  onComposerContextSeedConsumed={isActive ? () => setCanvasContext(null) : undefined}
                   workflowBuilderSeedPrompt={isActive ? workflowBuilderSeedPrompt : null}
                   onWorkflowBuilderSeedConsumed={isActive ? onWorkflowBuilderSeedConsumed : undefined}
                 />

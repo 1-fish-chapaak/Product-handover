@@ -34,7 +34,31 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { DATA_SOURCES } from '../../data/mockData';
-import type { JourneyFiles, RunResult, StepSpec, WorkflowDraft } from './types';
+import type { JourneyFiles, RunResult, WorkflowDraft } from './types';
+import {
+  type ComposerContext,
+  editPlanContext,
+  editCodeContext,
+  sourceChatContext,
+  sourcePickContext,
+} from '../chat/composerContext';
+import {
+  QueryExecutionPlanCard,
+  AssumptionsCard,
+  type PlanCardStep,
+  type PlanAssumption,
+} from '../shared/PlanCards';
+
+// Default run assumptions surfaced on the builder's Plan tab — mirrors the
+// chat/QnA Assumptions card so both modes read the same.
+const BUILDER_ASSUMPTIONS: PlanAssumption[] = [
+  { key: 'Run scope',        value: 'Full population (100%), since last run' },
+  { key: 'Amount tolerance', value: '± 5% on invoice amounts' },
+  { key: 'Vendor scope',     value: 'All active vendors in the master' },
+  { key: 'Matching logic',   value: 'Vendor + amount + invoice date within tolerance' },
+  { key: 'Excluded',         value: 'Voided and reversed invoices' },
+  { key: 'Currency',         value: 'INR (converted at booking rate)' },
+];
 
 interface Props {
   workflow: WorkflowDraft;
@@ -44,6 +68,12 @@ interface Props {
   running?: boolean;
   /** Current journey step — drives auto tab selection on transitions. */
   step?: number;
+  /**
+   * Hands a canvas CTA off to the chat composer as a focused "context mode"
+   * (Plan ▸ Edit, Code ▸ Edit, a Source's Chat / Pick). When absent the CTAs
+   * fall back to their in-canvas behaviour (e.g. expand the card).
+   */
+  onCanvasAction?: (ctx: ComposerContext) => void;
   /**
    * Whether the user has explicitly opened the preview from chat. When false,
    * a fresh result lands the user in Configure → Output (review schema first);
@@ -156,19 +186,6 @@ function describeColumn(name: string): string {
 }
 
 type PanelTab = 'input' | 'plan' | 'code' | 'preview';
-
-const STEP_BADGE: Record<
-  StepSpec['type'],
-  { label: string; bg: string; text: string }
-> = {
-  extract: { label: 'INGESTION', bg: 'bg-brand-50', text: 'text-brand-700' },
-  analyze: { label: 'ANALYSIS', bg: 'bg-brand-600', text: 'text-white' },
-  compare: { label: 'COMPARISON', bg: 'bg-compliant-50', text: 'text-compliant-700' },
-  flag: { label: 'FLAGGING', bg: 'bg-mitigated-50', text: 'text-mitigated-700' },
-  validate: { label: 'VALIDATION', bg: 'bg-evidence-50', text: 'text-evidence-700' },
-  summarize: { label: 'SUMMARY', bg: 'bg-compliant-50', text: 'text-compliant-700' },
-  calculate: { label: 'CALCULATION', bg: 'bg-mitigated-50', text: 'text-mitigated-700' },
-};
 
 function inputMeta(input: { type: string; multiple?: boolean }): string {
   if (input.type === 'csv') return '12,450 rows · CSV';
@@ -332,6 +349,7 @@ export default function DataSourcePanel({
   running = false,
   step,
   previewRevealed = false,
+  onCanvasAction,
 }: Props) {
   const [tab, setTab] = useState<PanelTab>('input');
   const [search, setSearch] = useState('');
@@ -695,7 +713,7 @@ export default function DataSourcePanel({
                       <span className="text-[11px] font-mono text-ink-700 truncate flex-1" title={folder.files.map(f => f.name).join(', ')}>
                         {folder.files.map(f => f.name).join(', ') || '(empty)'}
                       </span>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
                         <button
                           type="button"
                           onClick={() => toggleInputFolderExpansion(folder.id)}
@@ -708,6 +726,11 @@ export default function DataSourcePanel({
                         </button>
                         <button
                           type="button"
+                          onClick={() => onCanvasAction?.(sourceChatContext({
+                            name: folder.name,
+                            type: 'pdf',
+                            description: `${folder.fileCount} file${folder.fileCount === 1 ? '' : 's'}`,
+                          }))}
                           aria-label={`Discuss ${folder.name} in chat`}
                           title="Describe in chat"
                           className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
@@ -823,10 +846,19 @@ export default function DataSourcePanel({
                         <span className="text-[11px] font-mono text-ink-700 truncate flex-1" title={cols.join(', ')}>
                           {cols.join(', ')}
                         </span>
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
                           <button
                             type="button"
-                            onClick={() => toggleInputCardExpansion(input.id)}
+                            onClick={() =>
+                              onCanvasAction
+                                ? onCanvasAction(sourcePickContext({
+                                    name: input.name,
+                                    type: input.type,
+                                    used: cols.length,
+                                    total: cols.length,
+                                  }))
+                                : toggleInputCardExpansion(input.id)
+                            }
                             aria-label={`Pick columns from ${input.name}`}
                             title="Pick columns"
                             className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
@@ -836,6 +868,11 @@ export default function DataSourcePanel({
                           </button>
                           <button
                             type="button"
+                            onClick={() => onCanvasAction?.(sourceChatContext({
+                              name: input.name,
+                              type: input.type,
+                              description: input.description,
+                            }))}
                             aria-label={`Describe column change for ${input.name} in chat`}
                             title="Describe in chat"
                             className="inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
@@ -1124,69 +1161,35 @@ export default function DataSourcePanel({
               )}
             </div>
 
-            {/* Steps card — the generated code now lives in its own Code tab. */}
-            <div className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]">
-                <div className="flex items-center px-4 py-3">
-                  <div className="flex-1 flex items-center gap-2 text-[14px] font-semibold tracking-tight text-ink-900">
-                    <ListChecks size={14} className="text-primary shrink-0" />
-                    <span className="flex-1 text-left">Steps</span>
-                    <span className="text-[12px] font-normal text-ink-500">
-                      {workflow.steps.length} total
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="ml-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-2 py-1 rounded-md cursor-pointer transition-colors"
-                  >
-                    Reorder
-                  </button>
-                </div>
-                <ul className="flex flex-col border-t border-canvas-border">
-                  {workflow.steps.map((step, idx) => {
-                    const badge = STEP_BADGE[step.type];
-                    const relevant = workflow.inputs.filter((i) =>
-                      step.dataFiles.includes(i.id),
-                    );
-                    return (
-                      <li
-                        key={step.id}
-                        className={`px-4 py-3 hover:bg-brand-50/30 transition-colors ${idx > 0 ? 'border-t border-canvas-border/70' : ''}`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <span className="w-6 h-6 rounded-full bg-ink-900 text-white flex items-center justify-center text-[12px] font-bold shrink-0 mt-0.5 tabular-nums">
-                            {idx + 1}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="text-[13px] font-semibold text-ink-900">
-                                {step.name}
-                              </h3>
-                              <span
-                                className={`text-[11px] font-bold tracking-wider rounded px-1.5 py-0.5 ${badge.bg} ${badge.text}`}
-                              >
-                                {badge.label}
-                              </span>
-                            </div>
-                            <p className="text-[12px] text-ink-500 leading-relaxed mt-0.5">
-                              {step.description}
-                            </p>
-                            {relevant.length > 0 && (
-                              <div className="mt-2">
-                                <StepFilesAndColumns inputs={relevant} />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
+            {/* Query Execution Plan — shared with the chat/QnA canvas. */}
+            <QueryExecutionPlanCard
+              steps={workflow.steps.map((step): PlanCardStep => ({
+                id: step.id,
+                name: step.name,
+                type: step.type,
+                description: step.description,
+                sources: workflow.inputs
+                  .filter((i) => step.dataFiles.includes(i.id))
+                  .map((i) => ({ id: i.id, name: i.name, type: i.type, columns: i.columns })),
+              }))}
+              onEdit={onCanvasAction ? () => onCanvasAction(editPlanContext(workflow.steps.length)) : undefined}
+            />
+
+            {/* Assumptions — shared with the chat/QnA canvas. */}
+            <AssumptionsCard
+              assumptions={BUILDER_ASSUMPTIONS}
+              context="workflow"
+              onEdit={onCanvasAction ? () => onCanvasAction(editPlanContext(workflow.steps.length)) : undefined}
+            />
           </div>
         )}
         {tab === 'code' && (
           <div className="flex flex-col gap-3">
-            <CodeSection code={SAMPLE_CODE_LINES.join('\n')} filename="workflow.py" />
+            <CodeSection
+              code={SAMPLE_CODE_LINES.join('\n')}
+              filename="workflow.py"
+              onEdit={onCanvasAction ? () => onCanvasAction(editCodeContext('workflow.py')) : undefined}
+            />
           </div>
         )}
       </div>
@@ -1216,104 +1219,8 @@ const PY_KEYWORDS = new Set([
 // Generated-code section — mirrors the query ArtifactPanel's CodeTab UI:
 // CollapsibleSection-style header (icon + title + chevron) over a dark
 // code block with Copy / Download icon buttons anchored top-right.
-// Per-step files + columns block. Scales for "so many files and columns
-// used": each input is its own row with file icon + name + chip count,
-// and a collapsible column list with show-more if the column count is
-// large. Collapsed by default to keep step rows compact; user expands
-// any file they care about.
-function StepFilesAndColumns({ inputs }: { inputs: { id: string; name: string; type: string; columns?: string[] }[] }) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [showAllExpanded, setShowAllExpanded] = useState<Set<string>>(new Set());
-  const COLLAPSED_COLUMN_CAP = 6;
-  const toggle = (id: string) => setExpanded(prev => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
-  const toggleShowAll = (id: string) => setShowAllExpanded(prev => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
-  return (
-    <div className="rounded-lg border border-canvas-border bg-canvas/40 overflow-hidden">
-      <ul className="flex flex-col">
-        {inputs.map((input, i) => {
-          const cols = input.columns ?? [];
-          const isExpanded = expanded.has(input.id);
-          const isShowAll = showAllExpanded.has(input.id);
-          const Icon = typeIcon(input.type);
-          const visibleCols = isShowAll ? cols : cols.slice(0, COLLAPSED_COLUMN_CAP);
-          const hiddenCount = cols.length - visibleCols.length;
-          return (
-            <li
-              key={input.id}
-              className={i > 0 ? 'border-t border-canvas-border/60' : ''}
-            >
-              <button
-                type="button"
-                onClick={() => toggle(input.id)}
-                aria-expanded={isExpanded}
-                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-canvas-elevated transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
-              >
-                <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 ${typeColor(input.type)}`}>
-                  <Icon size={11} />
-                </div>
-                <div className="flex-1 min-w-0 flex items-center gap-2">
-                  <span className="text-[12.5px] font-semibold text-ink-800 truncate">{input.name}</span>
-                  <span className="text-[11px] font-mono text-ink-500 tabular-nums shrink-0">
-                    {cols.length} col{cols.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-ink-400 shrink-0">
-                  {input.type}
-                </span>
-                <ChevronDown
-                  size={12}
-                  className={`text-ink-400 shrink-0 transition-transform duration-150 ${isExpanded ? '' : '-rotate-90'}`}
-                />
-              </button>
-              {isExpanded && cols.length > 0 && (
-                <div className="px-3 pb-2.5 pt-0.5">
-                  <div className="flex flex-wrap gap-1">
-                    {visibleCols.map(col => (
-                      <span
-                        key={col}
-                        className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[11.5px] font-mono text-brand-700"
-                      >
-                        {col}
-                      </span>
-                    ))}
-                    {hiddenCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => toggleShowAll(input.id)}
-                        className="inline-flex items-center rounded-md bg-canvas-elevated border border-canvas-border hover:border-brand-200 hover:bg-brand-50/40 px-1.5 py-0.5 text-[11.5px] font-mono text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
-                      >
-                        +{hiddenCount} more
-                      </button>
-                    )}
-                    {isShowAll && cols.length > COLLAPSED_COLUMN_CAP && (
-                      <button
-                        type="button"
-                        onClick={() => toggleShowAll(input.id)}
-                        className="inline-flex items-center rounded-md bg-canvas-elevated border border-canvas-border hover:border-brand-200 hover:bg-brand-50/40 px-1.5 py-0.5 text-[11.5px] font-mono text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
-                      >
-                        Show less
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
 
-function CodeSection({ code, filename }: { code: string; filename: string }) {
+function CodeSection({ code, filename, onEdit }: { code: string; filename: string; onEdit?: () => void }) {
   const [open, setOpen] = useState(true);
   const [copied, setCopied] = useState(false);
   const handleCopy = async () => {
@@ -1347,6 +1254,13 @@ function CodeSection({ code, filename }: { code: string; filename: string }) {
         >
           <FileCode size={14} className="text-primary shrink-0" />
           <span className="flex-1 text-left">Generated Code</span>
+        </button>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="ml-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-2 py-1 rounded-md cursor-pointer transition-colors"
+        >
+          Edit
         </button>
         <button
           type="button"
