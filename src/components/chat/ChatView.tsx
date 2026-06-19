@@ -13,6 +13,7 @@ import {
   Bookmark, BookmarkCheck,
   Search, GitCompare, ShieldCheck, Info, Loader2, AlertTriangle, type LucideIcon,
   LayoutDashboard, ListChecks, FileCode,
+  Layers, Compass,
 } from 'lucide-react';
 import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS, WORKFLOWS } from '../../data/mockData';
 import {
@@ -93,6 +94,13 @@ export interface ChatMessage {
   hasArtifact?: boolean;
   artifactType?: 'workflow' | 'query' | 'report';
   followUps?: string[];
+  // Categorised follow-ups for data results. `depth` drills into the OUTPUT
+  // the run just produced (e.g. the flagged pairs); `breadth` explores
+  // adjacent dimensions of the INPUT sources the run hasn't touched yet. When
+  // present, the "What next?" block renders two labelled groups ("Go deeper" /
+  // "Go wider") instead of a flat card grid. Falls back to `followUps` for
+  // conversational quick-replies that don't split this way.
+  followUpTracks?: { depth: string[]; breadth: string[] };
   timestamp: Date;
   // Files / data sources attached to a user message — rendered as chips
   // above the bubble (not baked into the message text).
@@ -274,14 +282,94 @@ const AUDIT_RESULT = {
   },
 };
 
-const AUDIT_FOLLOWUPS = [
-  'Show match-method breakdown for the top 3 flags',
-  'Drill into Acme Corp’s flagged invoices',
-  'Build a recurring duplicate-invoice monitoring workflow',
-  'Compare these flags against last quarter’s run',
-  'Generate a report draft for the audit committee',
-  'Cross-check against vendor master changes in the same window',
-];
+// Two-track follow-ups for the audit result. DEPTH questions interrogate the
+// OUTPUT the run just surfaced (the 8 flagged pairs); BREADTH questions point
+// outward at adjacent dimensions of the INPUT sources (POs, vendor master,
+// credit notes) the run never looked at. Keeping them as separate lists lets
+// the "What next?" UI group them under "Go deeper" / "Go wider".
+const AUDIT_FOLLOWUP_TRACKS: { depth: string[]; breadth: string[] } = {
+  depth: [
+    'Drill into Acme Corp’s 4 flagged pairs',
+    'Rank all 8 pairs by exposure amount',
+    'Which pairs cleared the same approval limit?',
+  ],
+  breadth: [
+    'Check the same vendors for split purchase orders',
+    'Cross-check flags against vendor-master changes',
+    'Scan credit notes for the same pattern',
+  ],
+};
+
+// Header metadata for each follow-up track. The distinction is carried by the
+// group header (icon badge + label + caption), NOT by tinting the cards —
+// DESIGN.md keeps result chips a single neutral family. Depth leads with the
+// brand tint (the most likely immediate next step); breadth gets a quieter
+// neutral badge (the "what else?" move).
+const FOLLOWUP_TRACK_META: Record<
+  'depth' | 'breadth',
+  { Icon: LucideIcon; label: string; caption: string; badge: string }
+> = {
+  depth: {
+    Icon: Layers,
+    label: 'Go deeper',
+    caption: 'Drill into the results you just got',
+    badge: 'bg-brand-50 text-brand-600',
+  },
+  breadth: {
+    Icon: Compass,
+    label: 'Go wider',
+    caption: 'Run adjacent checks across your sources',
+    badge: 'bg-ink-100 text-ink-500',
+  },
+};
+
+// A single follow-up suggestion card. Shared by the flat list and the two
+// grouped tracks so the visual + motion contract stays identical everywhere.
+// `delayIndex` drives the one-by-one entrance cascade; pass a running index
+// across groups so the whole "What next?" block reveals as one sequence.
+function FollowUpCard({
+  q,
+  delayIndex,
+  isSelected,
+  onClick,
+  reduced,
+}: {
+  q: string;
+  delayIndex: number;
+  isSelected: boolean;
+  onClick: () => void;
+  reduced: boolean;
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      aria-pressed={isSelected}
+      // Mount cascade — NOT gated on reduced motion: the popup arrival is the
+      // signal that "follow-up suggestions are ready". Expo-out, no spring on
+      // entrance so it lands clean.
+      initial={{ opacity: 0, y: 12, scale: 0.9 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay: 0.4 + delayIndex * 0.1, duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+      whileHover={reduced ? undefined : {
+        y: -1,
+        scale: 1.012,
+        transition: { type: 'spring', stiffness: 700, damping: 32, mass: 0.12 },
+      }}
+      whileTap={reduced ? undefined : {
+        scale: 0.985,
+        transition: { type: 'spring', stiffness: 800, damping: 34, mass: 0.12 },
+      }}
+      className={`flex h-full items-start text-left px-4 py-3 rounded-xl text-[0.8125rem] leading-snug cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+        isSelected
+          ? 'bg-brand-50 text-brand-700 border border-brand-200'
+          : 'bg-canvas-elevated text-ink-700 border border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
+      }`}
+    >
+      <span>{q}</span>
+    </motion.button>
+  );
+}
 
 export interface ChatViewProps {
   showChatHistory: boolean;
@@ -3545,7 +3633,7 @@ Scanned **1.2M invoice records** across the last **90 days** and surfaced **8 hi
 - **Two tail vendors** — single flags each, lower priority but worth a glance before sign-off.
 
 The full plan, SQL, and sources are in the Workspace on the right. Promote any pair to a formal finding from the \`Flagged pairs\` table, or open the [duplicate-payment SOP](https://docs.auditify.example/sops/duplicate-payment) for the standard remediation path.`,
-        followUps: AUDIT_FOLLOWUPS,
+        followUpTracks: AUDIT_FOLLOWUP_TRACKS,
         richType: 'audit-result',
         richData: AUDIT_RESULT,
       };
@@ -6077,6 +6165,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                       thinking: undefined,
                                       richType: 'audit-result',
                                       richData: AUDIT_RESULT,
+                                      followUpTracks: AUDIT_FOLLOWUP_TRACKS,
                                     }
                                   : msg,
                               ));
@@ -6473,12 +6562,15 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     )}
                     </div>
 
-                    {/* Follow-up suggestions — wrapping horizontal flex of
-                        small rounded pills under a quiet "What next?" label.
-                        Hover lifts the chip to brand-50 and tints the border
-                        to brand-200. In our theme: canvas-elevated fill +
-                        canvas-border at rest, brand-50 + brand-200 on hover. */}
-                    {msg.role === 'assistant' && msg.followUps && msg.followUps.length > 0 && (
+                    {/* Follow-up suggestions under a quiet "What next?" label.
+                        When the message carries `followUpTracks`, they split
+                        into two labelled groups — "Go deeper" (drill into the
+                        result) and "Go wider" (explore adjacent input sources).
+                        Otherwise a flat card grid renders for conversational
+                        quick-replies. Cards stay one neutral family per
+                        DESIGN.md; the depth/breadth signal lives in the group
+                        header's icon badge + label. */}
+                    {msg.role === 'assistant' && (msg.followUpTracks || (msg.followUps && msg.followUps.length > 0)) && (
                       <div
                         role="region"
                         aria-labelledby={`followups-heading-${msg.id}`}
@@ -6494,60 +6586,76 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         >
                           What next?
                         </motion.h3>
-                        <div className="flex flex-wrap gap-2">
-                        {msg.followUps.map((q, i) => {
-                          const isSelected = selectedFollowUpByMsgId[msg.id] === q;
-                          return (
-                            <motion.button
-                              key={`${msg.id}-followup-${i}`}
-                              type="button"
-                              onClick={() => {
-                                setSelectedFollowUpByMsgId(prev => ({ ...prev, [msg.id]: q }));
-                                handleFollowUpClick(q);
-                              }}
-                              aria-pressed={isSelected}
-                              // Mount cascade — runs every time the chip mounts.
-                              // NOT gated on prefersReducedMotion: the user
-                              // explicitly asked for the popup animation to
-                              // play on chat generation; the cascade is the
-                              // signal that "follow-up suggestions arrived".
-                              initial={{ opacity: 0, y: 12, scale: 0.9 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              transition={{
-                                // Modern one-by-one popup cascade. Each chip
-                                // scales + rises over ~480ms with a 130ms
-                                // stagger so the eye can clearly track each
-                                // chip as it appears. Vercel/Linear expo-out
-                                // curve, no spring on entrance so it lands
-                                // clean (no wobble at rest).
-                                delay: 0.4 + i * 0.13,
-                                duration: 0.48,
-                                ease: [0.22, 1, 0.36, 1],
-                              }}
-                              whileHover={prefersReducedMotion ? undefined : {
-                                y: -1,
-                                scale: 1.012,
-                                // Featherweight — near-zero mass + very high
-                                // stiffness means the chip is at its hover
-                                // state almost instantly, like there's nothing
-                                // to move. Heavy damping kills any wobble.
-                                transition: { type: 'spring', stiffness: 700, damping: 32, mass: 0.12 },
-                              }}
-                              whileTap={prefersReducedMotion ? undefined : {
-                                scale: 0.985,
-                                transition: { type: 'spring', stiffness: 800, damping: 34, mass: 0.12 },
-                              }}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[0.8125rem] leading-tight cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                                isSelected
-                                  ? 'bg-brand-50 text-brand-700 border border-brand-200'
-                                  : 'bg-canvas-elevated text-ink-700 border border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
-                              }`}
-                            >
-                              <span>{q}</span>
-                            </motion.button>
-                          );
-                        })}
-                        </div>
+
+                        {msg.followUpTracks ? (
+                          (() => {
+                            const tracks = (['depth', 'breadth'] as const).filter(
+                              t => msg.followUpTracks![t]?.length,
+                            );
+                            // Running index across BOTH groups so the entrance
+                            // cascade reads as one continuous sequence rather
+                            // than two competing staggers.
+                            let cascade = 0;
+                            return (
+                              <div className="space-y-4">
+                                {tracks.map(track => {
+                                  const meta = FOLLOWUP_TRACK_META[track];
+                                  const BadgeIcon = meta.Icon;
+                                  return (
+                                    <div key={`${msg.id}-track-${track}`}>
+                                      <motion.div
+                                        initial={{ opacity: 0, y: 6 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.3, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                                        className="mb-2 flex items-center gap-2"
+                                      >
+                                        <span className={`inline-flex items-center justify-center size-6 rounded-md ${meta.badge}`}>
+                                          <BadgeIcon size={13} strokeWidth={2} />
+                                        </span>
+                                        <span className="text-[0.8125rem] font-semibold text-ink-900">{meta.label}</span>
+                                        <span className="text-[0.75rem] text-ink-400">{meta.caption}</span>
+                                      </motion.div>
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                        {msg.followUpTracks![track].map(q => {
+                                          const delayIndex = cascade++;
+                                          return (
+                                            <FollowUpCard
+                                              key={`${msg.id}-${track}-${delayIndex}`}
+                                              q={q}
+                                              delayIndex={delayIndex}
+                                              isSelected={selectedFollowUpByMsgId[msg.id] === q}
+                                              reduced={!!prefersReducedMotion}
+                                              onClick={() => {
+                                                setSelectedFollowUpByMsgId(prev => ({ ...prev, [msg.id]: q }));
+                                                handleFollowUpClick(q);
+                                              }}
+                                            />
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {msg.followUps!.map((q, i) => (
+                              <FollowUpCard
+                                key={`${msg.id}-followup-${i}`}
+                                q={q}
+                                delayIndex={i}
+                                isSelected={selectedFollowUpByMsgId[msg.id] === q}
+                                reduced={!!prefersReducedMotion}
+                                onClick={() => {
+                                  setSelectedFollowUpByMsgId(prev => ({ ...prev, [msg.id]: q }));
+                                  handleFollowUpClick(q);
+                                }}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
