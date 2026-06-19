@@ -29,6 +29,7 @@ import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS, GENERATED_REPORTS_KEY } from '../../data/mockData';
 import { ATR_LIBRARY, EVIDENCE_LIBRARY, type AtrLibraryReport } from '../../data/atrLibrary';
 import AtrReportsLibrary from './AtrReportsLibrary';
+import AtrUploadTab from './atr-upload/AtrUploadTab';
 import EvidenceRepository from './EvidenceRepository';
 import { exportAtrWord } from './atrTemplate';
 import { REPORT_QUERIES_ATR, type ReportQueryAtr } from '../../data/reportQueries';
@@ -4994,8 +4995,9 @@ export default function ReportsView({
     if (typeof window === 'undefined') return 'my-reports';
     const t = new URLSearchParams(window.location.search).get('tab');
     if (t === 'shared-reports' || t === 'templates' || t === 'my-reports') return t;
-    // Legacy deep-links to the old top-level ATR / Evidence tabs now land in My Reports.
-    if (t === 'atr-reports' || t === 'evidence') return 'my-reports';
+    // Legacy deep-links to the old top-level ATR / Evidence / Generate-by-upload
+    // tabs now all land in My Reports (upload lives under the ATR sub-tab).
+    if (t === 'atr-reports' || t === 'evidence' || t === 'atr-upload' || t === 'generate-by-upload') return 'my-reports';
     return 'my-reports';
   });
   // Segmented sub-tabs inside My Reports: the 3 report types + the evidence repository.
@@ -5003,8 +5005,15 @@ export default function ReportsView({
     if (typeof window === 'undefined') return 'all';
     const t = new URLSearchParams(window.location.search).get('tab');
     if (t === 'evidence') return 'evidence';
-    if (t === 'atr-reports') return 'atr';
+    if (t === 'atr-reports' || t === 'atr-upload') return 'atr';
     return 'all';
+  });
+  // Inside the ATR sub-tab: the upload wizard now lives behind a CTA (it used to
+  // be its own top-level tab). `atr-upload` deep-link opens it straight away —
+  // this powers the Manage Exceptions "Back" return path (see handoff.ts).
+  const [atrUploadOpen, setAtrUploadOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('tab') === 'atr-upload';
   });
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [allSearch, setAllSearch] = useState('');
@@ -5347,6 +5356,37 @@ export default function ReportsView({
     setReportType('atr');
     addToast({ type: 'success', message: `Saved “${label}” to the ATR tab.` });
   }, [addToast, uniqueReportName]);
+
+  // Save Version from the Generate-by-upload wizard → upsert a card in
+  // My Reports → ATR tab so the generated ATR is persisted alongside every
+  // other report. Keyed by the wizard session id so re-saving updates the same
+  // card (rather than spawning a duplicate on each save). The user stays in the
+  // wizard preview; the card simply appears in the ATR tab.
+  const saveUploadedAtr = useCallback((sessionId: string, label: string | undefined, data: AtrReportData) => {
+    const now = new Date();
+    const stamp = `${now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+    const base = data.meta.auditTitle ?? 'Action Taken Report';
+    const id = `gr-atr-upload-${sessionId}`;
+    setGeneratedReports(prev => {
+      const existing = prev.find(r => r.id === id);
+      const card = {
+        id,
+        templateId: 'rt-007',
+        kind: 'atr' as const,
+        name: existing?.name ?? uniqueReportName(label ? `${base} — ${label}` : base),
+        tag: 'Internal Audit' as const,
+        generatedBy: 'You',
+        generatedAt: stamp,
+        status: 'draft' as const,
+        pages: Math.max(1, data.observations.length * 2),
+        queries: data.observations.length,
+        atrData: data,
+        riskOwner: 'Tushar Goel',
+        sourceReport: base,
+      } as unknown as GeneratedReport;
+      return existing ? prev.map(r => (r.id === id ? card : r)) : [card, ...prev];
+    });
+  }, [uniqueReportName]);
 
   // Offline banner — listens to online/offline events.
   const [isOffline, setIsOffline] = useState(() =>
@@ -5786,7 +5826,7 @@ export default function ReportsView({
             <ToolbarChips
               layoutId="reports-type-pill-bg"
               value={reportType}
-              onChange={setReportType}
+              onChange={(k) => { setReportType(k); setAtrUploadOpen(false); }}
               options={[
                 { key: 'all', label: 'All', icon: Layers, count: allReportsUnified.length },
                 { key: 'ia', label: 'Internal Audit', icon: BookOpen, count: typeCounts.ia },
@@ -5933,16 +5973,33 @@ export default function ReportsView({
           </>
         )}
 
-        {/* ATR — every generated Action Taken Report, browsable */}
+        {/* ATR — every generated Action Taken Report, browsable. Split into
+            system-generated vs generated-from-upload; the upload wizard opens
+            inline behind the "Generate ATR by Upload" CTA. */}
         {activeTab === 'my-reports' && reportType === 'atr' && (
-          <AtrReportsLibrary
-            atrs={allAtrs}
-            onOpen={openAtr}
-            onShare={onShare ? (atr) => onShare(atr.id) : undefined}
-            onDownload={(atr) => { exportAtrWord(atr.atrData.meta, atr.atrData.observations); addToast({ type: 'success', message: `Downloading “${atr.name}”.` }); }}
-            view={viewMode}
-            onViewChange={setViewMode}
-          />
+          // CTA open → the self-contained upload wizard (same flow as before).
+          // Its "Back to ATR reports" exit sits above the stepper, inside the
+          // wizard's own container, so the screen stays tightly aligned.
+          atrUploadOpen ? (
+            <AtrUploadTab onManageExceptions={onManageExceptions} onSaveAtr={saveUploadedAtr} />
+          ) : (
+            <AtrReportsLibrary
+              atrs={allAtrs}
+              onOpen={openAtr}
+              onShare={onShare ? (atr) => onShare(atr.id) : undefined}
+              onDownload={(atr) => { exportAtrWord(atr.atrData.meta, atr.atrData.observations); addToast({ type: 'success', message: `Downloading “${atr.name}”.` }); }}
+              view={viewMode}
+              onViewChange={setViewMode}
+              trailingAction={
+                <button
+                  onClick={() => setAtrUploadOpen(true)}
+                  className="inline-flex items-center gap-2 h-10 px-4 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[10px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 whitespace-nowrap"
+                >
+                  <CloudUpload size={15} /> Generate ATR by Upload
+                </button>
+              }
+            />
+          )
         )}
 
         {/* Evidence — segregated repository, each item linked to its source ATR */}

@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'motion/react';
-import { FileText, FolderOpen, Download, Share2 } from 'lucide-react';
+import { FileText, FolderOpen, Download, Share2, CloudUpload, Sparkles } from 'lucide-react';
 import { type AtrLibraryReport, EVIDENCE_LIBRARY } from '../../data/atrLibrary';
 import ListToolbar, { ToolbarSelect, ToolbarFilterMenu, ToolbarViewToggle } from '../shared/ListToolbar';
 import SmartTable from '../shared/SmartTable';
@@ -32,8 +32,25 @@ function parseAtrDate(s: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+// Upload-generated ATRs are saved by the Generate-by-upload wizard under a
+// `gr-atr-upload-` id prefix; everything else is system-generated.
+const isUploadAtr = (a: AtrLibraryReport) => a.id.startsWith('gr-atr-upload-');
 
-export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, view, onViewChange }: {
+/** Origin tag shown under each report name — system vs uploaded. */
+function OriginBadge({ upload }: { upload: boolean }) {
+  return upload ? (
+    <span className="inline-flex items-center gap-1 h-[18px] px-2 rounded-full bg-brand-50 text-brand-700 text-[10.5px] font-semibold whitespace-nowrap">
+      <CloudUpload size={11} aria-hidden="true" /> Generated from upload
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 h-[18px] px-2 rounded-full bg-info-50 text-info-700 text-[10.5px] font-semibold whitespace-nowrap">
+      <Sparkles size={11} aria-hidden="true" /> System generated
+    </span>
+  );
+}
+
+
+export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, view, onViewChange, trailingAction }: {
   atrs: AtrLibraryReport[];
   onOpen: (atr: AtrLibraryReport) => void;
   onShare?: (atr: AtrLibraryReport) => void;
@@ -41,9 +58,12 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
   /** Shared view mode, owned by ReportsView so the toggle is consistent across tabs. */
   view: 'list' | 'grid';
   onViewChange: (mode: 'list' | 'grid') => void;
+  /** Optional CTA rendered at the right end of the toolbar, after the view toggle. */
+  trailingAction?: ReactNode;
 }) {
   const [q, setQ] = useState('');
   const [area, setArea] = useState('All');
+  const [origin, setOrigin] = useState('All'); // All | System generated | Generated from upload
   const [status, setStatus] = useState('All');
   const [auditor, setAuditor] = useState('All');
   const [riskOwner, setRiskOwner] = useState('All');
@@ -83,6 +103,8 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
     const range = DATE_RANGES.find(r => r.key === dateRange);
     return atrs.filter(a => {
       if (area !== 'All' && a.area !== area) return false;
+      if (origin === 'System generated' && isUploadAtr(a)) return false;
+      if (origin === 'Generated from upload' && !isUploadAtr(a)) return false;
       if (status !== 'All' && a.status !== status) return false;
       if (auditor !== 'All' && a.generatedBy !== auditor) return false;
       if (riskOwner !== 'All' && a.riskOwner !== riskOwner) return false;
@@ -93,14 +115,14 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
       if (s && !(blobs.get(a.id) ?? '').includes(s)) return false;
       return true;
     });
-  }, [atrs, q, area, status, auditor, riskOwner, dateRange, blobs, nowMs]);
+  }, [atrs, q, area, origin, status, auditor, riskOwner, dateRange, blobs, nowMs]);
 
-  const activeFilters = area !== 'All' || status !== 'All' || auditor !== 'All' || riskOwner !== 'All' || dateRange !== 'all' || !!q.trim();
+  const activeFilters = area !== 'All' || origin !== 'All' || status !== 'All' || auditor !== 'All' || riskOwner !== 'All' || dateRange !== 'all' || !!q.trim();
   // Count only the dropdown filters (not the search) for the Filters badge.
   const activeFilterCount =
-    (area !== 'All' ? 1 : 0) + (status !== 'All' ? 1 : 0) + (auditor !== 'All' ? 1 : 0) +
+    (area !== 'All' ? 1 : 0) + (origin !== 'All' ? 1 : 0) + (status !== 'All' ? 1 : 0) + (auditor !== 'All' ? 1 : 0) +
     (riskOwner !== 'All' ? 1 : 0) + (dateRange !== 'all' ? 1 : 0);
-  const clearFilters = () => { setArea('All'); setStatus('All'); setAuditor('All'); setRiskOwner('All'); setDateRange('all'); };
+  const clearFilters = () => { setArea('All'); setOrigin('All'); setStatus('All'); setAuditor('All'); setRiskOwner('All'); setDateRange('all'); };
   const clearAll = () => { setQ(''); clearFilters(); };
 
   return (
@@ -108,17 +130,20 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
       <ListToolbar
         search={q}
         onSearch={setQ}
-        searchPlaceholder="Search ATRs — names, auditors, or text inside…"
+        searchPlaceholder="Search ATRs…"
+        compactSearch
         trailing={
           <>
             <ToolbarFilterMenu activeCount={activeFilterCount} onClear={clearFilters}>
               <ToolbarSelect block label="Area" value={area} onChange={setArea} options={areaOpts} />
+              <ToolbarSelect block label="Origin" value={origin} onChange={setOrigin} options={['All', 'System generated', 'Generated from upload']} />
               <ToolbarSelect block label="Status" value={status} onChange={setStatus} options={['All', 'final', 'draft']} />
               <ToolbarSelect block label="Auditor" value={auditor} onChange={setAuditor} options={auditorOpts} />
               <ToolbarSelect block label="Risk owner" value={riskOwner} onChange={setRiskOwner} options={riskOwnerOpts} />
               <ToolbarSelect block label="Date" value={dateRange} onChange={setDateRange} options={DATE_RANGES.map(r => ({ value: r.key, label: r.label }))} />
             </ToolbarFilterMenu>
             <ToolbarViewToggle mode={view} onChange={onViewChange} />
+            {trailingAction}
           </>
         }
       />
@@ -156,7 +181,10 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
                   </span>
                   <div className="min-w-0">
                     <div className="text-[14.5px] font-semibold tracking-[-0.006em] text-ink-900 truncate group-hover:text-primary transition-colors" title={reportDisplayName(atr.name)}>{reportDisplayName(atr.name)}</div>
-                    <div className="mt-0.5 text-[11.5px] text-text-muted truncate">{atr.atrData.observations.length} obs · {plans} plans · {evidenceCount[atr.id] ?? 0} evidence</div>
+                    <div className="mt-1 flex items-center gap-2 min-w-0">
+                      <OriginBadge upload={isUploadAtr(atr)} />
+                      <span className="text-[11.5px] text-text-muted truncate">{atr.atrData.observations.length} obs · {plans} plans · {evidenceCount[atr.id] ?? 0} evidence</span>
+                    </div>
                   </div>
                 </div>
               );
@@ -197,6 +225,7 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
                 iconClass="bg-info-50 text-info-700"
                 eyebrow="ATR"
                 title={reportDisplayName(atr.name)}
+                subtitle={<OriginBadge upload={isUploadAtr(atr)} />}
                 description={`${atr.atrData.meta.auditEntity} — ${atr.atrData.meta.auditPeriod}`}
                 pills={[atr.status === 'final' ? 'Final' : 'Draft', `${atr.atrData.observations.length} observations`, `${plans} action plans`, `${ev} evidence`]}
                 footerRight={<span className="font-mono text-[11px] tabular-nums text-ink-400">{atr.generatedAt}</span>}

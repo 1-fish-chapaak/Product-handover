@@ -1,9 +1,11 @@
-import { Sparkles, Calendar, PenLine, Eye } from 'lucide-react';
+import { useRef } from 'react';
+import { Sparkles, Calendar } from 'lucide-react';
 import type {
   AtrMeta, AtrObservation, AtrActionPlan, AtrInsight,
   AtrClassification, AtrObservationStatus, AtrActionStatus,
 } from './atrTypes';
 import { computeExecSummary } from './atrTemplate';
+import { ATR_SECTION_ORDER, type AtrSectionKey } from './atrSections';
 
 // ─── Token maps (theme defines base / -50 / -700 only for semantic colors) ───
 const OBS_STATUS_PILL: Record<AtrObservationStatus, { cls: string; dot: string }> = {
@@ -41,6 +43,33 @@ function fmt(iso?: string): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+/** Inline click-to-edit text. Read-only unless `editable`; commits on blur so no
+ *  per-keystroke re-render disturbs the caret. */
+function EditableText({ value, onCommit, editable, className = '', placeholder, multiline }: {
+  value: string;
+  onCommit?: (next: string) => void;
+  editable?: boolean;
+  className?: string;
+  placeholder?: string;
+  multiline?: boolean;
+}) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  if (!editable) return <>{value}</>;
+  return (
+    <span
+      ref={ref}
+      contentEditable
+      suppressContentEditableWarning
+      data-ph={placeholder}
+      onBlur={e => { const t = (e.currentTarget.textContent ?? '').trim(); if (t !== value) onCommit?.(t); }}
+      onKeyDown={e => { if (!multiline && e.key === 'Enter') { e.preventDefault(); (e.currentTarget as HTMLSpanElement).blur(); } }}
+      className={`atr-ed inline-block min-w-[32px] outline-none rounded-[3px] px-0.5 -mx-0.5 cursor-text hover:bg-brand-50/40 focus:bg-brand-50/60 focus:ring-2 focus:ring-brand-600/30 ${className}`}
+    >
+      {value}
+    </span>
+  );
+}
+
 function NumberedHeading({ n, title, subtitle }: { n: number; title: string; subtitle: string }) {
   return (
     <div className="flex items-start gap-3 mb-5">
@@ -53,31 +82,23 @@ function NumberedHeading({ n, title, subtitle }: { n: number; title: string; sub
   );
 }
 
-function MetaCell({ label, value }: { label: string; value?: string }) {
-  if (!value) return null;
+function MetaCell({ label, value, editable, onCommit }: { label: string; value?: string; editable?: boolean; onCommit?: (v: string) => void }) {
+  if (!value && !editable) return null;
   return (
     <div>
       <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-1.5">{label}</div>
       <div className="border-l-[3px] border-brand-500 pl-3">
-        <div className="text-[0.8125rem] font-bold text-ink-900">{value}</div>
+        <div className="text-[0.8125rem] font-bold text-ink-900"><EditableText value={value ?? ''} editable={editable} onCommit={onCommit} placeholder={`Add ${label.toLowerCase()}`} /></div>
       </div>
     </div>
   );
 }
 
-function FieldRow({ label, children, italic }: { label: string; children: React.ReactNode; italic?: boolean }) {
-  if (children == null || children === '') return null;
-  return (
-    <>
-      <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ink-500 pt-2">{label}</div>
-      <p className={`pt-2 text-[0.75rem] text-ink-800 leading-relaxed ${italic ? 'italic text-ink-700' : ''}`}>{children}</p>
-    </>
-  );
-}
-
-
 export default function AtrDocument({
   meta, observations, insights = [], headerActions, maxWidthClass = 'max-w-[840px]',
+  editable, onMetaChange, onObservationsChange, onInsightsChange,
+  sectionOrder = ATR_SECTION_ORDER, hiddenSections = [],
+  renderObservationActions,
 }: {
   meta: AtrMeta;
   observations: AtrObservation[];
@@ -86,8 +107,24 @@ export default function AtrDocument({
   headerActions?: React.ReactNode;
   /** Width of the document surface. */
   maxWidthClass?: string;
+  /** Opt-in inline editing (default off → existing read-only usages unchanged). */
+  editable?: boolean;
+  onMetaChange?: (meta: AtrMeta) => void;
+  onObservationsChange?: (observations: AtrObservation[]) => void;
+  onInsightsChange?: (insights: AtrInsight[]) => void;
+  /** Section order + visibility (default = canonical order, nothing hidden). */
+  sectionOrder?: AtrSectionKey[];
+  hiddenSections?: AtrSectionKey[];
+  /** Optional per-observation action slot (e.g. a "Manage Exceptions" CTA),
+   *  rendered in each observation card header. Receives the 0-based index so the
+   *  caller can map it back to the source observation. Print-hidden by caller. */
+  renderObservationActions?: (index: number) => React.ReactNode;
 }) {
   const ex = computeExecSummary(observations);
+
+  const setMeta = (key: keyof AtrMeta, v: string) => onMetaChange?.({ ...meta, [key]: v || undefined });
+  const setObs = (i: number, next: AtrObservation) => onObservationsChange?.(observations.map((o, idx) => (idx === i ? next : o)));
+  const setInsight = (i: number, next: AtrInsight) => onInsightsChange?.(insights.map((ins, idx) => (idx === i ? next : ins)));
 
   // Executive Summary — exactly six KPIs. Overdue observations fold into Open.
   const totalExceptions = meta.totalExceptions ?? ex.totalExceptions;
@@ -101,49 +138,14 @@ export default function AtrDocument({
     { label: 'In Progress', value: ex.obsStatus['In Progress'], tone: 'mitigated' },
   ];
 
-  // The Observation Wise Summary buckets each observation's status into the same
-  // three the Executive Summary uses (Overdue counts as Open).
   const displayStatus = (s?: AtrObservationStatus): 'Open' | 'In Progress' | 'Closed' =>
     s === 'Closed' ? 'Closed' : s === 'In Progress' ? 'In Progress' : 'Open';
 
-  return (
-    <article className={`report-printable ${maxWidthClass} mx-auto bg-canvas-elevated border border-canvas-border rounded-[12px] shadow-sm overflow-hidden`}>
-      {/* Brand banner */}
-      <div className="relative px-9 py-7 bg-gradient-to-br from-brand-700 to-brand-600 text-white overflow-hidden">
-        <div className="absolute -right-6 -top-10 w-48 h-48 rounded-full bg-white/5" aria-hidden="true" />
-        <div className="relative flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-8 h-8 rounded-[8px] bg-white/15 flex items-center justify-center"><Sparkles size={15} /></div>
-              <div className="leading-none">
-                <div className="text-[0.8125rem] font-bold tracking-wide">IRAME.AI</div>
-                <div className="text-[0.5rem] font-semibold tracking-[0.22em] text-white/70 mt-0.5">AUDIT INTELLIGENCE</div>
-              </div>
-            </div>
-            <h1 className="text-[1.75rem] font-bold tracking-tight leading-tight">Action Taken Report</h1>
-            {(meta.auditEntity || meta.auditPeriod) && (
-              <p className="text-[0.8125rem] text-white/80 mt-1">
-                {[meta.auditEntity, meta.auditPeriod].filter(Boolean).join(' · ')}
-              </p>
-            )}
-          </div>
-          {headerActions && <div className="shrink-0 flex items-center gap-2 print:hidden">{headerActions}</div>}
-        </div>
-      </div>
-
-      {/* Metadata grid */}
-      <div className="px-9 py-6 grid grid-cols-3 gap-x-8 gap-y-5 border-b border-canvas-border">
-        <MetaCell label="Report ID" value={meta.reportId} />
-        <MetaCell label="Audit Title" value={meta.auditTitle} />
-        <MetaCell label="Audit Period" value={meta.auditPeriod} />
-        <MetaCell label="Prepared By" value={meta.preparedBy} />
-        <MetaCell label="Generated On" value={meta.generatedOn} />
-        <MetaCell label="Audit Entity" value={meta.auditEntity} />
-      </div>
-
-      {/* Section 1 — Executive Summary */}
-      <section className="px-9 pt-7 pb-6">
-        <NumberedHeading n={1} title="Executive Summary" subtitle="Overall observation and management action plan rollup" />
+  // ── Section renderers (keyed so the order/visibility props can drive them) ──
+  const bodies: Record<AtrSectionKey, (n: number) => React.ReactNode> = {
+    summary: n => (
+      <>
+        <NumberedHeading n={n} title="Executive Summary" subtitle="Overall observation and management action plan rollup" />
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {kpis.map(k => (
             <div key={k.label} className={`rounded-[10px] border border-canvas-border border-l-[3px] ${KPI_BORDER[k.tone]} bg-canvas-elevated p-4`}>
@@ -152,13 +154,11 @@ export default function AtrDocument({
             </div>
           ))}
         </div>
-      </section>
-
-      {/* Section 2 — Observation Wise Summary */}
-      <section className="px-9 pt-2 pb-6 border-t border-canvas-border">
-        <div className="pt-6">
-          <NumberedHeading n={2} title="Observation Wise Summary" subtitle="Exceptions, management action plans and status — per observation" />
-        </div>
+      </>
+    ),
+    process: n => (
+      <>
+        <NumberedHeading n={n} title="Observation Wise Summary" subtitle="Exceptions, management action plans and status — per observation" />
         <div className="overflow-hidden rounded-[10px] border border-canvas-border">
           <table className="w-full text-[0.75rem]">
             <thead>
@@ -198,71 +198,88 @@ export default function AtrDocument({
             </tbody>
           </table>
         </div>
-      </section>
-
-      {/* Section 3 — Observation Details */}
-      <section className="px-9 pt-2 pb-6 border-t border-canvas-border">
-        <div className="pt-6">
-          <NumberedHeading n={3} title="Observation Details" subtitle="Issue, risk, management action plan, evidence and verification" />
-        </div>
+      </>
+    ),
+    details: n => (
+      <>
+        <NumberedHeading n={n} title="Observation Details" subtitle="Issue, risk, management action plan, evidence and verification" />
         <div className="space-y-5">
           {observations.map((o, i) => (
-            <ObservationCard key={i} index={i + 1} obs={o} />
+            <ObservationCard key={i} index={i + 1} obs={o} editable={editable} onChange={next => setObs(i, next)} actions={renderObservationActions?.(i)} />
           ))}
         </div>
-      </section>
-
-      {/* Section 4 — Key Insights (only when provided) */}
-      {insights.length > 0 && (
-        <section className="px-9 pt-2 pb-6 border-t border-canvas-border">
-          <div className="pt-6">
-            <NumberedHeading n={4} title="Key Insights & Recommendations" subtitle="Auditor observations and forward-looking guidance" />
-          </div>
-          <div className="space-y-3">
-            {insights.map((ins, i) => (
-              <div key={i} className="bg-brand-50/40 border border-canvas-border border-l-[3px] border-l-brand-500 rounded-[10px] p-4">
-                <div className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5">{ins.title}</div>
-                <p className="text-[0.75rem] text-ink-700 leading-relaxed">{ins.body}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Section 5 — Approvals & Sign-Off */}
-      <section className="px-9 pt-2 pb-9 border-t border-canvas-border">
-        <div className="pt-6">
-          <NumberedHeading n={insights.length > 0 ? 5 : 4} title="Approvals & Sign-Off" subtitle="Digital authorisation of this Action Taken Report" />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          {[
-            { Icon: PenLine, role: 'Prepared by', name: meta.preparedBy },
-            { Icon: Eye, role: 'Reviewed by', name: '' },
-          ].map(c => (
-            <div key={c.role} className="rounded-[10px] border border-canvas-border p-5">
-              <div className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-3">
-                <c.Icon size={12} /> {c.role}
-              </div>
-              {c.name ? (
-                <div className="text-[0.8125rem] font-bold text-ink-900 leading-tight mb-5">{c.name}</div>
-              ) : (
-                <div className="h-5 mb-5" />
-              )}
-              <div className="border-t border-dashed border-canvas-border pt-2.5">
-                <div className="text-[0.6875rem] italic text-ink-500 text-center">Signature / Digital Approval</div>
-              </div>
+      </>
+    ),
+    insights: n => (
+      <>
+        <NumberedHeading n={n} title="Key Insights & Recommendations" subtitle="Auditor observations and forward-looking guidance" />
+        <div className="space-y-3">
+          {insights.map((ins, i) => (
+            <div key={i} className="bg-brand-50/40 border border-canvas-border border-l-[3px] border-l-brand-500 rounded-[10px] p-4">
+              <div className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5"><EditableText value={ins.title} editable={editable} onCommit={v => setInsight(i, { ...ins, title: v })} /></div>
+              <p className="text-[0.75rem] text-ink-700 leading-relaxed"><EditableText value={ins.body} editable={editable} multiline onCommit={v => setInsight(i, { ...ins, body: v })} /></p>
             </div>
           ))}
         </div>
-        {meta.generatedOn && (
-          <div className="text-center text-[0.75rem] text-ink-500 mt-5">Date of Sign-Off: <span className="font-semibold text-ink-700">{meta.generatedOn}</span></div>
-        )}
-      </section>
+      </>
+    ),
+  };
+
+  // Insights auto-skip when empty (preserves the original conditional behaviour).
+  const visible = sectionOrder.filter(k => !hiddenSections.includes(k) && !(k === 'insights' && insights.length === 0));
+
+  return (
+    <article className={`report-printable ${maxWidthClass} mx-auto bg-canvas-elevated border border-canvas-border rounded-[12px] shadow-sm overflow-hidden`}>
+      {editable && <style>{`.atr-ed:empty:before{content:attr(data-ph);color:#C2B9CB;}`}</style>}
+
+      {/* Brand banner */}
+      <div className="relative px-9 py-7 bg-gradient-to-br from-brand-700 to-brand-600 text-white overflow-hidden">
+        <div className="absolute -right-6 -top-10 w-48 h-48 rounded-full bg-white/5" aria-hidden="true" />
+        <div className="relative flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-8 h-8 rounded-[8px] bg-white/15 flex items-center justify-center"><Sparkles size={15} /></div>
+              <div className="leading-none">
+                <div className="text-[0.8125rem] font-bold tracking-wide">IRAME.AI</div>
+                <div className="text-[0.5rem] font-semibold tracking-[0.22em] text-white/70 mt-0.5">AUDIT INTELLIGENCE</div>
+              </div>
+            </div>
+            <h1 className="text-[1.75rem] font-bold tracking-tight leading-tight">Action Taken Report</h1>
+            {(meta.auditEntity || meta.auditPeriod) && (
+              <p className="text-[0.8125rem] text-white/80 mt-1">{[meta.auditEntity, meta.auditPeriod].filter(Boolean).join(' · ')}</p>
+            )}
+          </div>
+          {headerActions && <div className="shrink-0 flex items-center gap-2 print:hidden">{headerActions}</div>}
+        </div>
+      </div>
+
+      {/* Metadata grid */}
+      <div className="px-9 py-6 grid grid-cols-3 gap-x-8 gap-y-5 border-b border-canvas-border">
+        <MetaCell label="Report ID" value={meta.reportId} editable={editable} onCommit={v => setMeta('reportId', v)} />
+        <MetaCell label="Audit Title" value={meta.auditTitle} editable={editable} onCommit={v => setMeta('auditTitle', v)} />
+        <MetaCell label="Audit Entity" value={meta.auditEntity} editable={editable} onCommit={v => setMeta('auditEntity', v)} />
+        <MetaCell label="Audit Period" value={meta.auditPeriod} editable={editable} onCommit={v => setMeta('auditPeriod', v)} />
+        <MetaCell label="Prepared By" value={meta.preparedBy} editable={editable} onCommit={v => setMeta('preparedBy', v)} />
+        <MetaCell label="Generated On" value={meta.generatedOn} editable={editable} onCommit={v => setMeta('generatedOn', v)} />
+      </div>
+
+      {/* Ordered, hideable sections */}
+      {visible.map((key, i) => {
+        const first = i === 0;
+        const last = i === visible.length - 1;
+        const heading = bodies[key](i + 1);
+        return (
+          <section key={key} className={`px-9 ${last ? 'pb-9' : 'pb-6'} ${first ? 'pt-7' : 'pt-2 border-t border-canvas-border'}`}>
+            {first ? heading : <div className="pt-6">{heading}</div>}
+          </section>
+        );
+      })}
     </article>
   );
 }
 
-function ObservationCard({ index, obs }: { index: number; obs: AtrObservation }) {
+function ObservationCard({ index, obs, editable, onChange, actions }: { index: number; obs: AtrObservation; editable?: boolean; onChange?: (next: AtrObservation) => void; actions?: React.ReactNode }) {
+  const setPlan = (i: number, next: AtrActionPlan) => onChange?.({ ...obs, actionPlans: obs.actionPlans.map((p, idx) => (idx === i ? next : p)) });
   return (
     <div className="border border-canvas-border rounded-[10px] overflow-hidden">
       {/* Header */}
@@ -270,12 +287,11 @@ function ObservationCard({ index, obs }: { index: number; obs: AtrObservation })
         <div className="flex items-center gap-2.5 flex-wrap min-w-0">
           <span className="shrink-0 w-7 h-7 rounded-[8px] bg-brand-600 text-white text-[0.8125rem] font-bold flex items-center justify-center">{index}</span>
           <div className="min-w-0">
-            <h3 className="text-[0.9375rem] font-bold text-ink-900 leading-tight">{obs.title}</h3>
+            <h3 className="text-[0.9375rem] font-bold text-ink-900 leading-tight"><EditableText value={obs.title} editable={editable} onCommit={v => onChange?.({ ...obs, title: v })} /></h3>
             {obs.process && <div className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-ink-500 mt-0.5">{obs.process}</div>}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Observation-level status only: Open / Closed / In Progress (Overdue shows as Open). */}
           {obs.status && (() => {
             const s: AtrObservationStatus = obs.status === 'Overdue' ? 'Open' : obs.status;
             return (
@@ -284,21 +300,20 @@ function ObservationCard({ index, obs }: { index: number; obs: AtrObservation })
               </span>
             );
           })()}
+          {actions && <span className="print:hidden">{actions}</span>}
         </div>
       </div>
 
       <div className="px-5 py-4">
-        {/* Issue description */}
-        {obs.description && (
+        {(obs.description || editable) && (
           <div className="grid grid-cols-[150px_1fr] gap-x-5 gap-y-2 items-start mb-4">
-            <FieldRow label="Issue Description">{obs.description}</FieldRow>
+            <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ink-500 pt-2">Issue Description</div>
+            <p className="pt-2 text-[0.75rem] text-ink-800 leading-relaxed"><EditableText value={obs.description ?? ''} editable={editable} multiline placeholder="Add issue description" onCommit={v => onChange?.({ ...obs, description: v })} /></p>
           </div>
         )}
-
-        {/* Action plans */}
         <div className="space-y-3">
           {obs.actionPlans.map((ap, i) => (
-            <ActionPlanCard key={i} index={i + 1} plan={ap} classification={obs.classification} />
+            <ActionPlanCard key={i} index={i + 1} plan={ap} classification={obs.classification} editable={editable} onChange={next => setPlan(i, next)} />
           ))}
         </div>
       </div>
@@ -306,29 +321,32 @@ function ObservationCard({ index, obs }: { index: number; obs: AtrObservation })
   );
 }
 
-function ActionPlanCard({ index, plan, classification }: { index: number; plan: AtrActionPlan; classification?: AtrClassification }) {
+function ActionPlanCard({ index, plan, classification, editable, onChange }: { index: number; plan: AtrActionPlan; classification?: AtrClassification; editable?: boolean; onChange?: (next: AtrActionPlan) => void }) {
   const tone = plan.status ? ACTION_STATUS[plan.status] : null;
+  const field = (label: string, value: string | undefined, prop: keyof AtrActionPlan, italic?: boolean) => {
+    if (!value && !editable) return null;
+    return (
+      <>
+        <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500 pt-0.5">{label}</div>
+        <p className={`text-[0.75rem] leading-relaxed ${italic ? 'text-ink-700' : 'text-ink-800'}`}><EditableText value={value ?? ''} editable={editable} multiline placeholder={`Add ${label.toLowerCase()}`} onCommit={v => onChange?.({ ...plan, [prop]: v })} /></p>
+      </>
+    );
+  };
   return (
     <div className={`border border-canvas-border rounded-[12px] overflow-hidden bg-canvas-elevated ${tone ? `border-t-2 ${tone.border}` : ''}`}>
       <div className="p-4">
-        {/* Row 1 — plan badge + title, inline */}
         <div className="flex items-center gap-2.5 flex-wrap mb-2.5">
           <span className="inline-flex items-center h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded bg-brand-50 text-brand-700 shrink-0">Management Action Plan {index}</span>
-          {plan.title && <h4 className="text-[0.875rem] font-bold text-ink-900 leading-snug">{plan.title}</h4>}
+          {(plan.title || editable) && <h4 className="text-[0.875rem] font-bold text-ink-900 leading-snug"><EditableText value={plan.title ?? ''} editable={editable} placeholder="Add a title" onCommit={v => onChange?.({ ...plan, title: v })} /></h4>}
         </div>
 
-        {/* Row 2 — due date on the LEFT · classification + status on the RIGHT */}
         <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
           {plan.dueDate ? (
-            <span className="inline-flex items-center gap-1.5 h-7 px-3 text-[0.75rem] font-semibold rounded-full bg-brand-50 text-brand-700">
-              <Calendar size={12} /> Due {fmt(plan.dueDate)}
-            </span>
+            <span className="inline-flex items-center gap-1.5 h-7 px-3 text-[0.75rem] font-semibold rounded-full bg-brand-50 text-brand-700"><Calendar size={12} /> Due {fmt(plan.dueDate)}</span>
           ) : <span />}
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {classification && (
-              <span className={`inline-flex items-center h-7 px-3 text-[0.625rem] font-bold uppercase tracking-wider rounded-full ${CLASSIFICATION_PILL[classification]}`}>
-                {classification}
-              </span>
+              <span className={`inline-flex items-center h-7 px-3 text-[0.625rem] font-bold uppercase tracking-wider rounded-full ${CLASSIFICATION_PILL[classification]}`}>{classification}</span>
             )}
             {plan.status && tone && (
               <span className={`inline-flex items-center gap-1.5 h-7 px-3 text-[0.6875rem] font-bold uppercase tracking-wider rounded-full ${tone.pill}`}>
@@ -338,33 +356,12 @@ function ActionPlanCard({ index, plan, classification }: { index: number; plan: 
           </div>
         </div>
 
-        {/* MAP Details · Action Taken · Evidence · Auditor Verification — one sober, aligned grid */}
-        {(plan.text || plan.actionTaken || plan.evidence || plan.verification) && (
+        {(plan.text || plan.actionTaken || plan.evidence || plan.verification || editable) && (
           <div className="grid grid-cols-[150px_1fr] gap-x-5 gap-y-3 items-start border-t border-canvas-border pt-3.5">
-            {plan.text && (
-              <>
-                <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500 pt-0.5">MAP Details</div>
-                <p className="text-[0.75rem] text-ink-800 leading-relaxed">{plan.text}</p>
-              </>
-            )}
-            {plan.actionTaken && (
-              <>
-                <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500 pt-0.5">Action Taken</div>
-                <p className="text-[0.75rem] text-ink-800 leading-relaxed">{plan.actionTaken}</p>
-              </>
-            )}
-            {plan.evidence && (
-              <>
-                <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500 pt-0.5">Evidence</div>
-                <p className="text-[0.75rem] text-ink-700 leading-relaxed">{plan.evidence}</p>
-              </>
-            )}
-            {plan.verification && (
-              <>
-                <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500 pt-0.5">Auditor Verification</div>
-                <p className="text-[0.75rem] text-ink-800 leading-relaxed">{plan.verification}</p>
-              </>
-            )}
+            {field('MAP Details', plan.text, 'text')}
+            {field('Action Taken', plan.actionTaken, 'actionTaken')}
+            {field('Evidence', plan.evidence, 'evidence', true)}
+            {field('Auditor Verification', plan.verification, 'verification')}
           </div>
         )}
       </div>
