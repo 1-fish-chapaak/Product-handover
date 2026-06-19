@@ -21,6 +21,7 @@ import {
 import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
 import { KpiTile } from '../shared/KpiTile';
+import AuditResultBody from './AuditResultBody';
 import type { WorkflowTypeId } from '../../data/mockData';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { TextShimmer } from '../shared/TextShimmer';
@@ -3550,20 +3551,26 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
       };
     }));
 
-    // Claude-aligned scroll behavior: drive the same multi-fire snap-to-
-    // bottom window here as the regular post-generation path. The
-    // audit-result mount swaps the message in place (no isTyping toggle),
-    // so the messages/isTyping effect doesn't fire — we kick off the
-    // snaps directly so the "What next?" chip row at the bottom of the
-    // (often tall) audit-result message lands in view once its rich
-    // content + chip stagger has settled.
+    // Reveal-aware scroll. The result now streams in — prose typewriter first,
+    // then the KPI / chart / table cards. The old behavior (built for the
+    // instant card) snapped to the bottom, which glued the viewport to the tall
+    // result so the user missed the typewriter entirely. Instead we anchor the
+    // TOP of the result in view and park the user there: auto-follow stands down
+    // (treated as "scrolled up") so the prose plays uninterrupted while the
+    // cards brew below the fold, and the scroll-to-bottom button gives a one-tap
+    // jump to the KPIs / table when they're ready.
     if (!isUserScrolledUp.current) {
-      schedule(() => snapToBottom(true), 0);
-      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 120);
-      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 280);
-      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 500);
-      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 750);
-      schedule(() => { if (!isUserScrolledUp.current) snapToBottom(true); }, 1000);
+      isUserScrolledUp.current = true;
+      setShowScrollToBottom(true);
+      schedule(() => {
+        const container = messagesContainerRef.current;
+        const el = container?.querySelector(`[data-msg-id="${targetId}"]`) as HTMLElement | null;
+        if (!container || !el) return;
+        const delta = el.getBoundingClientRect().top - container.getBoundingClientRect().top;
+        const top = Math.max(0, container.scrollTop + delta - 24);
+        container.scrollTo({ top, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+        lastScrollTopRef.current = top;
+      }, 60);
     }
   };
 
@@ -5701,48 +5708,44 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       </div>
                     ) : msg.richType === 'audit-result' ? (
                       <div className="space-y-4 w-full">
-                        {/* Body text */}
-                        {msg.text && (
-                          <div className="text-[0.9375rem] leading-[1.65] text-ink-800 max-w-[66ch]">{renderAssistantText(msg.text)}</div>
-                        )}
-
-                        {/* Affordance: link inline result to the auto-opened panel.
-                            Hidden when the panel is already open (the link would
-                            no-op against itself and duplicates what's already
-                            on screen). */}
-                        {!showArtifacts && (
-                          <button
-                            onClick={() => setShowArtifacts(true)}
-                            className="inline-flex items-center gap-1.5 text-xs text-ink-500 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm"
-                          >
-                            <span>Plan, query, and sources are in the Workspace</span>
-                            <ArrowUpRight size={12} />
-                          </button>
-                        )}
-
-                        {/* KPI scoreboard — mirrors DashboardView's KPI grid
-                            exactly: glass-cards (rounded-xl, hairline border,
-                            brand-200 hover) in a 2/4-col grid. 11px uppercase
-                            label over a 26px bold ink-900 value. Scales to N
-                            rows when the result carries many KPIs — same
-                            widget, same typography on both surfaces. */}
-                        <div role="list" aria-label="Key results" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                          {AUDIT_RESULT.kpis.map((kpi, ki) => (
-                            <KpiTile key={kpi.label} label={kpi.label} value={kpi.value} index={ki} />
-                          ))}
-                        </div>
-
-                        {/* Chart — ChartGroup carries its own widget shell
-                            (title, toggle, expand button), matched to the
-                            ResultsTable below so they read as a pair. */}
-                        <ChartGroup charts={AUDIT_RESULT.charts} embedded />
-
-                        {/* Table preview */}
-                        <ResultsTable
-                          columns={AUDIT_RESULT.table.columns}
-                          rows={AUDIT_RESULT.table.rows}
-                          totalRows={AUDIT_RESULT.table.totalRows}
-                          onDownload={() => addToast({ type: 'success', message: 'CSV download started.' })}
+                        {/* Streamed composite output — prose typewriter, KPI
+                            count-up, chart draw-in and a row-streamed table all
+                            brew in parallel with staggered onsets. Render-prop
+                            slots keep ChartGroup / ResultsTable owned here so
+                            the shared widgets (and the right workspace) are
+                            untouched. */}
+                        <AuditResultBody
+                          messageId={msg.id}
+                          text={msg.text}
+                          kpis={AUDIT_RESULT.kpis}
+                          previewRowCount={Math.min(PREVIEW_ROW_COUNT, AUDIT_RESULT.table.rows.length)}
+                          forceComplete={msg.stopped}
+                          afterProse={
+                            /* Affordance: link inline result to the auto-opened
+                               panel. Hidden when the panel is already open (the
+                               link would no-op against itself and duplicate
+                               what's already on screen). */
+                            !showArtifacts ? (
+                              <button
+                                onClick={() => setShowArtifacts(true)}
+                                className="inline-flex items-center gap-1.5 text-xs text-ink-500 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm"
+                              >
+                                <span>Plan, query, and sources are in the Workspace</span>
+                                <ArrowUpRight size={12} />
+                              </button>
+                            ) : null
+                          }
+                          renderChart={() => (
+                            <ChartGroup charts={AUDIT_RESULT.charts} embedded />
+                          )}
+                          renderTable={(revealedRows) => (
+                            <ResultsTable
+                              columns={AUDIT_RESULT.table.columns}
+                              rows={AUDIT_RESULT.table.rows.slice(0, revealedRows)}
+                              totalRows={AUDIT_RESULT.table.totalRows}
+                              onDownload={() => addToast({ type: 'success', message: 'CSV download started.' })}
+                            />
+                          )}
                         />
 
                         {/* Action bar — explicit row of actions per PRD action-bar spec.
