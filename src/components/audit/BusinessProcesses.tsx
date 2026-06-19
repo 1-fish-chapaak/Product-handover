@@ -1545,7 +1545,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
     return () => clearTimeout(armSkeleton);
   }, []);
 
-  // Listen for header-level "Create new SOP" trigger.
+  // Listen for header-level "Upload SOP" trigger.
   useEffect(() => {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<{ section?: string }>;
@@ -2026,8 +2026,8 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               <FilterCTA label="File type" options={fileTypeOptions} value={fileTypeFilter} onChange={setFileTypeFilter} />
               <FilterCTA label="User" options={uploaderOptions} value={uploaderFilter} onChange={setUploaderFilter} />
               {can('bp_create') && (
-              <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadModal(true)} disabled={searchQuery.trim().length > 0} title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined} className="shrink-0 rounded-md!" leftIcon={<Plus size={13} />}>
-                Create new SOP
+              <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadModal(true)} disabled={searchQuery.trim().length > 0} title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined} className="shrink-0 rounded-md! text-[0.75rem]!" leftIcon={<Plus size={13} />}>
+                Upload SOP
               </Button>
               )}
             </div>
@@ -5427,8 +5427,8 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
 
   // Section-specific create button label rendered in the drilled-view header.
   const sectionCreateLabel: Record<SectionKey, string> = {
-    sop: 'Create new SOP',
-    racm: 'Create new RACM',
+    sop: 'Upload SOP',
+    racm: 'Create RACM',
     risks: 'Create new Risk',
     controls: 'Create new Control',
     workflows: 'Create Workflow',
