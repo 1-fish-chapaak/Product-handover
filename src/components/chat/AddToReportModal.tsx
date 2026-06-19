@@ -35,6 +35,8 @@ export interface ReportConfirmPayload {
   newName?: string;
   newDescription?: string;
   newSeverity?: Severity;
+  newAuditEntity?: string;
+  newAuditPeriod?: string;
   selection: GranularSelection;
 }
 
@@ -56,6 +58,21 @@ const DESC_MAX = 240;
 const DESC_SOFT = Math.round(DESC_MAX * 0.8);
 const SUBMIT_TIMEOUT_MS = 30_000;
 const RESERVED_NAMES = new Set(['default', 'system', 'untitled', 'new report']);
+const ENTITY_MAX = 80;
+
+/** Current fiscal quarter (India: FY starts in April), formatted as
+ *  "FY26 Q1 (April–June 2026)". Used to auto-fill the Audit Period. */
+function currentFiscalPeriod(): string {
+  const d = new Date();
+  const m = d.getMonth(); // 0 = Jan
+  const y = d.getFullYear();
+  let q: number, startYear: number, span: string, spanYear: number;
+  if (m >= 3 && m <= 5)      { q = 1; startYear = y;     span = 'April–June';       spanYear = y; }
+  else if (m >= 6 && m <= 8) { q = 2; startYear = y;     span = 'July–September';   spanYear = y; }
+  else if (m >= 9)           { q = 3; startYear = y;     span = 'October–December'; spanYear = y; }
+  else                       { q = 4; startYear = y - 1; span = 'January–March';     spanYear = y; }
+  return `FY${String(startYear % 100).padStart(2, '0')} Q${q} (${span} ${spanYear})`;
+}
 
 export function AddToReportModal({
   open, onClose, reports, alreadyAddedIds = [], resultData, onConfirm,
@@ -68,6 +85,8 @@ export function AddToReportModal({
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newSeverity, setNewSeverity] = useState<Severity | null>(null);
+  const [newEntity, setNewEntity] = useState('');
+  const [newPeriod, setNewPeriod] = useState<string>(() => currentFiscalPeriod());
   const [nameTouched, setNameTouched] = useState(false);
 
   const [selKpis, setSelKpis] = useState<Set<string>>(new Set((resultData?.kpis || []).map(k => k.label)));
@@ -92,6 +111,8 @@ export function AddToReportModal({
     setNewName('');
     setNewDesc('');
     setNewSeverity(null);
+    setNewEntity('');
+    setNewPeriod(currentFiscalPeriod());
     setNameTouched(false);
     setSelKpis(new Set((resultData?.kpis || []).map(k => k.label)));
     setSelCharts(new Set((resultData?.charts || []).map(c => c.id)));
@@ -127,6 +148,8 @@ export function AddToReportModal({
 
   const canProceed = mode === 'new'
     ? trimmedName.length > 0 && !duplicateName && !isReserved
+      && newDesc.trim().length > 0 && newSeverity !== null
+      && newEntity.trim().length > 0 && newPeriod.trim().length > 0
     : selectedId !== null;
   const totalSelected = selKpis.size + selCharts.size + selCols.size;
   const hasAnyResultItems =
@@ -150,6 +173,8 @@ export function AddToReportModal({
       newName: isNew ? trimmedName : undefined,
       newDescription: isNew ? newDesc.trim() : undefined,
       newSeverity: isNew ? (newSeverity ?? undefined) : undefined,
+      newAuditEntity: isNew ? newEntity.trim() : undefined,
+      newAuditPeriod: isNew ? newPeriod.trim() : undefined,
       selection: { kpis: [...selKpis], charts: [...selCharts], columns: [...selCols] },
     };
 
@@ -418,7 +443,7 @@ export function AddToReportModal({
                 className="space-y-3"
               >
                 <div>
-                  <label htmlFor="new-rpt-name" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Report Name</label>
+                  <label htmlFor="new-rpt-name" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Report Name / Audit Title</label>
                   <input
                     id="new-rpt-name"
                     ref={nameRef}
@@ -448,8 +473,37 @@ export function AddToReportModal({
                   </div>
                 </div>
                 <div>
+                  <label htmlFor="new-rpt-entity" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Audit Entity</label>
+                  <input
+                    id="new-rpt-entity"
+                    type="text" value={newEntity}
+                    onChange={e => setNewEntity(e.target.value.slice(0, ENTITY_MAX))}
+                    placeholder="e.g. Acme Corp — Finance Shared Services"
+                    maxLength={ENTITY_MAX}
+                    className="w-full h-10 px-3 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition-all"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3 items-start">
+                  <div>
+                    <label id="new-rpt-severity-label" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Severity</label>
+                    <SeveritySelect value={newSeverity} onChange={setNewSeverity} labelledBy="new-rpt-severity-label" />
+                  </div>
+                  <div>
+                    <label htmlFor="new-rpt-period" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Audit Period</label>
+                    <input
+                      id="new-rpt-period"
+                      type="text" value={newPeriod}
+                      onChange={e => setNewPeriod(e.target.value)}
+                      placeholder="e.g. FY26 Q1 (April–June 2026)"
+                      aria-describedby="new-rpt-period-hint"
+                      className="w-full h-10 px-3 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition-all"
+                    />
+                    <span id="new-rpt-period-hint" className="mt-1 block text-[0.6875rem] text-ink-400">Auto-filled to the current quarter — edit if needed.</span>
+                  </div>
+                </div>
+                <div>
                   <label htmlFor="new-rpt-desc" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">
-                    Description <span className="text-ink-400 font-normal">(optional)</span>
+                    Description
                   </label>
                   <textarea
                     id="new-rpt-desc"
@@ -467,10 +521,6 @@ export function AddToReportModal({
                       {newDesc.length}/{DESC_MAX}
                     </span>
                   </div>
-                </div>
-                <div>
-                  <label id="new-rpt-severity-label" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Severity</label>
-                  <SeveritySelect value={newSeverity} onChange={setNewSeverity} labelledBy="new-rpt-severity-label" />
                 </div>
               </div>
             )}
