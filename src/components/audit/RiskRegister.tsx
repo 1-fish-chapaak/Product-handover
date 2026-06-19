@@ -1101,12 +1101,12 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                     );
                     return embedded ? (
                       /* Process Hub Risks tab — Controls-style column grid: [id+title / desc] · [P2P+type stacked] · [severity] · [tags+actions] */
-                      <div className="grid grid-cols-[minmax(0,1fr)_7rem_6rem_20rem] gap-5 items-start">
+                      <div className="grid grid-cols-[minmax(0,1fr)_7rem_6rem_24rem] gap-5 items-start">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             {identity}
                           </div>
-                          <p className="text-[0.8125rem] text-text leading-relaxed mt-2.5">{risk.description || '—'}</p>
+                          <p title={risk.description} className="text-[0.8125rem] text-text leading-relaxed mt-2.5 max-w-[50ch] line-clamp-2">{risk.description || '—'}</p>
                         </div>
                         <div className="flex flex-col items-start gap-1.5">
                           {p2pChip}
