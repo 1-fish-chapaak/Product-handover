@@ -164,7 +164,7 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
             <div className="text-[0.6875rem] font-semibold text-text-muted tracking-wider uppercase mb-1">
               My Queue
             </div>
-            <h1 className="font-display text-[2rem] font-bold text-text leading-tight">
+            <h1 className="text-[2rem] font-bold text-text leading-tight">
               Welcome back, {CURRENT_USER.name}
             </h1>
             <p className="text-[0.8125rem] text-text-secondary mt-1.5 max-w-xl">

@@ -4,8 +4,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   X, ChevronDown, FileCode, PanelRightClose,
   Database, BarChart3, Copy, Download,
-  AlertTriangle, Wand2, HelpCircle,
-  Check, Pencil, Search, ListChecks, MessageSquare, Share2,
+  Wand2, HelpCircle,
+  Check, Search, ListChecks, MessageSquare, Share2,
   History as HistoryIcon, Clock,
 } from 'lucide-react';
 import type { ArtifactTab } from '../../hooks/useAppState';
@@ -13,6 +13,8 @@ import Gated from '../shared/Gated';
 import { useToast } from '../shared/Toast';
 import { KpiTile } from '../shared/KpiTile';
 import { SEED as DATA_SOURCE_SEED, TYPE_META, formatDate, type DataSource } from '../data-sources/sources';
+import { type ComposerContext, editPlanContext, editCodeContext } from '../chat/composerContext';
+import { QueryExecutionPlanCard, AssumptionsCard, type PlanCardStep } from '../shared/PlanCards';
 
 interface ArtifactPanelProps {
   activeTab: ArtifactTab;
@@ -28,6 +30,10 @@ interface ArtifactPanelProps {
    *  Used by the "Edit assumptions" action on the Plan tab so users adjust
    *  the run via natural language instead of an inline editor. */
   onComposeInChat?: (draft: string) => void;
+  /** Hands a canvas CTA off to the chat composer as a focused "context mode"
+   *  (Plan ▸ Edit, Code ▸ Edit) — matches the workflow-builder canvas. Keeps
+   *  the panel open so the artifact stays visible beside the composer. */
+  onCanvasAction?: (ctx: ComposerContext) => void;
   /** Optional override for the Plan tab body. When provided, it replaces the
    *  default (chat) PlanTab — used by the Workflow Executor to show that
    *  workflow's own plan while reusing the rest of this QnA workspace. */
@@ -38,7 +44,7 @@ interface ArtifactPanelProps {
   showHistory?: boolean;
 }
 
-// Counts must match PLAN_STEPS.length and QUERY_SOURCES.length defined below.
+// Counts must match CHAT_PLAN_STEPS.length and QUERY_SOURCES.length defined below.
 const TABS: { id: ArtifactTab; label: string; icon: React.ElementType; count?: number }[] = [
   { id: 'plan', label: 'Plan', icon: ListChecks, count: 5 },
   { id: 'code', label: 'Code', icon: FileCode },
@@ -89,28 +95,10 @@ function CollapsibleSection({ title, icon: Icon, defaultOpen = true, children, a
   );
 }
 
-// Production data contract for a query execution plan step. Status maps
-// 1:1 to backend states; no client-side decoration beyond that.
-type PlanStepStatus = 'pending' | 'running' | 'done' | 'failed';
-interface PlanStep {
-  id: string;
-  title: string;
-  detail: string;
-  status: PlanStepStatus;
-}
-
 interface PlanAssumption {
   key: string;
   value: string;
 }
-
-const PLAN_STEPS: PlanStep[] = [
-  { id: 'parse',   title: 'Parse user query',      detail: 'Identified intent: risk analysis query for P2P process',           status: 'done' },
-  { id: 'sources', title: 'Identify data sources', detail: 'Selected: SAP ERP AP Module, Vendor Master Data',                  status: 'done' },
-  { id: 'plan',    title: 'Generate query plan',   detail: 'Built SQL joins across 3 tables with risk severity filter',        status: 'done' },
-  { id: 'execute', title: 'Execute query',         detail: 'Processed 1.2M records, filtered to 9 matching risks',             status: 'done' },
-  { id: 'format',  title: 'Format results',        detail: 'Generated table view with severity indicators and control mapping', status: 'done' },
-];
 
 const PLAN_ASSUMPTIONS: PlanAssumption[] = [
   { key: 'Date range',       value: 'Full FY26 (Apr 2025 – Mar 2026)' },
@@ -121,37 +109,50 @@ const PLAN_ASSUMPTIONS: PlanAssumption[] = [
   { key: 'Currency',         value: 'INR (converted at booking rate)' },
 ];
 
-function PlanStepNode({ status, index }: { status: PlanStepStatus; index: number }) {
-  if (status === 'done') {
-    return <Check size={12} strokeWidth={2.75} className="text-compliant-700" aria-hidden />;
-  }
-  if (status === 'running') {
-    return (
-      <span className="relative inline-flex size-2.5 rounded-full bg-brand-600" aria-hidden>
-        <span className="absolute inset-0 rounded-full ring-2 ring-brand-400/40 motion-safe:animate-ping" />
-      </span>
-    );
-  }
-  if (status === 'failed') {
-    return <X size={12} strokeWidth={2.75} className="text-risk-700" aria-hidden />;
-  }
-  return (
-    <span className="text-[0.625rem] font-mono tabular-nums text-ink-400" aria-hidden>{index + 1}</span>
-  );
-}
+// Chat/QnA execution-plan steps, in the shared PlanCard shape so they render
+// through the same QueryExecutionPlanCard the workflow builder uses (numbered
+// steps + type badge + expandable source chips).
+const CHAT_PLAN_STEPS: PlanCardStep[] = [
+  {
+    id: 'parse', name: 'Parse user query', type: 'extract',
+    description: 'Identified intent: risk analysis query for the P2P process.',
+  },
+  {
+    id: 'sources', name: 'Identify data sources', type: 'extract',
+    description: 'Selected SAP ERP AP Module and Vendor Master Data.',
+    sources: [
+      { id: 'sap-ap', name: 'SAP ERP AP Module', type: 'sql',
+        columns: ['Vendor', 'Invoice No', 'Amount', 'PO Ref', 'GL Account', 'Posting Date', 'Currency'] },
+      { id: 'vendor-master', name: 'Vendor Master Data', type: 'sql',
+        columns: ['Vendor ID', 'Vendor', 'Bank Account', 'Status', 'Risk Flag'] },
+    ],
+  },
+  {
+    id: 'plan', name: 'Generate query plan', type: 'analyze',
+    description: 'Built SQL joins across 3 tables with a risk-severity filter.',
+  },
+  {
+    id: 'execute', name: 'Execute query', type: 'validate',
+    description: 'Processed 1.2M records, filtered to 9 matching risks.',
+  },
+  {
+    id: 'format', name: 'Format results', type: 'summarize',
+    description: 'Generated the table view with severity indicators and control mapping.',
+  },
+];
 
 function PlanTab({
-  steps = PLAN_STEPS,
+  steps = CHAT_PLAN_STEPS,
   assumptions = PLAN_ASSUMPTIONS,
   onComposeInChat,
+  onCanvasAction,
 }: {
-  steps?: PlanStep[];
+  steps?: PlanCardStep[];
   assumptions?: PlanAssumption[];
   onComposeInChat?: (draft: string) => void;
+  onCanvasAction?: (ctx: ComposerContext) => void;
 } = {}) {
   const { addToast } = useToast();
-  const [planOpen, setPlanOpen] = useState(true);
-  const [assumptionsOpen, setAssumptionsOpen] = useState(true);
 
   // Compose the chat draft from the current assumption set so the user
   // sees what they're editing and where to type their change. Falls back to
@@ -165,179 +166,24 @@ function PlanTab({
     onComposeInChat(`Update assumptions for this query — currently:\n${lines}\n\nWhat should change? `);
   };
 
-  const doneCount = steps.filter(s => s.status === 'done').length;
-  const allDone = doneCount === steps.length;
-  const hasRunning = steps.some(s => s.status === 'running');
-  const hasFailed = steps.some(s => s.status === 'failed');
-
   return (
     <div className="space-y-4 pt-4">
-      {/* ─────── Plan card ─────── */}
-      <section
-        aria-label="Query execution plan"
-        className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]"
-      >
-
-        {/* Header — clickable to toggle */}
-        <button
-          type="button"
-          onClick={() => setPlanOpen(o => !o)}
-          aria-expanded={planOpen}
-          aria-controls="plan-steps"
-          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-paper-50/40 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-inset"
-        >
-          <div className="size-7 rounded-lg bg-brand-50 ring-1 ring-inset ring-brand-100 flex items-center justify-center shrink-0">
-            <ListChecks size={13} className="text-brand-600" />
-          </div>
-          <div className="flex-1 min-w-0 text-left">
-            <h3 className="text-[0.75rem] font-semibold text-ink-900 leading-tight tracking-tight">Query Execution Plan</h3>
-          </div>
-          <span
-            className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[0.75rem] font-medium tabular-nums ${
-              hasFailed ? 'bg-risk-50 text-risk-700'
-                : hasRunning ? 'bg-brand-50 text-brand-700'
-                  : allDone ? 'bg-compliant-50 text-compliant-700'
-                    : 'bg-paper-100 text-ink-600'
-            }`}
-            aria-label={`${doneCount} of ${steps.length} steps ${hasFailed ? 'failed' : hasRunning ? 'in progress' : allDone ? 'completed' : 'done'}`}
-          >
-            <span className={`size-1.5 rounded-full ${
-              hasFailed ? 'bg-risk' : hasRunning ? 'bg-brand-500' : allDone ? 'bg-compliant' : 'bg-ink-400'
-            }`} aria-hidden />
-            {doneCount}/{steps.length}
-          </span>
-          <motion.span
-            animate={{ rotate: planOpen ? 0 : -90 }}
-            transition={{ type: 'spring', stiffness: 360, damping: 26 }}
-            className="inline-flex items-center justify-center size-6 -mr-1 text-ink-400"
-            aria-hidden
-          >
-            <ChevronDown size={14} />
-          </motion.span>
-        </button>
-
-        <AnimatePresence initial={false}>
-          {planOpen && (
-            <motion.div
-              key="plan-body"
-              id="plan-steps"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              className="overflow-hidden"
-            >
-              <ol className="px-3 pb-3 border-t border-canvas-border/70 pt-2" role="list">
-                {steps.map((s, i) => (
-                  <li
-                    key={s.id}
-                    className="flex items-start gap-2.5 px-2 py-1.5 rounded-md hover:bg-paper-50/70 transition-colors min-w-0"
-                    aria-label={`${s.title} — ${s.status}`}
-                  >
-                    <span className="inline-flex items-center justify-center w-4 h-[18px] shrink-0">
-                      <PlanStepNode status={s.status} index={i} />
-                    </span>
-                    <p className="text-[0.75rem] leading-[18px] min-w-0 flex-1">
-                      <span className="font-medium text-ink-900">{s.title}</span>
-                      <span className="text-ink-300 mx-1.5" aria-hidden>—</span>
-                      <span className="text-ink-500">{s.detail}</span>
-                    </p>
-                  </li>
-                ))}
-              </ol>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </section>
-
-      {/* ─────── Assumptions card ─────── */}
-      {assumptions.length > 0 && (
-        <section
-          aria-label="Assumptions"
-          className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]"
-        >
-
-          <div className="flex items-center">
-            <button
-              type="button"
-              onClick={() => setAssumptionsOpen(o => !o)}
-              aria-expanded={assumptionsOpen}
-              aria-controls="assumptions-list"
-              className="flex-1 flex items-center gap-3 px-4 py-3 hover:bg-paper-50/40 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-inset"
-            >
-              <div className="size-7 rounded-lg bg-brand-50 ring-1 ring-inset ring-brand-100 flex items-center justify-center shrink-0">
-                <AlertTriangle size={13} className="text-brand-600" />
-              </div>
-              <div className="flex-1 min-w-0 text-left">
-                <h3 className="text-[0.75rem] font-semibold text-ink-900 leading-tight tracking-tight">Assumptions</h3>
-                <p className="text-[0.75rem] text-ink-500 mt-px leading-tight">
-                  {assumptions.length} defaults applied to this query
-                </p>
-              </div>
-            </button>
-            <div className="flex items-center pr-3">
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); handleEditAssumptions(); }}
-                title="Edit assumptions in chat"
-                className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-100 hover:border-brand-200 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-              >
-                <Pencil size={11} strokeWidth={2.25} />
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => setAssumptionsOpen(o => !o)}
-                aria-expanded={assumptionsOpen}
-                aria-label={assumptionsOpen ? 'Collapse assumptions' : 'Expand assumptions'}
-                className="inline-flex items-center justify-center size-6 text-ink-400 hover:text-ink-700 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded"
-              >
-                <motion.span
-                  animate={{ rotate: assumptionsOpen ? 0 : -90 }}
-                  transition={{ type: 'spring', stiffness: 360, damping: 26 }}
-                  className="inline-flex"
-                  aria-hidden
-                >
-                  <ChevronDown size={14} />
-                </motion.span>
-              </button>
-            </div>
-          </div>
-
-          <AnimatePresence initial={false}>
-            {assumptionsOpen && (
-              <motion.div
-                key="assumptions-body"
-                id="assumptions-list"
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                className="overflow-hidden"
-              >
-                <dl className="px-3 pb-3 border-t border-canvas-border/70 pt-2">
-                  {assumptions.map((a) => (
-                    <div
-                      key={a.key}
-                      className="grid grid-cols-[130px_minmax(0,1fr)] gap-4 px-2 py-2 rounded-md hover:bg-paper-50/70 transition-colors"
-                    >
-                      <dt className="text-[0.75rem] font-medium text-ink-500 leading-[1.45] self-start">
-                        {a.key}
-                      </dt>
-                      <dd className="text-[0.8125rem] text-ink-900 leading-[1.5]">{a.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </section>
-      )}
+      {/* Query Execution Plan — shared with the workflow-builder canvas. */}
+      <QueryExecutionPlanCard
+        steps={steps}
+        onEdit={onCanvasAction ? () => onCanvasAction(editPlanContext(steps.length)) : undefined}
+      />
+      {/* Assumptions — shared with the workflow-builder canvas. */}
+      <AssumptionsCard
+        assumptions={assumptions}
+        context="query"
+        onEdit={onComposeInChat ? handleEditAssumptions : undefined}
+      />
     </div>
   );
 }
 
-function CodeTab() {
+function CodeTab({ onCanvasAction }: { onCanvasAction?: (ctx: ComposerContext) => void } = {}) {
   const { addToast } = useToast();
   const [copied, setCopied] = useState(false);
 
@@ -387,7 +233,20 @@ ORDER BY
 
   return (
     <div className="space-y-3 pt-4">
-      <CollapsibleSection title="Generated SQL Query" icon={FileCode}>
+      <CollapsibleSection
+        title="Generated SQL Query"
+        icon={FileCode}
+        actions={onCanvasAction ? (
+          <button
+            type="button"
+            onClick={() => onCanvasAction(editCodeContext('query.sql', 'SQL'))}
+            title="Edit query in chat"
+            className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-2 py-1 rounded-md cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
+            Edit
+          </button>
+        ) : undefined}
+      >
         <div className="mt-3 relative">
           <pre className="bg-ink-900 text-paper-50 rounded-lg p-4 text-[0.75rem] font-mono overflow-x-auto leading-relaxed">
             <code>{sql}</code>
@@ -589,7 +448,7 @@ function SourceCard({
           <span className="text-[0.75rem] font-mono text-ink-700 truncate flex-1" title={columnsUsed.join(', ')}>
             {columnsUsed.join(', ') || '(none)'}
           </span>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
             <button
               ref={pickBtnRef}
               type="button"
@@ -1208,7 +1067,7 @@ function RunHistoryTab() {
   );
 }
 
-export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpenInKnowledgeHub, onComposeInChat, onShareResults, planSlot, showHistory }: ArtifactPanelProps) {
+export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpenInKnowledgeHub, onComposeInChat, onCanvasAction, onShareResults, planSlot, showHistory }: ArtifactPanelProps) {
   const contentRef = useRef<HTMLDivElement | null>(null);
   // Executor appends a History tab; chat Q&A (no showHistory) keeps the base set.
   const tabs: { id: ArtifactTab; label: string; icon: React.ElementType; count?: number }[] =
@@ -1329,8 +1188,8 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
             exit={{ opacity: 0, y: -5 }}
             transition={{ duration: 0.15 }}
           >
-            {activeTab === 'plan' && (planSlot ?? <PlanTab onComposeInChat={onComposeInChat} />)}
-            {activeTab === 'code' && <CodeTab />}
+            {activeTab === 'plan' && (planSlot ?? <PlanTab onComposeInChat={onComposeInChat} onCanvasAction={onCanvasAction} />)}
+            {activeTab === 'code' && <CodeTab onCanvasAction={onCanvasAction} />}
             {activeTab === 'sources' && <SourcesTab onOpenInKnowledgeHub={onOpenInKnowledgeHub} onComposeInChat={onComposeInChat} />}
             {activeTab === 'history' && <RunHistoryTab />}
           </motion.div>

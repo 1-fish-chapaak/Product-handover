@@ -851,7 +851,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
           <div className="font-mono text-[0.75rem] text-ink-500 mb-2">Intelligence · Dashboards</div>
           <div className="flex items-end justify-between">
             <div>
-              <h1 className="font-display text-[2.125rem] font-[420] text-ink-900 leading-[1.15]">Dashboards</h1>
+              <h1 className="text-[2.125rem] font-semibold text-ink-900 leading-[1.15]">Dashboards</h1>
               <p className="text-[0.8125rem] text-ink-500 mt-1">Manage and access all analytics dashboards</p>
             </div>
             <div className="flex items-center gap-2">

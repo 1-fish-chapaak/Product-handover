@@ -720,7 +720,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
             {/* Header */}
             <header className="glass-card rounded-2xl p-5 mb-4 flex items-center justify-between gap-4 flex-wrap">
               <div>
-                <h1 className="font-display text-[1.375rem] font-semibold text-ink-900 tracking-tight">Case Management Workspace</h1>
+                <h1 className="text-[1.375rem] font-semibold text-ink-900 tracking-tight">Case Management Workspace</h1>
                 <p className="text-[0.75rem] text-ink-500 mt-0.5">Triage, classify, and resolve every exception flagged for this engagement.</p>
               </div>
               <div className="flex items-center gap-3">

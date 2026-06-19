@@ -206,6 +206,7 @@ const getInitialView = (): View => {
   if (v === 'reports') return 'reports';
   if (v === 'manage-exceptions') return 'manage-exceptions';
   if (v === 'racm-full-editor') return 'racm-full-editor';
+  if (v === 'audit-risk-register') return 'audit-risk-register';
   if (v === 'control-detail' && params.get('controlId')) return 'control-detail';
   if (v === 'chat') return 'chat';
   if (v === 'bp-detail' && params.get('bp')) return 'bp-detail';
@@ -344,10 +345,6 @@ export function useAppState() {
 
   const addUserProcess = useCallback((process: UserProcess) => {
     setState(prev => ({ ...prev, userProcesses: [...prev.userProcesses, process] }));
-  }, []);
-
-  const setSelectedEngagement = useCallback((id: string | null) => {
-    setState(prev => ({ ...prev, selectedEngagementId: id }));
   }, []);
 
   const openAuditExecution = useCallback((engagementId: string) => {

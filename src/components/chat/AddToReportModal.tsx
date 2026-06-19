@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
 import Gated from '../shared/Gated';
 import {
-  X, FileText, Plus, Check, ChevronRight, Search, Lock,
+  X, FileText, Plus, Check, ChevronRight, ChevronDown, Search, Lock,
 } from 'lucide-react';
 import type { AuditResultData, GranularSelection } from './AddToDashboardModal';
 import {
@@ -26,12 +26,17 @@ export interface ReportOption {
   generatedBy?: string;
 }
 
+export type Severity = 'high' | 'medium' | 'low';
+
 export interface ReportConfirmPayload {
   reportId: string;
   reportName: string;
   isNew: boolean;
   newName?: string;
   newDescription?: string;
+  newSeverity?: Severity;
+  newAuditEntity?: string;
+  newAuditPeriod?: string;
   selection: GranularSelection;
 }
 
@@ -53,6 +58,21 @@ const DESC_MAX = 240;
 const DESC_SOFT = Math.round(DESC_MAX * 0.8);
 const SUBMIT_TIMEOUT_MS = 30_000;
 const RESERVED_NAMES = new Set(['default', 'system', 'untitled', 'new report']);
+const ENTITY_MAX = 80;
+
+/** Current fiscal quarter (India: FY starts in April), formatted as
+ *  "FY26 Q1 (April–June 2026)". Used to auto-fill the Audit Period. */
+function currentFiscalPeriod(): string {
+  const d = new Date();
+  const m = d.getMonth(); // 0 = Jan
+  const y = d.getFullYear();
+  let q: number, startYear: number, span: string, spanYear: number;
+  if (m >= 3 && m <= 5)      { q = 1; startYear = y;     span = 'April–June';       spanYear = y; }
+  else if (m >= 6 && m <= 8) { q = 2; startYear = y;     span = 'July–September';   spanYear = y; }
+  else if (m >= 9)           { q = 3; startYear = y;     span = 'October–December'; spanYear = y; }
+  else                       { q = 4; startYear = y - 1; span = 'January–March';     spanYear = y; }
+  return `FY${String(startYear % 100).padStart(2, '0')} Q${q} (${span} ${spanYear})`;
+}
 
 export function AddToReportModal({
   open, onClose, reports, alreadyAddedIds = [], resultData, onConfirm,
@@ -64,6 +84,9 @@ export function AddToReportModal({
   const [search, setSearch] = useState('');
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newSeverity, setNewSeverity] = useState<Severity | null>(null);
+  const [newEntity, setNewEntity] = useState('');
+  const [newPeriod, setNewPeriod] = useState<string>(() => currentFiscalPeriod());
   const [nameTouched, setNameTouched] = useState(false);
 
   const [selKpis, setSelKpis] = useState<Set<string>>(new Set((resultData?.kpis || []).map(k => k.label)));
@@ -87,6 +110,9 @@ export function AddToReportModal({
     setSearch('');
     setNewName('');
     setNewDesc('');
+    setNewSeverity(null);
+    setNewEntity('');
+    setNewPeriod(currentFiscalPeriod());
     setNameTouched(false);
     setSelKpis(new Set((resultData?.kpis || []).map(k => k.label)));
     setSelCharts(new Set((resultData?.charts || []).map(c => c.id)));
@@ -122,6 +148,8 @@ export function AddToReportModal({
 
   const canProceed = mode === 'new'
     ? trimmedName.length > 0 && !duplicateName && !isReserved
+      && newDesc.trim().length > 0 && newSeverity !== null
+      && newEntity.trim().length > 0 && newPeriod.trim().length > 0
     : selectedId !== null;
   const totalSelected = selKpis.size + selCharts.size + selCols.size;
   const hasAnyResultItems =
@@ -144,6 +172,9 @@ export function AddToReportModal({
       isNew,
       newName: isNew ? trimmedName : undefined,
       newDescription: isNew ? newDesc.trim() : undefined,
+      newSeverity: isNew ? (newSeverity ?? undefined) : undefined,
+      newAuditEntity: isNew ? newEntity.trim() : undefined,
+      newAuditPeriod: isNew ? newPeriod.trim() : undefined,
       selection: { kpis: [...selKpis], charts: [...selCharts], columns: [...selCols] },
     };
 
@@ -412,7 +443,7 @@ export function AddToReportModal({
                 className="space-y-3"
               >
                 <div>
-                  <label htmlFor="new-rpt-name" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Report Name</label>
+                  <label htmlFor="new-rpt-name" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Report Name / Audit Title</label>
                   <input
                     id="new-rpt-name"
                     ref={nameRef}
@@ -442,8 +473,37 @@ export function AddToReportModal({
                   </div>
                 </div>
                 <div>
+                  <label htmlFor="new-rpt-entity" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Audit Entity</label>
+                  <input
+                    id="new-rpt-entity"
+                    type="text" value={newEntity}
+                    onChange={e => setNewEntity(e.target.value.slice(0, ENTITY_MAX))}
+                    placeholder="e.g. Acme Corp — Finance Shared Services"
+                    maxLength={ENTITY_MAX}
+                    className="w-full h-10 px-3 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition-all"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3 items-start">
+                  <div>
+                    <label id="new-rpt-severity-label" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Severity</label>
+                    <SeveritySelect value={newSeverity} onChange={setNewSeverity} labelledBy="new-rpt-severity-label" />
+                  </div>
+                  <div>
+                    <label htmlFor="new-rpt-period" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Audit Period</label>
+                    <input
+                      id="new-rpt-period"
+                      type="text" value={newPeriod}
+                      onChange={e => setNewPeriod(e.target.value)}
+                      placeholder="e.g. FY26 Q1 (April–June 2026)"
+                      aria-describedby="new-rpt-period-hint"
+                      className="w-full h-10 px-3 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition-all"
+                    />
+                    <span id="new-rpt-period-hint" className="mt-1 block text-[0.6875rem] text-ink-400">Auto-filled to the current quarter — edit if needed.</span>
+                  </div>
+                </div>
+                <div>
                   <label htmlFor="new-rpt-desc" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">
-                    Description <span className="text-ink-400 font-normal">(optional)</span>
+                    Description
                   </label>
                   <textarea
                     id="new-rpt-desc"
@@ -672,5 +732,90 @@ function Highlighted({ text, query }: { text: string; query: string }) {
       </mark>
       {text.slice(idx + query.length)}
     </>
+  );
+}
+
+// ─── Severity select ───────────────────────────────────────────────────────────
+// Single-select dropdown matching the modal's inputs + the app's popover idiom
+// (DateFilterPicker): trigger with a rotating chevron, full-screen click-catcher to
+// dismiss, Escape closes the menu (not the modal). Dots use the app's audit severity
+// palette — low/compliant, medium/mitigated, high/risk — never a bright traffic-light
+// ramp (DESIGN.md "No-RAG rule").
+
+const SEVERITY_OPTIONS: { value: Severity; label: string; dot: string }[] = [
+  { value: 'low', label: 'Low', dot: 'bg-compliant' },
+  { value: 'medium', label: 'Medium', dot: 'bg-mitigated' },
+  { value: 'high', label: 'High', dot: 'bg-risk' },
+];
+
+function SeveritySelect({
+  value, onChange, labelledBy,
+}: {
+  value: Severity | null;
+  onChange: (v: Severity) => void;
+  labelledBy?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = SEVERITY_OPTIONS.find(o => o.value === value) ?? null;
+
+  return (
+    <div
+      className="relative"
+      onKeyDown={e => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-labelledby={labelledBy}
+        className={`w-full h-10 px-3 flex items-center justify-between gap-2 rounded-lg border bg-white text-[0.8125rem] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200 ${
+          open ? 'border-brand-300 ring-2 ring-brand-200' : 'border-canvas-border hover:border-brand-200'
+        }`}
+      >
+        {selected ? (
+          <span className="flex items-center gap-2 text-ink-800">
+            <span className={`w-2 h-2 rounded-full ${selected.dot}`} aria-hidden="true" />
+            {selected.label}
+          </span>
+        ) : (
+          <span className="text-ink-400">Select…</span>
+        )}
+        <ChevronDown size={15} className={`shrink-0 text-ink-400 transition-transform ${open ? 'rotate-180 text-brand-600' : ''}`} />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden="true" />
+          {/* Opens upward: this is the last field in an overflow-y-auto modal body,
+              so a downward menu would be clipped. Room above (Name + Description). */}
+          <div
+            role="listbox"
+            aria-labelledby={labelledBy}
+            className="absolute left-0 right-0 bottom-full mb-1 z-20 bg-white border border-canvas-border rounded-lg py-1 shadow-lg"
+          >
+            {SEVERITY_OPTIONS.map(o => {
+              const isSel = o.value === value;
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="option"
+                  aria-selected={isSel}
+                  onClick={() => { onChange(o.value); setOpen(false); }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-[0.8125rem] cursor-pointer transition-colors ${
+                    isSel ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-700 hover:bg-paper-50'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${o.dot}`} aria-hidden="true" />
+                  {o.label}
+                  {isSel && <Check size={13} className="ml-auto text-brand-600" />}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
   );
 }

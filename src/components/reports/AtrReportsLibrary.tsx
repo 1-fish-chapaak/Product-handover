@@ -64,7 +64,6 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
   const [q, setQ] = useState('');
   const [area, setArea] = useState('All');
   const [origin, setOrigin] = useState('All'); // All | System generated | Generated from upload
-  const [status, setStatus] = useState('All');
   const [auditor, setAuditor] = useState('All');
   const [riskOwner, setRiskOwner] = useState('All');
   const [dateRange, setDateRange] = useState('all');
@@ -105,7 +104,6 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
       if (area !== 'All' && a.area !== area) return false;
       if (origin === 'System generated' && isUploadAtr(a)) return false;
       if (origin === 'Generated from upload' && !isUploadAtr(a)) return false;
-      if (status !== 'All' && a.status !== status) return false;
       if (auditor !== 'All' && a.generatedBy !== auditor) return false;
       if (riskOwner !== 'All' && a.riskOwner !== riskOwner) return false;
       if (range && range.days > 0) {
@@ -115,14 +113,14 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
       if (s && !(blobs.get(a.id) ?? '').includes(s)) return false;
       return true;
     });
-  }, [atrs, q, area, origin, status, auditor, riskOwner, dateRange, blobs, nowMs]);
+  }, [atrs, q, area, origin, auditor, riskOwner, dateRange, blobs, nowMs]);
 
-  const activeFilters = area !== 'All' || origin !== 'All' || status !== 'All' || auditor !== 'All' || riskOwner !== 'All' || dateRange !== 'all' || !!q.trim();
+  const activeFilters = area !== 'All' || origin !== 'All' || auditor !== 'All' || riskOwner !== 'All' || dateRange !== 'all' || !!q.trim();
   // Count only the dropdown filters (not the search) for the Filters badge.
   const activeFilterCount =
-    (area !== 'All' ? 1 : 0) + (origin !== 'All' ? 1 : 0) + (status !== 'All' ? 1 : 0) + (auditor !== 'All' ? 1 : 0) +
+    (area !== 'All' ? 1 : 0) + (origin !== 'All' ? 1 : 0) + (auditor !== 'All' ? 1 : 0) +
     (riskOwner !== 'All' ? 1 : 0) + (dateRange !== 'all' ? 1 : 0);
-  const clearFilters = () => { setArea('All'); setOrigin('All'); setStatus('All'); setAuditor('All'); setRiskOwner('All'); setDateRange('all'); };
+  const clearFilters = () => { setArea('All'); setOrigin('All'); setAuditor('All'); setRiskOwner('All'); setDateRange('all'); };
   const clearAll = () => { setQ(''); clearFilters(); };
 
   return (
@@ -137,7 +135,6 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
             <ToolbarFilterMenu activeCount={activeFilterCount} onClear={clearFilters}>
               <ToolbarSelect block label="Area" value={area} onChange={setArea} options={areaOpts} />
               <ToolbarSelect block label="Origin" value={origin} onChange={setOrigin} options={['All', 'System generated', 'Generated from upload']} />
-              <ToolbarSelect block label="Status" value={status} onChange={setStatus} options={['All', 'final', 'draft']} />
               <ToolbarSelect block label="Auditor" value={auditor} onChange={setAuditor} options={auditorOpts} />
               <ToolbarSelect block label="Risk owner" value={riskOwner} onChange={setRiskOwner} options={riskOwnerOpts} />
               <ToolbarSelect block label="Date" value={dateRange} onChange={setDateRange} options={DATE_RANGES.map(r => ({ value: r.key, label: r.label }))} />
@@ -151,8 +148,8 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
           <div className="w-12 h-12 rounded-[10px] bg-paper-50 flex items-center justify-center"><FolderOpen size={22} className="text-ink-400" /></div>
-          <div className="text-[13px] font-medium text-ink-700">No ATRs match your filters.</div>
-          {activeFilters && <button onClick={clearAll} className="text-[12px] text-brand-700 font-medium hover:underline cursor-pointer">Clear all filters</button>}
+          <div className="text-[0.8125rem] font-medium text-ink-700">No ATRs match your filters.</div>
+          {activeFilters && <button onClick={clearAll} className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer">Clear all filters</button>}
         </div>
       ) : view === 'list' ? (
         <div className="flex-1 rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-hidden">
@@ -166,12 +163,10 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
           keyField="id"
           paginated
           pageSize={20}
+          fixedLayout
           hideResultCount
           columns={[
-            { key: 'index', label: 'No.', width: '56px', sortable: false, render: (_item, i) => (
-              <span className="font-mono text-[11.5px] text-text-muted tabular-nums">{String(i + 1).padStart(2, '0')}</span>
-            )},
-            { key: 'name', label: 'Report', truncate: true, render: (item) => {
+            { key: 'name', label: 'Report', render: (item) => {
               const atr = item as unknown as AtrLibraryReport;
               const plans = atr.atrData.observations.reduce((n, o) => n + o.actionPlans.length, 0);
               return (
@@ -180,10 +175,10 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
                     <FileText size={16} strokeWidth={1.75} aria-hidden="true" />
                   </span>
                   <div className="min-w-0">
-                    <div className="text-[14.5px] font-semibold tracking-[-0.006em] text-ink-900 truncate group-hover:text-primary transition-colors" title={reportDisplayName(atr.name)}>{reportDisplayName(atr.name)}</div>
+                    <div className="text-[0.90625rem] font-semibold tracking-[-0.006em] text-ink-900 truncate group-hover:text-brand-600 transition-colors" title={reportDisplayName(atr.name)}>{reportDisplayName(atr.name)}</div>
                     <div className="mt-1 flex items-center gap-2 min-w-0">
                       <OriginBadge upload={isUploadAtr(atr)} />
-                      <span className="text-[11.5px] text-text-muted truncate">{atr.atrData.observations.length} obs · {plans} plans · {evidenceCount[atr.id] ?? 0} evidence</span>
+                      <span className="text-[0.71875rem] text-ink-400 truncate">{atr.atrData.observations.length} obs · {plans} plans · {evidenceCount[atr.id] ?? 0} evidence</span>
                     </div>
                   </div>
                 </div>
@@ -193,12 +188,8 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
               const atr = item as unknown as AtrLibraryReport;
               return <ReportPill tone={AREA_TONE_MAP[atr.area] ?? 'draft'}>{atr.area}</ReportPill>;
             }},
-            { key: 'status', label: 'Status', width: '128px', render: (item) => {
-              const atr = item as unknown as AtrLibraryReport;
-              return <ReportPill tone={atr.status === 'final' ? 'compliant' : 'draft'}>{atr.status === 'final' ? 'Final' : 'Draft'}</ReportPill>;
-            }},
-            { key: 'generatedAt', label: 'Generated', width: '150px', align: 'right', render: (item) => (
-              <span className="font-mono text-[12px] tabular-nums text-text-muted whitespace-nowrap">{String((item as unknown as AtrLibraryReport).generatedAt)}</span>
+            { key: 'generatedAt', label: 'Generated', width: '150px', render: (item) => (
+              <span className="text-[0.75rem] tabular-nums text-ink-500 whitespace-nowrap">{String((item as unknown as AtrLibraryReport).generatedAt)}</span>
             )},
             { key: 'actions', label: '', width: '120px', sortable: false, align: 'right', render: (item) => {
               const atr = item as unknown as AtrLibraryReport;
@@ -227,8 +218,8 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
                 title={reportDisplayName(atr.name)}
                 subtitle={<OriginBadge upload={isUploadAtr(atr)} />}
                 description={`${atr.atrData.meta.auditEntity} — ${atr.atrData.meta.auditPeriod}`}
-                pills={[atr.status === 'final' ? 'Final' : 'Draft', `${atr.atrData.observations.length} observations`, `${plans} action plans`, `${ev} evidence`]}
-                footerRight={<span className="font-mono text-[11px] tabular-nums text-ink-400">{atr.generatedAt}</span>}
+                pills={[`${atr.atrData.observations.length} observations`, `${plans} action plans`, `${ev} evidence`]}
+                footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{atr.generatedAt}</span>}
                 onClick={() => onOpen(atr)}
                 actions={<>
                   {onDownload && <button title="Download" onClick={(e) => { e.stopPropagation(); onDownload(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button>}

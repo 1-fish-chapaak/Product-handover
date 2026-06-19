@@ -374,7 +374,7 @@ const REVEAL_ITEM = {
 
 // "How it works" steps shown below the upload cards on the empty RACM Generator home.
 const HOW_IT_WORKS_STEPS = [
-  { title: 'Upload SOP', sub: 'PDF, CSV, or image' },
+  { title: 'Upload SOP', sub: 'PDF or Word doc' },
   { title: 'Document Parsing', sub: 'AI reads your document' },
   { title: 'Risk Identification', sub: 'Extracts risks & gaps' },
   { title: 'Control Mapping', sub: 'Maps controls to risks' },
@@ -392,18 +392,18 @@ function RacmCreateChooser({
   const sopInputRef = useRef<HTMLInputElement>(null);
   const prompt = (options.customPrompt as string) ?? '';
   const [staged, setStaged] = useState<{ file: PickedFile; source: 'racm' | 'sop' }[]>([]);
+  // Names of files dropped from the most recent pick because they exceed MAX_MB —
+  // surfaced inline (size only; duplicate-name skips stay silent). Replaced each pick.
+  const [rejected, setRejected] = useState<string[]>([]);
   const hasFile = staged.length > 0;
-  const hasPrompt = prompt.trim().length > 0;
-  // The button appears once there's a file OR typed instructions. When it's only
-  // there because of instructions (no file yet), it stays disabled and explains why.
-  const showContinue = hasFile || hasPrompt;
-  const showError = hasPrompt && !hasFile;
 
   const addFiles = (e: ChangeEvent<HTMLInputElement>, source: 'racm' | 'sop') => {
-    const picked = Array.from(e.target.files ?? [])
-      .filter((f) => f.size <= MAX_MB * 1024 * 1024)
-      .map((f) => ({ file: { name: f.name, size: f.size, type: f.type } as PickedFile, source }));
+    const all = Array.from(e.target.files ?? []);
+    const accepted = all.filter((f) => f.size <= MAX_MB * 1024 * 1024);
+    const tooLarge = all.filter((f) => f.size > MAX_MB * 1024 * 1024);
     e.target.value = '';
+    setRejected(tooLarge.length ? tooLarge.map((f) => f.name) : []);
+    const picked = accepted.map((f) => ({ file: { name: f.name, size: f.size, type: f.type } as PickedFile, source }));
     setStaged((prev) => {
       const names = new Set(prev.map((s) => s.file.name));
       return [...prev, ...picked.filter((p) => !names.has(p.file.name))];
@@ -424,6 +424,16 @@ function RacmCreateChooser({
     </>
   );
 
+  // Inline notice for files skipped because they exceed MAX_MB — shared by both
+  // states. Renders nothing when the last pick had no oversized files.
+  const rejectedNotice = rejected.length > 0 ? (
+    <p className="mt-2 text-[0.75rem] text-risk-700">
+      {rejected.length === 1
+        ? `“${rejected[0]}” is larger than ${MAX_MB} MB and wasn’t added.`
+        : `${rejected.length} files are larger than ${MAX_MB} MB and weren’t added.`}
+    </p>
+  ) : null;
+
   // Custom-instructions field — shared by both states. Teaches what it steers.
   const instructions = (
     <div className="text-left">
@@ -441,25 +451,21 @@ function RacmCreateChooser({
     </div>
   );
 
-  // Generate bar — states what Continue produces (mono count), or why it's blocked.
-  const footer = showContinue ? (
+  // Generate bar — states what Continue produces (mono count).
+  const footer = (
     <div className="flex items-center justify-between gap-4">
       <p className="text-[0.8125rem] leading-relaxed">
-        {showError ? (
-          <span className="text-risk-700">Cannot continue without uploading the file.</span>
-        ) : (
-          <span className="text-ink-500">
-            Generates a Risk &amp; Control Matrix from{' '}
-            <span className="font-mono tabular-nums text-ink-700">{staged.length}</span>{' '}
-            source{staged.length === 1 ? '' : 's'}.
-          </span>
-        )}
+        <span className="text-ink-500">
+          Generates a Risk &amp; Control Matrix from{' '}
+          <span className="font-mono tabular-nums text-ink-700">{staged.length}</span>{' '}
+          source{staged.length === 1 ? '' : 's'}.
+        </span>
       </p>
-      <Button variant="primary" size="md" disabled={!hasFile} onClick={onContinue} rightIcon={<ArrowRight size={15} />}>
+      <Button variant="primary" size="md" onClick={onContinue} rightIcon={<ArrowRight size={15} />}>
         Continue
       </Button>
     </div>
-  ) : null;
+  );
 
   // ── Working state — centered editorial composition ─────────────────────────
   // Once a source is staged we drop the placeholder and set the step as a workspace:
@@ -476,6 +482,10 @@ function RacmCreateChooser({
             Add an SOP <span className="ml-1 text-ink-400 font-normal">→ extract</span>
           </Button>
         </motion.div>
+
+        {rejectedNotice && (
+          <motion.div variants={REVEAL_ITEM} className="shrink-0 text-right">{rejectedNotice}</motion.div>
+        )}
 
         <motion.div variants={REVEAL_ITEM} className="shrink-0 mt-8 mb-3 flex items-baseline justify-between gap-3">
           <h2 className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-ink-400">Sources</h2>
@@ -506,7 +516,7 @@ function RacmCreateChooser({
                 <button
                   onClick={() => removeFile(s.file.name)}
                   aria-label={`Remove ${s.file.name}`}
-                  className="shrink-0 p-1 rounded-md text-ink-300 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                  className="shrink-0 p-1 rounded-md text-ink-300 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <X size={15} />
                 </button>
@@ -533,23 +543,24 @@ function RacmCreateChooser({
         className="!pt-8 !pb-5"
         icon={FileStack}
         title="Start your RACM library"
-        body="Upload an existing matrix or SOPs to extract — IRA consolidates them into one RACM."
+        body="Upload an existing matrix or SOPs to extract — Ira consolidates them into one RACM."
         action={
           <div className="w-full max-w-2xl mx-auto space-y-5">
             <div className="grid grid-cols-2 gap-3 text-left">
-              <button onClick={() => racmInputRef.current?.click()} className="group text-left rounded-xl border border-border-light bg-canvas-elevated hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
+              <button onClick={() => racmInputRef.current?.click()} className="group text-left rounded-xl border border-border-light bg-canvas-elevated hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2">
                 <div className="p-2 rounded-lg bg-evidence-50 inline-flex mb-3"><Upload size={16} className="text-evidence-700" /></div>
                 <div className="text-[0.84375rem] font-semibold text-text mb-1">Upload a RACM</div>
                 <div className="text-[0.71875rem] text-text-muted leading-relaxed">Import an existing matrix (.xlsx / .csv).</div>
               </button>
-              <button onClick={() => sopInputRef.current?.click()} className="group text-left rounded-xl border border-border-light bg-canvas-elevated hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer">
+              <button onClick={() => sopInputRef.current?.click()} className="group text-left rounded-xl border border-border-light bg-canvas-elevated hover:border-primary/40 hover:bg-primary-xlight/30 p-5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2">
                 <div className="p-2 rounded-lg bg-brand-50 inline-flex mb-3"><Sparkles size={16} className="text-brand-600" /></div>
                 <div className="text-[0.84375rem] font-semibold text-text mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-text-muted">→</span> extract</div>
-                <div className="text-[0.71875rem] text-text-muted leading-relaxed">Upload a procedure doc (.pdf/.docx). IRA reads and drafts it.</div>
+                <div className="text-[0.71875rem] text-text-muted leading-relaxed">Upload a procedure doc (.pdf/.docx). Ira reads and drafts it.</div>
               </button>
             </div>
 
             {fileInputs}
+            {rejectedNotice}
           </div>
         }
       />
@@ -569,7 +580,7 @@ function RacmCreateChooser({
                   <span className="mt-2.5 text-[0.8125rem] font-semibold text-ink-800">{s.title}</span>
                   <span className="mt-0.5 text-[0.75rem] text-ink-400 leading-snug">{s.sub}</span>
                 </li>
-                {i < HOW_IT_WORKS_STEPS.length - 1 && <ChevronRight size={16} className="text-ink-300 mt-2.5 shrink-0" />}
+                {i < HOW_IT_WORKS_STEPS.length - 1 && <ChevronRight size={16} className="hidden md:block text-ink-300 mt-2.5 shrink-0" />}
               </Fragment>
             ))}
           </ol>
@@ -592,6 +603,7 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
   tips: string[];
   onCancel: () => void;
 }) {
+  const [confirmStop, setConfirmStop] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     if (!state.startedAt) return;
@@ -633,8 +645,10 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
   const subStatus = state.message || (state.status === 'UPLOADING' ? 'Uploading…' : 'Starting…');
 
   return (
-    <div className="pb-10">
-      <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
+    <>
+    <div className="h-full max-w-6xl flex flex-col min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 flex-1 min-h-0 lg:items-stretch">
+      <div className="lg:col-span-3 flex flex-col min-h-0 rounded-xl border border-canvas-border bg-canvas-elevated p-5">
         <div className="flex items-center gap-2 mb-1">
           <Sparkles size={16} className="text-brand-600 animate-pulse shrink-0" />
           <span className="text-[0.875rem] font-semibold text-ink-800">
@@ -655,7 +669,7 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[0.6875rem] font-semibold ${done ? 'bg-brand-600 text-white' : active ? 'bg-brand-100 text-brand-700 ring-2 ring-brand-300' : 'bg-paper-100 text-ink-400'}`}>
                     {done ? <Check size={13} /> : i + 1}
                   </div>
-                  <span className={`mt-1.5 text-[0.625rem] text-center ${active ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>{s.label}</span>
+                  <span className={`mt-1.5 text-xs text-center whitespace-nowrap ${active ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>{s.label}</span>
                 </div>
                 {i < stages.length - 1 && <div className={`flex-1 h-px mt-3.5 mx-1 ${done ? 'bg-brand-300' : 'bg-canvas-border'}`} />}
               </div>
@@ -663,9 +677,16 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
           })}
         </div>
 
-        <p className="text-[0.8125rem] text-ink-700 mb-2">{subStatus}</p>
+        <p className="text-[0.8125rem] text-ink-700 mb-2" role="status" aria-live="polite">{subStatus}</p>
 
-        <div className="h-2 rounded-full bg-paper-100 overflow-hidden mb-1.5">
+        <div
+          className="h-2 rounded-full bg-paper-100 overflow-hidden mb-1.5"
+          role="progressbar"
+          aria-valuenow={state.progress}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="RACM generation progress"
+        >
           <motion.div className="h-full rounded-full bg-brand-600" animate={{ width: `${state.progress}%` }} transition={{ ease: 'easeOut', duration: 0.3 }} />
         </div>
         <div className="flex items-center justify-between text-[0.6875rem] text-ink-400 tabular-nums">
@@ -675,12 +696,12 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
 
         <div className="flex items-center justify-between gap-3 mt-4">
           <p className="text-[0.6875rem] text-ink-400">Leave this page anytime — your RACM keeps generating and saves automatically.</p>
-          <button onClick={onCancel} title="Stop and discard this generation" className="shrink-0 inline-flex items-center px-3 py-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:text-risk-700 hover:border-risk-200 cursor-pointer transition-colors">Cancel</button>
+          <button onClick={() => setConfirmStop(true)} title="Stop generating" className="shrink-0 inline-flex items-center px-3 py-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-medium text-ink-600 hover:text-risk-700 hover:border-risk-200 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">Stop generating</button>
         </div>
 
-        <div className="mt-4 rounded-lg bg-paper-50/70 border border-canvas-border p-3">
+        <div className="mt-4 flex-1 min-h-0 flex flex-col rounded-lg bg-paper-50/70 border border-canvas-border p-3">
           <div className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wide mb-1.5">Activity log</div>
-          <div className="max-h-28 overflow-y-auto space-y-0.5">
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-0.5">
             {log.length === 0 ? (
               <p className="text-[0.6875rem] text-ink-400">Starting…</p>
             ) : log.map((l, i) => (
@@ -692,36 +713,45 @@ function RacmLoader({ state, stages, fileName, checking, tips, onCancel }: {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-        <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-4">
-          <div className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wide mb-3">What we're checking</div>
-          <div className="space-y-2.5">
-            {checking.map((c, i) => {
-              const done = state.progress >= ((i + 1) / checking.length) * 100;
-              return (
-                <div key={c} className="flex items-start gap-2.5">
-                  <span className={`w-5 h-5 rounded-md inline-flex items-center justify-center shrink-0 mt-px transition-colors ${done ? 'bg-compliant-50' : 'bg-paper-100'}`}>
-                    {done ? <Check size={12} className="text-compliant-700" /> : <span className="w-1.5 h-1.5 rounded-full bg-ink-300" />}
-                  </span>
-                  <span className={`text-[0.75rem] leading-relaxed transition-colors ${done ? 'text-ink-700' : 'text-ink-500'}`}>{c}</span>
-                </div>
-              );
-            })}
+      <div className="lg:col-span-2 flex flex-col gap-4 min-h-0">
+        <div className="rounded-xl border border-brand-100 bg-brand-50/40 p-5 flex flex-col">
+          <div className="text-[0.6875rem] font-semibold text-brand-700 uppercase tracking-wide mb-3">Did you know?</div>
+          <div className="flex-1 flex flex-col justify-center">
+            <p className="text-[0.8125rem] text-ink-600 leading-relaxed">{tips[tipIdx]}</p>
+            {tips.length > 1 && (
+              <div className="flex items-center gap-1.5 mt-3">
+                {tips.map((_, i) => (
+                  <span key={i} className={`h-1.5 rounded-full transition-all ${i === tipIdx ? 'w-4 bg-brand-600' : 'w-1.5 bg-brand-200'}`} />
+                ))}
+              </div>
+            )}
           </div>
         </div>
-        <div className="rounded-xl border border-brand-100 bg-brand-50/40 p-4 flex flex-col">
-          <div className="text-[0.6875rem] font-semibold text-brand-700 uppercase tracking-wide mb-3">Did you know?</div>
-          <p className="text-[0.8125rem] text-ink-600 leading-relaxed flex-1">{tips[tipIdx]}</p>
-          {tips.length > 1 && (
-            <div className="flex items-center gap-1.5 mt-3">
-              {tips.map((_, i) => (
-                <span key={i} className={`h-1.5 rounded-full transition-all ${i === tipIdx ? 'w-4 bg-brand-600' : 'w-1.5 bg-brand-200'}`} />
-              ))}
-            </div>
-          )}
+        <div className="flex-1 min-h-0 rounded-xl border border-canvas-border bg-canvas-elevated p-5">
+          <div className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wide mb-3">What we're checking</div>
+          <div className="space-y-2.5">
+            {checking.map((c) => (
+              <div key={c} className="flex items-start gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-ink-300 shrink-0 mt-[0.4375rem]" />
+                <span className="text-[0.75rem] leading-relaxed text-ink-600">{c}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
+      </div>
     </div>
+    <ConfirmationModal
+      open={confirmStop}
+      title="Stop generating?"
+      description={<>This discards the RACM in progress and can't be undone.</>}
+      confirmLabel="Stop & discard"
+      cancelLabel="Keep going"
+      tone="destructive"
+      onConfirm={() => { setConfirmStop(false); onCancel(); }}
+      onClose={() => setConfirmStop(false)}
+    />
+    </>
   );
 }
 
@@ -815,6 +845,7 @@ function RacmHistoryList({ jobs, onOpen, onDelete }: {
           <input
             type="text"
             placeholder="Search by file, status…"
+            aria-label="Search generations"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 h-9 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 transition-colors"
@@ -847,7 +878,7 @@ function RacmHistoryList({ jobs, onOpen, onDelete }: {
                   type="button"
                   onClick={() => setCollapsed((c) => ({ ...c, [group.key]: !c[group.key] }))}
                   aria-expanded={!isCollapsed}
-                  className="group/sec w-full flex items-center justify-between gap-3 mb-2.5 cursor-pointer"
+                  className="group/sec w-full flex items-center justify-between gap-3 mb-2.5 cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <h3 className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-ink-400">
                     {group.key}<span className="ml-1.5 font-mono tabular-nums text-ink-300">{group.jobs.length}</span>
@@ -874,7 +905,7 @@ function RacmHistoryList({ jobs, onOpen, onDelete }: {
                           role={completed ? 'button' : undefined}
                           tabIndex={completed ? 0 : undefined}
                           onKeyDown={completed ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(j.id); } } : undefined}
-                          className={`group flex items-center gap-3 rounded-xl border border-canvas-border bg-canvas-elevated px-3.5 py-3 transition-colors ${completed ? 'cursor-pointer hover:border-brand-200 hover:bg-brand-50/30' : ''}`}
+                          className={`group flex items-center gap-3 rounded-xl border border-canvas-border bg-canvas-elevated px-3.5 py-3 transition-colors ${completed ? 'cursor-pointer hover:border-brand-200 hover:bg-brand-50/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30' : ''}`}
                         >
                           <span className={`w-8 h-8 rounded-lg inline-flex items-center justify-center shrink-0 ${chipBg}`}>
                             <Glyph size={15} className={chipFg} />
@@ -896,7 +927,7 @@ function RacmHistoryList({ jobs, onOpen, onDelete }: {
                             onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(j.id); }}
                             aria-label={`Delete ${name}`}
                             title="Delete RACM"
-                            className="shrink-0 p-1 rounded-md text-ink-300 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                            className="shrink-0 p-1 rounded-md text-ink-300 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                           >
                             <Trash2 size={15} />
                           </button>
@@ -930,7 +961,7 @@ export default function RACMGeneratorView({ onBack, onOpenEditor }: { onBack: ()
   return (
     <ConciergeFlow<Result>
       title="RACM Generator"
-      subtitle="Upload an SOP, policy, or process document and generate a full Risk & Control Matrix — risks, controls, assertions, and governance — ready for your working papers."
+      subtitle="Upload an SOP or import an existing matrix to generate a full Risk & Control Matrix — risks, controls, assertions, and governance — ready for your working papers."
       icon={TableProperties}
       onBack={onBack}
       accept=".pdf,.csv,.xlsx,.doc,.docx"

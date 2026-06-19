@@ -1333,7 +1333,7 @@ function SOPDetailPage({ sop, onGoToRacm }: {
               <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ${SOP_STATUS_STYLES[sop.status]}`}>{sop.status}</span>
               <span className="font-mono text-[0.6875rem] text-ink-500">{sop.id}</span>
             </div>
-            <h1 className="font-display text-[1.625rem] font-[420] tracking-tight text-ink-900 leading-[1.2]">{sop.name}</h1>
+            <h1 className="text-[1.625rem] font-semibold tracking-tight text-ink-900 leading-[1.2]">{sop.name}</h1>
           </div>
           {rels.racm && onGoToRacm && (
             <Button
@@ -1545,7 +1545,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
     return () => clearTimeout(armSkeleton);
   }, []);
 
-  // Listen for header-level "Create new SOP" trigger.
+  // Listen for header-level "Upload SOP" trigger.
   useEffect(() => {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<{ section?: string }>;
@@ -2026,8 +2026,8 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               <FilterCTA label="File type" options={fileTypeOptions} value={fileTypeFilter} onChange={setFileTypeFilter} />
               <FilterCTA label="User" options={uploaderOptions} value={uploaderFilter} onChange={setUploaderFilter} />
               {can('bp_create') && (
-              <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadModal(true)} disabled={searchQuery.trim().length > 0} title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined} className="shrink-0 rounded-md!" leftIcon={<Plus size={13} />}>
-                Create new SOP
+              <Button variant="primary" size="md" shape="lg" onClick={() => setShowUploadModal(true)} disabled={searchQuery.trim().length > 0} title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined} className="shrink-0 rounded-md! text-[0.75rem]!" leftIcon={<Plus size={13} />}>
+                Upload SOP
               </Button>
               )}
             </div>
@@ -2514,7 +2514,7 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack }: {
               <span className="font-mono text-[0.6875rem] text-ink-500">{ctrl.id}</span>
               <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ${ctrl.classification === 'Key' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-paper-100 text-ink-500'}`}>{ctrl.classification}</span>
             </div>
-            <h1 className="font-display text-[1.625rem] font-[420] tracking-tight text-ink-900 leading-[1.2]">{ctrl.name}</h1>
+            <h1 className="text-[1.625rem] font-semibold tracking-tight text-ink-900 leading-[1.2]">{ctrl.name}</h1>
           </div>
           {/* Status + Nature + Automation tags */}
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -5427,8 +5427,8 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
 
   // Section-specific create button label rendered in the drilled-view header.
   const sectionCreateLabel: Record<SectionKey, string> = {
-    sop: 'Create new SOP',
-    racm: 'Create new RACM',
+    sop: 'Upload SOP',
+    racm: 'Create RACM',
     risks: 'Create new Risk',
     controls: 'Create new Control',
     workflows: 'Create Workflow',
@@ -5541,7 +5541,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
           <span className="text-ink-700 truncate">{bp.name}</span>
         </div>
         <div className="pb-5 flex items-end justify-between gap-4 flex-wrap">
-          <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
+          <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">{bp.name}</h1>
           <div className="flex items-center gap-3 flex-wrap pb-1.5">
           {/* Process-meta (code · owner · status) — shown on all tabs for orientation.
               Full size on Overview; compact/quieter on section tabs. */}

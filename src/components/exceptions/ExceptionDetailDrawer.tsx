@@ -159,7 +159,7 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
                 <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-brand-700 uppercase tracking-[0.14em] mb-1">
                   <LinkIcon size={12} /> Management Action Plan
                 </div>
-                <h2 className="font-display text-[28px] leading-[1.15] font-semibold text-ink-900 tracking-tight font-mono">
+                <h2 className="text-[28px] leading-[1.15] font-semibold text-ink-900 tracking-tight font-mono">
                   {ex.actionableId}
                 </h2>
                 <p className="text-[13px] text-ink-500 mt-1 leading-snug">
@@ -168,7 +168,7 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
               </>
             ) : (
               <>
-                <h2 className="font-display text-[28px] leading-[1.15] font-semibold text-ink-900 tracking-tight">
+                <h2 className="text-[28px] leading-[1.15] font-semibold text-ink-900 tracking-tight">
                   {ex.id}
                 </h2>
                 <p className="text-[13px] text-ink-500 mt-1 leading-snug">

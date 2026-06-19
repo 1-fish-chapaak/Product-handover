@@ -10,6 +10,22 @@ export type StepType =
 export type OutputType = 'flags' | 'table' | 'summary';
 export type InputType = 'csv' | 'pdf' | 'sql' | 'image';
 
+/** How a required-file slot treats the source(s) mapped to it.
+ *  - consolidate: union same-schema sources many→one (the "Multiple files" case)
+ *  - single:      exactly one source allowed (master/reference tables)
+ *  - compare:     2+ sources kept distinct, aligned for diff (never concatenated)
+ *  - reference:   joined/looked-up against other inputs, not stacked */
+export type SlotFunction = 'consolidate' | 'single' | 'compare' | 'reference';
+
+export type ColumnDataType = 'text' | 'number' | 'date';
+
+export interface ColumnSpec {
+  name: string;
+  dataType: ColumnDataType;
+  /** Example value shown beneath the column name in the "Expected columns" popover. */
+  sample?: string;
+}
+
 export interface InputSpec {
   id: string;
   name: string;
@@ -17,7 +33,13 @@ export interface InputSpec {
   description: string;
   required: boolean;
   multiple?: boolean;
+  /** Slot role — how sources mapped here are treated. When unset, falls back to
+   *  'consolidate' if `multiple` is true, otherwise 'single'. */
+  func?: SlotFunction;
   columns?: string[];
+  /** Richer per-column schema (type + sample) surfaced via the "View columns" popover.
+   *  When absent, the executor falls back to `columns` with an inferred type. */
+  columnSpecs?: ColumnSpec[];
 }
 
 export interface StepSpec {

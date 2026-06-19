@@ -47,21 +47,42 @@ export type LibraryWorkflow = {
 
 export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
   {
-    id: 'lw-pdf-tester',
-    name: 'PDF tester',
-    description: 'Sandbox workflow whose required inputs are all PDFs. Use this to exercise the unstructured-document mapping journey end-to-end.',
-    tags: ['PDF', 'manual mapping'],
-    businessProcess: 'Sandbox',
-    controlId: 'CTRL-PDF',
-    live: true,
-  },
-  {
     id: 'lw-consolidated-file',
-    name: 'Consolidated file testing',
+    name: 'Consolidated file testing- consolidate 1 file',
     description: 'Sandbox workflow that takes a single consolidated workbook (multiple datasets in one file) and runs the dedicated consolidated-file execution journey. Single-run only — not available for bulk execution.',
     tags: ['consolidated', 'sandbox'],
     businessProcess: 'Sandbox',
     controlId: 'CTRL-CFT',
+    live: true,
+    singleRunOnly: true,
+  },
+  {
+    id: 'lw-consolidated-file-multi',
+    name: 'Consolidated file testing- multiple files',
+    description: 'Sandbox workflow that takes multiple consolidated workbooks (same schema, split across files), unions them, and runs the dedicated consolidated-file execution journey. Single-run only — not available for bulk execution.',
+    tags: ['consolidated', 'sandbox', 'multi-file'],
+    businessProcess: 'Sandbox',
+    controlId: 'CTRL-CFM',
+    live: true,
+    singleRunOnly: true,
+  },
+  {
+    id: 'lw-consolidated-file-reference',
+    name: 'Consolidated file testing- reference',
+    description: 'Sandbox workflow whose primary input is a reference/master table — a single source joined against the transaction inputs rather than unioned. Single-run only — not available for bulk execution.',
+    tags: ['consolidated', 'sandbox', 'reference'],
+    businessProcess: 'Sandbox',
+    controlId: 'CTRL-CFR',
+    live: true,
+    singleRunOnly: true,
+  },
+  {
+    id: 'lw-consolidated-file-compare',
+    name: 'Consolidated file testing- compare',
+    description: 'Sandbox workflow whose primary input is a compare slot — two or more same-schema sources kept distinct and aligned for diff (e.g. prior vs current period), never unioned. Single-run only — not available for bulk execution.',
+    tags: ['consolidated', 'sandbox', 'compare'],
+    businessProcess: 'Sandbox',
+    controlId: 'CTRL-CFC',
     live: true,
     singleRunOnly: true,
   },
@@ -297,7 +318,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
         <div className="font-mono text-[0.6875rem] text-ink-500 mb-2 tracking-tight">
           Workflow Library
         </div>
-        <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">
+        <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">
           Workflow Library
         </h1>
         <p className="text-[0.875rem] text-ink-500 mt-1">

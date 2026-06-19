@@ -63,7 +63,7 @@ export default function Drawer({
       >
         <header className="shrink-0 px-7 pt-7 pb-5 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div className="min-w-0">
-            <h2 className="font-display text-[1.5rem] leading-[1.2] font-semibold text-ink-900 tracking-tight">
+            <h2 className="text-[1.5rem] leading-[1.2] font-semibold text-ink-900 tracking-tight">
               {title}
             </h2>
             {subtitle && <p className="text-[0.8125rem] text-ink-500 mt-1 leading-snug">{subtitle}</p>}

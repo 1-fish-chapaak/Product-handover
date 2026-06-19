@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import {
   AudioLines, Mic, FileCheck2, FileText, Activity, Download, FileDown,
   CheckCircle2, XCircle, MinusCircle, Quote, TrendingUp,
+  History, Search, ChevronDown, Trash2, FileAudio, FileVideo,
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -9,6 +10,10 @@ import {
 } from 'recharts';
 import { ConciergeFlow } from '../ConciergeKit';
 import type { PickedFile, HistoryJob } from '../types';
+import ListPlaceholder from '../../../shared/ListPlaceholder';
+import { Pill, type Tone } from '../../../shared/StatusBadge';
+import { DateFilterPicker, dateInFilter, DEFAULT_DATE_FILTER, type DateFilter } from '../../../shared/DateFilterPicker';
+import ConfirmationModal from '../../../shared/ConfirmationModal';
 
 // ─── Result type ─────────────────────────────────────────────────────────────
 
@@ -249,6 +254,46 @@ function SentimentPill({ label }: { label: SentimentLabel }) {
       {label}
     </span>
   );
+}
+
+// ─── History helpers ─────────────────────────────────────────────────────────
+// The history model stores no absolute time, but the live job id encodes the
+// creation epoch (`job-<ms>-<seq>`), which we decode so each row reads like an
+// audit record — exact timestamp, day grouping, and date filtering.
+
+function jobEpoch(id: string): number | null {
+  const m = id.match(/^job-(\d+)-/);
+  return m ? Number(m[1]) : null;
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function formatDateTime(ms: number): string {
+  const d = new Date(ms);
+  let h = d.getHours();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${h}:${mm} ${ampm}`;
+}
+
+function startOfDay(t: number): number {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+const STATUS_PILL: Record<string, { label: string; tone: Tone }> = {
+  COMPLETED: { label: 'Completed', tone: 'compliant' },
+  IN_PROGRESS: { label: 'In progress', tone: 'evidence' },
+  FAILED: { label: 'Failed', tone: 'risk' },
+  CANCELLED: { label: 'Cancelled', tone: 'draft' },
+};
+
+// File glyph — audio by default, video for recorded video calls.
+function fileGlyph(name: string) {
+  const ext = name.split('.').pop()?.toLowerCase();
+  if (ext === 'mp4' || ext === 'webm' || ext === 'mov') return FileVideo;
+  return FileAudio;
 }
 
 // ─── Result views ────────────────────────────────────────────────────────────
@@ -552,9 +597,21 @@ const TIPS = [
   'Findings map each observation to an audit criterion, an implication, and a concrete recommendation.',
 ];
 
+const SEED_NOW = Date.now();
+const HOUR = 60 * 60_000;
+const DAY = 24 * HOUR;
+
 const HISTORY_SEED: HistoryJob[] = [
-  { id: 'sa-seed-1', files: ['retention-call-0412.mp3'], status: 'COMPLETED', createdAt: '2h ago', meta: 'Positive · 2 findings' },
-  { id: 'sa-seed-2', files: ['complaint-escalation.m4a'], status: 'COMPLETED', createdAt: 'Yesterday', meta: 'Negative · 4 findings' },
+  // Today
+  { id: `job-${SEED_NOW - 9 * 60_000}-7`, files: ['escalation-call-live.mp3'], status: 'IN_PROGRESS', createdAt: '9m ago' },
+  { id: `job-${SEED_NOW - 2 * HOUR}-6`, files: ['retention-call-0412.mp3'], status: 'COMPLETED', createdAt: '2h ago', meta: 'Positive · 2 findings' },
+  { id: `job-${SEED_NOW - 5 * HOUR}-5`, files: ['billing-dispute-2271.m4a'], status: 'COMPLETED', createdAt: '5h ago', meta: 'Negative · 4 findings' },
+  // Yesterday
+  { id: `job-${SEED_NOW - 27 * HOUR}-4`, files: ['complaint-escalation.m4a'], status: 'COMPLETED', createdAt: 'Yesterday', meta: 'Negative · 4 findings' },
+  { id: `job-${SEED_NOW - 31 * HOUR}-3`, files: ['onboarding-verify-118.wav'], status: 'FAILED', createdAt: 'Yesterday' },
+  // Earlier
+  { id: `job-${SEED_NOW - 3 * DAY}-2`, files: ['qa-sample-call.mp4'], status: 'COMPLETED', createdAt: '3d ago', meta: 'Positive · 3 findings' },
+  { id: `job-${SEED_NOW - 6 * DAY}-1`, files: ['cancellation-call-994.ogg'], status: 'COMPLETED', createdAt: '6d ago', meta: 'Negative · 5 findings' },
 ];
 
 // ─── extraControls: custom instructions ──────────────────────────────────────
@@ -600,6 +657,173 @@ function ResultActions(result: SpeechAuditResult): ReactNode {
   );
 }
 
+// ─── Generation history — drawer-friendly stacked list (mirrors RACM) ─────────
+// Replaces the shared JobHistory table for the Speech Auditor side sheet (via
+// renderHistory). Search + date filter + Today/Earlier collapsible groups; each
+// row is a file glyph + name, exact timestamp + sentiment·findings note, status
+// pill, whole row opens the result, delete-with-confirm on the right.
+
+function SpeechHistoryList({ jobs, onOpen, onDelete }: {
+  jobs: HistoryJob[];
+  onOpen: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState('');
+  const [dateFilter, setDateFilter] = useState<DateFilter>(DEFAULT_DATE_FILTER);
+  const [dateOpen, setDateOpen] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  if (jobs.length === 0) {
+    return (
+      <ListPlaceholder
+        icon={History}
+        title="No audits yet"
+        body="Your audited calls will appear here — open one to revisit the report."
+      />
+    );
+  }
+
+  const nowDate = new Date();
+  const today0 = startOfDay(nowDate.getTime());
+  const q = search.trim().toLowerCase();
+
+  // Newest first, then filter by the date range and the search term (which
+  // matches the file name, the status, or the sentiment·findings note).
+  const visible = [...jobs]
+    .sort((a, b) => (jobEpoch(b.id) ?? 0) - (jobEpoch(a.id) ?? 0))
+    .filter((j) => {
+      const ep = jobEpoch(j.id);
+      const iso = (ep == null ? nowDate : new Date(ep)).toISOString();
+      if (!dateInFilter(iso, dateFilter, nowDate)) return false;
+      if (!q) return true;
+      const hay = [...j.files, j.meta ?? '', STATUS_PILL[j.status]?.label ?? ''].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+
+  // Two buckets only: anything created today vs. everything older.
+  const groups: { key: 'Today' | 'Earlier'; jobs: HistoryJob[] }[] = [
+    { key: 'Today', jobs: [] }, { key: 'Earlier', jobs: [] },
+  ];
+  for (const j of visible) {
+    const ep = jobEpoch(j.id);
+    const isToday = ep != null && startOfDay(ep) === today0;
+    groups.find((g) => g.key === (isToday ? 'Today' : 'Earlier'))!.jobs.push(j);
+  }
+
+  const deletingJob = jobs.find((j) => j.id === confirmDeleteId);
+  const deletingName = deletingJob ? (deletingJob.files[0] ?? 'this audit') : '';
+
+  return (
+    <>
+    <div>
+      <div className="flex items-center gap-2 mb-5">
+        <div className="relative flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+          <input
+            type="text"
+            placeholder="Search by file, status…"
+            aria-label="Search audits"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 h-9 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-900 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 transition-colors"
+          />
+        </div>
+        <DateFilterPicker
+          filter={dateFilter}
+          open={dateOpen}
+          onToggle={() => setDateOpen((p) => !p)}
+          onClose={() => setDateOpen(false)}
+          onApply={(next) => { setDateFilter(next); setDateOpen(false); }}
+          today={nowDate}
+          rangeStacked
+        />
+      </div>
+
+      {visible.length === 0 ? (
+        <ListPlaceholder
+          icon={Search}
+          title="No matches"
+          body="No audits match your search or date range."
+        />
+      ) : (
+        <div className="space-y-6">
+          {groups.filter((g) => g.jobs.length > 0).map((group) => {
+            const isCollapsed = !!collapsed[group.key];
+            return (
+              <div key={group.key}>
+                <button
+                  type="button"
+                  onClick={() => setCollapsed((c) => ({ ...c, [group.key]: !c[group.key] }))}
+                  aria-expanded={!isCollapsed}
+                  className="group/sec w-full flex items-center justify-between gap-3 mb-2.5 cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  <h3 className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-ink-400">
+                    {group.key}<span className="ml-1.5 font-mono tabular-nums text-ink-300">{group.jobs.length}</span>
+                  </h3>
+                  <ChevronDown size={15} className={`shrink-0 text-ink-400 transition-transform group-hover/sec:text-ink-600 ${isCollapsed ? '-rotate-90' : ''}`} />
+                </button>
+                {!isCollapsed && (
+                  <div className="space-y-2">
+                    {group.jobs.map((j) => {
+                      const Glyph = fileGlyph(j.files[0] ?? '');
+                      const ep = jobEpoch(j.id);
+                      const when = ep == null ? j.createdAt : formatDateTime(ep);
+                      const completed = j.status === 'COMPLETED';
+                      const status = STATUS_PILL[j.status] ?? STATUS_PILL.COMPLETED;
+                      const name = j.files[0] ?? '—';
+                      return (
+                        <div
+                          key={j.id}
+                          onClick={completed ? () => onOpen(j.id) : undefined}
+                          role={completed ? 'button' : undefined}
+                          tabIndex={completed ? 0 : undefined}
+                          onKeyDown={completed ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(j.id); } } : undefined}
+                          className={`group flex items-center gap-3 rounded-xl border border-canvas-border bg-canvas-elevated px-3.5 py-3 transition-colors ${completed ? 'cursor-pointer hover:border-brand-200 hover:bg-brand-50/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30' : ''}`}
+                        >
+                          <span className="w-8 h-8 rounded-lg inline-flex items-center justify-center shrink-0 bg-brand-50">
+                            <Glyph size={15} className="text-brand-600" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[0.84375rem] text-ink-800 truncate">{name}</p>
+                            <p className="text-[0.6875rem] text-ink-400 mt-0.5">
+                              <span className="font-mono tabular-nums">{when}</span>
+                              {j.meta && <span> · {j.meta}</span>}
+                            </p>
+                          </div>
+                          <Pill tone={status.tone}>{status.label}</Pill>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(j.id); }}
+                            aria-label={`Delete ${name}`}
+                            title="Delete audit"
+                            className="shrink-0 p-1 rounded-md text-ink-300 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+    <ConfirmationModal
+      open={confirmDeleteId !== null}
+      title="Delete this audit?"
+      description={<>This permanently removes <span className="font-semibold text-ink-700">{deletingName}</span> from your history. This can't be undone.</>}
+      confirmLabel="Delete"
+      tone="destructive"
+      onConfirm={() => { if (confirmDeleteId) onDelete(confirmDeleteId); setConfirmDeleteId(null); }}
+      onClose={() => setConfirmDeleteId(null)}
+    />
+    </>
+  );
+}
+
 // ─── View ────────────────────────────────────────────────────────────────────
 
 export default function SpeechAuditorView({ onBack }: { onBack: () => void }) {
@@ -628,6 +852,8 @@ export default function SpeechAuditorView({ onBack }: { onBack: () => void }) {
       extraControls={ExtraControls}
       canRun={(files) => files.length > 0}
       historySeed={HISTORY_SEED}
+      historyAsDrawer
+      renderHistory={(api) => <SpeechHistoryList {...api} />}
     />
   );
 }

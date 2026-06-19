@@ -92,7 +92,7 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
             color="#6a12cd"
             opacity={0.05}
           />
-          <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">Process Hub</h1>
+          <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">Process Hub</h1>
           <p className="text-[0.8125rem] text-text-secondary mt-2 max-w-md leading-relaxed">Track risk, control, and coverage across every business process you audit.</p>
         </div>
 

@@ -163,7 +163,7 @@ function QuickActionPanel({ setView, onDismiss }: { setView: Props['setView']; o
             <Sparkles size={16} className="text-brand-700" />
           </div>
           <div>
-            <div className="font-display text-[1.25rem] font-[420] text-ink-900 leading-tight">
+            <div className="text-[1.25rem] font-semibold text-ink-900 leading-tight">
               Set up your workspace <span className="font-mono font-normal text-xs text-ink-500 ml-1">· {completed}/{total} done</span>
             </div>
             <p className="text-meta text-ink-500 mt-0.5">Get your workspace set up in a few quick steps.</p>
@@ -1718,7 +1718,7 @@ function RecentSharedSection({ setView, rangeDays }: { setView: Props['setView']
                 <span className="text-xs text-ink-400 tabular-nums whitespace-nowrap shrink-0">{item.timeAgo}</span>
               </div>
               <div>
-                <div className="font-display text-[0.9375rem] leading-snug text-ink-900 line-clamp-1">{item.name}</div>
+                <div className="text-[0.9375rem] leading-snug text-ink-900 line-clamp-1">{item.name}</div>
                 <div className="text-xs text-ink-500 line-clamp-2 mt-1">{item.description}</div>
               </div>
               <div className="text-[0.75rem] text-ink-400 mt-auto">Shared by {item.sharedBy}</div>
@@ -2915,7 +2915,7 @@ function AddWidgetModal({
         ref={modalRef}
       >
         <header className="shrink-0 px-6 py-5 border-b border-white/40 bg-white/20">
-          <h2 className="font-display text-[1.25rem] font-[420] text-ink-900 leading-tight">Edit widgets</h2>
+          <h2 className="text-[1.25rem] font-semibold text-ink-900 leading-tight">Edit widgets</h2>
           <p className="text-meta text-ink-500 mt-0.5">
             Add or remove widgets from your homepage. Drag the handle on a widget to reorder it.
           </p>

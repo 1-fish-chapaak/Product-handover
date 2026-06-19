@@ -1,0 +1,80 @@
+Bucket,Feature,Action,Passing criteria,Failing criteria
+Chat interface,General chat,User inputs a prompt in mid-conversation,New prompt is queued/answered without losing the thread; a running query can be stopped first,User unable to stop processing previously run query
+Chat interface,General chat,User hovers a message and clicks Copy,Message text copied to clipboard (verify with paste); toast / icon change confirms copy; works for both user and assistant messages,Copy includes HTML tags or markdown artifacts; no visual confirmation after copy
+Chat interface,General chat,User edits their own message,Bubble turns editable; saving re-runs the turn and keeps the old answer as a branch,Edit silently drops the downstream replies; no way back to the original
+Chat interface,General chat,Thumbs up / down on a reply,Icon fills; thumbs-down asks for a reason; choice sticks after refresh,Vote doesn't persist; no reason prompt on thumbs-down
+Chat interface,General chat,User clicks New Chat,All previous messages cleared from view; attached files shown in knowledge hub; right-side workspace tabs reset; old chat saved to history before reset,New Chat does not clear context (old context leaks into new prompt); old chat lost entirely (not saved to history); right-side tabs retain stale data
+Chat interface,General chat,Waiting experience,Thinking steps / loader shown while the query runs; chat still scrollable,Frozen UI with no progress; can't tell if anything is happening
+Chat interface,General chat,Cmd/Ctrl+Enter to send and Esc to clear,Send and clear shortcuts work from the composer,Shortcuts do nothing
+Chat interface,General chat,Same chat open in two tabs,Second tab shows read-only / "open elsewhere" notice,Both tabs writable; answers clash
+Chat interface,Clarification,Clarification pops up,Every clarification input is shown in chat; able to type custom input,Custom input ignored / lost on submit; on skip nothing is echoed so user can't tell what Ira assumed
+Chat interface,Clarification,Skip one / skip all,Skip moves on; skip-all proceeds with sensible defaults (defaults TBD),Skip blocks progress or wipes earlier answers
+Chat interface,Follow-up,User asks follow-up query,Stays in the same thread and reuses prior context/data,Treated as a brand new chat; context dropped
+Chat interface,Follow-up,User asks a completely different question in the same conversation,New clarify to run cycle; earlier result still scrollable,Overwrites the previous result or mixes the two
+File upload,Upload,Drag and drop files / Upload from computer,Files get uploaded and processed,Loader graphics until file is loaded; error state if file doesn't get uploaded
+File upload,Upload,"Supports different file formats (pdf, csv, xlsx, xlsx-multiple sheets) in single upload",All types of files get processed together,"Folders with all PDFs allowed, that too of same structure (Akshat code)"
+File upload,Upload,"User uploads an unsupported file type (e.g. .exe, .zip, .docx)","Toast: ""X files rejected - only CSV, XLSX, XLS, XLSM, ODS, PDF, PNG, JPG, JPEG supported""; rejected file does NOT appear in attached list; other valid files in the same batch still upload","Unsupported file silently added to list; generic ""upload failed"" with no reason; whole batch rejected because one file is invalid"
+File upload,Upload,File over the size limit (50 MB),Rejected with a toast naming size + type; valid files in the same batch still go through,Oversize file added; entire batch fails
+File upload,Upload,Paste into composer,Long pasted text becomes a .txt attachment; pasted image becomes an image attachment,Paste dumps raw text into the prompt / image lost
+File upload,Choose existing,Search existing files,Shows results with fuzzy and semantic search,In case of 0 results - show '0 results'
+File upload,Choose existing,Select file,Selected file shows as selected 'checkbox',"If no files are uploaded/selected, 'Verify with Ira' button is greyed out"
+File upload,Files added,Files uploaded or chosen from existing datasets,Files uploaded/chosen show in 'Added Files',For insufficient data files chat response says 'files insufficient'; if no input prompt but file is uploaded - clarification to show
+File upload,Files added,File added mid conversation,Ira rethinks and remakes the analysis plan,Plan stays stale after the new file is added
+File upload,Files added,Remove an attached file before sending,x removes the chip; file not sent,Removed file still goes with the query
+Right side workspace,Plan,Tab gets opened when query execution plan is ready,Shows loader until execution plan is generated,Tab opens empty / no loader
+Right side workspace,References,Opens when a query is run with data attached,"Initially shows all columns of the query; after output, only the used columns are shown",No files uploaded but prompt is input in chat
+Right side workspace,Code,Opens just before the output is ready,Shows the generated query/code,Code tab stays empty or shows stale code
+Right side workspace,Output config,Opens when the output is shown,"KPIs, Charts and Tables selections",Output config selection changes don't reflect in the output (in chat)
+Right side workspace,Workflow tabs (build mode),Workspace flips when a query is saved as workflow,Plan/Input/Output/Preview tabs appear; old query tabs fade to 'stale' in place,Tabs don't switch when the mode flips; both sets shown live
+Output,Save as workflow,User clicks on save as workflow,"Ira asks config (tolerance + thresholds) in the clarification UI - five governance questions (risk to detect, population/period, frequency, what each run outputs, what stays adjustable); after this the BP modal opens; saved workflow reflects wherever necessary in the system; composer locks to 'Workflow mode'",Modal opens before the governance questions; saved workflow doesn't show up in the library
+Output,Save as workflow,Save-as-workflow on a text-only result,Button hidden when there's no table/chart to save,Button shown; saves an empty workflow
+Output,Save as workflow,User skips the governance questions,Modal opens pre-filled with defaults (defaults TBD),Skip blocks the save or stores blank config
+Output,Save as workflow,Mode lock after saving,Pill becomes read-only 'Workflow mode'; only New Chat resets it,Can toggle back mid-thread; query and workflow state mix
+Output,Save as workflow,User closes modal via Cancel / X / Escape,All three close methods behave identically; confirmation prompt if the form has unsaved data; reopening the modal resets the form (clean state),Escape doesn't close the modal; closing without confirmation loses form data; reopening shows old form data
+Output,Export,User exports the result,Print/PDF flow opens with KPIs + table,Export comes out blank / charts missing
+Output,Add to dashboard/report,User clicks Add to Dashboard on banner,Output added to dashboard with success toast; banner dismissed after action; dashboard reflects the new card on next visit,"""Add to Dashboard"" enabled but does nothing; banner reappears after dismissal; output added but not visible on dashboard"
+Output,Add to dashboard/report,User clicks Add to Report,Linked; pill shows in the dropdown; report opens from the pill,Link doesn't persist
+Output,Add to dashboard/report,Remove a dashboard/report link,x removes the link; undo offered,Link stuck; no undo
+Output,Add to dashboard/report,Zero-row result,Dashboard/Report actions hidden; Export + Save as workflow still available,Empty card added to dashboard
+Workflow builder,Describe,User types a prompt / picks a template,'Audit on Chat' enabled only when there's text; template pre-fills the prompt,Button fires on an empty prompt; template doesn't fill anything
+Workflow builder,Describe,Attach files in step 1,Files carried forward and pre-mapped to inputs; count chip shown,Carried files lost on entering the builder
+Workflow builder,Describe,Seeded from chat handoff,Prompt arrives pre-filled and the draft auto-generates,Lands on an empty step 1
+Workflow builder,Describe,Empty template library,Shows '0 workflows' empty state,Blank / broken rail (open: empty state not defined)
+Workflow builder,Clarify (build),Initial clarify overlay,2-4 questions one at a time; option click custom text and keyboard 1-4 all work,Overlay skippable into a half-defined workflow
+Workflow builder,Clarify (build),Back out mid-clarify,"Confirms ""discard this draft?"" before leaving",Leaves silently; half-saved draft
+Workflow builder,File mapping,Simple - 1 csv to 1 input,Routes to the input; 3s auto-verify advances to mapping,Doesn't advance even though the required input is filled
+Workflow builder,File mapping,Consolidated (fan-in) - 3 csv (same schema) to 1 input,All 3 union into one input; verify fires once after the 3rd,Only the first file kept; verify fires early
+Workflow builder,File mapping,Consolidated (fan-out) - 1 csv to 3 inputs,Container splits across the 3 inputs,Stuck - one file can't satisfy 3 (open: does a split count as 'all filled'?)
+Workflow builder,File mapping,Multi-file - 3 csv to 3 inputs,Each file routes to its own input in order,All files land on the first input
+Workflow builder,File mapping,Multi-file + consolidated - 4 csv to 3 inputs,2 same-schema files merge other 2 go direct,4th file dropped or a phantom input appears
+Workflow builder,File mapping,Multi-sheet - 1 xlsx (3 sheets) to 3 inputs,Sheets split into the 3 inputs from one file,Only the first sheet read
+Workflow builder,File mapping,Rule-based - 3 xlsx to 4 inputs,Sheet-routing rule feeds the 4 inputs; unions where needed,Sheets mis-routed to the wrong input
+Workflow builder,File mapping,Under-supplied - 2 csv for 3 inputs,"Verify doesn't fire; empty input flagged red ""required - no file yet""",Advances with a required input still empty
+Workflow builder,File mapping,Over-supplied - 4 csv for 3 inputs,Extra file handled clearly (flag / ask),4th silently stacks on the first input (current behaviour - TBD)
+Workflow builder,File mapping,Schema-mismatch union - 3 csv 1 diverges,Odd file flagged 'mismatch' at mapping; user re-maps or drops it,Mismatched file merged silently; columns misaligned
+Workflow builder,File mapping,Remove a file after auto-verify,Removing a required file re-blocks the step,One-shot verify doesn't re-fire; advances with a gap (open: bug?)
+Workflow builder,File mapping,Carry-forward overflow - 5 files for 3 inputs,Extras flagged,Files 4-5 stack on the first input with no notice
+Workflow builder,File mapping,PDF simple - 1 PDF (1 page) to 1 input,Binds then goes to field extraction (not column mapping),Treated as csv; mapping step shown
+Workflow builder,File mapping,Multi-page PDF - 1 PDF (12 pages) to 1 input,Each page becomes a record; no page cap,Only the first page read
+Workflow builder,File mapping,PDF fan-in - 3 PDFs (same type) to 1 input,Extracted records appended,Only one PDF kept
+Workflow builder,File mapping,PDF burst - 1 packet to 3 inputs,Packet bursts into the 3 doc types,Whole packet dumped into one input
+Workflow builder,File mapping,PDF multi-file - 3 distinct PDFs to 3 inputs,Each doc type routes to its input,Misrouted
+Workflow builder,File mapping,Images - 3 images (same type) to 1 input,1 image = 1 doc/page; OCR then extract,Images rejected
+Workflow builder,File mapping,Low-confidence extraction - 1 PDF,Field flagged low_confidence / type_mismatch; Confirm / Edit / Skip before run,Low-confidence value used silently
+Workflow builder,File mapping,Field not extracted - 1 PDF,Null target blocks the run unless the field is optional,Runs with an empty required field
+Workflow builder,File mapping,Misclassified page - 1 packet,User can reassign the page before extraction,No way to fix the routing
+Workflow builder,File mapping,Wrong doc type - 1 PDF,Classifier marks it 'pending'; manual assign,Force-fit into the wrong input
+Workflow builder,File mapping,Mixed simple - 1 csv + 1 PDF,Each routed by type; verify needs both lanes filled,PDF accepted into the csv slot
+Workflow builder,File mapping,Mixed consolidated - 3 csv + 2 PDF to 1 csv + 1 PDF,Each type consolidates within its lane; no cross-type union,csv and PDF merged into one input
+Workflow builder,File mapping,Container + docs - 1 xlsx (3 sheets) + 2 PDF,Sheets split into 3; PDFs append to 1,Sheets or PDFs dropped
+Workflow builder,File mapping,One lane empty - 2 csv + 0 PDF for 2 csv + 1 PDF,Verify blocked until the PDF lane is filled,Advances with the PDF input empty
+Workflow builder,Column mapping,Expand an input to map columns,Alignment table shows source/target/confidence; bands green >=85 yellow 60-84 red <60,Confidence missing or bands wrong
+Workflow builder,Column mapping,Toggle / select-all columns and search,Selections hold; search filters columns,Toggles reset when the row is collapsed
+Workflow builder,Column mapping,Edit an input with no file,Edit disabled; row greyed,Opens an empty mapping table
+Workflow builder,Column mapping,Confirm & proceed,3s "confirming mappings" then step 4,Proceeds with unmapped required columns
+Workflow builder,Review & run,Validate workflow,Asks matching logic + tolerance inline; default +/-5%,Runs without tolerance set
+Workflow builder,Review & run,Run,Skeleton while running; "Finished - N rows M records scanned",Spins forever / no result; double-run possible during a run
+Workflow builder,Review & run,Run fails,"""Hit an error - try again, or restart""",Silent failure; stuck skeleton
+Workflow builder,Save workflow,View preview then Save,"Output card (summary, KPIs, table) then save modal",Save before preview / no output to save
+Workflow builder,Save workflow,Save modal - BP + RACM,RACM disabled until BP chosen and filtered by it; save disabled until name + BP + RACM filled,Save allowed with BP/RACM missing
+Workflow builder,Save workflow,Save success,"""X saved to BP / RACM""; button locks to Saved",Re-save creates a duplicate; draft lost if the save fails
