@@ -22,7 +22,6 @@ import {
 import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, GRC_BULK_ACTIONS, type GrcException, type GrcExceptionSeverity, type GrcActivityEntry, type GrcActivityAuthorRole, type GrcExceptionClassification, type GrcReviewStatus, type GrcDueDateRevision, type GrcActionStatus, type GrcCaseDetail } from '../../data/mockData';
 import { deriveStatus, requiresActionPlan, isMemberEligibleForDrawer, nextActionableId, auditorReviewStage, type ExceptionActionKind, type DrawerActionType } from './statusModel';
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
-import { QUERY_TABLES } from '../../data/queryGraphs';
 import type { ExceptionRole } from '../../hooks/useAppState';
 import { useCan } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -250,11 +249,6 @@ function KpiBarInline({ cells }: { cells: KpiCell[] }) {
   );
 }
 
-// ─── Derive exceptions from a query's output table ───────────────────────
-// When the user lands on Manage Exceptions via ?from=Q01 we don't want to
-// show the generic GRC_EXCEPTIONS mock — we want the actual rows from
-// QUERY_TABLES[Q01] so the data columns (Vendor, Invoice Date, Match %, …)
-// align row-for-row with the cells the auditor saw in the query result.
 // Format an ISO date for activity-log messages (e.g. "30 Apr 2026").
 const fmtDue = (iso?: string) => {
   if (!iso) return 'Not set';
@@ -266,105 +260,6 @@ const fmtStamp = (iso: string) => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
-
-function deriveExceptionsFromOutputTable(
-  table: { columns: string[]; rows: string[][] },
-  riskCategory = 'Financial Controls',
-): GrcException[] {
-  const idxOf = (re: RegExp) => table.columns.findIndex(c => re.test(c));
-  const matchCol = idxOf(/match|score|similarity/i);
-  const dateCol  = idxOf(/date/i);
-  const labelCol = table.columns.findIndex((c, i) => i > 0 && !/^status$/i.test(c));
-
-  return table.rows.map((row, i): GrcException => {
-    let severity: GrcExceptionSeverity = 'Medium';
-    if (matchCol >= 0) {
-      const pct = parseFloat(String(row[matchCol]).replace('%', ''));
-      if (!Number.isNaN(pct)) severity = pct >= 95 ? 'High' : pct >= 85 ? 'Medium' : 'Low';
-    }
-    // Seed dueDate on a few rows so the demo shows the dynamic Overdue chip.
-    // Bulk grouping is NOT seeded — the Bulk chip appears only once a Risk Owner
-    // actually bulk-classifies cases together (select cases → Bulk Classify).
-    const flags: Array<'Overdue' | 'Bulk'> = [];
-    const bulkId: string | undefined = undefined;
-    let dueDate: string | undefined;
-    if (i % 5 === 0) {
-      // Past due date so the dynamic Overdue chip renders via the dueDate path.
-      dueDate = '2026-04-15';
-    } else if (i % 7 === 0) {
-      // Future due date so the chip stays hidden (sanity check).
-      dueDate = '2026-08-30';
-    }
-
-    // Pre-classify a couple of rows with a future due date so the due-date
-    // revision flow is demoable without classifying first — one carries a
-    // pending request for the Auditor to review out of the box.
-    let classification: GrcExceptionClassification = 'Unclassified';
-    let classificationReview: GrcReviewStatus = 'Pending';
-    let dueDateRevision: GrcDueDateRevision | undefined;
-    if (i === 1) {
-      classification = 'Procedural Non-Compliance';
-      classificationReview = 'Approved';
-      dueDate = '2026-06-15';
-      dueDateRevision = {
-        previousDueDate: '2026-06-15',
-        revisedDueDate: '2026-07-10',
-        reason: 'Dependent control owner is on leave until early July; remediation evidence cannot be gathered before then.',
-        status: 'Pending',
-        requestedBy: 'Rohan Kapoor',
-        requestedAt: '2026-06-03T11:20:00.000Z',
-      };
-    } else if (i === 2) {
-      classification = 'Design Deficiency';
-      classificationReview = 'Approved';
-      dueDate = '2026-06-25';
-    } else if (i === 3) {
-      classification = 'System Deficiency';
-      classificationReview = 'Approved';
-      dueDate = '2026-06-30';
-    } else if (i === 4) {
-      classification = 'Procedural Non-Compliance';
-      classificationReview = 'Approved';
-      dueDate = '2026-06-18';
-      dueDateRevision = {
-        previousDueDate: '2026-06-18',
-        revisedDueDate: '2026-07-15',
-        reason: 'Third-party remediation vendor confirmed availability only from mid-July; cannot close earlier.',
-        status: 'Pending',
-        requestedBy: 'Rohan Kapoor',
-        requestedAt: '2026-06-03T09:10:00.000Z',
-      };
-    }
-
-    // Seed a distinct Actionable ID for each pre-classified actionable row (they
-    // are independent until a Risk Owner bulk-classifies cases together).
-    let actionableId: string | undefined;
-    if (requiresActionPlan(classification)) {
-      actionableId = i === 1 ? 'ACT-0001' : i === 2 ? 'ACT-0002' : i === 3 ? 'ACT-0003' : i === 4 ? 'ACT-0004' : undefined;
-    }
-
-    return {
-      id: `EXC${String(i + 1).padStart(3, '0')}`,
-      riskCategory,
-      severity,
-      // Status is derived from the classification (all seed rows start with the
-      // action review Pending): classified → In-Progress, else Open.
-      status: deriveStatus(classification, 'Pending', 'Pending'),
-      classification,
-      classificationReview,
-      actionReview: 'Pending',
-      // Pre-classified actionable rows await the Auditor's plan review.
-      actionPhase: requiresActionPlan(classification) ? ('plan-review' as const) : undefined,
-      lastUpdated: dateCol >= 0 ? String(row[dateCol]) : '—',
-      title: labelCol >= 0 ? `Case — ${row[labelCol]}` : `Case ${row[0]}`,
-      flags: flags.length ? flags : undefined,
-      bulkId,
-      actionableId,
-      dueDate,
-      dueDateRevision,
-    };
-  });
-}
 
 function RoleToggle({ role, setRole }: { role: ExceptionRole; setRole: (r: ExceptionRole) => void }) {
   return (
@@ -446,15 +341,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     return REPORT_QUERIES_ATR[fromId] ? { id: fromId, ...REPORT_QUERIES_ATR[fromId] } : null;
   }, []);
 
-  // Local exception state — when the user landed via a source query we derive
-  // exceptions from that query's output table so the IDs and data columns
-  // match exactly. Props win when explicitly supplied by an embedded host.
+  // Local exception state — always the canonical 10-case GRC_EXCEPTIONS set so the
+  // same cases show whether opened standalone or via a report/ATR query drill-in.
+  // Props still win when explicitly supplied by an embedded host.
   const [localExceptions, setLocalExceptions] = useState<GrcException[]>(() => {
     if (propsExceptions) return propsExceptions;
-    if (sourceQuery) {
-      const table = QUERY_TABLES[sourceQuery.id];
-      if (table) return deriveExceptionsFromOutputTable(table);
-    }
     return GRC_EXCEPTIONS;
   });
   // Sync if props change (e.g. new run generates more exceptions)
@@ -1098,7 +989,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               onAssign={(ex) => {
                 setSingleAssignCase(ex);
               }}
-              extraColumns={sourceQuery ? QUERY_TABLES[sourceQuery.id] : undefined}
+              extraColumns={undefined}
               onOpenDetail={(ex) => openDetail(ex.id)}
               headerLeading={
                 <div className="flex items-center gap-2">
@@ -1761,7 +1652,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             <ExceptionDetailDrawer
               key="exception-detail-drawer"
               exception={ex}
-              extraColumns={sourceQuery ? QUERY_TABLES[sourceQuery.id] : undefined}
+              extraColumns={undefined}
               role={role}
               onAction={(kind, target) => { setDetailExceptionId(null); runExceptionAction(kind, target); }}
               onComment={(text, attachment) => postComment(text, [ex.id], attachment)}
