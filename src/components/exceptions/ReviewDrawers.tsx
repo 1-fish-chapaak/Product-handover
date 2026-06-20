@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { auditorReviewStage, type AuditorReviewStage } from './statusModel';
 import { useWorkflow } from './workflow/WorkflowContext';
+import { canAct } from './workflow/workflowEngine';
 import WorkflowPipelineView from './workflow/WorkflowPipelineView';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
 import Gated from '../shared/Gated';
@@ -567,6 +568,21 @@ export function ReviewClassificationDrawer({
   const [comment, setComment] = useState('');
   const isRiskOwner = role === 'risk-owner';
 
+  // When the case is in an approval route and the acting user is a current-level
+  // approver, the decision drives the route engine (advance / send to first Risk
+  // Owner on reject) instead of finalizing the case directly. The route governs.
+  const { assignments, currentUserId, decide } = useWorkflow();
+  const routeAssignment = assignments.find(a => a.exceptionId === exception.id && a.status === 'in-approval');
+  const onRouteTurn = !!routeAssignment && canAct(routeAssignment, currentUserId).ok;
+  const handleDecision = (decision: 'approve' | 'reject') => {
+    if (routeAssignment && onRouteTurn) {
+      decide(routeAssignment.id, currentUserId, decision, comment.trim());
+      onClose();
+    } else {
+      onDecision(decision);
+    }
+  };
+
   return (
     <>
       <Overlay onClick={onClose} />
@@ -593,8 +609,8 @@ export function ReviewClassificationDrawer({
           ) : (
             <FooterButtons
               onCancel={onClose}
-              onReject={() => canTriage && onDecision('reject')}
-              onApprove={() => canTriage && onDecision('approve')}
+              onReject={() => canTriage && handleDecision('reject')}
+              onApprove={() => canTriage && handleDecision('approve')}
               disabled={!canTriage}
               disabledTitle="You don't have permission to review classifications"
             />
@@ -666,6 +682,21 @@ export function ReviewCaseDrawer({
   const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
   const [implementation, setImplementation] = useState<'Implemented' | 'Partially Implemented' | null>(null);
   const [comment, setComment] = useState('');
+
+  // Route-aware decision: when the case is mid-approval and the acting user is a
+  // current-level approver, the decision advances the route engine (or sends to
+  // the first Risk Owner on reject) rather than finalizing the case directly.
+  const { assignments, currentUserId, decide } = useWorkflow();
+  const routeAssignment = assignments.find(a => a.exceptionId === exception.id && a.status === 'in-approval');
+  const onRouteTurn = !!routeAssignment && canAct(routeAssignment, currentUserId).ok;
+  const submitDecision = (d: 'approve' | 'reject') => {
+    if (routeAssignment && onRouteTurn) {
+      decide(routeAssignment.id, currentUserId, d, comment.trim());
+      onClose();
+    } else {
+      onDecision(d, { implementation, comment });
+    }
+  };
 
   const isAuditor = role === 'auditor';
   const actionable = ACTIONABLE_CLASSIFICATIONS.has(exception.classification);
@@ -741,12 +772,13 @@ export function ReviewCaseDrawer({
               onClick={() => {
                 if (isViewMode) { onClose(); return; }
                 // The action review is the Auditor's decision (the Risk Owner
-                // classifies; the Auditor approves/rejects).
-                if (!isAuditor) return;
-                if (canSubmit && decision) onDecision(decision, { implementation, comment });
+                // classifies; the Auditor approves/rejects). On a route, a
+                // current-level approver of either side may act.
+                if (!isAuditor && !onRouteTurn) return;
+                if (canSubmit && decision) submitDecision(decision);
               }}
-              disabled={!canSubmit || (!isViewMode && !isAuditor)}
-              title={!isViewMode && !isAuditor ? 'Only the Auditor can submit a review decision' : undefined}
+              disabled={!canSubmit || (!isViewMode && !isAuditor && !onRouteTurn)}
+              title={!isViewMode && !isAuditor && !onRouteTurn ? 'Only the Auditor can submit a review decision' : undefined}
               className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
                 canSubmit
                   ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
@@ -1270,6 +1302,13 @@ export function ClassifyExceptionDrawer({
   bulkSkipped?: { awaitingReview: number; approved: number };
 }) {
   const isBulk = linkedCases.length > 1;
+  // If the acting user is the assignee of a drafting route for this case, saving
+  // the classification + action plan submits it into the approval chain (Step 2 →
+  // Step 4). Driven entirely from this existing modal — no new modal surface.
+  const { assignments, currentUserId, submitForApproval } = useWorkflow();
+  const routeDraft = assignments.find(
+    a => a.exceptionId === exception.id && a.status === 'drafting' && a.assigneeId === currentUserId,
+  );
   const [showLinked, setShowLinked] = useState(false);
   const [stepIdx, setStepIdx] = useState(0); // 0 = Classify, 1 = Action Plan
   const skippedTotal = (bulkSkipped?.awaitingReview ?? 0) + (bulkSkipped?.approved ?? 0);
@@ -1345,17 +1384,32 @@ export function ClassifyExceptionDrawer({
   const totalSteps = requiresActionPlan ? 2 : 1;
   const step = Math.min(stepIdx, totalSteps - 1);
   const step1Valid = !!classification; // Step 1 needs a classification to proceed.
-  const doSave = () => canSave && onSave({
-    severity,
-    classification,
-    comment,
-    actionName: requiresActionPlan ? actionPlans[0]?.name.trim() : undefined,
-    actionTaken: requiresActionPlan ? actionPlans[0]?.details.trim() : undefined,
-    dueDate: requiresActionPlan ? actionPlans.find(p => p.dueDate)?.dueDate : undefined,
-    actionPlans: requiresActionPlan
-      ? actionPlans.map(p => ({ name: p.name.trim(), details: p.details.trim(), dueDate: p.dueDate }))
-      : undefined,
-  });
+  const doSave = () => {
+    if (!canSave) return;
+    const firstPlan = requiresActionPlan ? actionPlans[0] : undefined;
+    const planDueDate = requiresActionPlan ? actionPlans.find(p => p.dueDate)?.dueDate : undefined;
+    onSave({
+      severity,
+      classification,
+      comment,
+      actionName: firstPlan?.name.trim(),
+      actionTaken: firstPlan?.details.trim(),
+      dueDate: planDueDate,
+      actionPlans: requiresActionPlan
+        ? actionPlans.map(p => ({ name: p.name.trim(), details: p.details.trim(), dueDate: p.dueDate }))
+        : undefined,
+    });
+    // Submit into the approval route when the acting user owns a drafting
+    // assignment — the chain then runs for the action plan (Step 4).
+    if (routeDraft) {
+      submitForApproval(routeDraft.id, {
+        classification,
+        actionName: firstPlan?.name.trim(),
+        actionDetails: firstPlan?.details.trim(),
+        dueDate: planDueDate,
+      });
+    }
+  };
 
   return (
     <>
