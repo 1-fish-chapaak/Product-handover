@@ -22,6 +22,7 @@ import {
   ClipboardList,
   AlertTriangle,
   Send,
+  Undo2,
 } from 'lucide-react';
 import { auditorReviewStage, type AuditorReviewStage } from './statusModel';
 import { useWorkflow } from './workflow/WorkflowContext';
@@ -362,12 +363,15 @@ function FooterButtons({
   onCancel,
   onReject,
   onApprove,
+  onSendBack,
   disabled = false,
   disabledTitle,
 }: {
   onCancel: () => void;
   onReject: () => void;
   onApprove: () => void;
+  /** When set, a Send back action returns the work to the previous reviewer. */
+  onSendBack?: () => void;
   /** When set, Reject/Approve are greyed + inert (Cancel stays usable). */
   disabled?: boolean;
   disabledTitle?: string;
@@ -381,6 +385,17 @@ function FooterButtons({
       >
         Cancel
       </button>
+      {onSendBack && (
+        <button
+          onClick={onSendBack}
+          disabled={disabled}
+          title={disabled ? disabledTitle : 'Send back to the previous reviewer'}
+          className={`flex-1 h-10 text-[13px] font-semibold text-mitigated-700 bg-mitigated-50 hover:bg-mitigated-100 border border-mitigated/30 rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${decisionCls}`}
+        >
+          <Undo2 size={14} />
+          Send back
+        </button>
+      )}
       <button
         onClick={onReject}
         disabled={disabled}
@@ -574,11 +589,12 @@ export function ReviewClassificationDrawer({
   const { assignments, currentUserId, decide } = useWorkflow();
   const routeAssignment = assignments.find(a => a.exceptionId === exception.id && a.status === 'in-approval');
   const onRouteTurn = !!routeAssignment && canAct(routeAssignment, currentUserId).ok;
-  const handleDecision = (decision: 'approve' | 'reject') => {
+  const canSendBack = onRouteTurn && (routeAssignment?.currentLevelIndex ?? 0) > 0;
+  const handleDecision = (decision: 'approve' | 'reject' | 'send-back') => {
     if (routeAssignment && onRouteTurn) {
       decide(routeAssignment.id, currentUserId, decision, comment.trim());
       onClose();
-    } else {
+    } else if (decision !== 'send-back') {
       onDecision(decision);
     }
   };
@@ -611,6 +627,7 @@ export function ReviewClassificationDrawer({
               onCancel={onClose}
               onReject={() => canTriage && handleDecision('reject')}
               onApprove={() => canTriage && handleDecision('approve')}
+              onSendBack={canSendBack ? () => canTriage && handleDecision('send-back') : undefined}
               disabled={!canTriage}
               disabledTitle="You don't have permission to review classifications"
             />
@@ -697,6 +714,15 @@ export function ReviewCaseDrawer({
       onDecision(d, { implementation, comment });
     }
   };
+  // Send back returns the work to the previous reviewer — only meaningful once
+  // the chain has advanced past its first level.
+  const canSendBack = onRouteTurn && (routeAssignment?.currentLevelIndex ?? 0) > 0;
+  const sendBack = () => {
+    if (routeAssignment && onRouteTurn) {
+      decide(routeAssignment.id, currentUserId, 'send-back', comment.trim());
+      onClose();
+    }
+  };
 
   const isAuditor = role === 'auditor';
   const actionable = ACTIONABLE_CLASSIFICATIONS.has(exception.classification);
@@ -709,9 +735,13 @@ export function ReviewCaseDrawer({
   //   classification    → Approve / Reject (Business as Usual / False Positive)
   // A classified, not-yet-reviewed actionable case with no explicit phase (legacy
   // data) defaults to the plan-review stage.
-  const isPlanReview = isAuditor && actionable && (phase === 'plan-review' || (!phase && exception.actionReview === 'Pending' && exception.classification !== 'Unclassified'));
-  const isCompletionReview = isAuditor && actionable && phase === 'completion-review';
-  const isClassReview = isAuditor && !actionable && exception.actionReview === 'Pending' && exception.classification !== 'Unclassified';
+  // A current-level route approver gets the same decision surface the Auditor has,
+  // so the people on the route (e.g. Neha, Vikram, Tushar) can approve / reject /
+  // send back the management action plan — not just view it.
+  const canReview = isAuditor || onRouteTurn;
+  const isPlanReview = canReview && actionable && (phase === 'plan-review' || (!phase && exception.actionReview === 'Pending' && exception.classification !== 'Unclassified'));
+  const isCompletionReview = canReview && actionable && phase === 'completion-review';
+  const isClassReview = canReview && !actionable && exception.actionReview === 'Pending' && exception.classification !== 'Unclassified';
   const needsDecision = isPlanReview || isCompletionReview || isClassReview;
   // Anything else (Risk Owner viewing, or an already-decided case) is read-only.
   const isViewMode = !needsDecision;
@@ -768,6 +798,16 @@ export function ReviewCaseDrawer({
             >
               Cancel
             </button>
+            {canSendBack && !isViewMode && (
+              <button
+                onClick={sendBack}
+                title="Send back to the previous reviewer"
+                className="flex-1 h-10 text-[13px] font-semibold text-mitigated-700 bg-mitigated-50 hover:bg-mitigated-100 border border-mitigated/30 rounded-[8px] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Undo2 size={14} />
+                Send back
+              </button>
+            )}
             <button
               onClick={() => {
                 if (isViewMode) { onClose(); return; }

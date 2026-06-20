@@ -605,6 +605,15 @@ function renderCell(
     );
   };
 
+  // Route-aware actor context — the acting user's relationship to the assignment
+  // decides their CTAs, independent of the role toggle. On a route only the work-
+  // assignee classifies (everyone else is read-only here); the current-level
+  // approver reviews the management action plan from the Action column.
+  const onRoute = !!assignment;
+  const isWorkAssignee = !!assignment && !!currentUserId && assignment.assigneeId === currentUserId;
+  const routeApprovalTurn =
+    !!assignment && assignment.status === 'in-approval' && !!currentUserId && canAct(assignment, currentUserId).ok;
+
   // Dynamic data column from the source-query output table.
   if (col.startsWith('data:')) {
     const name = col.slice(5);
@@ -791,7 +800,11 @@ function renderCell(
     }
     case 'classify': {
       let cta: React.ReactNode;
-      if (role === 'risk-owner') {
+      if (onRoute && !isWorkAssignee) {
+        // On a route, only the person the work was assigned to classifies; any
+        // approver (e.g. Tushar) sees View here — they act from the Action column.
+        cta = <GhostButton icon={<Eye size={12} />} onClick={onOpenClassification}>View</GhostButton>;
+      } else if (role === 'risk-owner') {
         if (ex.classification === 'Unclassified') {
           cta = <PrimaryButton icon={<Tag size={12} />} onClick={onOpenClassification}>Classify</PrimaryButton>;
         } else if (ex.actionReview === 'Rejected') {
@@ -814,8 +827,18 @@ function renderCell(
       const phase = ex.actionPhase;
       const actionableClass = ex.classification === 'Design Deficiency' || ex.classification === 'System Deficiency' || ex.classification === 'Procedural Non-Compliance';
       let cta: React.ReactNode;
-      // Risk Owner has no Action column (only the Classify column); its CTA lives there.
-      if (role === 'risk-owner') {
+      // On a route, the current-level approver reviews the management action plan
+      // (or the completed action) — regardless of which role toggle is active.
+      // Everyone else on the route is read-only until it's their turn.
+      if (onRoute) {
+        if (routeApprovalTurn) {
+          cta = phase === 'completion-review'
+            ? <PrimaryButton icon={<ArrowLeft size={12} className="rotate-180" />} onClick={onOpenAction}>Review Action</PrimaryButton>
+            : <PrimaryButton icon={<ClipboardCheck size={12} />} onClick={onOpenAction}>Review Plan</PrimaryButton>;
+        } else {
+          cta = <GhostButton icon={<Eye size={12} />} onClick={onOpenAction}>View</GhostButton>;
+        }
+      } else if (role === 'risk-owner') {
         cta = <GhostButton icon={<Eye size={12} />} onClick={onOpenAction}>View</GhostButton>;
       } else {
         // Auditor: review the plan, then the completion; single review for non-actionable.
