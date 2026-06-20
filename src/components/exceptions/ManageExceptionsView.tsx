@@ -53,6 +53,7 @@ import { useToast } from '../shared/Toast';
 // ─── Assignment & Approval Workflow module (configurable, data-driven) ───
 import { WorkflowProvider } from './workflow/WorkflowContext';
 import WorkflowModule from './workflow/WorkflowModule';
+import ActingAsSwitcher from './ActingAsSwitcher';
 import AssignmentModal from './workflow/AssignmentModal';
 import WorkflowAssignButton from './workflow/WorkflowAssignButton';
 import type { Assignment } from './workflow/workflowTypes';
@@ -913,6 +914,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               >
                 <History size={15} />
               </button>
+              <ActingAsSwitcher />
               <RoleToggle role={role} setRole={setRole} />
             </div>
           </div>

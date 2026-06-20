@@ -21,16 +21,22 @@ export default function AssignmentModal() {
   useFocusTrap(ref, !!assignmentModalIds, closeAssignment);
 
   const ids = assignmentModalIds ?? [];
-  const myTemplates = useMemo(() => templates.filter(t => t.persona === role), [templates, role]);
-  const [workflowId, setWorkflowId] = useState<string>(() => myTemplates.find(t => t.isDefault)?.id ?? myTemplates[0]?.id ?? '');
+  // Both sides' routes are selectable (grouped in the dropdown). The chosen route's
+  // persona — not the current role — decides which team the assignee comes from.
+  const roTemplates = useMemo(() => templates.filter(t => t.persona === 'risk-owner'), [templates]);
+  const auTemplates = useMemo(() => templates.filter(t => t.persona === 'auditor'), [templates]);
+  const [workflowId, setWorkflowId] = useState<string>(() => {
+    const mine = templates.filter(t => t.persona === role);
+    return mine.find(t => t.isDefault)?.id ?? mine[0]?.id ?? templates[0]?.id ?? '';
+  });
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [perms, setPerms] = useState<ColumnPermission[]>(buildDefaultPermissions());
   const [note, setNote] = useState('');
   const [dueDate, setDueDate] = useState('');
 
   if (!assignmentModalIds) return null;
-  const template = myTemplates.find(t => t.id === workflowId);
-  const personaUsers = usersForPersona(role);
+  const template = templates.find(t => t.id === workflowId);
+  const personaUsers = usersForPersona(template?.persona ?? role);
 
   // RBAC: cannot assign work to a user who also approves it in the same chain.
   const selfApproval = !!(assigneeId && template && userInApprovalChain(template.levels, assigneeId));
@@ -72,12 +78,28 @@ export default function AssignmentModal() {
           <div className="p-6 space-y-5 border-b md:border-b-0 md:border-r border-canvas-border">
             <div>
               <label className="text-[12px] font-semibold text-ink-800 mb-1.5 block">Approval Route <span className="text-risk">*</span></label>
-              {myTemplates.length === 0 ? (
-                <div className="text-[12px] text-mitigated-700 bg-mitigated-50 border border-mitigated/30 rounded-[8px] px-3 py-2">No approval routes for this persona yet — create one in the Route Configurator.</div>
+              {templates.length === 0 ? (
+                <div className="text-[12px] text-mitigated-700 bg-mitigated-50 border border-mitigated/30 rounded-[8px] px-3 py-2">No approval routes yet — create one in the Route Configurator.</div>
               ) : (
-                <select value={workflowId} onChange={e => setWorkflowId(e.target.value)} className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-900 focus:outline-none focus:border-brand-600 cursor-pointer">
-                  {myTemplates.map(t => <option key={t.id} value={t.id}>{t.name}{t.isDefault ? ' (default)' : ''} · v{t.version}</option>)}
+                <select value={workflowId} onChange={e => { setWorkflowId(e.target.value); setAssigneeId(null); }} className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-900 focus:outline-none focus:border-brand-600 cursor-pointer">
+                  {roTemplates.length > 0 && (
+                    <optgroup label="Risk Owner routes">
+                      {roTemplates.map(t => <option key={t.id} value={t.id}>{t.name}{t.isDefault ? ' (default)' : ''} · v{t.version}</option>)}
+                    </optgroup>
+                  )}
+                  {auTemplates.length > 0 && (
+                    <optgroup label="Auditor routes">
+                      {auTemplates.map(t => <option key={t.id} value={t.id}>{t.name}{t.isDefault ? ' (default)' : ''} · v{t.version}</option>)}
+                    </optgroup>
+                  )}
                 </select>
+              )}
+              {template && (
+                <p className="mt-1.5 text-[11px] text-ink-500">
+                  {template.persona === 'auditor'
+                    ? 'Auditor route — the Auditor lead reviews & approves first, then the team approval chain runs.'
+                    : 'Risk Owner route — the assignee does the work (classify + action), then the approval chain runs.'}
+                </p>
               )}
             </div>
 

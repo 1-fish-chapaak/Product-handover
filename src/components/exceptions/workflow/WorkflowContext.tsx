@@ -6,7 +6,10 @@ import type {
 import { SEED_TEMPLATES, SEED_ASSIGNMENTS, userById, userName } from './workflowData';
 import { submit as engineSubmit, applyDecision } from './workflowEngine';
 
-const STORAGE_KEY = 'workflow-engine-v2';
+// Bumped to v4 with the team remodel (Tushar leads Risk Owner, Deepak leads
+// Auditor, 4-person teams each) — a new key discards stale persisted state that
+// referenced the old user ids.
+const STORAGE_KEY = 'workflow-engine-v4';
 
 interface CreateAssignmentParams {
   exceptionIds: string[];

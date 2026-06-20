@@ -7,6 +7,8 @@ import type {
   GrcExceptionClassification,
 } from '../../data/mockData';
 import { exceptionActionsFor, type ExceptionActionKind } from './statusModel';
+import { useWorkflow } from './workflow/WorkflowContext';
+import WorkflowPipelineView from './workflow/WorkflowPipelineView';
 
 // Icon per action kind — mirrors the Exceptions-table CTA icons.
 const ACTION_ICON: Record<ExceptionActionKind, React.ElementType> = {
@@ -125,6 +127,12 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
   // Next actions for the active persona — same set the Exceptions table offers.
   const actions = role && onAction ? exceptionActionsFor(ex, role) : [];
 
+  // Approval route, when this case is delegated through one. Read-only here —
+  // the actual work / review actions are performed from the Classify and Action
+  // columns (and their modals), never from a second surface.
+  const { assignments } = useWorkflow();
+  const assignment = assignments.find(a => a.exceptionId === ex.id && a.status !== 'pulled-back');
+
   // When this exception's management action plan is shared across a bulk group
   // (same Actionable ID), present the detail Actionable-ID-wise — led by the
   // plan/ID, with the linked exceptions listed so the user can drill into any one.
@@ -201,6 +209,17 @@ export default function ExceptionDetailDrawer({ exception: ex, extraColumns, rol
               </Pill>
             </DetailField>
           </section>
+
+          {/* Approval route — live chain (read-only). Actions happen from the
+              Classify / Action columns, never here. */}
+          {assignment && (
+            <section>
+              <h3 className="text-[11px] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">Approval Route</h3>
+              <div className="border border-canvas-border rounded-[12px] bg-[#FAFAFB] p-5">
+                <WorkflowPipelineView assignment={assignment} />
+              </div>
+            </section>
+          )}
 
           {/* Part of Bulk Action — one action plan shared across the linked cases. */}
           {isPlanView && (

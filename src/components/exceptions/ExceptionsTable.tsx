@@ -41,6 +41,38 @@ import {
 import type { ExceptionRole } from '../../hooks/useAppState';
 import { unreadCommentCount } from './commentStore';
 import { useToast } from '../shared/Toast';
+import { useWorkflow } from './workflow/WorkflowContext';
+import { canAct, currentLevel } from './workflow/workflowEngine';
+import { userName } from './workflow/workflowData';
+import type { Assignment } from './workflow/workflowTypes';
+
+// Plain-language approval state for the table's Approval column. `yourTurn`
+// flags when the acting user (header "Acting as") is the one who must act now.
+function approvalCellMeta(a: Assignment | undefined, currentUserId: string): { label: string; cls: string; yourTurn: boolean } | null {
+  if (!a || a.status === 'pulled-back') return null;
+  const assignee = userName(a.assigneeId);
+  const assigneeTurn = (a.status === 'drafting' || a.status === 'rejected') && currentUserId === a.assigneeId;
+  const approverTurn = a.status === 'in-approval' && canAct(a, currentUserId).ok;
+  switch (a.status) {
+    case 'approved':           return { label: 'Approved', cls: 'bg-compliant-50 text-compliant-700', yourTurn: false };
+    case 'rejected':           return { label: `Returned to ${assignee}`, cls: 'bg-risk-50 text-risk-700', yourTurn: assigneeTurn };
+    case 'escalated':          return { label: 'Escalated to assigner', cls: 'bg-mitigated-50 text-mitigated-700', yourTurn: false };
+    case 'needs-reassignment': return { label: 'Needs reassignment', cls: 'bg-risk-50 text-risk-700', yourTurn: false };
+    case 'drafting': {
+      if (a.persona === 'auditor') return { label: `Lead review · ${assignee}`, cls: 'bg-brand-50 text-brand-700', yourTurn: assigneeTurn };
+      // "Drafting" (the classify/work stage) is the assignee's alone — they see it as
+      // their turn; everyone else just sees the case is assigned to that person.
+      return assigneeTurn
+        ? { label: `Drafting · ${assignee}`, cls: 'bg-brand-50 text-brand-700', yourTurn: true }
+        : { label: `Assigned · ${assignee}`, cls: 'bg-[#F4F2F7] text-ink-600', yourTurn: false };
+    }
+    default: {
+      const lvl = currentLevel(a);
+      const approvers = lvl ? lvl.assigneeIds.map(userName).join(', ') : '';
+      return { label: lvl ? `${lvl.name.split('—')[0].trim()} · ${approvers}` : 'In approval', cls: 'bg-brand-50 text-brand-700', yourTurn: approverTurn };
+    }
+  }
+}
 
 // ─── Tokens ───
 const STATUS_STYLE: Record<GrcExceptionStatus, string> = {
@@ -255,6 +287,7 @@ function buildColumnDefs(
     { key: 'actionableId',   label: 'Actionable ID',  draggable: true, filterable: true, filterMode: 'text', accessor: (e) => e.bulkId ?? '', minWidth: 110 },
     { key: 'lastUpdated',    label: 'Last Updated',   draggable: true, filterable: false, accessor: (e) => e.lastUpdated },
     { key: 'assignedTo',     label: 'Assigned To',    draggable: true, filterable: true,  filterMode: 'text', accessor: (e) => (e.assignees ?? (e.assignedTo ? [e.assignedTo] : [])).map(a => a.name).join(', '), minWidth: 160 },
+    { key: 'approval',       label: 'Approval',       draggable: true, filterable: false, minWidth: 180 },
   ];
   // Risk Owner gets the Classify CTA; Auditor only sees the Action CTA.
   if (!isAuditor) {
@@ -530,6 +563,8 @@ function renderCell(
   onRequestDueDate?: (ex: GrcException) => void,
   onReviewDueDate?: (ex: GrcException) => void,
   onMarkComplete?: () => void,
+  assignment?: Assignment,
+  currentUserId?: string,
 ): React.ReactNode {
   // Overdue is dynamically derived from the action-plan due date set during
   // classification. The legacy `flags: ['Overdue']` array on the default mock
@@ -663,6 +698,25 @@ function renderCell(
       );
     case 'lastUpdated':
       return <span className="text-ink-500 text-[11.5px] tabular-nums whitespace-nowrap">{ex.lastUpdated}</span>;
+    case 'approval': {
+      // Status only — never an action surface. The work / review is done from
+      // the Classify and Action columns; the live chain shows inside those modals.
+      const meta = approvalCellMeta(assignment, currentUserId ?? '');
+      if (!meta) return (
+        <span title="This case has not been assigned to an approval route." className="inline-flex items-center h-6 px-2.5 text-[11px] font-medium rounded-full bg-[#F4F2F7] text-ink-500 whitespace-nowrap">
+          Not on a route
+        </span>
+      );
+      return (
+        <span
+          title={`${meta.label}${meta.yourTurn ? ' · your turn — act from the Classify / Action column' : ''}`}
+          className="inline-flex items-center gap-1.5 max-w-full min-w-0"
+        >
+          <span className={`inline-flex items-center h-6 px-2.5 text-[11px] font-semibold rounded-full truncate max-w-[140px] ${meta.cls}`}>{meta.label}</span>
+          {meta.yourTurn && <span className="inline-flex items-center h-5 px-1.5 text-[9px] font-bold uppercase tracking-wide bg-brand-600 text-white rounded-full shrink-0">You</span>}
+        </span>
+      );
+    }
     case 'assignedTo': {
       const allAssignees = ex.assignees ?? (ex.assignedTo ? [ex.assignedTo] : []);
       if (allAssignees.length > 1) {
@@ -1038,6 +1092,13 @@ export default function ExceptionsTable({
   const [pageSizeMenuOpen, setPageSizeMenuOpen] = useState(false);
 
   const { addToast } = useToast();
+  // Approval-route assignment per case (newest, non-recalled) for the Approval column.
+  const { assignments, currentUserId } = useWorkflow();
+  const assignmentByEx = useMemo(() => {
+    const m = new Map<string, Assignment>();
+    assignments.forEach(a => { if (a.status !== 'pulled-back' && !m.has(a.exceptionId)) m.set(a.exceptionId, a); });
+    return m;
+  }, [assignments]);
 
   // Filter Set + Export CSV menus
   const [filterSetOpen, setFilterSetOpen] = useState(false);
@@ -1565,6 +1626,8 @@ export default function ExceptionsTable({
                             onRequestDueDate,
                             onReviewDueDate,
                             () => onMarkComplete?.(ex),
+                            assignmentByEx.get(ex.id),
+                            currentUserId,
                           )}
                         </td>
                       );

@@ -5,18 +5,21 @@ import type {
 // ─── Org directory ───────────────────────────────────────────────────────
 // Risk-owner side and auditor side, each with one extra approver tier. One
 // user is inactive to demo the "assignee deactivated → needs reassignment" flag.
+// Two leads own their side and run approvals: Tushar Goel (Risk Owner) and
+// Deepak Bansal (Auditor). Each has a 4-person team they assign work / routes to.
 export const ORG_USERS: OrgUser[] = [
-  // Risk-owner side
-  { id: 'u-ro-1', name: 'Sneha Desai',  initials: 'SD', role: 'Risk Analyst',        email: 'sneha.desai@company.com',  persona: 'risk-owner', active: true },
-  { id: 'u-ro-2', name: 'Tushar Goel',  initials: 'TG', role: 'AP Manager',          email: 'tushar.goel@company.com',  persona: 'risk-owner', active: true },
-  { id: 'u-ro-3', name: 'Deepak Bansal', initials: 'DB', role: 'Finance Controller',  email: 'deepak.bansal@company.com', persona: 'risk-owner', active: true },
-  { id: 'u-ro-4', name: 'Neha Joshi',   initials: 'NJ', role: 'Compliance Lead',      email: 'neha.joshi@company.com',   persona: 'risk-owner', active: true },
-  { id: 'u-ro-5', name: 'Vikram Nair',  initials: 'VN', role: 'Process Owner',        email: 'vikram.nair@company.com',  persona: 'risk-owner', active: false },
-  // Auditor side
-  { id: 'u-au-1', name: 'Karan Mehta',  initials: 'KM', role: 'Audit Manager',        email: 'karan.mehta@company.com',  persona: 'auditor', active: true },
-  { id: 'u-au-2', name: 'Priya Mehta',  initials: 'PM', role: 'Senior Auditor',       email: 'priya.mehta@company.com',  persona: 'auditor', active: true },
-  { id: 'u-au-3', name: 'Anil Kapoor',  initials: 'AK', role: 'Engagement Partner',   email: 'anil.kapoor@company.com',  persona: 'auditor', active: true },
-  { id: 'u-au-4', name: 'Ritu Shah',    initials: 'RS', role: 'Audit Senior',         email: 'ritu.shah@company.com',    persona: 'auditor', active: true },
+  // ── Risk Owner side — Tushar leads; 4 team members ──
+  { id: 'u-ro-owner', name: 'Tushar Goel',  initials: 'TG', role: 'Risk Owner (Lead)', email: 'tushar.goel@company.com',  persona: 'risk-owner', active: true },
+  { id: 'u-ro-1', name: 'Sneha Desai',  initials: 'SD', role: 'Risk Analyst',       email: 'sneha.desai@company.com',  persona: 'risk-owner', active: true },
+  { id: 'u-ro-2', name: 'Neha Joshi',   initials: 'NJ', role: 'Compliance Lead',     email: 'neha.joshi@company.com',   persona: 'risk-owner', active: true },
+  { id: 'u-ro-3', name: 'Vikram Nair',  initials: 'VN', role: 'Process Owner',       email: 'vikram.nair@company.com',  persona: 'risk-owner', active: true },
+  { id: 'u-ro-4', name: 'Aarti Rao',    initials: 'AR', role: 'Risk Analyst',        email: 'aarti.rao@company.com',    persona: 'risk-owner', active: true },
+  // ── Auditor side — Deepak leads; 4 team members ──
+  { id: 'u-au-owner', name: 'Deepak Bansal', initials: 'DB', role: 'Auditor (Lead)', email: 'deepak.bansal@company.com', persona: 'auditor', active: true },
+  { id: 'u-au-1', name: 'Karan Mehta',  initials: 'KM', role: 'Audit Manager',       email: 'karan.mehta@company.com',  persona: 'auditor', active: true },
+  { id: 'u-au-2', name: 'Priya Mehta',  initials: 'PM', role: 'Senior Auditor',      email: 'priya.mehta@company.com',  persona: 'auditor', active: true },
+  { id: 'u-au-3', name: 'Anil Kapoor',  initials: 'AK', role: 'Engagement Partner',  email: 'anil.kapoor@company.com',  persona: 'auditor', active: true },
+  { id: 'u-au-4', name: 'Ritu Shah',    initials: 'RS', role: 'Audit Senior',        email: 'ritu.shah@company.com',    persona: 'auditor', active: true },
 ];
 
 export const userById = (id: string): OrgUser | undefined => ORG_USERS.find(u => u.id === id);
@@ -60,12 +63,12 @@ export const SEED_TEMPLATES: WorkflowTemplate[] = [
     persona: 'risk-owner',
     isDefault: true,
     version: 1,
-    createdBy: 'u-ro-4',
+    createdBy: 'u-ro-owner',
     createdAt: '2026-05-01T09:00:00.000Z',
     levels: [
-      { id: 'lvl-ro-1', name: 'L1 — Team Lead Review',     assigneeIds: ['u-ro-2'], mode: 'any', slaHours: 48, allowSendBack: true },
-      { id: 'lvl-ro-2', name: 'L2 — Finance Controller',   assigneeIds: ['u-ro-3'], mode: 'all', slaHours: 72, allowSendBack: true },
-      { id: 'lvl-ro-3', name: 'L3 — Compliance Sign-off',  assigneeIds: ['u-ro-4'], mode: 'any', slaHours: 96, allowSendBack: false },
+      { id: 'lvl-ro-1', name: 'L1 — Team Review',         assigneeIds: ['u-ro-2'],     mode: 'any', slaHours: 48, allowSendBack: true },
+      { id: 'lvl-ro-2', name: 'L2 — Process Owner',       assigneeIds: ['u-ro-3'],     mode: 'all', slaHours: 72, allowSendBack: true },
+      { id: 'lvl-ro-3', name: 'L3 — Risk Owner Sign-off', assigneeIds: ['u-ro-owner'], mode: 'any', slaHours: 96, allowSendBack: false },
     ],
   },
   {
@@ -74,11 +77,11 @@ export const SEED_TEMPLATES: WorkflowTemplate[] = [
     persona: 'auditor',
     isDefault: true,
     version: 1,
-    createdBy: 'u-au-1',
+    createdBy: 'u-au-owner',
     createdAt: '2026-05-02T09:00:00.000Z',
     levels: [
-      { id: 'lvl-au-1', name: 'L1 — Audit Manager',   assigneeIds: ['u-au-1'], mode: 'any', slaHours: 48, allowSendBack: true },
-      { id: 'lvl-au-2', name: 'L2 — Senior Partner',  assigneeIds: ['u-au-3'], mode: 'any', slaHours: 72, allowSendBack: false },
+      { id: 'lvl-au-1', name: 'L1 — Audit Manager',  assigneeIds: ['u-au-1'], mode: 'any', slaHours: 48, allowSendBack: true },
+      { id: 'lvl-au-2', name: 'L2 — Senior Partner', assigneeIds: ['u-au-3'], mode: 'any', slaHours: 72, allowSendBack: false },
     ],
   },
 ];
@@ -88,16 +91,32 @@ const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString
 const freshStates = (t: WorkflowTemplate): LevelState[] =>
   t.levels.map(l => ({ levelId: l.id, status: 'pending' as const, approvals: [] }));
 
+// Build the level states for a seeded assignment. Levels BELOW the current one
+// are marked approved (with an approval entry, so the inbox shows prior comments);
+// the current level is in-progress; a fully-approved assignment approves them all.
+function seedStates(template: WorkflowTemplate, currentLevelIndex: number, fullyApproved: boolean, baseHrs: number): LevelState[] {
+  const states = freshStates(template);
+  const approve = (i: number) => {
+    const lvl = template.levels[i];
+    if (!lvl || !states[i]) return;
+    states[i].status = 'approved';
+    states[i].approvals = lvl.assigneeIds.map(uid => ({ userId: uid, decision: 'approve' as const, comment: 'Reviewed and approved.', at: hoursAgo(Math.max(1, baseHrs - (i + 1) * 4)) }));
+  };
+  if (fullyApproved) {
+    template.levels.forEach((_, i) => approve(i));
+  } else if (currentLevelIndex >= 0) {
+    for (let i = 0; i < currentLevelIndex; i++) approve(i);
+    if (states[currentLevelIndex]) states[currentLevelIndex].status = 'in-progress';
+  }
+  return states;
+}
+
 function seedAssignment(
   partial: Pick<Assignment, 'id' | 'exceptionId' | 'assigneeId' | 'assignedBy' | 'status' | 'currentLevelIndex'> &
     Partial<Pick<Assignment, 'draft' | 'note'>>,
   template: WorkflowTemplate,
   assignedHoursAgo: number,
 ): Assignment {
-  const states = freshStates(template);
-  if (partial.currentLevelIndex >= 0 && states[partial.currentLevelIndex]) {
-    states[partial.currentLevelIndex].status = 'in-progress';
-  }
   return {
     id: partial.id,
     exceptionId: partial.exceptionId,
@@ -111,7 +130,7 @@ function seedAssignment(
     note: partial.note,
     status: partial.status,
     currentLevelIndex: partial.currentLevelIndex,
-    levelStates: states,
+    levelStates: seedStates(template, partial.currentLevelIndex, partial.status === 'approved', assignedHoursAgo),
     sendBackCount: 0,
     assignedBy: partial.assignedBy,
     assignedAt: hoursAgo(assignedHoursAgo),
@@ -119,26 +138,34 @@ function seedAssignment(
   };
 }
 
+const RO_ROUTE = SEED_TEMPLATES[0]; // L1 Tushar → L2 Deepak → L3 Neha
+const AU_ROUTE = SEED_TEMPLATES[1]; // L1 Karan → L2 Anil
+
+// Seeded in-flight assignments spanning the whole journey so all three tabs —
+// Exceptions (Approval column), Action Hub (Approval-routes KPIs) and Approval &
+// Configuration — show consistent, linked, end-to-end data. Risk-owner work is
+// done by Sneha (u-ro-1); auditor work by Ritu (u-au-4) — neither is an approver
+// on their chain, so the self-approval guard is respected.
 export const SEED_ASSIGNMENTS: Assignment[] = [
-  // Risk-owner: Sneha is still drafting EXC002.
-  seedAssignment(
-    { id: 'as-ro-1', exceptionId: 'EXC002', assigneeId: 'u-ro-1', assignedBy: 'u-ro-4', status: 'drafting', currentLevelIndex: -1, note: 'Please classify and draft a remediation plan for the unencrypted PII finding.' },
-    SEED_TEMPLATES[0], 6,
-  ),
-  // Risk-owner: EXC001 already submitted, awaiting L1 (Tushar). Past SLA → overdue.
-  seedAssignment(
-    {
-      id: 'as-ro-2', exceptionId: 'EXC001', assigneeId: 'u-ro-1', assignedBy: 'u-ro-4', status: 'in-approval', currentLevelIndex: 0,
-      draft: { classification: 'System Deficiency', actionName: 'Decommission legacy VPN endpoint', actionDetails: 'Retire the legacy endpoint and enforce SSO + MFA for remaining access paths.', dueDate: '2026-07-15' },
-    },
-    SEED_TEMPLATES[0], 52,
-  ),
-  // Auditor: EXC003 reviewed case routed through audit chain, awaiting L1 (Karan).
-  seedAssignment(
-    {
-      id: 'as-au-1', exceptionId: 'EXC003', assigneeId: 'u-au-4', assignedBy: 'u-au-1', status: 'in-approval', currentLevelIndex: 0,
-      draft: { actionReview: 'Approved', actionStatus: 'Implemented' },
-    },
-    SEED_TEMPLATES[1], 20,
-  ),
+  // ── Risk-owner route ──
+  // 1 · Drafting — Sneha's to classify + plan (EXC002).
+  seedAssignment({ id: 'as-ro-1', exceptionId: 'EXC002', assigneeId: 'u-ro-1', assignedBy: 'u-ro-owner', status: 'drafting', currentLevelIndex: -1, note: 'Please classify and draft a remediation plan for the unencrypted PII finding.' }, RO_ROUTE, 6),
+  // 2 · At L1 — awaiting Tushar (EXC001). Past SLA → overdue badge.
+  seedAssignment({ id: 'as-ro-2', exceptionId: 'EXC001', assigneeId: 'u-ro-1', assignedBy: 'u-ro-owner', status: 'in-approval', currentLevelIndex: 0, draft: { classification: 'System Deficiency', actionName: 'Decommission legacy VPN endpoint', actionDetails: 'Retire the legacy endpoint and enforce SSO + MFA for remaining access paths.', dueDate: '2026-07-15' } }, RO_ROUTE, 52),
+  // 3 · At L2 (L1 approved) — awaiting Deepak (EXC004).
+  seedAssignment({ id: 'as-ro-3', exceptionId: 'EXC004', assigneeId: 'u-ro-1', assignedBy: 'u-ro-owner', status: 'in-approval', currentLevelIndex: 1, draft: { classification: 'System Deficiency', actionName: 'Enforce FIDO2 MFA for C-suite', actionDetails: 'Issue hardware keys and remove the system-level MFA bypass.', dueDate: '2026-07-20' } }, RO_ROUTE, 34),
+  // 4 · At L3 (L1+L2 approved) — awaiting Neha (EXC005).
+  seedAssignment({ id: 'as-ro-4', exceptionId: 'EXC005', assigneeId: 'u-ro-1', assignedBy: 'u-ro-owner', status: 'in-approval', currentLevelIndex: 2, draft: { classification: 'Procedural Non-Compliance', actionName: 'Automate DSR SLA tracking', actionDetails: 'Add intake SLA timers with escalation before the 30-day limit.', dueDate: '2026-07-10' } }, RO_ROUTE, 44),
+  // 5 · Fully approved through the RO route (EXC006).
+  seedAssignment({ id: 'as-ro-5', exceptionId: 'EXC006', assigneeId: 'u-ro-1', assignedBy: 'u-ro-owner', status: 'approved', currentLevelIndex: RO_ROUTE.levels.length, draft: { classification: 'Design Deficiency', actionName: 'Daily automated reconciliation', actionDetails: 'Automated reconciliation with exception alerting now live.', dueDate: '2026-06-30' } }, RO_ROUTE, 96),
+  // 6 · Rejected — returned to Sneha to revise (EXC009).
+  seedAssignment({ id: 'as-ro-6', exceptionId: 'EXC009', assigneeId: 'u-ro-1', assignedBy: 'u-ro-owner', status: 'rejected', currentLevelIndex: -1, note: 'Re-check the terminated-contractor access list and resubmit with evidence.' }, RO_ROUTE, 18),
+
+  // ── Auditor route ──
+  // 7 · Drafting — Ritu records her verification (EXC012).
+  seedAssignment({ id: 'as-au-1', exceptionId: 'EXC012', assigneeId: 'u-au-owner', assignedBy: 'u-au-owner', status: 'drafting', currentLevelIndex: -1, note: 'Review the third-party data-sharing case and record your verification.' }, AU_ROUTE, 10),
+  // 8 · At L1 — awaiting Karan (EXC003).
+  seedAssignment({ id: 'as-au-2', exceptionId: 'EXC003', assigneeId: 'u-au-owner', assignedBy: 'u-au-owner', status: 'in-approval', currentLevelIndex: 0, draft: { actionReview: 'Approved', actionStatus: 'Implemented' } }, AU_ROUTE, 20),
+  // 9 · Fully approved through the auditor route (EXC010).
+  seedAssignment({ id: 'as-au-3', exceptionId: 'EXC010', assigneeId: 'u-au-owner', assignedBy: 'u-au-owner', status: 'approved', currentLevelIndex: AU_ROUTE.levels.length, draft: { actionReview: 'Approved', actionStatus: 'Implemented' } }, AU_ROUTE, 90),
 ];

@@ -24,6 +24,8 @@ import {
   Send,
 } from 'lucide-react';
 import { auditorReviewStage, type AuditorReviewStage } from './statusModel';
+import { useWorkflow } from './workflow/WorkflowContext';
+import WorkflowPipelineView from './workflow/WorkflowPipelineView';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
 import Gated from '../shared/Gated';
 import { useCan } from '../../context/CurrentUserContext';
@@ -216,6 +218,23 @@ export function ExceptionContext({
   );
 }
 
+/** Read-only approval-route chain for an action modal — shows where the case
+ *  sits in its route (who's done, who's pending) so the person taking the action
+ *  has the full picture. Display only; the action itself stays in the modal. */
+export function RouteChainNote({ exceptionId }: { exceptionId: string }) {
+  const { assignments } = useWorkflow();
+  const a = assignments.find(x => x.exceptionId === exceptionId && x.status !== 'pulled-back');
+  if (!a) return null;
+  return (
+    <div className="mb-5 rounded-[12px] border border-canvas-border bg-[#FAFAFB] p-4">
+      <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-3">
+        Approval route · {a.persona === 'auditor' ? 'Auditor' : 'Risk Owner'} side · {a.workflowName}
+      </div>
+      <WorkflowPipelineView assignment={a} />
+    </div>
+  );
+}
+
 // ── ModalShell — the unified, centered modal frame for every Exceptions/Action
 // Hub action. Replaces the former right-side slide panel. Supports a sticky
 // context bar, an optional wizard stepper, three widths, tabs, and a sticky
@@ -232,6 +251,7 @@ export function ModalShell({
   size = 'md',
   context,
   step,
+  routeChain,
 }: {
   title: string;
   subtitle?: string;
@@ -247,6 +267,9 @@ export function ModalShell({
   context?: React.ReactNode;
   /** Wizard stepper indicator (multi-step flows). */
   step?: { current: number; total: number; label?: string };
+  /** Read-only approval-route chain shown as a segregated section at the top of
+   *  the body (when the case is delegated through a route). Display only. */
+  routeChain?: React.ReactNode;
 }) {
   useModalChrome(onClose);
   return (
@@ -310,7 +333,7 @@ export function ModalShell({
           </div>
         )}
       </header>
-      <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+      <div className="flex-1 overflow-y-auto px-6 py-5">{routeChain}{children}</div>
       <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas-elevated flex items-center gap-2">
         {footer}
       </footer>
@@ -701,6 +724,7 @@ export function ReviewCaseDrawer({
       <Overlay onClick={onClose} />
       <ModalShell
         title={isPlanReview ? 'Review Management Action Plan' : isCompletionReview ? 'Review Completed Action' : isClassReview ? 'Review Classification' : 'Case Details'}
+        routeChain={<RouteChainNote exceptionId={exception.id} />}
         context={<ExceptionContext exception={exception} extra={
           <ContextChip label="Stage">{isPlanReview ? 'Plan review' : isCompletionReview ? 'Action review' : isClassReview ? 'Classification review' : 'View'}</ContextChip>
         } />}
@@ -1339,6 +1363,7 @@ export function ClassifyExceptionDrawer({
       <ModalShell
         title={isBulk ? 'Bulk Classify' : 'Classify Exception'}
         subtitle={isBulk ? `Apply one classification & action plan to ${linkedCases.length} linked cases` : undefined}
+        routeChain={isBulk ? undefined : <RouteChainNote exceptionId={exception.id} />}
         size={isBulk ? 'lg' : 'md'}
         step={totalSteps > 1 ? { current: step + 1, total: totalSteps, label: step === 0 ? 'Classify' : 'Action Plan' } : undefined}
         context={
