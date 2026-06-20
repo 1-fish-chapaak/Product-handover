@@ -6,10 +6,10 @@ import type {
 import { SEED_TEMPLATES, SEED_ASSIGNMENTS, userById, userName } from './workflowData';
 import { submit as engineSubmit, applyDecision } from './workflowEngine';
 
-// Bumped to v4 with the team remodel (Tushar leads Risk Owner, Deepak leads
-// Auditor, 4-person teams each) — a new key discards stale persisted state that
-// referenced the old user ids.
-const STORAGE_KEY = 'workflow-engine-v4';
+// Bumped to v5 with the 10-case demo seed (5 fully-mocked, 5 blank/unassigned) —
+// a new key discards stale persisted state that referenced removed cases
+// (EXC006/009/010/012) so the unassigned cases load clean for the Step 1 flow.
+const STORAGE_KEY = 'workflow-engine-v5';
 
 interface CreateAssignmentParams {
   exceptionIds: string[];
