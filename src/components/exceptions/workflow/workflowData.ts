@@ -68,7 +68,10 @@ export const SEED_TEMPLATES: WorkflowTemplate[] = [
     levels: [
       { id: 'lvl-ro-1', name: 'L1 — Team Review',         assigneeIds: ['u-ro-2'],     mode: 'any', slaHours: 48, allowSendBack: true },
       { id: 'lvl-ro-2', name: 'L2 — Process Owner',       assigneeIds: ['u-ro-3'],     mode: 'all', slaHours: 72, allowSendBack: true },
-      { id: 'lvl-ro-3', name: 'L3 — Risk Owner Sign-off', assigneeIds: ['u-ro-owner'], mode: 'any', slaHours: 96, allowSendBack: false },
+      { id: 'lvl-ro-3', name: 'L3 — Risk Owner Sign-off', assigneeIds: ['u-ro-owner'], mode: 'any', slaHours: 96, allowSendBack: true },
+      // Final gate: the management action plan must also clear the Auditor before
+      // it is approved (Step 4 — approved by all Risk Owners AND the Auditor).
+      { id: 'lvl-ro-4', name: 'L4 — Auditor Sign-off',    assigneeIds: ['u-au-owner'], mode: 'any', slaHours: 96, allowSendBack: true },
     ],
   },
   {
@@ -138,7 +141,7 @@ function seedAssignment(
   };
 }
 
-const RO_ROUTE = SEED_TEMPLATES[0]; // L1 Tushar → L2 Deepak → L3 Neha
+const RO_ROUTE = SEED_TEMPLATES[0]; // L1 Neha → L2 Vikram → L3 Tushar → L4 Deepak (Auditor)
 const AU_ROUTE = SEED_TEMPLATES[1]; // L1 Karan → L2 Anil
 
 // Seeded in-flight assignments on the FULLY-MOCKED cases only (EXC001, EXC003,

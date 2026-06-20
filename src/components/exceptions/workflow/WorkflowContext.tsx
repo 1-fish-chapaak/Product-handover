@@ -6,10 +6,10 @@ import type {
 import { SEED_TEMPLATES, SEED_ASSIGNMENTS, userById, userName } from './workflowData';
 import { submit as engineSubmit, applyDecision } from './workflowEngine';
 
-// Bumped to v5 with the 10-case demo seed (5 fully-mocked, 5 blank/unassigned) —
-// a new key discards stale persisted state that referenced removed cases
-// (EXC006/009/010/012) so the unassigned cases load clean for the Step 1 flow.
-const STORAGE_KEY = 'workflow-engine-v5';
+// Bumped to v6 — the RO route now ends with an Auditor sign-off level (L4), so a
+// new key discards stale persisted templates/assignments that still carried the
+// old 3-level route.
+const STORAGE_KEY = 'workflow-engine-v6';
 
 interface CreateAssignmentParams {
   exceptionIds: string[];
