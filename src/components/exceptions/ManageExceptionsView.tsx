@@ -737,13 +737,39 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     updateExceptions(prev => prev.map(e => {
       if (e.id !== a.exceptionId) return e;
       if (a.persona === 'risk-owner') {
+        // Second cycle: the Action Taken cleared the whole chain → case closed.
+        if (a.actionCycle) {
+          return {
+            ...e,
+            actionReview: 'Approved' as const,
+            actionPhase: undefined,
+            status: 'Closed' as const,
+            lastUpdated: today,
+          };
+        }
         const classification = (a.draft?.classification as GrcException['classification']) ?? e.classification;
+        // The whole chain (Risk Owner route → Auditor phase) has now approved.
+        if (!requiresActionPlan(classification)) {
+          // Business as Usual / False Positive → no action needed → case closed.
+          return {
+            ...e,
+            classification,
+            classificationReview: 'Approved' as const,
+            actionReview: 'Approved' as const,
+            actionPhase: undefined,
+            status: 'Closed' as const,
+            lastUpdated: today,
+          };
+        }
+        // Design/System Deficiency or Procedural Non-Compliance → the plan is
+        // approved; hand back to the Risk Owner who classified it to carry out the
+        // action (Action Taken), which then goes through review step by step.
         return {
           ...e,
           classification,
           classificationReview: 'Approved' as const,
-          actionReview: 'Pending' as const, // now available for Auditor review
-          actionPhase: requiresActionPlan(classification) ? ('plan-review' as const) : undefined,
+          actionReview: 'Pending' as const,
+          actionPhase: 'in-progress' as const,
           status: deriveStatus(classification, 'Pending', 'Pending'),
           dueDate: a.draft?.dueDate ?? e.dueDate,
           lastUpdated: today,
@@ -762,8 +788,26 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     }));
   };
 
+  // A route rejection reopens the case for the Risk Owner who classified it —
+  // same end-state as an auditor reject, so the Re-Classify CTA + editable classify
+  // drawer light up via the existing actionReview === 'Rejected' path.
+  const handleWorkflowReject = (a: Assignment) => {
+    const today = new Date().toISOString().slice(0, 10);
+    updateExceptions(prev => prev.map(e =>
+      e.id === a.exceptionId
+        ? {
+            ...e,
+            actionReview: 'Rejected' as const,
+            actionPhase: undefined,
+            status: deriveStatus(e.classification, 'Rejected', 'Discrepancy'),
+            lastUpdated: today,
+          }
+        : e
+    ));
+  };
+
   return (
-    <WorkflowProvider role={role} onFinalize={handleWorkflowFinalize}>
+    <WorkflowProvider role={role} onFinalize={handleWorkflowFinalize} onReject={handleWorkflowReject}>
     <div className="h-full w-full flex flex-col overflow-hidden bg-canvas">
       {/* Top chrome — only shown when standalone (Back button); hidden when embedded */}
       {!embedded && (
@@ -1331,6 +1375,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             key="action-drawer"
             exception={drawerException}
             role={role}
+            scopeIds={drawer?.scopeIds ?? [drawerException.id]}
             onPostComment={(text, attachment) => postComment(text, drawer?.scopeIds ?? [drawerException.id], attachment)}
             onClose={() => setDrawer(null)}
             onDecision={(decision, { implementation, comment }) => {

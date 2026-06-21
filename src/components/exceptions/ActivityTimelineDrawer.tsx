@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { motion } from 'motion/react';
 import { X, Paperclip } from 'lucide-react';
 import {
-  ACTION_HUB_TIMELINE,
+  GRC_CASE_DETAILS,
   type ActionHubEvent,
   type ActionHubActorRole,
 } from '../../data/mockData';
@@ -61,16 +61,48 @@ function TimelineEntry({ event }: { event: ActionHubEvent }) {
 }
 
 export default function ActivityTimelineDrawer({ onClose }: { onClose: () => void }) {
-  const timeline = ACTION_HUB_TIMELINE;
   const grouped = useMemo(() => {
+    const ROLES: ActionHubActorRole[] = ['Risk Owner', 'Auditor', 'Ira (AI)', 'System'];
+    const rel = (d: Date) => {
+      const mins = Math.round((Date.now() - d.getTime()) / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.round(mins / 60);
+      if (hrs < 24) return `${hrs}h ago`;
+      return `${Math.round(hrs / 24)}d ago`;
+    };
+    // Live feed: every activity-log entry across all cases, newest first — so it
+    // reflects the real flow (classify, approvals, handoff, action taken) as it runs.
+    const events: (ActionHubEvent & { sort: number })[] = [];
+    Object.entries(GRC_CASE_DETAILS).forEach(([exId, d]) => {
+      d.activityLog.forEach(e => {
+        const dt = new Date(e.timestamp);
+        const valid = !Number.isNaN(dt.getTime());
+        events.push({
+          id: e.id,
+          date: valid ? dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : e.timestamp,
+          time: valid ? dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '',
+          relative: valid ? rel(dt) : '',
+          actor: e.author,
+          role: (ROLES.includes(e.role as ActionHubActorRole) ? e.role : 'System') as ActionHubActorRole,
+          message: e.message,
+          exceptionId: exId,
+          comment: e.comment,
+          attachment: e.attachment,
+          sort: valid ? dt.getTime() : 0,
+        });
+      });
+    });
+    events.sort((a, b) => b.sort - a.sort);
     const groups: { date: string; events: ActionHubEvent[] }[] = [];
-    timeline.forEach(ev => {
+    events.forEach(ev => {
       const last = groups[groups.length - 1];
       if (last && last.date === ev.date) last.events.push(ev);
       else groups.push({ date: ev.date, events: [ev] });
     });
     return groups;
-  }, [timeline]);
+  }, []);
+  const totalEvents = grouped.reduce((n, g) => n + g.events.length, 0);
 
   return (
     <>
@@ -122,7 +154,7 @@ export default function ActivityTimelineDrawer({ onClose }: { onClose: () => voi
           ))}
         </div>
         <footer className="shrink-0 px-6 py-3 border-t border-canvas-border text-right text-[0.75rem] text-ink-500 tabular-nums">
-          {timeline.length} events
+          {totalEvents} events
         </footer>
       </motion.aside>
     </>

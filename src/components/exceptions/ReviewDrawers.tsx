@@ -26,7 +26,8 @@ import {
 } from 'lucide-react';
 import { auditorReviewStage, type AuditorReviewStage } from './statusModel';
 import { useWorkflow } from './workflow/WorkflowContext';
-import { canAct } from './workflow/workflowEngine';
+import { canAct, primaryAssignment } from './workflow/workflowEngine';
+import type { Assignment } from './workflow/workflowTypes';
 import WorkflowPipelineView from './workflow/WorkflowPipelineView';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
 import Gated from '../shared/Gated';
@@ -225,14 +226,54 @@ export function ExceptionContext({
  *  has the full picture. Display only; the action itself stays in the modal. */
 export function RouteChainNote({ exceptionId }: { exceptionId: string }) {
   const { assignments } = useWorkflow();
-  const a = assignments.find(x => x.exceptionId === exceptionId && x.status !== 'pulled-back');
+  const [open, setOpen] = useState(true);
+  const a = primaryAssignment(assignments, exceptionId);
   if (!a) return null;
   return (
     <div className="mb-5 rounded-[12px] border border-canvas-border bg-[#FAFAFB] p-4">
-      <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-3">
-        Approval route · {a.persona === 'auditor' ? 'Auditor' : 'Risk Owner'} side · {a.workflowName}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 cursor-pointer group"
+        aria-expanded={open}
+      >
+        <span className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 text-left">
+          Approval route · {a.persona === 'auditor' ? 'Auditor' : 'Risk Owner'} side · {a.workflowName}
+        </span>
+        <ChevronDown size={16} className={`shrink-0 text-ink-500 group-hover:text-ink-700 transition-transform ${open ? '' : '-rotate-90'}`} />
+      </button>
+      {open && (
+        <div className="mt-3">
+          <StackedRouteChains assignment={a} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Renders the full approval history as stacked chains: each completed cycle (e.g.
+ *  the plan approval) as its own finished chain, then the current cycle live. */
+export function StackedRouteChains({ assignment }: { assignment: Assignment }) {
+  const prior = assignment.priorCycles ?? [];
+  const currentLabel = assignment.actionCycle ? 'Action taken review' : 'Action plan approval';
+  return (
+    <div className="space-y-3">
+      {prior.map((pc, i) => (
+        <div key={i} className="rounded-[10px] border border-canvas-border bg-canvas-elevated p-3">
+          <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-2">{pc.label} · complete</div>
+          <WorkflowPipelineView assignment={{ ...assignment, levels: pc.levels, levelStates: pc.levelStates, status: 'approved', currentLevelIndex: pc.levels.length, priorCycles: undefined }} />
+        </div>
+      ))}
+      <div className={prior.length ? 'rounded-[10px] border border-canvas-border bg-canvas-elevated p-3' : ''}>
+        {prior.length > 0 && <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-2">{currentLabel}</div>}
+        <WorkflowPipelineView assignment={assignment} />
       </div>
-      <WorkflowPipelineView assignment={a} />
+      {/* Auditor route attached to this case but not yet started (pre-handoff). */}
+      {assignment.auditorRouteLevels && assignment.auditorRouteLevels.length > 0 && !assignment.auditorPhase && (
+        <div className="rounded-[10px] border border-dashed border-canvas-border bg-[#FAFAFB] p-3 text-[11.5px] text-ink-500">
+          Auditor route attached{assignment.auditorRouteName ? `: ${assignment.auditorRouteName}` : ''} — runs after the Risk Owner approvals complete.
+        </div>
+      )}
     </div>
   );
 }
@@ -581,6 +622,7 @@ export function ReviewClassificationDrawer({
   const detail = GRC_CASE_DETAILS[exception.id];
   const bulk = exception.bulkId ? GRC_BULK_ACTIONS[exception.bulkId] : null;
   const [comment, setComment] = useState('');
+  const [routeOpen, setRouteOpen] = useState(true);
   const isRiskOwner = role === 'risk-owner';
 
   // When the case is in an approval route and the acting user is a current-level
@@ -588,6 +630,9 @@ export function ReviewClassificationDrawer({
   // Owner on reject) instead of finalizing the case directly. The route governs.
   const { assignments, currentUserId, decide } = useWorkflow();
   const routeAssignment = assignments.find(a => a.exceptionId === exception.id && a.status === 'in-approval');
+  // Any assignment for this case (the in-approval one preferred) — used to show
+  // the submitted action plan and the route chain even after it's been approved.
+  const caseAssignment = routeAssignment ?? primaryAssignment(assignments, exception.id);
   const onRouteTurn = !!routeAssignment && canAct(routeAssignment, currentUserId).ok;
   const canSendBack = onRouteTurn && (routeAssignment?.currentLevelIndex ?? 0) > 0;
   const handleDecision = (decision: 'approve' | 'reject' | 'send-back') => {
@@ -607,7 +652,19 @@ export function ReviewClassificationDrawer({
         context={<ExceptionContext exception={exception} />}
         onClose={onClose}
         footer={
-          isRiskOwner ? (
+          (onRouteTurn || !isRiskOwner) ? (
+            // A current-level route approver (or the Auditor) decides here:
+            // Approve advances the route to the next reviewer; Reject returns to
+            // the first Risk Owner; Send back returns to the previous reviewer.
+            <FooterButtons
+              onCancel={onClose}
+              onReject={() => (onRouteTurn || canTriage) && handleDecision('reject')}
+              onApprove={() => (onRouteTurn || canTriage) && handleDecision('approve')}
+              onSendBack={canSendBack ? () => (onRouteTurn || canTriage) && handleDecision('send-back') : undefined}
+              disabled={!onRouteTurn && !canTriage}
+              disabledTitle="You don't have permission to review this submission"
+            />
+          ) : (
             <>
               <button
                 onClick={onClose}
@@ -622,18 +679,28 @@ export function ReviewClassificationDrawer({
                 Submit
               </button>
             </>
-          ) : (
-            <FooterButtons
-              onCancel={onClose}
-              onReject={() => canTriage && handleDecision('reject')}
-              onApprove={() => canTriage && handleDecision('approve')}
-              onSendBack={canSendBack ? () => canTriage && handleDecision('send-back') : undefined}
-              disabled={!canTriage}
-              disabledTitle="You don't have permission to review classifications"
-            />
           )
         }
       >
+        {caseAssignment && (
+          <div className="mb-5">
+            <button
+              type="button"
+              onClick={() => setRouteOpen(o => !o)}
+              className="w-full flex items-center justify-between mb-2 cursor-pointer group"
+              aria-expanded={routeOpen}
+            >
+              <SectionLabel>Approval Route</SectionLabel>
+              <ChevronDown size={16} className={`text-ink-500 group-hover:text-ink-700 transition-transform ${routeOpen ? '' : '-rotate-90'}`} />
+            </button>
+            {routeOpen && (
+              <div className="border border-canvas-border rounded-[12px] p-4">
+                <StackedRouteChains assignment={caseAssignment} />
+              </div>
+            )}
+          </div>
+        )}
+
         {bulk && (
           <div className="bg-brand-50/70 border border-brand-100 rounded-[12px] p-4 mb-5">
             <div className="flex items-center gap-2 text-[13px] font-semibold text-brand-700 mb-2">
@@ -656,6 +723,50 @@ export function ReviewClassificationDrawer({
             </Pill>
           </section>
         </div>
+
+        {caseAssignment?.draft && (caseAssignment.draft.actionName || caseAssignment.draft.actionDetails) && (
+          <div className="mb-5">
+            <section className="border border-canvas-border rounded-[12px] p-4">
+              <SectionLabel>Management Action Plan</SectionLabel>
+              {caseAssignment.draft.actionName && (
+                <h3 className="text-[14px] font-semibold text-ink-900 mb-1.5 leading-snug">
+                  <FileText size={14} className="inline mr-1.5 text-ink-500 -mt-0.5" />
+                  {caseAssignment.draft.actionName}
+                </h3>
+              )}
+              {caseAssignment.draft.dueDate && (
+                <div className="inline-flex items-center gap-1.5 text-[12px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
+                  <Calendar size={11} />
+                  Due {fmtPlanDate(caseAssignment.draft.dueDate)}
+                </div>
+              )}
+              {caseAssignment.draft.actionDetails && <p className="text-[12.5px] text-ink-700 leading-relaxed whitespace-pre-wrap">{caseAssignment.draft.actionDetails}</p>}
+            </section>
+          </div>
+        )}
+
+        {(detail?.completion || caseAssignment?.draft?.actionTaken) && (
+          <div className="mb-5">
+            <section className="border border-compliant/40 bg-compliant-50/40 rounded-[12px] p-4">
+              <SectionLabel>Risk Owner — Action Completed</SectionLabel>
+              {(detail?.completion?.selfAssessment || caseAssignment?.draft?.actionStatus) && (
+                <div className="mb-2.5">
+                  <span className="text-[11px] text-ink-500 mr-1.5">Risk Owner reports:</span>
+                  {(() => {
+                    const status = detail?.completion?.selfAssessment ?? caseAssignment?.draft?.actionStatus;
+                    return (
+                      <Pill className={status === 'Implemented' ? 'bg-compliant-50 text-compliant-700 border border-compliant/40' : 'bg-mitigated-50 text-mitigated-700 border border-mitigated/40'}>
+                        {status}
+                      </Pill>
+                    );
+                  })()}
+                </div>
+              )}
+              <p className="text-[12.5px] text-ink-700 leading-relaxed whitespace-pre-wrap">{detail?.completion?.note ?? caseAssignment?.draft?.actionTaken}</p>
+              {detail?.completion?.completedAt && <p className="text-[11px] text-ink-400 mt-2">Marked complete on {detail.completion.completedAt}</p>}
+            </section>
+          </div>
+        )}
 
         <div className="mb-5">
           <CaseCommentBox
@@ -682,6 +793,7 @@ export function ReviewCaseDrawer({
   onViewBulk,
   onPostComment,
   role,
+  scopeIds,
 }: {
   exception: GrcException;
   onClose: () => void;
@@ -693,6 +805,8 @@ export function ReviewCaseDrawer({
   /** Post a free-form comment to this case's thread (always-on channel). */
   onPostComment?: (text: string, attachment?: { name: string }) => void;
   role?: 'risk-owner' | 'auditor';
+  /** All cases this review applies to (bulk). Defaults to just the opened case. */
+  scopeIds?: string[];
 }) {
   const detail = GRC_CASE_DETAILS[exception.id];
   const bulk = exception.bulkId ? GRC_BULK_ACTIONS[exception.bulkId] : null;
@@ -701,14 +815,19 @@ export function ReviewCaseDrawer({
   const [comment, setComment] = useState('');
 
   // Route-aware decision: when the case is mid-approval and the acting user is a
-  // current-level approver, the decision advances the route engine (or sends to
-  // the first Risk Owner on reject) rather than finalizing the case directly.
+  // current-level approver, the decision drives the route engine for EVERY scoped
+  // case the user can act on (covers bulk review), rather than finalizing directly.
   const { assignments, currentUserId, decide } = useWorkflow();
+  const scope = scopeIds && scopeIds.length > 0 ? scopeIds : [exception.id];
   const routeAssignment = assignments.find(a => a.exceptionId === exception.id && a.status === 'in-approval');
   const onRouteTurn = !!routeAssignment && canAct(routeAssignment, currentUserId).ok;
+  // Every scoped case where the acting user is the current-level approver.
+  const actionableRoutes = () => scope
+    .map(id => assignments.find(a => a.exceptionId === id && a.status === 'in-approval'))
+    .filter((a): a is Assignment => !!a && canAct(a, currentUserId).ok);
   const submitDecision = (d: 'approve' | 'reject') => {
     if (routeAssignment && onRouteTurn) {
-      decide(routeAssignment.id, currentUserId, d, comment.trim());
+      actionableRoutes().forEach(a => decide(a.id, currentUserId, d, comment.trim()));
       onClose();
     } else {
       onDecision(d, { implementation, comment });
@@ -719,7 +838,7 @@ export function ReviewCaseDrawer({
   const canSendBack = onRouteTurn && (routeAssignment?.currentLevelIndex ?? 0) > 0;
   const sendBack = () => {
     if (routeAssignment && onRouteTurn) {
-      decide(routeAssignment.id, currentUserId, 'send-back', comment.trim());
+      actionableRoutes().forEach(a => decide(a.id, currentUserId, 'send-back', comment.trim()));
       onClose();
     }
   };
@@ -873,7 +992,7 @@ export function ReviewCaseDrawer({
               </section>
             </div>
 
-            {detail && (
+            {detail && actionable && (
               <section className="border border-canvas-border rounded-[12px] p-4 mb-4">
                 <SectionLabel>{detail.actionPlans && detail.actionPlans.length > 1 ? `Management Action Plans · ${detail.actionPlans.length}` : 'Management Action Plan'}</SectionLabel>
                 {detail.actionPlans && detail.actionPlans.length > 0 ? (
@@ -1082,6 +1201,17 @@ export function CompleteActionDrawer({
   linkedCases?: LinkedCaseRow[];
 }) {
   const detail = GRC_CASE_DETAILS[exception.id];
+  // The fully-approved plan assignment owned by this Risk Owner — submitting the
+  // Action Taken restarts the chain (RO route → Auditor phase) for the action
+  // review, so it's reviewed step by step before the case closes.
+  const { assignments, currentUserId, submitActionForReview } = useWorkflow();
+  // Every scoped case (this one + bulk-linked) whose plan is fully approved and is
+  // owned by the acting Risk Owner — so submitting the Action Taken restarts the
+  // chain for ALL of them, not just the opened case.
+  const completionScopeIds = linkedCases.length > 1 ? linkedCases.map(c => c.id) : [exception.id];
+  const completionRoutes = completionScopeIds
+    .map(id => assignments.find(a => a.exceptionId === id && a.status === 'approved' && a.assigneeId === currentUserId && !a.actionCycle))
+    .filter((a): a is Assignment => !!a);
   const [implementation, setImplementation] = useState<'Implemented' | 'Partially Implemented' | null>(detail?.completion?.selfAssessment ?? null);
   const [note, setNote] = useState(detail?.completion?.note ?? '');     // Action Taken — manual, no auto-fill
   const [comment, setComment] = useState('');
@@ -1122,7 +1252,13 @@ export function CompleteActionDrawer({
               Cancel
             </button>
             <button
-              onClick={() => { if (canSubmit && implementation) onSubmit({ note: note.trim(), evidence, implementation, comment: comment.trim() }); }}
+              onClick={() => {
+                if (!canSubmit || !implementation) return;
+                onSubmit({ note: note.trim(), evidence, implementation, comment: comment.trim() });
+                // Restart the approval chain to review the Action Taken for every
+                // scoped case. Stored separately from the plan so it's preserved.
+                completionRoutes.forEach(r => submitActionForReview(r.id, { actionTaken: note.trim(), actionStatus: implementation }));
+              }}
               disabled={!canSubmit}
               className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
                 canSubmit ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
@@ -1346,9 +1482,13 @@ export function ClassifyExceptionDrawer({
   // the classification + action plan submits it into the approval chain (Step 2 →
   // Step 4). Driven entirely from this existing modal — no new modal surface.
   const { assignments, currentUserId, submitForApproval } = useWorkflow();
-  const routeDraft = assignments.find(
-    a => a.exceptionId === exception.id && a.status === 'drafting' && a.assigneeId === currentUserId,
-  );
+  // Every scoped case (this one, plus any bulk-linked cases) whose drafting — or
+  // rejected — route is owned by the acting user, so saving a (re-)classification
+  // submits ALL of them into the approval chain, not just the opened case.
+  const scopeIds = linkedCases.length > 1 ? linkedCases.map(c => c.id) : [exception.id];
+  const routeDrafts = scopeIds
+    .map(id => assignments.find(a => a.exceptionId === id && (a.status === 'drafting' || a.status === 'rejected') && a.assigneeId === currentUserId))
+    .filter((a): a is Assignment => !!a);
   const [showLinked, setShowLinked] = useState(false);
   const [stepIdx, setStepIdx] = useState(0); // 0 = Classify, 1 = Action Plan
   const skippedTotal = (bulkSkipped?.awaitingReview ?? 0) + (bulkSkipped?.approved ?? 0);
@@ -1439,16 +1579,14 @@ export function ClassifyExceptionDrawer({
         ? actionPlans.map(p => ({ name: p.name.trim(), details: p.details.trim(), dueDate: p.dueDate }))
         : undefined,
     });
-    // Submit into the approval route when the acting user owns a drafting
-    // assignment — the chain then runs for the action plan (Step 4).
-    if (routeDraft) {
-      submitForApproval(routeDraft.id, {
-        classification,
-        actionName: firstPlan?.name.trim(),
-        actionDetails: firstPlan?.details.trim(),
-        dueDate: planDueDate,
-      });
-    }
+    // Submit every scoped case the acting user owns into its approval route — the
+    // chain then runs for the action plan (Step 4). Covers bulk classify too.
+    routeDrafts.forEach(rd => submitForApproval(rd.id, {
+      classification,
+      actionName: firstPlan?.name.trim(),
+      actionDetails: firstPlan?.details.trim(),
+      dueDate: planDueDate,
+    }));
   };
 
   return (
@@ -2499,6 +2637,10 @@ export function BulkReviewDrawer({
   onClose: () => void;
   onSubmit: (subs: BulkReviewSubmission[]) => void;
 }) {
+  // Route-aware: a reviewed case that is mid-approval and where the acting user is
+  // the current-level approver is driven through the route engine (it governs; the
+  // case is written back via onFinalize). Non-routed cases fall back to onSubmit.
+  const { assignments, currentUserId, decide } = useWorkflow();
   // ── Group MAP-wise ──────────────────────────────────────────────────────
   // Actionable cases group by their shared Actionable ID (one management action
   // plan → one decision). Non-actionable cases (Business as Usual / False
@@ -2609,9 +2751,21 @@ export function BulkReviewDrawer({
     decidedValid.forEach(g => {
       const st = decisions[g.key];
       const ids = new Set(scopeIds(g));
-      g.cases.filter(c => ids.has(c.id)).forEach(c => subs.push({ id: c.id, stage: g.stage, decision: st.decision as 'approve' | 'reject', implementation: st.implementation, comment: st.comment.trim() }));
+      g.cases.filter(c => ids.has(c.id)).forEach(c => {
+        const decision = st.decision as 'approve' | 'reject';
+        // Drive the route when this case is mid-approval and it's the user's turn —
+        // advancing / finalizing the chain (back to the Risk Owner on the final plan
+        // approval). Otherwise apply the plain lifecycle transition.
+        const route = assignments.find(a => a.exceptionId === c.id && a.status === 'in-approval');
+        if (route && canAct(route, currentUserId).ok) {
+          decide(route.id, currentUserId, decision, st.comment.trim());
+        } else {
+          subs.push({ id: c.id, stage: g.stage, decision, implementation: st.implementation, comment: st.comment.trim() });
+        }
+      });
     });
     onSubmit(subs);
+    onClose();
   };
 
   const skippedTotal = skipped.awaitingRiskOwner + skipped.alreadyReviewed;

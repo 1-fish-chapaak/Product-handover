@@ -42,7 +42,7 @@ import type { ExceptionRole } from '../../hooks/useAppState';
 import { unreadCommentCount } from './commentStore';
 import { useToast } from '../shared/Toast';
 import { useWorkflow } from './workflow/WorkflowContext';
-import { canAct, currentLevel } from './workflow/workflowEngine';
+import { canAct, currentLevel, primaryAssignment } from './workflow/workflowEngine';
 import { userName } from './workflow/workflowData';
 import type { Assignment } from './workflow/workflowTypes';
 
@@ -53,8 +53,23 @@ function approvalCellMeta(a: Assignment | undefined, currentUserId: string): { l
   const assignee = userName(a.assigneeId);
   const assigneeTurn = (a.status === 'drafting' || a.status === 'rejected') && currentUserId === a.assigneeId;
   const approverTurn = a.status === 'in-approval' && canAct(a, currentUserId).ok;
+  const cls = a.draft?.classification ?? '';
+  const actionable = cls === 'Design Deficiency' || cls === 'System Deficiency' || cls === 'Procedural Non-Compliance';
   switch (a.status) {
-    case 'approved':           return { label: 'Approved', cls: 'bg-compliant-50 text-compliant-700', yourTurn: false };
+    case 'approved': {
+      // Action Taken cleared the whole chain → case is closed.
+      if (a.actionCycle) {
+        const impl = a.draft?.actionStatus;
+        return { label: impl ? `Approved (${impl})` : 'Approved', cls: 'bg-compliant-50 text-compliant-700', yourTurn: false };
+      }
+      // Actionable plan approved but the case isn't closed yet — it's back with the
+      // Risk Owner to carry out the action. Keep a live status, not a flat Approved.
+      if (actionable) {
+        return { label: `Plan approved · action with ${assignee}`, cls: 'bg-evidence-50 text-evidence-700', yourTurn: currentUserId === a.assigneeId };
+      }
+      // BAU / False Positive — classification approved, case closed.
+      return { label: 'Approved', cls: 'bg-compliant-50 text-compliant-700', yourTurn: false };
+    }
     case 'rejected':           return { label: `Returned to ${assignee}`, cls: 'bg-risk-50 text-risk-700', yourTurn: assigneeTurn };
     case 'escalated':          return { label: 'Escalated to assigner', cls: 'bg-mitigated-50 text-mitigated-700', yourTurn: false };
     case 'needs-reassignment': return { label: 'Needs reassignment', cls: 'bg-risk-50 text-risk-700', yourTurn: false };
@@ -69,7 +84,11 @@ function approvalCellMeta(a: Assignment | undefined, currentUserId: string): { l
     default: {
       const lvl = currentLevel(a);
       const approvers = lvl ? lvl.assigneeIds.map(userName).join(', ') : '';
-      return { label: lvl ? `${lvl.name.split('—')[0].trim()} · ${approvers}` : 'In approval', cls: 'bg-brand-50 text-brand-700', yourTurn: approverTurn };
+      // Tag the cycle so reviewers know whether they're approving the plan or the
+      // action taken; the auditor phase already reads from the auditor level names.
+      const phaseTag = a.actionCycle ? 'Action review' : 'Plan review';
+      const base = lvl ? `${lvl.name.split('—')[0].trim()} · ${approvers}` : 'In approval';
+      return { label: `${base} · ${phaseTag}`, cls: 'bg-brand-50 text-brand-700', yourTurn: approverTurn };
     }
   }
 }
@@ -614,6 +633,19 @@ function renderCell(
   const routeApprovalTurn =
     !!assignment && assignment.status === 'in-approval' && !!currentUserId && canAct(assignment, currentUserId).ok;
 
+  // Triage ownership (before a route exists): the Auditor assigns a case to a Risk
+  // Owner, recorded in `assignees`. Only that owner classifies; other Risk Owners
+  // see View until the case is routed on to a specific work-assignee.
+  const triageOwnerNames = (ex.assignees ?? (ex.assignedTo ? [ex.assignedTo] : [])).map(a => a.name);
+  const isTriaged = triageOwnerNames.length > 0;
+  const isTriageOwner = !!currentUserId && triageOwnerNames.includes(userName(currentUserId));
+  // Read-only in the Classify column when the case belongs to someone else —
+  // either a route work-assignee, or a triage owner you are not.
+  const classifyLockedToOther = (onRoute && !isWorkAssignee) || (!onRoute && isTriaged && !isTriageOwner);
+  // A route rejection returns the case to the assignee (the person who classified
+  // it) to re-classify and resubmit.
+  const routeRejectedToMe = !!assignment && assignment.status === 'rejected' && isWorkAssignee;
+
   // Dynamic data column from the source-query output table.
   if (col.startsWith('data:')) {
     const name = col.slice(5);
@@ -800,16 +832,21 @@ function renderCell(
     }
     case 'classify': {
       let cta: React.ReactNode;
-      if (onRoute && !isWorkAssignee) {
-        // On a route, only the person the work was assigned to classifies; any
-        // approver (e.g. Tushar) sees View here — they act from the Action column.
-        cta = <GhostButton icon={<Eye size={12} />} onClick={onOpenClassification}>View</GhostButton>;
+      if (classifyLockedToOther) {
+        // The case belongs to another Risk Owner — the triage owner the Auditor
+        // assigned, or the route work-assignee. The current-level approver gets a
+        // Review CTA that opens the full action-review modal (plan + action taken +
+        // decision + ATR); everyone else is read-only (View).
+        cta = routeApprovalTurn
+          ? <PrimaryButton icon={<ClipboardCheck size={12} />} onClick={onOpenAction}>Review</PrimaryButton>
+          : <GhostButton icon={<Eye size={12} />} onClick={onOpenClassification}>View</GhostButton>;
       } else if (role === 'risk-owner') {
-        if (ex.classification === 'Unclassified') {
-          cta = <PrimaryButton icon={<Tag size={12} />} onClick={onOpenClassification}>Classify</PrimaryButton>;
-        } else if (ex.actionReview === 'Rejected') {
-          // Auditor rejected the action/plan (Discrepancy) → reopened for the Risk Owner.
+        if (routeRejectedToMe || ex.actionReview === 'Rejected') {
+          // Rejected in the approval route (or by the auditor) → reopened for the
+          // Risk Owner who classified it to re-classify and resubmit.
           cta = <PrimaryButton icon={<RotateCcw size={12} />} onClick={onOpenClassification}>Re-Classify</PrimaryButton>;
+        } else if (ex.classification === 'Unclassified') {
+          cta = <PrimaryButton icon={<Tag size={12} />} onClick={onOpenClassification}>Classify</PrimaryButton>;
         } else if (ex.actionPhase === 'in-progress') {
           // Plan accepted → Risk Owner implements, then marks the action complete (with evidence).
           cta = <PrimaryButton icon={<CheckCircle2 size={12} />} onClick={() => onMarkComplete?.()}>Mark Complete</PrimaryButton>;
@@ -827,14 +864,16 @@ function renderCell(
       const phase = ex.actionPhase;
       const actionableClass = ex.classification === 'Design Deficiency' || ex.classification === 'System Deficiency' || ex.classification === 'Procedural Non-Compliance';
       let cta: React.ReactNode;
-      // On a route, the current-level approver reviews the management action plan
-      // (or the completed action) — regardless of which role toggle is active.
-      // Everyone else on the route is read-only until it's their turn.
+      // On a route, the current-level approver reviews from here: the management
+      // action plan (actionable cases), the classification (non-actionable), or
+      // the completed action at the completion stage. Others are read-only.
       if (onRoute) {
         if (routeApprovalTurn) {
           cta = phase === 'completion-review'
             ? <PrimaryButton icon={<ArrowLeft size={12} className="rotate-180" />} onClick={onOpenAction}>Review Action</PrimaryButton>
-            : <PrimaryButton icon={<ClipboardCheck size={12} />} onClick={onOpenAction}>Review Plan</PrimaryButton>;
+            : actionableClass
+              ? <PrimaryButton icon={<ClipboardCheck size={12} />} onClick={onOpenAction}>Review Plan</PrimaryButton>
+              : <PrimaryButton icon={<ClipboardCheck size={12} />} onClick={onOpenAction}>Review</PrimaryButton>;
         } else {
           cta = <GhostButton icon={<Eye size={12} />} onClick={onOpenAction}>View</GhostButton>;
         }
@@ -1117,9 +1156,17 @@ export default function ExceptionsTable({
   const { addToast } = useToast();
   // Approval-route assignment per case (newest, non-recalled) for the Approval column.
   const { assignments, currentUserId } = useWorkflow();
+  // A case can carry two assignments — the Risk Owner's live lifecycle one and an
+  // auditor route the Auditor marked separately (a dormant route-holder until the
+  // handoff copies its levels in). The row shows ONE coherent status via the shared
+  // primaryAssignment selector (most-advanced in the chain, Risk Owner winning ties).
   const assignmentByEx = useMemo(() => {
     const m = new Map<string, Assignment>();
-    assignments.forEach(a => { if (a.status !== 'pulled-back' && !m.has(a.exceptionId)) m.set(a.exceptionId, a); });
+    assignments.forEach(a => {
+      if (m.has(a.exceptionId)) return;
+      const primary = primaryAssignment(assignments, a.exceptionId);
+      if (primary) m.set(a.exceptionId, primary);
+    });
     return m;
   }, [assignments]);
 

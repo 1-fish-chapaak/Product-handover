@@ -9,46 +9,62 @@ import { useToast } from '../../shared/Toast';
 import { UserSelect } from './UserPicker';
 import ColumnPermissionMatrix from './ColumnPermissionMatrix';
 import WorkflowPipelineView from './WorkflowPipelineView';
-import { CustomDatePicker } from '../../shared/CustomDatePicker';
+import { CaseCommentBox } from '../ReviewDrawers';
 import type { ColumnPermission } from './workflowTypes';
 
 /** Assign selected exceptions through a workflow with column-level RBAC.
  *  Invoked from the Exceptions table; reads the selected ids from context. */
 export default function AssignmentModal() {
-  const { assignmentModalIds, closeAssignment, templates, role, createAssignments, currentUserId } = useWorkflow();
+  const { assignmentModalIds, closeAssignment, templates, role, createAssignments, attachAuditorRoute, currentUserId } = useWorkflow();
   const { addToast } = useToast();
   const ref = useRef<HTMLDivElement>(null);
   useFocusTrap(ref, !!assignmentModalIds, closeAssignment);
 
   const ids = assignmentModalIds ?? [];
-  // Both sides' routes are selectable (grouped in the dropdown). The chosen route's
-  // persona — not the current role — decides which team the assignee comes from.
-  const roTemplates = useMemo(() => templates.filter(t => t.persona === 'risk-owner'), [templates]);
-  const auTemplates = useMemo(() => templates.filter(t => t.persona === 'auditor'), [templates]);
-  const [workflowId, setWorkflowId] = useState<string>(() => {
-    const mine = templates.filter(t => t.persona === role);
-    return mine.find(t => t.isDefault)?.id ?? mine[0]?.id ?? templates[0]?.id ?? '';
-  });
+  // Only the current side's routes are selectable — the Risk Owner screen shows
+  // Risk Owner routes, the Auditor screen shows Auditor routes.
+  const sideTemplates = useMemo(() => templates.filter(t => t.persona === role), [templates, role]);
+  const [workflowId, setWorkflowId] = useState<string>(() =>
+    sideTemplates.find(t => t.isDefault)?.id ?? sideTemplates[0]?.id ?? '',
+  );
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [perms, setPerms] = useState<ColumnPermission[]>(buildDefaultPermissions());
   const [note, setNote] = useState('');
-  const [dueDate, setDueDate] = useState('');
 
   if (!assignmentModalIds) return null;
-  const template = templates.find(t => t.id === workflowId);
+  // Always resolve to a route on the CURRENT side. If the saved selection is stale
+  // (e.g. the screen switched from Risk Owner to Auditor after this component
+  // mounted), fall back to this side's default so the dropdown, hint, chain and the
+  // "Assign work to" logic stay in sync with the side shown in the header.
+  const effectiveWorkflowId = sideTemplates.some(t => t.id === workflowId)
+    ? workflowId
+    : (sideTemplates.find(t => t.isDefault)?.id ?? sideTemplates[0]?.id ?? '');
+  const template = templates.find(t => t.id === effectiveWorkflowId);
   const personaUsers = usersForPersona(template?.persona ?? role);
 
+  // An Auditor route is a pure approval chain — there is no "work assignee" to
+  // pick. The assigning Auditor is recorded as the assignee so the chain can run;
+  // a Risk Owner route still picks the person who does the classify + action work.
+  const isAuditorSide = (template?.persona ?? role) === 'auditor';
+  const effectiveAssignee = isAuditorSide ? currentUserId : assigneeId;
+
   // RBAC: cannot assign work to a user who also approves it in the same chain.
-  const selfApproval = !!(assigneeId && template && userInApprovalChain(template.levels, assigneeId));
-  const assigneeInactive = !!(assigneeId && userById(assigneeId)?.active === false);
+  const selfApproval = !!(effectiveAssignee && template && userInApprovalChain(template.levels, effectiveAssignee));
+  const assigneeInactive = !!(effectiveAssignee && userById(effectiveAssignee)?.active === false);
   const visibleCount = perms.filter(p => p.visible).length;
-  const canAssign = !!template && !!assigneeId && !selfApproval && !assigneeInactive && visibleCount > 0;
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const canAssign = !!template && !!effectiveAssignee && !selfApproval && !assigneeInactive && visibleCount > 0;
 
   const assign = () => {
-    if (!canAssign || !template || !assigneeId) return;
-    createAssignments({ exceptionIds: ids, template, assigneeId, columnPermissions: perms, note: note.trim() || undefined, dueDate: dueDate || undefined, assignedBy: currentUserId });
-    addToast({ type: 'success', message: `${ids.length} exception${ids.length === 1 ? '' : 's'} assigned via "${template.name}".` });
+    if (!canAssign || !template || !effectiveAssignee) return;
+    if (isAuditorSide) {
+      // Auditor route attaches onto the case's existing record (one record) — it
+      // runs as the Auditor phase after the Risk Owner approvals complete.
+      attachAuditorRoute({ exceptionIds: ids, template, assignedBy: currentUserId, note: note.trim() || undefined });
+      addToast({ type: 'success', message: `Auditor route "${template.name}" attached to ${ids.length} case${ids.length === 1 ? '' : 's'} — runs after Risk Owner approvals.` });
+    } else {
+      createAssignments({ exceptionIds: ids, template, assigneeId: effectiveAssignee, columnPermissions: perms, note: note.trim() || undefined, assignedBy: currentUserId });
+      addToast({ type: 'success', message: `${ids.length} exception${ids.length === 1 ? '' : 's'} assigned via "${template.name}".` });
+    }
     closeAssignment();
   };
 
@@ -81,17 +97,8 @@ export default function AssignmentModal() {
               {templates.length === 0 ? (
                 <div className="text-[12px] text-mitigated-700 bg-mitigated-50 border border-mitigated/30 rounded-[8px] px-3 py-2">No approval routes yet — create one in the Route Configurator.</div>
               ) : (
-                <select value={workflowId} onChange={e => { setWorkflowId(e.target.value); setAssigneeId(null); }} className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-900 focus:outline-none focus:border-brand-600 cursor-pointer">
-                  {roTemplates.length > 0 && (
-                    <optgroup label="Risk Owner routes">
-                      {roTemplates.map(t => <option key={t.id} value={t.id}>{t.name}{t.isDefault ? ' (default)' : ''} · v{t.version}</option>)}
-                    </optgroup>
-                  )}
-                  {auTemplates.length > 0 && (
-                    <optgroup label="Auditor routes">
-                      {auTemplates.map(t => <option key={t.id} value={t.id}>{t.name}{t.isDefault ? ' (default)' : ''} · v{t.version}</option>)}
-                    </optgroup>
-                  )}
+                <select value={effectiveWorkflowId} onChange={e => { setWorkflowId(e.target.value); setAssigneeId(null); }} className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-900 focus:outline-none focus:border-brand-600 cursor-pointer">
+                  {sideTemplates.map(t => <option key={t.id} value={t.id}>{t.name}{t.isDefault ? ' (default)' : ''} · v{t.version}</option>)}
                 </select>
               )}
               {template && (
@@ -103,22 +110,22 @@ export default function AssignmentModal() {
               )}
             </div>
 
-            <div>
-              <label className="text-[12px] font-semibold text-ink-800 mb-1.5 block">Assign work to <span className="text-risk">*</span></label>
-              <UserSelect users={personaUsers} value={assigneeId} onChange={setAssigneeId} placeholder="Select a team member…" />
-              {selfApproval && <p className="mt-2 text-[11.5px] text-risk-700 inline-flex items-start gap-1.5"><AlertTriangle size={13} className="mt-px shrink-0" /> This user is also an approver in this route. A user can't approve their own work — pick someone else or adjust the chain.</p>}
-              {assigneeInactive && <p className="mt-2 text-[11.5px] text-risk-700 inline-flex items-start gap-1.5"><AlertTriangle size={13} className="mt-px shrink-0" /> This user is deactivated. Pick an active user.</p>}
-            </div>
+            {!isAuditorSide && (
+              <div>
+                <label className="text-[12px] font-semibold text-ink-800 mb-1.5 block">Assign work to <span className="text-risk">*</span></label>
+                <UserSelect users={personaUsers} value={assigneeId} onChange={setAssigneeId} placeholder="Select a team member…" />
+                {selfApproval && <p className="mt-2 text-[11.5px] text-risk-700 inline-flex items-start gap-1.5"><AlertTriangle size={13} className="mt-px shrink-0" /> This user is also an approver in this route. A user can't approve their own work — pick someone else or adjust the chain.</p>}
+                {assigneeInactive && <p className="mt-2 text-[11.5px] text-risk-700 inline-flex items-start gap-1.5"><AlertTriangle size={13} className="mt-px shrink-0" /> This user is deactivated. Pick an active user.</p>}
+              </div>
+            )}
 
-            <div>
-              <label className="text-[12px] font-semibold text-ink-800 mb-1.5 block">Instructions for assignee <span className="text-ink-400 font-normal">(optional)</span></label>
-              <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="What should the assignee do?" className="w-full resize-none p-2.5 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/15" />
-            </div>
-
-            <div>
-              <label className="text-[12px] font-semibold text-ink-800 mb-1.5 block">Assignment due date <span className="text-ink-400 font-normal">(optional)</span></label>
-              <div className="w-[200px]"><CustomDatePicker value={dueDate} onChange={setDueDate} minDate={todayIso} /></div>
-            </div>
+            <CaseCommentBox
+              value={note}
+              onChange={setNote}
+              label="Comment"
+              hint="(optional)"
+              placeholder="Add a comment for this exception — captured in the activity log…"
+            />
 
             {template && (
               <div className="rounded-[10px] border border-canvas-border bg-[#FAFAFB] p-3">
