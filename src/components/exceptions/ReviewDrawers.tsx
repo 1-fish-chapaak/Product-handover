@@ -22,8 +22,13 @@ import {
   ClipboardList,
   AlertTriangle,
   Send,
+  Undo2,
 } from 'lucide-react';
 import { auditorReviewStage, type AuditorReviewStage } from './statusModel';
+import { useWorkflow } from './workflow/WorkflowContext';
+import { canAct, primaryAssignment } from './workflow/workflowEngine';
+import type { Assignment } from './workflow/workflowTypes';
+import WorkflowPipelineView from './workflow/WorkflowPipelineView';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
 import Gated from '../shared/Gated';
 import { useCan } from '../../context/CurrentUserContext';
@@ -216,6 +221,63 @@ export function ExceptionContext({
   );
 }
 
+/** Read-only approval-route chain for an action modal — shows where the case
+ *  sits in its route (who's done, who's pending) so the person taking the action
+ *  has the full picture. Display only; the action itself stays in the modal. */
+export function RouteChainNote({ exceptionId }: { exceptionId: string }) {
+  const { assignments } = useWorkflow();
+  const [open, setOpen] = useState(true);
+  const a = primaryAssignment(assignments, exceptionId);
+  if (!a) return null;
+  return (
+    <div className="mb-5 rounded-[12px] border border-canvas-border bg-[#FAFAFB] p-4">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 cursor-pointer group"
+        aria-expanded={open}
+      >
+        <span className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 text-left">
+          Approval route · {a.persona === 'auditor' ? 'Auditor' : 'Risk Owner'} side · {a.workflowName}
+        </span>
+        <ChevronDown size={16} className={`shrink-0 text-ink-500 group-hover:text-ink-700 transition-transform ${open ? '' : '-rotate-90'}`} />
+      </button>
+      {open && (
+        <div className="mt-3">
+          <StackedRouteChains assignment={a} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Renders the full approval history as stacked chains: each completed cycle (e.g.
+ *  the plan approval) as its own finished chain, then the current cycle live. */
+export function StackedRouteChains({ assignment }: { assignment: Assignment }) {
+  const prior = assignment.priorCycles ?? [];
+  const currentLabel = assignment.actionCycle ? 'Action taken review' : 'Action plan approval';
+  return (
+    <div className="space-y-3">
+      {prior.map((pc, i) => (
+        <div key={i} className="rounded-[10px] border border-canvas-border bg-canvas-elevated p-3">
+          <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-2">{pc.label} · complete</div>
+          <WorkflowPipelineView assignment={{ ...assignment, levels: pc.levels, levelStates: pc.levelStates, status: 'approved', currentLevelIndex: pc.levels.length, priorCycles: undefined }} />
+        </div>
+      ))}
+      <div className={prior.length ? 'rounded-[10px] border border-canvas-border bg-canvas-elevated p-3' : ''}>
+        {prior.length > 0 && <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-2">{currentLabel}</div>}
+        <WorkflowPipelineView assignment={assignment} />
+      </div>
+      {/* Auditor route attached to this case but not yet started (pre-handoff). */}
+      {assignment.auditorRouteLevels && assignment.auditorRouteLevels.length > 0 && !assignment.auditorPhase && (
+        <div className="rounded-[10px] border border-dashed border-canvas-border bg-[#FAFAFB] p-3 text-[11.5px] text-ink-500">
+          Auditor route attached{assignment.auditorRouteName ? `: ${assignment.auditorRouteName}` : ''} — runs after the Risk Owner approvals complete.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── ModalShell — the unified, centered modal frame for every Exceptions/Action
 // Hub action. Replaces the former right-side slide panel. Supports a sticky
 // context bar, an optional wizard stepper, three widths, tabs, and a sticky
@@ -232,6 +294,7 @@ export function ModalShell({
   size = 'md',
   context,
   step,
+  routeChain,
 }: {
   title: string;
   subtitle?: string;
@@ -247,6 +310,9 @@ export function ModalShell({
   context?: React.ReactNode;
   /** Wizard stepper indicator (multi-step flows). */
   step?: { current: number; total: number; label?: string };
+  /** Read-only approval-route chain shown as a segregated section at the top of
+   *  the body (when the case is delegated through a route). Display only. */
+  routeChain?: React.ReactNode;
 }) {
   useModalChrome(onClose);
   return (
@@ -310,7 +376,7 @@ export function ModalShell({
           </div>
         )}
       </header>
-      <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+      <div className="flex-1 overflow-y-auto px-6 py-5">{routeChain}{children}</div>
       <footer className="shrink-0 px-6 py-4 border-t border-canvas-border bg-canvas-elevated flex items-center gap-2">
         {footer}
       </footer>
@@ -338,12 +404,15 @@ function FooterButtons({
   onCancel,
   onReject,
   onApprove,
+  onSendBack,
   disabled = false,
   disabledTitle,
 }: {
   onCancel: () => void;
   onReject: () => void;
   onApprove: () => void;
+  /** When set, a Send back action returns the work to the previous reviewer. */
+  onSendBack?: () => void;
   /** When set, Reject/Approve are greyed + inert (Cancel stays usable). */
   disabled?: boolean;
   disabledTitle?: string;
@@ -357,6 +426,17 @@ function FooterButtons({
       >
         Cancel
       </button>
+      {onSendBack && (
+        <button
+          onClick={onSendBack}
+          disabled={disabled}
+          title={disabled ? disabledTitle : 'Send back to the previous reviewer'}
+          className={`flex-1 h-10 text-[13px] font-semibold text-mitigated-700 bg-mitigated-50 hover:bg-mitigated-100 border border-mitigated/30 rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${decisionCls}`}
+        >
+          <Undo2 size={14} />
+          Send back
+        </button>
+      )}
       <button
         onClick={onReject}
         disabled={disabled}
@@ -542,7 +622,27 @@ export function ReviewClassificationDrawer({
   const detail = GRC_CASE_DETAILS[exception.id];
   const bulk = exception.bulkId ? GRC_BULK_ACTIONS[exception.bulkId] : null;
   const [comment, setComment] = useState('');
+  const [routeOpen, setRouteOpen] = useState(true);
   const isRiskOwner = role === 'risk-owner';
+
+  // When the case is in an approval route and the acting user is a current-level
+  // approver, the decision drives the route engine (advance / send to first Risk
+  // Owner on reject) instead of finalizing the case directly. The route governs.
+  const { assignments, currentUserId, decide } = useWorkflow();
+  const routeAssignment = assignments.find(a => a.exceptionId === exception.id && a.status === 'in-approval');
+  // Any assignment for this case (the in-approval one preferred) — used to show
+  // the submitted action plan and the route chain even after it's been approved.
+  const caseAssignment = routeAssignment ?? primaryAssignment(assignments, exception.id);
+  const onRouteTurn = !!routeAssignment && canAct(routeAssignment, currentUserId).ok;
+  const canSendBack = onRouteTurn && (routeAssignment?.currentLevelIndex ?? 0) > 0;
+  const handleDecision = (decision: 'approve' | 'reject' | 'send-back') => {
+    if (routeAssignment && onRouteTurn) {
+      decide(routeAssignment.id, currentUserId, decision, comment.trim());
+      onClose();
+    } else if (decision !== 'send-back') {
+      onDecision(decision);
+    }
+  };
 
   return (
     <>
@@ -552,7 +652,19 @@ export function ReviewClassificationDrawer({
         context={<ExceptionContext exception={exception} />}
         onClose={onClose}
         footer={
-          isRiskOwner ? (
+          (onRouteTurn || !isRiskOwner) ? (
+            // A current-level route approver (or the Auditor) decides here:
+            // Approve advances the route to the next reviewer; Reject returns to
+            // the first Risk Owner; Send back returns to the previous reviewer.
+            <FooterButtons
+              onCancel={onClose}
+              onReject={() => (onRouteTurn || canTriage) && handleDecision('reject')}
+              onApprove={() => (onRouteTurn || canTriage) && handleDecision('approve')}
+              onSendBack={canSendBack ? () => (onRouteTurn || canTriage) && handleDecision('send-back') : undefined}
+              disabled={!onRouteTurn && !canTriage}
+              disabledTitle="You don't have permission to review this submission"
+            />
+          ) : (
             <>
               <button
                 onClick={onClose}
@@ -567,17 +679,28 @@ export function ReviewClassificationDrawer({
                 Submit
               </button>
             </>
-          ) : (
-            <FooterButtons
-              onCancel={onClose}
-              onReject={() => canTriage && onDecision('reject')}
-              onApprove={() => canTriage && onDecision('approve')}
-              disabled={!canTriage}
-              disabledTitle="You don't have permission to review classifications"
-            />
           )
         }
       >
+        {caseAssignment && (
+          <div className="mb-5">
+            <button
+              type="button"
+              onClick={() => setRouteOpen(o => !o)}
+              className="w-full flex items-center justify-between mb-2 cursor-pointer group"
+              aria-expanded={routeOpen}
+            >
+              <SectionLabel>Approval Route</SectionLabel>
+              <ChevronDown size={16} className={`text-ink-500 group-hover:text-ink-700 transition-transform ${routeOpen ? '' : '-rotate-90'}`} />
+            </button>
+            {routeOpen && (
+              <div className="border border-canvas-border rounded-[12px] p-4">
+                <StackedRouteChains assignment={caseAssignment} />
+              </div>
+            )}
+          </div>
+        )}
+
         {bulk && (
           <div className="bg-brand-50/70 border border-brand-100 rounded-[12px] p-4 mb-5">
             <div className="flex items-center gap-2 text-[13px] font-semibold text-brand-700 mb-2">
@@ -600,6 +723,50 @@ export function ReviewClassificationDrawer({
             </Pill>
           </section>
         </div>
+
+        {caseAssignment?.draft && (caseAssignment.draft.actionName || caseAssignment.draft.actionDetails) && (
+          <div className="mb-5">
+            <section className="border border-canvas-border rounded-[12px] p-4">
+              <SectionLabel>Management Action Plan</SectionLabel>
+              {caseAssignment.draft.actionName && (
+                <h3 className="text-[14px] font-semibold text-ink-900 mb-1.5 leading-snug">
+                  <FileText size={14} className="inline mr-1.5 text-ink-500 -mt-0.5" />
+                  {caseAssignment.draft.actionName}
+                </h3>
+              )}
+              {caseAssignment.draft.dueDate && (
+                <div className="inline-flex items-center gap-1.5 text-[12px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
+                  <Calendar size={11} />
+                  Due {fmtPlanDate(caseAssignment.draft.dueDate)}
+                </div>
+              )}
+              {caseAssignment.draft.actionDetails && <p className="text-[12.5px] text-ink-700 leading-relaxed whitespace-pre-wrap">{caseAssignment.draft.actionDetails}</p>}
+            </section>
+          </div>
+        )}
+
+        {(detail?.completion || caseAssignment?.draft?.actionTaken) && (
+          <div className="mb-5">
+            <section className="border border-compliant/40 bg-compliant-50/40 rounded-[12px] p-4">
+              <SectionLabel>Risk Owner — Action Completed</SectionLabel>
+              {(detail?.completion?.selfAssessment || caseAssignment?.draft?.actionStatus) && (
+                <div className="mb-2.5">
+                  <span className="text-[11px] text-ink-500 mr-1.5">Risk Owner reports:</span>
+                  {(() => {
+                    const status = detail?.completion?.selfAssessment ?? caseAssignment?.draft?.actionStatus;
+                    return (
+                      <Pill className={status === 'Implemented' ? 'bg-compliant-50 text-compliant-700 border border-compliant/40' : 'bg-mitigated-50 text-mitigated-700 border border-mitigated/40'}>
+                        {status}
+                      </Pill>
+                    );
+                  })()}
+                </div>
+              )}
+              <p className="text-[12.5px] text-ink-700 leading-relaxed whitespace-pre-wrap">{detail?.completion?.note ?? caseAssignment?.draft?.actionTaken}</p>
+              {detail?.completion?.completedAt && <p className="text-[11px] text-ink-400 mt-2">Marked complete on {detail.completion.completedAt}</p>}
+            </section>
+          </div>
+        )}
 
         <div className="mb-5">
           <CaseCommentBox
@@ -626,6 +793,7 @@ export function ReviewCaseDrawer({
   onViewBulk,
   onPostComment,
   role,
+  scopeIds,
 }: {
   exception: GrcException;
   onClose: () => void;
@@ -637,12 +805,43 @@ export function ReviewCaseDrawer({
   /** Post a free-form comment to this case's thread (always-on channel). */
   onPostComment?: (text: string, attachment?: { name: string }) => void;
   role?: 'risk-owner' | 'auditor';
+  /** All cases this review applies to (bulk). Defaults to just the opened case. */
+  scopeIds?: string[];
 }) {
   const detail = GRC_CASE_DETAILS[exception.id];
   const bulk = exception.bulkId ? GRC_BULK_ACTIONS[exception.bulkId] : null;
   const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
   const [implementation, setImplementation] = useState<'Implemented' | 'Partially Implemented' | null>(null);
   const [comment, setComment] = useState('');
+
+  // Route-aware decision: when the case is mid-approval and the acting user is a
+  // current-level approver, the decision drives the route engine for EVERY scoped
+  // case the user can act on (covers bulk review), rather than finalizing directly.
+  const { assignments, currentUserId, decide } = useWorkflow();
+  const scope = scopeIds && scopeIds.length > 0 ? scopeIds : [exception.id];
+  const routeAssignment = assignments.find(a => a.exceptionId === exception.id && a.status === 'in-approval');
+  const onRouteTurn = !!routeAssignment && canAct(routeAssignment, currentUserId).ok;
+  // Every scoped case where the acting user is the current-level approver.
+  const actionableRoutes = () => scope
+    .map(id => assignments.find(a => a.exceptionId === id && a.status === 'in-approval'))
+    .filter((a): a is Assignment => !!a && canAct(a, currentUserId).ok);
+  const submitDecision = (d: 'approve' | 'reject') => {
+    if (routeAssignment && onRouteTurn) {
+      actionableRoutes().forEach(a => decide(a.id, currentUserId, d, comment.trim()));
+      onClose();
+    } else {
+      onDecision(d, { implementation, comment });
+    }
+  };
+  // Send back returns the work to the previous reviewer — only meaningful once
+  // the chain has advanced past its first level.
+  const canSendBack = onRouteTurn && (routeAssignment?.currentLevelIndex ?? 0) > 0;
+  const sendBack = () => {
+    if (routeAssignment && onRouteTurn) {
+      actionableRoutes().forEach(a => decide(a.id, currentUserId, 'send-back', comment.trim()));
+      onClose();
+    }
+  };
 
   const isAuditor = role === 'auditor';
   const actionable = ACTIONABLE_CLASSIFICATIONS.has(exception.classification);
@@ -655,9 +854,13 @@ export function ReviewCaseDrawer({
   //   classification    → Approve / Reject (Business as Usual / False Positive)
   // A classified, not-yet-reviewed actionable case with no explicit phase (legacy
   // data) defaults to the plan-review stage.
-  const isPlanReview = isAuditor && actionable && (phase === 'plan-review' || (!phase && exception.actionReview === 'Pending' && exception.classification !== 'Unclassified'));
-  const isCompletionReview = isAuditor && actionable && phase === 'completion-review';
-  const isClassReview = isAuditor && !actionable && exception.actionReview === 'Pending' && exception.classification !== 'Unclassified';
+  // A current-level route approver gets the same decision surface the Auditor has,
+  // so the people on the route (e.g. Neha, Vikram, Tushar) can approve / reject /
+  // send back the management action plan — not just view it.
+  const canReview = isAuditor || onRouteTurn;
+  const isPlanReview = canReview && actionable && (phase === 'plan-review' || (!phase && exception.actionReview === 'Pending' && exception.classification !== 'Unclassified'));
+  const isCompletionReview = canReview && actionable && phase === 'completion-review';
+  const isClassReview = canReview && !actionable && exception.actionReview === 'Pending' && exception.classification !== 'Unclassified';
   const needsDecision = isPlanReview || isCompletionReview || isClassReview;
   // Anything else (Risk Owner viewing, or an already-decided case) is read-only.
   const isViewMode = !needsDecision;
@@ -701,6 +904,7 @@ export function ReviewCaseDrawer({
       <Overlay onClick={onClose} />
       <ModalShell
         title={isPlanReview ? 'Review Management Action Plan' : isCompletionReview ? 'Review Completed Action' : isClassReview ? 'Review Classification' : 'Case Details'}
+        routeChain={<RouteChainNote exceptionId={exception.id} />}
         context={<ExceptionContext exception={exception} extra={
           <ContextChip label="Stage">{isPlanReview ? 'Plan review' : isCompletionReview ? 'Action review' : isClassReview ? 'Classification review' : 'View'}</ContextChip>
         } />}
@@ -713,16 +917,27 @@ export function ReviewCaseDrawer({
             >
               Cancel
             </button>
+            {canSendBack && !isViewMode && (
+              <button
+                onClick={sendBack}
+                title="Send back to the previous reviewer"
+                className="flex-1 h-10 text-[13px] font-semibold text-mitigated-700 bg-mitigated-50 hover:bg-mitigated-100 border border-mitigated/30 rounded-[8px] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Undo2 size={14} />
+                Send back
+              </button>
+            )}
             <button
               onClick={() => {
                 if (isViewMode) { onClose(); return; }
                 // The action review is the Auditor's decision (the Risk Owner
-                // classifies; the Auditor approves/rejects).
-                if (!isAuditor) return;
-                if (canSubmit && decision) onDecision(decision, { implementation, comment });
+                // classifies; the Auditor approves/rejects). On a route, a
+                // current-level approver of either side may act.
+                if (!isAuditor && !onRouteTurn) return;
+                if (canSubmit && decision) submitDecision(decision);
               }}
-              disabled={!canSubmit || (!isViewMode && !isAuditor)}
-              title={!isViewMode && !isAuditor ? 'Only the Auditor can submit a review decision' : undefined}
+              disabled={!canSubmit || (!isViewMode && !isAuditor && !onRouteTurn)}
+              title={!isViewMode && !isAuditor && !onRouteTurn ? 'Only the Auditor can submit a review decision' : undefined}
               className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
                 canSubmit
                   ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
@@ -777,7 +992,7 @@ export function ReviewCaseDrawer({
               </section>
             </div>
 
-            {detail && (
+            {detail && actionable && (
               <section className="border border-canvas-border rounded-[12px] p-4 mb-4">
                 <SectionLabel>{detail.actionPlans && detail.actionPlans.length > 1 ? `Management Action Plans · ${detail.actionPlans.length}` : 'Management Action Plan'}</SectionLabel>
                 {detail.actionPlans && detail.actionPlans.length > 0 ? (
@@ -986,6 +1201,20 @@ export function CompleteActionDrawer({
   linkedCases?: LinkedCaseRow[];
 }) {
   const detail = GRC_CASE_DETAILS[exception.id];
+  // The fully-approved plan assignment owned by this Risk Owner — submitting the
+  // Action Taken restarts the chain (RO route → Auditor phase) for the action
+  // review, so it's reviewed step by step before the case closes.
+  const { assignments, currentUserId, submitActionForReview } = useWorkflow();
+  // Every scoped case (this one + bulk-linked) whose plan is fully approved and is
+  // owned by the acting Risk Owner — so submitting the Action Taken restarts the
+  // chain for ALL of them, not just the opened case.
+  const completionScopeIds = linkedCases.length > 1 ? linkedCases.map(c => c.id) : [exception.id];
+  // The route to (re)submit the Action Taken into: the plan-approved one ready for
+  // action, OR an action-cycle assignment that was rejected and is being revised.
+  const completionRoutes = completionScopeIds
+    .map(id => assignments.find(a => a.exceptionId === id && a.assigneeId === currentUserId &&
+      ((a.status === 'approved' && !a.actionCycle) || (a.status === 'rejected' && a.actionCycle))))
+    .filter((a): a is Assignment => !!a);
   const [implementation, setImplementation] = useState<'Implemented' | 'Partially Implemented' | null>(detail?.completion?.selfAssessment ?? null);
   const [note, setNote] = useState(detail?.completion?.note ?? '');     // Action Taken — manual, no auto-fill
   const [comment, setComment] = useState('');
@@ -1026,7 +1255,13 @@ export function CompleteActionDrawer({
               Cancel
             </button>
             <button
-              onClick={() => { if (canSubmit && implementation) onSubmit({ note: note.trim(), evidence, implementation, comment: comment.trim() }); }}
+              onClick={() => {
+                if (!canSubmit || !implementation) return;
+                onSubmit({ note: note.trim(), evidence, implementation, comment: comment.trim() });
+                // Restart the approval chain to review the Action Taken for every
+                // scoped case. Stored separately from the plan so it's preserved.
+                completionRoutes.forEach(r => submitActionForReview(r.id, { actionTaken: note.trim(), actionStatus: implementation }));
+              }}
               disabled={!canSubmit}
               className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
                 canSubmit ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
@@ -1208,6 +1443,9 @@ interface ActionPlanDraft {
   name: string;
   details: string;
   dueDate: string;
+  /** A previously-rejected plan — shown read-only & marked Rejected; the user adds
+   *  a new plan via "+ Add Plan". */
+  locked?: boolean;
 }
 
 export function ClassifyExceptionDrawer({
@@ -1246,6 +1484,17 @@ export function ClassifyExceptionDrawer({
   bulkSkipped?: { awaitingReview: number; approved: number };
 }) {
   const isBulk = linkedCases.length > 1;
+  // If the acting user is the assignee of a drafting route for this case, saving
+  // the classification + action plan submits it into the approval chain (Step 2 →
+  // Step 4). Driven entirely from this existing modal — no new modal surface.
+  const { assignments, currentUserId, submitForApproval } = useWorkflow();
+  // Every scoped case (this one, plus any bulk-linked cases) whose drafting — or
+  // rejected — route is owned by the acting user, so saving a (re-)classification
+  // submits ALL of them into the approval chain, not just the opened case.
+  const scopeIds = linkedCases.length > 1 ? linkedCases.map(c => c.id) : [exception.id];
+  const routeDrafts = scopeIds
+    .map(id => assignments.find(a => a.exceptionId === id && (a.status === 'drafting' || a.status === 'rejected') && a.assigneeId === currentUserId))
+    .filter((a): a is Assignment => !!a);
   const [showLinked, setShowLinked] = useState(false);
   const [stepIdx, setStepIdx] = useState(0); // 0 = Classify, 1 = Action Plan
   const skippedTotal = (bulkSkipped?.awaitingReview ?? 0) + (bulkSkipped?.approved ?? 0);
@@ -1261,18 +1510,27 @@ export function ClassifyExceptionDrawer({
       ? reclassDetail.classificationJustification.replace(/^"|"$/g, '')
       : '',
   );
+  // The action PLAN was rejected (and no action was ever taken) → lock the rejected
+  // plan(s) and require a fresh plan. (Action-taken rejection is handled elsewhere,
+  // with the plan locked and the action taken revised.)
+  const planRejected = isReclassify && exception.actionReview === 'Rejected' && !reclassDetail?.completion;
   const [actionPlans, setActionPlans] = useState<ActionPlanDraft[]>(() => {
+    if (planRejected && reclassDetail?.actionPlans?.length) {
+      // Rejected plan(s) kept locked; a fresh editable plan is added for the new one.
+      const locked = reclassDetail.actionPlans.map((p, i) => ({ id: `ap-rej-${i + 1}`, name: p.name, details: p.details, dueDate: p.dueDate, locked: true }));
+      return [...locked, { id: 'ap-new-1', name: '', details: '', dueDate: '' }];
+    }
     if (isReclassify && reclassDetail?.actionPlans?.length) {
       return reclassDetail.actionPlans.map((p, i) => ({ id: `ap-${i + 1}`, name: p.name, details: p.details, dueDate: p.dueDate }));
     }
     return [{ id: 'ap-1', name: '', details: '', dueDate: '' }];
   });
-  const [expandedPlan, setExpandedPlan] = useState<string>('ap-1');
+  const [expandedPlan, setExpandedPlan] = useState<string>(planRejected ? 'ap-new-1' : 'ap-1');
   const [classificationOpen, setClassificationOpen] = useState(false);
   const classificationRef = useRef<HTMLDivElement>(null);
 
   const updatePlan = (id: string, patch: Partial<ActionPlanDraft>) =>
-    setActionPlans(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)));
+    setActionPlans(prev => prev.map(p => (p.id === id && !p.locked ? { ...p, ...patch } : p)));
   const addPlan = () => {
     const id = `ap-${Date.now()}`;
     setActionPlans(prev => [...prev, { id, name: '', details: '', dueDate: '' }]);
@@ -1306,12 +1564,14 @@ export function ClassifyExceptionDrawer({
   const requiresActionPlan = ACTIONABLE_CLASSIFICATIONS.has(classification);
 
   const canSave = useMemo(() => {
-    // Comment is optional — only classification (and an action plan when the
-    // classification requires one) are mandatory.
+    // Comment is optional — only classification (and a NEW action plan when the
+    // classification requires one) are mandatory. Locked (rejected) plans don't
+    // count — the user must add at least one fresh plan.
     if (!classification) return false;
     if (requiresActionPlan) {
-      if (actionPlans.length === 0) return false;
-      if (actionPlans.some(p => !p.name.trim() || !p.details.trim() || !p.dueDate)) return false;
+      const active = actionPlans.filter(p => !p.locked);
+      if (active.length === 0) return false;
+      if (active.some(p => !p.name.trim() || !p.details.trim() || !p.dueDate)) return false;
     }
     return true;
   }, [classification, requiresActionPlan, actionPlans]);
@@ -1321,17 +1581,32 @@ export function ClassifyExceptionDrawer({
   const totalSteps = requiresActionPlan ? 2 : 1;
   const step = Math.min(stepIdx, totalSteps - 1);
   const step1Valid = !!classification; // Step 1 needs a classification to proceed.
-  const doSave = () => canSave && onSave({
-    severity,
-    classification,
-    comment,
-    actionName: requiresActionPlan ? actionPlans[0]?.name.trim() : undefined,
-    actionTaken: requiresActionPlan ? actionPlans[0]?.details.trim() : undefined,
-    dueDate: requiresActionPlan ? actionPlans.find(p => p.dueDate)?.dueDate : undefined,
-    actionPlans: requiresActionPlan
-      ? actionPlans.map(p => ({ name: p.name.trim(), details: p.details.trim(), dueDate: p.dueDate }))
-      : undefined,
-  });
+  const doSave = () => {
+    if (!canSave) return;
+    // Only the new (non-locked) plans go forward — the rejected ones stay history.
+    const active = requiresActionPlan ? actionPlans.filter(p => !p.locked) : [];
+    const firstPlan = active[0];
+    const planDueDate = active.find(p => p.dueDate)?.dueDate;
+    onSave({
+      severity,
+      classification,
+      comment,
+      actionName: firstPlan?.name.trim(),
+      actionTaken: firstPlan?.details.trim(),
+      dueDate: planDueDate,
+      actionPlans: requiresActionPlan
+        ? active.map(p => ({ name: p.name.trim(), details: p.details.trim(), dueDate: p.dueDate }))
+        : undefined,
+    });
+    // Submit every scoped case the acting user owns into its approval route — the
+    // chain then runs for the action plan (Step 4). Covers bulk classify too.
+    routeDrafts.forEach(rd => submitForApproval(rd.id, {
+      classification,
+      actionName: firstPlan?.name.trim(),
+      actionDetails: firstPlan?.details.trim(),
+      dueDate: planDueDate,
+    }));
+  };
 
   return (
     <>
@@ -1339,6 +1614,7 @@ export function ClassifyExceptionDrawer({
       <ModalShell
         title={isBulk ? 'Bulk Classify' : 'Classify Exception'}
         subtitle={isBulk ? `Apply one classification & action plan to ${linkedCases.length} linked cases` : undefined}
+        routeChain={isBulk ? undefined : <RouteChainNote exceptionId={exception.id} />}
         size={isBulk ? 'lg' : 'md'}
         step={totalSteps > 1 ? { current: step + 1, total: totalSteps, label: step === 0 ? 'Classify' : 'Action Plan' } : undefined}
         context={
@@ -1562,19 +1838,21 @@ export function ClassifyExceptionDrawer({
                         aria-expanded={open}
                         className="flex-1 min-w-0 flex items-center gap-2.5 text-left cursor-pointer h-full"
                       >
-                        <span className="shrink-0 w-5 h-5 rounded-full bg-brand-50 text-brand-700 text-[11px] font-bold flex items-center justify-center tabular-nums">
+                        <span className={`shrink-0 w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center tabular-nums ${plan.locked ? 'bg-risk-50 text-risk-700' : 'bg-brand-50 text-brand-700'}`}>
                           {idx + 1}
                         </span>
-                        <span className="flex-1 min-w-0 truncate text-[13px] font-semibold text-ink-800">
+                        <span className={`flex-1 min-w-0 truncate text-[13px] font-semibold ${plan.locked ? 'text-ink-500 line-through' : 'text-ink-800'}`}>
                           {plan.name.trim() || `Management Action Plan ${idx + 1}`}
                         </span>
-                        {plan.dueDate && (
+                        {plan.locked ? (
+                          <span className="inline-flex items-center h-5 px-1.5 text-[9px] font-bold uppercase tracking-wide bg-risk-50 text-risk-700 rounded-full shrink-0">Rejected</span>
+                        ) : plan.dueDate && (
                           <span className="hidden sm:inline-flex items-center gap-1 h-6 px-2 text-[11px] text-brand-700 bg-brand-50 rounded-full shrink-0 tabular-nums">
                             <Calendar size={10} />
                             {plan.dueDate}
                           </span>
                         )}
-                        {!complete && (
+                        {!plan.locked && !complete && (
                           <span
                             className="w-1.5 h-1.5 rounded-full bg-mitigated shrink-0"
                             title="Incomplete — fill in all required fields"
@@ -1586,7 +1864,7 @@ export function ClassifyExceptionDrawer({
                           className={`text-ink-400 transition-transform duration-150 shrink-0 ${open ? 'rotate-180' : ''}`}
                         />
                       </button>
-                      {actionPlans.length > 1 && (
+                      {actionPlans.length > 1 && !plan.locked && (
                         <button
                           type="button"
                           onClick={() => removePlan(plan.id)}
@@ -1617,8 +1895,9 @@ export function ClassifyExceptionDrawer({
                               <input
                                 value={plan.name}
                                 onChange={(e) => updatePlan(plan.id, { name: e.target.value })}
+                                disabled={plan.locked}
                                 placeholder="e.g. MFA enforcement for executive accounts"
-                                className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                                className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 disabled:bg-[#F4F2F7] disabled:text-ink-500 disabled:cursor-not-allowed"
                               />
                             </div>
 
@@ -1630,9 +1909,10 @@ export function ClassifyExceptionDrawer({
                                 <textarea
                                   value={plan.details}
                                   onChange={(e) => updatePlan(plan.id, { details: e.target.value })}
+                                  disabled={plan.locked}
                                   rows={4}
                                   placeholder="Describe the remediation steps, evidence, and rollout plan…"
-                                  className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                                  className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 disabled:bg-[#F4F2F7] disabled:text-ink-500 disabled:cursor-not-allowed"
                                 />
                                 <button
                                   type="button"
@@ -1650,11 +1930,15 @@ export function ClassifyExceptionDrawer({
                                 Due Date <span className="text-risk">*</span>
                               </label>
                               <div className="w-[220px]">
-                                <CustomDatePicker
-                                  value={plan.dueDate}
-                                  onChange={(v) => updatePlan(plan.id, { dueDate: v })}
-                                  minDate={todayIso}
-                                />
+                                {plan.locked ? (
+                                  <div className="h-10 px-3 flex items-center bg-[#F4F2F7] border border-canvas-border rounded-[8px] text-[13px] text-ink-500 tabular-nums">{plan.dueDate || '—'}</div>
+                                ) : (
+                                  <CustomDatePicker
+                                    value={plan.dueDate}
+                                    onChange={(v) => updatePlan(plan.id, { dueDate: v })}
+                                    minDate={todayIso}
+                                  />
+                                )}
                               </div>
                             </div>
                           </div>
@@ -2380,6 +2664,10 @@ export function BulkReviewDrawer({
   onClose: () => void;
   onSubmit: (subs: BulkReviewSubmission[]) => void;
 }) {
+  // Route-aware: a reviewed case that is mid-approval and where the acting user is
+  // the current-level approver is driven through the route engine (it governs; the
+  // case is written back via onFinalize). Non-routed cases fall back to onSubmit.
+  const { assignments, currentUserId, decide } = useWorkflow();
   // ── Group MAP-wise ──────────────────────────────────────────────────────
   // Actionable cases group by their shared Actionable ID (one management action
   // plan → one decision). Non-actionable cases (Business as Usual / False
@@ -2490,9 +2778,21 @@ export function BulkReviewDrawer({
     decidedValid.forEach(g => {
       const st = decisions[g.key];
       const ids = new Set(scopeIds(g));
-      g.cases.filter(c => ids.has(c.id)).forEach(c => subs.push({ id: c.id, stage: g.stage, decision: st.decision as 'approve' | 'reject', implementation: st.implementation, comment: st.comment.trim() }));
+      g.cases.filter(c => ids.has(c.id)).forEach(c => {
+        const decision = st.decision as 'approve' | 'reject';
+        // Drive the route when this case is mid-approval and it's the user's turn —
+        // advancing / finalizing the chain (back to the Risk Owner on the final plan
+        // approval). Otherwise apply the plain lifecycle transition.
+        const route = assignments.find(a => a.exceptionId === c.id && a.status === 'in-approval');
+        if (route && canAct(route, currentUserId).ok) {
+          decide(route.id, currentUserId, decision, st.comment.trim());
+        } else {
+          subs.push({ id: c.id, stage: g.stage, decision, implementation: st.implementation, comment: st.comment.trim() });
+        }
+      });
     });
     onSubmit(subs);
+    onClose();
   };
 
   const skippedTotal = skipped.awaitingRiskOwner + skipped.alreadyReviewed;

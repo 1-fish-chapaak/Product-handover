@@ -23,7 +23,7 @@ export default function WorkflowAssignButton({ selectedIds }: { selectedIds: str
       }`}
     >
       <GitBranch size={13} />
-      Assign to Route
+      Send for Approval
       {active && (
         <span className="inline-flex items-center h-5 min-w-5 px-1 text-[10.5px] font-semibold bg-brand-50 rounded-full tabular-nums">{selectedIds.length}</span>
       )}
