@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Calendar, Lightbulb } from 'lucide-react';
+import { Calendar, Lightbulb, PenLine, Eye } from 'lucide-react';
 import type {
   AtrMeta, AtrObservation, AtrActionPlan, AtrInsight,
   AtrClassification, AtrObservationStatus, AtrActionStatus,
@@ -45,6 +45,7 @@ const SECTION_ID: Record<AtrSectionKey, string> = {
   process: 'section-atr-obs-summary',
   details: 'section-atr-obs-details',
   insights: 'section-atr-insights',
+  signoff: 'section-atr-signoff',
 };
 
 function fmt(iso?: string): string {
@@ -248,6 +249,34 @@ export default function AtrDocument({
             </div>
           ))}
         </div>
+      </>
+    ),
+    signoff: n => (
+      <>
+        <NumberedHeading n={n} title="Approvals & Sign-Off" subtitle="Digital authorisation of this Action Taken Report" />
+        <div className="grid grid-cols-2 gap-4">
+          {[
+            { Icon: PenLine, role: 'Prepared by', name: meta.preparedBy },
+            { Icon: Eye, role: 'Reviewed by', name: meta.reviewedBy ?? '' },
+          ].map(c => (
+            <div key={c.role} className="rounded-[10px] border border-canvas-border p-5">
+              <div className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-3">
+                <c.Icon size={12} /> {c.role}
+              </div>
+              {c.name ? (
+                <div className="text-[0.8125rem] font-bold text-ink-900 leading-tight mb-5">{c.name}</div>
+              ) : (
+                <div className="h-5 mb-5" />
+              )}
+              <div className="border-t border-dashed border-canvas-border pt-2.5">
+                <div className="text-[0.6875rem] italic text-ink-500 text-center">Signature / Digital Approval</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {meta.generatedOn && (
+          <div className="text-center text-[0.75rem] text-ink-500 mt-5">Date of Sign-Off: <span className="font-semibold text-ink-700">{meta.generatedOn}</span></div>
+        )}
       </>
     ),
   };
