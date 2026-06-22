@@ -9,7 +9,7 @@ import AssignmentsAdmin from './AssignmentsAdmin';
 type SubView = 'configurator' | 'assignments';
 
 const SUBVIEWS: { id: SubView; label: string; icon: typeof Settings2 }[] = [
-  { id: 'configurator', label: 'Route Configurator', icon: Settings2 },
+  { id: 'configurator', label: 'Approval Routes', icon: Settings2 },
   { id: 'assignments', label: 'Assignments', icon: ClipboardList },
 ];
 

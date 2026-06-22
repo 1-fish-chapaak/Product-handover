@@ -76,13 +76,13 @@ export default function AssignmentModal() {
         initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
         className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[920px] max-w-[94vw] max-h-[90vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[90] flex flex-col"
-        role="dialog" aria-modal="true" aria-label="Assign to approval route" tabIndex={-1}
+        role="dialog" aria-modal="true" aria-label="Send for approval" tabIndex={-1}
       >
         <header className="shrink-0 px-6 py-3 flex items-center justify-between gap-4 border-b border-canvas-border">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center"><UserPlus size={16} /></div>
             <div>
-              <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Assign to Approval Route</h2>
+              <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Send for Approval</h2>
               <p className="text-[0.75rem] text-ink-500">{ids.length} exception{ids.length === 1 ? '' : 's'} · {role === 'auditor' ? 'Auditor' : 'Risk Owner'} side</p>
             </div>
           </div>
@@ -95,7 +95,7 @@ export default function AssignmentModal() {
             <div>
               <label className="text-[12px] font-semibold text-ink-800 mb-1.5 block">Approval Route <span className="text-risk">*</span></label>
               {templates.length === 0 ? (
-                <div className="text-[12px] text-mitigated-700 bg-mitigated-50 border border-mitigated/30 rounded-[8px] px-3 py-2">No approval routes yet — create one in the Route Configurator.</div>
+                <div className="text-[12px] text-mitigated-700 bg-mitigated-50 border border-mitigated/30 rounded-[8px] px-3 py-2">No approval routes yet — create one in Approval Routes.</div>
               ) : (
                 <select value={effectiveWorkflowId} onChange={e => { setWorkflowId(e.target.value); setAssigneeId(null); }} className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-900 focus:outline-none focus:border-brand-600 cursor-pointer">
                   {sideTemplates.map(t => <option key={t.id} value={t.id}>{t.name}{t.isDefault ? ' (default)' : ''} · v{t.version}</option>)}
@@ -149,7 +149,7 @@ export default function AssignmentModal() {
           <div className="flex items-center gap-2">
             <button onClick={closeAssignment} className="h-10 px-5 text-[12.5px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 cursor-pointer">Cancel</button>
             <button onClick={assign} disabled={!canAssign} className="h-10 px-5 inline-flex items-center gap-2 text-[12.5px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-              <GitBranch size={14} /> Assign {ids.length} to Route
+              <GitBranch size={14} /> Send {ids.length} for Approval
             </button>
           </div>
         </footer>

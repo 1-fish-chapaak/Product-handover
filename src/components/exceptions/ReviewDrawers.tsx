@@ -1209,8 +1209,11 @@ export function CompleteActionDrawer({
   // owned by the acting Risk Owner — so submitting the Action Taken restarts the
   // chain for ALL of them, not just the opened case.
   const completionScopeIds = linkedCases.length > 1 ? linkedCases.map(c => c.id) : [exception.id];
+  // The route to (re)submit the Action Taken into: the plan-approved one ready for
+  // action, OR an action-cycle assignment that was rejected and is being revised.
   const completionRoutes = completionScopeIds
-    .map(id => assignments.find(a => a.exceptionId === id && a.status === 'approved' && a.assigneeId === currentUserId && !a.actionCycle))
+    .map(id => assignments.find(a => a.exceptionId === id && a.assigneeId === currentUserId &&
+      ((a.status === 'approved' && !a.actionCycle) || (a.status === 'rejected' && a.actionCycle))))
     .filter((a): a is Assignment => !!a);
   const [implementation, setImplementation] = useState<'Implemented' | 'Partially Implemented' | null>(detail?.completion?.selfAssessment ?? null);
   const [note, setNote] = useState(detail?.completion?.note ?? '');     // Action Taken — manual, no auto-fill
@@ -1440,6 +1443,9 @@ interface ActionPlanDraft {
   name: string;
   details: string;
   dueDate: string;
+  /** A previously-rejected plan — shown read-only & marked Rejected; the user adds
+   *  a new plan via "+ Add Plan". */
+  locked?: boolean;
 }
 
 export function ClassifyExceptionDrawer({
@@ -1504,18 +1510,27 @@ export function ClassifyExceptionDrawer({
       ? reclassDetail.classificationJustification.replace(/^"|"$/g, '')
       : '',
   );
+  // The action PLAN was rejected (and no action was ever taken) → lock the rejected
+  // plan(s) and require a fresh plan. (Action-taken rejection is handled elsewhere,
+  // with the plan locked and the action taken revised.)
+  const planRejected = isReclassify && exception.actionReview === 'Rejected' && !reclassDetail?.completion;
   const [actionPlans, setActionPlans] = useState<ActionPlanDraft[]>(() => {
+    if (planRejected && reclassDetail?.actionPlans?.length) {
+      // Rejected plan(s) kept locked; a fresh editable plan is added for the new one.
+      const locked = reclassDetail.actionPlans.map((p, i) => ({ id: `ap-rej-${i + 1}`, name: p.name, details: p.details, dueDate: p.dueDate, locked: true }));
+      return [...locked, { id: 'ap-new-1', name: '', details: '', dueDate: '' }];
+    }
     if (isReclassify && reclassDetail?.actionPlans?.length) {
       return reclassDetail.actionPlans.map((p, i) => ({ id: `ap-${i + 1}`, name: p.name, details: p.details, dueDate: p.dueDate }));
     }
     return [{ id: 'ap-1', name: '', details: '', dueDate: '' }];
   });
-  const [expandedPlan, setExpandedPlan] = useState<string>('ap-1');
+  const [expandedPlan, setExpandedPlan] = useState<string>(planRejected ? 'ap-new-1' : 'ap-1');
   const [classificationOpen, setClassificationOpen] = useState(false);
   const classificationRef = useRef<HTMLDivElement>(null);
 
   const updatePlan = (id: string, patch: Partial<ActionPlanDraft>) =>
-    setActionPlans(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)));
+    setActionPlans(prev => prev.map(p => (p.id === id && !p.locked ? { ...p, ...patch } : p)));
   const addPlan = () => {
     const id = `ap-${Date.now()}`;
     setActionPlans(prev => [...prev, { id, name: '', details: '', dueDate: '' }]);
@@ -1549,12 +1564,14 @@ export function ClassifyExceptionDrawer({
   const requiresActionPlan = ACTIONABLE_CLASSIFICATIONS.has(classification);
 
   const canSave = useMemo(() => {
-    // Comment is optional — only classification (and an action plan when the
-    // classification requires one) are mandatory.
+    // Comment is optional — only classification (and a NEW action plan when the
+    // classification requires one) are mandatory. Locked (rejected) plans don't
+    // count — the user must add at least one fresh plan.
     if (!classification) return false;
     if (requiresActionPlan) {
-      if (actionPlans.length === 0) return false;
-      if (actionPlans.some(p => !p.name.trim() || !p.details.trim() || !p.dueDate)) return false;
+      const active = actionPlans.filter(p => !p.locked);
+      if (active.length === 0) return false;
+      if (active.some(p => !p.name.trim() || !p.details.trim() || !p.dueDate)) return false;
     }
     return true;
   }, [classification, requiresActionPlan, actionPlans]);
@@ -1566,8 +1583,10 @@ export function ClassifyExceptionDrawer({
   const step1Valid = !!classification; // Step 1 needs a classification to proceed.
   const doSave = () => {
     if (!canSave) return;
-    const firstPlan = requiresActionPlan ? actionPlans[0] : undefined;
-    const planDueDate = requiresActionPlan ? actionPlans.find(p => p.dueDate)?.dueDate : undefined;
+    // Only the new (non-locked) plans go forward — the rejected ones stay history.
+    const active = requiresActionPlan ? actionPlans.filter(p => !p.locked) : [];
+    const firstPlan = active[0];
+    const planDueDate = active.find(p => p.dueDate)?.dueDate;
     onSave({
       severity,
       classification,
@@ -1576,7 +1595,7 @@ export function ClassifyExceptionDrawer({
       actionTaken: firstPlan?.details.trim(),
       dueDate: planDueDate,
       actionPlans: requiresActionPlan
-        ? actionPlans.map(p => ({ name: p.name.trim(), details: p.details.trim(), dueDate: p.dueDate }))
+        ? active.map(p => ({ name: p.name.trim(), details: p.details.trim(), dueDate: p.dueDate }))
         : undefined,
     });
     // Submit every scoped case the acting user owns into its approval route — the
@@ -1819,19 +1838,21 @@ export function ClassifyExceptionDrawer({
                         aria-expanded={open}
                         className="flex-1 min-w-0 flex items-center gap-2.5 text-left cursor-pointer h-full"
                       >
-                        <span className="shrink-0 w-5 h-5 rounded-full bg-brand-50 text-brand-700 text-[11px] font-bold flex items-center justify-center tabular-nums">
+                        <span className={`shrink-0 w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center tabular-nums ${plan.locked ? 'bg-risk-50 text-risk-700' : 'bg-brand-50 text-brand-700'}`}>
                           {idx + 1}
                         </span>
-                        <span className="flex-1 min-w-0 truncate text-[13px] font-semibold text-ink-800">
+                        <span className={`flex-1 min-w-0 truncate text-[13px] font-semibold ${plan.locked ? 'text-ink-500 line-through' : 'text-ink-800'}`}>
                           {plan.name.trim() || `Management Action Plan ${idx + 1}`}
                         </span>
-                        {plan.dueDate && (
+                        {plan.locked ? (
+                          <span className="inline-flex items-center h-5 px-1.5 text-[9px] font-bold uppercase tracking-wide bg-risk-50 text-risk-700 rounded-full shrink-0">Rejected</span>
+                        ) : plan.dueDate && (
                           <span className="hidden sm:inline-flex items-center gap-1 h-6 px-2 text-[11px] text-brand-700 bg-brand-50 rounded-full shrink-0 tabular-nums">
                             <Calendar size={10} />
                             {plan.dueDate}
                           </span>
                         )}
-                        {!complete && (
+                        {!plan.locked && !complete && (
                           <span
                             className="w-1.5 h-1.5 rounded-full bg-mitigated shrink-0"
                             title="Incomplete — fill in all required fields"
@@ -1843,7 +1864,7 @@ export function ClassifyExceptionDrawer({
                           className={`text-ink-400 transition-transform duration-150 shrink-0 ${open ? 'rotate-180' : ''}`}
                         />
                       </button>
-                      {actionPlans.length > 1 && (
+                      {actionPlans.length > 1 && !plan.locked && (
                         <button
                           type="button"
                           onClick={() => removePlan(plan.id)}
@@ -1874,8 +1895,9 @@ export function ClassifyExceptionDrawer({
                               <input
                                 value={plan.name}
                                 onChange={(e) => updatePlan(plan.id, { name: e.target.value })}
+                                disabled={plan.locked}
                                 placeholder="e.g. MFA enforcement for executive accounts"
-                                className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                                className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 disabled:bg-[#F4F2F7] disabled:text-ink-500 disabled:cursor-not-allowed"
                               />
                             </div>
 
@@ -1887,9 +1909,10 @@ export function ClassifyExceptionDrawer({
                                 <textarea
                                   value={plan.details}
                                   onChange={(e) => updatePlan(plan.id, { details: e.target.value })}
+                                  disabled={plan.locked}
                                   rows={4}
                                   placeholder="Describe the remediation steps, evidence, and rollout plan…"
-                                  className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                                  className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 disabled:bg-[#F4F2F7] disabled:text-ink-500 disabled:cursor-not-allowed"
                                 />
                                 <button
                                   type="button"
@@ -1907,11 +1930,15 @@ export function ClassifyExceptionDrawer({
                                 Due Date <span className="text-risk">*</span>
                               </label>
                               <div className="w-[220px]">
-                                <CustomDatePicker
-                                  value={plan.dueDate}
-                                  onChange={(v) => updatePlan(plan.id, { dueDate: v })}
-                                  minDate={todayIso}
-                                />
+                                {plan.locked ? (
+                                  <div className="h-10 px-3 flex items-center bg-[#F4F2F7] border border-canvas-border rounded-[8px] text-[13px] text-ink-500 tabular-nums">{plan.dueDate || '—'}</div>
+                                ) : (
+                                  <CustomDatePicker
+                                    value={plan.dueDate}
+                                    onChange={(v) => updatePlan(plan.id, { dueDate: v })}
+                                    minDate={todayIso}
+                                  />
+                                )}
                               </div>
                             </div>
                           </div>

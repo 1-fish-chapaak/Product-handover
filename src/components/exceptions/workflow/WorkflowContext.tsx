@@ -26,6 +26,10 @@ interface WorkflowContextValue {
   role: Persona;
   templates: WorkflowTemplate[];
   assignments: Assignment[];
+  /** Auditor routes assigned per exception — a separate config keyed by exception
+   *  id, NOT an assignment, so it never drives the Risk Owner lifecycle / CTAs.
+   *  Consumed only at the Risk Owner → Auditor handoff. */
+  auditorRoutes: Record<string, { levels: WorkflowLevel[]; name: string }>;
   currentUserId: string;
   setCurrentUser: (id: string) => void;
   assignmentModalIds: string[] | null;
@@ -116,6 +120,7 @@ export function WorkflowProvider({
   role,
   onFinalize,
   onReject,
+  onReopenPartial,
   children,
 }: {
   role: Persona;
@@ -125,10 +130,16 @@ export function WorkflowProvider({
   /** Called when an assignment is rejected in the route — host reopens the case
    *  for the Risk Owner who classified it (mirrors the auditor-reject flow). */
   onReject?: (assignment: Assignment) => void;
+  /** Called when the action was approved only as Partially Implemented — host
+   *  records "Approved (Partially Implemented)" and reopens for re-classification. */
+  onReopenPartial?: (assignment: Assignment) => void;
   children: React.ReactNode;
 }) {
   const [templates, setTemplates] = useState<WorkflowTemplate[]>(SEED_TEMPLATES);
   const [assignments, setAssignments] = useState<Assignment[]>(() => applyDeactivation(SEED_ASSIGNMENTS));
+  // Auditor routes are a SEPARATE config keyed by exception id — never an
+  // assignment, so they don't touch the Risk Owner lifecycle/CTAs.
+  const [auditorRoutes, setAuditorRoutes] = useState<Record<string, { levels: WorkflowLevel[]; name: string }>>({});
   const [currentUserId, setCurrentUserId] = useState<string>('u-ro-1');
   const [assignmentModalIds, setAssignmentModalIds] = useState<string[] | null>(null);
 
@@ -185,13 +196,22 @@ export function WorkflowProvider({
   }, []);
 
   const attachAuditorRoute = useCallback((p: { exceptionIds: string[]; template: WorkflowTemplate; assignedBy: string; note?: string }) => {
-    const levels = p.template.levels.map(l => ({ ...l, assigneeIds: [...l.assigneeIds] }));
+    const cloneLevels = () => p.template.levels.map(l => ({ ...l, assigneeIds: [...l.assigneeIds] }));
+    // Record the auditor route as case config — NOT an assignment, so it never
+    // becomes a case's "primary" and never touches the Risk Owner CTAs/lifecycle.
+    setAuditorRoutes(prev => {
+      const next = { ...prev };
+      p.exceptionIds.forEach(id => { next[id] = { levels: cloneLevels(), name: p.template.name }; });
+      return next;
+    });
+    // Mirror onto an existing Risk Owner record purely so the route-chain panel can
+    // show "Auditor route attached". The handoff reads the config map regardless.
     setAssignments(prev => prev.map(a => (
       p.exceptionIds.includes(a.exceptionId) && a.persona === 'risk-owner' && a.status !== 'pulled-back'
-        ? { ...a, auditorRouteLevels: levels, auditorRouteName: p.template.name }
+        ? { ...a, auditorRouteLevels: cloneLevels(), auditorRouteName: p.template.name }
         : a
     )));
-    p.exceptionIds.forEach(exId => logToCase(exId, 'auditor', userName(p.assignedBy), `Auditor route "${p.template.name}" attached — runs after Risk Owner approvals`, p.note));
+    p.exceptionIds.forEach(exId => logToCase(exId, 'auditor', userName(p.assignedBy), `Auditor route "${p.template.name}" assigned — runs after Risk Owner approvals`, p.note));
   }, []);
 
   const updateDraft = useCallback((assignmentId: string, draft: Assignment['draft']) => {
@@ -247,13 +267,34 @@ export function WorkflowProvider({
         // as the final approver). The case is only marked approved once the final
         // auditor approver signs off.
         if (res.assignment.persona === 'risk-owner' && !res.assignment.auditorPhase) {
-          // Use the auditor route ONLY if the Auditor attached one to THIS case
-          // (stored on the same record). Otherwise the Auditor lead is the sole
-          // final approver — no route is auto-assigned.
-          const handed = handoffToAuditor(res.assignment, auditorPhaseLevels(res.assignment.auditorRouteLevels));
+          // Use the auditor route the Auditor assigned to THIS case — attached onto
+          // this record, or (if it was assigned before this RO record existed) held
+          // on a standalone auditor record. Otherwise the Auditor lead is the sole
+          // final approver; no route is auto-assigned.
+          const attachedRoute = res.assignment.auditorRouteLevels ?? auditorRoutes[res.assignment.exceptionId]?.levels;
+          const handed = handoffToAuditor(res.assignment, auditorPhaseLevels(attachedRoute));
           const nextName = handed.levels[handed.currentLevelIndex]?.name ?? 'final approval';
           logToCase(a.exceptionId, a.persona, userName(userId), `Risk Owner approvals complete — sent to the Auditor for ${nextName}`);
           return handed;
+        }
+        // Action cycle approved but only PARTIALLY implemented → the work isn't done,
+        // so reopen for re-classification by the person who classified it and restart
+        // the whole approval — it does NOT close.
+        if (res.assignment.actionCycle && res.assignment.draft?.actionStatus === 'Partially Implemented') {
+          const tmpl = templates.find(t => t.id === res.assignment.workflowId);
+          const baseLevels = (tmpl?.levels ?? res.assignment.levels).map(l => ({ ...l, assigneeIds: [...l.assigneeIds] }));
+          const reopened: Assignment = {
+            ...res.assignment,
+            levels: baseLevels,
+            levelStates: baseLevels.map(l => ({ levelId: l.id, status: 'pending' as const, approvals: [] })),
+            status: 'rejected',
+            currentLevelIndex: -1,
+            auditorPhase: false,
+            actionCycle: false,
+          };
+          logToCase(a.exceptionId, a.persona, userName(userId), 'Action approved as Partially Implemented — reopened for re-classification; approval restarts');
+          onReopenPartial?.(reopened);
+          return reopened;
         }
         onFinalize(res.assignment);
         return res.assignment;
@@ -261,7 +302,7 @@ export function WorkflowProvider({
       if (res.assignment.status === 'rejected') onReject?.(res.assignment);
       return res.assignment;
     }));
-  }, [onFinalize, onReject]);
+  }, [onFinalize, onReject, onReopenPartial, auditorRoutes, templates]);
 
   const reassign = useCallback((assignmentId: string, newAssigneeId: string) => {
     setAssignments(prev => prev.map(a => {
@@ -280,7 +321,7 @@ export function WorkflowProvider({
   }, []);
 
   const value: WorkflowContextValue = {
-    role, templates, assignments, currentUserId, setCurrentUser,
+    role, templates, assignments, auditorRoutes, currentUserId, setCurrentUser,
     assignmentModalIds, openAssignment, closeAssignment,
     upsertTemplate, deleteTemplate, setDefaultTemplate,
     createAssignments, attachAuditorRoute, submitForApproval, submitActionForReview, decide, reassign, pullBack, updateDraft,

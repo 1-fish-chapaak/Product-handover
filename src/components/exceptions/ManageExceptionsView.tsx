@@ -806,8 +806,28 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     ));
   };
 
+  // Partially Implemented: the action review column shows "Approved (Partially
+  // Implemented)" while the case reopens for the Risk Owner to re-classify and
+  // finish the remaining work — so it stays In-Progress (not Closed).
+  const handleWorkflowReopenPartial = (a: Assignment) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const detail = GRC_CASE_DETAILS[a.exceptionId];
+    if (detail) detail.actionStatus = 'Partially Implemented';
+    updateExceptions(prev => prev.map(e =>
+      e.id === a.exceptionId
+        ? {
+            ...e,
+            actionReview: 'Approved' as const,
+            actionPhase: undefined,
+            status: 'Under Review' as const,
+            lastUpdated: today,
+          }
+        : e
+    ));
+  };
+
   return (
-    <WorkflowProvider role={role} onFinalize={handleWorkflowFinalize} onReject={handleWorkflowReject}>
+    <WorkflowProvider role={role} onFinalize={handleWorkflowFinalize} onReject={handleWorkflowReject} onReopenPartial={handleWorkflowReopenPartial}>
     <div className="h-full w-full flex flex-col overflow-hidden bg-canvas">
       {/* Top chrome — only shown when standalone (Back button); hidden when embedded */}
       {!embedded && (
@@ -1466,6 +1486,10 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               scope.forEach(id => {
                 const detail = GRC_CASE_DETAILS[id];
                 if (!detail) return;
+                // Record the reported implementation as the case's action status so
+                // the Action Review column shows the SAME outcome (Implemented vs
+                // Partially Implemented), not a stale value.
+                detail.actionStatus = implementation;
                 detail.completion = { note, evidence, completedAt: fmtStamp(nowIso), selfAssessment: implementation };
                 detail.activityLog = [{
                   id: `act-done-${id}-${Date.now()}`,
@@ -1477,7 +1501,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 }, ...detail.activityLog];
               });
               updateExceptions(list => list.map(e => scope.includes(e.id)
-                ? { ...e, actionPhase: 'completion-review' as const, status: deriveStatus(e.classification, 'Pending', 'Pending'), lastUpdated: nowIso.slice(0, 10) }
+                ? { ...e, actionReview: 'Pending' as const, actionPhase: 'completion-review' as const, status: deriveStatus(e.classification, 'Pending', 'Pending'), lastUpdated: nowIso.slice(0, 10) }
                 : e));
               logEvent({ action: 'Update', description: `Marked ${scope.length > 1 ? `${scope.length} linked cases` : drawerException.id} action complete — Risk Owner reports ${implementation}`, module: 'Exceptions', entity: 'Exception' });
               addToast({ type: 'success', message: scope.length > 1
