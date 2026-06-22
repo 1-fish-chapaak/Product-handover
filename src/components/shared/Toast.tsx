@@ -17,9 +17,11 @@ interface Toast {
 interface ToastContextType {
   addToast: (toast: Omit<Toast, 'id'>) => string;
   updateToast: (id: string, patch: Partial<Omit<Toast, 'id'>>) => void;
+  /** Dismiss a toast immediately by id (e.g. close a loading toast on completion). */
+  removeToast: (id: string) => void;
 }
 
-const ToastContext = createContext<ToastContextType>({ addToast: () => '', updateToast: () => {} });
+const ToastContext = createContext<ToastContextType>({ addToast: () => '', updateToast: () => {}, removeToast: () => {} });
 
 export function useToast() {
   return useContext(ToastContext);
@@ -74,7 +76,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <ToastContext.Provider value={{ addToast, updateToast }}>
+    <ToastContext.Provider value={{ addToast, updateToast, removeToast }}>
       {children}
       <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-2">
         <AnimatePresence>

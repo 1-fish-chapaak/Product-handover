@@ -982,13 +982,13 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
               <Button
                 variant="primary"
                 size="md"
-                className="shrink-0 !h-8 rounded-md!"
+                className="shrink-0 !h-8 rounded-md! text-[0.75rem]!"
                 leftIcon={<Plus size={13} />}
                 onClick={onCreate}
                 disabled={searchQuery.trim().length > 0}
                 title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined}
               >
-                Create new RACM
+                Create RACM
               </Button>
             )}
           </div>
