@@ -40,6 +40,11 @@ interface DatePickerProps {
    *  fixed TODAY) align the calendar's default month + today marker with the
    *  app's clock instead of the real system date. Defaults to real now. */
   today?: Date;
+  /** z-index for the portaled popover. Defaults to the --z-popover token (100),
+   *  which sits below modals. Pass a higher value when the picker lives inside a
+   *  high z-index modal (e.g. ModalShell at z-9999) so the calendar isn't hidden
+   *  behind it. */
+  popoverZIndex?: number | string;
   'aria-label'?: string;
   id?: string;
 }
@@ -75,6 +80,7 @@ export default function DatePicker({
   min,
   max,
   today: todayProp,
+  popoverZIndex = 'var(--z-popover)',
   'aria-label': ariaLabel,
   id,
 }: DatePickerProps) {
@@ -247,7 +253,7 @@ export default function DatePicker({
                 bottom: coords.bottom,
                 left: coords.left,
                 width: POP_W,
-                zIndex: 'var(--z-popover)' as unknown as number,
+                zIndex: popoverZIndex as unknown as number,
               }}
               className="rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_10px_32px_rgb(15_8_30_/_0.15)] p-2"
             >
