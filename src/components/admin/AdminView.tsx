@@ -2132,7 +2132,7 @@ export default function AdminView({ activeTab }: Props) {
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="mb-6"
           >
-            <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">Administration</h1>
+            <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">Administration</h1>
             <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">Control who has access, what they can do, and what they've done.</p>
           </motion.div>
 

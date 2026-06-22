@@ -54,11 +54,20 @@ export interface DesignDoc {
   uploadedBy?: string;
   at?: string;
 }
-/** A design consideration assessed in the walkthrough. */
+/** The Q&A a validation workflow produced — reviewable after it runs. */
+export interface ValidationQA { q: string; a: string; pass: boolean; }
+export interface ValidationResult { qa: ValidationQA[]; at: string; }
+
+/** A design consideration — validated by its own workflow, with manual override. */
 export interface DesignPoint {
   id: string;
   text: string;
+  workflowId?: string;
+  workflowName?: string;
+  workflowRunRef?: string;
+  validation?: ValidationResult;
   result: TestResult;
+  override?: Override;
 }
 export interface DesignTrack {
   documents: DesignDoc[];
@@ -72,6 +81,18 @@ export interface DesignTrack {
 // ─── Operating track (TOE) ──────────────────────────────────────────────────────
 
 export type OperatingMethod = 'Automated' | 'Manual';
+/** How one attribute is evidenced — choose one per attribute. */
+export type EvidenceMode = 'ai' | 'workflow' | 'attest';
+/** A first-line self-attestation against one attribute: text + uploaded evidence. */
+export interface Attestation {
+  note: string;
+  evidence: EvidenceFile[];
+  by: string;
+  role: Role;
+  at: string;
+}
+/** One attribute (test step). Each attribute is evidenced independently — by its
+ *  own linked workflow, or by self-attestation with text + uploaded evidence. */
 export interface OperatingStep {
   id: string;
   code: string;
@@ -79,6 +100,14 @@ export interface OperatingStep {
   assertion: Assertion;
   precision: string;
   procedures: TestProcedure[];
+  evidenceMode?: EvidenceMode;
+  workflowId?: string;
+  workflowName?: string;
+  workflowRunRef?: string;
+  aiValidation?: boolean;
+  validation?: ValidationResult;
+  attestEnabled?: boolean;
+  attestation?: Attestation;
   result: TestResult;
   override?: Override;
 }
@@ -96,10 +125,7 @@ export interface Population {
   evidence: EvidenceFile[];
 }
 export interface OperatingTrack {
-  method: OperatingMethod;
-  workflowId?: string;
-  workflowName?: string;
-  workflowRunRef?: string;
+  method: OperatingMethod;        // dominant evidence mode — informational; each attribute is evidenced independently
   population?: Population;
   sampling?: Sampling;
   steps: OperatingStep[];
@@ -178,16 +204,38 @@ export interface Deficiency {
   compensatingControlId?: string;
   aggregationGroup?: string;
   remediation: { action: string; date: string | null; owner: string; status: 'Open' | 'In progress' | 'Done' };
+  // exception lifecycle
+  status: ExceptionStatus;
+  retest?: { result: 'Pass' | 'Fail'; at: string; by: string };
+  signoff?: { by: string; at: string };
 }
+export type ExceptionStatus = 'Identified' | 'Remediation' | 'Retest' | 'Closed';
 
 export interface SignificantAccount {
   id: string; name: string; balance: number; inScope: boolean; assertions: Assertion[];
+}
+
+/** The engagement-level "ground rules" that drive how every exception is evaluated and routed. */
+export const MW_INDICATOR_CATALOGUE = [
+  'Restatement of previously issued financial statements',
+  'Material misstatement identified by audit, not the control',
+  'Fraud of any magnitude by senior management',
+  'Ineffective control environment / oversight',
+  'Ineffective period-end financial reporting process',
+] as const;
+export interface MaterialityRules {
+  clearlyTrivial: number;        // de-minimis threshold (₹) — below this, an exception is clearly trivial
+  sdBandPct: number;             // significant-deficiency lower band, as % of overall materiality (e.g. 20)
+  aggregate: boolean;            // aggregate individually-minor deficiencies by commonality
+  autoRoute: boolean;            // auto-route an exception to the owner/reviewer by computed severity
+  mwIndicators: string[];        // MW indicators in force for this engagement (from the catalogue)
 }
 
 export interface IcfrEngagement {
   id: string; code: string; name: string; entity: string; framework: string;
   periodStart: string; periodEnd: string; period: 'Interim' | 'Year-end';
   materiality: number; performanceMateriality: number; preparer: string; reviewer: string;
+  rules: MaterialityRules;
   accounts: SignificantAccount[];
   controls: Control[];
   deficiencies: Deficiency[];

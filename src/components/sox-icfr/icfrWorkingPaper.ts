@@ -61,9 +61,9 @@ export function downloadIcfrWorkingPaper(eng: IcfrEngagement): void {
   const dg = XLSX.utils.aoa_to_sheet([dgH, ...dgR]); dg['!cols'] = autofit([dgH, ...dgR]);
   XLSX.utils.book_append_sheet(wb, dg, 'Design Testing');
 
-  // Operating testing — step-level
-  const opH = ['W/P', 'Control ID', 'Method', 'Attribute', 'Description', 'Assertion', 'Procedures', 'Result', 'Override rationale'];
-  const opR: (string | number)[][] = eng.controls.flatMap(c => c.operating.steps.map(s => [c.wpRef, c.id, c.operating.method, s.code, s.description, s.assertion, s.procedures.join('; '), stepResult(s), s.override?.rationale ?? '']));
+  // Operating testing — attribute-level (each attribute has its own workflow / attestation)
+  const opH = ['W/P', 'Control ID', 'Attribute', 'Description', 'Assertion', 'Procedures', 'Workflow', 'Attested by', 'Attestation', 'Evidence', 'Result', 'Override rationale'];
+  const opR: (string | number)[][] = eng.controls.flatMap(c => c.operating.steps.map(s => [c.wpRef, c.id, s.code, s.description, s.assertion, s.procedures.join('; '), s.workflowName ? `${s.workflowName}${s.workflowRunRef ? ` (${s.workflowRunRef})` : ''}` : '—', s.attestation?.by ?? '—', s.attestation?.note ?? '', s.attestation?.evidence.map(e => e.name).join('; ') ?? '', stepResult(s), s.override?.rationale ?? '']));
   const op = XLSX.utils.aoa_to_sheet([opH, ...opR]); op['!cols'] = autofit([opH, ...opR]);
   XLSX.utils.book_append_sheet(wb, op, 'Operating Testing');
 
@@ -124,10 +124,10 @@ export function downloadControlWorkingPaper(eng: IcfrEngagement, c: Control): vo
   const dg = XLSX.utils.aoa_to_sheet([dgH, ...dgR]); dg['!cols'] = autofit([dgH, ...dgR]);
   XLSX.utils.book_append_sheet(wb, dg, 'Design (TOD)');
 
-  // Operating
-  const opH = ['Attribute', 'Description', 'Assertion', 'Precision', 'Procedures', 'Result', 'Override rationale'];
-  const opR: (string | number)[][] = c.operating.steps.map(s => [s.code, s.description, s.assertion, s.precision, s.procedures.join('; '), stepResult(s), s.override?.rationale ?? '']);
-  const opMeta: (string | number)[][] = [['Method', c.operating.method], ['Workflow', c.operating.workflowName ?? '—'], ['Population', c.operating.population ? `${c.operating.population.count} · ${c.operating.population.source}` : '—'], ['Sample', c.operating.sampling ? `${c.operating.sampling.size} · ${c.operating.sampling.basis}` : '—'], []];
+  // Operating — each attribute evidenced on its own (workflow / self-attestation)
+  const opH = ['Attribute', 'Description', 'Assertion', 'Precision', 'Procedures', 'Workflow', 'Attested by', 'Attestation', 'Evidence', 'Result', 'Override rationale'];
+  const opR: (string | number)[][] = c.operating.steps.map(s => [s.code, s.description, s.assertion, s.precision, s.procedures.join('; '), s.workflowName ? `${s.workflowName}${s.workflowRunRef ? ` (${s.workflowRunRef})` : ''}` : '—', s.attestation?.by ?? '—', s.attestation?.note ?? '', s.attestation?.evidence.map(e => e.name).join('; ') ?? '', stepResult(s), s.override?.rationale ?? '']);
+  const opMeta: (string | number)[][] = [['Method (dominant)', c.operating.method], ['Population', c.operating.population ? `${c.operating.population.count} · ${c.operating.population.source}` : '—'], ['Sample', c.operating.sampling ? `${c.operating.sampling.size} · ${c.operating.sampling.basis}` : '—'], []];
   const op = XLSX.utils.aoa_to_sheet([...opMeta, opH, ...opR]); op['!cols'] = autofit([opH, ...opR]);
   XLSX.utils.book_append_sheet(wb, op, 'Operating (TOE)');
 

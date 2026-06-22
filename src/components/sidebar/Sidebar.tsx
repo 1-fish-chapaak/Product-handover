@@ -353,8 +353,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
           {programsVisible && <Divider label="Programs" expanded={isExpanded} />}
 
           {can('plan_view') && <NavItem icon={Calendar} label="Audit Planning" active={view === 'audit-planning'} expanded={isExpanded} onClick={() => setView('audit-planning')} />}
-          {can('eng_view') && <NavItem icon={ClipboardCheck} label="Engagements" active={view === 'engagements' || view === 'engagement-overview' || view === 'engagement-case-management'} expanded={isExpanded} onClick={() => setView('engagements')} />}
-          {can('eng_view') && <NavItem icon={Shield} label="SOX / ICFR" active={view === 'sox-icfr'} expanded={isExpanded} onClick={() => setView('sox-icfr')} />}
+          {can('eng_view') && <NavItem icon={ClipboardCheck} label="Engagements" active={view === 'engagements' || view === 'engagement-overview' || view === 'engagement-case-management' || view === 'sox-icfr'} expanded={isExpanded} onClick={() => setView('engagements')} />}
           {can('bp_view') && <NavItem icon={Layers} label="Process Hub" active={view === 'programs' || view === 'business-processes' || view === 'bp-detail'} expanded={isExpanded} onClick={() => setView('programs')} />}
 
           {/* ── GLOBAL ── */}

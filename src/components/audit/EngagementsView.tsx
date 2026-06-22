@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
@@ -6,7 +6,7 @@ import {
   Pencil, UserPlus, CheckCircle2,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
-import { ENGAGEMENTS, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
+import { ENGAGEMENTS, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
 import CreateEngagementWizard from './CreateEngagementWizard';
 import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
 import { useCan } from '../../context/CurrentUserContext';
@@ -15,6 +15,12 @@ import { useToast } from '../shared/Toast';
 interface Props {
   onOpenEngagement: (engagementId: string) => void;
   onOpenAuditPlanning: () => void;
+  /** Open already narrowed to a type (e.g. routed from the SOX report flow
+   *  with 'Compliance'). Lands on the list so the filter is visible. */
+  initialTypeFilter?: 'All' | EngType;
+  /** Called once on mount after the initial filter is applied, so the parent
+   *  can clear its one-shot flag (normal navigation stays unfiltered). */
+  onInitialFilterConsumed?: () => void;
 }
 
 const STATUS_CLS: Record<EngStatus, string> = {
@@ -39,12 +45,14 @@ const TYPE_CLS: Record<EngType, string> = {
   Compliance: 'bg-brand-50 text-brand-700 border-brand-100',
   'Internal Audit': 'bg-evidence-50 text-evidence-700 border-evidence-100',
   Automation: 'bg-compliant-50 text-compliant-700 border-compliant-100',
+  'SOX / ICFR': 'bg-brand-100 text-brand-800 border-brand-200',
 };
 
 const TYPE_LABEL: Record<EngType, string> = {
   Compliance: 'Compliance',
   'Internal Audit': 'Internal Audit',
   Automation: 'Automation',
+  'SOX / ICFR': 'SOX / ICFR',
 };
 
 /** Short label for the Automation subtype shown as a small tag next to the type pill. */
@@ -57,7 +65,7 @@ const SUBTYPE_LABEL: Record<AutomationSubtype, string> = {
   Custom: 'Custom',
 };
 
-const TYPE_FILTERS: ('All' | EngType)[] = ['All', 'Compliance', 'Internal Audit', 'Automation'];
+const TYPE_FILTERS: ('All' | EngType)[] = ['All', 'SOX / ICFR', 'Compliance', 'Internal Audit', 'Automation'];
 const STATUS_FILTERS: ('All' | EngStatus)[] = ['All', 'Active', 'In Progress', 'Planned', 'Review', 'Draft'];
 const PROCESS_FILTERS: ('All' | ProcessCode)[] = ['All', 'P2P', 'O2C', 'R2R', 'S2C', 'ITGC'];
 
@@ -68,12 +76,18 @@ function healthTier(pct: number): { bar: string; text: string } {
   return { bar: 'bg-risk', text: 'text-risk-700' };
 }
 
-export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning }: Props) {
+export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning, initialTypeFilter, onInitialFilterConsumed }: Props) {
   const { can } = useCan();
   const { addToast } = useToast();
-  const [mode, setMode] = useState<'overview' | 'list'>('overview');
+  const presetType = initialTypeFilter && initialTypeFilter !== 'All';
+  // When routed with an initial type (e.g. SOX → 'Compliance'), open straight
+  // onto the list view, pre-filtered to that type.
+  const [mode, setMode] = useState<'overview' | 'list'>(presetType ? 'list' : 'overview');
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'All' | EngType>('All');
+  const [typeFilter, setTypeFilter] = useState<'All' | EngType>(initialTypeFilter ?? 'All');
+  // Clear the parent's one-shot flag once we've taken the initial filter, so a
+  // later plain visit to Engagements opens unfiltered.
+  useEffect(() => { if (presetType) onInitialFilterConsumed?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [statusFilter, setStatusFilter] = useState<'All' | EngStatus>('All');
   const [processFilter, setProcessFilter] = useState<'All' | ProcessCode>('All');
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -128,7 +142,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
         <div className="flex items-end justify-between mb-5">
           <div>
             <div className="text-[11px] font-semibold text-text-muted tracking-wider uppercase mb-1">Engagements</div>
-            <h1 className="font-display text-[32px] font-bold text-text leading-tight">Engagement Library</h1>
+            <h1 className="text-[32px] font-bold text-text leading-tight">Engagement Library</h1>
             <p className="text-[13px] text-text-secondary mt-1.5 max-w-xl">
               {mode === 'overview'
                 ? 'A cross-engagement snapshot — health, attention, and activity across your whole portfolio.'
@@ -365,6 +379,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning 
           <CreateEngagementWizard
             onClose={() => setWizardOpen(false)}
             onCreated={(newEng) => {
+              registerEngagement(newEng);
               setCreated(prev => [newEng, ...prev]);
               setWizardOpen(false);
             }}

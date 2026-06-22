@@ -4137,12 +4137,12 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                       onChange={e => setDashName(e.target.value)}
                       onBlur={() => setEditingDashName(false)}
                       onKeyDown={e => { if (e.key === 'Enter') setEditingDashName(false); }}
-                      className={`font-display font-[420] text-ink-900 leading-[1.15] bg-transparent border-none ring-0 shadow-none w-full ${isFullScreen ? 'text-[1.375rem]' : 'text-[2.125rem]'}`}
+                      className={`font-semibold text-ink-900 leading-[1.15] bg-transparent border-none ring-0 shadow-none w-full ${isFullScreen ? 'text-[1.375rem]' : 'text-[2.125rem]'}`}
                       style={{ outline: 'none', boxShadow: 'none' }}
                     />
                   ) : (
                     <h1
-                      className={`font-display font-[420] text-ink-900 leading-[1.15] cursor-text hover:text-brand-800 transition-colors ${isFullScreen ? 'text-[1.375rem]' : 'text-[2.125rem]'}`}
+                      className={`font-semibold text-ink-900 leading-[1.15] cursor-text hover:text-brand-800 transition-colors ${isFullScreen ? 'text-[1.375rem]' : 'text-[2.125rem]'}`}
                       onClick={() => setEditingDashName(true)}
                     >{displayName}</h1>
                   )}

@@ -7,9 +7,20 @@
 
 export type ProcessCode = 'P2P' | 'O2C' | 'R2R' | 'S2C' | 'ITGC';
 export type EngStatus = 'Active' | 'In Progress' | 'Planned' | 'Review' | 'Draft' | 'Closed';
-export type EngType = 'Compliance' | 'Internal Audit' | 'Automation';
+export type EngType = 'Compliance' | 'Internal Audit' | 'Automation' | 'SOX / ICFR';
 /** Concrete project shape for Automation engagements — kept undefined for Compliance / Internal Audit. */
 export type AutomationSubtype = 'CCM' | 'Reconciliation' | 'MIS' | 'Forensic' | 'Image Analytics' | 'Custom';
+
+/** Headline materiality ground rules captured for a SOX / ICFR engagement at creation.
+ *  The full rule set (severity bands, aggregation, auto-routing) is managed in the SOX workspace. */
+export interface SoxConfig {
+  overallMateriality: number;
+  performanceMateriality: number;
+  clearlyTrivial: number;
+  sdBandPct: number;
+  aggregate: boolean;
+  keyOnly: boolean;
+}
 
 export interface Engagement {
   id: string;
@@ -19,6 +30,8 @@ export interface Engagement {
   type: EngType;
   /** Required for Automation; ignored for Compliance / Internal Audit. */
   subtype?: AutomationSubtype;
+  /** Present only for SOX / ICFR engagements. */
+  soxConfig?: SoxConfig;
   process: ProcessCode;
   framework: string;
   owner: string;
@@ -38,18 +51,25 @@ export interface Engagement {
 
 export const ENGAGEMENTS: Engagement[] = [
   {
-    id: 'eng-1', code: 'ENG-001', name: 'P2P — SOX Audit',
-    description: 'SOX ICFR testing of Procure-to-Pay controls — vendor master, PO approval, three-way match, payment release.',
-    type: 'Compliance', process: 'P2P', framework: 'SOX ICFR', owner: 'Tushar Goel',
-    status: 'Active', periodStart: 'Apr 2025', periodEnd: 'Mar 2026', controls: 24,
+    id: 'eng-1', code: 'ENG-001', name: 'FY26 ICFR — Air India Express',
+    description: 'SOX 404 / ICFR engagement — entity-wide scoping, Procure-to-Pay key controls, design + operating effectiveness, and deficiency evaluation against materiality.',
+    type: 'SOX / ICFR', process: 'P2P', framework: 'COSO 2013 / SOX 404', owner: 'A. Mehta',
+    status: 'Active', periodStart: 'Apr 2025', periodEnd: 'Mar 2026', controls: 100,
     health: 75, openIssues: 3, lastActivity: '2d ago', nextScheduled: 'Sign-off in 12d',
   },
   {
-    id: 'eng-2', code: 'ENG-002', name: 'O2C — SOX Audit',
-    description: 'Order-to-Cash SOX testing across customer master, credit limits, invoicing, and revenue recognition cutoffs.',
-    type: 'Compliance', process: 'O2C', framework: 'SOX ICFR', owner: 'Neha Joshi',
+    id: 'eng-2', code: 'ENG-002', name: 'O2C — SOX / ICFR',
+    description: 'Order-to-Cash SOX testing across customer master, credit limits, invoicing, and revenue recognition cut-offs.',
+    type: 'SOX / ICFR', process: 'O2C', framework: 'COSO 2013 / SOX 404', owner: 'Neha Joshi',
     status: 'Active', periodStart: 'Apr 2025', periodEnd: 'Mar 2026', controls: 18,
     health: 89, openIssues: 1, lastActivity: '6h ago', nextScheduled: 'Walkthrough in 4d',
+  },
+  {
+    id: 'eng-sox-3', code: 'ENG-009', name: 'R2R — SOX / ICFR',
+    description: 'Record-to-Report SOX testing — manual journals, reconciliations, close checklist, and management review controls.',
+    type: 'SOX / ICFR', process: 'R2R', framework: 'COSO 2013 / SOX 404', owner: 'D. Rao',
+    status: 'Planned', periodStart: 'Apr 2025', periodEnd: 'Mar 2026', controls: 22,
+    health: 0, openIssues: 0, lastActivity: 'Not started', nextScheduled: 'Kickoff Jul 1',
   },
   {
     id: 'eng-3', code: 'ENG-003', name: 'AP Duplicate Invoice Monitor',
@@ -126,3 +146,13 @@ export const ENGAGEMENTS: Engagement[] = [
 export const PROCESS_COLORS: Record<ProcessCode, string> = {
   P2P: '#6a12cd', O2C: '#0284c7', R2R: '#d97706', S2C: '#059669', ITGC: '#7c3aed',
 };
+
+/** Runtime registry for engagements created during the session (the seed array is static).
+ *  Lets any view (e.g. the SOX experience) resolve a created engagement by id. */
+const RUNTIME_ENGAGEMENTS: Engagement[] = [];
+export function registerEngagement(e: Engagement): void {
+  if (!RUNTIME_ENGAGEMENTS.some(x => x.id === e.id)) RUNTIME_ENGAGEMENTS.unshift(e);
+}
+export function findEngagement(id: string): Engagement | undefined {
+  return ENGAGEMENTS.find(e => e.id === id) ?? RUNTIME_ENGAGEMENTS.find(e => e.id === id);
+}

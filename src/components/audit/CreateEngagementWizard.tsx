@@ -55,6 +55,7 @@ const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
 ];
 
 const TYPE_TILES: { type: EngType; icon: JSX.Element; tagline: string; tint: string; ring: string; iconWrap: string }[] = [
+  { type: 'SOX / ICFR',     icon: <ShieldCheck size={22} />,    tagline: 'SOX 404 / ICFR — scoping, materiality rules, design + operating effectiveness, deficiency evaluation', tint: 'bg-brand-50/70 hover:bg-brand-50 text-brand-700 border-brand-200',          ring: 'ring-brand-600 ring-offset-2 ring-offset-canvas-elevated',     iconWrap: 'bg-brand-600 text-white' },
   { type: 'Compliance',     icon: <ShieldCheck size={22} />,    tagline: 'Framework-driven control testing',                              tint: 'bg-brand-50/70 hover:bg-brand-50 text-brand-700 border-brand-100',           ring: 'ring-brand-500 ring-offset-2 ring-offset-canvas-elevated',     iconWrap: 'bg-brand-100 text-brand-700' },
   { type: 'Internal Audit', icon: <ClipboardList size={22} />,  tagline: 'Process audit aligned to RACM + SOPs',                          tint: 'bg-evidence-50/70 hover:bg-evidence-50 text-evidence-700 border-evidence-100', ring: 'ring-evidence-500 ring-offset-2 ring-offset-canvas-elevated',  iconWrap: 'bg-evidence-100 text-evidence-700' },
   { type: 'Automation',     icon: <Zap size={22} />,             tagline: 'Continuous monitoring / reconciliation / MIS / forensic',      tint: 'bg-compliant-50/70 hover:bg-compliant-50 text-compliant-700 border-compliant-100', ring: 'ring-compliant-500 ring-offset-2 ring-offset-canvas-elevated', iconWrap: 'bg-compliant-100 text-compliant-700' },
@@ -95,6 +96,12 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
   const [samplingMethod, setSamplingMethod] = useState<SamplingMethod>('Random');
   const [sampleSize, setSampleSize] = useState(25);
   const [materiality, setMateriality] = useState(500000);
+
+  // Step 3 — SOX / ICFR (materiality ground rules; full rule set is managed in-engagement)
+  const [overallMateriality, setOverallMateriality] = useState(5_000_000);
+  const [pmPct, setPmPct] = useState(75);   // performance materiality as % of overall
+  const [cttPct, setCttPct] = useState(5);  // clearly-trivial threshold as % of overall
+  const [keyOnly, setKeyOnly] = useState(true);
 
   // Step 3 — Internal Audit
   const [scopeLevel, setScopeLevel] = useState<ScopeLevel>('Full process');
@@ -141,6 +148,7 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
   const step2Valid = name.trim().length > 0 && code.trim().length > 0 && periodStart !== '' && periodEnd !== '' && periodStart <= periodEnd && !reviewerInvalid;
   let step3Valid = true;
   if (type === 'Compliance')          step3Valid = framework !== '' && racmVersion !== '' && (samplingMethod === 'Manual upload' || sampleSize > 0);
+  else if (type === 'SOX / ICFR')     step3Valid = overallMateriality > 0 && pmPct > 0 && pmPct <= 100 && cttPct >= 0 && cttPct < 100;
   else if (type === 'Internal Audit') step3Valid = linkedRacms.length > 0 && tatDays > 0;
   else if (type === 'Automation')     step3Valid = inputSources.length > 0 && alertRecipients.length > 0;
 
@@ -162,7 +170,8 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
     type: type ?? 'Compliance',
     subtype: type === 'Automation' ? autoSubtype : undefined,
     process: (process === 'Cross' ? 'P2P' : process) as ProcessCode,
-    framework: type === 'Compliance' ? framework : 'Internal Policy',
+    framework: type === 'SOX / ICFR' ? 'COSO 2013 / SOX 404' : type === 'Compliance' ? framework : 'Internal Policy',
+    soxConfig: type === 'SOX / ICFR' ? { overallMateriality, performanceMateriality: Math.round(overallMateriality * pmPct / 100), clearlyTrivial: Math.round(overallMateriality * cttPct / 100), sdBandPct: 20, aggregate: true, keyOnly } : undefined,
     owner,
     status,
     periodStart: periodStart || 'TBD',
@@ -201,7 +210,7 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <Sparkles size={16} className="text-brand-600 shrink-0" />
-                <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight">Create Engagement</h2>
+                <h2 className="text-[1.125rem] font-semibold text-ink-900 tracking-tight">Create Engagement</h2>
               </div>
               <p className="text-[0.75rem] text-ink-500">Step {step} of 5</p>
             </div>
@@ -373,6 +382,52 @@ export default function CreateEngagementWizard({ onClose, onCreated }: Props): J
                   </div>
                 </div>
               )}
+
+              {step === 3 && type === 'SOX / ICFR' && (() => {
+                const fmtR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
+                const pm = overallMateriality * pmPct / 100;
+                const ctt = overallMateriality * cttPct / 100;
+                const sd = overallMateriality * 0.20;
+                return (
+                <div className="space-y-4">
+                  <SectionTitle title="SOX / ICFR — scoping & materiality" subtitle="Ground rules that drive how exceptions are evaluated" />
+                  <Field label="Framework">
+                    <div className="px-3 py-2.5 border border-border-light bg-canvas/60 rounded-lg text-[0.8125rem] text-ink-700 font-medium">COSO 2013 / SOX 404(b)</div>
+                  </Field>
+                  <Field label="Control scope">
+                    <button type="button" onClick={() => setKeyOnly(k => !k)} className={`w-full flex items-center justify-between px-3 py-2.5 border rounded-lg text-[0.8125rem] transition-all ${keyOnly ? segActiveCls : segIdleCls}`}>
+                      <span className="font-medium">Key controls only</span>
+                      <span className={`w-9 h-5 rounded-full relative transition-colors ${keyOnly ? 'bg-brand-600' : 'bg-ink-200'}`}><span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${keyOnly ? 'left-[1.125rem]' : 'left-0.5'}`} /></span>
+                    </button>
+                  </Field>
+                  <Field label="Overall materiality">
+                    <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[0.8125rem] text-ink-500 pointer-events-none">{'₹'}</span><input type="number" min={0} value={overallMateriality} onChange={e => setOverallMateriality(parseInt(e.target.value) || 0)} className={inputCls + ' pl-7'} /></div>
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Performance materiality (% of overall)">
+                      <input type="number" min={1} max={100} value={pmPct} onChange={e => setPmPct(parseInt(e.target.value) || 0)} className={inputCls} />
+                      <div className="text-[0.7rem] text-ink-500 mt-1">= {fmtR(pm)}</div>
+                    </Field>
+                    <Field label="Clearly-trivial threshold (% of overall)">
+                      <input type="number" min={0} max={99} value={cttPct} onChange={e => setCttPct(parseInt(e.target.value) || 0)} className={inputCls} />
+                      <div className="text-[0.7rem] text-ink-500 mt-1">= {fmtR(ctt)}</div>
+                    </Field>
+                  </div>
+                  <div className="rounded-lg border border-border-light bg-canvas/60 p-3 space-y-1.5">
+                    <div className={labelCls + ' mb-0.5'}>Exception severity — computed automatically</div>
+                    {[
+                      [`≤ ${fmtR(ctt)}`, 'Clearly trivial — logged, not aggregated', 'text-ink-500'],
+                      [`> ${fmtR(ctt)} and < ${fmtR(sd)}`, 'Deficiency', 'text-mitigated-700'],
+                      [`≥ ${fmtR(sd)} (20% of materiality)`, 'Significant deficiency', 'text-high-700'],
+                      [`≥ ${fmtR(overallMateriality)} or an MW indicator`, 'Material weakness', 'text-risk-700'],
+                    ].map(([band, label, cls]) => (
+                      <div key={band} className="flex items-center justify-between text-[0.75rem]"><span className="text-ink-600 tabular-nums">{band}</span><span className={`font-semibold ${cls}`}>{label}</span></div>
+                    ))}
+                    <div className="text-[0.7rem] text-ink-500 pt-1 border-t border-border-light mt-1">Full rule set — bands, aggregation, compensating controls, auto-routing — is managed in the engagement's Materiality workspace.</div>
+                  </div>
+                </div>
+                );
+              })()}
 
               {step === 3 && type === 'Internal Audit' && (
                 <div className="space-y-4">

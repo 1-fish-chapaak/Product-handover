@@ -30,7 +30,7 @@ export default function ListPlaceholder({
       <div className="w-12 h-12 rounded-lg bg-paper-100 flex items-center justify-center mb-4">
         <Icon className="w-6 h-6 text-ink-500" aria-hidden="true" />
       </div>
-      <h3 className="text-[0.9375rem] font-display text-ink-800 mb-1">{title}</h3>
+      <h3 className="text-[0.9375rem] text-ink-800 mb-1">{title}</h3>
       {body && <p className="text-[0.8125rem] text-ink-600 mb-5 max-w-[320px]">{body}</p>}
       {action}
     </div>

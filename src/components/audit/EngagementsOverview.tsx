@@ -28,6 +28,7 @@ const TYPE_CLS: Record<EngType, string> = {
   Compliance: 'bg-brand-50 text-brand-700 border-brand-100',
   'Internal Audit': 'bg-evidence-50 text-evidence-700 border-evidence-100',
   Automation: 'bg-compliant-50 text-compliant-700 border-compliant-100',
+  'SOX / ICFR': 'bg-brand-100 text-brand-800 border-brand-200',
 };
 
 const STATUS_DOT: Record<EngStatus, string> = {
@@ -53,7 +54,7 @@ const SEV_DOT: Record<Severity, string> = {
   Low: 'bg-gray-400',
 };
 
-const TYPE_ORDER: EngType[] = ['Compliance', 'Internal Audit', 'Automation'];
+const TYPE_ORDER: EngType[] = ['SOX / ICFR', 'Compliance', 'Internal Audit', 'Automation'];
 const STATUS_ORDER: EngStatus[] = ['Active', 'In Progress', 'Planned', 'Review', 'Draft'];
 const PROCESS_ORDER: ProcessCode[] = ['P2P', 'O2C', 'R2R', 'S2C', 'ITGC'];
 

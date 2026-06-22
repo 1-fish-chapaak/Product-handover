@@ -376,7 +376,7 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
         <div className="flex flex-col gap-5 h-full">
           <div className="flex items-start justify-between gap-4 shrink-0">
             {workflowChoice === 'link' ? (
-              <h3 className="font-display text-[15px] font-semibold text-ink-900">Link existing workflow</h3>
+              <h3 className="text-[15px] font-semibold text-ink-900">Link existing workflow</h3>
             ) : (
               <p className="text-[0.75rem] text-ink-500">
                 Choose how this control will get its workflow. A workflow defines how the control is tested during engagements.
@@ -494,7 +494,7 @@ export default function CreateControlDrawer({ onClose, onSave, defaultProcess, d
             <div>
               <div className="flex items-center gap-2">
                 <Shield size={18} className="text-brand-600" />
-                <h2 className="font-display text-[1.25rem] font-semibold text-ink-900 tracking-tight">Create Control</h2>
+                <h2 className="text-[1.25rem] font-semibold text-ink-900 tracking-tight">Create Control</h2>
               </div>
               <p className="text-[0.75rem] text-ink-500 mt-0.5">Define a new reusable governance control.</p>
             </div>

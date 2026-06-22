@@ -31,7 +31,8 @@ const STEP_LABELS: { key: Step; label: string }[] = [
 
 /**
  * Upload Report → Generate ATR (guided 3-step flow).
- *  1. Template  — download the Excel/Word template of required observation fields.
+ *  1. Template  — download the Excel/Word template of required observation fields,
+ *                 or pick an existing report as the source (skips upload).
  *  2. Upload    — upload the filled template (or any report) + confirm report meta.
  *  3. Review    — extracted observations rendered into the standard ATR format.
  */
@@ -138,14 +139,14 @@ export default function UploadReportModal({ onClose, onAddToReport }: {
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
-        className="fixed inset-0 bg-ink-900/50 backdrop-blur-[2px] z-50"
+        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50"
         onClick={onClose}
       />
       <motion.div
         ref={containerRef}
         initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[860px] max-w-[94vw] max-h-[90vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col"
         role="dialog"
         aria-modal="true"
         aria-label="Upload Report to Generate ATR"
@@ -163,7 +164,7 @@ export default function UploadReportModal({ onClose, onAddToReport }: {
                 <p className="text-[0.75rem] text-ink-500 leading-snug">Download the template, fill in your observations, and upload to generate the report.</p>
               </div>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close">
+            <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Close">
               <X size={16} />
             </button>
           </div>
@@ -175,7 +176,7 @@ export default function UploadReportModal({ onClose, onAddToReport }: {
               return (
                 <div key={s.key} className="flex items-center gap-2">
                   <span className={`inline-flex items-center gap-1.5 h-7 pl-1.5 pr-2.5 rounded-full text-[0.75rem] font-semibold ${
-                    state === 'active' ? 'bg-brand-50 text-brand-700' : state === 'done' ? 'bg-compliant-50 text-compliant-700' : 'bg-[#F4F2F7] text-ink-500'
+                    state === 'active' ? 'bg-brand-50 text-brand-700' : state === 'done' ? 'bg-compliant-50 text-compliant-700' : 'bg-draft-50 text-ink-500'
                   }`}>
                     <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[0.625rem] ${
                       state === 'active' ? 'bg-brand-600 text-white' : state === 'done' ? 'bg-compliant text-white' : 'bg-ink-300 text-white'
@@ -226,7 +227,7 @@ export default function UploadReportModal({ onClose, onAddToReport }: {
 
               {/* Download template */}
               <div className="flex flex-col gap-3">
-                <div className="rounded-[12px] border border-canvas-border bg-[#FAFAFB] p-5">
+                <div className="rounded-[12px] border border-canvas-border bg-canvas p-5">
                   <div className="text-[0.875rem] font-semibold text-ink-900 mb-1">Download the template</div>
                   <p className="text-[0.75rem] text-ink-500 leading-relaxed mb-4">Fill one row per observation, then upload it in the next step. The Excel sheet includes an example row and an Instructions tab.</p>
                   <div className="flex flex-col gap-2.5">
@@ -278,7 +279,7 @@ export default function UploadReportModal({ onClose, onAddToReport }: {
                 <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">Upload filled template or report <span className="text-risk">*</span></label>
                 <input ref={fileInputRef} id="ur-file-input" type="file" accept={ACCEPT} className="sr-only" onChange={e => acceptFile(e.target.files?.[0])} />
                 {file ? (
-                  <div className="flex items-center gap-3 px-4 py-3 border border-canvas-border rounded-[10px] bg-[#FAFAFB]">
+                  <div className="flex items-center gap-3 px-4 py-3 border border-canvas-border rounded-[10px] bg-canvas">
                     <div className="w-9 h-9 rounded-[8px] bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[0.8125rem] font-semibold text-ink-900 truncate">{file.name}</div>
@@ -295,7 +296,7 @@ export default function UploadReportModal({ onClose, onAddToReport }: {
                     onDragLeave={() => setDragOver(false)}
                     onDrop={e => { e.preventDefault(); setDragOver(false); acceptFile(e.dataTransfer.files?.[0]); }}
                     className={`w-full flex flex-col items-center justify-center gap-2 px-4 py-7 rounded-[10px] border-2 border-dashed transition-colors cursor-pointer ${
-                      dragOver ? 'border-brand-500 bg-brand-50/60' : showErrors && !file ? 'border-risk/50 bg-risk-50/40' : 'border-canvas-border bg-[#FAFAFB] hover:border-brand-300 hover:bg-brand-50/30'
+                      dragOver ? 'border-brand-500 bg-brand-50/60' : showErrors && !file ? 'border-risk/50 bg-risk-50/40' : 'border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/30'
                     }`}
                   >
                     <CloudUpload size={22} className={dragOver ? 'text-brand-600' : 'text-ink-400'} />
@@ -328,11 +329,11 @@ export default function UploadReportModal({ onClose, onAddToReport }: {
                 })}
                 <div>
                   <div className="text-[0.75rem] font-semibold text-ink-800 mb-1.5">Report ID</div>
-                  <div className="px-3 py-2.5 rounded-[8px] border border-dashed border-canvas-border bg-[#FAFAFB] text-[0.8125rem] font-mono text-ink-600">{reportId}</div>
+                  <div className="px-3 py-2.5 rounded-[8px] border border-dashed border-canvas-border bg-canvas text-[0.8125rem] font-mono text-ink-600">{reportId}</div>
                 </div>
                 <div>
                   <div className="text-[0.75rem] font-semibold text-ink-800 mb-1.5">Generated On</div>
-                  <div className="px-3 py-2.5 rounded-[8px] border border-dashed border-canvas-border bg-[#FAFAFB] text-[0.8125rem] text-ink-600">{generatedOn}</div>
+                  <div className="px-3 py-2.5 rounded-[8px] border border-dashed border-canvas-border bg-canvas text-[0.8125rem] text-ink-600">{generatedOn}</div>
                 </div>
               </div>
             </div>

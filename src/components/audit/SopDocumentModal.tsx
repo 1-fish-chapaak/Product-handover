@@ -125,7 +125,7 @@ export default function SopDocumentModal({
               {/* Body — in-app document "page" */}
               <div className="flex-1 overflow-y-auto bg-canvas/40 px-6">
                 <article className="mx-auto my-6 max-w-[680px] bg-white border border-border-light rounded-xl shadow-sm px-10 py-9">
-                  <h1 className="font-display text-[1.375rem] font-bold text-ink-900 border-b border-border-light pb-3 mb-1">{sopName}</h1>
+                  <h1 className="text-[1.375rem] font-bold text-ink-900 border-b border-border-light pb-3 mb-1">{sopName}</h1>
                   {subtitleParts.length > 0 && (
                     <p className="text-[0.71875rem] text-ink-400">{subtitleParts.join(' · ')}</p>
                   )}

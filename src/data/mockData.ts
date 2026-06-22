@@ -1,3 +1,5 @@
+import type { WorkflowResult } from "../components/reports/reportShared";
+
 // ─── Business Processes ───
 export const BUSINESS_PROCESSES = [
   { id: "p2p", name: "Procure to Pay", abbr: "P2P", color: "#6a12cd", risks: 9, controls: 24, coverage: 72, sops: 2, workflows: 5 },
@@ -142,9 +144,9 @@ export const REPORT_TEMPLATES = [
   { id: "rt-001", name: "SOX Compliance Report", desc: "Comprehensive SOX compliance status with control testing results", category: "Compliance", icon: "shield", sections: [
     { name: 'Executive Summary', icon: 'file-text' },
     { name: 'Scope & Objectives', icon: 'file-text' },
+    { name: 'Testing Methodology', icon: 'file-text' },
     { name: 'Control Testing Results', icon: 'check-circle' },
-    { name: 'Deficiency Analysis', icon: 'alert-triangle' },
-    { name: 'Remediation Status', icon: 'shield' },
+    { name: 'Detailed Description', icon: 'alert-triangle' },
     { name: 'Appendix', icon: 'file-text' },
   ]},
   { id: "rt-007", name: "ATR Report", desc: "Action Taken Report with query-wise summary, closure status, key insights, auditor comments, and sign-off", category: "Audit", icon: "clipboard-check", sections: [
@@ -201,7 +203,7 @@ export const REPORT_TEMPLATES = [
 // Mock workflow results seeded onto the demo Bulk Audit report (gr-002) so
 // the report opens with workflow cards, severity chips, and an output table
 // even without running a fresh Bulk Run from Workflow Library.
-const SEED_BULK_AUDIT_WORKFLOWS = [
+export const SEED_BULK_AUDIT_WORKFLOWS: WorkflowResult[] = [
   {
     id: 'wfr-seed-1',
     workflowId: 'WF-001',
@@ -299,18 +301,30 @@ const SEED_BULK_AUDIT_WORKFLOWS = [
   },
 ];
 
+/** Single source of truth for the persisted-reports localStorage key. Bump the
+ *  version suffix to invalidate stale blobs (e.g. after a seed-shape change).
+ *  All writers (ReportsView, App, BulkRunProgress) must use this constant so
+ *  the key can never drift between them. */
+export const GENERATED_REPORTS_KEY = 'irame.reports.generatedReports.v9';
+
 export const GENERATED_REPORTS = [
-  { id: "gr-001", templateId: "rt-001", name: "FY26 Q1 SOX Compliance Report", tag: "Internal Audit", generatedBy: "Karan Mehta", generatedAt: "Mar 20, 2026", status: "final", pages: 24, queries: 6 },
-  { id: "gr-002", templateId: "ct-custom-01", name: "P2P Risk Assessment — March 2026", tag: "Bulk Audit", generatedBy: "Tushar Goel", generatedAt: "Mar 18, 2026", status: "draft", pages: 12, queries: 4, workflowResults: SEED_BULK_AUDIT_WORKFLOWS },
-  { id: "gr-003", templateId: "ct-custom-02", name: "Workflow Performance — Feb 2026", tag: "Internal Audit", generatedBy: "AI Copilot", generatedAt: "Mar 1, 2026", status: "final", pages: 8, queries: 3 },
-  { id: "gr-004", templateId: "rt-001", name: "FY26 Q1 Comprehensive Multi-Jurisdictional Procure-to-Pay and Order-to-Cash Risk Assessment with Detailed Vendor Master Anomaly Detection, Duplicate Invoice Forensics, Segregation of Duties Audit, and Quarter-End Reconciliation Variance Review Report", tag: "Internal Audit", generatedBy: "Karan Mehta", generatedAt: "Feb 24, 2026", status: "draft", pages: 41, queries: 12 },
+  { id: "gr-001", templateId: "rt-001", name: "FY26 Q1 Financial Reporting Controls Review", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 20, 2026", status: "final", pages: 24, queries: 6 },
+  { id: "gr-002", templateId: "ct-custom-01", name: "P2P Risk Assessment — March 2026", tag: "Bulk Audit", generatedBy: "You", generatedAt: "Mar 18, 2026", status: "draft", pages: 12, queries: 4, workflowResults: SEED_BULK_AUDIT_WORKFLOWS },
+  { id: "gr-003", templateId: "ct-custom-02", name: "Workflow Performance Review — Feb 2026", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 1, 2026", status: "final", pages: 8, queries: 3 },
+  { id: "gr-004", templateId: "rt-001", name: "FY26 Q1 Comprehensive Multi-Jurisdictional Procure-to-Pay and Order-to-Cash Risk Assessment with Detailed Vendor Master Anomaly Detection, Duplicate Invoice Forensics, Segregation of Duties Audit, and Quarter-End Reconciliation Variance Review Report", tag: "Internal Audit", generatedBy: "You", generatedAt: "Feb 24, 2026", status: "draft", pages: 41, queries: 12 },
+  { id: "gr-005", templateId: "rt-001", name: "Quarter-End Reconciliation Variance Review — Q1 FY26", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 16, 2026", status: "final", pages: 16, queries: 5 },
+  { id: "gr-006", templateId: "rt-001", name: "Segregation of Duties Assessment — Finance", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 12, 2026", status: "draft", pages: 11, queries: 4 },
+  { id: "gr-007", templateId: "rt-001", name: "IT General Controls Effectiveness — FY26", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 8, 2026", status: "final", pages: 19, queries: 7 },
+  { id: "gr-008", templateId: "rt-internal-audit", name: "Procure-to-Pay Process Audit — March 2026", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 5, 2026", status: "final", pages: 14, queries: 5 },
+  { id: "gr-009", templateId: "rt-internal-audit", name: "Vendor Master Data Integrity Assessment", tag: "Internal Audit", generatedBy: "You", generatedAt: "Feb 28, 2026", status: "draft", pages: 9, queries: 3 },
+  { id: "gr-010", templateId: "rt-internal-audit", name: "Order-to-Cash Revenue Audit — Q1 FY26", tag: "Internal Audit", generatedBy: "You", generatedAt: "Feb 20, 2026", status: "final", pages: 22, queries: 8 },
 ];
 
 export const SHARED_REPORTS = [
-  { id: "sr-001", name: "FY26 Internal Audit Summary", sharedBy: "Neha Joshi", sharedAt: "Apr 10, 2026", status: "final", pages: 18, sharedWith: "Audit Team", queries: 5 },
-  { id: "sr-002", name: "O2C Controls Review — Q1 2026", sharedBy: "Deepak Bansal", sharedAt: "Apr 5, 2026", status: "final", pages: 14, sharedWith: "Finance", queries: 4 },
-  { id: "sr-003", name: "Vendor Risk Exposure Report", sharedBy: "Karan Mehta", sharedAt: "Mar 28, 2026", status: "draft", pages: 9, sharedWith: "Risk Committee", queries: 2 },
-  { id: "sr-004", name: "GL Reconciliation — Feb 2026", sharedBy: "Sneha Desai", sharedAt: "Mar 15, 2026", status: "final", pages: 22, sharedWith: "CFO Office", queries: 7 },
+  { id: "sr-001", name: "FY26 Internal Audit Summary", kind: "ia", sharedBy: "Neha Joshi", sharedAt: "Apr 10, 2026", status: "final", pages: 18, sharedWith: "Audit Team", queries: 5 },
+  { id: "sr-002", name: "O2C Controls Review — Q1 2026", kind: "sox", sharedBy: "Deepak Bansal", sharedAt: "Apr 5, 2026", status: "final", pages: 14, sharedWith: "Finance", queries: 4 },
+  { id: "sr-003", name: "Vendor Risk Exposure Report", kind: "ia", sharedBy: "Karan Mehta", sharedAt: "Mar 28, 2026", status: "draft", pages: 9, sharedWith: "Risk Committee", queries: 2 },
+  { id: "sr-004", name: "GL Reconciliation — Feb 2026", kind: "sox", sharedBy: "Sneha Desai", sharedAt: "Mar 15, 2026", status: "final", pages: 22, sharedWith: "CFO Office", queries: 7 },
 ];
 
 // ─── Data Sources ───
@@ -496,6 +510,10 @@ export interface GrcActivityEntry {
   message: string;
   comment?: string;
   attachment?: { name: string };
+  /** Set to 'comment' for free-form posts from the always-on comment channel
+   *  (as opposed to system/action log entries). Drives the comment-count badge
+   *  on the Classify/Action CTAs and the comment styling in the thread. */
+  kind?: 'comment';
 }
 export type GrcActionStatus = 'Implemented' | 'Partially Implemented' | 'Pending' | 'Discrepancy';
 export interface GrcCaseDetail {

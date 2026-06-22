@@ -765,7 +765,7 @@ function EngagementFinalLanding({ onOpen }: { onOpen: (card: IAEngagementCard) =
       <div className="flex items-end justify-between">
         <div>
           <div className="text-[11px] font-semibold text-text-muted tracking-wider uppercase mb-1">Engagements</div>
-          <h1 className="font-display text-[28px] font-bold text-text tracking-tight">Engagement Final</h1>
+          <h1 className="text-[28px] font-bold text-text tracking-tight">Engagement Final</h1>
           <p className="text-[13px] text-text-secondary mt-1.5">Browse all engagements — compliance audits, internal audits, and automation programs.</p>
         </div>
         <button onClick={() => setShowTypePicker(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary to-primary-medium text-white text-[13px] font-semibold hover:from-primary-hover hover:to-primary transition-all cursor-pointer shadow-sm">

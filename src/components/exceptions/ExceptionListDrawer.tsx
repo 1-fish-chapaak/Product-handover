@@ -81,11 +81,14 @@ function ExceptionCard({ ex, onClick }: { ex: GrcException; onClick?: () => void
 // One card per management action plan (Actionable ID). The relative action can be
 // performed right here; "View all cases" opens the linked-exceptions modal — so the
 // user acts from the slide panel with the fewest clicks.
-function PlanRow({ aid, exs, role, onView, onAction }: {
+function PlanRow({ aid, exs, role, onViewDetail, onViewBulk, onAction }: {
   aid: string;
   exs: GrcException[];
   role?: 'risk-owner' | 'auditor';
-  onView: () => void;
+  /** Open the management action plan / case detail directly. */
+  onViewDetail: () => void;
+  /** Open the list of all linked cases (bulk groups only). */
+  onViewBulk?: () => void;
   onAction?: (kind: ExceptionActionKind, ex: GrcException) => void;
 }) {
   const counts: Partial<Record<GrcExceptionStatus, number>> = {};
@@ -111,9 +114,16 @@ function PlanRow({ aid, exs, role, onView, onAction }: {
       </div>
       <div className="text-[13.5px] font-semibold text-ink-900 leading-snug mb-3">{planTitleOf(exs)}</div>
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <button type="button" onClick={onView} className="inline-flex items-center gap-1 text-[12.5px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer">
-          {isBulk ? 'View all cases in this bulk action' : 'View case detail'} <ExternalLink size={12} />
-        </button>
+        <div className="flex items-center gap-x-4 gap-y-1 flex-wrap">
+          <button type="button" onClick={onViewDetail} className="inline-flex items-center gap-1 text-[12.5px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer">
+            View case detail <ExternalLink size={12} />
+          </button>
+          {isBulk && onViewBulk && (
+            <button type="button" onClick={onViewBulk} className="inline-flex items-center gap-1 text-[12.5px] font-medium text-ink-500 hover:text-ink-700 cursor-pointer">
+              View all cases in this bulk action <ExternalLink size={12} />
+            </button>
+          )}
+        </div>
         {act && actEx && onAction && (
           <button
             type="button"
@@ -212,17 +222,17 @@ export default function ExceptionListDrawer({
         onClick={onClose}
       />
       <motion.aside
-        initial={{ x: 24, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        exit={{ x: 24, opacity: 0 }}
-        transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-canvas-elevated shadow-xl border-l border-canvas-border flex flex-col z-50"
+        initial={{ opacity: 0, scale: 0.98, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.98, y: 8 }}
+        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-[880px] max-h-[88vh] bg-canvas-elevated shadow-xl border border-canvas-border rounded-[16px] flex flex-col z-50"
         role="dialog"
         aria-label={title}
       >
         <header className="shrink-0 px-6 pt-5 pb-4 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div>
-            <h2 className="font-display text-[20px] font-semibold text-ink-900 tracking-tight">{title}</h2>
+            <h2 className="text-[20px] font-semibold text-ink-900 tracking-tight">{title}</h2>
             <p className="text-[12.5px] text-ink-500 mt-0.5">
               {groupByActionable ? `${groups.length} management action plan${groups.length === 1 ? '' : 's'} · grouped by Actionable ID` : subtitle}
             </p>
@@ -245,7 +255,8 @@ export default function ExceptionListDrawer({
                 aid={aid}
                 exs={exs}
                 role={role}
-                onView={() => { if (exs.length > 1) setModalAid(aid); else onSelectException?.(exs[0]); }}
+                onViewDetail={() => onSelectException?.(exs[0])}
+                onViewBulk={exs.length > 1 ? () => setModalAid(aid) : undefined}
                 onAction={onAction}
               />
             ))

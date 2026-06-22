@@ -246,7 +246,7 @@ function RacmDetailHeader({ racm, action }: { racm: RacmEntry; action: React.Rea
             <span className={`px-2 h-5 rounded-full text-[0.625rem] font-semibold inline-flex items-center ${READINESS_BADGE[readiness]}`}>{readiness}</span>
             <span className="font-mono text-[0.6875rem] text-ink-500">{racm.id}</span>
           </div>
-          <h1 className="font-display text-[1.625rem] font-[420] tracking-tight text-ink-900 leading-[1.2]">{racm.name}</h1>
+          <h1 className="text-[1.625rem] font-semibold tracking-tight text-ink-900 leading-[1.2]">{racm.name}</h1>
         </div>
         {action}
       </div>
@@ -487,7 +487,7 @@ function ArRacmMappingView({ racm, entries, onBack }: { racm: RacmEntry; entries
 
       {/* View label so it's clear this is the mapping view, not the summary. */}
       <div className="flex items-baseline gap-2">
-        <h2 className="font-display text-[1.25rem] font-[420] tracking-tight text-ink-900">Risk-Control Mapping</h2>
+        <h2 className="text-[1.25rem] font-semibold tracking-tight text-ink-900">Risk-Control Mapping</h2>
         <span className="text-[0.75rem] text-ink-500">every risk paired with its control, in full RACM detail</span>
       </div>
 
@@ -982,13 +982,13 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
               <Button
                 variant="primary"
                 size="md"
-                className="shrink-0 !h-8 rounded-md!"
+                className="shrink-0 !h-8 rounded-md! text-[0.75rem]!"
                 leftIcon={<Plus size={13} />}
                 onClick={onCreate}
                 disabled={searchQuery.trim().length > 0}
                 title={searchQuery.trim().length > 0 ? 'Clear search to create' : undefined}
               >
-                Create new RACM
+                Create RACM
               </Button>
             )}
           </div>

@@ -41,32 +41,31 @@ export default function ComprehensiveAtrModal({
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
-        className="fixed inset-0 bg-ink-900/50 backdrop-blur-[2px] z-50"
+        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50"
         onClick={onClose}
       />
       <motion.div
         initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[980px] max-w-[94vw] h-[90vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col"
         role="dialog"
         aria-label="Action Taken Report"
       >
         {/* Title bar */}
-        <header className="shrink-0 px-6 py-3 flex items-center justify-between gap-4 border-b border-canvas-border">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
-              <FileText size={16} />
+        {/* Title bar — the document banner carries the report title, so this
+            bar stays a thin context strip. */}
+        <header className="shrink-0 px-6 py-2.5 flex items-center justify-between gap-4 border-b border-canvas-border">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-[8px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
+              <FileText size={14} />
             </div>
-            <div>
-              <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Action Taken Report</h2>
-              <p className="text-[0.75rem] text-ink-500 leading-snug">
-                Generated from {observations.length} observation{observations.length === 1 ? '' : 's'} · <span className="font-mono">{meta.reportId}</span>
-              </p>
-            </div>
+            <p className="text-[0.8125rem] font-medium text-ink-600 truncate">
+              Generated from {observations.length} observation{observations.length === 1 ? '' : 's'} · <span className="font-mono">{meta.reportId}</span>
+            </p>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0"
+            className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0"
             aria-label="Close"
           >
             <X size={16} />
@@ -74,7 +73,7 @@ export default function ComprehensiveAtrModal({
         </header>
 
         {/* Document */}
-        <div className="flex-1 min-h-0 overflow-y-auto bg-[#F4F2F7] py-6">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-draft-50 py-6">
           <AtrDocument meta={meta} observations={observations} insights={insights} />
         </div>
 

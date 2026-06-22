@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
-  Search, Plus, FileSpreadsheet, AlertTriangle, Layers, Rows3, ChevronRight, MessageSquare,
-  Star, RefreshCw, ListFilter, FileText, X, Send,
+  Search, Plus, FileSpreadsheet, AlertTriangle, Layers, Rows3, MessageSquare,
+  Star, RefreshCw, ListFilter, FileText, X, Send, LayoutGrid, Table2,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import {
@@ -22,6 +22,42 @@ const VIEWS: { id: SavedView; label: string }[] = [
   { id: 'exceptions', label: 'Exceptions' },
   { id: 'key', label: 'Key controls' },
 ];
+
+// binding colours, one per process — drawn from the brand purple + evidence blue families (on-theme, no brown)
+const BINDINGS = ['#6A12CD', '#0369A1', '#550FA5', '#075985', '#8838DE', '#0284C7', '#3B0B72', '#1E3A5F'];
+function spineColor(p: string): string { let h = 0; for (let i = 0; i < p.length; i++) h = (h * 31 + p.charCodeAt(i)) >>> 0; return BINDINGS[h % BINDINGS.length]; }
+
+function ControlCard({ c, discN, court, role, onOpen }: { c: Control; discN: number; court: ReturnType<typeof courtFor>; role: ReturnType<typeof useIcfr>['role']; onOpen: () => void }) {
+  const dp = designProgress(c); const op = operatingProgress(c);
+  const dRes = trackResult(c.design); const oRes = trackResult(c.operating);
+  const concl = controlConclusion(c);
+  const dStarted = dp.docsReceived > 0 || dp.pointsPass > 0;
+  const oStarted = op.tested > 0;
+  const dotCls = (res: ReturnType<typeof trackResult>, started: boolean) => res === 'Effective' ? 'ok' : res === 'Ineffective' ? 'ko' : started ? 'prog' : 'none';
+  const label = (res: ReturnType<typeof trackResult>, started: boolean) => res === 'Not tested' ? (started ? 'In progress' : 'Not started') : res;
+  return (
+    <button className="ac-card" onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter') onOpen(); }} aria-label={`Open ${c.id} — ${c.description}`}>
+      <div className="flex items-center gap-2">
+        <span className="wp-ref">{c.wpRef}</span>
+        <span className="ac-eyebrow"><span className="dot" style={{ background: spineColor(c.process) }} /><span className="lbl">{c.process}</span></span>
+        {c.isKey && <Star size={12} className="text-mitigated fill-mitigated-100 shrink-0" />}
+        {discN > 0 && <span className="ml-auto inline-flex items-center gap-0.5 text-[10.5px] font-bold text-brand-700 bg-brand-50 px-1.5 h-[17px] rounded-full"><MessageSquare size={9} />{discN}</span>}
+      </div>
+      <h3 className="ac-title mt-2.5">{c.description}</h3>
+      <div className="ac-meta">{c.id} · {c.subProcess} · {c.nature}</div>
+      <div className="ac-div" />
+      <div>
+        <div className="ac-track"><span className="ac-track-label">Design</span><span className={cn('ac-dot', dotCls(dRes, dStarted))} /><span className="ac-track-status">{label(dRes, dStarted)}</span><span className="ac-track-count">{dp.docsReceived}/{dp.docsTotal}</span></div>
+        <div className="ac-track"><span className="ac-track-label">Operating</span><span className={cn('ac-dot', dotCls(oRes, oStarted))} /><span className="ac-track-status">{label(oRes, oStarted)}</span><span className="ac-track-count">{op.tested}/{op.total}</span></div>
+      </div>
+      <div className="ac-div" />
+      <div className="ac-foot">
+        <ConclusionPill c={concl} />
+        <span className="ml-auto"><CourtBadge court={court} fromRole={role} /></span>
+      </div>
+    </button>
+  );
+}
 
 function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackResult>; a: number; b: number; label: string }) {
   const pct = b === 0 ? 0 : Math.round((a / b) * 100);
@@ -48,6 +84,7 @@ export default function ControlRegister() {
   const [nature, setNature] = useState('All');
   const [grouped, setGrouped] = useState(true);
   const [dense, setDense] = useState(false);
+  const [layout, setLayout] = useState<'cards' | 'table'>('cards');
   const [sel, setSel] = useState<Set<string>>(new Set());
 
   const stats = engagementProgress(eng);
@@ -92,8 +129,8 @@ export default function ControlRegister() {
           <p className="text-[13px] text-ink-500 mt-0.5">{eng.controls.length} controls · Design and operating effectiveness tested independently · {eng.framework}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setView('scope')} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Layers size={14} /> Scope</button>
-          <button onClick={() => setView('deficiencies')} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><AlertTriangle size={14} /> Deficiencies <span className="ml-0.5 px-1.5 h-[18px] inline-flex items-center rounded-full bg-risk-50 text-risk-700 text-[10.5px] font-bold">{eng.deficiencies.length}</span></button>
+          <button onClick={() => setView('scope')} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Layers size={14} /> Materiality &amp; scope</button>
+          <button onClick={() => setView('deficiencies')} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><AlertTriangle size={14} /> Exceptions <span className="ml-0.5 px-1.5 h-[18px] inline-flex items-center rounded-full bg-risk-50 text-risk-700 text-[10.5px] font-bold">{eng.deficiencies.length}</span></button>
           <button onClick={() => downloadIcfrWorkingPaper(eng)} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={14} /> Working paper</button>
           <button onClick={rollForward} title="Roll forward to year-end" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RefreshCw size={14} /> Roll forward</button>
           <button onClick={() => setView('setup')} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New engagement</button>
@@ -143,11 +180,38 @@ export default function ControlRegister() {
           </select>
         </div>
         <div className="flex-1" />
-        <button onClick={() => setGrouped(g => !g)} className={cn('filter-pill', grouped && 'on')}><Layers size={13} /> Group by process</button>
-        <button onClick={() => setDense(d => !d)} className={cn('filter-pill', dense && 'on')}><Rows3 size={13} /> Dense</button>
+        <button onClick={() => setGrouped(g => !g)} className={cn('filter-pill', grouped && 'on')}><Layers size={13} /> {layout === 'cards' ? 'Shelves' : 'Group'} by process</button>
+        {layout === 'table' && <button onClick={() => setDense(d => !d)} className={cn('filter-pill', dense && 'on')}><Rows3 size={13} /> Dense</button>}
+        <div className="inline-flex items-center p-0.5 rounded-lg border border-canvas-border bg-canvas-elevated">
+          <button onClick={() => setLayout('cards')} title="Card view" className={cn('h-8 px-2.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors', layout === 'cards' ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}><LayoutGrid size={13} /> Cards</button>
+          <button onClick={() => setLayout('table')} title="Table view" className={cn('h-8 px-2.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors', layout === 'table' ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}><Table2 size={13} /> Table</button>
+        </div>
       </div>
 
-      {/* table */}
+      {/* register body — cards (default) or table */}
+      {layout === 'cards' ? (
+        <div>
+          {groups.map(g => (
+            <div key={g.key || 'flat'} className="shelf">
+              {g.key && (
+                <div className="shelf-head">
+                  <span className="shelf-swatch" style={{ background: spineColor(g.key) }} />
+                  <span className="shelf-title">{g.key}</span>
+                  <span className="text-[11.5px] text-ink-400 font-medium">· {g.rows.length}</span>
+                  <span className="text-[10.5px] font-semibold text-ink-400 hidden md:inline">{g.rows.filter(c => trackResult(c.design) !== 'Not tested').length} design · {g.rows.filter(c => trackResult(c.operating) !== 'Not tested').length} operating concluded</span>
+                  <span className="shelf-board" />
+                </div>
+              )}
+              <div className="card-grid">
+                {g.rows.map(c => <ControlCard key={c.id} c={c} discN={openDiscussionCount(eng, c.id)} court={courtFor(c, eng.tasks)} role={role} onOpen={() => openControl(c.id)} />)}
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <div className="text-center py-16 text-ink-400 text-[13px] rounded-2xl border border-dashed border-canvas-border">No controls match these filters. <button onClick={() => { setQ(''); setProcess('All'); setNature('All'); setSavedView('all'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button></div>
+          )}
+        </div>
+      ) : (
       <div className={cn('reg-wrap', dense && 'reg-dense')}>
         <table className="w-full border-collapse">
           <thead className="reg-head">
@@ -205,6 +269,7 @@ export default function ControlRegister() {
           </tbody>
         </table>
       </div>
+      )}
       <div className="mt-2 text-[11.5px] text-ink-400 flex items-center justify-between">
         <span>Showing {filtered.length} of {eng.controls.length} controls</span>
         <span className="inline-flex items-center gap-3"><span className="inline-flex items-center gap-1"><Tickmark result="Pass" size={13} /> effective</span><span className="inline-flex items-center gap-1"><Tickmark result="Fail" size={13} /> ineffective</span><span className="inline-flex items-center gap-1"><Tickmark result="Not tested" size={13} /> not started</span></span>

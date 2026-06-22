@@ -9,6 +9,11 @@ export interface Column<T> {
   sortable?: boolean;
   align?: 'left' | 'center' | 'right';
   width?: string;
+  /** Let this (flexible) column shrink and truncate its content instead of
+   *  forcing the table wider than its container. Applies `max-width: 0` to the
+   *  cell so an inner `truncate` element ellipsizes rather than pushing the
+   *  table into horizontal scroll. Use on the single fluid column. */
+  truncate?: boolean;
   render?: (item: T, index: number) => ReactNode;
 }
 
@@ -53,6 +58,10 @@ interface SmartTableProps<T extends Record<string, unknown>> {
   // sentence-case muted labels, generous rows, no vertical grid lines,
   // very quiet hover. The opposite of a spreadsheet.
   variant?: 'default' | 'modern';
+  /** Compact row rhythm for the 'modern' variant — trades the generous py-4
+   *  rows for a tighter py-2.5, matching the platform's dense list views
+   *  (EvidenceRepository / DataSources). No effect on the 'default' variant. */
+  dense?: boolean;
   hideResultCount?: boolean;
   /** Background utility class for the search input. Defaults to 'bg-white';
    *  pass e.g. 'bg-paper-50' to match an adjacent filter control. */
@@ -65,6 +74,10 @@ interface SmartTableProps<T extends Record<string, unknown>> {
    *  by surfaces that own selection externally (e.g. Admin checkboxes). Off by
    *  default, so every other SmartTable is unaffected. */
   isRowSelected?: (item: T, index: number) => boolean;
+  /** Opt-in `table-layout: fixed`. Column `width` values are then honoured
+   *  exactly and the table always fills its container, so a width-less column
+   *  takes the remainder. Off by default (auto layout) for existing callers. */
+  fixedLayout?: boolean;
 }
 
 /* ─── Sort Icon ─── */
@@ -91,6 +104,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
   paginated = true,
   pageSize = 8,
   striped = true,
+  fixedLayout = false,
   stickyHeader = false,
   stickyHeaderTop = 'top-0',
   noRowHover = false,
@@ -103,6 +117,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
   animateRows = true,
   rowReveal = 'fade',
   variant = 'default',
+  dense = false,
   hideResultCount = false,
   searchBg = 'bg-white',
   showSortHint = false,
@@ -217,23 +232,24 @@ export default function SmartTable<T extends Record<string, unknown>>({
       {/* Table — `overflow-x-auto` also forces overflow-y to `auto`, which would
           trap the sticky header; drop it when the header is pinned. */}
       <div className={stickyHeader ? '' : 'overflow-x-auto'}>
-        <table className={`w-full ${isModern ? 'text-[13px]' : 'text-[12.5px]'}`}>
+        <table className={`w-full ${fixedLayout ? 'table-fixed' : ''} ${isModern ? 'text-[13px]' : 'text-[12.5px]'}`}>
           <thead>
-            <tr className={isModern ? 'border-b border-border-light' : 'bg-surface-2 border-b border-border-light'}>
-              {expandable && <th className={`w-8 ${stickyHeader ? `sticky ${stickyHeaderTop} z-10 ${isModern ? 'bg-white' : 'bg-surface-2'}` : ''}`} />}
+            <tr className="bg-surface-2 border-b border-border-light">
+              {expandable && <th className={`w-8 ${stickyHeader ? `sticky ${stickyHeaderTop} z-10 bg-surface-2` : ''}`} />}
               {columns.map((col, ci) => (
                 <th
                   key={col.key}
                   className={[
                     isModern
-                      ? `py-3 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-text-muted ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
+                      ? `${dense ? 'py-2.5' : 'py-3'} font-semibold text-text-secondary ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
                       : 'px-4 py-2.5 font-semibold text-text-secondary',
                     alignClass(col.align),
                     col.sortable !== false ? 'cursor-pointer select-none hover:text-text-secondary transition-colors' : '',
                     // Pin the header row to the page scroller, parked under any
                     // sticky toolbar via `stickyHeaderTop`. Each cell carries the
                     // header fill so scrolled rows don't show through.
-                    stickyHeader ? `sticky ${stickyHeaderTop} z-10 ${isModern ? 'bg-white' : 'bg-surface-2'}` : '',
+                    stickyHeader ? `sticky ${stickyHeaderTop} z-10 bg-surface-2` : '',
+                    col.truncate ? 'max-w-0' : '',
                   ].filter(Boolean).join(' ')}
                   style={col.width ? { width: col.width } : undefined}
                   onClick={() => col.sortable !== false && handleSort(col.key)}
@@ -305,7 +321,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                         : 'border-b border-border-light last:border-0',
                       selected ? 'bg-brand-50/60' : (stripeOn && i % 2 === 1 ? 'bg-surface-2/30' : ''),
                       onRowClick || expandable ? 'cursor-pointer' : '',
-                      noRowHover ? '' : (selected ? 'hover:bg-brand-50/70' : (isModern ? 'hover:bg-paper-50/50' : 'hover:bg-primary-xlight/50')),
+                      noRowHover ? '' : (selected ? 'hover:bg-brand-50/70' : (isModern ? 'hover:bg-brand-50/50' : 'hover:bg-primary-xlight/50')),
                     ].filter(Boolean).join(' ')}
                     onClick={() => {
                       if (expandable) handleToggleExpand(id);
@@ -325,10 +341,11 @@ export default function SmartTable<T extends Record<string, unknown>>({
                         key={col.key}
                         className={[
                           isModern
-                            ? `py-4 ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
+                            ? `${dense ? 'py-2.5' : 'py-4'} ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
                             : 'px-4 py-3',
                           // Opt-in selected-row accent: a left brand bar carried by the first cell.
                           ci === 0 && selected ? 'shadow-[inset_3px_0_0_#6A12CD]' : '',
+                          col.truncate ? 'max-w-0' : '',
                           alignClass(col.align),
                         ].filter(Boolean).join(' ')}
                       >

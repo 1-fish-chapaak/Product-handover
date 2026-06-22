@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Gavel, UserCheck, ShieldQuestion, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu } from 'lucide-react';
+import { Gavel, UserCheck, ShieldQuestion, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X } from 'lucide-react';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
 import type { Conclusion, Court, Nature, Role, Severity, TestResult, TrackConclusion } from './types';
@@ -41,6 +41,22 @@ export function Tickmark({ result, size = 18 }: { result: TestResult | 'Effectiv
     >
       {pass ? '✓' : fail ? '✗' : '–'}
     </span>
+  );
+}
+
+// ─── The auditor's stamp — pressed onto the page on conclusion ────────────────────
+export function Stamp({ result, size = 'sm', animate = true }: { result: 'Effective' | 'Ineffective'; size?: 'sm' | 'lg'; animate?: boolean }) {
+  const ok = result === 'Effective';
+  const lg = size === 'lg';
+  const cls = cn('stamp', ok ? 'stamp-ok' : 'stamp-ko', lg && 'stamp-lg');
+  const inner = <>{ok ? <Check size={lg ? 17 : 12} strokeWidth={3} /> : <X size={lg ? 17 : 12} strokeWidth={3} />} {result}</>;
+  if (!animate) return <span className={cls}>{inner}</span>;
+  return (
+    <motion.span className={cls}
+      initial={{ scale: lg ? 1.9 : 1.45, opacity: 0, rotate: -17 }}
+      animate={{ scale: 1, opacity: lg ? 1 : 0.94, rotate: -7 }}
+      transition={{ type: 'spring', stiffness: 340, damping: 13 }}
+    >{inner}</motion.span>
   );
 }
 

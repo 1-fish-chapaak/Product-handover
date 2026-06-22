@@ -1,3 +1,21 @@
+// ─── ReportBuilder — the non-template report surfaces ────────────────────────
+//
+// Scope boundary (so this and the wizard stop reading as redundant):
+//   • ReportBuilder (this file) owns the report paths that are NOT driven by a
+//     template + query selection:
+//       - context 'new'           → a blank report started from a result
+//                                    ("Add to report" on chat/workflow output),
+//       - context 'action-report' → a report seeded from exception /
+//                                    action-taken data (Manage Exceptions →
+//                                    "Generate Report").
+//   • GenerateReportWizard owns the canonical TEMPLATE path
+//     (template → pick queries → generate). Use it for anything template-driven.
+//   • TemplateEditor (in ReportsView) owns template AUTHORING (brand, theme,
+//     header/footer, arrangement); prefer it over this file's inline
+//     "Save as Template" form for net-new template creation.
+//
+// See PRD-REPORT-TEMPLATES.md §4 (journey) and §6.2 item 4 (the still-open
+// exceptions→report / Add-to-Report wiring) before merging these surfaces.
 import { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -151,28 +169,28 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
   };
 
   return (
-    <div className="flex h-full bg-surface-2 overflow-hidden">
+    <div className="flex h-full bg-canvas overflow-hidden">
       {/* Main Canvas */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
-        <div className="border-b border-border-light bg-white flex items-center justify-between px-6 py-4 shrink-0">
+        <div className="border-b border-canvas-border bg-white flex items-center justify-between px-6 py-4 shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-primary/10 text-primary rounded-[8px] shrink-0"><FileText size={16} /></div>
+              <div className="p-2 bg-brand-600/10 text-brand-600 rounded-[8px] shrink-0"><FileText size={16} /></div>
               <div>
                 <input
                   value={title}
                   onChange={e => setTitle(e.target.value)}
-                  className="text-[15px] font-semibold text-text bg-transparent border-none outline-none focus:underline focus:decoration-primary/30 block w-full"
+                  className="text-[0.9375rem] font-semibold text-ink-800 bg-transparent border-none outline-none focus:underline focus:decoration-brand-600/30 block w-full"
                 />
-                <p className="text-[11px] text-text-muted">Template Configuration</p>
+                <p className="text-[0.6875rem] text-ink-400">Template Configuration</p>
               </div>
             </div>
           </div>
           <button
             onClick={() => setShowPreview(p => !p)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium transition-colors cursor-pointer ${
-              showPreview ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-paper-50'
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[0.75rem] font-medium transition-colors cursor-pointer ${
+              showPreview ? 'bg-brand-600/10 text-brand-600' : 'text-ink-500 hover:bg-paper-50'
             }`}
           >
             <Eye size={14} />
@@ -183,16 +201,16 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
         {/* Preview Mode */}
         {showPreview && (
           <div className="flex-1 overflow-y-auto py-5 px-6">
-            <div className="bg-white rounded-[12px] border border-border-light overflow-hidden shadow-sm">
+            <div className="bg-white rounded-[12px] border border-canvas-border overflow-hidden">
               {/* Report Header */}
               <div className="px-8 py-4 flex items-center justify-between" style={{ background: `${templateThemeColor}15` }}>
                 <div>
-                  <div className="text-[11px] font-bold uppercase tracking-widest mb-0.5" style={{ color: templateThemeColor }}>{templateCategory}</div>
-                  <div className="text-[18px] font-bold text-text">{title}</div>
+                  <div className="text-[0.6875rem] font-bold uppercase tracking-widest mb-0.5" style={{ color: templateThemeColor }}>{templateCategory}</div>
+                  <div className="text-[1.125rem] font-bold text-ink-800">{title}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[10px] text-text-muted">{templateHeader}</div>
-                  <div className="text-[10px] text-text-muted mt-0.5">{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                  <div className="text-[0.625rem] text-ink-400">{templateHeader}</div>
+                  <div className="text-[0.625rem] text-ink-400 mt-0.5">{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
                 </div>
               </div>
               <div className="h-1 w-full" style={{ background: templateThemeColor }} />
@@ -200,12 +218,12 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
               {/* Section Placeholders */}
               <div className="px-8 py-5 flex flex-col gap-5">
                 {sections.length === 0 ? (
-                  <div className="text-center py-10 text-[12px] text-text-muted">No sections added yet. Add report sections to see them here.</div>
+                  <div className="text-center py-10 text-[0.75rem] text-ink-400">No sections added yet. Add report sections to see them here.</div>
                 ) : sections.map(section => (
                   <div key={section.id}>
                     <div className="flex items-center gap-2 mb-2">
                       <div className="h-3 w-1 rounded-full" style={{ background: templateThemeColor }} />
-                      <span className="text-[12px] font-bold text-text">{section.title}</span>
+                      <span className="text-[0.75rem] font-bold text-ink-800">{section.title}</span>
                     </div>
                     {section.type === 'text' && (
                       <div className="space-y-1.5 pl-3">
@@ -216,9 +234,9 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                       </div>
                     )}
                     {section.type === 'chart' && (
-                      <div className="pl-3 h-20 rounded-[12px] border border-dashed border-border flex items-center justify-center gap-2" style={{ background: `${templateThemeColor}05` }}>
+                      <div className="pl-3 h-20 rounded-[12px] border border-dashed border-canvas-border flex items-center justify-center gap-2" style={{ background: `${templateThemeColor}05` }}>
                         <PieChart size={16} style={{ color: templateThemeColor }} />
-                        <span className="text-[11px] font-medium" style={{ color: templateThemeColor }}>Chart / Visualization</span>
+                        <span className="text-[0.6875rem] font-medium" style={{ color: templateThemeColor }}>Chart / Visualization</span>
                       </div>
                     )}
                     {section.type === 'exception-summary' && (
@@ -233,7 +251,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                     {section.type === 'action-taken' && (
                       <div className="pl-3 space-y-1.5">
                         {[1,2,3].map(i => (
-                          <div key={i} className="h-6 rounded border border-border-light flex items-center px-2 gap-2" style={{ background: `${templateThemeColor}05` }}>
+                          <div key={i} className="h-6 rounded border border-canvas-border flex items-center px-2 gap-2" style={{ background: `${templateThemeColor}05` }}>
                             <div className="w-2 h-2 rounded-full" style={{ background: templateThemeColor }} />
                             <div className="h-1.5 rounded bg-text-muted/15 flex-1" />
                           </div>
@@ -245,9 +263,9 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
               </div>
 
               {/* Report Footer */}
-              <div className="px-8 py-3 border-t border-border-light flex items-center justify-between" style={{ background: `${templateThemeColor}08` }}>
-                <span className="text-[9px] text-text-muted">{templateFooter}</span>
-                <span className="text-[9px] text-text-muted">Page 1 of 1</span>
+              <div className="px-8 py-3 border-t border-canvas-border flex items-center justify-between" style={{ background: `${templateThemeColor}08` }}>
+                <span className="text-[0.5625rem] text-ink-400">{templateFooter}</span>
+                <span className="text-[0.5625rem] text-ink-400">Page 1 of 1</span>
               </div>
             </div>
           </div>
@@ -261,7 +279,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
               {showTemplateErrors && inlineMissing.length > 0 && (
                 <div
                   role="alert"
-                  className="mb-3 border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[12px] text-risk-800"
+                  className="mb-3 border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[0.75rem] text-risk-800"
                 >
                   <div className="font-semibold mb-0.5">
                     {inlineMissing.length === 1 ? 'One field needs attention' : `${inlineMissing.length} fields need attention`}
@@ -283,7 +301,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
               )}
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label htmlFor="template-name-input" className="text-[12px] font-semibold text-text block mb-1.5">
+                  <label htmlFor="template-name-input" className="text-[0.75rem] font-semibold text-ink-800 block mb-1.5">
                     Template Name <span className="text-risk ml-0.5 font-normal">*</span>
                   </label>
                   <input
@@ -296,36 +314,36 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                     }}
                     aria-required="true"
                     aria-invalid={showTemplateErrors && !title.trim() ? 'true' : undefined}
-                    className={`w-full px-3 py-2 rounded-[8px] border text-[12px] focus:outline-none focus:ring-2 ${
+                    className={`w-full px-3 py-2 rounded-[8px] border text-[0.75rem] focus:outline-none focus:ring-2 ${
                       showTemplateErrors && !title.trim()
                         ? 'border-risk-300 focus:border-risk-400 focus:ring-risk-200/60'
-                        : 'border-border-light focus:border-primary/40 focus:ring-primary/10'
+                        : 'border-canvas-border focus:border-brand-600/40 focus:ring-brand-600/10'
                     }`}
                   />
                 </div>
                 <div>
-                  <label className="text-[12px] font-semibold text-text block mb-1.5">Category</label>
+                  <label className="text-[0.75rem] font-semibold text-ink-800 block mb-1.5">Category</label>
                   <div className="relative">
                     <button
                       onClick={() => setShowCategoryDropdown(p => !p)}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-[8px] border border-border-light text-[12px] text-text hover:border-primary/30 transition-colors cursor-pointer"
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-[8px] border border-canvas-border text-[0.75rem] text-ink-800 hover:border-brand-600/30 transition-colors cursor-pointer"
                     >
                       {templateCategory}
-                      <ChevronDown size={12} className={`text-text-muted transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+                      <ChevronDown size={12} className={`text-ink-400 transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
                     </button>
                   </div>
                 </div>
                 <div>
-                  <label className="text-[12px] font-semibold text-text block mb-1.5">Header Text</label>
-                  <input value={templateHeader} onChange={e => setTemplateHeader(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-border-light text-[12px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                  <label className="text-[0.75rem] font-semibold text-ink-800 block mb-1.5">Header Text</label>
+                  <input value={templateHeader} onChange={e => setTemplateHeader(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.75rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
                 </div>
                 <div>
-                  <label className="text-[12px] font-semibold text-text block mb-1.5">Footer Text</label>
-                  <input value={templateFooter} onChange={e => setTemplateFooter(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-border-light text-[12px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                  <label className="text-[0.75rem] font-semibold text-ink-800 block mb-1.5">Footer Text</label>
+                  <input value={templateFooter} onChange={e => setTemplateFooter(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.75rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
                 </div>
               </div>
               <div className="mb-3">
-                <label className="text-[12px] font-semibold text-text block mb-1.5">Theme Color</label>
+                <label className="text-[0.75rem] font-semibold text-ink-800 block mb-1.5">Theme Color</label>
                 <div className="flex gap-2">
                   {['#6a12cd', '#1a2744', '#0d9488', '#334155', '#dc2626'].map(c => (
                     <button
@@ -338,19 +356,19 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                 </div>
               </div>
               {/* Mini preview */}
-              <div className="border border-border-light rounded-[12px] p-3 bg-surface-2">
-                <div className="bg-white rounded-[12px] shadow-sm border border-border-light overflow-hidden" style={{ aspectRatio: '8.5/3' }}>
+              <div className="border border-canvas-border rounded-[12px] p-3 bg-canvas">
+                <div className="bg-white rounded-[12px] shadow-sm border border-canvas-border overflow-hidden" style={{ aspectRatio: '8.5/3' }}>
                   <div className="h-5 flex items-center justify-between px-3" style={{ background: `${templateThemeColor}10` }}>
-                    <span className="text-[6px] font-bold" style={{ color: templateThemeColor }}>{title}</span>
-                    <span className="text-[5px] text-text-muted">{templateHeader}</span>
+                    <span className="text-[0.375rem] font-bold" style={{ color: templateThemeColor }}>{title}</span>
+                    <span className="text-[0.3125rem] text-ink-400">{templateHeader}</span>
                   </div>
                   <div className="p-2 flex-1">
                     <div className="h-1.5 w-16 bg-text-muted/15 rounded mb-0.5" />
                     <div className="h-1 w-full bg-text-muted/10 rounded mb-0.5" />
                     <div className="h-1 w-3/4 bg-text-muted/10 rounded" />
                   </div>
-                  <div className="h-3 bg-surface-2 flex items-center justify-center">
-                    <span className="text-[4px] text-text-muted">{templateFooter}</span>
+                  <div className="h-3 bg-canvas flex items-center justify-center">
+                    <span className="text-[0.25rem] text-ink-400">{templateFooter}</span>
                   </div>
                 </div>
               </div>
@@ -358,23 +376,23 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
 
             {/* Add Report Sections */}
             <div>
-              <h4 className="text-[12px] font-bold text-text-muted mb-3 flex items-center gap-2">
-                <Plus size={14} className="text-primary" /> Add Report Sections
+              <h4 className="text-[0.75rem] font-bold text-ink-400 mb-3 flex items-center gap-2">
+                <Plus size={14} className="text-brand-600" /> Add Report Sections
               </h4>
               <div className="flex flex-col gap-2">
                 {AVAILABLE_BLOCKS.filter(b => b.type !== 'action-taken' || context === 'action-report').map(block => (
                   <button
                     key={block.type}
                     onClick={() => addSection(block.type)}
-                    className="text-left p-3 rounded-[8px] border border-border-light hover:border-primary/30 hover:bg-primary-xlight/50 hover:shadow-sm transition-all duration-300 cursor-pointer group"
+                    className="text-left p-3 rounded-[8px] border border-canvas-border hover:border-brand-600/30 hover:bg-brand-50/50 hover:shadow-sm transition-all duration-300 cursor-pointer group"
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <div className={`p-1 rounded-[8px] ${sectionColor(block.type)}`}>
                         <block.icon size={12} />
                       </div>
-                      <span className="text-[12px] font-semibold text-text group-hover:text-primary transition-colors">{block.label}</span>
+                      <span className="text-[0.75rem] font-semibold text-ink-800 group-hover:text-brand-600 transition-colors">{block.label}</span>
                     </div>
-                    <p className="text-[11px] text-text-muted pl-7">{block.desc}</p>
+                    <p className="text-[0.6875rem] text-ink-400 pl-7">{block.desc}</p>
                   </button>
                 ))}
               </div>
@@ -407,7 +425,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                 }}
                 disabled={isSavingTemplate}
                 aria-busy={isSavingTemplate || undefined}
-                className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-[8px] border border-dashed border-border text-[12px] font-medium text-text-secondary hover:bg-paper-50 hover:border-primary/30 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-[8px] border border-dashed border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:bg-paper-50 hover:border-brand-600/30 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
               >
                 {isSavingTemplate ? <Loader2 size={14} className="animate-spin" /> : <BookOpen size={14} />}
                 {isSavingTemplate ? 'Saving…' : 'Save as Template'}
@@ -415,7 +433,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
             </div>
 
             {sections.length > 0 && (
-              <h4 className="text-[12px] font-bold text-text-muted px-1 pt-2">Detected Sections</h4>
+              <h4 className="text-[0.75rem] font-bold text-ink-400 px-1 pt-2">Detected Sections</h4>
             )}
 
             <AnimatePresence>
@@ -427,8 +445,8 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   exit={{ opacity: 0, scale: 0.95 }}
                 >
                 <div
-                  className={`bg-white rounded-[12px] border shadow-sm hover:border-primary/20 transition-all duration-300 ${
-                    dragOverIndex === index ? 'border-primary border-2' : 'border-border-light'
+                  className={`bg-white rounded-[12px] border shadow-sm hover:border-brand-600/20 transition-all duration-300 ${
+                    dragOverIndex === index ? 'border-brand-600 border-2' : 'border-canvas-border'
                   }`}
                   draggable
                   onDragStart={e => handleDragStart(e, index)}
@@ -436,75 +454,75 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   onDrop={e => handleDrop(e, index)}
                   onDragLeave={() => setDragOverIndex(null)}
                 >
-                  <div className="flex items-center gap-3 px-4 py-3 border-b border-border-light">
-                    <div className="cursor-grab active:cursor-grabbing text-text-muted/40 hover:text-text-muted transition-colors">
+                  <div className="flex items-center gap-3 px-4 py-3 border-b border-canvas-border">
+                    <div className="cursor-grab active:cursor-grabbing text-ink-400/40 hover:text-ink-400 transition-colors">
                       <GripVertical size={14} />
                     </div>
-                    <div className="w-6 h-6 rounded-[8px] bg-primary/10 text-primary text-[11px] font-bold flex items-center justify-center shrink-0">
+                    <div className="w-6 h-6 rounded-[8px] bg-brand-600/10 text-brand-600 text-[0.6875rem] font-bold flex items-center justify-center shrink-0">
                       {index + 1}
                     </div>
                     <input
                       value={section.title}
                       onChange={e => setSections(prev => prev.map(s => s.id === section.id ? { ...s, title: e.target.value } : s))}
-                      className="flex-1 text-[13px] font-semibold text-text bg-transparent border-none outline-none"
+                      className="flex-1 text-[0.8125rem] font-semibold text-ink-800 bg-transparent border-none outline-none"
                     />
-                    <button onClick={() => removeSection(section.id)} className="p-1 hover:bg-risk-50 hover:text-risk-700 rounded text-text-muted transition-colors cursor-pointer">
+                    <button onClick={() => removeSection(section.id)} className="p-1 hover:bg-risk-50 hover:text-risk-700 rounded text-ink-400 transition-colors cursor-pointer">
                       <X size={14} />
                     </button>
                   </div>
 
                   <div className="px-4 py-3">
                     {section.type === 'text' ? (
-                      <div className="flex items-center gap-2 p-3 bg-surface-2 rounded-[12px]">
-                        <MessageSquare size={14} className="text-text-muted shrink-0" />
+                      <div className="flex items-center gap-2 p-3 bg-canvas rounded-[12px]">
+                        <MessageSquare size={14} className="text-ink-400 shrink-0" />
                         <div>
-                          <div className="text-[12px] text-text-muted">Content added from /chat</div>
-                          {section.content && <div className="text-[12px] text-text-secondary mt-0.5">{section.content}</div>}
+                          <div className="text-[0.75rem] text-ink-400">Content added from /chat</div>
+                          {section.content && <div className="text-[0.75rem] text-ink-500 mt-0.5">{section.content}</div>}
                         </div>
                       </div>
                     ) : section.type === 'exception-summary' ? (
                       <div className="space-y-2">
                         <div className="flex gap-3">
                           <div className="flex-1 p-2.5 bg-risk-50 rounded-[12px] text-center">
-                            <div className="text-[16px] font-bold text-risk-700">8</div>
-                            <div className="text-[12px] text-risk-700 uppercase font-semibold">Flagged</div>
+                            <div className="text-[1rem] font-bold text-risk-700">8</div>
+                            <div className="text-[0.75rem] text-risk-700 uppercase font-semibold">Flagged</div>
                           </div>
                           <div className="flex-1 p-2.5 bg-high-50 rounded-[12px] text-center">
-                            <div className="text-[16px] font-bold text-high-700">3</div>
-                            <div className="text-[12px] text-high-700 uppercase font-semibold">Assigned</div>
+                            <div className="text-[1rem] font-bold text-high-700">3</div>
+                            <div className="text-[0.75rem] text-high-700 uppercase font-semibold">Assigned</div>
                           </div>
                           <div className="flex-1 p-2.5 bg-compliant-50 rounded-[12px] text-center">
-                            <div className="text-[16px] font-bold text-compliant-700">1</div>
-                            <div className="text-[12px] text-compliant-700 uppercase font-semibold">Resolved</div>
+                            <div className="text-[1rem] font-bold text-compliant-700">1</div>
+                            <div className="text-[0.75rem] text-compliant-700 uppercase font-semibold">Resolved</div>
                           </div>
                         </div>
-                        <div className="text-[12px] text-text-muted">Total flagged amount: $616,650</div>
+                        <div className="text-[0.75rem] text-ink-400">Total flagged amount: $616,650</div>
                       </div>
                     ) : section.type === 'action-taken' ? (
                       <div className="overflow-x-auto">
-                        <table className="w-full text-[12px]">
+                        <table className="w-full text-[0.75rem]">
                           <thead>
-                            <tr className="bg-surface-2">
-                              <th className="text-left px-2 py-1.5 font-semibold text-text-secondary">Exception</th>
-                              <th className="text-left px-2 py-1.5 font-semibold text-text-secondary">Action By</th>
-                              <th className="text-left px-2 py-1.5 font-semibold text-text-secondary">Date</th>
-                              <th className="text-left px-2 py-1.5 font-semibold text-text-secondary">Resolution</th>
+                            <tr className="bg-canvas">
+                              <th className="text-left px-2 py-1.5 font-semibold text-ink-500">Exception</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-ink-500">Action By</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-ink-500">Date</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-ink-500">Resolution</th>
                             </tr>
                           </thead>
                           <tbody>
                             {ACTION_TAKEN_DATA.map(a => (
-                              <tr key={a.exceptionId} className="border-t border-border-light">
-                                <td className="px-2 py-1.5 font-mono text-text-muted">{a.exceptionId}</td>
-                                <td className="px-2 py-1.5 text-text">{a.actionBy}</td>
-                                <td className="px-2 py-1.5 text-text-muted">{a.actionDate}</td>
-                                <td className="px-2 py-1.5 text-text">{a.resolution}</td>
+                              <tr key={a.exceptionId} className="border-t border-canvas-border">
+                                <td className="px-2 py-1.5 font-mono text-ink-400">{a.exceptionId}</td>
+                                <td className="px-2 py-1.5 text-ink-800">{a.actionBy}</td>
+                                <td className="px-2 py-1.5 text-ink-400">{a.actionDate}</td>
+                                <td className="px-2 py-1.5 text-ink-800">{a.resolution}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
                       </div>
                     ) : section.type === 'chart' ? (
-                      <div className="flex items-center justify-center h-24 bg-surface-2 rounded-[12px]">
+                      <div className="flex items-center justify-center h-24 bg-canvas rounded-[12px]">
                         <div className="flex items-end gap-1 h-14">
                           {[40, 65, 25, 80, 55, 70].map((h, i) => (
                             <div key={i} className="w-6 rounded-t" style={{ height: `${h}%`, background: `rgba(106,18,205,${0.15 + (h / 200)})` }} />
@@ -522,10 +540,10 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
         </div>}
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-border-light bg-white shrink-0 flex items-center justify-between">
+        <div className="px-6 py-4 border-t border-canvas-border bg-white shrink-0 flex items-center justify-between">
           <button
             onClick={onBack}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] border border-border-light bg-white text-[13px] font-semibold text-text hover:bg-paper-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] border border-canvas-border bg-white text-[0.8125rem] font-semibold text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             <ArrowLeft size={14} />
             Back
@@ -549,30 +567,30 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white rounded-[16px] shadow-2xl w-[560px] overflow-hidden"
+              className="relative bg-white rounded-[16px] shadow-xl w-[560px] overflow-hidden"
               onClick={e => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
               aria-labelledby="save-template-title"
               tabIndex={-1}
             >
-              <div className="px-5 py-4 border-b border-border-light flex items-center justify-between">
+              <div className="px-5 py-4 border-b border-canvas-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-primary/10 text-primary rounded-[8px]"><BookOpen size={14} /></div>
-                  <h4 id="save-template-title" className="text-[14px] font-semibold text-text">Save as Template</h4>
+                  <div className="p-1.5 bg-brand-600/10 text-brand-600 rounded-[8px]"><BookOpen size={14} /></div>
+                  <h4 id="save-template-title" className="text-[0.875rem] font-semibold text-ink-800">Save as Template</h4>
                 </div>
                 <button
                   onClick={() => setShowSaveTemplate(false)}
                   className="p-1 hover:bg-paper-50 rounded-[8px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
-                  <X size={14} className="text-text-muted" />
+                  <X size={14} className="text-ink-400" />
                 </button>
               </div>
               <div className="p-5 space-y-4">
                 {showModalErrors && modalMissing.length > 0 && (
                   <div
                     role="alert"
-                    className="border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[12px] text-risk-800"
+                    className="border border-risk-200 bg-risk-50 rounded-[8px] px-3 py-2 text-[0.75rem] text-risk-800"
                   >
                     <div className="font-semibold mb-0.5">
                       {modalMissing.length === 1 ? 'One field needs attention' : `${modalMissing.length} fields need attention`}
@@ -593,7 +611,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   </div>
                 )}
                 <div>
-                  <label htmlFor="modal-template-name" className="text-[12px] font-semibold text-text mb-1.5 block">
+                  <label htmlFor="modal-template-name" className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">
                     Template Name <span className="text-risk ml-0.5 font-normal">*</span>
                   </label>
                   <input
@@ -606,31 +624,31 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                     }}
                     aria-required="true"
                     aria-invalid={showModalErrors && !templateName.trim() ? 'true' : undefined}
-                    className={`w-full px-3 py-2.5 rounded-[8px] border text-[13px] focus:outline-none focus:ring-2 ${
+                    className={`w-full px-3 py-2.5 rounded-[8px] border text-[0.8125rem] focus:outline-none focus:ring-2 ${
                       showModalErrors && !templateName.trim()
                         ? 'border-risk-300 focus:border-risk-400 focus:ring-risk-200/60'
-                        : 'border-border-light focus:border-primary/40 focus:ring-primary/10'
+                        : 'border-canvas-border focus:border-brand-600/40 focus:ring-brand-600/10'
                     }`}
                     placeholder="Enter template name"
                   />
                 </div>
                 <div>
-                  <label className="text-[12px] font-semibold text-text mb-1.5 block">Description</label>
+                  <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">Description</label>
                   <textarea
                     value={templateDesc}
                     onChange={e => setTemplateDesc(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 resize-none min-h-[70px]"
+                    className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10 resize-none min-h-[70px]"
                     placeholder="Describe what this template is for..."
                   />
                 </div>
                 <div className="relative">
-                  <label className="text-[12px] font-semibold text-text mb-1.5 block">Category</label>
+                  <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">Category</label>
                   <button
                     onClick={() => setShowCategoryDropdown(p => !p)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-[8px] border border-border-light text-[13px] text-text hover:border-primary/30 transition-colors cursor-pointer"
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] text-ink-800 hover:border-brand-600/30 transition-colors cursor-pointer"
                   >
                     {templateCategory}
-                    <ChevronDown size={14} className={`text-text-muted transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+                    <ChevronDown size={14} className={`text-ink-400 transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
                   </button>
                   <AnimatePresence>
                     {showCategoryDropdown && (
@@ -638,13 +656,13 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                         initial={{ opacity: 0, y: -5 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -5 }}
-                        className="absolute left-0 right-0 top-full mt-1 bg-white rounded-[8px] shadow-xl border border-border-light z-10 overflow-hidden"
+                        className="absolute left-0 right-0 top-full mt-1 bg-white rounded-[8px] shadow-xl border border-canvas-border z-10 overflow-hidden"
                       >
                         {TEMPLATE_CATEGORIES.map(cat => (
                           <button
                             key={cat}
                             onClick={() => { setTemplateCategory(cat); setShowCategoryDropdown(false); }}
-                            className={`w-full text-left px-3 py-2 text-[12px] hover:bg-primary-xlight transition-colors cursor-pointer ${templateCategory === cat ? 'text-primary font-semibold bg-primary/5' : 'text-text'}`}
+                            className={`w-full text-left px-3 py-2 text-[0.75rem] hover:bg-brand-50 transition-colors cursor-pointer ${templateCategory === cat ? 'text-brand-600 font-semibold bg-brand-600/5' : 'text-ink-800'}`}
                           >
                             {cat}
                           </button>
@@ -654,11 +672,11 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   </AnimatePresence>
                 </div>
               </div>
-              <div className="px-5 py-4 border-t border-border-light flex justify-end gap-2">
+              <div className="px-5 py-4 border-t border-canvas-border flex justify-end gap-2">
                 <button
                   onClick={() => setShowSaveTemplate(false)}
                   disabled={isSavingTemplateModal}
-                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[13px] font-semibold text-text bg-white border border-border-light hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   Cancel
                 </button>
@@ -679,7 +697,7 @@ export default function ReportBuilder({ context, onBack, initialTitle, onSaveAsT
                   }}
                   disabled={isSavingTemplateModal}
                   aria-busy={isSavingTemplateModal || undefined}
-                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-primary text-white rounded-[8px] text-[13px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                  className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[0.8125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                 >
                   {isSavingTemplateModal && <Loader2 size={12} className="animate-spin" />}
                   {isSavingTemplateModal ? 'Saving…' : 'Save Template'}

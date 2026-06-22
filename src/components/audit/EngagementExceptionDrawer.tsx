@@ -212,7 +212,7 @@ export default function EngagementExceptionDrawer({
                   {exception.status}
                 </span>
               </div>
-              <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight leading-snug">
+              <h2 className="text-[1.125rem] font-semibold text-ink-900 tracking-tight leading-snug">
                 {exception.title}
               </h2>
               <div className="mt-2 flex items-center gap-2 flex-wrap">

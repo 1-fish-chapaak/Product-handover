@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { findEngagement } from '../data/engagements';
 import type { WorkflowTypeId } from '../data/mockData';
 import type { WorkflowRunSeed } from '../components/workflow/workflowRunSeed';
 import {
@@ -50,6 +51,11 @@ export type View =
   | 'ai-concierge'
   | 'ai-concierge-forensics'
   | 'ai-concierge-table-extractor'
+  | 'ai-concierge-image'
+  | 'ai-concierge-speech'
+  | 'ai-concierge-medical'
+  | 'ai-concierge-insights'
+  | 'ai-concierge-racm'
   | 'ai-concierge-workflow-builder'
   // System
   | 'configuration'
@@ -200,6 +206,7 @@ const getInitialView = (): View => {
   if (v === 'reports') return 'reports';
   if (v === 'manage-exceptions') return 'manage-exceptions';
   if (v === 'racm-full-editor') return 'racm-full-editor';
+  if (v === 'audit-risk-register') return 'audit-risk-register';
   if (v === 'control-detail' && params.get('controlId')) return 'control-detail';
   if (v === 'chat') return 'chat';
   if (v === 'bp-detail' && params.get('bp')) return 'bp-detail';
@@ -340,16 +347,14 @@ export function useAppState() {
     setState(prev => ({ ...prev, userProcesses: [...prev.userProcesses, process] }));
   }, []);
 
-  const setSelectedEngagement = useCallback((id: string | null) => {
-    setState(prev => ({ ...prev, selectedEngagementId: id }));
-  }, []);
-
   const openAuditExecution = useCallback((engagementId: string) => {
     setState(prev => ({ ...prev, view: 'audit-execution' as View, selectedEngagementId: engagementId }));
   }, []);
 
   const openEngagement = useCallback((engagementId: string) => {
-    setState(prev => ({ ...prev, view: 'engagement-overview' as View, selectedEngagementId: engagementId }));
+    const eng = findEngagement(engagementId);
+    const view: View = eng?.type === 'SOX / ICFR' ? 'sox-icfr' : 'engagement-overview';
+    setState(prev => ({ ...prev, view, selectedEngagementId: engagementId }));
   }, []);
 
   const openCaseManagement = useCallback((engagementId: string) => {
@@ -542,6 +547,22 @@ export function useAppState() {
     setState(prev => ({ ...prev, workflowBuilderSeedPrompt: prompt }));
   }, []);
 
+  // Open the AI Concierge "Workflow Builder" tile INSIDE the Ask IRA chat rather
+  // than the standalone journey: land on view='chat' with an (empty) workflow
+  // seed, which boots ChatView into Workflow mode on its empty state — where the
+  // Recent Workflows launcher shows. A non-empty prompt would auto-start an
+  // in-thread build. Scoped to the tile; the shared
+  // launchWorkflowBuilderWithPrompt (Evidence / Engagement / home) is unchanged.
+  const launchWorkflowBuilderInChat = useCallback((prompt: string = '') => {
+    setState(prev => ({
+      ...prev,
+      view: 'chat' as View,
+      selectedChatId: null,
+      workflowBuilderSeedPrompt: prompt,
+      showChatHistory: false,
+    }));
+  }, []);
+
   // ── Notifications ──
   const openNotificationDrawer = useCallback(() => {
     setState(prev => ({ ...prev, notificationDrawerOpen: true }));
@@ -649,6 +670,7 @@ export function useAppState() {
     closeExecutionPanel,
     setExceptionRole,
     launchWorkflowBuilderWithPrompt,
+    launchWorkflowBuilderInChat,
     setWorkflowBuilderSeedPrompt,
     openNotificationDrawer,
     closeNotificationDrawer,

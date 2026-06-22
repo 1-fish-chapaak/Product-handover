@@ -59,6 +59,8 @@ export interface ProcurementRacmRow {
   sopSectionRef: string;
   /** Attributes — comma-separated list of test attributes for this control (a control can have one or multiple) */
   attributes: string;
+  /** Ref — source file this row was extracted from. Set only for multi-file consolidation (RACM Generator). */
+  ref?: string;
 }
 
 export interface RacmColumnDef {
@@ -69,8 +71,8 @@ export interface RacmColumnDef {
 }
 
 export const PROCUREMENT_RACM_COLUMNS: RacmColumnDef[] = [
-  { key: 'riskId', label: "Risk ID", group: 'identity', width: 80 },
-  { key: 'controlId', label: "Control ID", group: 'identity', width: 80 },
+  { key: 'riskId', label: "Risk ID", group: 'identity', width: 88 },
+  { key: 'controlId', label: "Control ID", group: 'identity', width: 104 },
   { key: 'processArea', label: "Process Area", group: 'context', width: 200 },
   { key: 'subProcess', label: "Sub-Process", group: 'context', width: 260 },
   { key: 'riskCategory', label: "Risk Category", group: 'risk', width: 130 },
@@ -3599,10 +3601,10 @@ export function groupRowsBySubProcess(rows: ProcurementRacmRow[]): { subProcess:
 
 export function deriveRiskRatingClass(rating: string): string {
   const r = (rating || '').toLowerCase();
-  if (r === 'high' || r === 'critical') return 'bg-red-50 text-red-700 border-red-100';
-  if (r === 'medium') return 'bg-amber-50 text-amber-700 border-amber-100';
-  if (r === 'low') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-  return 'bg-gray-100 text-gray-600 border-gray-200';
+  if (r === 'high' || r === 'critical') return 'bg-risk-50 text-risk-700 border-risk-700/15';
+  if (r === 'medium') return 'bg-mitigated-50 text-mitigated-700 border-mitigated-700/15';
+  if (r === 'low') return 'bg-compliant-50 text-compliant-700 border-compliant-700/15';
+  return 'bg-paper-100 text-ink-600 border-border-light';
 }
 
 export function deriveControlTypeClass(type: string): string {
