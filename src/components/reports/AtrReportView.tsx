@@ -118,7 +118,7 @@ export default function AtrReportView({ report, onBack, onShare }: {
                       className={`w-full flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px] text-left transition-colors cursor-pointer ${isActive ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
                     >
                       <span className={`shrink-0 w-5 text-[0.6875rem] font-semibold font-mono tabular-nums text-right ${isActive ? 'text-brand-700' : 'text-brand-500'}`}>{String(i + 1).padStart(2, '0')}</span>
-                      <span className={`flex-1 min-w-0 text-[0.78125rem] truncate ${isActive ? 'font-semibold text-brand-700' : 'font-medium text-ink-600'}`}>{e.title}</span>
+                      <span className={`flex-1 min-w-0 text-[0.8125rem] truncate ${isActive ? 'font-semibold text-brand-700' : 'font-medium text-ink-600'}`}>{e.title}</span>
                     </button>
                   </li>
                 );

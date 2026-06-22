@@ -352,14 +352,14 @@ export function AddToDashboardModal({
             {!online && <OfflineBanner />}
 
             {/* Mode toggle */}
-            <div className="flex gap-1.5 p-1 bg-paper-50 rounded-lg" role="tablist" aria-label="Destination type">
+            <div className="flex gap-1.5 p-1 bg-canvas rounded-lg" role="tablist" aria-label="Destination type">
               <button
                 type="button"
                 role="tab"
                 aria-selected={mode === 'existing'}
                 onClick={() => setMode('existing')}
                 className={`flex-1 text-[0.75rem] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
-                  mode === 'existing' ? 'bg-white text-ink-800 shadow-sm' : 'text-ink-500 hover:text-ink-700'
+                  mode === 'existing' ? 'bg-white text-ink-800 border border-canvas-border shadow-sm' : 'text-ink-500 hover:text-ink-700'
                 }`}
               >
                 Existing Dashboard
@@ -370,7 +370,7 @@ export function AddToDashboardModal({
                 aria-selected={mode === 'new'}
                 onClick={() => setMode('new')}
                 className={`flex-1 text-[0.75rem] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
-                  mode === 'new' ? 'bg-white text-ink-800 shadow-sm' : 'text-ink-500 hover:text-ink-700'
+                  mode === 'new' ? 'bg-white text-ink-800 border border-canvas-border shadow-sm' : 'text-ink-500 hover:text-ink-700'
                 }`}
               >
                 <Plus size={12} className="inline mr-1 -mt-0.5" />
