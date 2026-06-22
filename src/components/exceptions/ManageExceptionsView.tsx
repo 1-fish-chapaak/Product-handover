@@ -880,7 +880,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               {([
                 { id: 'exceptions' as const, label: 'Exceptions', icon: Layers },
                 { id: 'action-hub' as const, label: 'Action Hub', icon: FileBarChart },
-                { id: 'workflow' as const, label: 'Approval & Configuration', icon: Workflow },
+                { id: 'workflow' as const, label: 'Approval Routes', icon: Workflow },
               ] as const).map(t => {
                 const Icon = t.icon;
                 const isActive = activeNav === t.id;
@@ -913,7 +913,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
       {activeNav === 'action-hub' ? (
         <ActionHubView exceptions={exceptions} role={role} onAction={runExceptionAction} />
       ) : activeNav === 'workflow' ? (
-        <WorkflowModule role={role} exceptions={exceptions} />
+        <WorkflowModule role={role} />
       ) : (
         <motion.div
           initial={{ opacity: 0, y: 4 }}
