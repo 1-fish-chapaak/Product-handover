@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
 import Gated from '../shared/Gated';
+import DatePicker from '../shared/DatePicker';
 import {
   X, FileText, Plus, Check, ChevronRight, ChevronDown, Search, Lock,
 } from 'lucide-react';
@@ -60,18 +61,35 @@ const SUBMIT_TIMEOUT_MS = 30_000;
 const RESERVED_NAMES = new Set(['default', 'system', 'untitled', 'new report']);
 const ENTITY_MAX = 80;
 
-/** Current fiscal quarter (India: FY starts in April), formatted as
- *  "FY26 Q1 (April–June 2026)". Used to auto-fill the Audit Period. */
-function currentFiscalPeriod(): string {
+function toISODate(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/** ISO "yyyy-mm-dd" → "DD Mon YYYY" (matches the ATR-by-upload audit period). */
+function fmtPeriodDate(iso: string): string {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return Number.isNaN(d.getTime()) ? iso
+    : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/** Start/end ISO dates of the current fiscal quarter (India: FY starts in April).
+ *  Used to auto-fill the Audit Period date range. */
+function currentFiscalQuarterRange(): { start: string; end: string } {
   const d = new Date();
   const m = d.getMonth(); // 0 = Jan
   const y = d.getFullYear();
-  let q: number, startYear: number, span: string, spanYear: number;
-  if (m >= 3 && m <= 5)      { q = 1; startYear = y;     span = 'April–June';       spanYear = y; }
-  else if (m >= 6 && m <= 8) { q = 2; startYear = y;     span = 'July–September';   spanYear = y; }
-  else if (m >= 9)           { q = 3; startYear = y;     span = 'October–December'; spanYear = y; }
-  else                       { q = 4; startYear = y - 1; span = 'January–March';     spanYear = y; }
-  return `FY${String(startYear % 100).padStart(2, '0')} Q${q} (${span} ${spanYear})`;
+  let startMonth: number;
+  if (m >= 3 && m <= 5)      startMonth = 3; // Q1 Apr–Jun
+  else if (m >= 6 && m <= 8) startMonth = 6; // Q2 Jul–Sep
+  else if (m >= 9)           startMonth = 9; // Q3 Oct–Dec
+  else                       startMonth = 0; // Q4 Jan–Mar
+  const start = new Date(y, startMonth, 1);
+  const end = new Date(y, startMonth + 3, 0); // last day of the quarter
+  return { start: toISODate(start), end: toISODate(end) };
 }
 
 export function AddToReportModal({
@@ -86,7 +104,11 @@ export function AddToReportModal({
   const [newDesc, setNewDesc] = useState('');
   const [newSeverity, setNewSeverity] = useState<Severity | null>(null);
   const [newEntity, setNewEntity] = useState('');
-  const [newPeriod, setNewPeriod] = useState<string>(() => currentFiscalPeriod());
+  const [newPeriodStart, setNewPeriodStart] = useState<string>(() => currentFiscalQuarterRange().start);
+  const [newPeriodEnd, setNewPeriodEnd] = useState<string>(() => currentFiscalQuarterRange().end);
+  // Severity tags the query being added to an EXISTING report (query-wise, not
+  // report-wise) — mirrors the new-report Severity field.
+  const [existingSeverity, setExistingSeverity] = useState<Severity | null>(null);
   const [nameTouched, setNameTouched] = useState(false);
 
   const [selKpis, setSelKpis] = useState<Set<string>>(new Set((resultData?.kpis || []).map(k => k.label)));
@@ -112,7 +134,9 @@ export function AddToReportModal({
     setNewDesc('');
     setNewSeverity(null);
     setNewEntity('');
-    setNewPeriod(currentFiscalPeriod());
+    setNewPeriodStart(currentFiscalQuarterRange().start);
+    setNewPeriodEnd(currentFiscalQuarterRange().end);
+    setExistingSeverity(null);
     setNameTouched(false);
     setSelKpis(new Set((resultData?.kpis || []).map(k => k.label)));
     setSelCharts(new Set((resultData?.charts || []).map(c => c.id)));
@@ -149,8 +173,8 @@ export function AddToReportModal({
   const canProceed = mode === 'new'
     ? trimmedName.length > 0 && !duplicateName && !isReserved
       && newDesc.trim().length > 0 && newSeverity !== null
-      && newEntity.trim().length > 0 && newPeriod.trim().length > 0
-    : selectedId !== null;
+      && newEntity.trim().length > 0 && !!newPeriodStart && !!newPeriodEnd
+    : selectedId !== null && existingSeverity !== null;
   const totalSelected = selKpis.size + selCharts.size + selCols.size;
   const hasAnyResultItems =
     resultData.kpis.length + resultData.charts.length + resultData.table.columns.length > 0;
@@ -172,9 +196,11 @@ export function AddToReportModal({
       isNew,
       newName: isNew ? trimmedName : undefined,
       newDescription: isNew ? newDesc.trim() : undefined,
-      newSeverity: isNew ? (newSeverity ?? undefined) : undefined,
+      // Severity rides along for both paths: a new report's severity, or the
+      // query-wise severity when adding to an existing report.
+      newSeverity: (isNew ? newSeverity : existingSeverity) ?? undefined,
       newAuditEntity: isNew ? newEntity.trim() : undefined,
-      newAuditPeriod: isNew ? newPeriod.trim() : undefined,
+      newAuditPeriod: isNew ? `${fmtPeriodDate(newPeriodStart)} – ${fmtPeriodDate(newPeriodEnd)}` : undefined,
       selection: { kpis: [...selKpis], charts: [...selCharts], columns: [...selCols] },
     };
 
@@ -281,7 +307,7 @@ export function AddToReportModal({
             {!online && <OfflineBanner />}
 
             {/* Mode toggle */}
-            <div className="flex gap-1.5 p-1 bg-paper-50 rounded-lg" role="tablist" aria-label="Destination type">
+            <div className="flex gap-1.5 p-1 bg-canvas rounded-lg" role="tablist" aria-label="Destination type">
               <button
                 type="button"
                 role="tab"
@@ -290,7 +316,7 @@ export function AddToReportModal({
                 aria-selected={mode === 'existing'}
                 onClick={() => setMode('existing')}
                 className={`flex-1 text-[0.75rem] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
-                  mode === 'existing' ? 'bg-white text-ink-800 shadow-sm' : 'text-ink-500 hover:text-ink-700'
+                  mode === 'existing' ? 'bg-white text-ink-800 border border-canvas-border shadow-sm' : 'text-ink-500 hover:text-ink-700'
                 }`}
               >
                 Existing report
@@ -303,7 +329,7 @@ export function AddToReportModal({
                 aria-selected={mode === 'new'}
                 onClick={() => setMode('new')}
                 className={`flex-1 text-[0.75rem] font-semibold py-2 rounded-md transition-all cursor-pointer min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
-                  mode === 'new' ? 'bg-white text-ink-800 shadow-sm' : 'text-ink-500 hover:text-ink-700'
+                  mode === 'new' ? 'bg-white text-ink-800 border border-canvas-border shadow-sm' : 'text-ink-500 hover:text-ink-700'
                 }`}
               >
                 <Plus size={12} className="inline mr-1 -mt-0.5" />
@@ -434,6 +460,12 @@ export function AddToReportModal({
                     })
                   )}
                 </div>
+
+                <div>
+                  <label id="existing-rpt-severity-label" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Severity</label>
+                  <SeveritySelect value={existingSeverity} onChange={setExistingSeverity} labelledBy="existing-rpt-severity-label" />
+                  <span className="mt-1 block text-[0.6875rem] text-ink-400">Applies to this query within the report.</span>
+                </div>
               </div>
             ) : (
               <div
@@ -483,23 +515,34 @@ export function AddToReportModal({
                     className="w-full h-10 px-3 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition-all"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3 items-start">
-                  <div>
-                    <label id="new-rpt-severity-label" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Severity</label>
-                    <SeveritySelect value={newSeverity} onChange={setNewSeverity} labelledBy="new-rpt-severity-label" />
-                  </div>
-                  <div>
-                    <label htmlFor="new-rpt-period" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Audit Period</label>
-                    <input
-                      id="new-rpt-period"
-                      type="text" value={newPeriod}
-                      onChange={e => setNewPeriod(e.target.value)}
-                      placeholder="e.g. FY26 Q1 (April–June 2026)"
-                      aria-describedby="new-rpt-period-hint"
-                      className="w-full h-10 px-3 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition-all"
+                <div>
+                  <label id="new-rpt-severity-label" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Severity</label>
+                  <SeveritySelect value={newSeverity} onChange={setNewSeverity} labelledBy="new-rpt-severity-label" />
+                </div>
+                <div>
+                  <label className="text-[0.75rem] font-medium text-ink-700 mb-1 block">Audit Period</label>
+                  <div className="flex items-center gap-2">
+                    <DatePicker
+                      value={newPeriodStart}
+                      onChange={e => setNewPeriodStart(e.target.value)}
+                      max={newPeriodEnd || undefined}
+                      placeholder="Start date"
+                      aria-label="Audit period start date"
+                      popoverZIndex={10000}
+                      className="w-full h-10 px-3 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition-all"
                     />
-                    <span id="new-rpt-period-hint" className="mt-1 block text-[0.6875rem] text-ink-400">Auto-filled to the current quarter — edit if needed.</span>
+                    <span className="text-ink-400 shrink-0" aria-hidden="true">–</span>
+                    <DatePicker
+                      value={newPeriodEnd}
+                      onChange={e => setNewPeriodEnd(e.target.value)}
+                      min={newPeriodStart || undefined}
+                      placeholder="End date"
+                      aria-label="Audit period end date"
+                      popoverZIndex={10000}
+                      className="w-full h-10 px-3 rounded-lg border border-canvas-border bg-white text-[0.8125rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition-all"
+                    />
                   </div>
+                  <span className="mt-1 block text-[0.6875rem] text-ink-400">Auto-filled to the current quarter — edit if needed.</span>
                 </div>
                 <div>
                   <label htmlFor="new-rpt-desc" className="text-[0.75rem] font-medium text-ink-700 mb-1 block">

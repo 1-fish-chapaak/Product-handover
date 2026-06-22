@@ -25,21 +25,21 @@ function EvidenceRow({ item, onOpenSource }: { item: EvidenceItem; onOpenSource:
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-[0.8125rem] font-semibold text-ink-900 truncate">{item.name}</span>
-          <span className={`inline-flex items-center h-5 px-1.5 text-[0.59375rem] font-bold rounded ${t.bg} ${t.fg}`}>{item.type}</span>
+          <span className={`inline-flex items-center h-5 px-1.5 text-[0.625rem] font-bold rounded ${t.bg} ${t.fg}`}>{item.type}</span>
         </div>
-        <div className="text-[0.71875rem] text-ink-500 mt-0.5 truncate">
+        <div className="text-[0.75rem] text-ink-500 mt-0.5 truncate">
           Backs: <span className="text-ink-700">{item.observation}</span>
         </div>
       </div>
       <div className="hidden md:block text-right shrink-0 min-w-0">
-        <div className="text-[0.71875rem] text-ink-600 truncate max-w-[200px]">{item.atrName}</div>
+        <div className="text-[0.75rem] text-ink-600 truncate max-w-[200px]">{item.atrName}</div>
         <div className="text-[0.6875rem] text-ink-400">{item.uploadedBy} · {item.uploadedAt} · {item.size}</div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
         <button
           onClick={() => onOpenSource(item.atrId)}
           title="Open the source ATR report"
-          className="inline-flex items-center gap-1 h-8 px-2.5 text-[0.71875rem] font-semibold text-brand-600 bg-white border border-canvas-border rounded-[8px] hover:border-brand-600/30 cursor-pointer transition-colors"
+          className="inline-flex items-center gap-1 h-8 px-2.5 text-[0.75rem] font-semibold text-brand-600 bg-white border border-canvas-border rounded-[8px] hover:border-brand-600/30 cursor-pointer transition-colors"
         >
           View source <ExternalLink size={11} />
         </button>
@@ -60,8 +60,8 @@ function AreaGroup({ area, items, onOpenSource }: { area: string; items: Evidenc
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-9 h-9 rounded-[9px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><ShieldCheck size={16} /></div>
           <div className="min-w-0">
-            <h3 className="text-[0.84375rem] font-semibold text-ink-900 truncate">{area}</h3>
-            <p className="text-[0.71875rem] text-ink-500 truncate">{atrName}</p>
+            <h3 className="text-[0.875rem] font-semibold text-ink-900 truncate">{area}</h3>
+            <p className="text-[0.75rem] text-ink-500 truncate">{atrName}</p>
           </div>
         </div>
         <div className="flex items-center gap-2.5 shrink-0">

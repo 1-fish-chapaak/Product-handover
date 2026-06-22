@@ -5860,10 +5860,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                   leftIcon={hasDash ? <CheckCircle size={14} /> : <BarChart3 size={14} />}
                                   rightIcon={hasDash ? <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} /> : undefined}
                                   onClick={() => hasDash ? setOpenDropdown(isOpen ? null : dropKey) : handleAuditAction('dashboard', msg.id)}
+                                  title={hasDash && dashLinks.length === 1 ? dashLinks[0].name : undefined}
                                 >
                                   {hasDash
                                     ? dashLinks.length === 1
-                                      ? `In "${dashLinks[0].name}"`
+                                      ? <span className="truncate block max-w-[16rem]">In "{dashLinks[0].name}"</span>
                                       : `In ${dashLinks.length} dashboards`
                                     : 'Add to dashboard'}
                                 </Button>
@@ -5914,10 +5915,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                   leftIcon={hasRpt ? <CheckCircle size={14} /> : <FileText size={14} />}
                                   rightIcon={hasRpt ? <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} /> : undefined}
                                   onClick={() => hasRpt ? setOpenDropdown(isOpen ? null : dropKey) : handleAuditAction('report', msg.id)}
+                                  title={hasRpt && rptLinks.length === 1 ? rptLinks[0].name : undefined}
                                 >
                                   {hasRpt
                                     ? rptLinks.length === 1
-                                      ? `In "${rptLinks[0].name}"`
+                                      ? <span className="truncate block max-w-[16rem]">In "{rptLinks[0].name}"</span>
                                       : `In ${rptLinks.length} reports`
                                     : 'Add to report'}
                                 </Button>

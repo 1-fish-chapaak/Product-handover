@@ -57,6 +57,7 @@ export interface AtrMeta {
   auditTitle?: string;
   auditPeriod?: string;
   preparedBy?: string;
+  reviewedBy?: string;
   generatedOn?: string;
   auditEntity?: string;
   /** Optional override for the Total Exceptions KPI (else summed from observations). */

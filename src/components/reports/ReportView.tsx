@@ -10,7 +10,7 @@ import {
   FileText, Shield, AlertTriangle, CheckCircle2, BarChart3,
   TrendingUp, Download, Share2, ArrowLeft, ChevronDown,
   ChevronLeft, ChevronRight,
-  Layout, X, Edit3, BookOpen, Loader2, Trash2,
+  Layout, X, Edit3, Loader2, Trash2,
   List, LayoutGrid, GripVertical, Plus,
   MoreVertical, Eye, EyeOff, ExternalLink,
   MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
@@ -58,6 +58,18 @@ import AddObservationModal, {
  * idle → switch off; user flips it on → brief generating state; once ready the
  * toggle is replaced inline by the existing ManageExceptionsLaunchButton.
  */
+// Tone a query-card inline KPI value by what its label means, so the strip
+// carries a glanceable read (open work = attention, closed = resolved) instead
+// of a flat row of identical-weight numbers.
+function kpiInlineTone(label: string): string {
+  const l = label.toLowerCase();
+  if (/overdue|fail|breach|critical|violation/.test(l)) return 'text-risk-700';
+  if (/open|pending|unmatched|flagged/.test(l)) return 'text-high-700';
+  if (/closed|resolved|remediat|cleared|matched/.test(l)) return 'text-compliant-700';
+  if (/health|score|rate|coverage|%/.test(l)) return 'text-brand-700';
+  return 'text-ink-900';
+}
+
 type CasesPhase = 'idle' | 'generating' | 'ready';
 
 function GenerateCasesGate({ queryId, phase, onPhaseChange }: { queryId: string; phase: CasesPhase; onPhaseChange: (p: CasesPhase) => void }) {
@@ -75,33 +87,26 @@ function GenerateCasesGate({ queryId, phase, onPhaseChange }: { queryId: string;
   return (
     <button
       type="button"
-      role="switch"
-      aria-checked={isOn}
       aria-label={isOn ? 'Generating cases' : 'Generate cases'}
+      aria-busy={isOn}
       onClick={handleToggle}
       disabled={isOn}
-      className="inline-flex items-center gap-2 h-8 pl-2.5 pr-3 text-[0.75rem] font-semibold text-ink-500 bg-white border border-canvas-border rounded-[8px] cursor-pointer hover:border-brand-600/40 hover:text-brand-600 transition-colors"
+      className={`group inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 text-[0.75rem] font-semibold rounded-[8px] border transition-colors cursor-pointer ${
+        isOn
+          ? 'text-brand-700 bg-brand-50 border-brand-200 cursor-default'
+          : 'text-ink-600 bg-canvas-elevated border-canvas-border hover:text-brand-700 hover:border-brand-300 hover:bg-brand-50/40'
+      }`}
     >
-      <span
-        className={`relative inline-flex w-8 h-[18px] rounded-full transition-colors duration-200 ${
-          isOn ? 'bg-brand-600' : 'bg-border'
-        }`}
-      >
-        <motion.span
-          layout
-          transition={{ type: 'spring', stiffness: 500, damping: 32 }}
-          className={`absolute top-0.5 w-[14px] h-[14px] rounded-full bg-white shadow-sm ${
-            isOn ? 'right-0.5' : 'left-0.5'
-          }`}
-        />
-      </span>
       {isOn ? (
-        <span className="inline-flex items-center gap-1.5">
-          <Loader2 size={12} className="animate-spin" />
-          Generating cases…
-        </span>
+        <>
+          <Loader2 size={14} className="shrink-0 animate-spin text-brand-600" />
+          <span>Generating cases…</span>
+        </>
       ) : (
-        'Generate Cases'
+        <>
+          <Sparkles size={14} className="shrink-0 text-brand-600 transition-transform duration-200 group-hover:scale-110" />
+          <span>Generate Cases</span>
+        </>
       )}
     </button>
   );
@@ -150,7 +155,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
       className="relative bg-white border border-canvas-border overflow-hidden"
     >
 
-      <div className="px-7 py-6">
+      <div className="px-9 py-7">
         {/* Meta band — type-only line: Q01 · risk · severity · status on the left;
             Manage Exceptions (text-link), Comments, 3-dots on the right. */}
         <motion.div
@@ -253,27 +258,28 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
           {query.title}
         </motion.h3>
 
-        {/* Inline metrics — sit directly below the query title so the numbers
-            read as the answer to the question above. Driven by the "Add
-            Widgets" modal selection. */}
+        {/* Inline metrics — a compact stat strip directly below the query title so
+            the numbers read as the answer to the question. Value stacks over an
+            uppercase label; the value is tone-coloured by meaning (open = needs
+            attention, closed = resolved). Driven by the "Add Widgets" modal. */}
         {(() => {
           const kpis = queryKpis.filter(k => selectedKpis.has(k.label));
           if (kpis.length === 0) return null;
           return (
-            <div className="flex items-baseline flex-wrap gap-x-6 gap-y-1.5 tabular-nums mb-5">
+            <div className="flex flex-wrap items-stretch gap-x-6 gap-y-4 tabular-nums mb-7">
               {kpis.map((k, ki) => (
-                <motion.span
+                <motion.div
                   key={k.label}
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: baseDelay + 0.3 + ki * 0.05, duration: 0.3 }}
-                  className="flex items-baseline gap-2"
+                  className="flex-1 min-w-[120px] flex flex-col gap-1.5"
                 >
-                  <span className="text-[1rem] font-semibold text-ink-800 leading-none">
+                  <span className={`text-[1.5rem] font-bold leading-none tracking-[-0.02em] ${kpiInlineTone(k.label)}`}>
                     <KpiCountUp value={k.value} delay={120 + ki * 80} />
                   </span>
-                  <span className="text-[0.75rem] text-ink-400 font-medium">{k.label}</span>
-                </motion.span>
+                  <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500 leading-none">{k.label}</span>
+                </motion.div>
               ))}
             </div>
           );
@@ -367,13 +373,19 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
           </motion.div>
         )}
 
-        {/* Answer — rendered in the chat's rich markdown format (shared renderer) */}
+        {/* Answer — report's document markdown variant. This is a report
+            DOCUMENT (not a chat conversation), so the 66ch chat rule doesn't
+            bind: 66ch left a narrow ragged strip with a big right gutter under
+            the full-width title, which read as "too many lines". Capped at 80ch
+            — fills the column, aligns with the title, and keeps line length in
+            the comfortable document range. */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: baseDelay + 0.6, duration: 0.4 }}
+          className="max-w-[80ch]"
         >
-          {renderAssistantText(query.answer)}
+          {renderAssistantText(query.answer, 'document')}
         </motion.div>
       </div>
 
@@ -907,13 +919,13 @@ function ContentsRow({
           }}
           autoFocus
           onClick={(e) => e.stopPropagation()}
-          className="flex-1 min-w-0 bg-white border border-brand-600/40 rounded-[8px] px-2 py-1 text-[0.78125rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/15"
+          className="flex-1 min-w-0 bg-white border border-brand-600/40 rounded-[8px] px-2 py-1 text-[0.8125rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/15"
         />
       ) : (
         <button
           onClick={onScroll}
           aria-current={active ? 'true' : undefined}
-          className={`flex-1 min-w-0 text-left text-[0.78125rem] truncate transition-colors cursor-pointer ${active ? 'font-semibold text-brand-700' : 'font-medium text-ink-600 group-hover/crow:text-brand-700'}`}
+          className={`flex-1 min-w-0 text-left text-[0.8125rem] truncate transition-colors cursor-pointer ${active ? 'font-semibold text-brand-700' : 'font-medium text-ink-600 group-hover/crow:text-brand-700'}`}
         >
           {section.title}
         </button>
@@ -1098,7 +1110,7 @@ function ObservationCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-b border-canvas-border' : 'border border-canvas-border rounded-[12px]'}`}
+      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-canvas-border' : 'border border-canvas-border rounded-[12px]'}`}
     >
       <div className="px-6 py-5">
         {/* Meta row — mirrors QueryCard */}
@@ -1314,9 +1326,9 @@ function WorkflowResultCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className="relative border-x border-b border-canvas-border bg-white overflow-hidden"
+      className="relative border-x border-canvas-border bg-white overflow-hidden"
     >
-      <div className="px-6 py-5">
+      <div className="px-9 py-7">
         {/* Meta row */}
         <motion.div
           initial={{ opacity: 0, y: 4 }}
@@ -1697,16 +1709,20 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       );
     }
     return (
-      <div className="group/desc flex items-start gap-1.5 mb-3 -ml-0.5">
-        <p className={`text-[0.8125rem] leading-snug pl-0.5 ${onDark ? 'text-white/75' : 'text-ink-500'}`}>
+      <div className="group/desc flex items-start gap-2 mb-3">
+        <p
+          title={displayDescription || undefined}
+          className={`min-w-0 flex-1 text-[0.8125rem] leading-snug line-clamp-2 ${onDark ? 'text-white/75' : 'text-ink-500'}`}
+        >
           {displayDescription || <span className={`italic ${onDark ? 'text-white/45' : 'text-ink-400'}`}>No description</span>}
         </p>
         <button
           onClick={startEditDesc}
           aria-label="Edit description"
-          className={`shrink-0 p-1 -mt-0.5 rounded-[8px] opacity-0 group-hover/desc:opacity-100 focus-visible:opacity-100 transition-all duration-150 cursor-pointer ${onDark ? 'text-white/60 hover:text-white hover:bg-white/15' : 'text-ink-400 hover:text-brand-700 hover:bg-brand-50'}`}
+          title="Edit description"
+          className={`shrink-0 inline-flex items-center justify-center w-6 h-6 -mt-0.5 rounded-[6px] border opacity-0 group-hover/desc:opacity-100 focus-visible:opacity-100 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 ${onDark ? 'text-white/80 bg-white/10 border-white/25 hover:bg-white/20 hover:text-white focus-visible:ring-white/50' : 'text-ink-500 bg-canvas border-canvas-border hover:border-brand-300 hover:text-brand-700 focus-visible:ring-brand-600/30'}`}
         >
-          <Edit3 size={12} />
+          <Edit3 size={13} />
         </button>
       </div>
     );
@@ -1979,6 +1995,13 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       ? []
       : DEFAULT_QUERIES;
   const [sections, setSections] = useState<SectionItem[]>(() => buildInitialSections(seededQueries));
+  // Structure signature → drives the "report changed" gate. The baseline is
+  // (re)captured whenever the report is freshly built/templated; once the user
+  // reorders, adds, or removes sections the signature diverges and the
+  // "Save current as template" affordance appears.
+  const structureSig = (secs: SectionItem[]) => secs.filter(s => s.kind !== 'cover').map(s => `${s.kind}:${s.title ?? ''}`).join('|');
+  const sectionsBaselineRef = useRef<string | null>(null);
+  const structureChanged = sectionsBaselineRef.current !== null && structureSig(sections) !== sectionsBaselineRef.current;
   const appliedTemplateId = appliedTemplate?.id ?? null;
 
   // Summary lifecycle — "Generate Summary" (header) and "Regenerate" (section)
@@ -1989,13 +2012,28 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   // alternative blurb after a short simulated delay so the action feels real.
   const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
   const [summaryOverride, setSummaryOverride] = useState<string | null>(null);
+  // Initial-generation loading flag: the summary prose is gated behind it so
+  // "Generate Summary" produces a visible empty → loading → content transition.
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const ALT_SUMMARY = "Updated review identifies three additional control gaps in the vendor master review workflow, with proposed remediation owners. Findings reflect data through this morning's reconciliation cycle.";
+  const generateSummary = () => {
+    if (isGeneratingSummary || summaryGenerated) return;
+    setIsGeneratingSummary(true);
+    addToast({ type: 'success', message: 'Generating report summary…' });
+    setTimeout(() => {
+      setIsGeneratingSummary(false);
+      setSummaryGenerated(true);
+      addToast({ type: 'success', message: 'Executive summary ready.' });
+    }, 1400);
+  };
 
   useEffect(() => {
     const queries = appliedTemplateId && TEMPLATE_QUERIES[appliedTemplateId]
       ? TEMPLATE_QUERIES[appliedTemplateId]
       : seededQueries;
-    setSections(buildInitialSections(queries));
+    const fresh = buildInitialSections(queries);
+    setSections(fresh);
+    sectionsBaselineRef.current = structureSig(fresh);
     setSummaryOverride(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appliedTemplateId, isBulkAudit, reportWorkflows.length]);
@@ -2239,7 +2277,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             {tmplSections.map((s, i) => (
               <li key={`${s.name}-${i}`} className="flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px] hover:bg-brand-50/30 transition-colors">
                 <span className="shrink-0 w-5 text-[0.6875rem] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
-                <span className="flex-1 min-w-0 text-[0.78125rem] font-medium text-ink-600 truncate">{s.name}</span>
+                <span className="flex-1 min-w-0 text-[0.8125rem] font-medium text-ink-600 truncate">{s.name}</span>
               </li>
             ))}
             {appliedObservations.map((o, i) => (
@@ -2277,7 +2315,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           {outlineEntries.map((e, i) => (
             <li key={e.id} className="flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px]">
               <span className="shrink-0 w-5 text-[0.6875rem] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
-              <span className="flex-1 min-w-0 text-[0.78125rem] font-medium text-ink-600 truncate">{e.title}</span>
+              <span className="flex-1 min-w-0 text-[0.8125rem] font-medium text-ink-600 truncate">{e.title}</span>
             </li>
           ))}
         </ol>
@@ -2407,24 +2445,24 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   activeId={appliedTemplate?.id ?? reportTemplate?.id ?? null}
                   onSelect={handleApplyTemplate}
                   onClose={() => setShowApplyTemplate(false)}
+                  onSaveAsTemplate={onSaveAsTemplate && structureChanged ? handleSaveAsTemplate : undefined}
                 />
               </>
             )}
           </AnimatePresence>
         </div>
       )}
+      <button
+        onClick={() => setActivityLogOpen(true)}
+        title="View this report's activity log"
+        aria-label="View report activity log"
+        className="flex items-center justify-center w-9 h-9 text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+      >
+        <History size={16} />
+      </button>
       {onShare && can('rp_share') && (
         <button onClick={onShare} className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30">
           <Share2 size={14} /> <span className="hidden sm:inline">Share</span>
-        </button>
-      )}
-      {!isReadOnly && onSaveAsTemplate && (
-        <button
-          onClick={handleSaveAsTemplate}
-          title="Save this report's structure as a custom template"
-          className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-        >
-          <BookOpen size={14} /> <span className="hidden lg:inline">Save as template</span>
         </button>
       )}
       <button
@@ -2541,23 +2579,6 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                       Live ATR
                     </button>
                     )}
-                    <button
-                      onClick={() => setActivityLogOpen(true)}
-                      title="View this report's activity log"
-                      aria-label="View report activity log"
-                      className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/85 bg-white/10 border border-white/25 hover:bg-white/20 hover:text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                    >
-                      <History size={16} />
-                    </button>
-                    {!summaryGenerated && (
-                    <button
-                      onClick={() => { setSummaryGenerated(true); addToast({ type: 'success', message: 'Generating report summary…' }); }}
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.78125rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-                    >
-                      <Sparkles size={13} />
-                      Generate Summary
-                    </button>
-                    )}
                   </>
                 }
               >
@@ -2657,7 +2678,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           <div className="w-full">
             {/* Sections rendered as a continuous report (drag-to-reorder enabled for query cards) */}
             <main className="min-w-0">
-              <Reorder.Group axis="y" values={sections} onReorder={setSections} as="div" className="list-none p-0 m-0 [&>*:last-child>*]:rounded-b-[12px]">
+              <Reorder.Group axis="y" values={sections} onReorder={setSections} as="div" className="list-none p-0 m-0 [&>*:last-child>*]:rounded-b-[12px] [&>*:last-child>*]:border-b [&>*:last-child>*]:border-canvas-border">
                 {sections.map((section, i) => {
                   // `key` is intentionally NOT in here — React requires keys to
                   // be passed directly on each element, never via a spread prop.
@@ -2683,6 +2704,9 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                           title={reportDisplayName(report.name)}
                                     className="rounded-t-[12px]"
                           gradient={report.theme ? TEMPLATE_THEME_GRADIENT[report.theme] : undefined}
+                          eyebrow={report.id && (
+                            <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{report.id.toUpperCase()}</span>
+                          )}
                           actions={
                             <>
                               {canGenerateAtr && (
@@ -2695,52 +2719,29 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                 Generate ATR
                               </button>
                               )}
-                              <button
-                                onClick={() => setActivityLogOpen(true)}
-                                title="View this report's activity log"
-                                aria-label="View report activity log"
-                                className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/85 bg-white/10 border border-white/25 hover:bg-white/20 hover:text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                              >
-                                <History size={16} />
-                              </button>
-                              {!summaryGenerated && (
-                              <button
-                                onClick={() => { setSummaryGenerated(true); addToast({ type: 'success', message: 'Generating report summary…' }); }}
-                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.78125rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-                              >
-                                <Sparkles size={13} />
-                                Generate Summary
-                              </button>
-                              )}
-                                      </>
+                            </>
                           }
+                          footer={(() => {
+                            // Inline byline: pipe-separated values (prepared-by emphasized),
+                            // Report ID lives in the eyebrow and Report Type in the template
+                            // selector, so only the who/when/scope/period facts show here.
+                            const parts = [report.generatedBy, report.generatedAt, scopeLabel, report.reportPeriod].filter(Boolean);
+                            if (parts.length === 0) return null;
+                            return (
+                              <div className="flex items-center gap-2.5 text-[0.8125rem] flex-wrap">
+                                {parts.map((p, i) => (
+                                  <span key={i} className="inline-flex items-center gap-2.5">
+                                    {i > 0 && <span className="text-white/30" aria-hidden="true">|</span>}
+                                    <span className={i === 0 ? 'font-semibold text-white' : 'text-white/70'}>{p}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         >
                           <EditableDescription onDark />
-                          <div className="flex items-center gap-1.5 text-[0.8125rem] flex-wrap">
-                            <span className="font-semibold text-white">{report.generatedBy}</span>
-                            <span className="text-white/30 mx-0.5">|</span>
-                            <span className="text-white/70">{report.generatedAt}</span>
-                            <span className="text-white/30 mx-0.5">|</span>
-                            <span className="text-white/70">{scopeLabel}</span>
-                            {report.tag === 'Bulk Audit' && (
-                              <span className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[0.625rem] font-semibold whitespace-nowrap rounded-full bg-white/15 text-white border border-white/25">
-                                Bulk Audit
-                              </span>
-                            )}
-                          </div>
                         </ReportBrandBanner>
                       </Reorder.Item>,
-                      <div key={`${section.id}-meta`} className="border-x border-b border-canvas-border bg-white px-9 py-6">
-                        {/* Scope, Prepared By and Generated On live in the banner byline. */}
-                        <ReportMetaPanel
-                          items={[
-                            { label: 'Report ID', value: report.id?.toUpperCase() },
-                            { label: 'Report Type', value: report.tag ?? 'Internal Audit' },
-                            { label: 'Template', value: reportTemplate?.name },
-                            { label: 'Audit Period', value: report.reportPeriod },
-                          ]}
-                        />
-                      </div>,
                     ];
                   }
 
@@ -2748,12 +2749,12 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     const hasQueries = sections.some(s => s.kind === 'query');
                     return (
                       <Reorder.Item key={section.id} {...sectionProps}>
-                        <div className="border-x border-b border-canvas-border bg-white px-9 pt-7 pb-6">
+                        <div className="border-x border-canvas-border bg-white px-9 pt-6 pb-6">
                           <ReportNumberedHeading
                             n={sectionNumber(section.id)}
                             title={section.title}
                             subtitle={isBulkAudit ? 'Overall workflow result rollup' : 'Overall observation and action plan rollup'}
-                            right={hasQueries && summaryGenerated && (
+                            right={summaryGenerated ? (hasQueries && (
                               <button
                                 onClick={() => {
                                   if (isRegeneratingSummary) return;
@@ -2767,21 +2768,39 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                 disabled={isRegeneratingSummary}
                                 aria-busy={isRegeneratingSummary || undefined}
                                 title="Regenerate this summary with the latest queries"
-                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="group/regen inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                               >
                                 {isRegeneratingSummary ? (
                                   <Loader2 size={14} className="animate-spin" />
                                 ) : (
-                                  <RefreshCw size={12} className="transition-transform duration-300 group-hover/regen:rotate-180" />
+                                  <RefreshCw size={14} className="transition-transform duration-300 group-hover/regen:rotate-180" />
                                 )}
                                 {isRegeneratingSummary ? 'Regenerating…' : 'Regenerate'}
                               </button>
+                            )) : (
+                              <button
+                                onClick={generateSummary}
+                                disabled={isGeneratingSummary}
+                                aria-busy={isGeneratingSummary || undefined}
+                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 disabled:opacity-60 disabled:cursor-not-allowed"
+                              >
+                                {isGeneratingSummary ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                                {isGeneratingSummary ? 'Generating…' : 'Generate Summary'}
+                              </button>
                             )}
                           />
-                          <div className="pb-5 border-b border-canvas-border mb-5">
+                          <div className={(summaryGenerated || isGeneratingSummary) ? 'pb-6 border-b border-canvas-border mb-6' : ''}>
                             <ReportKpiTiles stats={activeStats} animate />
                           </div>
-                          <p className="text-[0.875rem] text-ink-700 leading-relaxed">{summaryOverride ?? section.content}</p>
+                          {summaryGenerated ? (
+                            <p className="max-w-[80ch] text-[1.0625rem] text-ink-700 leading-[1.8]">{summaryOverride ?? section.content}</p>
+                          ) : isGeneratingSummary ? (
+                            <div className="max-w-[80ch] space-y-2.5" aria-live="polite">
+                              <div className="h-3.5 w-full rounded bg-canvas-border/70 animate-pulse" />
+                              <div className="h-3.5 w-[92%] rounded bg-canvas-border/70 animate-pulse" />
+                              <div className="h-3.5 w-[78%] rounded bg-canvas-border/70 animate-pulse" />
+                            </div>
+                          ) : null}
                         </div>
                       </Reorder.Item>
                     );
@@ -2790,7 +2809,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   if (section.kind === 'stats') {
                     return (
                       <Reorder.Item key={section.id} {...sectionProps}>
-                        <div className="border-x border-b border-canvas-border bg-white px-9 py-6">
+                        <div className="border-x border-canvas-border bg-white px-9 py-6">
                           <ReportKpiTiles stats={activeStats} />
                         </div>
                       </Reorder.Item>
@@ -2850,9 +2869,9 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   if (section.kind === 'note') {
                     return (
                       <Reorder.Item key={section.id} {...sectionProps}>
-                        <div className="border-x border-b border-canvas-border bg-white px-9 pt-7 pb-6">
+                        <div className="border-x border-canvas-border bg-white px-9 pt-6 pb-6">
                           <ReportNumberedHeading n={sectionNumber(section.id)} title={section.title} />
-                          <p className="text-[0.8125rem] text-ink-800 leading-relaxed">{section.content}</p>
+                          <p className="max-w-[80ch] text-[0.9375rem] text-ink-700 leading-[1.8]">{section.content}</p>
                         </div>
                       </Reorder.Item>
                     );
