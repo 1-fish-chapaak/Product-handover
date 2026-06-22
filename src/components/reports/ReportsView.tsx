@@ -10,7 +10,7 @@ import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
   X, Edit3, BookOpen, Upload, Trash2, Plus, Search, Layers, Check,
-  WifiOff, FileCheck2, FolderArchive, Copy, ShieldCheck, CloudUpload,
+  WifiOff, FileCheck2, FolderArchive, Copy, ShieldCheck,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
@@ -1128,14 +1128,6 @@ export default function ReportsView({
               onDownload={(atr) => { exportAtrWord(atr.atrData.meta, atr.atrData.observations); addToast({ type: 'success', message: `Downloading “${atr.name}”.` }); }}
               view={viewMode}
               onViewChange={setViewMode}
-              trailingAction={
-                <button
-                  onClick={() => setAtrUploadOpen(true)}
-                  className="inline-flex items-center gap-2 h-10 px-4 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[10px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 whitespace-nowrap"
-                >
-                  <CloudUpload size={15} /> Generate ATR by Upload
-                </button>
-              }
             />
           )
         )}
