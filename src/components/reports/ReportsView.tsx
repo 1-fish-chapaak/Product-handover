@@ -117,7 +117,14 @@ export default function ReportsView({
     if (t === 'atr-reports') return 'atr';
     return 'all';
   });
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  // View mode (list/grid) persists across refresh so a chosen card view sticks.
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => {
+    if (typeof window === 'undefined') return 'list';
+    return localStorage.getItem('irame.reports.viewMode') === 'grid' ? 'grid' : 'list';
+  });
+  useEffect(() => {
+    try { localStorage.setItem('irame.reports.viewMode', viewMode); } catch { /* ignore */ }
+  }, [viewMode]);
   const [allSearch, setAllSearch] = useState('');
   // Type filter for the All feed — a framework (SOX / IA / ATR / Evidence) or the
   // cross-cutting Bulk Audit engagement style.
