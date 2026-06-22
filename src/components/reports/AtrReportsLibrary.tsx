@@ -171,9 +171,13 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
                 </div>
               );
             }},
-            { key: 'area', label: 'Area', width: '180px', render: (item) => {
+            { key: 'area', label: 'Area', width: '248px', render: (item) => {
               const atr = item as unknown as AtrLibraryReport;
-              return <ReportPill tone={AREA_TONE_MAP[atr.area] ?? 'draft'}>{atr.area}</ReportPill>;
+              return (
+                <div className="max-w-[232px]" title={atr.area}>
+                  <ReportPill tone={AREA_TONE_MAP[atr.area] ?? 'draft'}><span className="block max-w-[208px] truncate">{atr.area}</span></ReportPill>
+                </div>
+              );
             }},
             { key: 'generatedAt', label: 'Generated', width: '150px', render: (item) => (
               <span className="text-[0.75rem] tabular-nums text-ink-500 whitespace-nowrap">{String((item as unknown as AtrLibraryReport).generatedAt)}</span>
