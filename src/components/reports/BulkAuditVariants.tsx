@@ -908,7 +908,7 @@ function EditorialLayout({
             </button>
             <button
               onClick={() => addToast({ type: 'success', message: 'Generating report summary…' })}
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.78125rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
             >
               <Sparkles size={13} />
               Generate Summary
@@ -1085,7 +1085,7 @@ function EditorialContents({
                 className={`flex items-center gap-1.5 w-full py-2 pl-1 pr-1 rounded-[8px] transition-colors text-left cursor-pointer ${isActive ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
               >
                 <span className={`shrink-0 w-5 text-[0.6875rem] font-mono tabular-nums text-right ${isActive ? 'text-brand-700 font-semibold' : 'text-brand-500 font-semibold'}`}>{String(fixedStart + i + 1).padStart(2, '0')}</span>
-                <span className={`flex-1 min-w-0 text-[0.78125rem] truncate ${isActive ? 'font-semibold text-brand-700' : 'font-medium text-ink-600'}`}>{r.label}</span>
+                <span className={`flex-1 min-w-0 text-[0.8125rem] truncate ${isActive ? 'font-semibold text-brand-700' : 'font-medium text-ink-600'}`}>{r.label}</span>
               </button>
             </li>
           );
@@ -1224,7 +1224,7 @@ function BulkContentsRow<T extends { id: string }>({
         <button
           onClick={onScroll}
           aria-current={active ? 'true' : undefined}
-          className={`flex-1 min-w-0 text-left text-[0.78125rem] truncate transition-colors cursor-pointer ${active ? 'font-semibold text-brand-700' : 'font-medium text-ink-600 group-hover/crow:text-brand-700'}`}
+          className={`flex-1 min-w-0 text-left text-[0.8125rem] truncate transition-colors cursor-pointer ${active ? 'font-semibold text-brand-700' : 'font-medium text-ink-600 group-hover/crow:text-brand-700'}`}
         >
           {label}
         </button>
@@ -1269,7 +1269,7 @@ function EditorialSummary({ totals }: { totals: Totals }) {
       <div className="pb-5 border-b border-ink-900/15 mb-5">
         <ReportKpiTiles stats={bulkSummaryStats(totals)} animate />
       </div>
-      <p className="text-[0.9375rem] leading-[1.75] text-ink-800">
+      <p className="max-w-[80ch] text-[0.9375rem] leading-[1.75] text-ink-800">
         This audit returned <strong className="font-semibold text-ink-900">{totals.records} flagged records</strong> across{' '}
         <strong className="font-semibold text-ink-900">{totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}</strong>.
         High-severity items should be triaged first; the remainder are queued for AP review.

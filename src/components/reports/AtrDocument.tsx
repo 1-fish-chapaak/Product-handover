@@ -85,7 +85,7 @@ function NumberedHeading({ n, title, subtitle }: { n: number; title: string; sub
     <div className="flex items-start gap-3 mb-5">
       <span className="shrink-0 w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[0.8125rem] font-bold flex items-center justify-center mt-0.5">{n}</span>
       <div>
-        <h2 className="text-[1.1875rem] font-semibold text-ink-900 tracking-tight leading-tight">{title}</h2>
+        <h2 className="text-[1.25rem] font-semibold text-ink-900 tracking-tight leading-tight">{title}</h2>
         <p className="text-[0.75rem] text-ink-500">{subtitle}</p>
       </div>
     </div>
@@ -112,7 +112,7 @@ function FieldRow({ label, value, editable, onCommit, italic, multiline = true }
   return (
     <>
       <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ink-500 pt-2">{label}</div>
-      <p className={`pt-2 text-[0.875rem] text-ink-800 leading-relaxed ${italic ? 'italic text-ink-600' : ''}`}>
+      <p className={`pt-2 text-[1rem] text-ink-800 leading-relaxed ${italic ? 'italic text-ink-600' : ''}`}>
         <EditableText value={value ?? ''} editable={editable} multiline={multiline} placeholder={`Add ${label.toLowerCase()}`} onCommit={onCommit} />
       </p>
     </>
@@ -243,7 +243,7 @@ export default function AtrDocument({
               <span className="shrink-0 mt-0.5 w-6 h-6 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center"><Lightbulb size={13} /></span>
               <div className="min-w-0">
                 <div className="text-[0.9375rem] font-semibold text-ink-900 mb-1 leading-snug"><EditableText value={ins.title} editable={editable} onCommit={v => setInsight(i, { ...ins, title: v })} /></div>
-                <p className="text-[0.875rem] text-ink-700 leading-relaxed"><EditableText value={ins.body} editable={editable} multiline onCommit={v => setInsight(i, { ...ins, body: v })} /></p>
+                <p className="text-[1rem] text-ink-700 leading-relaxed"><EditableText value={ins.body} editable={editable} multiline onCommit={v => setInsight(i, { ...ins, body: v })} /></p>
               </div>
             </div>
           ))}

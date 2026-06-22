@@ -175,10 +175,10 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
                     <FileText size={16} strokeWidth={1.75} aria-hidden="true" />
                   </span>
                   <div className="min-w-0">
-                    <div className="text-[0.90625rem] font-semibold tracking-[-0.006em] text-ink-900 truncate group-hover:text-brand-600 transition-colors" title={reportDisplayName(atr.name)}>{reportDisplayName(atr.name)}</div>
+                    <div className="text-[0.875rem] font-semibold tracking-[-0.006em] text-ink-900 truncate group-hover:text-brand-600 transition-colors" title={reportDisplayName(atr.name)}>{reportDisplayName(atr.name)}</div>
                     <div className="mt-1 flex items-center gap-2 min-w-0">
                       <OriginBadge upload={isUploadAtr(atr)} />
-                      <span className="text-[0.71875rem] text-ink-400 truncate">{atr.atrData.observations.length} obs · {plans} plans · {evidenceCount[atr.id] ?? 0} evidence</span>
+                      <span className="text-[0.75rem] text-ink-400 truncate">{atr.atrData.observations.length} obs · {plans} plans · {evidenceCount[atr.id] ?? 0} evidence</span>
                     </div>
                   </div>
                 </div>

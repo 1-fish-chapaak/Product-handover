@@ -754,8 +754,8 @@ export default function ReportsView({
           )}
         </span>
         <div className="min-w-0">
-          <div className="text-[0.90625rem] font-semibold tracking-[-0.006em] text-ink-900 truncate" title={display.length > 100 ? display : undefined}>{truncated}</div>
-          {subline && <div className="mt-0.5 text-[0.71875rem] text-ink-400 truncate">{subline}</div>}
+          <div className="text-[0.875rem] font-semibold tracking-[-0.006em] text-ink-900 truncate" title={display.length > 100 ? display : undefined}>{truncated}</div>
+          {subline && <div className="mt-0.5 text-[0.75rem] text-ink-400 truncate">{subline}</div>}
         </div>
       </div>
     );
@@ -1246,7 +1246,7 @@ export default function ReportsView({
               { key: 'queries', label: 'Queries', width: COL_W.queries, render: (item) => {
                 const n = Number(item.queries) || 0;
                 return (
-                  <span className={`inline-flex items-center justify-center min-w-[26px] h-[22px] px-2 rounded-full text-[0.71875rem] font-semibold tabular-nums ${n > 0 ? 'bg-paper-100 text-ink-600' : 'bg-paper-100 text-ink-400'}`}>{n}</span>
+                  <span className={`inline-flex items-center justify-center min-w-[26px] h-[22px] px-2 rounded-full text-[0.75rem] font-semibold tabular-nums ${n > 0 ? 'bg-paper-100 text-ink-600' : 'bg-paper-100 text-ink-400'}`}>{n}</span>
                 );
               }},
               { key: 'generatedAt', label: 'Generated', width: COL_W.generated, render: (item) => (

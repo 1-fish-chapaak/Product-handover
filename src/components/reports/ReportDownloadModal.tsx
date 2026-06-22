@@ -305,7 +305,7 @@ function PdfPreview({
       {/* Cover page — chrome carries the tag + Irame mark, body shows title + meta */}
       <PdfPage pageNo={1} totalPages={totalPages} variant="cover" reportName={reportName} reportTag={reportTag}>
         <div className="h-full flex flex-col justify-center text-center">
-          <h1 className="text-[1.875rem] leading-[1.15] font-semibold text-ink-900 tracking-tight mb-4">
+          <h1 className="text-[1.75rem] leading-[1.15] font-semibold text-ink-900 tracking-tight mb-4">
             {reportName}
           </h1>
           <div className="mx-auto h-px bg-ink-900/20 w-16 mb-5" />
@@ -373,7 +373,7 @@ function PageBlockBody({ block, typeface }: { block: DownloadPreviewSection[]; t
 function PdfContents({ sections }: { sections: DownloadPreviewSection[] }) {
   return (
     <div>
-      <h2 className="text-[1.375rem] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-1">
+      <h2 className="text-[1.25rem] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-1">
         Table of Contents
       </h2>
       <div className="h-px bg-ink-900/20 w-12 mb-6" />
