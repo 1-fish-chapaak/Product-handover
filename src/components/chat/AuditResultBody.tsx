@@ -1,9 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { KpiTile } from '../shared/KpiTile';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import { sanitizePartialMarkdown } from './reveal/sanitizePartialMarkdown';
 import { useTypewriter } from './reveal/useTypewriter';
+import { useStream } from './stream/useStream';
+import { useSmoothText } from './stream/useSmoothText';
+import { mockAuditStream, type MockAuditData } from './stream/mockStream';
 
 // ── Reveal choreography ──────────────────────────────────────────────────────
 // Prose leads and is meant to be *watched*. The compact KPI grid brews
@@ -32,6 +35,12 @@ interface AuditResultBodyProps {
   previewRowCount: number;
   /** Snap straight to the finished state (generation stopped). */
   forceComplete?: boolean;
+  /** Flag-gated streaming path: when present, the prose streams from this mock
+   *  event stream (the spine) instead of the fixed-string typewriter. Absent =
+   *  legacy behavior, untouched. */
+  streamData?: MockAuditData;
+  /** Fired once when the stream reaches its 'done' phase. */
+  onDone?: () => void;
 }
 
 // ── Skeletons — sized to the real cards so there is zero layout shift when the
@@ -96,9 +105,12 @@ export default function AuditResultBody({
   renderTable,
   previewRowCount,
   forceComplete = false,
+  streamData,
+  onDone,
 }: AuditResultBodyProps) {
   const prefersReducedMotion = useReducedMotion();
   const instant = !!prefersReducedMotion || forceComplete;
+  const streaming = !!streamData;
 
   // Animated onsets start false and are flipped only from timer callbacks. The
   // `instant` case is OR'd in at render time, so the effect never sets state
@@ -108,14 +120,46 @@ export default function AuditResultBody({
   const [chartOn, setChartOn] = useState(false);
   const [tableRows, setTableRows] = useState(0);
 
-  const { shown, done } = useTypewriter(text, { enabled: !instant });
+  // ── Prose source ──────────────────────────────────────────────────────────
+  // Streaming path: prose grows from text.delta events via the spine, smoothed
+  // for display. Legacy path: fixed-string typewriter. Both hooks run every
+  // render; the inactive one is inert (null source / disabled).
+  const source = useMemo(
+    () => (streamData && !instant ? mockAuditStream(streamData) : null),
+    [streamData, instant],
+  );
+  const stream = useStream(source);
+  const { shown: streamShown, done: streamCaught } = useSmoothText(stream.text, { reduced: instant });
+  const { shown: typed, done: typedDone } = useTypewriter(text, { enabled: !instant && !streaming });
 
-  // KPI scoreboard brews alongside the prose.
+  const streamTextDone = stream.phase === 'materializing' || stream.phase === 'done';
+  const done = instant ? true : streaming ? (streamCaught && streamTextDone) : typedDone;
+
+  // Fire onDone exactly once when the stream completes.
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+  const firedDone = useRef(false);
+  useEffect(() => {
+    if (streaming && stream.phase === 'done' && !firedDone.current) {
+      firedDone.current = true;
+      onDoneRef.current?.();
+    }
+  }, [streaming, stream.phase]);
+
+  // KPI scoreboard brews alongside the prose. In streaming mode it waits for the
+  // answer to start (so the numbers don't pop during the reasoning beat);
+  // otherwise it brews on the fixed onset timer.
   useEffect(() => {
     if (instant) return;
+    if (streaming) {
+      if (stream.phase === 'answering' || stream.phase === 'materializing' || stream.phase === 'done') {
+        setKpiOn(true);
+      }
+      return;
+    }
     const t = setTimeout(() => setKpiOn(true), KPI_ONSET);
     return () => clearTimeout(t);
-  }, [messageId, instant]);
+  }, [messageId, instant, streaming, stream.phase]);
 
   // Heavy artifacts wait for the typewriter to land, then stagger in.
   useEffect(() => {
@@ -136,8 +180,8 @@ export default function AuditResultBody({
     return () => { timers.forEach(clearTimeout); };
   }, [messageId, instant, done, previewRowCount]);
 
-  const proseSource = instant ? text : shown;
-  const showCaret = !instant && !done && !!text;
+  const proseSource = instant ? text : streaming ? streamShown : typed;
+  const showCaret = !instant && !done && (streaming ? stream.phase !== 'idle' : !!text);
 
   const showKpi = instant || kpiOn;
   const showTable = instant || tableOn;
@@ -146,6 +190,20 @@ export default function AuditResultBody({
 
   return (
     <div className="space-y-4 w-full">
+      {/* Reasoning trail — the brief "working" beat before the answer streams.
+          Shown only in streaming mode while still reasoning; it gives way to the
+          prose the moment the first answer token lands. */}
+      {streaming && stream.phase === 'reasoning' && stream.reasoning.steps.length > 0 && (
+        <div className="space-y-1" aria-label="Working">
+          {stream.reasoning.steps.map(s => (
+            <div key={s.id} className="flex items-center gap-2 text-[0.75rem] text-ink-500">
+              <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'done' ? 'bg-brand-300' : 'bg-primary'}`} aria-hidden="true" />
+              {s.label}{s.status === 'active' ? '…' : ''}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Prose — streamed char-by-char, markdown kept stable each frame. The
           caret is a glyph appended into the source (before sanitising) so it
           tracks the last character inline instead of dropping below the block

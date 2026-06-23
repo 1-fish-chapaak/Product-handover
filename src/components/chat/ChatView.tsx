@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import DatePicker from '../shared/DatePicker';
+import type { MockAuditData } from './stream/mockStream';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import {
@@ -478,6 +479,42 @@ const LOADING_STEPS: { label: string; tab: ArtifactTab | null }[] = [
   { label: 'Connecting data sources…',    tab: 'sources' },
   { label: 'Processing 1.2M records…',    tab: null },
 ];
+
+// Streaming v2 — opt-in via ?stream=v2. When on, the audit answer streams from
+// the event spine (text.delta + smoothing + collapsed wait) instead of the
+// fixed 8.4s loader → typewriter. Read once at load; the legacy path is the
+// default and stays byte-identical.
+const STREAM_V2 = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('stream') === 'v2';
+
+// The audit answer prose — shared by the legacy completion path and the v2
+// stream so both render the exact same content.
+const AUDIT_PROSE = `## Duplicate invoice detection — Q1 FY26
+
+Scanned **1.2M invoice records** across the last **90 days** and surfaced **8 high-confidence duplicates** totalling **₹6.16L** in exposure. The strongest pair sits at a **96% match** on **Acme Corp**, which alone accounts for *half of the flags*.
+
+> Sample-data preview: this run used the connected sandbox source. Re-run against your production SAP AP module before promoting any flag to a finding.
+
+### Where to look first
+
+- **Acme Corp** — 4 of 8 flags. Two invoices were posted **3 days apart** for identical amounts under near-identical PO references.
+  - One pair was approved by the same AP clerk; check whether the duplicate-payment control failed open.
+  - The other pair crossed an approval-limit boundary; payment may have already cleared.
+- **Bluepeak Logistics** — 2 flags, both at month-end, both **₹84,000** exactly. Confirm whether one is a credit-note reversal.
+- **Two tail vendors** — single flags each, lower priority but worth a glance before sign-off.
+
+The full plan, SQL, and sources are in the Workspace on the right. Promote any pair to a formal finding from the \`Flagged pairs\` table, or open the [duplicate-payment SOP](https://docs.auditify.example/sops/duplicate-payment) for the standard remediation path.`;
+
+// The v2 stream's content — same numbers/prose/rows as the legacy result, fed
+// to the mock emitter so the answer materializes from events.
+const AUDIT_STREAM_DATA: MockAuditData = {
+  reasoning: ['Generating execution plan', 'Writing SQL query', 'Connecting to data sources'],
+  answer: AUDIT_PROSE,
+  kpis: AUDIT_RESULT.kpis,
+  chart: { id: 'confidence' },
+  columns: AUDIT_RESULT.table.columns,
+  rows: AUDIT_RESULT.table.rows,
+};
 
 const WORKFLOW_TYPE_NAMES: Record<WorkflowTypeId, string> = {
   reconciliation: 'Three-Way Reconciliation',
@@ -3284,6 +3321,11 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     timersRef.current.push(t);
   };
 
+  // Streaming v2: true while the event-driven audit answer is materializing.
+  // Keeps the composer in "generating" mode (Stop button, Esc-to-stop) since
+  // the v2 path doesn't use isTyping / showProgressiveLoader.
+  const [streamingActive, setStreamingActive] = useState(false);
+
   // Cancel an in-flight typing simulation. Clears pending timers, hides the
   // thinking trail, and flips isTyping off so the composer returns to Send.
   // If an audit run was mid-flight, tag its message so the UI shows "Stopped"
@@ -3293,19 +3335,30 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setIsTyping(false);
     setThinkingSteps([]);
     setShowProgressiveLoader(false);
+    setStreamingActive(false);
     const haltedId = auditRunMsgIdRef.current;
     auditRunMsgIdRef.current = null;
     activeQueryFlowRef.current = null;
     if (haltedId) {
       setMessages(prev => prev.map(m => {
         if (m.id !== haltedId) return m;
-        // Drop the audit-loading richType so the loader unmounts; keep the
-        // thinking trail and mark the message as stopped for the badge.
-        return { ...m, richType: undefined, stopped: true };
+        // Drop the loader richType so it unmounts; for a streaming result keep
+        // its richType so it snaps to the finished state via forceComplete.
+        // Mark stopped for the badge.
+        return { ...m, richType: m.richType === 'audit-loading' ? undefined : m.richType, stopped: true };
       }));
     }
     addToast({ type: 'info', message: 'Stopped generating.' });
   }, [addToast]);
+
+  // v2 stream finished: leave generating mode and reveal the follow-ups (added
+  // now so they don't show mid-stream).
+  const handleStreamDone = useCallback((id: string) => {
+    setStreamingActive(false);
+    setMessages(prev => prev.map(m => (
+      m.id === id && !m.followUpTracks ? { ...m, followUpTracks: AUDIT_FOLLOWUP_TRACKS } : m
+    )));
+  }, []);
 
   // Reset the entire conversation. Wired to: the header's "+ New chat" button
   // (was the floating chip's button) and the locked-workflow inline link
@@ -3337,7 +3390,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // discard the in-progress response. We surface a confirm dialog before
   // proceeding so the user doesn't accidentally lose work.
   const [newChatConfirmAfter, setNewChatConfirmAfter] = useState<null | (() => void)>(null);
-  const isGenerating = isTyping || showProgressiveLoader;
+  const isGenerating = isTyping || showProgressiveLoader || streamingActive;
   const requestNewChat = useCallback((after?: () => void) => {
     if (isGenerating) {
       // Stash the post-reset callback so the confirmation dialog can run it
@@ -3428,6 +3481,24 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     activeQueryFlowRef.current = 'audit-query';
     const msgId = `msg-audit-run-${Date.now()}`;
     auditRunMsgIdRef.current = msgId;
+
+    if (STREAM_V2) {
+      // v2: create the result message directly and let AuditResultBody stream it
+      // from the spine — no fixed 8.4s loader. Follow-ups are attached on done.
+      setMessages(prev => [...prev, {
+        id: msgId,
+        role: 'assistant',
+        text: AUDIT_PROSE,
+        timestamp: new Date(),
+        richType: 'audit-result',
+        richData: AUDIT_RESULT,
+      }]);
+      setStreamingActive(true);
+      setArtifactMode('query');
+      setShowArtifacts(true);
+      setActiveArtifactTab('plan');
+      return;
+    }
 
     setMessages(prev => [...prev, {
       id: msgId,
@@ -5808,6 +5879,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           kpis={AUDIT_RESULT.kpis}
                           previewRowCount={Math.min(PREVIEW_ROW_COUNT, AUDIT_RESULT.table.rows.length)}
                           forceComplete={msg.stopped}
+                          streamData={STREAM_V2 ? AUDIT_STREAM_DATA : undefined}
+                          onDone={() => handleStreamDone(msg.id)}
                           afterProse={
                             /* Affordance: link inline result to the auto-opened
                                panel. Hidden when the panel is already open (the
@@ -5842,7 +5915,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             to multi-row when the chat column narrows (e.g. with both
                             side panels open) — each button keeps its single-line
                             label instead of squeezing into a 2-line text block. */}
-                        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-canvas-border">
+                        <div className={`flex flex-wrap items-center gap-2 pt-3 border-t border-canvas-border${streamingActive && msg.id === auditRunMsgIdRef.current ? ' hidden' : ''}`}>
                           <ExportReportButton messages={messages} upToMessageId={msg.id} chatTitle={currentChatTitle} />
                           {/* Dashboard button — pressed when one or more dashboards linked. */}
                           {(() => {
