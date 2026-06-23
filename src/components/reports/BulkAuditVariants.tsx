@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState, type ElementType } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, Reorder, useDragControls } from 'motion/react';
-import { ArrowLeft, Download, History, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2, GripVertical, Edit3, StickyNote, Sparkles } from 'lucide-react';
+import { ArrowLeft, Download, History, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2, GripVertical, Edit3, StickyNote, Sparkles, RefreshCw } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import EmptyState from '../shared/EmptyState';
@@ -17,8 +17,8 @@ import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { ReportBrandBanner, ReportMetaPanel, ReportNumberedHeading, ReportKpiTiles } from './ReportDocumentChrome';
 import { statTone } from './reportTones';
-import { exportReportWord, exportReportPpt, exportReportPdf, exportReportHtml, exportBulkAuditExcel } from './reportExport';
-import type { DownloadPreviewSection } from './ReportDownloadModal';
+import { exportBulkAuditExcel } from './reportExport';
+import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import { REPORT_TEMPLATES } from '../../data/mockData';
 import type { WorkflowResult } from './reportShared';
 import AddObservationModal, {
@@ -96,6 +96,7 @@ export function BulkAuditVariantView({
   const { can } = useCan();
   const [workflows, setWorkflows] = useState<WorkflowResult[]>(report.workflowResults ?? []);
   const [pendingDelete, setPendingDelete] = useState<WorkflowResult | null>(null);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   // ─── Report-level observations (parity with Internal Audit reports) ───
   const [observations, setObservations] = useState<ObservationCardData[]>([]);
@@ -230,64 +231,37 @@ export function BulkAuditVariantView({
   const allFailed = successfulWorkflows.length === 0 && failedWorkflows.length > 0;
   const totals = computeTotals(successfulWorkflows);
 
-  // Real exports — same composers as standard reports, so the downloaded
-  // document mirrors the on-screen ATR-style layout.
-  const handleExport = (ext: 'pdf' | 'doc' | 'ppt' | 'html' | 'xlsx') => {
-    if (ext === 'xlsx') {
-      exportBulkAuditExcel(report.name, successfulWorkflows);
-      addToast({ type: 'success', message: `${report.name}.xlsx downloaded.` });
-      return;
-    }
-    const sections: DownloadPreviewSection[] = [
-      {
-        id: 'bulk-exec-summary',
-        kind: 'summary',
-        title: 'Executive Summary',
-        content: `This audit returned ${totals.records} flagged records across ${totals.workflows} ${totals.workflows === 1 ? 'workflow' : 'workflows'}. High-severity items should be triaged first; the remainder are queued for AP review.`,
-        stats: bulkSummaryStats(totals).map(s => ({ label: s.label, value: s.value, accent: statTone(s.color).hex })),
-      },
-      ...successfulWorkflows.map(w => ({
-        id: w.id,
-        kind: 'workflow' as const,
-        title: `Workflow · ${w.workflowId}`,
-        workflowId: w.workflowId,
-        workflowName: w.name,
-        severity: w.severity,
-        summary: resultSummary(w),
-        findings: w.findings,
-        observations: w.observations,
-      })),
-      ...observations.map(o => ({
-        id: o.id,
-        kind: 'observation' as const,
-        title: o.title,
-        obsId: o.obsId,
-        description: o.description,
-      })),
-    ];
-    const ctx = {
-      reportName: report.name,
-      reportTag: report.tag,
-      reportId: report.id?.toUpperCase(),
-      generatedBy: report.generatedBy,
-      generatedAt: report.generatedAt,
-      sections,
-    };
-    if (ext === 'doc') {
-      exportReportWord(ctx);
-      addToast({ type: 'success', message: `${report.name}.doc downloaded.` });
-    } else if (ext === 'ppt') {
-      exportReportPpt(ctx);
-      addToast({ type: 'success', message: `${report.name}.ppt downloaded.` });
-    } else if (ext === 'html') {
-      exportReportHtml(ctx);
-      addToast({ type: 'success', message: `${report.name}.html downloaded.` });
-    } else if (exportReportPdf(ctx)) {
-      addToast({ type: 'info', message: 'Opening print dialog — choose “Save as PDF”.' });
-    } else {
-      addToast({ type: 'error', message: 'Pop-up blocked — allow pop-ups to export the PDF.' });
-    }
-  };
+  // Map the bulk run onto the shared download-preview section model so the bulk
+  // report exports through the same modal (preview + PDF/DOCX/PPTX/HTML/Excel) as
+  // every other report. The modal owns the non-Excel composers; Excel is tabular
+  // and delegated back via onExcelExport.
+  const buildDownloadSections = (): DownloadPreviewSection[] => [
+    {
+      id: 'bulk-exec-summary',
+      kind: 'summary',
+      title: 'Executive Summary',
+      content: `This audit returned ${totals.records} flagged records across ${totals.workflows} ${totals.workflows === 1 ? 'workflow' : 'workflows'}. High-severity items should be triaged first; the remainder are queued for AP review.`,
+      stats: bulkSummaryStats(totals).map(s => ({ label: s.label, value: s.value, accent: statTone(s.color).hex })),
+    },
+    ...successfulWorkflows.map((w): DownloadPreviewSection => ({
+      id: w.id,
+      kind: 'workflow',
+      title: `Workflow · ${w.workflowId}`,
+      workflowId: w.workflowId,
+      workflowName: w.name,
+      severity: w.severity,
+      summary: resultSummary(w),
+      findings: w.findings,
+      observations: w.observations,
+    })),
+    ...observations.map((o): DownloadPreviewSection => ({
+      id: o.id,
+      kind: 'observation',
+      title: o.title,
+      obsId: o.obsId,
+      description: o.description,
+    })),
+  ];
 
   const handleOpenWorkflow = (w: WorkflowResult) => {
     addToast({ type: 'info', message: `Opening ${w.workflowId} — ${w.name}…` });
@@ -352,7 +326,7 @@ export function BulkAuditVariantView({
         <BulkBackLink onBack={onBack} />
         {!allFailed && (
           <div className="flex items-center gap-2">
-            <BulkCoverActions onShare={onShare} onExport={handleExport} templates={templates} />
+            <BulkCoverActions onShare={onShare} onDownload={() => setShowDownloadModal(true)} templates={templates} />
           </div>
         )}
       </div>
@@ -410,7 +384,6 @@ export function BulkAuditVariantView({
               onGenerateAtr={() => setAtrModalOpen(true)}
               onBack={onBack}
               onShare={onShare}
-              onExport={handleExport}
               templates={templates}
             />
           </div>
@@ -445,6 +418,21 @@ export function BulkAuditVariantView({
         onClose={closeAddObservation}
         onSave={handleObservationSave}
       />
+
+      <AnimatePresence>
+        {showDownloadModal && (
+          <ReportDownloadModal
+            reportName={report.name}
+            reportTag={report.tag}
+            reportId={report.id?.toUpperCase()}
+            generatedBy={report.generatedBy}
+            generatedAt={report.generatedAt}
+            sections={buildDownloadSections()}
+            onExcelExport={() => exportBulkAuditExcel(report.name, successfulWorkflows)}
+            onClose={() => setShowDownloadModal(false)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -685,16 +673,15 @@ function BulkBackLink({ onBack }: { onBack: () => void }) {
 // Apply Template / Share / Download — rendered in the cover banner's action slot.
 // Apply Template is a UX match here: a bulk audit report has a fixed editorial
 // layout, so applying a template animates + toasts without swapping sections.
-function BulkCoverActions({ onShare, onExport, templates = REPORT_TEMPLATES }: {
+function BulkCoverActions({ onShare, onDownload, templates = REPORT_TEMPLATES }: {
   onShare?: () => void;
-  onExport: (ext: 'pdf' | 'doc' | 'ppt' | 'html' | 'xlsx') => void;
+  onDownload: () => void;
   templates?: typeof REPORT_TEMPLATES[number][];
 }) {
   const { addToast } = useToast();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
-  const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
 
   const handleApplyTemplate = (template: typeof REPORT_TEMPLATES[0]) => {
     setApplyingTemplate(true);
@@ -744,34 +731,13 @@ function BulkCoverActions({ onShare, onExport, templates = REPORT_TEMPLATES }: {
           <Share2 size={14} /> Share
         </button>
       )}
-      {/* Download */}
-      <div className="relative">
-        <button
-          onClick={() => setShowDownloadDropdown(p => !p)}
-          className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-500 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
-        >
-          <Download size={14} /> Download <ChevronDown size={12} className={`transition-transform ${showDownloadDropdown ? 'rotate-180' : ''}`} />
-        </button>
-        {showDownloadDropdown && (
-          <div className="absolute right-0 top-full mt-1 bg-white border border-canvas-border shadow-xl z-50 py-1 w-48 rounded-[8px]">
-            {([
-              { label: 'Download as PDF', ext: 'pdf' },
-              { label: 'Download as DOCX', ext: 'doc' },
-              { label: 'Download as PPTX', ext: 'ppt' },
-              { label: 'Download as HTML', ext: 'html' },
-              { label: 'Download as Excel', ext: 'xlsx' },
-            ] as const).map(({ label, ext }) => (
-              <button
-                key={ext}
-                onClick={() => { onExport(ext); setShowDownloadDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 transition-colors cursor-pointer"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Download — opens the shared preview modal (same as every other report) */}
+      <button
+        onClick={onDownload}
+        className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-[8px] hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+      >
+        <Download size={14} /> Download
+      </button>
       {/* Applying Template Overlay */}
       <AnimatePresence>
         {applyingTemplate && (
@@ -848,7 +814,7 @@ function AllFailedEmpty({ report, failedWorkflows, onBack }: {
 function EditorialLayout({
   report, workflows, failedWorkflows, totals, onOpenWorkflow, onRequestDelete,
   observations, onEditObservation, onToggleObservationAttachment, onDeleteObservation,
-  onGenerateAtr, onBack, onShare, onExport, templates,
+  onGenerateAtr, onBack, onShare, templates,
 }: {
   report: Report;
   workflows: WorkflowResult[];
@@ -873,7 +839,6 @@ function EditorialLayout({
   onGenerateAtr: () => void;
   onBack: () => void;
   onShare?: () => void;
-  onExport: (ext: 'pdf' | 'doc' | 'ppt' | 'html' | 'xlsx') => void;
   templates?: typeof REPORT_TEMPLATES[number][];
 }) {
   const { addToast } = useToast();
@@ -883,73 +848,42 @@ function EditorialLayout({
       <ReportBrandBanner
         title={report.name}
         className="rounded-t-[12px]"
-        facts={[
-          { value: totals.workflows, label: 'Workflows' },
-          { value: totals.records, label: 'Flagged Records' },
-          { value: observations.length, label: 'Observations' },
-        ]}
-        actions={
-          <>
-            <button
-              onClick={onGenerateAtr}
-              title="Generate Action Taken Report"
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-            >
-              <FileText size={14} />
-              Generate ATR
-            </button>
-            <button
-              onClick={() => addToast({ type: 'info', message: 'Activity log coming soon for bulk audit.' })}
-              title="View this report's activity log"
-              aria-label="View report activity log"
-              className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/85 bg-white/10 border border-white/25 hover:bg-white/20 hover:text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-            >
-              <History size={16} />
-            </button>
-            <button
-              onClick={() => addToast({ type: 'success', message: 'Generating report summary…' })}
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-            >
-              <Sparkles size={13} />
-              Generate Summary
-            </button>
-          </>
-        }
-      >
-        {report.pages != null && (
-          <p className="text-[0.8125rem] leading-snug text-white/75 mb-3">
-            {totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'} · {totals.records} flagged records
-          </p>
+        eyebrow={report.id && (
+          <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{report.id.toUpperCase()}</span>
         )}
-        <div className="flex items-center gap-1.5 text-[0.8125rem] flex-wrap">
-          <span className="font-semibold text-white">{report.generatedBy}</span>
-          <span className="text-white/30 mx-0.5">|</span>
-          <span className="text-white/70">{report.generatedAt}</span>
-          <span className="text-white/30 mx-0.5">|</span>
-          <span className="text-white/70">
-            {totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}
-          </span>
-          {report.tag && (
-            <span className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[0.625rem] font-semibold whitespace-nowrap rounded-full bg-white/15 text-white border border-white/25">
-              {report.tag}
-            </span>
-          )}
-        </div>
+        actions={
+          <button
+            onClick={onGenerateAtr}
+            title="Generate Action Taken Report"
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+          >
+            <FileText size={14} />
+            Generate ATR
+          </button>
+        }
+        footer={(() => {
+          const parts = [report.generatedBy, report.generatedAt].filter(Boolean);
+          return (
+            <div className="flex items-center gap-2.5 text-[0.8125rem] flex-wrap">
+              {parts.map((p, i) => (
+                <span key={i} className="inline-flex items-center gap-2.5">
+                  {i > 0 && <span className="text-white/30" aria-hidden="true">|</span>}
+                  <span className={i === 0 ? 'font-semibold text-white' : 'text-white/70'}>{p}</span>
+                </span>
+              ))}
+              {report.tag && (
+                <span className="inline-flex items-center px-2 h-5 ml-0.5 text-[0.625rem] font-semibold whitespace-nowrap rounded-full bg-white/15 text-white border border-white/25">
+                  {report.tag}
+                </span>
+              )}
+            </div>
+          );
+        })()}
+      >
+        <p className="text-[0.8125rem] leading-snug text-white/75 mb-3 line-clamp-2">
+          Consolidated results across all workflow runs in this bulk audit.
+        </p>
       </ReportBrandBanner>
-
-      {/* Metadata — structured report-facts panel, attached below the banner */}
-      <div className="bg-white border-x border-b border-canvas-border px-9 py-6">
-        <ReportMetaPanel
-          items={[
-            { label: 'Report ID', value: report.id?.toUpperCase() },
-            { label: 'Report Type', value: report.tag ?? 'Bulk Audit' },
-            { label: 'Scope', value: `${totals.workflows} ${totals.workflows === 1 ? 'workflow' : 'workflows'}` },
-            { label: 'Prepared By', value: report.generatedBy },
-            { label: 'Generated On', value: report.generatedAt },
-            { label: 'Flagged Records', value: String(totals.records) },
-          ]}
-        />
-      </div>
 
       {/* Editorial body — white card attached to the header (no gap). The table
           of contents now lives in the persistent outline rail, not inline. */}
@@ -1263,17 +1197,86 @@ function bulkSummaryStats(totals: Totals) {
 }
 
 function EditorialSummary({ totals }: { totals: Totals }) {
+  const { addToast } = useToast();
+  const [summaryGenerated, setSummaryGenerated] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [override, setOverride] = useState<string | null>(null);
+  const ALT_SUMMARY = "Re-run of the bulk audit confirms the flagged-record counts and surfaces three additional medium-severity items in the vendor-master workflow, now queued with proposed remediation owners.";
+
+  const generate = () => {
+    if (isGenerating || summaryGenerated) return;
+    setIsGenerating(true);
+    addToast({ type: 'success', message: 'Generating report summary...' });
+    setTimeout(() => {
+      setIsGenerating(false);
+      setSummaryGenerated(true);
+      addToast({ type: 'success', message: 'Executive summary ready.' });
+    }, 1400);
+  };
+
+  const kpis = [
+    ...bulkSummaryStats(totals),
+    { label: 'Low Severity', value: String(totals.low), icon: CheckCircle2, color: 'text-compliant-700 bg-compliant-50' },
+  ];
+
   return (
     <div>
-      <ReportNumberedHeading n={1} title="Executive Summary" subtitle="Overall workflow result rollup" />
-      <div className="pb-5 border-b border-ink-900/15 mb-5">
-        <ReportKpiTiles stats={bulkSummaryStats(totals)} animate />
+      <ReportNumberedHeading
+        n={1}
+        title="Executive Summary"
+        subtitle="Overall workflow result rollup"
+        right={summaryGenerated ? (
+          <button
+            onClick={() => {
+              if (isRegenerating) return;
+              setIsRegenerating(true);
+              setTimeout(() => {
+                setOverride(ALT_SUMMARY);
+                setIsRegenerating(false);
+                addToast({ type: 'success', message: 'Executive summary regenerated.' });
+              }, 1200);
+            }}
+            disabled={isRegenerating}
+            aria-busy={isRegenerating || undefined}
+            title="Regenerate this summary with the latest workflow results"
+            className="group/regen inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isRegenerating ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} className="transition-transform duration-300 group-hover/regen:rotate-180" />}
+            {isRegenerating ? 'Regenerating...' : 'Regenerate'}
+          </button>
+        ) : (
+          <button
+            onClick={generate}
+            disabled={isGenerating}
+            aria-busy={isGenerating || undefined}
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            {isGenerating ? 'Generating...' : 'Generate Summary'}
+          </button>
+        )}
+      />
+      <div className={(summaryGenerated || isGenerating) ? 'pb-5 border-b border-ink-900/15 mb-5' : ''}>
+        <ReportKpiTiles stats={kpis} animate />
       </div>
-      <p className="max-w-[80ch] text-[0.9375rem] leading-[1.75] text-ink-800">
-        This audit returned <strong className="font-semibold text-ink-900">{totals.records} flagged records</strong> across{' '}
-        <strong className="font-semibold text-ink-900">{totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}</strong>.
-        High-severity items should be triaged first; the remainder are queued for AP review.
-      </p>
+      {summaryGenerated ? (
+        <p className="max-w-[68ch] text-[1.0625rem] leading-[1.75] text-ink-700">
+          {override ?? (
+            <>
+              This audit returned <strong className="font-semibold text-ink-900">{totals.records} flagged records</strong> across{' '}
+              <strong className="font-semibold text-ink-900">{totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}</strong>.
+              High-severity items should be triaged first; the remainder are queued for AP review.
+            </>
+          )}
+        </p>
+      ) : isGenerating ? (
+        <div className="max-w-[68ch] space-y-2.5" aria-live="polite">
+          <div className="h-3.5 w-full rounded bg-ink-900/10 animate-pulse" />
+          <div className="h-3.5 w-[92%] rounded bg-ink-900/10 animate-pulse" />
+          <div className="h-3.5 w-[78%] rounded bg-ink-900/10 animate-pulse" />
+        </div>
+      ) : null}
     </div>
   );
 }

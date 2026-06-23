@@ -16,9 +16,16 @@ export type ReportStat = {
   color: string;
 };
 
+const KPI_COL_CLASS: Record<number, string> = {
+  1: 'md:grid-cols-1', 2: 'md:grid-cols-2', 3: 'md:grid-cols-3',
+  4: 'md:grid-cols-4', 5: 'md:grid-cols-5', 6: 'md:grid-cols-6',
+};
 export function ReportKpiTiles({ stats, animate = false }: { stats: ReportStat[]; animate?: boolean }) {
+  // Column count follows the number of tiles so any count (incl. 5) lays out
+  // evenly — 4 stays a clean four-up; 5 becomes a five-up rather than 4 + orphan.
+  const cols = KPI_COL_CLASS[Math.min(stats.length, 6)] ?? 'md:grid-cols-4';
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className={`grid grid-cols-2 ${cols} gap-3`}>
       {stats.map((stat, si) => {
         const tone = statTone(stat.color);
         // Canonical card chrome: flat at rest, hover tints the border (Border-First,
