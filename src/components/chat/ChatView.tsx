@@ -1009,7 +1009,7 @@ function FullscreenChartModal({
 const PREVIEW_ROW_COUNT = 9;
 
 function ResultsTable({
-  columns, rows, totalRows, onDownload, title = 'Flagged duplicate pairs',
+  columns, rows, totalRows, onDownload, title = 'Flagged duplicate pairs', animateRows = false,
 }: {
   columns: string[];
   rows: string[][];
@@ -1021,6 +1021,10 @@ function ResultsTable({
    *  "Flagged duplicate pairs"; the workflow-run recap passes the run's own
    *  result title (e.g. "Duplicate Invoice Matches"). */
   title?: string;
+  /** Opt-in: each row animates in (fade + slide-up, lightly staggered) as it
+   *  mounts — used by the streaming result so rows visibly arrive instead of
+   *  popping. Off by default; legacy callers are unchanged. */
+  animateRows?: boolean;
 }) {
   const [fullscreen, setFullscreen] = useState(false);
   const prefersReducedMotion = useReducedMotion();
@@ -1185,13 +1189,27 @@ function ResultsTable({
               </tr>
             </thead>
             <tbody>
-              {rows.slice(0, PREVIEW_ROW_COUNT).map((row, i) => (
-                <tr key={i} className="border-b border-canvas-border/40 last:border-b-0 hover:bg-brand-50/40 transition-colors">
-                  {row.map((cell, j) => (
-                    <td key={j} className={`px-5 py-2.5 text-ink-700 whitespace-nowrap ${j >= 3 ? 'tabular-nums' : ''}`}>{cell}</td>
-                  ))}
-                </tr>
-              ))}
+              {rows.slice(0, PREVIEW_ROW_COUNT).map((row, i) => {
+                const cells = row.map((cell, j) => (
+                  <td key={j} className={`px-5 py-2.5 text-ink-700 whitespace-nowrap ${j >= 3 ? 'tabular-nums' : ''}`}>{cell}</td>
+                ));
+                const rowCls = 'border-b border-canvas-border/40 last:border-b-0 hover:bg-brand-50/40 transition-colors';
+                // Each newly-mounted row slides + fades up (streaming reveal),
+                // lightly staggered within a batch. Mounted rows never replay.
+                return animateRows && !prefersReducedMotion ? (
+                  <motion.tr
+                    key={i}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1], delay: (i % 3) * 0.04 }}
+                    className={rowCls}
+                  >
+                    {cells}
+                  </motion.tr>
+                ) : (
+                  <tr key={i} className={rowCls}>{cells}</tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -5905,6 +5923,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                               rows={AUDIT_RESULT.table.rows.slice(0, revealedRows)}
                               totalRows={AUDIT_RESULT.table.totalRows}
                               onDownload={() => addToast({ type: 'success', message: 'CSV download started.' })}
+                              animateRows={STREAM_V2}
                             />
                           )}
                         />

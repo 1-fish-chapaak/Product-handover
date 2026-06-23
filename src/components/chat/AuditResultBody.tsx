@@ -264,9 +264,12 @@ export default function AuditResultBody({
           the whole card rather than touch the shared ConfigurableChart. */}
       {showChart ? (
         <motion.div
-          initial={instant ? false : { opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: 'spring', stiffness: 240, damping: 26 }}
+          // Streaming: a bottom-up clip wipe so the chart "builds" from its
+          // baseline (reads as rising bars) as recharts draws underneath.
+          // Legacy: the original spring fade.
+          initial={instant ? false : streaming ? { opacity: 0, clipPath: 'inset(100% 0% 0% 0%)' } : { opacity: 0, y: 10 }}
+          animate={streaming ? { opacity: 1, clipPath: 'inset(0% 0% 0% 0%)' } : { opacity: 1, y: 0 }}
+          transition={streaming ? { duration: 0.7, ease: [0.22, 1, 0.36, 1] } : { type: 'spring', stiffness: 240, damping: 26 }}
         >
           {renderChart()}
         </motion.div>
