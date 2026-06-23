@@ -322,7 +322,7 @@ export function BulkAuditVariantView({
     >
       {/* Report actions — pinned to the top of the scroll area (page-coloured,
           borderless — no header-bar chrome) so they stay reachable on scroll. */}
-      <div className="sticky top-0 z-30 bg-canvas max-w-[1480px] mx-auto px-6 lg:px-10 h-16 flex items-center justify-between gap-4 print:hidden">
+      <div className="sticky top-0 z-30 bg-canvas px-6 lg:px-12 xl:px-[124px] h-16 flex items-center justify-between gap-4 print:hidden">
         <BulkBackLink onBack={onBack} />
         {!allFailed && (
           <div className="flex items-center gap-2">
@@ -332,11 +332,11 @@ export function BulkAuditVariantView({
       </div>
 
       {allFailed ? (
-        <div className="max-w-[1480px] mx-auto px-6 lg:px-10 pt-3 pb-8">
+        <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8">
           <AllFailedEmpty report={report} failedWorkflows={failedWorkflows} onBack={onBack} />
         </div>
       ) : (
-        <div className="max-w-[1480px] mx-auto px-6 lg:px-10 pt-3 pb-8 flex items-start gap-8 xl:gap-10">
+        <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10">
           <aside className="hidden xl:block w-[252px] shrink-0 sticky top-[72px] self-start max-h-[calc(100vh-96px)] overflow-y-auto pr-1 -mr-1 print:hidden">
             <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-3.5">
               <EditorialContents
@@ -359,7 +359,7 @@ export function BulkAuditVariantView({
               />
             </div>
           </aside>
-          <div className="min-w-0 flex-1 max-w-[920px]">
+          <div className="min-w-0 flex-1">
             <EditorialLayout
               report={report}
               workflows={successfulWorkflows}
@@ -1250,7 +1250,7 @@ function EditorialSummary({ totals }: { totals: Totals }) {
             onClick={generate}
             disabled={isGenerating}
             aria-busy={isGenerating || undefined}
-            className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-[8px] hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
             {isGenerating ? 'Generating...' : 'Generate Summary'}
@@ -1484,7 +1484,14 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
             </thead>
             <tbody>
               {workflow.outputTable.rows.map((row, ri) => (
-                <tr key={ri} className="border-b border-ink-900/10">
+                <motion.tr
+                  key={ri}
+                  initial={{ opacity: 0, y: 4 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-20px' }}
+                  transition={{ duration: 0.28, delay: Math.min(ri, 12) * 0.03, ease: [0.22, 1, 0.36, 1] }}
+                  className="border-b border-ink-900/10"
+                >
                   {row.map((cell, ci) => {
                     const cellStr = String(cell);
                     const isSeverity = cellStr === 'High' || cellStr === 'Medium' || cellStr === 'Low';
@@ -1498,7 +1505,7 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
                       </td>
                     );
                   })}
-                </tr>
+                </motion.tr>
               ))}
             </tbody>
           </table>
@@ -1822,7 +1829,7 @@ function AddOutputModal({
           aria-modal="true"
           aria-labelledby="add-output-title"
           tabIndex={-1}
-          className="w-full max-w-[840px] max-h-[calc(100vh-48px)] bg-white border border-canvas-border rounded-[16px] shadow-xl overflow-hidden flex flex-col"
+          className="w-full max-w-[840px] h-[640px] max-h-[calc(100vh-48px)] bg-white border border-canvas-border rounded-[16px] shadow-xl overflow-hidden flex flex-col"
         >
           <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-canvas-border">
             <div>

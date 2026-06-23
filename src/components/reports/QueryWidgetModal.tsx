@@ -1,25 +1,45 @@
 // Query widget picker modal — choose which KPIs / charts / table from a query
-// to surface as a widget. Extracted from the report reader.
+// to surface as a widget. Mirrors the platform's canonical AddOutputModal
+// (BulkAuditVariants): KPI / Graph / Table tabs, radio-select cards, a
+// content-height 840px panel, and the "Nothing selected" footer.
 
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BarChart3, FileText, X } from 'lucide-react';
+import { BarChart3, FileText, X, Check } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
+import { KpiTile } from '../shared/KpiTile';
 import EmptyState from '../shared/EmptyState';
-import { SectionHeader, Checkbox, KpiPreviewRow, TablePreviewRow } from '../chat/WidgetPickerParts';
-import { setAll, toggleIn } from '../chat/widgetPickerHelpers';
-import type { QueryGraph, QueryTable } from '../../data/queryGraphs';
+import { toggleIn } from '../chat/widgetPickerHelpers';
+import { cellRender } from './queryTableCell';
+import type { QueryGraph, QueryTableDef } from '../../data/queryGraphs';
+
+type TabId = 'kpi' | 'graph' | 'table';
+
+// Dashboard selection idiom: a 2px brand outline on the bordered card (same as
+// KpiTile's KPI-as-filter selected state) — borders first, no heavy glow.
+const SELECTED = '[outline:2px_solid_var(--color-brand-500)] [outline-offset:-1px]';
+
+/** Selection tick — brand dot when picked, hollow ring when not. */
+function PickTick({ picked }: { picked: boolean }) {
+  return picked ? (
+    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-600 text-white shrink-0">
+      <Check size={12} />
+    </span>
+  ) : (
+    <span className="inline-flex w-5 h-5 rounded-full border border-canvas-border shrink-0" />
+  );
+}
 
 export default function QueryWidgetModal({
   queryId,
   queryTitle,
   kpis,
   charts,
-  table,
+  tables,
   initialKpis,
   initialCharts,
-  initialTable,
+  initialTables,
   onConfirm,
   onClose,
 }: {
@@ -27,11 +47,11 @@ export default function QueryWidgetModal({
   queryTitle: string;
   kpis: { label: string; value: string }[];
   charts: QueryGraph[];
-  table?: QueryTable;
+  tables: QueryTableDef[];
   initialKpis: Set<string>;
   initialCharts: Set<string>;
-  initialTable: boolean;
-  onConfirm: (sel: { kpis: Set<string>; charts: Set<string>; table: boolean }) => void;
+  initialTables: Set<string>;
+  onConfirm: (sel: { kpis: Set<string>; charts: Set<string>; tables: Set<string> }) => void;
   onClose: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -39,23 +59,27 @@ export default function QueryWidgetModal({
 
   const [selKpis, setSelKpis] = useState<Set<string>>(() => new Set(initialKpis));
   const [selCharts, setSelCharts] = useState<Set<string>>(() => new Set(initialCharts));
-  const [selTable, setSelTable] = useState(initialTable);
-  const [collapsed, setCollapsed] = useState({ kpis: false, charts: false, table: false });
+  const [selTables, setSelTables] = useState<Set<string>>(() => new Set(initialTables));
 
-  const hasTable = !!table && table.columns.length > 0;
-  const totalSelected = selKpis.size + selCharts.size + (selTable ? 1 : 0);
-  const totalItems = kpis.length + charts.length + (hasTable ? 1 : 0);
+  const totalSelected = selKpis.size + selCharts.size + selTables.size;
+  const totalItems = kpis.length + charts.length + tables.length;
 
+  const tabs: { id: TabId; label: string; count: number; selected: number }[] = [
+    kpis.length > 0 && { id: 'kpi' as const, label: 'KPI', count: kpis.length, selected: selKpis.size },
+    charts.length > 0 && { id: 'graph' as const, label: 'Graph', count: charts.length, selected: selCharts.size },
+    tables.length > 0 && { id: 'table' as const, label: 'Table', count: tables.length, selected: selTables.size },
+  ].filter(Boolean) as { id: TabId; label: string; count: number; selected: number }[];
+
+  const [tab, setTab] = useState<TabId>(() => tabs[0]?.id ?? 'kpi');
+
+  // One-click select-all / clear across every tab — the main click reducer.
+  const allSelected = totalItems > 0 && totalSelected === totalItems;
   const selectAll = () => {
-    setAll(kpis.map(k => k.label), true, setSelKpis);
-    setAll(charts.map(c => c.id), true, setSelCharts);
-    if (hasTable) setSelTable(true);
+    setSelKpis(new Set(kpis.map(k => k.label)));
+    setSelCharts(new Set(charts.map(c => c.id)));
+    setSelTables(new Set(tables.map(t => t.id)));
   };
-  const clearAll = () => {
-    setSelKpis(new Set());
-    setSelCharts(new Set());
-    setSelTable(false);
-  };
+  const clearAll = () => { setSelKpis(new Set()); setSelCharts(new Set()); setSelTables(new Set()); };
 
   return (
     <AnimatePresence>
@@ -63,209 +87,221 @@ export default function QueryWidgetModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.18 }}
-        className="fixed inset-0 z-[60] flex items-center justify-center p-6"
+        transition={{ duration: 0.15 }}
         onClick={onClose}
+        className="fixed inset-0 z-[60] bg-ink-900/40 backdrop-blur-[2px] flex items-center justify-center p-6"
       >
-        <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
         <motion.div
           ref={containerRef}
-          initial={{ opacity: 0, scale: 0.97, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.97, y: 10 }}
-          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          initial={{ opacity: 0, y: 6, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 4, scale: 0.98 }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
           aria-labelledby="query-widget-title"
-          className="relative bg-white rounded-[16px] border border-canvas-border shadow-xl w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] flex flex-col overflow-hidden"
+          tabIndex={-1}
+          className="w-full max-w-[840px] h-[640px] max-h-[calc(100vh-48px)] bg-white border border-canvas-border rounded-[16px] shadow-xl overflow-hidden flex flex-col"
         >
           {/* Header */}
           <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-canvas-border">
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-[8px] bg-brand-50 flex items-center justify-center shrink-0">
-                <FileText size={16} className="text-brand-600" />
-              </div>
-              <div className="min-w-0">
-                <h3 id="query-widget-title" className="text-[1rem] font-bold text-ink-800 tracking-tight">
-                  Choose What to Include
-                </h3>
-                <p className="text-[0.75rem] text-ink-500 mt-0.5 truncate">
-                  <span className="font-mono text-[0.6875rem] text-brand-600">{queryId}</span>
-                  <span className="mx-1.5 text-ink-400">·</span>
-                  {queryTitle}
-                </p>
-              </div>
+            <div className="min-w-0">
+              <h3 id="query-widget-title" className="text-[1rem] font-bold text-ink-800 tracking-tight">
+                Choose What to Include
+              </h3>
+              <p className="text-[0.75rem] text-ink-500 mt-1 truncate">
+                <span className="font-bold text-brand-600 uppercase tracking-wider text-[0.6875rem]">Query · {queryId}</span>
+                <span className="mx-1.5 text-ink-400">·</span>
+                {queryTitle}
+              </p>
             </div>
             <button
               onClick={onClose}
               aria-label="Close"
-              className="w-8 h-8 inline-flex items-center justify-center rounded-[8px] text-ink-400 hover:text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer shrink-0"
+              className="w-8 h-8 inline-flex items-center justify-center rounded-[8px] text-ink-400 hover:text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 shrink-0"
             >
               <X size={20} />
             </button>
           </div>
 
-          {/* Body */}
-          <div className="flex-1 overflow-y-auto px-6 py-5">
-            {totalItems === 0 ? (
+          {totalItems === 0 ? (
+            <div className="flex-1 overflow-y-auto px-6 py-5">
               <EmptyState
                 icon={BarChart3}
                 title="Nothing to add yet"
                 body="Attach a graph, KPI or table to start building insights."
                 size="compact"
               />
-            ) : (
-              <div className="space-y-5">
-                {/* Selection summary + all/none */}
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[0.75rem] text-ink-400" aria-live="polite">
-                    {totalSelected === 0
-                      ? 'Select what to show on the card.'
-                      : `${totalSelected} item${totalSelected === 1 ? '' : 's'} selected`}
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={selectAll}
-                      className="text-[0.6875rem] font-semibold text-brand-600 hover:text-brand-500 cursor-pointer"
-                    >
-                      Select all
-                    </button>
-                    <button
-                      type="button"
-                      onClick={clearAll}
-                      className="text-[0.6875rem] font-semibold text-ink-400 hover:text-ink-800 cursor-pointer"
-                    >
-                      Clear
-                    </button>
-                  </div>
+            </div>
+          ) : (
+            <>
+              {/* Tabs + one-click Select all / Clear */}
+              <div className="flex items-center justify-between gap-2 px-6 pt-3 border-b border-canvas-border">
+                <div className="flex items-center gap-1">
+                  {tabs.map(t => {
+                    const active = tab === t.id;
+                    const allInTab = t.selected === t.count && t.count > 0;
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => setTab(t.id)}
+                        className={`relative pb-3 pt-1 px-2 mr-2 text-[0.8125rem] font-semibold transition-colors cursor-pointer ${active ? 'text-brand-600' : 'text-ink-400 hover:text-ink-800'}`}
+                      >
+                        <span>{t.label}</span>
+                        {/* Badge turns brand-filled when the whole tab is selected, so
+                            the user sees what's already included without switching. */}
+                        <span className={`ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[0.625rem] font-semibold tabular-nums ${active ? 'bg-brand-600/10 text-brand-600' : allInTab ? 'bg-brand-600 text-white' : 'bg-paper-50 text-ink-400'}`}>
+                          {t.count}
+                        </span>
+                        {active && <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-brand-600 rounded-full" />}
+                      </button>
+                    );
+                  })}
                 </div>
+                <button
+                  onClick={() => (allSelected ? clearAll() : selectAll())}
+                  className="mb-3 shrink-0 text-[0.75rem] font-semibold text-brand-600 hover:text-brand-700 px-2.5 py-1 rounded-md hover:bg-brand-50 transition-colors cursor-pointer"
+                >
+                  {allSelected ? 'Clear all' : 'Select all'}
+                </button>
+              </div>
 
-                {/* KPI Cards */}
-                {kpis.length > 0 && (
-                  <div className="space-y-1.5" role="group" aria-label="KPI Cards">
-                    <SectionHeader
-                      title="KPI Cards"
-                      count={selKpis.size}
-                      total={kpis.length}
-                      collapsed={collapsed.kpis}
-                      onToggle={() => setCollapsed(c => ({ ...c, kpis: !c.kpis }))}
-                      onToggleAll={(all) => setAll(kpis.map(k => k.label), all, setSelKpis)}
-                      accent="brand"
-                    />
-                    {!collapsed.kpis && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-1">
-                        {kpis.map(k => (
-                          <KpiPreviewRow
-                            key={k.label}
-                            kpi={{ label: k.label, value: k.value, color: 'text-ink-900' }}
-                            checked={selKpis.has(k.label)}
-                            onChange={() => toggleIn(selKpis, k.label, setSelKpis)}
-                            accent="brand"
+              {/* Tab body */}
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                {tab === 'kpi' && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {kpis.map((k, i) => {
+                      const picked = selKpis.has(k.label);
+                      return (
+                        <div key={k.label} className="relative">
+                          {/* The dashboard's own KpiTile — label + big bold value,
+                              brand-outline when selected. */}
+                          <KpiTile
+                            label={k.label}
+                            value={k.value}
+                            index={i}
+                            selected={picked}
+                            onClick={() => toggleIn(selKpis, k.label, setSelKpis)}
                           />
-                        ))}
-                      </div>
-                    )}
+                          {picked && (
+                            <span className="absolute top-3 right-3">
+                              <PickTick picked />
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
-                {/* Charts */}
-                {charts.length > 0 && (
-                  <div className="space-y-1.5" role="group" aria-label="Charts">
-                    <SectionHeader
-                      title="Charts"
-                      count={selCharts.size}
-                      total={charts.length}
-                      collapsed={collapsed.charts}
-                      onToggle={() => setCollapsed(c => ({ ...c, charts: !c.charts }))}
-                      onToggleAll={(all) => setAll(charts.map(c => c.id), all, setSelCharts)}
-                      accent="brand"
-                    />
-                    {!collapsed.charts && (
-                      <div className="grid grid-cols-2 gap-3 pl-1">
-                        {charts.map(g => {
-                          const on = selCharts.has(g.id);
-                          return (
-                            <button
-                              key={g.id}
-                              type="button"
-                              role="checkbox"
-                              aria-checked={on}
-                              aria-label={g.title}
-                              onClick={() => toggleIn(selCharts, g.id, setSelCharts)}
-                              className={`text-left bg-white border-2 rounded-[12px] p-3 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
-                                on
-                                  ? 'border-brand-600 shadow-[0_0_0_3px_rgba(106,18,205,0.12)]'
-                                  : 'border-canvas-border hover:border-brand-600/40'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 mb-2">
-                                <Checkbox checked={on} accent="brand" />
-                                <span className="text-[0.75rem] font-semibold text-ink-800 truncate">{g.title}</span>
-                              </div>
-                              <div className="h-[150px] bg-canvas-elevated rounded-[12px] p-1.5 pointer-events-none">
-                                <ConfigurableChart
-                                  type={g.type}
-                                  xAxis={g.xAxis}
-                                  yAxis={g.yAxis}
-                                  color={g.color ?? '#6a12cd'}
-                                  showTarget={false}
-                                  showLegend={false}
-                                />
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                {tab === 'graph' && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {charts.map(g => {
+                      const picked = selCharts.has(g.id);
+                      return (
+                        <button
+                          key={g.id}
+                          onClick={() => toggleIn(selCharts, g.id, setSelCharts)}
+                          className={`glass-card rounded-xl p-4 text-left w-full cursor-pointer transition-[border-color,box-shadow] duration-300 ${picked ? SELECTED : 'hover:border-brand-200'}`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-3">
+                            <h3 className="text-[0.9375rem] font-semibold text-ink-900 truncate">{g.title}</h3>
+                            <PickTick picked={picked} />
+                          </div>
+                          {/* Same render as the dashboard widget: ConfigurableChart sits
+                              directly in the card with dashboard height + legend/target. */}
+                          <div className="h-[260px] pointer-events-none">
+                            <ConfigurableChart
+                              type={g.type}
+                              xAxis={g.xAxis}
+                              yAxis={g.yAxis}
+                              color={g.color ?? '#6a12cd'}
+                              showLegend
+                            />
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
 
-                {/* Results Table */}
-                {hasTable && (
-                  <div className="space-y-1.5" role="group" aria-label="Results Table">
-                    <SectionHeader
-                      title="Results Table"
-                      count={selTable ? 1 : 0}
-                      total={1}
-                      collapsed={collapsed.table}
-                      onToggle={() => setCollapsed(c => ({ ...c, table: !c.table }))}
-                      onToggleAll={(all) => setSelTable(all)}
-                      accent="brand"
-                    />
-                    {!collapsed.table && (
-                      <div className="pl-1">
-                        <TablePreviewRow
-                          columns={table!.columns}
-                          sampleRows={table!.rows}
-                          checked={selTable}
-                          onChange={() => setSelTable(v => !v)}
-                          accent="brand"
-                        />
-                      </div>
-                    )}
+                {tab === 'table' && (
+                  <div className="space-y-4">
+                    {tables.map(t => {
+                      const picked = selTables.has(t.id);
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => toggleIn(selTables, t.id, setSelTables)}
+                          className={`glass-card rounded-xl p-4 text-left w-full block cursor-pointer transition-[border-color,box-shadow] duration-300 ${picked ? SELECTED : 'hover:border-brand-200'}`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-3">
+                            <div className="min-w-0">
+                              <h3 className="text-[0.9375rem] font-semibold text-ink-900">{t.title}</h3>
+                              <p className="text-[0.6875rem] text-ink-500 mt-0.5">{t.columns.length} columns · {t.rows.length} rows</p>
+                            </div>
+                            <PickTick picked={picked} />
+                          </div>
+                          {/* The dashboard table styling — surface-2 uppercase headers,
+                              brand-700 first column, severity pills via cellRender. */}
+                          <div className="overflow-x-auto rounded-[10px] border border-canvas-border pointer-events-none">
+                            <table className="w-full text-left">
+                              <thead>
+                                <tr className="border-b border-canvas-border bg-surface-2/50">
+                                  {t.columns.map(c => (
+                                    <th
+                                      key={c}
+                                      className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider px-4 py-3 whitespace-nowrap"
+                                    >
+                                      {c}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {t.rows.map((row, ri) => (
+                                  <tr key={ri} className="border-b border-canvas-border/50 last:border-0 hover:bg-brand-50/30 transition-colors">
+                                    {row.map((cell, ci) => (
+                                      <td key={ci} className="px-4 py-3 text-[0.75rem] whitespace-nowrap">
+                                        {cellRender(cell, t.columns[ci] || '', ci === 0)}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
-            )}
-          </div>
+            </>
+          )}
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-canvas-border bg-paper-50/40">
-            <button
-              onClick={onClose}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => onConfirm({ kpis: selKpis, charts: selCharts, table: selTable })}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer"
-            >
-              <FileText size={14} />
-              Add to Card
-            </button>
+          <div className="flex items-center justify-between px-6 py-4 border-t border-canvas-border bg-paper-50/40">
+            <span className="text-[0.75rem] text-ink-400" aria-live="polite">
+              {totalSelected === 0 ? 'Nothing selected' : `${totalSelected} of ${totalItems} selected`}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onClose}
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => onConfirm({ kpis: selKpis, charts: selCharts, tables: selTables })}
+                disabled={totalSelected === 0}
+                className={`inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${totalSelected === 0 ? 'bg-brand-600/40 text-white/85 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-500 text-white'}`}
+              >
+                <FileText size={14} />
+                Add to Card
+              </button>
+            </div>
           </div>
         </motion.div>
       </motion.div>

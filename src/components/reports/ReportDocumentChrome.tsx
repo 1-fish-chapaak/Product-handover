@@ -81,7 +81,13 @@ export function ReportNumberedHeading({ n, title, subtitle, right }: {
   // tick accents the header — the old full-width hairline rule was dropped to cut
   // the divider-line clutter; whitespace now separates sections instead.
   return (
-    <div className="mb-5">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      className="mb-5"
+    >
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-baseline gap-3.5 min-w-0">
           <span className="shrink-0 text-[0.8125rem] font-semibold tabular-nums tracking-[0.16em] text-brand-700 leading-none">
@@ -94,8 +100,15 @@ export function ReportNumberedHeading({ n, title, subtitle, right }: {
         </div>
         {right && <div className="shrink-0">{right}</div>}
       </div>
-      <span className="mt-3.5 block h-[2px] w-8 rounded-full bg-brand-500/80" aria-hidden="true" />
-    </div>
+      <motion.span
+        initial={{ scaleX: 0 }}
+        whileInView={{ scaleX: 1 }}
+        viewport={{ once: true, margin: '-80px' }}
+        transition={{ duration: 0.45, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+        className="mt-3.5 block h-[2px] w-8 origin-left rounded-full bg-brand-500/80"
+        aria-hidden="true"
+      />
+    </motion.div>
   );
 }
 
@@ -122,12 +135,19 @@ export function ReportMetaPanel({ items, columns }: { items: { label: string; va
   if (facts.length === 0) return null;
   const cols = columns ?? (facts.length <= 4 ? facts.length : 3);
   return (
-    <div className={`grid ${META_COL_CLASS[cols]} gap-x-8 gap-y-6 rounded-[12px] border-t-[2px] border-t-brand-500/80 bg-canvas-elevated/60 px-6 pt-5 pb-6`}>
-      {facts.map((it) => (
-        <div key={it.label} className="min-w-0">
+    <div className={`grid ${META_COL_CLASS[cols]} gap-x-8 gap-y-6 px-6 pt-5 pb-6`}>
+      {facts.map((it, i) => (
+        <motion.div
+          key={it.label}
+          initial={{ opacity: 0, y: 8 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          transition={{ duration: 0.35, delay: Math.min(i, 6) * 0.06, ease: [0.22, 1, 0.36, 1] }}
+          className="min-w-0"
+        >
           <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.15em] text-ink-400 mb-2">{it.label}</div>
           <div className="text-[0.875rem] font-medium text-ink-700 leading-snug tabular-nums break-words">{it.value || '—'}</div>
-        </div>
+        </motion.div>
       ))}
     </div>
   );
@@ -255,9 +275,35 @@ export function ReportBrandBanner({ title, back, actions, children, className = 
           preserves the reading hierarchy — title first, actions second. */}
       <div className="relative z-10 flex items-start justify-between gap-5 lg:gap-6 flex-wrap">
         <div className="min-w-0 flex-1">
-          {eyebrow && <div className="mb-2">{eyebrow}</div>}
-          <h1 title={typeof title === 'string' ? title : undefined} className={`${titleClassName ?? 'text-[2rem]'} truncate font-bold tracking-[-0.02em] leading-[1.08] text-white mb-1.5`} style={{ textShadow: '0 1px 2px rgba(10,2,30,0.22)' }}>{title}</h1>
-          {children}
+          {eyebrow && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
+              className="mb-2"
+            >
+              {eyebrow}
+            </motion.div>
+          )}
+          <motion.h1
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            title={typeof title === 'string' ? title : undefined}
+            className={`${titleClassName ?? 'text-[2rem]'} truncate font-bold tracking-[-0.02em] leading-[1.08] text-white mb-1.5`}
+            style={{ textShadow: '0 1px 2px rgba(10,2,30,0.22)' }}
+          >
+            {title}
+          </motion.h1>
+          {children && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {children}
+            </motion.div>
+          )}
         </div>
         {aside && <div className="shrink-0 w-full sm:w-auto">{aside}</div>}
         <div className="shrink-0 flex flex-col items-end gap-3 empty:hidden">
@@ -265,20 +311,32 @@ export function ReportBrandBanner({ title, back, actions, children, className = 
             <span className="text-[0.75rem] font-semibold uppercase tracking-[0.12em] text-white/60">{headerText}</span>
           )}
           {facts && facts.length > 0 && (
-            <div className="flex items-stretch rounded-[12px] border border-white/20 bg-white/10 overflow-hidden">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="flex items-stretch rounded-[12px] border border-white/20 bg-white/10 overflow-hidden"
+            >
               {facts.map((f, i) => (
                 <div key={f.label} className={`px-5 py-3 text-center ${i > 0 ? 'border-l border-white/15' : ''}`}>
                   <div className="text-[1.5rem] font-bold tabular-nums leading-none text-white">{f.value}</div>
                   <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-white/65 mt-1.5 whitespace-nowrap">{f.label}</div>
                 </div>
               ))}
-            </div>
+            </motion.div>
           )}
           {actions && <div className="flex items-center gap-2 print:hidden">{actions}</div>}
         </div>
       </div>
       {footer && (
-        <div className="relative z-10 mt-5">{footer}</div>
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.26, ease: [0.22, 1, 0.36, 1] }}
+          className="relative z-10 mt-5"
+        >
+          {footer}
+        </motion.div>
       )}
     </div>
   );

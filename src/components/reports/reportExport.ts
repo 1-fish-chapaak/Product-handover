@@ -119,6 +119,38 @@ function kpiTileGrid(stats: { label: string; value: string; accent?: string }[])
   return `<table width="100%" cellpadding="0" cellspacing="6" style="margin:0 0 8px;">${rows.join('')}</table>`;
 }
 
+// ─── Table embedding (Word / HTML / PDF / PPT) ───
+// Inline-styled to survive Office-HTML import. Mirrors the dashboard table:
+// brand-700 first column, Severity → coloured pill, Status → muted, Expected → bold.
+const SEV_HEX: Record<string, { bg: string; fg: string; bd: string }> = {
+  Critical: { bg: '#FEF2F2', fg: '#B91C1C', bd: '#FECACA' },
+  High: { bg: '#FFF7ED', fg: '#C2410C', bd: '#FED7AA' },
+  Medium: { bg: '#FFFBEB', fg: '#B45309', bd: '#FDE68A' },
+  Low: { bg: '#F0FDF4', fg: '#15803D', bd: '#BBF7D0' },
+};
+
+function exportCell(value: string, header: string, first: boolean): string {
+  if (/severit|^risk/i.test(header)) {
+    const c = SEV_HEX[value] ?? { bg: '#F9FAFB', fg: '#4B5563', bd: '#E5E7EB' };
+    return `<span style="display:inline-block;font-size:8.5pt;font-weight:600;padding:1px 7px;border-radius:999px;background:${c.bg};color:${c.fg};border:1px solid ${c.bd};">${esc(value)}</span>`;
+  }
+  const style = first
+    ? `color:${BRAND};font-weight:600;`
+    : /status/i.test(header) ? `color:${MUTED};`
+    : /expected/i.test(header) ? `color:${INK};font-weight:600;`
+    : `color:${INK};`;
+  return `<span style="${style}">${esc(value)}</span>`;
+}
+
+function tableBlock(t: { title: string; columns: string[]; rows: string[][] }): string {
+  const head = t.columns.map(c =>
+    `<th style="text-align:left;padding:5px 8px;font-size:8pt;font-weight:bold;color:${MUTED};text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid ${HAIRLINE};background:#FAFAFB;white-space:nowrap;">${esc(c)}</th>`).join('');
+  const body = t.rows.slice(0, 10).map(row =>
+    `<tr>${row.map((cell, ci) => `<td style="padding:5px 8px;font-size:9pt;border-bottom:1px solid #F1F1F4;white-space:nowrap;">${exportCell(cell, t.columns[ci] || '', ci === 0)}</td>`).join('')}</tr>`).join('');
+  return `<p style="margin:10px 0 3px;font-size:8.5pt;font-weight:bold;text-transform:uppercase;letter-spacing:0.8px;color:${MUTED};">${esc(t.title)}</p>
+    <table style="border-collapse:collapse;width:100%;border:1px solid ${HAIRLINE};margin:0 0 8px;"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
 // ─── Shared document body (Word + PDF) ───
 function composeDocumentBody(ctx: ReportExportContext): string {
   let n = 0;
@@ -137,12 +169,14 @@ function composeDocumentBody(ctx: ReportExportContext): string {
       const kpis = (s.kpis ?? []).map(k => `<b>${esc(k.label)}:</b> ${esc(k.value)}`).join(' &nbsp;·&nbsp; ');
       const findings = s.findings.map(f => `<li style="margin:0 0 3px;">${esc(f)}</li>`).join('');
       const observations = s.observations.map(o => `<li style="margin:0 0 3px;">${esc(o)}</li>`).join('');
+      const tables = (s.tables ?? []).filter(t => t.rows.length > 0).map(tableBlock).join('');
       return `${numberedHeading(n, `${s.queryId} — ${s.queryTitle}`)}
         <p style="margin:0 0 6px;color:${MUTED};font-size:10pt;">${esc(s.risk)} · <span style="color:${sevColor(s.severity)};font-weight:bold;">${esc(s.severity)} severity</span></p>
         ${kpis ? `<p style="margin:0 0 6px;font-size:10pt;">${kpis}</p>` : ''}
         <p style="margin:0 0 6px;line-height:1.55;">${esc(plain(s.summary))}</p>
         ${findings ? `<p style="margin:8px 0 2px;"><b>Key findings</b></p><ul style="margin:0 0 6px;">${findings}</ul>` : ''}
-        ${observations ? `<p style="margin:8px 0 2px;"><b>Observations</b></p><ul style="margin:0 0 6px;">${observations}</ul>` : ''}`;
+        ${observations ? `<p style="margin:8px 0 2px;"><b>Observations</b></p><ul style="margin:0 0 6px;">${observations}</ul>` : ''}
+        ${tables}`;
     }
     if (s.kind === 'workflow') {
       const findings = s.findings.map(f => `<li style="margin:0 0 3px;">${esc(f)}</li>`).join('');
@@ -219,6 +253,12 @@ export function exportReportPpt(ctx: ReportExportContext) {
         <h2 style="font-family:${TITLE_FONT};font-weight:bold;font-size:18pt;color:${INK};margin:0 0 14px;">${esc(s.queryTitle)}</h2>
         ${kpis ? `<table style="border-collapse:collapse;margin:0 0 16px;"><tr>${kpis}</tr></table>` : ''}
         ${bullets ? `<ul style="font-size:12.5pt;line-height:1.5;margin:0;">${bullets}</ul>` : `<p style="font-size:12.5pt;">${esc(plain(s.summary))}</p>`}`));
+      // One slide per attached table so the deck carries the full data.
+      for (const t of (s.tables ?? []).filter(t => t.rows.length > 0)) {
+        slides.push(slideShell(`
+          <p style="font-size:10pt;color:${MUTED};margin:0 0 4px;">${esc(s.queryId)} · ${esc(s.queryTitle)}</p>
+          ${tableBlock(t)}`));
+      }
     } else if (s.kind === 'workflow') {
       const bullets = s.findings.slice(0, 4).map(f => `<li style="margin:0 0 8px;">${esc(f)}</li>`).join('');
       slides.push(slideShell(`

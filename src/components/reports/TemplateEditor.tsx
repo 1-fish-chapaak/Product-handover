@@ -11,7 +11,7 @@ import { motion, AnimatePresence, useDragControls } from 'motion/react';
 import {
   Check, ChevronDown, FileText, GripVertical, Image, Layout,
   Loader2, Palette, Plus, Settings, Trash2, Type, X,
-  Tag, ShieldCheck, BookOpen,
+  Tag, ShieldCheck, BookOpen, Search,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -27,18 +27,51 @@ import {
 
 // ─── Apply Template Dropdown ───
 export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, onSelect, onClose, onSaveAsTemplate }: { templates?: typeof REPORT_TEMPLATES[number][]; activeId?: string | null; onSelect: (template: typeof REPORT_TEMPLATES[0]) => void; onClose: () => void; onSaveAsTemplate?: () => void }) {
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? templates.filter(rt => rt.name.toLowerCase().includes(q) || (rt.category ?? '').toLowerCase().includes(q))
+    : templates;
   return (
     <motion.div
       initial={{ opacity: 0, y: -5, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -5, scale: 0.97 }}
-      className="absolute right-0 top-full mt-1 w-[280px] bg-white rounded-[8px] shadow-xl border border-canvas-border z-50 overflow-hidden"
+      className="absolute right-0 top-full mt-1.5 w-[300px] bg-white rounded-[12px] shadow-[0_16px_40px_-12px_rgba(15,8,30,0.22)] border border-canvas-border z-50 overflow-hidden"
     >
-      <div className="px-3 py-2 border-b border-canvas-border">
-        <span className="text-[0.75rem] font-semibold text-ink-400 uppercase tracking-wider">Select Template</span>
+      <div className="px-3.5 pt-3 pb-1">
+        <span className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-[0.12em]">Select Template</span>
       </div>
-      <div className="max-h-[260px] overflow-y-auto p-1.5">
-        {templates.map(rt => {
+      {/* Search — clean filled field (no stroke), filters by name or category */}
+      <div className="px-2.5 pt-1.5 pb-2">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+          <input
+            autoFocus
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); if (query) setQuery(''); else onClose(); } }}
+            placeholder="Search templates…"
+            aria-label="Search templates"
+            className="w-full h-9 pl-9 pr-8 rounded-[8px] bg-paper-50 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:bg-paper-100 transition-colors"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 inline-flex items-center justify-center rounded-full text-ink-400 hover:text-ink-700 hover:bg-canvas-border/60 transition-colors cursor-pointer"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="max-h-[280px] overflow-y-auto px-1.5 pb-1.5 border-t border-canvas-border pt-1.5">
+        {filtered.length === 0 ? (
+          <div className="px-3 py-6 text-center text-[0.75rem] text-ink-400">No templates match “{query.trim()}”.</div>
+        ) : filtered.map(rt => {
           const Icon = ICON_MAP[rt.icon] || FileText;
           const isActive = rt.id === activeId;
           return (

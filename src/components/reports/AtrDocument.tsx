@@ -1,12 +1,13 @@
 import { useRef } from 'react';
+import { motion } from 'motion/react';
 import { Calendar, Lightbulb, PenLine, Eye } from 'lucide-react';
 import type {
   AtrMeta, AtrObservation, AtrActionPlan, AtrInsight,
   AtrClassification, AtrObservationStatus, AtrActionStatus,
 } from './atrTypes';
 import { computeExecSummary } from './atrTemplate';
-import FloatingLines from '../shared/FloatingLines';
-import { ReportMetaPanel } from './ReportDocumentChrome';
+import { ReportNumberedHeading, ReportBrandBanner } from './ReportDocumentChrome';
+import { statTone } from './reportTones';
 import { ATR_SECTION_ORDER, type AtrSectionKey } from './atrSections';
 
 // ─── Token maps (theme defines base / -50 / -700 only for semantic colors) ───
@@ -30,14 +31,6 @@ const CLASSIFICATION_PILL: Record<AtrClassification, string> = {
 };
 
 type Tone = 'brand' | 'risk' | 'mitigated' | 'compliant' | 'high' | 'ink';
-const KPI_TONE: Record<Tone, string> = {
-  brand: 'text-brand-700', risk: 'text-risk-700', mitigated: 'text-mitigated-700',
-  compliant: 'text-compliant-700', high: 'text-high-700', ink: 'text-ink-700',
-};
-const KPI_BORDER: Record<Tone, string> = {
-  brand: 'border-l-brand-500', risk: 'border-l-risk', mitigated: 'border-l-mitigated',
-  compliant: 'border-l-compliant', high: 'border-l-high', ink: 'border-l-ink-300',
-};
 
 // Section anchors (kept for in-page scroll navigation from the report reader).
 const SECTION_ID: Record<AtrSectionKey, string> = {
@@ -78,18 +71,6 @@ function EditableText({ value, onCommit, editable, className = '', placeholder, 
     >
       {value}
     </span>
-  );
-}
-
-function NumberedHeading({ n, title, subtitle }: { n: number; title: string; subtitle: string }) {
-  return (
-    <div className="flex items-start gap-3 mb-5">
-      <span className="shrink-0 w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[0.8125rem] font-bold flex items-center justify-center mt-0.5">{n}</span>
-      <div>
-        <h2 className="text-[1.25rem] font-semibold text-ink-900 tracking-tight leading-tight">{title}</h2>
-        <p className="text-[0.75rem] text-ink-500">{subtitle}</p>
-      </div>
-    </div>
   );
 }
 
@@ -170,20 +151,38 @@ export default function AtrDocument({
   const bodies: Record<AtrSectionKey, (n: number) => React.ReactNode> = {
     summary: n => (
       <>
-        <NumberedHeading n={n} title="Executive Summary" subtitle="Overall observation and management action plan rollup" />
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {kpis.map(k => (
-            <div key={k.label} className={`rounded-[10px] border border-canvas-border border-l-[3px] ${KPI_BORDER[k.tone]} bg-canvas-elevated p-4`}>
-              <div className={`text-[1.625rem] font-bold tabular-nums leading-none mb-1 ${KPI_TONE[k.tone]}`}>{k.value}</div>
-              <div className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-600 leading-tight">{k.label}</div>
-            </div>
-          ))}
+        <ReportNumberedHeading n={n} title="Executive Summary" subtitle="Overall observation and management action plan rollup" />
+        {/* KPI tiles — mirror the shared ReportKpiTiles look (corner tone wash +
+            top hairline keyline) so the ATR exec summary matches every other
+            report. All six KPIs sit on a single row on wide screens. */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {kpis.map(k => {
+            const tone = statTone(`text-${k.tone}-700`);
+            return (
+              <div key={k.label} className="relative overflow-hidden rounded-[14px] border border-canvas-border bg-canvas-elevated p-5 transition-colors duration-150 hover:border-brand-200">
+                <span
+                  className="absolute inset-0 pointer-events-none print:hidden"
+                  style={{ background: `radial-gradient(120% 120% at 100% 0%, ${tone.hex}14, transparent 58%)` }}
+                  aria-hidden="true"
+                />
+                <span
+                  className="absolute inset-x-0 top-0 h-[2px] pointer-events-none print:hidden"
+                  style={{ background: `linear-gradient(to right, ${tone.hex}, ${tone.hex}00 88%)` }}
+                  aria-hidden="true"
+                />
+                <div className="relative">
+                  <div className={`text-[2rem] font-bold tabular-nums tracking-[-0.02em] leading-none mb-2 ${tone.text}`}>{k.value}</div>
+                  <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-500 leading-tight">{k.label}</div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </>
     ),
     process: n => (
       <>
-        <NumberedHeading n={n} title="Observation Wise Summary" subtitle="Exceptions, management action plans and status — per observation" />
+        <ReportNumberedHeading n={n} title="Observation Wise Summary" subtitle="Exceptions, management action plans and status — per observation" />
         <div className="overflow-hidden rounded-[10px] border border-canvas-border">
           <table className="w-full text-[0.75rem]">
             <thead>
@@ -199,7 +198,13 @@ export default function AtrDocument({
                 const st = displayStatus(o.status);
                 const stCls = st === 'Closed' ? 'bg-compliant-50 text-compliant-700' : st === 'In Progress' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-high-50 text-high-700';
                 return (
-                  <tr key={i} className="border-t border-canvas-border">
+                  <motion.tr
+                    key={i}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.28, delay: Math.min(i, 12) * 0.03, ease: [0.22, 1, 0.36, 1] }}
+                    className="border-t border-canvas-border"
+                  >
                     <td className="px-4 py-3">
                       <div className="font-semibold text-ink-900 leading-snug">{o.title}</div>
                       {o.process && <div className="text-[0.6875rem] text-ink-500">{o.process}</div>}
@@ -209,17 +214,9 @@ export default function AtrDocument({
                     <td className="px-3 py-3 text-center">
                       <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold ${stCls}`}>{st}</span>
                     </td>
-                  </tr>
+                  </motion.tr>
                 );
               })}
-              <tr className="border-t border-canvas-border bg-paper-50 font-semibold">
-                <td className="px-4 py-3 text-brand-700">TOTAL · {ex.totalObservations} observation{ex.totalObservations === 1 ? '' : 's'}</td>
-                <td className="px-3 py-3 text-center tabular-nums">{totalExceptions}</td>
-                <td className="px-3 py-3 text-center tabular-nums">{ex.totalActionPlans}</td>
-                <td className="px-3 py-3 text-center text-[0.6875rem]">
-                  <span className="text-high-700">{openCount} Open</span> · <span className="text-mitigated-700">{ex.obsStatus['In Progress']} In&nbsp;Progress</span> · <span className="text-compliant-700">{ex.obsStatus.Closed} Closed</span>
-                </td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -227,7 +224,7 @@ export default function AtrDocument({
     ),
     details: n => (
       <>
-        <NumberedHeading n={n} title="Observation Details" subtitle="Issue, risk, management action plan, evidence and verification" />
+        <ReportNumberedHeading n={n} title="Observation Details" subtitle="Issue, risk, management action plan, evidence and verification" />
         <div className="space-y-5">
           {observations.map((o, i) => (
             <ObservationCard key={i} index={i + 1} obs={o} editable={editable} onChange={next => setObs(i, next)} actions={renderObservationActions?.(i)} />
@@ -237,7 +234,7 @@ export default function AtrDocument({
     ),
     insights: n => (
       <>
-        <NumberedHeading n={n} title="Key Insights & Recommendations" subtitle="Auditor observations and forward-looking guidance" />
+        <ReportNumberedHeading n={n} title="Key Insights & Recommendations" subtitle="Auditor observations and forward-looking guidance" />
         <div className="space-y-3">
           {insights.map((ins, i) => (
             <div key={i} className="flex gap-3.5 bg-canvas-elevated border border-canvas-border rounded-[10px] p-4 hover:border-brand-200 transition-colors">
@@ -253,7 +250,7 @@ export default function AtrDocument({
     ),
     signoff: n => (
       <>
-        <NumberedHeading n={n} title="Approvals & Sign-Off" subtitle="Digital authorisation of this Action Taken Report" />
+        <ReportNumberedHeading n={n} title="Approvals & Sign-Off" subtitle="Digital authorisation of this Action Taken Report" />
         <div className="grid grid-cols-2 gap-4">
           {[
             { Icon: PenLine, role: 'Prepared by', name: meta.preparedBy },
@@ -288,61 +285,45 @@ export default function AtrDocument({
     <article className={`report-printable ${maxWidthClass} mx-auto bg-canvas-elevated border border-canvas-border rounded-[12px] overflow-hidden`}>
       {editable && <style>{`.atr-ed:empty:before{content:attr(data-ph);color:#C2B9CB;}`}</style>}
 
-      {/* Purple gradient letterhead — title over the woven line art. */}
-      <div
-        className="relative overflow-hidden px-9 pt-9 pb-8"
-        style={{ backgroundImage: 'linear-gradient(125deg, #3b0b72 0%, #6a12cd 62%, #6a12cd 100%)' }}
+      {/* Purple letterhead — the shared ReportBrandBanner so the ATR matches
+          every other report exactly: eyebrow ID · title · description · a
+          who/when/scope byline, over the same subtle woven line art. */}
+      <ReportBrandBanner
+        title="Action Taken Report"
+        eyebrow={meta.reportId && (
+          <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{meta.reportId.toUpperCase()}</span>
+        )}
+        actions={headerActions}
+        footer={(() => {
+          const parts = [
+            meta.preparedBy,
+            meta.generatedOn,
+            `${ex.totalObservations} ${ex.totalObservations === 1 ? 'observation' : 'observations'}`,
+          ].filter(Boolean);
+          if (parts.length === 0) return null;
+          return (
+            <div className="flex items-center gap-2.5 text-[0.8125rem] flex-wrap">
+              {parts.map((p, i) => (
+                <span key={i} className="inline-flex items-center gap-2.5">
+                  {i > 0 && <span className="text-white/30" aria-hidden="true">|</span>}
+                  <span className={i === 0 ? 'font-semibold text-white' : 'text-white/70'}>{p}</span>
+                </span>
+              ))}
+            </div>
+          );
+        })()}
       >
-        <div
-          className="absolute inset-0 z-0 print:hidden"
-          style={{ backgroundImage: 'radial-gradient(135% 160% at 100% -10%, rgba(255,255,255,0.20), rgba(255,255,255,0) 52%), radial-gradient(120% 130% at 0% 120%, rgba(8,2,24,0.32), rgba(8,2,24,0) 55%)' }}
-          aria-hidden="true"
-        />
-        <div
-          className="absolute inset-0 z-0 print:hidden"
-          style={{ maskImage: 'linear-gradient(to right, transparent 18%, white 56%)', WebkitMaskImage: 'linear-gradient(to right, transparent 18%, white 56%)' }}
-          aria-hidden="true"
-        >
-          <FloatingLines enabledWaves={['top', 'middle', 'bottom']} lineCount={[7, 8, 7]} lineDistance={5} interactive={false} parallax={false} color="#c084fc" opacity={0.22} />
-          <FloatingLines enabledWaves={['top', 'middle']} lineCount={6} lineDistance={7} interactive={false} parallax={false} color="#f5d0fe" opacity={0.4} />
-        </div>
-        <div
-          className="absolute inset-0 z-0"
-          style={{ backgroundImage: 'linear-gradient(to right, rgba(17,5,42,0.48), rgba(17,5,42,0.14) 40%, rgba(17,5,42,0) 62%)' }}
-          aria-hidden="true"
-        />
-        <div className="relative z-10 flex items-start justify-between gap-4 flex-wrap">
-          <div className="min-w-0">
-            <h1 className="text-[2rem] font-semibold tracking-tight leading-tight text-white">Action Taken Report</h1>
-            {(meta.auditEntity || meta.auditPeriod) && (
-              <p className="text-[0.8125rem] text-white/70 mt-1.5">
-                {[meta.auditEntity, meta.auditPeriod].filter(Boolean).join(' · ')}
-              </p>
-            )}
-          </div>
-          <div className="shrink-0 flex flex-col items-end gap-3">
-            {headerActions && <div className="flex items-center gap-2 print:hidden">{headerActions}</div>}
-            {ex.totalObservations > 0 && (
-              <div className="flex items-stretch rounded-[12px] border border-white/20 bg-white/10 overflow-hidden">
-                {[
-                  { value: ex.totalObservations, label: 'Observations' },
-                  { value: totalExceptions, label: 'Exceptions' },
-                  { value: ex.totalActionPlans, label: 'Action Plans' },
-                ].map((s, i) => (
-                  <div key={s.label} className={`px-5 py-3 text-center ${i > 0 ? 'border-l border-white/15' : ''}`}>
-                    <div className="text-[1.5rem] font-bold text-white tabular-nums leading-none">{s.value}</div>
-                    <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-white/65 mt-1.5 whitespace-nowrap">{s.label}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+        {(meta.auditEntity || meta.auditPeriod) && (
+          <p className="text-[0.8125rem] text-white/70">
+            {[meta.auditEntity, meta.auditPeriod].filter(Boolean).join(' · ')}
+          </p>
+        )}
+      </ReportBrandBanner>
 
-      {/* Metadata — read-only panel, or an editable grid (all six facts, in order) in edit mode. */}
-      <div className="px-9 py-6 border-b border-canvas-border">
-        {editable ? (
+      {/* Metadata — editable grid in edit mode only. The read-only report carries
+          the key facts in the banner (eyebrow ID + who/when byline), so no panel. */}
+      {editable && (
+        <div className="px-9 py-6 border-b border-canvas-border">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
             <MetaCell label="Report ID" value={meta.reportId} onCommit={v => setMeta('reportId', v)} />
             <MetaCell label="Audit Title" value={meta.auditTitle} onCommit={v => setMeta('auditTitle', v)} />
@@ -351,18 +332,8 @@ export default function AtrDocument({
             <MetaCell label="Prepared By" value={meta.preparedBy} onCommit={v => setMeta('preparedBy', v)} />
             <MetaCell label="Generated On" value={meta.generatedOn} onCommit={v => setMeta('generatedOn', v)} />
           </div>
-        ) : (
-          <ReportMetaPanel
-            columns={4}
-            items={[
-              { label: 'Report ID', value: meta.reportId },
-              { label: 'Audit Title', value: meta.auditTitle },
-              { label: 'Prepared By', value: meta.preparedBy },
-              { label: 'Generated On', value: meta.generatedOn },
-            ]}
-          />
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Ordered, hideable sections */}
       {visible.map((key, i) => {
@@ -370,8 +341,8 @@ export default function AtrDocument({
         const last = i === visible.length - 1;
         const heading = bodies[key](i + 1);
         return (
-          <section key={key} id={SECTION_ID[key]} className={`px-9 ${last ? 'pb-9' : 'pb-6'} ${first ? 'pt-7' : 'pt-2 border-t border-canvas-border'} scroll-mt-20`}>
-            {first ? heading : <div className="pt-6">{heading}</div>}
+          <section key={key} id={SECTION_ID[key]} className={`px-9 ${last ? 'pb-9' : 'pb-6'} ${first ? 'pt-7' : 'pt-6'} scroll-mt-20`}>
+            {heading}
           </section>
         );
       })}
