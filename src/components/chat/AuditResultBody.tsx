@@ -96,6 +96,17 @@ function TableSkeleton({ columns }: { columns: number }) {
   );
 }
 
+// Simple on/off blink for the streaming caret — a real blinking element rather
+// than a static glyph (toggles a boolean on an interval).
+function useBlink(intervalMs: number): boolean {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    const id = setInterval(() => setOn(o => !o), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return on;
+}
+
 export default function AuditResultBody({
   messageId,
   text,
@@ -146,24 +157,18 @@ export default function AuditResultBody({
     }
   }, [streaming, stream.phase]);
 
-  // KPI scoreboard brews alongside the prose. In streaming mode it waits for the
-  // answer to start (so the numbers don't pop during the reasoning beat);
-  // otherwise it brews on the fixed onset timer.
+  // KPI scoreboard brews on a fixed onset in legacy mode. In streaming mode the
+  // grid is gated on the kpi block arriving (data-driven), so this timer is off.
   useEffect(() => {
-    if (instant) return;
-    if (streaming) {
-      if (stream.phase === 'answering' || stream.phase === 'materializing' || stream.phase === 'done') {
-        setKpiOn(true);
-      }
-      return;
-    }
+    if (instant || streaming) return;
     const t = setTimeout(() => setKpiOn(true), KPI_ONSET);
     return () => clearTimeout(t);
-  }, [messageId, instant, streaming, stream.phase]);
+  }, [messageId, instant, streaming]);
 
-  // Heavy artifacts wait for the typewriter to land, then stagger in.
+  // Heavy artifacts wait for the typewriter to land, then stagger in. Legacy
+  // only — in streaming mode the chart/table are driven by their block events.
   useEffect(() => {
-    if (instant || !done) return;
+    if (instant || streaming || !done) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
     timers.push(setTimeout(() => {
       setTableOn(true);
@@ -178,15 +183,28 @@ export default function AuditResultBody({
     }, TABLE_AFTER_PROSE));
     timers.push(setTimeout(() => setChartOn(true), CHART_AFTER_PROSE));
     return () => { timers.forEach(clearTimeout); };
-  }, [messageId, instant, done, previewRowCount]);
+  }, [messageId, instant, streaming, done, previewRowCount]);
 
   const proseSource = instant ? text : streaming ? streamShown : typed;
   const showCaret = !instant && !done && (streaming ? stream.phase !== 'idle' : !!text);
+  const blink = useBlink(530);
+  const caretGlyph = showCaret && (streaming ? blink : true) ? '▌' : '';
 
-  const showKpi = instant || kpiOn;
-  const showTable = instant || tableOn;
-  const showChart = instant || chartOn;
-  const rowsToShow = instant ? previewRowCount : tableRows;
+  // Streaming blocks materialize from the spine's events (data-driven), not the
+  // legacy onset timers: KPIs when the kpi block lands, table rows as the
+  // table block's batches accumulate, chart when its block completes.
+  const kpiBlock = stream.blocks.find(b => b.kind === 'kpi');
+  const tableBlock = stream.blocks.find(b => b.kind === 'table');
+  const chartBlock = stream.blocks.find(b => b.kind === 'chart');
+
+  const showKpi = instant || (streaming ? !!kpiBlock : kpiOn);
+  const showTable = instant || (streaming ? !!tableBlock : tableOn);
+  const showChart = instant || (streaming ? chartBlock?.status === 'complete' : chartOn);
+  const rowsToShow = instant
+    ? previewRowCount
+    : streaming
+      ? Math.min(previewRowCount, tableBlock?.rows?.length ?? 0)
+      : tableRows;
 
   return (
     <div className="space-y-4 w-full">
@@ -210,7 +228,15 @@ export default function AuditResultBody({
           paragraph, and never reflows the trailing word as it would if toggled. */}
       {text && (
         <div className="text-[0.9375rem] leading-[1.65] text-ink-800 max-w-[66ch]">
-          {renderAssistantText(sanitizePartialMarkdown(proseSource + (showCaret ? '▌' : '')))}
+          {renderAssistantText(sanitizePartialMarkdown(proseSource + caretGlyph))}
+        </div>
+      )}
+
+      {/* Stream failure (defensive — the mock never errors, but the contract and
+          UI handle it for the real source). */}
+      {streaming && stream.phase === 'error' && (
+        <div className="text-[0.8125rem] text-risk-700" role="alert">
+          Couldn’t finish generating this result{stream.error ? ` — ${stream.error}` : ''}.
         </div>
       )}
 
@@ -249,8 +275,19 @@ export default function AuditResultBody({
       )}
 
       {/* Table — header is the schema, rows stream in; the card's fixed height
-          means the body fills without any reflow. */}
-      {showTable ? renderTable(rowsToShow) : <TableSkeleton columns={10} />}
+          means the body fills without any reflow. In streaming mode the rows are
+          driven by the table block's batches, with a live count tracking
+          arrival. */}
+      {showTable ? (
+        <div className="space-y-1.5">
+          {streaming && tableBlock && tableBlock.status !== 'complete' && (
+            <div className="text-[0.6875rem] text-ink-500 tabular-nums" aria-live="polite">
+              Streaming rows… {rowsToShow}
+            </div>
+          )}
+          {renderTable(rowsToShow)}
+        </div>
+      ) : <TableSkeleton columns={10} />}
     </div>
   );
 }
