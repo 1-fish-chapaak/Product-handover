@@ -283,7 +283,7 @@ function ReportTypeSelect({ value, onChange }: { value: ReportTypeName; onChange
   );
 }
 
-export function TemplateEditor({ template, onClose, onCancel, isCopy = false, onSaveCopy, onSaveEdit, existingTemplateNames = [], initialName }: { template: EditableTemplate; onClose: () => void; onCancel?: () => void; isCopy?: boolean; onSaveCopy?: (copy: EditableTemplate) => void; onSaveEdit?: (updated: EditableTemplate) => void; existingTemplateNames?: string[]; initialName?: string }) {
+export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveEdit, existingTemplateNames = [], initialName }: { template: EditableTemplate; onClose: () => void; onCancel?: () => void; onSaveNew?: (created: EditableTemplate) => void; onSaveEdit?: (updated: EditableTemplate) => void; existingTemplateNames?: string[]; initialName?: string }) {
   const { addToast } = useToast();
   // Cancel / X / discard route through onCancel (which may return to the
   // originating modal, e.g. the Generate wizard); a completed save uses onClose.
@@ -295,7 +295,7 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
   const isNew = template.id === 'ct-blank';
   // The name field is shown in every flow (New / Edit), seeded to a sensible
   // default: an explicit initialName, or the template's own name when editing.
-  const defaultName = initialName ?? (isCopy ? `Copy of ${template.name}` : template.name);
+  const defaultName = initialName ?? template.name;
   const [copyName, setCopyName] = useState(defaultName);
   const [brand, setBrand] = useState(template.brand ?? 'Irame');
   const [theme, setTheme] = useState(template.theme ?? 'Purple & White');
@@ -406,8 +406,7 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
   };
 
   const handleSave = (skipMissing = false) => {
-    // Required-field validation: brand is always required; copyName is
-    // required in the Copy flow; sections must be non-empty.
+    // Required-field validation: name + brand are required; sections non-empty.
     const next: { field: 'copyName' | 'brand' | 'sections'; label: string }[] = [];
     if (!copyName.trim()) next.push({ field: 'copyName', label: 'Template Name' });
     if (!brand.trim()) next.push({ field: 'brand', label: 'Brand Name' });
@@ -436,16 +435,16 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
     setIsSaving(true);
     // Simulate an async save so the spinner is observable.
     window.setTimeout(() => {
-      if (isCopy && onSaveCopy) {
-        const finalName = copyName.trim() || `Copy of ${template.name}`;
+      if (isNew && onSaveNew) {
+        const finalName = copyName.trim() || 'Untitled Template';
         if (existingTemplateNames.some(n => n.toLowerCase() === finalName.toLowerCase())) {
           setIsSaving(false);
           addToast({ type: 'error', message: `A template named "${finalName}" already exists. Choose a different name.` });
           return;
         }
-        onSaveCopy({
+        onSaveNew({
           ...template,
-          id: `ct-copy-${Date.now()}`,
+          id: `ct-new-${Date.now()}`,
           name: finalName,
           category: reportType,
           sections,
@@ -454,10 +453,10 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
           headerText: headerText.trim(),
           footerText: footerText.trim(),
         });
-        addToast({ type: 'success', message: 'Copy saved to Custom Templates.' });
+        addToast({ type: 'success', message: 'Template saved to Custom Templates.' });
       } else {
-        // In-place edit (custom templates): persist the changes back to the
-        // same entry. Standard templates never reach here — they open as a copy.
+        // In-place edit (existing custom templates): persist changes back to
+        // the same entry. New templates use the create path above.
         if (onSaveEdit) {
           const finalName = copyName.trim() || template.name;
           // A rename can collide with another template; the template's own name
@@ -894,8 +893,8 @@ export function TemplateEditor({ template, onClose, onCancel, isCopy = false, on
             disabled={isSaving}
             className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.875rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 rounded-[8px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >Cancel</button>
-          {/* Custom templates save in place (overwrite). The "save a copy" path
-              belongs to standard templates, surfaced as "Clone to edit". */}
+          {/* New templates create a fresh entry; existing custom templates save
+              in place (overwrite). */}
           <button
             onClick={() => handleSave()}
             disabled={isSaving}

@@ -14,15 +14,20 @@ import type {
   MissingField, ReportMeta, UploadedFile, CompletenessStatus,
 } from './types';
 
-// Status messages cycled on Screen 3 (every 1.5s). Total mock duration 6–8s.
+// Status stages shown on Screen 3's in-modal waiting screen. Paced across the
+// full mock duration (~15s) so each stage is visible for a couple of seconds
+// and the wait never feels stalled.
 export const PROCESSING_MESSAGES = [
   'Reading your report…',
+  'Detecting document structure…',
   'Identifying observations…',
+  'Extracting risks & recommendations…',
   'Extracting action plans…',
+  'Linking evidence…',
   'Mapping annexures…',
-  'Almost there…',
+  'Finalizing the extraction…',
 ];
-export const PROCESSING_DURATION_MS = 7000;
+export const PROCESSING_DURATION_MS = 15000;
 
 // Report metadata — matches the IRAME.AI brand sample in the brief.
 const SEED_META: ReportMeta = {

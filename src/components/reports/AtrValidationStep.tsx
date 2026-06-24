@@ -17,6 +17,15 @@ const BADGE: Record<Completeness, string> = {
   Incomplete: 'bg-risk-50 text-risk-700 border-risk/30',
 };
 
+// Remediation-status pill shown on each card (distinct from field completeness).
+const STATUS_PILL: Record<string, string> = {
+  Complete: 'bg-compliant-50 text-compliant-700 border-compliant/30',
+  Closed: 'bg-compliant-50 text-compliant-700 border-compliant/30',
+  'In Progress': 'bg-mitigated-50 text-mitigated-700 border-mitigated/30',
+  Open: 'bg-draft-100 text-ink-600 border-canvas-border',
+  Overdue: 'bg-risk-50 text-risk-700 border-risk/30',
+};
+
 const RISK_OPTS: AtrRisk[] = ['High', 'Medium', 'Low'];
 
 // Status pips for the right-rail "By status" rollup.
@@ -53,9 +62,19 @@ export default function AtrValidationStep({ observations, onChange }: {
   observations: AtrWorkObs[];
   onChange: (next: AtrWorkObs[]) => void;
 }) {
-  const [open, setOpen] = useState<string | null>(null);          // expanded missing-fields _id
-  const [view, setView] = useState<string | null>(null);          // expanded full-details _id
+  // An observation "needs attention" when it has missing fields or its
+  // remediation status is still Open / Overdue.
+  const needsAttention = (o: AtrWorkObs) =>
+    missingFields(o).length > 0 || o.status === 'Open' || o.status === 'Overdue';
+
+  // Cards that need attention start EXPANDED (never collapsed): missing-field
+  // cards open the resolver; Open/Overdue cards open the details viewer.
+  const [open, setOpen] = useState<Set<string>>(() => new Set(observations.filter(o => missingFields(o).length > 0).map(o => o._id)));   // resolver _ids
+  const [view, setView] = useState<Set<string>>(() => new Set(observations.filter(o => needsAttention(o) && missingFields(o).length === 0).map(o => o._id))); // details _ids
   const [editing, setEditing] = useState<Record<string, ComplField | null>>({}); // per-obs field being filled
+
+  const toggleIn = (set: (fn: (s: Set<string>) => Set<string>) => void, id: string) =>
+    set(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const patch = (id: string, fn: (o: AtrWorkObs) => AtrWorkObs) =>
     onChange(observations.map(o => (o._id === id ? fn(o) : o)));
@@ -129,10 +148,11 @@ export default function AtrValidationStep({ observations, onChange }: {
             {observations.map(o => {
               const miss = missingFields(o);
               const comp = completeness(o);
-              const isOpen = open === o._id;
+              const isOpen = open.has(o._id);
+              const attention = needsAttention(o);
               return (
                 <div key={o._id} className={o.selected ? '' : 'opacity-55'}>
-                  <div className="flex items-start gap-3 px-3 py-2.5 bg-canvas-elevated">
+                  <div className={`flex items-start gap-3 px-3 py-2.5 ${attention ? 'bg-mitigated-50/40' : 'bg-canvas-elevated'}`}>
                     <button onClick={() => patch(o._id, x => ({ ...x, selected: !x.selected }))} className="mt-0.5 text-brand-600 hover:text-brand-700 cursor-pointer shrink-0" aria-label={o.selected ? 'Deselect' : 'Select'}>
                       {o.selected ? <CheckSquare size={17} /> : <Square size={17} className="text-ink-400" />}
                     </button>
@@ -145,6 +165,7 @@ export default function AtrValidationStep({ observations, onChange }: {
                       />
                       <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                         <span className={`inline-flex items-center h-5 px-2 rounded-full border text-[0.625rem] font-semibold ${BADGE[comp]}`}>{comp}</span>
+                        {o.status && <span className={`inline-flex items-center h-5 px-2 rounded-full border text-[0.625rem] font-semibold ${STATUS_PILL[o.status] ?? 'bg-draft-50 text-ink-500 border-canvas-border'}`}>{o.status}</span>}
                         {dupes.has(o._id) && <span className="inline-flex items-center h-5 px-2 rounded-full bg-mitigated-50 text-mitigated-700 border border-mitigated/30 text-[0.625rem] font-semibold">Possible duplicate</span>}
                         {o.classification
                           ? <span className="inline-flex items-center h-5 px-2 rounded-full bg-paper-50 border border-canvas-border text-[0.625rem] font-medium text-ink-600">{o.classification}</span>
@@ -155,11 +176,11 @@ export default function AtrValidationStep({ observations, onChange }: {
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <button onClick={() => setView(view === o._id ? null : o._id)} className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[0.625rem] font-semibold cursor-pointer ${view === o._id ? 'bg-brand-600 text-white' : 'bg-paper-50 text-ink-600 hover:bg-paper-100'}`} title="View full details">
+                      <button onClick={() => toggleIn(setView, o._id)} className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[0.625rem] font-semibold cursor-pointer ${view.has(o._id) ? 'bg-brand-600 text-white' : 'bg-paper-50 text-ink-600 hover:bg-paper-100'}`} title="View full details">
                         <Eye size={11} /> View
                       </button>
                       {miss.length > 0 && (
-                        <button onClick={() => setOpen(isOpen ? null : o._id)} className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[0.625rem] font-semibold cursor-pointer ${isOpen ? 'bg-brand-600 text-white' : 'bg-risk-50 text-risk-700'}`}>
+                        <button onClick={() => toggleIn(setOpen, o._id)} className={`inline-flex items-center gap-1 h-6 px-2 rounded-full text-[0.625rem] font-semibold cursor-pointer ${isOpen ? 'bg-brand-600 text-white' : 'bg-risk-50 text-risk-700'}`}>
                           {miss.length} missing <ChevronDown size={11} className={isOpen ? 'rotate-180' : ''} />
                         </button>
                       )}
@@ -167,7 +188,7 @@ export default function AtrValidationStep({ observations, onChange }: {
                   </div>
 
                   {/* Full-details viewer (read-only) */}
-                  {view === o._id && (
+                  {view.has(o._id) && (
                     <div className="px-3 pb-3 pt-1 bg-canvas space-y-2.5">
                       <div className="rounded-[8px] border border-canvas-border bg-canvas-elevated p-3 space-y-2.5">
                         {(o.process || o.status) && (

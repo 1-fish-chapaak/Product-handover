@@ -28,7 +28,7 @@ walks the user from uploading an audit report through to a finalised ATR.
 | `toAtrReportData.ts` | Maps a session → `AtrReportData` for `AtrDocument` (selected only, skipped fields cleared). |
 | `handoff.ts` | "Manage Exceptions First" hand-off via the existing query-table derive path. |
 | `screens/` | `Step1MethodSelect` · `Step2aTemplateDownload` · `Step2bReportUpload` · `Step3Processing` · `Step4ExtractionSummary` · `Step5AnnexureMapping` · `Step6DecisionPoint` · `Step7AtrPreview`. |
-| `components/` | `FileDropZone` · `MethodSelectionCard` · `ObservationExtractCard` · `MissingFieldResolver` · `AnnexureMappingRow` · `ExtractionRightRail`. |
+| `components/` | `MethodSelectionCard` · `ObservationExtractCard` · `MissingFieldResolver`. |
 
 ## Demo the happy path
 

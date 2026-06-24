@@ -45,7 +45,7 @@ const STEP_TIP: Record<string, string> = {
 
 // Where clicking a completed step lands. The two upload paths share the
 // "Upload" slot, so step 1 resolves to whichever method the user picked.
-function stepBackTarget(i: number, method: UploadMethod): WizardStage {
+function stepBackTarget(i: number, method: UploadMethod | null): WizardStage {
   if (i === 0) return 'method';
   if (i === 1) return method === 'template' ? 'template' : 'upload';
   if (i === 2) return 'summary';
@@ -55,7 +55,7 @@ function stepBackTarget(i: number, method: UploadMethod): WizardStage {
 
 // Clickable progress rail in the modal header. Completed steps navigate back;
 // the active/upcoming steps are inert. Processing locks navigation.
-function Stepper({ stage, method, onJump }: { stage: WizardStage; method: UploadMethod; onJump: (s: WizardStage) => void }) {
+function Stepper({ stage, method, onJump }: { stage: WizardStage; method: UploadMethod | null; onJump: (s: WizardStage) => void }) {
   const active = STAGE_INDEX[stage];
   return (
     <div className="flex items-center gap-2">

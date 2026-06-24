@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
-  X, FileText, FileSpreadsheet, CloudUpload, Loader2, CheckCircle2, Sparkles,
+  X, FileText, FileSpreadsheet, Loader2, CheckCircle2, Sparkles,
   ArrowRight, ArrowLeft, Check, Download, ChevronDown, Lock, Save, FilePenLine,
-  Upload, LayoutTemplate, Paperclip, ClipboardList, ListChecks, AlertTriangle, FileCheck2,
-  PencilLine, Briefcase, Image as ImageIcon, Palette, Calendar, RefreshCw, SlidersHorizontal, Plus,
+  Upload, UploadCloud, LayoutTemplate, Paperclip, ListChecks, AlertTriangle, FileCheck2,
+  PencilLine, Briefcase, Image as ImageIcon, Palette, Calendar, RefreshCw, SlidersHorizontal,
 } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useToast } from '../shared/Toast';
+import { Button } from '../shared/Button';
+import UploadDataModal from '../concierge-workflow-builder/UploadDataModal';
 import AtrDocument from './AtrDocument';
 import AtrItemsEditor from './AtrItemsEditor';
 import AtrValidationStep from './AtrValidationStep';
@@ -35,9 +37,6 @@ function statusBreakdown(obs: AtrObservation[]) {
   return out;
 }
 
-const REPORT_ACCEPT = '.pdf,.docx,.doc,.xlsx,.xls,.csv,.ppt,.pptx';
-const TEMPLATE_ACCEPT = '.xlsx,.xls,.docx,.doc,.csv';
-const ANNEX_ACCEPT = '.xlsx,.xls,.csv';
 
 const PROCESS_MESSAGES = ['Reading your report…', 'Identifying observations…', 'Extracting annexures…', 'Almost there…'];
 
@@ -99,21 +98,22 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
   const { addToast } = useToast();
   const [stage, setStage] = useState<Stage>(resumeDraft ? 'preview' : 'entry');
   const [startMode, setStartMode] = useState<StartMode>('template');
-  const [file, setFile] = useState<File | null>(null);
+  const [reportFiles, setReportFiles] = useState<File[]>([]);
   const [annexFiles, setAnnexFiles] = useState<File[]>([]);
-  const [dragOver, setDragOver] = useState(false);
-  const [annexDragOver, setAnnexDragOver] = useState(false);
   const [fileError, setFileError] = useState(false);
-  const [downloadedTmpls, setDownloadedTmpls] = useState<Set<string>>(() => {
-    try { const r = localStorage.getItem('irame.atr.tmplDownloaded'); return new Set<string>(r ? JSON.parse(r) : []); } catch { return new Set<string>(); }
-  });
-  const markDownloaded = (k: string) => setDownloadedTmpls(prev => {
-    const next = new Set(prev); next.add(k);
-    try { localStorage.setItem('irame.atr.tmplDownloaded', JSON.stringify([...next])); } catch { /* ignore */ }
-    return next;
-  });
+  // Shared "Add data" upload modal — one for the main file (template/report),
+  // one for annexures. The main accept-list is derived from the active stage.
+  const [mainUploadOpen, setMainUploadOpen] = useState(false);
+  const [annexUploadOpen, setAnnexUploadOpen] = useState(false);
+  // Session-only: each fresh modal open starts with nothing downloaded, so the
+  // rows show "Download" (not a stale "Downloaded" from a previous session).
+  const [downloadedTmpls, setDownloadedTmpls] = useState<Set<string>>(() => new Set<string>());
+  const markDownloaded = (k: string) => setDownloadedTmpls(prev => new Set(prev).add(k));
   const [confirmClose, setConfirmClose] = useState(false);
   const [procMsg, setProcMsg] = useState(0);
+  // Stage 4 (decision): which path the user has selected. Cards select; the
+  // footer primary button executes — same select→advance pattern as Steps 1–3.
+  const [decisionChoice, setDecisionChoice] = useState<'generate' | 'manage'>('generate');
 
   const [workObs, setWorkObs] = useState<AtrWorkObs[]>(() => resumeDraft ? toWorkObs(resumeDraft.observations) : []);
   const [manualObs, setManualObs] = useState<AtrObservation[]>([{ title: '', description: '', risk: 'Medium', status: 'Open', actionPlans: [{ text: '' }] }]);
@@ -150,12 +150,10 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
   const [pdfOrientation, setPdfOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [pdfFontScale, setPdfFontScale] = useState<number>(100);
 
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const annexRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Closing with work-in-progress prompts a discard confirmation.
-  const isDirty = stage !== 'entry' && (workObs.length > 0 || !!file || previewObs.length > 0);
+  const isDirty = stage !== 'entry' && (workObs.length > 0 || reportFiles.length > 0 || previewObs.length > 0);
   const requestClose = () => { if (isDirty) setConfirmClose(true); else onClose(); };
   useFocusTrap(containerRef, stage !== 'processing', requestClose);
 
@@ -196,65 +194,116 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
     reader.readAsDataURL(f);
   };
 
+  // Accepted extensions for the main upload, by stage (template vs report).
+  const mainAccept = stage === 'template-upload'
+    ? ['xlsx', 'xls', 'docx', 'doc', 'csv']
+    : ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'csv', 'ppt', 'pptx'];
+
+  // Main upload field — shows the picked file, or a card that opens the shared
+  // "Add data" upload modal. Replaces the old inline dropzone.
+  const mainUploadField = (label: string, hint: string) => (
+    reportFiles.length > 0 ? (
+      <div>
+        <ul className="space-y-2">
+          {reportFiles.map((f, i) => (
+            <li key={`${f.name}-${i}`} className="flex items-center gap-3 px-4 py-3 border border-canvas-border rounded-[10px] bg-canvas">
+              <div className="w-9 h-9 rounded-[8px] bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-ink-900 truncate">{f.name}</div>
+                <div className="text-xs text-ink-500 flex items-center gap-1.5"><CheckCircle2 size={11} className="text-compliant" /> Ready · {formatBytes(f.size)}</div>
+              </div>
+              <button onClick={() => removeReportFile(i)} className="w-7 h-7 rounded-full text-ink-500 hover:text-risk-700 hover:bg-risk-50 flex items-center justify-center cursor-pointer shrink-0" aria-label={`Remove ${f.name}`}><X size={14} /></button>
+            </li>
+          ))}
+        </ul>
+        <Button variant="outline" size="md" leftIcon={<Upload size={15} />} onClick={() => setMainUploadOpen(true)} className="w-full mt-2">
+          Add more files
+        </Button>
+      </div>
+    ) : (
+      <div>
+        <button type="button" onClick={() => setMainUploadOpen(true)}
+          className={`w-full flex flex-col items-center justify-center text-center py-10 px-6 rounded-[12px] border-2 border-dashed transition-colors cursor-pointer ${fileError ? 'border-risk/60 bg-risk-50/40' : 'border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/40'}`}>
+          <Upload size={28} className={`mb-2 ${fileError ? 'text-risk-700' : 'text-ink-400'}`} aria-hidden="true" />
+          <span className="text-sm font-semibold text-ink-800">Upload {label}</span>
+          <span className="text-xs text-ink-500 mt-0.5">{hint}</span>
+          <span className="inline-flex items-center gap-2 mt-3 px-4 h-9 rounded-md bg-brand-600 text-white text-[13px] font-semibold"><Upload size={14} aria-hidden="true" /> Choose files</span>
+        </button>
+        {fileError && <div className="text-xs text-risk-700 mt-1.5 flex items-center gap-1"><AlertTriangle size={11} aria-hidden="true" /> Please upload a file to continue.</div>}
+      </div>
+    )
+  );
+
   // Optional annexures uploader — reused on both the upload and template paths.
   const annexureSection = (
     <div className="mt-4 shrink-0">
-      <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5">
+      <label className="text-xs font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5">
         <Paperclip size={12} /> Upload Annexures <span className="text-ink-400 font-normal">(optional)</span>
-        {embeddedAnnex.length > 0 && <span className="ml-1 text-[0.625rem] font-semibold text-compliant-700">· {embeddedAnnex.length} auto-added from report</span>}
+        {embeddedAnnex.length > 0 && <span className="ml-1 text-xs font-semibold text-compliant-700">· {embeddedAnnex.length} auto-added from report</span>}
       </label>
-      <input ref={annexRef} type="file" accept={ANNEX_ACCEPT} multiple className="sr-only" onChange={e => { const fs = Array.from(e.target.files ?? []); setAnnexFiles(prev => [...prev, ...fs]); }} />
       {(embeddedAnnex.length > 0 || annexFiles.length > 0) && (
         <div className="flex flex-wrap gap-1.5 mb-2">
           {embeddedAnnex.map(a => (
-            <span key={a.id} className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-[7px] bg-compliant-50 border border-compliant/30 text-[0.6875rem] text-compliant-700">
+            <span key={a.id} className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-[7px] bg-compliant-50 border border-compliant/30 text-xs text-compliant-700">
               <FileSpreadsheet size={11} /><span className="truncate max-w-[150px]" title={a.name}>{a.name.replace(" (from report)", "")}</span>
-              <span className="text-[0.5625rem] font-semibold bg-compliant/15 px-1 rounded-full">from report · {a.rows}</span>
+              <span className="text-xs font-semibold bg-compliant/15 px-1 rounded-full">from report · {a.rows}</span>
               <button onClick={() => setEmbeddedAnnex(prev => prev.filter(x => x.id !== a.id))} className="w-4 h-4 rounded-full text-compliant-700/60 hover:text-risk-700 flex items-center justify-center cursor-pointer"><X size={9} /></button>
             </span>
           ))}
           {annexFiles.map((a, i) => (
-            <span key={i} className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-[7px] bg-paper-50 border border-canvas-border text-[0.6875rem] text-ink-700">
+            <span key={i} className="inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-[7px] bg-paper-50 border border-canvas-border text-xs text-ink-700">
               <FileSpreadsheet size={11} className="text-compliant-700" /><span className="truncate max-w-[160px]" title={a.name}>{a.name}</span>
               <button onClick={() => setAnnexFiles(prev => prev.filter((_, j) => j !== i))} className="w-4 h-4 rounded-full text-ink-400 hover:text-risk-700 flex items-center justify-center cursor-pointer"><X size={9} /></button>
             </span>
           ))}
         </div>
       )}
-      <button
-        onClick={() => annexRef.current?.click()}
-        onDragOver={e => { e.preventDefault(); setAnnexDragOver(true); }}
-        onDragLeave={() => setAnnexDragOver(false)}
-        onDrop={e => {
-          e.preventDefault(); setAnnexDragOver(false);
-          const fs = Array.from(e.dataTransfer.files ?? []).filter(f => ['xlsx', 'xls', 'csv'].includes(f.name.split('.').pop()?.toLowerCase() ?? ''));
-          if (fs.length) setAnnexFiles(prev => [...prev, ...fs]);
-        }}
-        className={`w-full flex flex-col items-center justify-center gap-1.5 py-4 rounded-[10px] border-2 border-dashed text-[0.75rem] font-medium transition-colors cursor-pointer ${annexDragOver ? 'border-brand-500 bg-brand-50/60 text-brand-700' : 'border-canvas-border text-ink-500 hover:border-brand-300 hover:text-brand-700'}`}
-      >
-        <Paperclip size={16} className={annexDragOver ? 'text-brand-600' : 'text-ink-400'} />
-        Drag &amp; drop or <span className="text-brand-700">browse</span> annexure Excel / CSV files
-      </button>
+      <Button variant="outline" size="md" leftIcon={<Upload size={15} />} onClick={() => setAnnexUploadOpen(true)} className="w-full">
+        {annexFiles.length > 0 ? 'Add more annexures' : 'Upload annexures'}
+      </Button>
     </div>
   );
 
-  const acceptInto = (set: (f: File) => void, accept: string[], f?: File) => {
-    if (!f) return;
-    const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
-    if (!accept.includes(ext)) { addToast({ type: 'error', message: `Unsupported file ".${ext}".` }); return; }
-    set(f);
+  // Re-derive the embedded-annexure pool from whichever report files remain.
+  const syncEmbeddedAnnex = (fs: File[]) => {
+    if (fs.length === 0) { setEmbeddedAnnex([]); return; }
+    Promise.all(fs.map(extractEmbeddedAnnexures)).then(r => setEmbeddedAnnex(r.flat()));
+  };
+
+  // Append one or more report files, skipping any with an unsupported extension.
+  const addReportFiles = (incoming: File[]) => {
+    const accepted = incoming.filter(f => mainAccept.includes(f.name.split('.').pop()?.toLowerCase() ?? ''));
+    const skipped = incoming.length - accepted.length;
+    if (skipped > 0) addToast({ type: 'error', message: `Skipped ${skipped} unsupported file${skipped === 1 ? '' : 's'}.` });
+    if (accepted.length === 0) return;
+    setReportFiles(prev => {
+      const next = [...prev, ...accepted];
+      syncEmbeddedAnnex(next);
+      return next;
+    });
     setFileError(false);
-    // Auto-detect annexures already embedded as extra sheets in the report.
-    extractEmbeddedAnnexures(f).then(setEmbeddedAnnex);
+  };
+
+  const removeReportFile = (idx: number) => {
+    setReportFiles(prev => {
+      const next = prev.filter((_, i) => i !== idx);
+      syncEmbeddedAnnex(next);
+      return next;
+    });
   };
 
   const runExtraction = async () => {
-    if (!auditTitle && file) setAuditTitle(baseName(file.name));
+    if (reportFiles.length === 0) return;
+    if (!auditTitle) setAuditTitle(baseName(reportFiles[0].name));
     setProcMsg(0);
     setStage('processing');
-    const parsed = file ? await parseObservationsFromFile(file) : null;
-    const useReal = !!parsed && parsed.length > 0;
-    const obs = useReal ? parsed! : SAMPLE_OBSERVATIONS;
+    // Parse every uploaded report file and combine their observations.
+    // parseObservationsFromFile returns null for unparseable types (PDF, Word,
+    // .doc) — drop those so we cleanly fall back to the sample seed instead of
+    // carrying a null into toWorkObs (which would throw and stall processing).
+    const parsed = (await Promise.all(reportFiles.map(parseObservationsFromFile))).flatMap(r => r ?? []);
+    const useReal = parsed.length > 0;
+    const obs = useReal ? parsed : SAMPLE_OBSERVATIONS;
     const ins = useReal ? [] : SAMPLE_INSIGHTS;
     // Annexure pool: first whatever's embedded in the report file, then any
     // separately-uploaded annexures; fall back to the demo pool only if neither.
@@ -365,8 +414,8 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Sparkles size={16} /></div>
               <div>
-                <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Build an Action Taken Report</h2>
-                <p className="text-[0.75rem] text-ink-500 leading-snug">Start from a template or report, validate, link annexures, then generate.</p>
+                <h2 className="text-base font-semibold text-ink-900 leading-tight">Build an Action Taken Report</h2>
+                <p className="text-xs text-ink-500 leading-snug">Start from a template or report, validate, link annexures, then generate.</p>
               </div>
             </div>
             <button onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Close"><X size={16} /></button>
@@ -386,9 +435,9 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
                     aria-label={canGoBack ? `Go back to ${s.label}` : undefined}
                     aria-disabled={!canGoBack}
                     onClick={() => canGoBack && setStage(stepBackTarget(s.key))}
-                    className={`group inline-flex items-center gap-1.5 h-7 pl-1.5 pr-2.5 rounded-full text-[0.75rem] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${state === 'active' ? 'bg-brand-50 text-brand-700' : state === 'done' ? 'bg-compliant-50 text-compliant-700 hover:bg-compliant-100 cursor-pointer' : 'bg-draft-50 text-ink-500 hover:bg-draft-100 cursor-not-allowed'}`}
+                    className={`group inline-flex items-center gap-1.5 h-7 pl-1.5 pr-2.5 rounded-full text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${state === 'active' ? 'bg-brand-50 text-brand-700' : state === 'done' ? 'bg-compliant-50 text-compliant-700 hover:bg-compliant-100 cursor-pointer' : 'bg-draft-50 text-ink-500 hover:bg-draft-100 cursor-not-allowed'}`}
                   >
-                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[0.625rem] ${state === 'active' ? 'bg-brand-600 text-white' : state === 'done' ? 'bg-compliant text-white' : 'bg-ink-300 text-white'}`}>{state === 'done' ? <Check size={10} /> : i + 1}</span>
+                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-xs ${state === 'active' ? 'bg-brand-600 text-white' : state === 'done' ? 'bg-compliant text-white' : 'bg-ink-300 text-white'}`}>{state === 'done' ? <Check size={10} /> : i + 1}</span>
                     {s.label}
                     {canGoBack && <ArrowLeft size={11} className="-mr-0.5 max-w-0 opacity-0 group-hover:max-w-[14px] group-hover:opacity-100 transition-all duration-150" />}
                   </button>
@@ -401,164 +450,102 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
 
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-y-auto">
-          {/* Stage 0 — Entry (merged with the template detail) */}
+          {/* Stage 0 — Entry. NOTE: the "Import from Engagement" path is hidden
+              for now (kept in code — importEngagement + the engagement-pick stage
+              stay intact — so it can be re-enabled later). */}
           {stage === 'entry' && (
-            <div className="p-6">
-              <h3 className="text-[1rem] font-semibold text-ink-900 text-center mb-0.5">How would you like to start?</h3>
-              <p className="text-[0.75rem] text-ink-500 text-center mb-4">Choose the input that matches what you have.</p>
+            <div className="px-8 py-5">
+              <h3 className="text-base font-semibold text-ink-900 mb-0.5">How would you like to start?</h3>
+              <p className="text-xs text-ink-500 mb-4">Choose the input that matches what you have.</p>
 
-              {/* Compact, horizontal start cards — 4 input paths */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Input paths — premium cards (icon + chip on top, title/desc
+                  anchored to the bottom). Fixed height so content stays top-packed. */}
+              <div className="grid grid-cols-3 gap-3.5 min-h-[140px]">
                 {([
-                  { mode: 'template' as const, icon: LayoutTemplate, tint: 'brand', title: 'Use IRAME Template', rec: true, desc: 'Download our structured template, fill offline, and upload it back.' },
-                  { mode: 'upload' as const, icon: Upload, tint: 'evidence', title: 'Upload Existing Report', rec: false, desc: "Already have an audit report? Upload it and we'll extract the observations." },
-                  { mode: 'manual' as const, icon: PencilLine, tint: 'brand', title: 'Enter Observations Manually', rec: false, desc: 'Type observations straight into an editable table — no file needed.' },
-                  { mode: 'engagement' as const, icon: Briefcase, tint: 'evidence', title: 'Import from Engagement', rec: false, desc: 'Pull observations from an existing audit engagement.' },
+                  { mode: 'template' as const, icon: LayoutTemplate, title: 'Use IRAME template', rec: true, desc: 'Download, fill offline, upload back.' },
+                  { mode: 'upload' as const, icon: UploadCloud, title: 'Upload a report', rec: false, desc: "We'll extract the observations." },
+                  { mode: 'manual' as const, icon: PencilLine, title: 'Enter manually', rec: false, desc: 'Type into an editable table.' },
                 ]).map(c => {
                   const active = startMode === c.mode;
                   return (
-                    <button key={c.mode} onClick={() => selectPath(c.mode)} aria-pressed={active} className={`flex items-start gap-3 rounded-[12px] border p-3.5 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/50 ${active ? 'border-brand-500 ring-2 ring-brand-600/15 bg-brand-50/40' : 'border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/20'}`}>
-                      <span className={`w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-colors ${active ? (c.tint === 'brand' ? 'bg-brand-600 text-white' : 'bg-evidence-600 text-white') : (c.tint === 'brand' ? 'bg-brand-50 text-brand-700' : 'bg-evidence-50 text-evidence-700')}`}><c.icon size={17} /></span>
-                      <div className="min-w-0">
-                        <div className="text-[0.875rem] font-semibold text-ink-900 leading-tight flex items-center gap-1.5 flex-wrap">{c.title}{c.rec && <span className="text-[0.5625rem] font-semibold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded-full">Recommended</span>}</div>
-                        <p className="text-[0.6875rem] text-ink-500 leading-snug mt-1">{c.desc}</p>
+                    <button key={c.mode} onClick={() => selectPath(c.mode)} aria-pressed={active} className={`group relative flex flex-col overflow-hidden rounded-[18px] border p-5 text-left transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${active ? 'border-brand-500 bg-gradient-to-br from-brand-50 via-brand-50/50 to-canvas-elevated shadow-lg shadow-brand-900/[0.07]' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:-translate-y-0.5 hover:shadow-md hover:shadow-brand-900/[0.05]'}`}>
+                      {/* Ambient brand glow on the selected card. */}
+                      {active && <span aria-hidden className="pointer-events-none absolute -top-10 -right-10 w-32 h-32 rounded-full bg-brand-400/20 blur-3xl" />}
+                      <div className="relative flex items-start justify-between gap-2">
+                        <span className={`w-12 h-12 rounded-[14px] flex items-center justify-center shrink-0 transition-all duration-200 ${active ? 'bg-gradient-to-br from-brand-600 to-brand-500 text-white shadow-md shadow-brand-600/30' : 'bg-brand-50 text-brand-700 group-hover:bg-brand-100'}`}><c.icon size={22} strokeWidth={2} /></span>
+                        {c.rec && <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-brand-600 to-brand-500 text-white text-[9px] font-bold uppercase tracking-wider pl-1.5 pr-2 py-1 shadow-sm shadow-brand-600/30"><Sparkles size={9} strokeWidth={2.5} aria-hidden="true" />Recommended</span>}
+                      </div>
+                      <div className="relative mt-auto pt-5">
+                        <div className="text-[15px] font-semibold text-ink-900 leading-tight">{c.title}</div>
+                        <p className="text-[12.5px] text-ink-500 leading-snug mt-1">{c.desc}</p>
                       </div>
                     </button>
                   );
                 })}
               </div>
 
-              {/* Required observation details + (dynamic) right panel */}
-              {(startMode === 'template' || startMode === 'upload') && (
-              <div className="grid md:grid-cols-[1.5fr_1fr] gap-x-6 gap-y-4 mt-5 pt-4 border-t border-canvas-border">
-                <div>
-                  <div className="flex items-center gap-1.5 mb-2.5">
-                    <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500">Required details per observation</span>
-                    <span className="inline-flex items-center h-4 px-1.5 rounded-full bg-brand-50 text-brand-700 text-[0.5625rem] font-bold tabular-nums">11</span>
+              {/* Selected-path action + the "captures" reference share one full-width row */}
+              <div className="mt-4 grid grid-cols-[1.35fr_1fr] gap-5 items-start">
+                {/* Left — the one thing this path needs */}
+                {startMode === 'template' && (
+                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-5">
+                    <div className="text-sm font-semibold text-ink-900 mb-0.5">Download the template</div>
+                    <p className="text-xs text-ink-500 leading-relaxed mb-3">Fill one row per observation, then upload it on the next step.</p>
+                    <div className="space-y-1.5">
+                      {([
+                        { key: 'excel', icon: FileSpreadsheet, tint: 'bg-compliant-50 text-compliant-700', title: 'Excel template', ext: '.xlsx', dashed: false, onClick: () => { downloadExcelTemplate(); markDownloaded('excel'); addToast({ type: 'success', message: 'Excel template downloaded.' }); } },
+                        { key: 'word', icon: FileText, tint: 'bg-brand-50 text-brand-700', title: 'Word template', ext: '.doc', dashed: false, onClick: () => { downloadWordTemplate(); markDownloaded('word'); addToast({ type: 'success', message: 'Word template downloaded.' }); } },
+                        { key: 'sample', icon: Sparkles, tint: 'bg-brand-50 text-brand-700', title: 'Filled sample', ext: 'example data', dashed: true, onClick: () => { exportAtrExcel({ reportId: 'ATR-SAMPLE' }, SAMPLE_OBSERVATIONS); markDownloaded('sample'); addToast({ type: 'success', message: 'Filled sample downloaded.' }); } },
+                      ] as const).map(opt => {
+                        const done = downloadedTmpls.has(opt.key);
+                        return (
+                          <button key={opt.key} onClick={opt.onClick}
+                            className={`group flex items-center gap-3 w-full h-11 pl-2.5 pr-3 rounded-[10px] border transition-colors cursor-pointer text-left ${done ? 'border-compliant-200 bg-compliant-50/50' : `bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/30 ${opt.dashed ? 'border-dashed border-canvas-border' : 'border-canvas-border'}`}`}>
+                            <span className={`w-8 h-8 rounded-[8px] flex items-center justify-center shrink-0 ${opt.tint}`}><opt.icon size={16} /></span>
+                            <span className="flex-1 min-w-0 text-sm font-medium text-ink-800 truncate">{opt.title} <span className="text-ink-400 font-normal">· {opt.ext}</span></span>
+                            {done
+                              ? <span className="text-xs font-semibold text-compliant-700 flex items-center gap-1 shrink-0"><Check size={13} /> Downloaded</span>
+                              : <span className="text-xs font-semibold text-brand-700 flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100"><Download size={14} /> Download</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-                    {[
-                      { key: 'title', label: 'Observation Title', hint: REQUIRED_FIELDS[0].hint },
-                      { key: 'category', label: 'Observation Category / Area', hint: 'Audited process or function (e.g. Accounts Payable).' },
-                      ...REQUIRED_FIELDS.slice(1).map(f => ({ key: f.key as string, label: f.label, hint: f.hint })),
-                    ].map(f => (
-                      <li key={f.key} className="flex items-start gap-2">
-                        <span className="mt-[3px] w-3.5 h-3.5 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Check size={9} /></span>
-                        <div className="min-w-0">
-                          <div className="text-[0.75rem] font-semibold text-ink-800 leading-tight">{f.label}</div>
-                          <div className="text-[0.625rem] text-ink-500 leading-snug">{f.hint}</div>
-                        </div>
+                )}
+                {startMode === 'upload' && (
+                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-5 flex items-start gap-3">
+                    <FileCheck2 size={16} className="text-brand-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-ink-600 leading-relaxed">Upload any PDF, Word, Excel or CSV report on the next step. We'll extract the observations, risks, recommendations and evidence — you'll review everything before it's finalized.</p>
+                  </div>
+                )}
+                {startMode === 'manual' && (
+                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-5 flex items-start gap-3">
+                    <PencilLine size={16} className="text-brand-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-ink-600 leading-relaxed">Add observations row by row on the next step — title, risk, classification, status and action plans. Each row becomes one observation.</p>
+                  </div>
+                )}
+
+                {/* Right — what every observation captures (fills the modal's open space) */}
+                <div className="rounded-[12px] bg-brand-50/40 border border-brand-100/70 p-5">
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-brand-700/80 mb-2.5">Each observation captures</div>
+                  <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                    {[REQUIRED_FIELDS[0].label, 'Category / Area', ...REQUIRED_FIELDS.slice(1).map(f => f.label)].map(label => (
+                      <li key={label} className="flex items-start gap-1.5 text-xs text-ink-700 leading-snug">
+                        <span className="mt-[5px] w-1 h-1 rounded-full bg-brand-400 shrink-0" /> {label}
                       </li>
                     ))}
                   </ul>
                 </div>
-
-                {startMode === 'template' ? (
-                  <div className="flex flex-col gap-2.5">
-                    <div className="rounded-[12px] border border-canvas-border bg-canvas p-4">
-                      <div className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5">Download the template</div>
-                      <p className="text-[0.625rem] text-ink-500 leading-relaxed mb-3">Fill one row per observation, then upload it in the next step. Includes an example row and Instructions tab.</p>
-                      <div className="flex flex-col gap-2">
-                        <button
-                          onClick={() => { downloadExcelTemplate(); markDownloaded('excel'); addToast({ type: 'success', message: 'Excel template downloaded.' }); }}
-                          className={`inline-flex items-center justify-between gap-2 h-10 px-3.5 rounded-[10px] border transition-colors cursor-pointer ${downloadedTmpls.has('excel') ? 'border-compliant/40 bg-compliant-50/40' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40'}`}
-                        >
-                          <span className="flex items-center gap-2.5"><span className="w-7 h-7 rounded-[8px] bg-compliant-50 text-compliant-700 flex items-center justify-center"><FileSpreadsheet size={15} /></span><span className="text-[0.8125rem] font-semibold text-ink-800">Excel template</span></span>
-                          {downloadedTmpls.has('excel') ? <span className="text-[0.625rem] font-semibold text-compliant-700 flex items-center gap-1"><Check size={11} /> Downloaded</span> : <span className="text-[0.625rem] font-semibold text-brand-700">.xlsx</span>}
-                        </button>
-                        <button
-                          onClick={() => { downloadWordTemplate(); markDownloaded('word'); addToast({ type: 'success', message: 'Word template downloaded.' }); }}
-                          className={`inline-flex items-center justify-between gap-2 h-10 px-3.5 rounded-[10px] border transition-colors cursor-pointer ${downloadedTmpls.has('word') ? 'border-compliant/40 bg-compliant-50/40' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/40'}`}
-                        >
-                          <span className="flex items-center gap-2.5"><span className="w-7 h-7 rounded-[8px] bg-brand-50 text-brand-700 flex items-center justify-center"><FileText size={15} /></span><span className="text-[0.8125rem] font-semibold text-ink-800">Word template</span></span>
-                          {downloadedTmpls.has('word') ? <span className="text-[0.625rem] font-semibold text-compliant-700 flex items-center gap-1"><Check size={11} /> Downloaded</span> : <span className="text-[0.625rem] font-semibold text-brand-700">.doc</span>}
-                        </button>
-                      </div>
-                      <button onClick={() => { exportAtrExcel({ reportId: 'ATR-SAMPLE' }, SAMPLE_OBSERVATIONS); markDownloaded('sample'); addToast({ type: 'success', message: 'Filled sample downloaded.' }); }} className="mt-2.5 text-[0.625rem] font-semibold text-brand-700 hover:underline cursor-pointer inline-flex items-center gap-1">
-                        {downloadedTmpls.has('sample') ? <><Check size={11} /> Sample downloaded</> : <>↓ Download a filled sample (example data)</>}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-4">
-                    <div className="flex items-center gap-2 mb-1.5"><FileCheck2 size={15} className="text-brand-600" /><div className="text-[0.8125rem] font-semibold text-ink-900">What we'll extract</div></div>
-                    <p className="text-[0.625rem] text-ink-500 leading-relaxed mb-3">Upload any PDF, Word, Excel or CSV report. We read it and pull out:</p>
-                    <ul className="space-y-1.5">
-                      {['Observations & their descriptions', 'Risk significance & classification', 'Recommendations / action plans', 'Evidence & verification notes'].map(t => (
-                        <li key={t} className="flex items-center gap-2 text-[0.6875rem] text-ink-700"><Check size={12} className="text-compliant-700 shrink-0" /> {t}</li>
-                      ))}
-                    </ul>
-                    <p className="text-[0.625rem] text-ink-400 leading-relaxed mt-3">You'll review and edit everything before anything is finalized.</p>
-                  </div>
-                )}
               </div>
-              )}
-
-              {/* Contextual panel for the manual / engagement paths */}
-              {(startMode === 'manual' || startMode === 'engagement') && (
-              <div className="grid md:grid-cols-[1.5fr_1fr] gap-x-6 gap-y-4 mt-5 pt-4 border-t border-canvas-border">
-                <div>
-                  <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-2.5">
-                    {startMode === 'manual' ? 'How manual entry works' : 'What we pull from the engagement'}
-                  </div>
-                  <ul className="space-y-2">
-                    {(startMode === 'manual'
-                      ? ['Each row becomes one observation in your ATR.', 'Add as many rows as you need — no file required.', 'Fill title, risk, classification, status and action plans inline.', 'Review everything before the ATR is generated.']
-                      : ['All findings and their descriptions.', 'Risk significance and classification.', 'Action plans and remediation status.', 'Linked evidence and exception annexures.']
-                    ).map(t => (
-                      <li key={t} className="flex items-start gap-2 text-[0.75rem] text-ink-700">
-                        <span className="mt-[3px] w-3.5 h-3.5 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Check size={9} /></span>
-                        {t}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {startMode === 'manual' ? (
-                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-4">
-                    <div className="flex items-center gap-2 mb-2"><PencilLine size={15} className="text-brand-600" /><div className="text-[0.8125rem] font-semibold text-ink-900">You'll fill a table like this</div></div>
-                    <div className="rounded-[8px] border border-canvas-border overflow-hidden text-[0.625rem]">
-                      <div className="grid grid-cols-[1.6fr_0.7fr_0.9fr] bg-paper-50 border-b border-canvas-border px-2 py-1 font-semibold uppercase tracking-[0.08em] text-ink-500">
-                        <span>Observation</span><span>Risk</span><span>Status</span>
-                      </div>
-                      {[['Duplicate vendor records', 'High', 'Open'], ['Missing 3-way match', 'Medium', 'In Progress']].map((r, ri) => (
-                        <div key={ri} className="grid grid-cols-[1.6fr_0.7fr_0.9fr] px-2 py-1.5 border-b border-canvas-border items-center">
-                          <span className="text-ink-700 truncate">{r[0]}</span>
-                          <span className="text-ink-600">{r[1]}</span>
-                          <span className="text-ink-600">{r[2]}</span>
-                        </div>
-                      ))}
-                      <div className="px-2 py-1.5 text-brand-700 font-semibold flex items-center gap-1"><Plus size={10} /> Add row</div>
-                    </div>
-                    <p className="text-[0.625rem] text-ink-500 leading-relaxed mt-2.5">Each row becomes an observation. Add as many rows as needed.</p>
-                  </div>
-                ) : (
-                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-4">
-                    <div className="flex items-center gap-2 mb-1.5"><Briefcase size={15} className="text-evidence-600" /><div className="text-[0.8125rem] font-semibold text-ink-900">Straight from your engagement</div></div>
-                    <p className="text-[0.625rem] text-ink-500 leading-relaxed mb-3">We'll pull all findings, classifications, and action plans from your selected engagement — pre-filled and ready for you to review.</p>
-                    <div className="flex items-center gap-2 rounded-[8px] bg-evidence-50/60 px-2.5 py-2 text-[0.625rem] text-evidence-700"><FileCheck2 size={12} className="shrink-0" /> Nothing is finalized until you review and confirm.</div>
-                  </div>
-                )}
-              </div>
-              )}
             </div>
           )}
 
           {/* Stage 1A.2/3 — Upload filled template */}
           {stage === 'template-upload' && (
             <div className="p-6 h-full flex flex-col">
-              <div className="flex items-start gap-2 border border-brand-200 bg-brand-50/40 rounded-[8px] px-3 py-2 mb-4 text-[0.75rem] text-brand-700">
-                <ClipboardList size={14} className="mt-0.5 shrink-0" />
-                <span>Once you've filled the template, upload it below. We'll extract every observation and let you review before anything is finalized.</span>
-              </div>
-              <Dropzone
-                grow
-                id="ur-template-dz" file={file} dragOver={dragOver} setDragOver={setDragOver} error={fileError}
-                onPick={() => fileRef.current?.click()}
-                onDrop={f => acceptInto(setFile, ['xlsx', 'xls', 'docx', 'doc', 'csv'], f)}
-                onClear={() => { setFile(null); setEmbeddedAnnex([]); if (fileRef.current) fileRef.current.value = ""; }}
-                label="Upload filled template" hint="Excel / Word / CSV · max 25 MB" />
-              <input ref={fileRef} type="file" accept={TEMPLATE_ACCEPT} className="sr-only" onChange={e => acceptInto(setFile, ['xlsx', 'xls', 'docx', 'doc', 'csv'], e.target.files?.[0])} />
+              <h3 className="text-base font-semibold text-ink-900 mb-0.5">Upload your filled template</h3>
+              <p className="text-xs text-ink-500 mb-4">We'll extract every observation and let you review before anything is finalized.</p>
+              {mainUploadField('filled template', 'Excel / Word / CSV · max 25 MB')}
               {annexureSection}
             </div>
           )}
@@ -566,18 +553,9 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
           {/* Stage 1B — Upload report */}
           {stage === 'report-upload' && (
             <div className="p-6 h-full flex flex-col">
-              <div className="flex items-start gap-2 text-[0.75rem] text-ink-500 border border-canvas-border bg-canvas rounded-[8px] px-3 py-2 mb-4">
-                <FileCheck2 size={14} className="mt-0.5 shrink-0 text-brand-600" />
-                <span>We'll attempt to extract all required ATR details. You'll review before anything is finalized.</span>
-              </div>
-              <Dropzone
-                grow
-                id="ur-report-dz" file={file} dragOver={dragOver} setDragOver={setDragOver} error={fileError}
-                onPick={() => fileRef.current?.click()}
-                onDrop={f => acceptInto(setFile, ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'csv', 'ppt', 'pptx'], f)}
-                onClear={() => { setFile(null); setEmbeddedAnnex([]); if (fileRef.current) fileRef.current.value = ""; }}
-                label="Upload report" hint="PDF / Word / Excel / PPT · Excel & CSV read for real" />
-              <input ref={fileRef} type="file" accept={REPORT_ACCEPT} className="sr-only" onChange={e => acceptInto(setFile, ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'csv', 'ppt', 'pptx'], e.target.files?.[0])} />
+              <h3 className="text-base font-semibold text-ink-900 mb-0.5">Upload your audit report</h3>
+              <p className="text-xs text-ink-500 mb-4">We'll extract all required ATR details. You'll review before anything is finalized.</p>
+              {mainUploadField('report', 'PDF / Word / Excel / PPT · Excel & CSV read for real')}
               {annexureSection}
             </div>
           )}
@@ -585,8 +563,8 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
           {/* Stage: Import from Engagement */}
           {stage === 'engagement-pick' && (
             <div className="p-6">
-              <h3 className="text-[0.9375rem] font-semibold text-ink-900 mb-1">Import from an engagement</h3>
-              <p className="text-[0.75rem] text-ink-500 mb-4">Pick an engagement — we'll pull its observations into the ATR for you to review.</p>
+              <h3 className="text-base font-semibold text-ink-900 mb-1">Import from an engagement</h3>
+              <p className="text-xs text-ink-500 mb-4">Pick an engagement — we'll pull its observations into the ATR for you to review.</p>
               <div className="space-y-2.5">
                 {ENGAGEMENT_SOURCES.map(eng => {
                   const obs = eng.observations();
@@ -604,15 +582,15 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
                     <button key={eng.id} onClick={() => importEngagement(eng.id)} className="w-full flex items-center gap-3 px-4 py-3 rounded-[12px] border border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/30 transition-colors cursor-pointer text-left">
                       <span className="w-9 h-9 rounded-[10px] bg-evidence-50 text-evidence-700 flex items-center justify-center shrink-0"><Briefcase size={17} /></span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[0.875rem] font-semibold text-ink-900 truncate">{eng.name}</span>
+                        <span className="block text-sm font-semibold text-ink-900 truncate">{eng.name}</span>
                         <span className="mt-0.5 flex items-center gap-1.5 flex-wrap">
-                          <span className="text-[0.6875rem] text-ink-500">{eng.period} · {n} observation{n === 1 ? '' : 's'}</span>
+                          <span className="text-xs text-ink-500">{eng.period} · {n} observation{n === 1 ? '' : 's'}</span>
                           {chips.map(([label, count, cls]) => (
-                            <span key={label} className={`inline-flex items-center h-[18px] px-1.5 rounded-full text-[0.5625rem] font-semibold tabular-nums ${cls}`}>{count} {label}</span>
+                            <span key={label} className={`inline-flex items-center h-[18px] px-1.5 rounded-full text-xs font-semibold tabular-nums ${cls}`}>{count} {label}</span>
                           ))}
                         </span>
                       </span>
-                      {ready && <span className="inline-flex items-center gap-1 h-6 px-2 rounded-full bg-compliant-50 text-compliant-700 border border-compliant/30 text-[0.625rem] font-semibold shrink-0" title="All observations are remediated"><CheckCircle2 size={11} /> ATR ready</span>}
+                      {ready && <span className="inline-flex items-center gap-1 h-6 px-2 rounded-full bg-compliant-50 text-compliant-700 border border-compliant/30 text-xs font-semibold shrink-0" title="All observations are remediated"><CheckCircle2 size={11} /> ATR ready</span>}
                       <ArrowRight size={16} className="text-ink-400 shrink-0" />
                     </button>
                   );
@@ -625,7 +603,7 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
           {stage === 'manual-edit' && (
             <div>
               <div className="px-6 pt-5 pb-1">
-                <div className="flex items-start gap-2 text-[0.75rem] text-ink-500 border border-canvas-border bg-canvas rounded-[8px] px-3 py-2">
+                <div className="flex items-start gap-2 text-xs text-ink-500 border border-canvas-border bg-canvas rounded-[8px] px-3 py-2">
                   <PencilLine size={14} className="mt-0.5 shrink-0 text-brand-600" />
                   <span>Enter your observations directly. Add as many as you need — each becomes a section in the ATR.</span>
                 </div>
@@ -639,8 +617,8 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
             <div className="flex flex-col items-center justify-center gap-4 px-6 py-24">
               <div className="relative"><Loader2 size={32} className="text-brand-600 animate-spin" /><Sparkles size={14} className="text-brand-500 absolute -top-1 -right-1" /></div>
               <div className="text-center">
-                <p className="text-[0.9375rem] font-semibold text-ink-900 mb-1">{PROCESS_MESSAGES[procMsg]}</p>
-                <p className="text-[0.8125rem] text-ink-500">Reading <span className="font-mono text-ink-700">{file?.name ?? 'your report'}</span> and mapping it into the ATR format.</p>
+                <p className="text-base font-semibold text-ink-900 mb-1">{PROCESS_MESSAGES[procMsg]}</p>
+                <p className="text-sm text-ink-500">Reading <span className="font-mono text-ink-700">{reportFiles.length > 1 ? `${reportFiles.length} files` : reportFiles[0]?.name ?? 'your report'}</span> and mapping it into the ATR format.</p>
               </div>
               <div className="w-56 h-1 rounded-full bg-draft-50 overflow-hidden"><div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${((procMsg + 1) / PROCESS_MESSAGES.length) * 100}%` }} /></div>
             </div>
@@ -655,22 +633,25 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
           {/* Stage 4 — Decision */}
           {stage === 'decision' && (
             <div className="p-6">
-              <h3 className="text-[1.0625rem] font-semibold text-ink-900 text-center mb-1">How would you like to proceed?</h3>
-              <p className="text-[0.8125rem] text-ink-500 text-center mb-6">{selForAnnex.length} observations · {linkedRows} linked exception rows.</p>
-              <div className="grid grid-cols-2 gap-4 max-w-[720px] mx-auto">
-                <button onClick={() => setStage('customize')} className="text-left rounded-[14px] border border-canvas-border bg-canvas p-5 hover:border-brand-400 hover:bg-brand-50/30 hover:shadow-lg hover:shadow-brand-900/5 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40">
-                  <span className="w-11 h-11 rounded-[12px] bg-brand-50 text-brand-700 flex items-center justify-center mb-3 group-hover:bg-brand-600 group-hover:text-white transition-colors"><FileText size={20} /></span>
-                  <div className="text-[0.9375rem] font-semibold text-ink-900 mb-1">Generate ATR Only</div>
-                  <p className="text-[0.75rem] text-ink-500 leading-relaxed">Skip case management and go directly to the ATR preview. You can come back and manage exceptions later.</p>
+              <h3 className="text-base font-semibold text-ink-900 mb-1">How would you like to proceed?</h3>
+              <p className="text-sm text-ink-500 mb-6">{selForAnnex.length} observation{selForAnnex.length === 1 ? '' : 's'} · {linkedRows} linked exception row{linkedRows === 1 ? '' : 's'}.</p>
+              <div className="grid grid-cols-2 gap-4 max-w-[720px] items-stretch">
+                <button onClick={() => setDecisionChoice('generate')} aria-pressed={decisionChoice === 'generate'}
+                  className={`relative flex flex-col text-left rounded-[16px] border p-5 transition-all duration-200 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${decisionChoice === 'generate' ? 'border-brand-500 bg-brand-50/50 shadow-md shadow-brand-900/[0.06]' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/20 hover:-translate-y-0.5 hover:shadow-md hover:shadow-brand-900/[0.05]'}`}>
+                  <span className={`w-12 h-12 rounded-[13px] flex items-center justify-center mb-3 transition-all duration-200 ${decisionChoice === 'generate' ? 'bg-brand-600 text-white shadow-md shadow-brand-600/30 scale-[1.03]' : 'bg-brand-50 text-brand-700'}`}><FileText size={21} /></span>
+                  <div className="text-base font-semibold text-ink-900 mb-1">Generate ATR only</div>
+                  <p className="text-xs text-ink-500 leading-relaxed">Skip case management and go straight to the ATR preview. You can come back and manage exceptions later.</p>
+                  <p className="mt-auto pt-3 inline-flex items-center gap-1.5 text-xs font-medium text-brand-700 bg-brand-50 rounded-[6px] px-2 py-1">
+                    <ArrowRight size={11} className="shrink-0" /> Goes straight to the ATR preview.
+                  </p>
                 </button>
-                <button
-                  onClick={() => goManageExceptions(toAtrObservations(workObs))}
-                  className="text-left rounded-[14px] border border-canvas-border bg-canvas p-5 hover:border-brand-400 hover:bg-brand-50/30 hover:shadow-lg hover:shadow-brand-900/5 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40">
-                  <span className="w-11 h-11 rounded-[12px] bg-evidence-50 text-evidence-700 flex items-center justify-center mb-3 group-hover:bg-evidence-600 group-hover:text-white transition-colors"><ListChecks size={20} /></span>
-                  <div className="text-[0.9375rem] font-semibold text-ink-900 mb-1">Manage Exceptions First</div>
-                  <p className="text-[0.75rem] text-ink-500 leading-relaxed">Review the exception cases linked to observations before generating. Classify, assign action plans, and review evidence.</p>
-                  <p className="mt-2 inline-flex items-center gap-1.5 text-[0.6875rem] font-medium text-evidence-700 bg-evidence-50 rounded-[6px] px-2 py-1">
-                    <ArrowRight size={11} className="shrink-0" /> Takes you to the Manage Exceptions screen — generate the ATR after reviewing.
+                <button onClick={() => setDecisionChoice('manage')} aria-pressed={decisionChoice === 'manage'}
+                  className={`relative flex flex-col text-left rounded-[16px] border p-5 transition-all duration-200 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-evidence-600/40 ${decisionChoice === 'manage' ? 'border-evidence-500 bg-evidence-50/40 shadow-md shadow-brand-900/[0.06]' : 'border-canvas-border bg-canvas-elevated hover:border-evidence-300 hover:bg-evidence-50/20 hover:-translate-y-0.5 hover:shadow-md hover:shadow-brand-900/[0.05]'}`}>
+                  <span className={`w-12 h-12 rounded-[13px] flex items-center justify-center mb-3 transition-all duration-200 ${decisionChoice === 'manage' ? 'bg-evidence-600 text-white shadow-md shadow-evidence-600/30 scale-[1.03]' : 'bg-evidence-50 text-evidence-700'}`}><ListChecks size={21} /></span>
+                  <div className="text-base font-semibold text-ink-900 mb-1">Manage exceptions first</div>
+                  <p className="text-xs text-ink-500 leading-relaxed">Review the exception cases linked to observations before generating. Classify, assign action plans, and review evidence.</p>
+                  <p className="mt-auto pt-3 inline-flex items-center gap-1.5 text-xs font-medium text-evidence-700 bg-evidence-50 rounded-[6px] px-2 py-1">
+                    <ArrowRight size={11} className="shrink-0" /> Opens Manage Exceptions — generate the ATR after reviewing.
                   </p>
                 </button>
               </div>
@@ -681,83 +662,83 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
           {stage === 'customize' && (
             <div className="p-6 space-y-5">
               <div>
-                <h3 className="text-[0.9375rem] font-semibold text-ink-900 mb-0.5">Customize the report</h3>
-                <p className="text-[0.75rem] text-ink-500">Cover details, audit period, reviewer and branding — all optional.</p>
+                <h3 className="text-base font-semibold text-ink-900 mb-0.5">Customize the report</h3>
+                <p className="text-xs text-ink-500">Cover details, audit period, reviewer and branding — all optional.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 flex items-center justify-between">
+                  <label className="text-xs font-semibold text-ink-800 mb-1.5 flex items-center justify-between">
                     <span>Audit Title <span className="text-ink-400 font-normal">· report name</span></span>
-                    {!auditTitle && <button onClick={() => setAuditTitle(`Action Taken Report — ${new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}`)} className="text-[0.6875rem] font-semibold text-brand-700 hover:underline cursor-pointer">Suggest a name</button>}
+                    {!auditTitle && <button onClick={() => setAuditTitle(`Action Taken Report — ${new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}`)} className="text-xs font-semibold text-brand-700 hover:underline cursor-pointer">Suggest a name</button>}
                   </label>
-                  <input value={auditTitle} onChange={e => setAuditTitle(e.target.value)} placeholder="e.g. Procure-to-Pay Controls Review" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
-                  <div className="text-[0.625rem] text-ink-500 mt-1">Saved to My Reports as this name.</div>
+                  <input value={auditTitle} onChange={e => setAuditTitle(e.target.value)} placeholder="e.g. Procure-to-Pay Controls Review" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                  <div className="text-xs text-ink-500 mt-1">Saved to My Reports as this name.</div>
                 </div>
                 <div className="col-span-2">
-                  <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">Audit Entity</label>
-                  <input value={auditEntity} onChange={e => setAuditEntity(e.target.value)} placeholder="e.g. Acme Corp — Internal Audit" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                  <label className="text-xs font-semibold text-ink-800 mb-1.5 block">Audit Entity</label>
+                  <input value={auditEntity} onChange={e => setAuditEntity(e.target.value)} placeholder="e.g. Acme Corp — Internal Audit" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
                 </div>
                 <div className="col-span-2">
-                  <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5"><Calendar size={12} /> Audit Period</label>
+                  <label className="text-xs font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5"><Calendar size={12} /> Audit Period</label>
                   <div className="flex items-center gap-2">
-                    <input type="date" value={periodFrom} onChange={e => setPeriod(e.target.value, periodTo)} className="flex-1 px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
-                    <span className="text-ink-400 text-[0.75rem]">to</span>
-                    <input type="date" value={periodTo} onChange={e => setPeriod(periodFrom, e.target.value)} className="flex-1 px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                    <input type="date" value={periodFrom} onChange={e => setPeriod(e.target.value, periodTo)} className="flex-1 px-3 py-2.5 rounded-[8px] border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                    <span className="text-ink-400 text-xs">to</span>
+                    <input type="date" value={periodTo} onChange={e => setPeriod(periodFrom, e.target.value)} className="flex-1 px-3 py-2.5 rounded-[8px] border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
                   </div>
-                  {auditPeriod && <div className="text-[0.6875rem] text-ink-500 mt-1">Shows as: <span className="font-medium text-ink-700">{auditPeriod}</span></div>}
+                  {auditPeriod && <div className="text-xs text-ink-500 mt-1">Shows as: <span className="font-medium text-ink-700">{auditPeriod}</span></div>}
                 </div>
                 <div>
-                  <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">Prepared By</label>
-                  <input value={preparedBy} onChange={e => setPreparedBy(e.target.value)} placeholder="Internal Audit Team" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                  <label className="text-xs font-semibold text-ink-800 mb-1.5 block">Prepared By</label>
+                  <input value={preparedBy} onChange={e => setPreparedBy(e.target.value)} placeholder="Internal Audit Team" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
                 </div>
                 <div className="relative">
-                  <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">Reviewed By</label>
-                  <input value={reviewedBy} onChange={e => { setReviewedBy(e.target.value); setReviewerOpen(true); }} onFocus={() => setReviewerOpen(true)} placeholder="Search team members…" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-[0.8125rem] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
+                  <label className="text-xs font-semibold text-ink-800 mb-1.5 block">Reviewed By</label>
+                  <input value={reviewedBy} onChange={e => { setReviewedBy(e.target.value); setReviewerOpen(true); }} onFocus={() => setReviewerOpen(true)} placeholder="Search team members…" className="w-full px-3 py-2.5 rounded-[8px] border border-canvas-border text-sm text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15" />
                   {reviewerOpen && reviewerMatches.length > 0 && (
                     <>
                       <div className="fixed inset-0 z-[65]" onClick={() => setReviewerOpen(false)} />
                       <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-[70] max-h-44 overflow-y-auto bg-white border border-canvas-border shadow-xl rounded-[10px] p-1">
                         {reviewerMatches.map(p => (
                           <button key={p.id} onClick={() => { setReviewedBy(p.name); setReviewerOpen(false); }} className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[7px] hover:bg-brand-50 text-left cursor-pointer">
-                            <span className="w-6 h-6 rounded-full bg-brand-100 text-brand-700 text-[0.5625rem] font-bold flex items-center justify-center shrink-0">{p.initials}</span>
-                            <span className="min-w-0 flex-1"><span className="block text-[0.75rem] font-medium text-ink-800 truncate">{p.name}</span><span className="block text-[0.5625rem] text-ink-400">{p.role}</span></span>
+                            <span className="w-6 h-6 rounded-full bg-brand-100 text-brand-700 text-xs font-bold flex items-center justify-center shrink-0">{p.initials}</span>
+                            <span className="min-w-0 flex-1"><span className="block text-xs font-medium text-ink-800 truncate">{p.name}</span><span className="block text-xs text-ink-400">{p.role}</span></span>
                           </button>
                         ))}
                       </div>
                     </>
                   )}
-                  <div className="text-[0.625rem] text-ink-500 mt-1">Pick from people at Irame, or type a name.</div>
+                  <div className="text-xs text-ink-500 mt-1">Pick from people at Irame, or type a name.</div>
                 </div>
               </div>
 
               {/* Brand color */}
               <div>
-                <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5"><Palette size={12} /> Brand color</label>
+                <label className="text-xs font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5"><Palette size={12} /> Brand color</label>
                 <div className="flex items-center gap-2 flex-wrap">
                   {THEME_PRESETS.map(t => (
                     <button key={t.color} onClick={() => pickBrand(t.color)} title={t.name} className={`w-9 h-9 rounded-[8px] border-2 transition-transform ${brandColor === t.color ? 'border-ink-900 scale-105' : 'border-transparent'}`} style={{ backgroundColor: t.color }} />
                   ))}
                   <div className="flex items-center gap-1.5 ml-1 pl-1.5 pr-2.5 h-9 rounded-[8px] border border-canvas-border">
                     <input type="color" value={brandColor || '#6a12cd'} onChange={e => pickBrand(e.target.value)} className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0" aria-label="Pick a color" />
-                    <input type="text" value={hexDraft} onChange={e => onHexChange(e.target.value)} placeholder="#6a12cd" maxLength={7} spellCheck={false} className="w-[74px] text-[0.75rem] font-mono text-ink-700 bg-transparent focus:outline-none placeholder:text-ink-400" aria-label="Hex color code" />
+                    <input type="text" value={hexDraft} onChange={e => onHexChange(e.target.value)} placeholder="#6a12cd" maxLength={7} spellCheck={false} className="w-[74px] text-xs font-mono text-ink-700 bg-transparent focus:outline-none placeholder:text-ink-400" aria-label="Hex color code" />
                   </div>
-                  {brandColor && <button onClick={() => { setBrandColor(''); setHexDraft(''); }} className="text-[0.6875rem] text-ink-500 hover:text-ink-800 cursor-pointer">Reset</button>}
+                  {brandColor && <button onClick={() => { setBrandColor(''); setHexDraft(''); }} className="text-xs text-ink-500 hover:text-ink-800 cursor-pointer">Reset</button>}
                 </div>
               </div>
 
               {/* Logo */}
               <div>
-                <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5"><ImageIcon size={12} /> Company logo</label>
+                <label className="text-xs font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5"><ImageIcon size={12} /> Company logo</label>
                 <input ref={logoInputRef} type="file" accept="image/*" className="sr-only" onChange={e => onLogoPick(e.target.files?.[0])} />
                 {logoDataUrl ? (
                   <div className="flex items-center gap-3 px-3 py-2.5 border border-canvas-border rounded-[10px] bg-canvas">
                     <img src={logoDataUrl} alt="Logo preview" className="h-8 max-w-[120px] object-contain" />
-                    <span className="text-[0.75rem] text-ink-600 flex-1">Logo added — shows on the cover.</span>
-                    <button onClick={() => setLogoDataUrl('')} className="text-[0.6875rem] text-ink-500 hover:text-risk-700 cursor-pointer">Remove</button>
+                    <span className="text-xs text-ink-600 flex-1">Logo added — shows on the cover.</span>
+                    <button onClick={() => setLogoDataUrl('')} className="text-xs text-ink-500 hover:text-risk-700 cursor-pointer">Remove</button>
                   </div>
                 ) : (
-                  <button onClick={() => logoInputRef.current?.click()} className="w-full py-3 rounded-[10px] border border-dashed border-canvas-border text-[0.75rem] font-medium text-ink-500 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">+ Upload logo (PNG / JPG / SVG)</button>
+                  <button onClick={() => logoInputRef.current?.click()} className="w-full py-3 rounded-[10px] border border-dashed border-canvas-border text-xs font-medium text-ink-500 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">+ Upload logo (PNG / JPG / SVG)</button>
                 )}
               </div>
             </div>
@@ -770,13 +751,13 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
               : (
                 <div className="bg-draft-50 min-h-full">
                   {resumeDraft && (
-                    <div className="mx-6 mt-4 flex items-center gap-2 border border-compliant/30 bg-compliant-50 rounded-[8px] px-3 py-2 text-[0.75rem] text-compliant-700">
+                    <div className="mx-6 mt-4 flex items-center gap-2 border border-compliant/30 bg-compliant-50 rounded-[8px] px-3 py-2 text-xs text-compliant-700">
                       <CheckCircle2 size={14} className="shrink-0" />
                       <span><span className="font-semibold">Exceptions reviewed.</span> Your ATR is ready — finalize or save it below.</span>
                     </div>
                   )}
                   <div className="flex items-center justify-end px-6 pt-4">
-                    <button onClick={regenInsights} className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-300 transition-colors cursor-pointer" title="Regenerate just the Key Insights section">
+                    <button onClick={regenInsights} className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold text-brand-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-300 transition-colors cursor-pointer" title="Regenerate just the Key Insights section">
                       <RefreshCw size={13} /> Regenerate Key Insights
                     </button>
                   </div>
@@ -791,79 +772,90 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
           <footer className="shrink-0 px-6 py-3.5 border-t border-canvas-border flex items-center justify-between gap-2">
             {/* Left / back */}
             {stage === 'entry' ? (
-              <button onClick={requestClose} className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer">Cancel</button>
+              <button onClick={requestClose} className="h-10 px-5 text-sm font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer">Cancel</button>
             ) : (
-              <button onClick={goBack} className="inline-flex items-center gap-1.5 h-10 px-4 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><ArrowLeft size={14} /> Back</button>
+              <button onClick={goBack} className="inline-flex items-center gap-1.5 h-10 px-4 text-sm font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><ArrowLeft size={14} /> Back</button>
             )}
 
             {/* Right / primary */}
             {stage === 'entry' && (
-              <button onClick={() => setStage(startMode === 'template' ? 'template-upload' : startMode === 'upload' ? 'report-upload' : startMode === 'manual' ? 'manual-edit' : 'engagement-pick')} className="inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">
+              <button onClick={() => setStage(startMode === 'template' ? 'template-upload' : startMode === 'upload' ? 'report-upload' : startMode === 'manual' ? 'manual-edit' : 'engagement-pick')} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">
                 {startMode === 'template' ? 'Next: Upload filled template' : startMode === 'upload' ? 'Next: Upload report' : startMode === 'manual' ? 'Next: Enter observations' : 'Next: Pick engagement'} <ArrowRight size={14} />
               </button>
             )}
             {stage === 'manual-edit' && (
-              <button onClick={continueManual} className="inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">Continue <ArrowRight size={14} /></button>
+              <button onClick={continueManual} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">Continue <ArrowRight size={14} /></button>
             )}
             {stage === 'customize' && (
-              <button onClick={goPreview} className="inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">Preview ATR <ArrowRight size={14} /></button>
+              <button onClick={goPreview} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer">Preview ATR <ArrowRight size={14} /></button>
             )}
             {(stage === 'template-upload' || stage === 'report-upload') && (
               <div className="flex items-center gap-2.5">
-                {fileError && !file && <span className="text-[0.6875rem] text-risk-700 flex items-center gap-1"><AlertTriangle size={11} /> Upload a file to continue</span>}
-                <button onClick={() => { if (!file) { setFileError(true); addToast({ type: 'error', message: 'Please upload a file to continue.' }); return; } runExtraction(); }} className={`inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold rounded-[8px] transition-colors cursor-pointer ${file ? 'text-white bg-brand-600 hover:bg-brand-500' : 'text-brand-700 bg-brand-50 hover:bg-brand-100'}`}><Sparkles size={14} /> Extract observations</button>
+                {reportFiles.length === 0 && <span className="text-xs text-ink-400">Upload a file to continue</span>}
+                <button
+                  onClick={runExtraction}
+                  disabled={reportFiles.length === 0}
+                  title={reportFiles.length === 0 ? 'Upload a file to continue' : undefined}
+                  aria-disabled={reportFiles.length === 0}
+                  className={`inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold rounded-[8px] transition-colors ${reportFiles.length > 0 ? 'text-white bg-brand-600 hover:bg-brand-500 cursor-pointer' : 'text-ink-400 bg-draft-50 cursor-not-allowed'}`}
+                ><Sparkles size={14} /> Extract observations</button>
               </div>
             )}
             {stage === 'validation' && (
               <div className="flex items-center gap-2.5">
-                {!canContinueValidation && <span className="text-[0.6875rem] text-ink-500 flex items-center gap-1"><AlertTriangle size={11} className="text-risk" /> {selectedCount(workObs) === 0 ? 'Select at least one' : 'Resolve missing fields'}</span>}
-                <button onClick={() => setStage('annexures')} disabled={!canContinueValidation} className="inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Continue <ArrowRight size={14} /></button>
+                {!canContinueValidation && <span className="text-xs text-ink-500 flex items-center gap-1"><AlertTriangle size={11} className="text-risk" /> {selectedCount(workObs) === 0 ? 'Select at least one' : 'Resolve missing fields'}</span>}
+                <button onClick={() => setStage('annexures')} disabled={!canContinueValidation} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Continue <ArrowRight size={14} /></button>
               </div>
             )}
             {stage === 'annexures' && (
               <div className="flex items-center gap-2.5">
-                <button onClick={() => setStage('decision')} className="h-10 px-4 text-[0.8125rem] font-medium text-ink-600 hover:text-ink-900 cursor-pointer" title="Manage Exceptions will not be available without annexures">Skip annexures</button>
-                <button onClick={() => setStage('decision')} className="inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer"><CheckCircle2 size={14} /> Confirm annexure mapping</button>
+                <button onClick={() => setStage('decision')} className="h-10 px-4 text-sm font-medium text-ink-600 hover:text-ink-900 cursor-pointer" title="Manage Exceptions will not be available without annexures">Skip annexures</button>
+                <button onClick={() => setStage('decision')} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer"><CheckCircle2 size={14} /> Confirm annexure mapping</button>
               </div>
             )}
             {stage === 'preview' && (
               <div className="flex items-center gap-2.5">
                 {onManageExceptions && !resumeDraft && (
-                  <button onClick={() => goManageExceptions(previewObs)} title="Park this ATR and review exception cases first" className="inline-flex items-center gap-2 h-10 px-3.5 text-[0.8125rem] font-semibold text-evidence-700 bg-evidence-50 border border-evidence-200 rounded-[8px] hover:bg-evidence-100 transition-colors cursor-pointer"><ListChecks size={14} /> Manage Exceptions</button>
+                  <button onClick={() => goManageExceptions(previewObs)} title="Park this ATR and review exception cases first" className="inline-flex items-center gap-2 h-10 px-3.5 text-sm font-semibold text-evidence-700 bg-evidence-50 border border-evidence-200 rounded-[8px] hover:bg-evidence-100 transition-colors cursor-pointer"><ListChecks size={14} /> Manage Exceptions</button>
                 )}
-                <button onClick={() => setPreviewEditing(e => !e)} className="inline-flex items-center gap-2 h-10 px-3.5 text-[0.8125rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><FilePenLine size={14} /> {previewEditing ? 'Done editing' : 'Edit items'}</button>
+                <button onClick={() => setPreviewEditing(e => !e)} className="inline-flex items-center gap-2 h-10 px-3.5 text-sm font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><FilePenLine size={14} /> {previewEditing ? 'Done editing' : 'Edit items'}</button>
                 <div className="relative">
-                  <button onClick={() => setShowFormats(s => !s)} className="inline-flex items-center gap-2 h-10 px-3.5 text-[0.8125rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><Download size={14} /> Preview &amp; Download <ChevronDown size={12} className={showFormats ? 'rotate-180' : ''} /></button>
+                  <button onClick={() => setShowFormats(s => !s)} className="inline-flex items-center gap-2 h-10 px-3.5 text-sm font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><Download size={14} /> Preview &amp; Download <ChevronDown size={12} className={showFormats ? 'rotate-180' : ''} /></button>
                   {showFormats && (
                     <>
                       <div className="fixed inset-0 z-[65]" onClick={() => setShowFormats(false)} />
                       <div className="absolute right-0 bottom-full mb-1.5 z-[70] bg-white border border-canvas-border shadow-xl py-2 w-60 rounded-[10px] overflow-hidden">
                         {/* PDF page options */}
                         <div className="px-3 pb-2 mb-1 border-b border-canvas-border">
-                          <div className="flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-ink-500 mb-2"><SlidersHorizontal size={11} /> PDF options</div>
+                          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-ink-500 mb-2"><SlidersHorizontal size={11} /> PDF options</div>
                           <div className="flex gap-1.5 mb-2">
                             {(['portrait', 'landscape'] as const).map(o => (
-                              <button key={o} onClick={() => setPdfOrientation(o)} className={`flex-1 h-7 rounded-[6px] text-[0.6875rem] font-semibold capitalize transition-colors cursor-pointer ${pdfOrientation === o ? 'bg-brand-600 text-white' : 'bg-paper-50 text-ink-600 hover:bg-paper-100'}`}>{o}</button>
+                              <button key={o} onClick={() => setPdfOrientation(o)} className={`flex-1 h-7 rounded-[6px] text-xs font-semibold capitalize transition-colors cursor-pointer ${pdfOrientation === o ? 'bg-brand-600 text-white' : 'bg-paper-50 text-ink-600 hover:bg-paper-100'}`}>{o}</button>
                             ))}
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[0.625rem] text-ink-500 shrink-0">Font</span>
+                            <span className="text-xs text-ink-500 shrink-0">Font</span>
                             <input type="range" min={80} max={120} step={5} value={pdfFontScale} onChange={e => setPdfFontScale(Number(e.target.value))} className="flex-1 accent-brand-600 cursor-pointer" />
-                            <span className="text-[0.625rem] font-mono text-ink-600 w-9 text-right">{pdfFontScale}%</span>
+                            <span className="text-xs font-mono text-ink-600 w-9 text-right">{pdfFontScale}%</span>
                           </div>
                         </div>
                         {[{ k: 'pdf' as const, l: 'Print / Save as PDF' }, { k: 'word' as const, l: 'Download as Word' }, { k: 'excel' as const, l: 'Download as Excel' }].map(f => (
-                          <button key={f.k} onClick={() => handleDownload(f.k)} className="w-full text-left px-3 py-2 text-[0.75rem] text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer">{f.l}</button>
+                          <button key={f.k} onClick={() => handleDownload(f.k)} className="w-full text-left px-3 py-2 text-xs text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer">{f.l}</button>
                         ))}
                       </div>
                     </>
                   )}
                 </div>
-                {onAddToReport && <button onClick={() => onAddToReport(meta, previewObs, insights)} className="inline-flex items-center gap-2 h-10 px-3.5 text-[0.8125rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><Save size={14} /> Save Version</button>}
-                {onFreeze && <button onClick={() => onFreeze(meta, previewObs, insights)} className="inline-flex items-center gap-2 h-10 px-5 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer"><Lock size={14} /> Finalize &amp; Sign-off</button>}
+                {onAddToReport && <button onClick={() => onAddToReport(meta, previewObs, insights)} className="inline-flex items-center gap-2 h-10 px-3.5 text-sm font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"><Save size={14} /> Save Version</button>}
+                {onFreeze && <button onClick={() => onFreeze(meta, previewObs, insights)} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer"><Lock size={14} /> Finalize &amp; Sign-off</button>}
               </div>
             )}
-            {(stage === 'decision' || stage === 'engagement-pick') && <span />}
+            {stage === 'engagement-pick' && <span />}
+            {stage === 'decision' && (
+              decisionChoice === 'generate'
+                ? <button onClick={() => setStage('customize')} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] transition-colors cursor-pointer"><FileText size={14} /> Generate ATR <ArrowRight size={14} /></button>
+                : <button onClick={() => goManageExceptions(toAtrObservations(workObs))} className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-evidence-600 hover:bg-evidence-700 rounded-[8px] transition-colors cursor-pointer"><ListChecks size={14} /> Manage exceptions first <ArrowRight size={14} /></button>
+            )}
           </footer>
         )}
 
@@ -871,15 +863,42 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
         {confirmClose && (
           <div className="absolute inset-0 z-[80] flex items-center justify-center bg-ink-900/40 rounded-[16px]">
             <div className="w-[344px] bg-canvas-elevated rounded-[14px] border border-canvas-border shadow-xl p-5">
-              <div className="text-[0.9375rem] font-semibold text-ink-900 mb-1">Discard this ATR draft?</div>
-              <p className="text-[0.8125rem] text-ink-500 mb-4">Your progress in this builder will be lost. This can't be undone.</p>
+              <div className="text-base font-semibold text-ink-900 mb-1">Discard this ATR draft?</div>
+              <p className="text-sm text-ink-500 mb-4">Your progress in this builder will be lost. This can't be undone.</p>
               <div className="flex items-center justify-end gap-2">
-                <button onClick={() => setConfirmClose(false)} className="h-9 px-4 text-[0.8125rem] font-medium text-ink-700 bg-canvas border border-canvas-border rounded-[8px] hover:border-brand-200 cursor-pointer">Keep editing</button>
-                <button onClick={() => { setConfirmClose(false); onClose(); }} className="h-9 px-4 text-[0.8125rem] font-semibold text-white bg-risk rounded-[8px] hover:bg-risk-700 cursor-pointer">Discard</button>
+                <button onClick={() => setConfirmClose(false)} className="h-9 px-4 text-sm font-medium text-ink-700 bg-canvas border border-canvas-border rounded-[8px] hover:border-brand-200 cursor-pointer">Keep editing</button>
+                <button onClick={() => { setConfirmClose(false); onClose(); }} className="h-9 px-4 text-sm font-semibold text-white bg-risk rounded-[8px] hover:bg-risk-700 cursor-pointer">Discard</button>
               </div>
             </div>
           </div>
         )}
+
+        {/* Shared "Add data" upload modals — main file (template/report) + annexures. */}
+        <UploadDataModal
+          open={mainUploadOpen}
+          onClose={() => setMainUploadOpen(false)}
+          title={stage === 'template-upload' ? 'Upload filled template' : 'Upload audit report'}
+          allowedTabs={['upload', 'all', 'files', 'folder']}
+          hideSessionFiles
+          footerHint={stage === 'template-upload'
+            ? "Upload your filled template — we'll extract every observation."
+            : "Upload your audit report — we'll extract the ATR details."}
+          onAttachDraft={({ files }) => { const real = files.map(x => x.file).filter((f): f is File => !!f); if (real.length) addReportFiles(real); }}
+        />
+        <UploadDataModal
+          open={annexUploadOpen}
+          onClose={() => setAnnexUploadOpen(false)}
+          title="Upload annexures"
+          allowedTabs={['upload', 'all', 'files', 'folder']}
+          hideSessionFiles
+          footerHint="Add annexure workbooks (.xlsx / .csv) for case management."
+          onAttachDraft={({ files }) => {
+            const real = files
+              .map(x => x.file)
+              .filter((f): f is File => !!f && ['xlsx', 'xls', 'csv'].includes(f.name.split('.').pop()?.toLowerCase() ?? ''));
+            if (real.length) setAnnexFiles(prev => [...prev, ...real]);
+          }}
+        />
       </motion.div>
     </>
   );
@@ -900,39 +919,3 @@ function backStage(stage: Stage): Stage {
   }
 }
 
-function Dropzone({ id, file, dragOver, setDragOver, onPick, onDrop, onClear, label, hint, grow, error }: {
-  id: string; file: File | null; dragOver: boolean; setDragOver: (v: boolean) => void;
-  onPick: () => void; onDrop: (f?: File) => void; onClear: () => void; label: string; hint: string;
-  /** Fill the available vertical space with a large drop target. */
-  grow?: boolean;
-  /** Show the required-error treatment (red border + inline message). */
-  error?: boolean;
-}) {
-  return (
-    <div className={grow ? 'flex-1 flex flex-col min-h-0' : ''}>
-      <label className="text-[0.75rem] font-semibold text-ink-800 mb-1.5 block">{label} <span className="text-risk">*</span></label>
-      {file ? (
-        <div className="flex items-center gap-3 px-4 py-3 border border-canvas-border rounded-[10px] bg-canvas">
-          <div className="w-9 h-9 rounded-[8px] bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[0.8125rem] font-semibold text-ink-900 truncate">{file.name}</div>
-            <div className="text-[0.6875rem] text-ink-500 flex items-center gap-1.5"><CheckCircle2 size={11} className="text-compliant" /> Ready · {formatBytes(file.size)}</div>
-          </div>
-          <button onClick={onClear} className="w-7 h-7 rounded-full text-ink-500 hover:text-risk-700 hover:bg-risk-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Remove file"><X size={14} /></button>
-        </div>
-      ) : (
-        <button id={id} type="button" onClick={onPick}
-          onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)}
-          onDrop={e => { e.preventDefault(); setDragOver(false); onDrop(e.dataTransfer.files?.[0]); }}
-          className={`w-full flex flex-col items-center justify-center gap-2.5 px-4 rounded-[12px] border-2 border-dashed transition-colors cursor-pointer ${grow ? 'flex-1 min-h-[180px] py-10' : 'py-8'} ${dragOver ? 'border-brand-500 bg-brand-50/60' : error ? 'border-risk/60 bg-risk-50/40' : 'border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/30'}`}>
-          <span className={`rounded-full flex items-center justify-center transition-colors ${grow ? 'w-14 h-14' : 'w-11 h-11'} ${dragOver ? 'bg-brand-100 text-brand-600' : error ? 'bg-risk-50 text-risk-700' : 'bg-paper-50 text-ink-400'}`}><CloudUpload size={grow ? 26 : 20} /></span>
-          <div className="text-center">
-            <div className={`font-semibold text-ink-800 ${grow ? 'text-[0.9375rem]' : 'text-[0.8125rem]'}`}>Drag &amp; drop or <span className="text-brand-700">browse</span></div>
-            <div className="text-[0.6875rem] text-ink-500 mt-0.5">{hint}</div>
-          </div>
-        </button>
-      )}
-      {error && !file && <div className="text-[0.6875rem] text-risk-700 mt-1.5 flex items-center gap-1"><AlertTriangle size={11} /> Please upload a file to continue.</div>}
-    </div>
-  );
-}

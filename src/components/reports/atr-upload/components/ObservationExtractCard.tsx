@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, Pencil, Check, X, ClipboardList, Paperclip, UserCheck, RotateCcw } from 'lucide-react';
 import Checkbox from '../../../shared/Checkbox';
-import { Pill, SeverityBadge } from '../../../shared/StatusBadge';
 import MissingFieldResolver from './MissingFieldResolver';
 import {
   OBSERVATION_FIELDS, CLASSIFICATION_OPTIONS, RISK_OPTIONS, getFieldValue, type FieldDef,
@@ -11,10 +10,11 @@ import type { ExtractedObservation, ExtractedFieldKey } from '../types';
 
 type ResolveMode = 'fill' | 'skip' | 'reset';
 
-const COMPLETENESS_TONE = { Complete: 'compliant', Partial: 'mitigated', Incomplete: 'risk' } as const;
-const CLASSIFICATION_TONE: Record<string, 'high' | 'risk' | 'info'> = {
-  'Design Deficiency': 'high', 'System Deficiency': 'risk', 'Procedural Non-Compliance': 'info',
-};
+// Meta is rendered as one quiet inline line — colour is carried by a small
+// status dot (risk + completeness), everything else is muted text. This keeps
+// the stacked list scannable instead of a wall of bordered pills.
+const RISK_DOT: Record<string, string> = { High: 'bg-risk-500', Medium: 'bg-mitigated-500', Low: 'bg-ink-300' };
+const COMPLETENESS_DOT: Record<string, string> = { Complete: 'bg-compliant-500', Partial: 'bg-mitigated-500', Incomplete: 'bg-risk-500' };
 
 export default function ObservationExtractCard({
   obs, linkedAnnexures, linkedRows, onToggleSelect, onEditField, onResolve,
@@ -34,6 +34,17 @@ export default function ObservationExtractCard({
   const missingMap = new Map(obs.missingFields.map(f => [f.key, f]));
   const title = obs.title?.trim() || 'Untitled observation';
 
+  // One quiet meta line: process · risk · classification · completeness.
+  const metaParts: React.ReactNode[] = [];
+  if (obs.process) metaParts.push(<span className="text-ink-600">{obs.process}</span>);
+  metaParts.push(obs.risk
+    ? <span className="inline-flex items-center gap-1.5"><span className={`w-1.5 h-1.5 rounded-full ${RISK_DOT[obs.risk] ?? 'bg-ink-300'}`} aria-hidden="true" />{obs.risk} risk</span>
+    : <span className="text-ink-400">Risk not detected</span>);
+  metaParts.push(obs.classification
+    ? <span className="text-ink-600">{obs.classification}</span>
+    : <span className="text-ink-400">Class not detected</span>);
+  metaParts.push(<span className="inline-flex items-center gap-1.5"><span className={`w-1.5 h-1.5 rounded-full ${COMPLETENESS_DOT[obs.completeness] ?? 'bg-ink-300'}`} aria-hidden="true" />{obs.completeness}</span>);
+
   const startEdit = (key: ExtractedFieldKey) => { setDraft(getFieldValue(obs, key)); setEditing(key); };
   const commit = (field: FieldDef) => {
     const mf = missingMap.get(field.key);
@@ -43,21 +54,24 @@ export default function ObservationExtractCard({
   };
 
   return (
-    <div className="rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-hidden">
+    <div className="bg-canvas-elevated">
+      {/* Selection is shown only by the checkbox — no row tint or accent bar. */}
       {/* Header row */}
-      <div className="flex items-start gap-3 px-4 py-3.5">
+      <div className="flex items-start gap-3 px-5 py-3">
         <div className="pt-0.5"><Checkbox checked={obs.selected} onChange={onToggleSelect} ariaLabel={`Select observation ${obs.number}`} /></div>
 
         <button onClick={() => setOpen(o => !o)} className="flex-1 min-w-0 text-left cursor-pointer">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] font-semibold tabular-nums text-ink-400">#{obs.number}</span>
-            <span className="text-[13.5px] font-semibold text-ink-900 truncate max-w-[420px]">{title}</span>
+          <div className="flex items-baseline gap-2">
+            <span className="text-[11px] font-semibold tabular-nums text-ink-400 shrink-0">#{obs.number}</span>
+            <span className="text-[13.5px] font-semibold text-ink-900 truncate">{title}</span>
           </div>
-          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-            {obs.process && <span className="inline-flex items-center h-6 px-2.5 rounded-full bg-canvas text-ink-600 border border-canvas-border text-[11px]">{obs.process}</span>}
-            {obs.risk ? <SeverityBadge severity={obs.risk.toLowerCase()} /> : <Pill tone="draft">Risk not detected</Pill>}
-            {obs.classification ? <Pill tone={CLASSIFICATION_TONE[obs.classification] ?? 'info'}>{obs.classification}</Pill> : <Pill tone="draft">Class not detected</Pill>}
-            <Pill tone={COMPLETENESS_TONE[obs.completeness]}>{obs.completeness}</Pill>
+          <div className="mt-1 flex items-center gap-x-2 gap-y-1 flex-wrap text-[11.5px] text-ink-500">
+            {metaParts.map((node, i) => (
+              <span key={i} className="inline-flex items-center gap-2">
+                {i > 0 && <span className="text-ink-300" aria-hidden="true">·</span>}
+                {node}
+              </span>
+            ))}
           </div>
         </button>
 
@@ -74,14 +88,14 @@ export default function ObservationExtractCard({
       <AnimatePresence initial={false}>
         {open && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22 }} className="overflow-hidden border-t border-canvas-border">
-            <div className="px-4 py-4 grid sm:grid-cols-2 gap-x-6 gap-y-4 bg-[#FCFBFD]">
+            <div className="px-5 py-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4 bg-[#FCFBFD]">
               {OBSERVATION_FIELDS.map(field => {
                 const mf = missingMap.get(field.key);
                 const isEditing = editing === field.key;
                 const value = getFieldValue(obs, field.key);
                 const isWide = field.kind === 'textarea';
                 return (
-                  <div key={field.key} className={isWide ? 'sm:col-span-2' : ''}>
+                  <div key={field.key} className={isWide ? 'sm:col-span-2 lg:col-span-3' : ''}>
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">{field.label}</span>
                       {mf?.state === 'missing' && <span className="text-[9.5px] font-bold uppercase text-risk-700 bg-risk-50 px-1.5 py-0.5 rounded">Missing</span>}

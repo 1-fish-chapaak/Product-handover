@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Upload, FileText, X } from 'lucide-react';
 import { Button } from '../../../shared/Button';
-import FileDropZone from '../components/FileDropZone';
+import UploadDataModal from '../../../concierge-workflow-builder/UploadDataModal';
 import DatePicker from '../../../shared/DatePicker';
 import { WizardFooter } from '../footerSlot';
 import type { ReportMeta } from '../types';
@@ -34,6 +34,8 @@ export default function Step2bReportUpload({ onExtract }: {
 }) {
   const [report, setReport] = useState<File[]>([]);
   const [annexures, setAnnexures] = useState<File[]>([]);
+  // Which slot the shared "Add data" upload modal is filling (null = closed).
+  const [uploadTarget, setUploadTarget] = useState<'report' | 'annexures' | null>(null);
 
   // Mandatory report details → ATR top section. Generated On is auto (today).
   const [auditTitle, setAuditTitle] = useState('');
@@ -65,27 +67,43 @@ export default function Step2bReportUpload({ onExtract }: {
       </p>
 
       <div className="grid sm:grid-cols-2 gap-3 items-start mb-3">
-        <FileDropZone
-          label="Upload Audit Report"
-          acceptExt={['pdf', 'docx', 'xlsx', 'pptx']}
-          hint="for the ATR"
-          maxSizeMb={20}
-          variant="secondary"
-          files={report}
-          onFiles={setReport}
-          onRemove={() => setReport([])}
-        />
+        {/* Audit report — opens the shared "Add data" upload modal. */}
+        <div>
+          <label className="block text-xs font-semibold text-ink-800 mb-1.5">Upload Audit Report</label>
+          {report.length > 0 && (
+            <ul className="space-y-1.5 mb-2">
+              {report.map((f, i) => (
+                <li key={`${f.name}-${i}`} className="flex items-center gap-2.5 rounded-[8px] border border-canvas-border bg-canvas-elevated px-3 py-2">
+                  <FileText size={15} className="text-brand-600 shrink-0" aria-hidden="true" />
+                  <span className="text-[12.5px] font-medium text-ink-800 truncate flex-1">{f.name}</span>
+                  <button type="button" onClick={() => setReport(prev => prev.filter((_, idx) => idx !== i))} aria-label={`Remove ${f.name}`} className="w-5 h-5 inline-flex items-center justify-center rounded-full text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"><X size={13} aria-hidden="true" /></button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Button variant="outline" size="md" leftIcon={<Upload size={15} />} onClick={() => setUploadTarget('report')} className="w-full">
+            {report.length > 0 ? 'Add more report files' : 'Upload audit report'}
+          </Button>
+        </div>
 
-        <FileDropZone
-          label="Upload Annexures (optional)"
-          acceptExt={['xlsx']}
-          hint="for case management"
-          multiple
-          variant="secondary"
-          files={annexures}
-          onFiles={setAnnexures}
-          onRemove={i => setAnnexures(prev => prev.filter((_, idx) => idx !== i))}
-        />
+        {/* Annexures (optional) */}
+        <div>
+          <label className="block text-xs font-semibold text-ink-800 mb-1.5">Upload Annexures <span className="text-ink-400 font-normal">(optional)</span></label>
+          {annexures.length > 0 && (
+            <ul className="space-y-1.5 mb-2">
+              {annexures.map((f, i) => (
+                <li key={`${f.name}-${i}`} className="flex items-center gap-2.5 rounded-[8px] border border-canvas-border bg-canvas-elevated px-3 py-2">
+                  <FileText size={15} className="text-brand-600 shrink-0" aria-hidden="true" />
+                  <span className="text-[12.5px] font-medium text-ink-800 truncate flex-1">{f.name}</span>
+                  <button type="button" onClick={() => setAnnexures(prev => prev.filter((_, idx) => idx !== i))} aria-label={`Remove ${f.name}`} className="w-5 h-5 inline-flex items-center justify-center rounded-full text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"><X size={13} aria-hidden="true" /></button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Button variant="outline" size="md" leftIcon={<Upload size={15} />} onClick={() => setUploadTarget('annexures')} className="w-full">
+            {annexures.length > 0 ? 'Add more annexures' : 'Upload annexures'}
+          </Button>
+        </div>
       </div>
 
       {/* Mandatory report details — these populate the ATR's top section. */}
@@ -138,6 +156,24 @@ export default function Step2bReportUpload({ onExtract }: {
           </Button>
         </div>
       </WizardFooter>
+
+      {/* Shared "Add data" upload modal — fills whichever slot opened it. */}
+      <UploadDataModal
+        open={uploadTarget !== null}
+        onClose={() => setUploadTarget(null)}
+        title={uploadTarget === 'annexures' ? 'Upload annexures' : 'Upload audit report'}
+        allowedTabs={['upload', 'all', 'files', 'folder']}
+        hideSessionFiles
+        footerHint={uploadTarget === 'annexures'
+          ? 'Add annexure workbooks (.xlsx) — optional; they power the linked cases in Manage Exceptions.'
+          : 'Upload the audit report file(s) — this generates the ATR.'}
+        onAttachDraft={({ files }) => {
+          const real = files.map(x => x.file).filter((f): f is File => !!f);
+          if (real.length === 0) return;
+          if (uploadTarget === 'report') setReport(prev => [...prev, ...real]);
+          else if (uploadTarget === 'annexures') setAnnexures(prev => [...prev, ...real]);
+        }}
+      />
     </div>
   );
 }

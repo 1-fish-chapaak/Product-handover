@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Link2, Plus, X, CheckCircle2, AlertCircle, Unlink, FileSpreadsheet } from 'lucide-react';
+import { Link2, Plus, X, Check, CheckCircle2, AlertCircle, Unlink, FileSpreadsheet } from 'lucide-react';
 import { type AtrWorkObs, type LinkState, type AtrAnnexure } from './atrBuilder';
 
-const STATE_META: Record<LinkState, { label: string; cls: string; icon: typeof CheckCircle2 }> = {
-  confirmed: { label: 'Confirmed', cls: 'bg-compliant-50 text-compliant-700 border-compliant/30', icon: CheckCircle2 },
-  review: { label: 'Needs review', cls: 'bg-mitigated-50 text-mitigated-700 border-mitigated/30', icon: AlertCircle },
-  unlinked: { label: 'Unlinked', cls: 'bg-risk-50 text-risk-700 border-risk/30', icon: Unlink },
+const STATE_META: Record<LinkState, { label: string; cls: string; icon: typeof CheckCircle2; hint: string }> = {
+  confirmed: { label: 'Confirmed', cls: 'bg-compliant-50 text-compliant-700 border-compliant/30', icon: CheckCircle2, hint: 'Mapping confirmed.' },
+  review: { label: 'Needs review', cls: 'bg-mitigated-50 text-mitigated-700 border-mitigated/30', icon: AlertCircle, hint: 'AI-suggested link — confirm it’s correct or adjust it before continuing.' },
+  unlinked: { label: 'Unlinked', cls: 'bg-risk-50 text-risk-700 border-risk/30', icon: Unlink, hint: 'No annexure linked — this observation won’t create exception cases in Manage Exceptions.' },
 };
 
 /**
@@ -43,9 +43,9 @@ export default function AtrAnnexureStep({ observations, pool, onChange }: {
 
   return (
     <div className="p-6">
-      <div className="flex items-start gap-2 border border-brand-200 bg-brand-50/50 rounded-[8px] px-3 py-2 mb-4 text-[0.75rem] text-brand-700">
+      <div className="flex items-start gap-2 border border-brand-200 bg-brand-50/50 rounded-[8px] px-3 py-2 mb-4 text-xs text-brand-700">
         <Link2 size={14} className="mt-0.5 shrink-0" />
-        <span><span className="font-semibold">We've linked annexures to observations based on the report.</span> Please confirm or adjust each mapping.</span>
+        <span><span className="font-semibold">We've linked annexures to observations based on the report.</span> Confirm or adjust each mapping — an observation can link to several annexures, and any left <span className="font-semibold">Unlinked</span> won't create exception cases in Manage Exceptions.</span>
       </div>
 
       <div className="rounded-[12px] border border-canvas-border overflow-visible">
@@ -58,6 +58,13 @@ export default function AtrAnnexureStep({ observations, pool, onChange }: {
         </div>
 
         <div className="divide-y divide-canvas-border">
+          {selected.length === 0 && (
+            <div className="px-3 py-10 text-center">
+              <Unlink size={20} className="mx-auto text-ink-300 mb-2" />
+              <div className="text-sm font-medium text-ink-700">No observations to link</div>
+              <div className="text-xs text-ink-500 mt-0.5">Select observations on the previous step to map annexures here.</div>
+            </div>
+          )}
           {selected.map(o => {
             const meta = STATE_META[o.linkState];
             const rows = o.annexures.reduce((n, a) => n + a.rows, 0);
@@ -101,12 +108,12 @@ export default function AtrAnnexureStep({ observations, pool, onChange }: {
 
                 <div className="text-right text-[0.75rem] font-semibold text-ink-700 tabular-nums pt-1">{rows || '—'}</div>
 
-                <div className="flex flex-col items-end gap-1">
-                  <span className={`inline-flex items-center gap-1 h-5 px-2 rounded-full border text-[0.5625rem] font-semibold ${meta.cls}`}>
-                    <meta.icon size={9} /> {meta.label}
+                <div className="flex flex-col items-end gap-1.5">
+                  <span title={meta.hint} className={`inline-flex items-center gap-1 h-5 px-2 rounded-full border text-[0.625rem] font-semibold cursor-help ${meta.cls}`}>
+                    <meta.icon size={10} /> {meta.label}
                   </span>
                   {o.linkState !== 'confirmed' && o.annexures.length > 0 && (
-                    <button onClick={() => confirmRow(o._id)} className="text-[0.5625rem] font-semibold text-brand-700 hover:underline cursor-pointer">Confirm</button>
+                    <button onClick={() => confirmRow(o._id)} title="Mark this mapping as confirmed" className="inline-flex items-center gap-1 h-6 px-2 rounded-[6px] border border-brand-200 bg-brand-50 text-[0.625rem] font-semibold text-brand-700 hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer"><Check size={11} /> Confirm</button>
                   )}
                 </div>
               </div>
@@ -114,10 +121,6 @@ export default function AtrAnnexureStep({ observations, pool, onChange }: {
           })}
         </div>
       </div>
-
-      <p className="mt-3 text-[0.6875rem] text-ink-500 flex items-center gap-1.5">
-        <AlertCircle size={11} /> An observation can link to multiple annexures. Unlinked observations won't have exception cases in Manage Exceptions.
-      </p>
     </div>
   );
 }
