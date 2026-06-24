@@ -34,6 +34,7 @@ import {
   type EditableTemplate, type GeneratedReport,
 } from './reportShared';
 import SmartTable from '../shared/SmartTable';
+import { KpiCountUp } from '../shared/KpiTile';
 import { useToast } from '../shared/Toast';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useCan } from '../../context/CurrentUserContext';
@@ -355,6 +356,18 @@ export default function ReportsView({
       });
     }
   }, [generatedReports, addToast]);
+
+  // Report-type counts for the My Reports filter band (only reports I generated).
+  const typeCounts = useMemo(() => {
+    let sox = 0, ia = 0;
+    generatedReports.forEach(r => {
+      if (r.generatedBy !== 'You') return;
+      const k = reportKind(r);
+      if (k === 'sox') sox++;
+      else if (k === 'ia') ia++;
+    });
+    return { sox, ia };
+  }, [generatedReports]);
 
   // ── ATR library: the curated mock ATRs plus any the user generated (have atrData). ──
   const allAtrs = useMemo<AtrLibraryReport[]>(() => {
@@ -803,6 +816,33 @@ export default function ReportsView({
   // Canonical KPI-family filter tile (§7.11.2 shape, §526 stroke-free selection)
   // shared by the report-type band and the SOX / IA breakdown band so they stay
   // identical. Selection = brand border + wash + solid icon chip; no baseline.
+  const renderKpiTile = (o: { key: string; active: boolean; icon: React.ElementType; value: number; label: string; onClick: () => void; index?: number; fixed?: boolean; animate?: boolean }) => {
+    const Icon = o.icon;
+    return (
+      <button
+        key={o.key}
+        type="button"
+        onClick={o.onClick}
+        aria-pressed={o.active}
+        className={`group/kpi flex items-center gap-2.5 rounded-lg border px-3 py-2 cursor-pointer transition-[border-color,box-shadow,background-color] duration-300 ${o.fixed ? 'shrink-0 w-[184px]' : ''} ${
+          o.active
+            ? 'border-brand-300 bg-brand-50/50'
+            : 'border-canvas-border bg-canvas-elevated hover:border-brand-200 hover:shadow-[0_12px_28px_-14px_rgba(15,8,30,0.22)]'
+        }`}
+      >
+        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${o.active ? 'bg-brand-600 text-white shadow-sm' : 'bg-brand-50 text-brand-600 group-hover/kpi:bg-brand-100'}`}>
+          <Icon size={14} strokeWidth={2} />
+        </span>
+        <span className="min-w-0 flex items-baseline gap-1.5">
+          <span className={`text-[1.125rem] font-bold leading-none tabular-nums ${o.active ? 'text-brand-800' : 'text-ink-900'}`}>
+            {o.animate === false ? o.value : <KpiCountUp value={String(o.value)} delay={120 + (o.index ?? 0) * 80} />}
+          </span>
+          <span className="text-[0.75rem] font-medium text-ink-500 truncate">{o.label}</span>
+        </span>
+      </button>
+    );
+  };
+
   // Canonical "Report" name cell shared by every list-view table (All · SOX · IA
   // · Shared) so the lists never drift: brand tile + type icon, 14.5px name with
   // a quiet secondary subline. Hover affordances only when the row is openable.

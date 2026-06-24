@@ -1811,13 +1811,13 @@ function AddOutputModal({
       charts={GRAPH_CATALOG.map(g => ({ id: g.id, title: g.title, type: g.chartType, xAxis: g.xAxis, yAxis: g.yAxis, color: g.color }))}
       tables={TABLE_CATALOG.map(t => ({ id: t.id, title: t.title, columns: t.columns, rows: t.rows }))}
       initialKpis={isFresh
-        ? new Set(KPI_CATALOG.map(k => k.label))
-        : new Set(attached.filter(a => a.kind === 'kpi').map(a => KPI_CATALOG.find(k => k.id === a.id)?.label).filter((l): l is string => !!l))}
+        ? new Set<string>(KPI_CATALOG.map(k => k.label))
+        : new Set<string>(attached.filter(a => a.kind === 'kpi').map(a => KPI_CATALOG.find(k => k.id === a.id)?.label).filter((l): l is NonNullable<typeof l> => !!l))}
       initialCharts={new Set(attached.filter(a => a.kind === 'graph').map(a => a.id))}
       initialTables={new Set(attached.filter(a => a.kind === 'table').map(a => a.id))}
       onConfirm={(sel) => {
         const items: AttachedOutput[] = [
-          ...Array.from(sel.kpis).map(label => KPI_CATALOG.find(k => k.label === label)?.id).filter((id): id is string => !!id).map(id => ({ kind: 'kpi' as const, id })),
+          ...Array.from(sel.kpis).map(label => KPI_CATALOG.find(k => k.label === label)?.id).filter((id): id is NonNullable<typeof id> => !!id).map(id => ({ kind: 'kpi' as const, id })),
           ...Array.from(sel.charts).map(id => ({ kind: 'graph' as const, id })),
           ...Array.from(sel.tables).map(id => ({ kind: 'table' as const, id })),
         ];
