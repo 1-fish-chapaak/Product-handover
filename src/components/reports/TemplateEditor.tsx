@@ -9,7 +9,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence, useDragControls } from 'motion/react';
 import {
-  Check, ChevronDown, FileText, GripVertical, Image, Layout,
+  Check, ChevronDown, ChevronRight, FileText, GripVertical, Image, Layout,
   Loader2, Palette, Plus, Settings, Trash2, Type, X,
   Tag, ShieldCheck, BookOpen, Search,
 } from 'lucide-react';
@@ -54,7 +54,7 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
             onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); if (query) setQuery(''); else onClose(); } }}
             placeholder="Search templates…"
             aria-label="Search templates"
-            className="w-full h-9 pl-9 pr-8 rounded-[8px] bg-paper-50 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:bg-paper-100 transition-colors"
+            className="w-full h-9 pl-9 pr-8 rounded-[8px] bg-canvas border border-canvas-border text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:bg-white focus:border-brand-600/40 transition-colors"
           />
           {query && (
             <button
@@ -79,16 +79,19 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
               key={rt.id}
               onClick={() => { onSelect(rt); onClose(); }}
               aria-current={isActive || undefined}
-              className={`w-full text-left px-3 py-2.5 rounded-[8px] transition-colors cursor-pointer flex items-center gap-2.5 ${isActive ? 'bg-brand-50' : 'hover:bg-brand-50'}`}
+              className={`group/item relative w-full text-left px-3 py-2.5 rounded-[8px] transition-all duration-150 cursor-pointer flex items-center gap-2.5 ${isActive ? 'bg-brand-50 ring-1 ring-inset ring-brand-200' : 'hover:bg-brand-50'}`}
             >
-              <div className={`p-1.5 rounded-[8px] ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
+              {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-brand-600" aria-hidden="true" />}
+              <div className={`p-1.5 rounded-[8px] transition-colors ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
                 <Icon size={12} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className={`text-[0.75rem] truncate ${isActive ? 'font-semibold text-brand-600' : 'font-medium text-ink-800'}`}>{rt.name}</div>
-                <div className="text-[0.75rem] text-ink-400">{rt.category}</div>
+                <div className={`text-[0.75rem] truncate transition-colors ${isActive ? 'font-semibold text-brand-700' : 'font-medium text-ink-800 group-hover/item:text-brand-700'}`}>{rt.name}</div>
+                <div className={`text-[0.75rem] transition-colors ${isActive ? 'text-brand-600/70' : 'text-ink-400 group-hover/item:text-ink-500'}`}>{rt.category}</div>
               </div>
-              {isActive && <Check size={14} className="shrink-0 text-brand-600" />}
+              {isActive
+                ? <Check size={14} className="shrink-0 text-brand-600" />
+                : <ChevronRight size={14} className="shrink-0 text-brand-500 opacity-0 -translate-x-1 transition-all duration-150 group-hover/item:opacity-100 group-hover/item:translate-x-0" />}
             </button>
           );
         })}

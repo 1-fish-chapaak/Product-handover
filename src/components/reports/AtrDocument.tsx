@@ -1,13 +1,15 @@
 import { useRef } from 'react';
 import { motion } from 'motion/react';
-import { Calendar, Lightbulb, PenLine, Eye } from 'lucide-react';
+import {
+  Calendar, Lightbulb, PenLine, Eye,
+  ClipboardList, AlertTriangle, ListChecks, CircleDot, CheckCircle2, Clock,
+} from 'lucide-react';
 import type {
   AtrMeta, AtrObservation, AtrActionPlan, AtrInsight,
   AtrClassification, AtrObservationStatus, AtrActionStatus,
 } from './atrTypes';
 import { computeExecSummary } from './atrTemplate';
-import { ReportNumberedHeading, ReportBrandBanner } from './ReportDocumentChrome';
-import { statTone } from './reportTones';
+import { ReportNumberedHeading, ReportBrandBanner, ReportKpiTiles } from './ReportDocumentChrome';
 import { ATR_SECTION_ORDER, type AtrSectionKey } from './atrSections';
 
 // ─── Token maps (theme defines base / -50 / -700 only for semantic colors) ───
@@ -17,12 +19,12 @@ const OBS_STATUS_PILL: Record<AtrObservationStatus, { cls: string; dot: string }
   Open:          { cls: 'bg-high-50 text-high-700',           dot: 'bg-high' },
   Overdue:       { cls: 'bg-risk-50 text-risk-700',           dot: 'bg-risk' },
 };
-const ACTION_STATUS: Record<AtrActionStatus, { pill: string; border: string; dot: string }> = {
-  Implemented:             { pill: 'bg-compliant-50 text-compliant-700', border: 'border-t-compliant', dot: 'bg-compliant' },
-  'Partially Implemented': { pill: 'bg-mitigated-50 text-mitigated-700', border: 'border-t-mitigated', dot: 'bg-mitigated' },
-  Pending:                 { pill: 'bg-risk-50 text-risk-700',           border: 'border-t-risk',      dot: 'bg-risk' },
-  Overdue:                 { pill: 'bg-risk-50 text-risk-700',           border: 'border-t-risk',      dot: 'bg-risk' },
-  'Not Due':               { pill: 'bg-paper-100 text-ink-600',          border: 'border-t-ink-300',   dot: 'bg-ink-400' },
+const ACTION_STATUS: Record<AtrActionStatus, { pill: string; dot: string }> = {
+  Implemented:             { pill: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant' },
+  'Partially Implemented': { pill: 'bg-mitigated-50 text-mitigated-700', dot: 'bg-mitigated' },
+  Pending:                 { pill: 'bg-risk-50 text-risk-700',           dot: 'bg-risk' },
+  Overdue:                 { pill: 'bg-risk-50 text-risk-700',           dot: 'bg-risk' },
+  'Not Due':               { pill: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-400' },
 };
 const CLASSIFICATION_PILL: Record<AtrClassification, string> = {
   'Design Deficiency': 'bg-high-50 text-high-700',
@@ -135,13 +137,13 @@ export default function AtrDocument({
   // Executive Summary — exactly six KPIs. Overdue observations fold into Open.
   const totalExceptions = meta.totalExceptions ?? ex.totalExceptions;
   const openCount = ex.obsStatus.Open + ex.obsStatus.Overdue;
-  const kpis: { label: string; value: number; tone: Tone }[] = [
-    { label: 'Total Observations', value: ex.totalObservations, tone: 'brand' },
-    { label: 'Total Exceptions', value: totalExceptions, tone: 'ink' },
-    { label: 'Total Management Action Plan', value: ex.totalActionPlans, tone: 'brand' },
-    { label: 'Open', value: openCount, tone: 'high' },
-    { label: 'Closed', value: ex.obsStatus.Closed, tone: 'compliant' },
-    { label: 'In Progress', value: ex.obsStatus['In Progress'], tone: 'mitigated' },
+  const kpis: { label: string; value: number; tone: Tone; icon: React.ElementType }[] = [
+    { label: 'Observations', value: ex.totalObservations, tone: 'brand', icon: ClipboardList },
+    { label: 'Exceptions', value: totalExceptions, tone: 'ink', icon: AlertTriangle },
+    { label: 'Action Plans', value: ex.totalActionPlans, tone: 'brand', icon: ListChecks },
+    { label: 'Open', value: openCount, tone: 'high', icon: CircleDot },
+    { label: 'Closed', value: ex.obsStatus.Closed, tone: 'compliant', icon: CheckCircle2 },
+    { label: 'In Progress', value: ex.obsStatus['In Progress'], tone: 'mitigated', icon: Clock },
   ];
 
   const displayStatus = (s?: AtrObservationStatus): 'Open' | 'In Progress' | 'Closed' =>
@@ -152,32 +154,11 @@ export default function AtrDocument({
     summary: n => (
       <>
         <ReportNumberedHeading n={n} title="Executive Summary" subtitle="Overall observation and management action plan rollup" />
-        {/* KPI tiles — mirror the shared ReportKpiTiles look (corner tone wash +
-            top hairline keyline) so the ATR exec summary matches every other
-            report. All six KPIs sit on a single row on wide screens. */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {kpis.map(k => {
-            const tone = statTone(`text-${k.tone}-700`);
-            return (
-              <div key={k.label} className="relative overflow-hidden rounded-[14px] border border-canvas-border bg-canvas-elevated p-5 transition-colors duration-150 hover:border-brand-200">
-                <span
-                  className="absolute inset-0 pointer-events-none print:hidden"
-                  style={{ background: `radial-gradient(120% 120% at 100% 0%, ${tone.hex}14, transparent 58%)` }}
-                  aria-hidden="true"
-                />
-                <span
-                  className="absolute inset-x-0 top-0 h-[2px] pointer-events-none print:hidden"
-                  style={{ background: `linear-gradient(to right, ${tone.hex}, ${tone.hex}00 88%)` }}
-                  aria-hidden="true"
-                />
-                <div className="relative">
-                  <div className={`text-[2rem] font-bold tabular-nums tracking-[-0.02em] leading-none mb-2 ${tone.text}`}>{k.value}</div>
-                  <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-500 leading-tight">{k.label}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        {/* KPI tiles — the single shared ReportKpiTiles, so the ATR exec summary
+            stays identical to every other report type by construction. */}
+        <ReportKpiTiles
+          stats={kpis.map(k => ({ label: k.label, value: String(k.value), icon: k.icon, color: `text-${k.tone}-700` }))}
+        />
       </>
     ),
     process: n => (
@@ -395,7 +376,7 @@ function ObservationCard({ index, obs, editable, onChange, actions }: { index: n
 function ActionPlanCard({ index, plan, classification, editable, onChange }: { index: number; plan: AtrActionPlan; classification?: AtrClassification; editable?: boolean; onChange?: (next: AtrActionPlan) => void }) {
   const tone = plan.status ? ACTION_STATUS[plan.status] : null;
   return (
-    <div className={`border border-canvas-border rounded-[12px] overflow-hidden bg-canvas-elevated ${tone ? `border-t-2 ${tone.border}` : ''}`}>
+    <div className="border border-canvas-border rounded-[12px] overflow-hidden bg-canvas-elevated">
       <div className="p-4">
         <div className="flex items-center gap-2.5 flex-wrap mb-2.5">
           <span className="inline-flex items-center h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded bg-brand-50 text-brand-700 shrink-0">Management Action Plan {index}</span>

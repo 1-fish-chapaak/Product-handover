@@ -12,7 +12,7 @@ import {
   ChevronLeft, ChevronRight,
   Layout, X, Edit3, Loader2, Trash2,
   List, LayoutGrid, GripVertical, Plus,
-  MoreVertical, Eye, EyeOff, ExternalLink,
+  MoreVertical, Eye, EyeOff, SquareArrowOutUpRight,
   MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
   Layers, Check, RefreshCw, Lock, Sparkles,
 } from 'lucide-react';
@@ -130,6 +130,8 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
   const [menuOpen, setMenuOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Pending removal of an attached widget (graph/table) — confirmed via dialog.
+  const [pendingWidgetRemove, setPendingWidgetRemove] = useState<{ kind: 'chart' | 'table'; id: string; title: string } | null>(null);
   const [widgetModalOpen, setWidgetModalOpen] = useState(false);
   const availableGraphs = QUERY_GRAPHS[safeQuery.id] ?? [];
   // Multi-table set when defined (Q01 = the four Excel tables); otherwise wrap
@@ -138,17 +140,12 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
   const queryTables = QUERY_TABLE_SETS[safeQuery.id]
     ?? (single ? [{ id: 'results', title: 'Results Table', columns: single.columns, rows: single.rows }] : []);
   const queryKpis = QUERY_KPIS[safeQuery.id] ?? computeQueryKpis(safeQuery);
-  // Card stays lean by default (KPIs inline; graphs/tables opt-in). The modal,
-  // however, opens fully checked until the user customises — so adding all is
-  // open → Add to Card with no extra clicks, while the card isn't pre-cluttered.
+  // Card stays lean by default (KPIs inline; graphs/tables opt-in). The modal
+  // always reflects what's actually on the card — already-added items show
+  // checked; the rest unchecked. "Select all" in the modal adds everything at once.
   const [selectedKpis, setSelectedKpis] = useState<Set<string>>(() => new Set(queryKpis.map(k => k.label)));
   const [selectedCharts, setSelectedCharts] = useState<Set<string>>(new Set());
   const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set());
-  const [widgetCustomized, setWidgetCustomized] = useState(false);
-  // Modal seed: all-checked on first open, the actual card selection thereafter.
-  const modalKpis = widgetCustomized ? selectedKpis : new Set(queryKpis.map(k => k.label));
-  const modalCharts = widgetCustomized ? selectedCharts : new Set(availableGraphs.map(g => g.id));
-  const modalTables = widgetCustomized ? selectedTables : new Set(queryTables.map(t => t.id));
   const menuRef = useRef<HTMLDivElement>(null);
   const baseDelay = index * 0.08;
 
@@ -202,38 +199,50 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
               {can('rp_comment') && (() => {
                 const myComments = comments.filter(c => c.queryId === query.id).length;
                 return (
-                  <button
-                    onClick={() => setCommentsOpen(true)}
-                    title="Comments on this query"
-                    aria-label="Comments on this query"
-                    className="relative inline-flex items-center justify-center w-7 h-7 -mx-1 text-ink-400 rounded-[8px] cursor-pointer hover:text-brand-600 hover:bg-brand-50/50 transition-colors"
-                  >
-                    <MessageSquare size={16} className="shrink-0" />
-                    {myComments > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[0.5625rem] font-semibold bg-brand-600 text-white rounded-full tabular-nums border border-white">
-                        {myComments}
-                      </span>
-                    )}
-                  </button>
+                  <div className="relative group/cm">
+                    <button
+                      onClick={() => setCommentsOpen(true)}
+                      aria-label="Comments on this query"
+                      className="relative inline-flex items-center justify-center w-8 h-8 text-ink-400 rounded-[8px] cursor-pointer hover:text-brand-600 hover:bg-brand-50 transition-colors"
+                    >
+                      <MessageSquare size={16} className="shrink-0" />
+                      {myComments > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[0.5625rem] font-semibold bg-brand-600 text-white rounded-full tabular-nums border border-white">
+                          {myComments}
+                        </span>
+                      )}
+                    </button>
+                    <span className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 z-30 whitespace-nowrap rounded-md bg-ink-900 text-white text-[0.625rem] font-semibold px-2 py-1 opacity-0 translate-y-0.5 transition-all duration-150 shadow-md group-hover/cm:opacity-100 group-hover/cm:translate-y-0">
+                      Comments
+                    </span>
+                  </div>
                 );
               })()}
-              <button
-                onClick={() => setWidgetModalOpen(true)}
-                title="Add widgets"
-                aria-label="Add widgets"
-                className="w-7 h-7 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50/50 transition-colors cursor-pointer"
-              >
-                <LayoutGrid size={16} className="shrink-0" />
-              </button>
-              <div className="relative -ml-1" ref={menuRef}>
+              <div className="relative group/aw">
+                <button
+                  onClick={() => setWidgetModalOpen(true)}
+                  aria-label="Add widgets"
+                  className="w-8 h-8 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
+                >
+                  <LayoutGrid size={16} className="shrink-0" />
+                </button>
+                <span className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 z-30 whitespace-nowrap rounded-md bg-ink-900 text-white text-[0.625rem] font-semibold px-2 py-1 opacity-0 translate-y-0.5 transition-all duration-150 shadow-md group-hover/aw:opacity-100 group-hover/aw:translate-y-0">
+                  Add Widgets
+                </span>
+              </div>
+              <div className="relative group/dots -ml-1" ref={menuRef}>
                 <button
                   onClick={() => setMenuOpen(o => !o)}
-                  title="More options"
                   aria-label="More options"
-                  className="w-7 h-7 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50/50 transition-colors cursor-pointer"
+                  className="w-8 h-8 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
                 >
                   <MoreVertical size={16} />
                 </button>
+                {!menuOpen && (
+                  <span className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 z-30 whitespace-nowrap rounded-md bg-ink-900 text-white text-[0.625rem] font-semibold px-2 py-1 opacity-0 translate-y-0.5 transition-all duration-150 shadow-md group-hover/dots:opacity-100 group-hover/dots:translate-y-0">
+                    More options
+                  </span>
+                )}
                 <AnimatePresence>
                   {menuOpen && (
                     <motion.div
@@ -242,12 +251,11 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.96, y: -6 }}
                       transition={{ type: 'spring', stiffness: 520, damping: 32, mass: 0.6 }}
-                      className="absolute right-0 top-10 z-10 w-[208px] origin-top-right bg-white border border-canvas-border rounded-[12px] shadow-[0_12px_32px_-8px_rgba(15,8,30,0.18)] p-1.5"
+                      className="absolute right-0 top-10 z-10 w-[164px] origin-top-right bg-white border border-canvas-border rounded-[12px] shadow-[0_12px_32px_-8px_rgba(15,8,30,0.18)] p-1.5"
                     >
                       {[
-                        { icon: ExternalLink, label: 'Open Query', onClick: () => { setMenuOpen(false); onOpenQuery?.({ id: query.id, title: query.title }); } },
-                        { icon: LayoutGrid, label: 'Add Widgets', onClick: () => { setMenuOpen(false); setWidgetModalOpen(true); } },
-                        { icon: Download, label: 'Download', onClick: () => setMenuOpen(false) },
+                        { icon: SquareArrowOutUpRight, label: 'Open Query', tile: 'text-brand-600 bg-brand-50', onClick: () => { setMenuOpen(false); onOpenQuery?.({ id: query.id, title: query.title }); } },
+                        { icon: Download, label: 'Download', tile: 'text-evidence-700 bg-evidence-50', onClick: () => setMenuOpen(false) },
                       ].map((item, i) => (
                         <motion.button
                           key={item.label}
@@ -256,9 +264,11 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.05 + i * 0.04, duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                           onClick={item.onClick}
-                          className="group/mi flex items-center gap-2.5 w-full text-left px-2.5 h-9 rounded-[8px] text-[0.8125rem] font-medium text-ink-600 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-brand-50 focus-visible:text-brand-700"
+                          className="group/mi flex items-center gap-2.5 w-full text-left px-2 h-9 rounded-[8px] text-[0.8125rem] font-medium text-ink-700 hover:bg-brand-50 hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-brand-50"
                         >
-                          <item.icon size={15} className="shrink-0 text-ink-400 transition-colors group-hover/mi:text-brand-600" />
+                          <span className={`shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-[7px] ${item.tile}`}>
+                            <item.icon size={14} strokeWidth={2.25} />
+                          </span>
                           {item.label}
                         </motion.button>
                       ))}
@@ -271,9 +281,11 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.05 + 3 * 0.04, duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                             onClick={() => { setMenuOpen(false); setShowDeleteConfirm(true); }}
-                            className="group/mi flex items-center gap-2.5 w-full text-left px-2.5 h-9 rounded-[8px] text-[0.8125rem] font-medium text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-risk-50"
+                            className="group/mi flex items-center gap-2.5 w-full text-left px-2 h-9 rounded-[8px] text-[0.8125rem] font-medium text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-risk-50"
                           >
-                            <Trash2 size={15} className="shrink-0 text-risk-700/70 transition-colors group-hover/mi:text-risk-700" />
+                            <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-[7px] text-risk-700 bg-risk-50">
+                              <Trash2 size={14} strokeWidth={2.25} />
+                            </span>
                             Delete Query
                           </motion.button>
                         </>
@@ -339,7 +351,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 {g.title}
               </div>
               <button
-                onClick={() => setSelectedCharts(prev => { const n = new Set(prev); n.delete(g.id); return n; })}
+                onClick={() => setPendingWidgetRemove({ kind: 'chart', id: g.id, title: g.title })}
                 title="Remove graph"
                 aria-label="Remove graph"
                 className="w-6 h-6 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
@@ -347,7 +359,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 <X size={14} />
               </button>
             </div>
-            <div className="h-[200px]">
+            <div className="h-[340px]">
               <ConfigurableChart
                 type={g.type}
                 xAxis={g.xAxis}
@@ -377,7 +389,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 {t.title}
               </div>
               <button
-                onClick={() => setSelectedTables(prev => { const n = new Set(prev); n.delete(t.id); return n; })}
+                onClick={() => setPendingWidgetRemove({ kind: 'table', id: t.id, title: t.title })}
                 title="Remove table"
                 aria-label="Remove table"
                 className="w-6 h-6 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
@@ -461,6 +473,23 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
         }}
       />
 
+      <ConfirmDialog
+        open={pendingWidgetRemove !== null}
+        onClose={() => setPendingWidgetRemove(null)}
+        title={pendingWidgetRemove?.kind === 'table' ? 'Remove table?' : 'Remove graph?'}
+        description={pendingWidgetRemove ? `Remove “${pendingWidgetRemove.title}” from this query card?` : ''}
+        confirmLabel="Remove"
+        destructive
+        onConfirm={() => {
+          if (pendingWidgetRemove?.kind === 'chart') {
+            setSelectedCharts(prev => { const n = new Set(prev); n.delete(pendingWidgetRemove.id); return n; });
+          } else if (pendingWidgetRemove?.kind === 'table') {
+            setSelectedTables(prev => { const n = new Set(prev); n.delete(pendingWidgetRemove.id); return n; });
+          }
+          setPendingWidgetRemove(null);
+        }}
+      />
+
       {widgetModalOpen && createPortal(
         <QueryWidgetModal
           queryId={query.id}
@@ -468,14 +497,13 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
           kpis={queryKpis}
           charts={availableGraphs}
           tables={queryTables}
-          initialKpis={modalKpis}
-          initialCharts={modalCharts}
-          initialTables={modalTables}
+          initialKpis={selectedKpis}
+          initialCharts={selectedCharts}
+          initialTables={selectedTables}
           onConfirm={(sel) => {
             setSelectedKpis(sel.kpis);
             setSelectedCharts(sel.charts);
             setSelectedTables(sel.tables);
-            setWidgetCustomized(true);
             setWidgetModalOpen(false);
             addToast({ type: 'success', message: 'Query card updated.' });
           }}
@@ -1701,31 +1729,33 @@ function WorkflowResultCard({
 function QueryCardSkeleton() {
   return (
     <div className="relative bg-white border border-canvas-border overflow-hidden" aria-hidden="true">
-      <div className="px-9 py-7 animate-pulse">
+      <div className="px-9 py-7">
         {/* meta band */}
         <div className="flex items-center gap-2.5 mb-6">
-          <div className="h-4 w-10 rounded bg-canvas-border/70" />
+          <div className="skeleton-cool h-4 w-10 rounded" />
           <div className="h-3.5 w-px bg-canvas-border" />
-          <div className="h-4 w-28 rounded bg-canvas-border/60" />
-          <div className="h-4 w-16 rounded bg-canvas-border/60" />
-          <div className="ml-auto h-6 w-6 rounded-full bg-canvas-border/50" />
+          <div className="skeleton-cool h-4 w-28 rounded" />
+          <div className="skeleton-cool h-4 w-16 rounded" />
+          <div className="skeleton-cool ml-auto h-6 w-6 rounded-full" />
         </div>
         {/* title */}
-        <div className="h-6 w-2/3 rounded bg-canvas-border/70 mb-7" />
-        {/* KPI tile row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
-          {Array.from({ length: 4 }).map((_, k) => (
-            <div key={k} className="rounded-[14px] border border-canvas-border p-5">
-              <div className="h-7 w-16 rounded bg-canvas-border/70 mb-2.5" />
-              <div className="h-3 w-20 rounded bg-canvas-border/50" />
-            </div>
-          ))}
+        <div className="skeleton-cool h-6 w-2/3 rounded mb-7" />
+        {/* KPI bar — matches the live unified divided stat-bar */}
+        <div className="overflow-hidden rounded-[14px] border border-canvas-border mb-7">
+          <div className="-mt-px -ml-px grid grid-cols-2 md:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, k) => (
+              <div key={k} className="border-l border-t border-canvas-border px-5 py-6">
+                <div className="skeleton-cool h-2.5 w-20 rounded" style={{ '--sk-delay': `${k * 70}ms` } as React.CSSProperties} />
+                <div className="skeleton-cool h-8 w-16 rounded mt-4" style={{ '--sk-delay': `${k * 70 + 40}ms` } as React.CSSProperties} />
+              </div>
+            ))}
+          </div>
         </div>
         {/* body lines */}
         <div className="space-y-2.5 max-w-[80ch]">
-          <div className="h-3.5 w-full rounded bg-canvas-border/70" />
-          <div className="h-3.5 w-[94%] rounded bg-canvas-border/60" />
-          <div className="h-3.5 w-[80%] rounded bg-canvas-border/60" />
+          <div className="skeleton-cool h-3.5 w-full rounded" />
+          <div className="skeleton-cool h-3.5 w-[94%] rounded" />
+          <div className="skeleton-cool h-3.5 w-[80%] rounded" />
         </div>
       </div>
     </div>
@@ -2775,7 +2805,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     <button
                       onClick={() => setAtrModalOpen(true)}
                       title="Open the live Action Taken Report"
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-white rounded-[8px] shadow-sm hover:bg-brand-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-brand-700"
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-700 border border-white/25 rounded-[8px] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-brand-600 hover:border-white/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                     >
                       <FileText size={14} />
                       Live ATR
@@ -2922,7 +2952,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                               <button
                                 onClick={() => setAtrModalOpen(true)}
                                 title="Generate Action Taken Report"
-                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-white rounded-[8px] shadow-sm hover:bg-brand-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-brand-700"
+                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-700 border border-white/25 rounded-[8px] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-brand-600 hover:border-white/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                               >
                                 <FileText size={14} />
                                 Generate ATR

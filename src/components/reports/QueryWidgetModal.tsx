@@ -42,6 +42,9 @@ export default function QueryWidgetModal({
   initialTables,
   onConfirm,
   onClose,
+  heading = 'Choose What to Include',
+  eyebrowLabel = 'Query',
+  confirmLabel = 'Add to Card',
 }: {
   queryId: string;
   queryTitle: string;
@@ -53,6 +56,12 @@ export default function QueryWidgetModal({
   initialTables: Set<string>;
   onConfirm: (sel: { kpis: Set<string>; charts: Set<string>; tables: Set<string> }) => void;
   onClose: () => void;
+  /** Header title (default "Choose What to Include"). */
+  heading?: string;
+  /** Eyebrow before the id, e.g. "Query" or "Workflow". */
+  eyebrowLabel?: string;
+  /** Primary button label (default "Add to Card"). */
+  confirmLabel?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   useFocusTrap(containerRef, true, onClose);
@@ -108,10 +117,10 @@ export default function QueryWidgetModal({
           <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-canvas-border">
             <div className="min-w-0">
               <h3 id="query-widget-title" className="text-[1rem] font-bold text-ink-800 tracking-tight">
-                Choose What to Include
+                {heading}
               </h3>
               <p className="text-[0.75rem] text-ink-500 mt-1 truncate">
-                <span className="font-bold text-brand-600 uppercase tracking-wider text-[0.6875rem]">Query · {queryId}</span>
+                <span className="font-bold text-brand-600 uppercase tracking-wider text-[0.6875rem]">{eyebrowLabel} · {queryId}</span>
                 <span className="mx-1.5 text-ink-400">·</span>
                 {queryTitle}
               </p>
@@ -299,7 +308,7 @@ export default function QueryWidgetModal({
                 className={`inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${totalSelected === 0 ? 'bg-brand-600/40 text-white/85 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-500 text-white'}`}
               >
                 <FileText size={14} />
-                Add to Card
+                {confirmLabel}
               </button>
             </div>
           </div>

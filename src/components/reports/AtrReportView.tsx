@@ -70,9 +70,9 @@ export default function AtrReportView({ report, onBack, onShare }: {
     const totalExceptions = meta.totalExceptions ?? ex.totalExceptions;
     const openCount = ex.obsStatus.Open + ex.obsStatus.Overdue;
     const stats = [
-      { label: 'Total Observations', value: String(ex.totalObservations), accent: ATR_TONE_HEX.brand },
-      { label: 'Total Exceptions', value: String(totalExceptions), accent: ATR_TONE_HEX.ink },
-      { label: 'Total Management Action Plan', value: String(ex.totalActionPlans), accent: ATR_TONE_HEX.brand },
+      { label: 'Observations', value: String(ex.totalObservations), accent: ATR_TONE_HEX.brand },
+      { label: 'Exceptions', value: String(totalExceptions), accent: ATR_TONE_HEX.ink },
+      { label: 'Action Plans', value: String(ex.totalActionPlans), accent: ATR_TONE_HEX.brand },
       { label: 'Open', value: String(openCount), accent: ATR_TONE_HEX.high },
       { label: 'Closed', value: String(ex.obsStatus.Closed), accent: ATR_TONE_HEX.compliant },
       { label: 'In Progress', value: String(ex.obsStatus['In Progress']), accent: ATR_TONE_HEX.mitigated },

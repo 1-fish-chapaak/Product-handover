@@ -3,8 +3,6 @@
 // brand banner, metadata grid, numbered sections, KPI tile grid.
 
 import { motion } from 'motion/react';
-import { KpiCountUp } from '../shared/KpiTile';
-import { statTone } from './reportTones';
 import FloatingLines from '../shared/FloatingLines';
 
 export type ReportStat = {
@@ -16,57 +14,40 @@ export type ReportStat = {
   color: string;
 };
 
+// All KPIs sit on a single row — one column per metric.
 const KPI_COL_CLASS: Record<number, string> = {
   1: 'md:grid-cols-1', 2: 'md:grid-cols-2', 3: 'md:grid-cols-3',
   4: 'md:grid-cols-4', 5: 'md:grid-cols-5', 6: 'md:grid-cols-6',
 };
-export function ReportKpiTiles({ stats, animate = false }: { stats: ReportStat[]; animate?: boolean }) {
-  // Column count follows the number of tiles so any count (incl. 5) lays out
-  // evenly — 4 stays a clean four-up; 5 becomes a five-up rather than 4 + orphan.
+export function ReportKpiTiles({ stats }: { stats: ReportStat[]; animate?: boolean }) {
+  // Unified stat-bar (Stripe / Mercury pattern): one surface, the metrics split
+  // by hairline dividers — not a grid of separate boxes. Interior dividers only:
+  // each cell draws its top+left hairline, the grid is nudged -1px up/left and
+  // the rounded surface clips the outermost lines, so any column count (incl. 5
+  // or 6) and wrapping rows divide cleanly. Column count follows the tile count.
+  // Static — no entry animation or count-up; the value reads instantly.
   const cols = KPI_COL_CLASS[Math.min(stats.length, 6)] ?? 'md:grid-cols-4';
   return (
-    <div className={`grid grid-cols-2 ${cols} gap-3`}>
-      {stats.map((stat, si) => {
-        const tone = statTone(stat.color);
-        // Canonical card chrome: flat at rest, hover tints the border (Border-First,
-        // §4). The tone is carried by the corner wash + the value colour — not by a
-        // 3px side-stripe, which §5 reserves for alert cards only.
-        const cls = `relative overflow-hidden rounded-[14px] border border-canvas-border bg-canvas-elevated p-5 transition-colors duration-150 hover:border-brand-200`;
-        const inner = (
-          <>
-            {/* Tone wash in the top-right corner for a subtle lift. */}
-            <span
-              className="absolute inset-0 pointer-events-none print:hidden"
-              style={{ background: `radial-gradient(120% 120% at 100% 0%, ${tone.hex}14, transparent 58%)` }}
-              aria-hidden="true"
-            />
-            {/* Hairline tone keyline along the top edge — ties the number's colour
-                to the tile without painting the whole container. */}
-            <span
-              className="absolute inset-x-0 top-0 h-[2px] pointer-events-none print:hidden"
-              style={{ background: `linear-gradient(to right, ${tone.hex}, ${tone.hex}00 88%)` }}
-              aria-hidden="true"
-            />
-            <div className="relative">
-              <div className={`text-[2rem] font-bold tabular-nums tracking-[-0.02em] leading-none mb-2 ${tone.text}`}>
-                {animate ? <KpiCountUp value={stat.value} delay={120 + si * 80} /> : stat.value}
-              </div>
-              <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-500 leading-tight">{stat.label}</div>
-            </div>
-          </>
-        );
-        return animate ? (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 10, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 18, mass: 0.7, delay: 0.08 + si * 0.08 }}
-            className={cls}
-          >
-            {inner}
-          </motion.div>
-        ) : (
-          <div key={stat.label} className={cls}>{inner}</div>
+    // Matches the platform's KPI vocabulary (DESIGN.md §7.2.2 / 7.10.2): flat
+    // glass-card tiles, hairline borders, no shadow, no gradient. The semantic
+    // red→amber→green ramp is forbidden (No-RAG rule), so colour is a single
+    // uniform brand-purple icon chip (the SourceCard pattern) — never a heat
+    // strip. Label (11px uppercase ink-500) over a bold tabular ink-900 value.
+    <div className={`grid grid-cols-2 gap-3 ${cols}`}>
+      {stats.map((stat) => {
+        // The number and its underline tick take the metric's semantic tone
+        // (text-<tone>-700 from stat.color); the label stays muted ink.
+        const toneText = stat.color.match(/text-[\w-]+/)?.[0] ?? 'text-ink-900';
+        return (
+          <div key={stat.label} className="glass-card rounded-xl px-5 py-5">
+            <p className={`text-[2.5rem] font-bold leading-none tabular-nums tracking-[-0.035em] ${toneText}`}>
+              {stat.value}
+            </p>
+            <span className={`mt-3.5 mb-3 block h-[2px] w-8 rounded-full bg-current ${toneText}`} aria-hidden="true" />
+            <p className="text-[0.625rem] font-semibold uppercase tracking-[0.05em] text-ink-400 leading-snug whitespace-nowrap">
+              {stat.label}
+            </p>
+          </div>
         );
       })}
     </div>
