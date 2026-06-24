@@ -1,8 +1,11 @@
-import { useState } from 'react';
-import { Check, ArrowLeft, X, CloudUpload } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Check, ArrowLeft, X, CloudUpload, AlertTriangle } from 'lucide-react';
 import { AtrUploadProvider, useAtrUpload } from './AtrUploadContext';
 import { seedSession, seedEmptySession } from './mockExtraction';
 import { handoffToManageExceptions } from './handoff';
+import { saveAtrDraft } from '../atrDraft';
+import { toAtrReportData } from './toAtrReportData';
 import { useAuditLog } from '../../../context/AdminDataContext';
 import { FooterSlotContext } from './footerSlot';
 import type { WizardStage, UploadedFile, UploadMethod, ReportMeta } from './types';
@@ -13,8 +16,10 @@ import Step2bReportUpload from './screens/Step2bReportUpload';
 import Step3Processing from './screens/Step3Processing';
 import Step4ExtractionSummary from './screens/Step4ExtractionSummary';
 import Step5AnnexureMapping from './screens/Step5AnnexureMapping';
+import Step6Decision from './screens/Step6Decision';
 import Step7AtrPreview from './screens/Step7AtrPreview';
 import { useToast } from '../../shared/Toast';
+import { Button } from '../../shared/Button';
 
 // ─── Stepper ───
 const STEPS: { stage: WizardStage; label: string }[] = [
@@ -27,8 +32,8 @@ const STEPS: { stage: WizardStage; label: string }[] = [
 // 'template' (Screen 2A) shares the "Upload" step slot in the rail.
 // 'processing' has no rail pill of its own — it's surfaced as a corner toast
 // (see Step3Processing) and the rail sits on "Extraction" while it runs.
-// 'decision' is retired — managing exceptions now happens per-observation from
-// the generated ATR (Step 7), so it maps to the ATR Preview slot.
+// 'decision' (Screen 6 — generate-only vs manage-exceptions) sits in the final
+// "generate" phase alongside the preview, so it shares the ATR Preview slot.
 const STAGE_INDEX: Record<WizardStage, number> = {
   method: 0, template: 1, upload: 1, processing: 2, summary: 2, annexures: 3, decision: 4, preview: 4,
 };
@@ -88,6 +93,93 @@ function Stepper({ stage, method, onJump }: { stage: WizardStage; method: Upload
   );
 }
 
+// Close-confirm copy, keyed to how much work is on the line. Three tiers so the
+// dialog never overstates ("upload" when there's a full extracted ATR) or
+// understates ("progress" while a run is mid-flight and would be killed).
+type CloseConfirmKind = 'extracting' | 'extracted' | 'upload';
+const CLOSE_CONFIRM_COPY: Record<CloseConfirmKind, { title: string; body: string; confirm: string; cancel: string }> = {
+  extracting: {
+    title: 'Stop the extraction?',
+    body: 'Extraction is still running. Closing now cancels it — you’ll need to upload and re-extract to start over.',
+    confirm: 'Stop & close',
+    cancel: 'Keep extracting',
+  },
+  extracted: {
+    title: 'Discard your progress?',
+    body: 'Your extracted ATR — observations, annexure links and any edits on this screen — will be discarded.',
+    confirm: 'Discard & close',
+    cancel: 'Keep editing',
+  },
+  upload: {
+    title: 'Discard this upload?',
+    body: 'Your uploaded report will be discarded and you’ll return to the report list.',
+    confirm: 'Discard & close',
+    cancel: 'Keep editing',
+  },
+};
+
+// Close-confirm scoped to the wizard card — NOT a second full-screen modal.
+// The shared ConfirmationModal paints its own viewport-wide scrim, which stacks
+// on top of the host modal's backdrop (double-dim + a bright halo on the card's
+// rounded border). MUI ships `hideBackdrop` for exactly this nested case. Here we
+// instead render an `absolute inset-0` overlay that the host card's
+// `overflow-hidden` rounding clips, so there's a single clean scrim over the one
+// surface being discarded, corners and all.
+function CloseConfirm({ open, kind, onConfirm, onCancel }: {
+  open: boolean;
+  kind: CloseConfirmKind;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel(); } };
+    // Capture so we intercept Escape before the host modal's own close handler.
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [open, onCancel]);
+
+  const copy = CLOSE_CONFIRM_COPY[kind];
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="absolute inset-0 z-30 flex items-center justify-center p-6"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="atr-close-confirm-title"
+          aria-describedby="atr-close-confirm-body"
+        >
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]"
+            onClick={onCancel}
+          />
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.97 }}
+            transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+            className="relative w-full max-w-[400px] bg-canvas-elevated rounded-[20px] shadow-2xl ring-1 ring-ink-900/[0.06] p-7 text-center"
+          >
+            {/* Icon centered above the copy — reads as a deliberate alert, not a default box. */}
+            <div className="mx-auto w-12 h-12 rounded-full bg-risk-50 ring-[6px] ring-risk-50/40 text-risk-600 flex items-center justify-center">
+              <AlertTriangle size={22} strokeWidth={2.25} />
+            </div>
+            <h2 id="atr-close-confirm-title" className="mt-4 text-[18px] font-semibold text-ink-900 tracking-tight leading-tight">{copy.title}</h2>
+            <p id="atr-close-confirm-body" className="mt-2 text-[13px] text-ink-500 leading-relaxed">{copy.body}</p>
+
+            {/* Full-width, equal-weight actions — destructive on the right, safe option focused. */}
+            <div className="mt-6 grid grid-cols-2 gap-2.5">
+              <Button variant="outline" size="md" shape="md" className="w-full h-11" onClick={onCancel} autoFocus>{copy.cancel}</Button>
+              <Button variant="destructive" size="md" shape="md" className="w-full h-11" onClick={onConfirm}>{copy.confirm}</Button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function toUploadedFile(f: File): UploadedFile {
   return {
     id: `uf-${Date.now()}`,
@@ -109,6 +201,21 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr }: {
   const logEvent = useAuditLog();
   // The sticky footer DOM node — steps portal their primary CTA into it.
   const [footerEl, setFooterEl] = useState<HTMLElement | null>(null);
+
+  // Closing mid-flow discards in-progress work — guard every exit past the
+  // method picker. The confirm copy scales with how much is on the line: a live
+  // extraction (killed), an extracted ATR (observations + edits lost), or just an
+  // uploaded file. At the method step there's nothing to lose, so close straight.
+  const [confirmClose, setConfirmClose] = useState(false);
+  const closeConfirmKind: CloseConfirmKind =
+    state.stage === 'processing' ? 'extracting'
+    : state.session ? 'extracted'
+    : 'upload';
+  const hasWorkInProgress = state.stage !== 'method';
+  const requestClose = () => {
+    if (hasWorkInProgress) setConfirmClose(true);
+    else onClose?.();
+  };
 
   // Build the session (with the uploaded file's metadata) up front, then run the
   // processing animation. Seeding before processing keeps refresh-mid-processing
@@ -147,6 +254,22 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr }: {
     else addToast({ type: 'warning', message: 'Manage Exceptions is not available in this context.' });
   };
 
+  // Whole-report hand-off from the decision screen (Step 6): send every linked
+  // annexure to Manage Exceptions at once, then navigate. The wizard's persisted
+  // ATR-Preview stage means "Back" from case management resumes the user here.
+  const goToManageExceptionsAll = () => {
+    if (!state.session) return;
+    // Persist the wizard at the preview stage AND park the ATR draft, so the
+    // Manage-Exceptions view shows its "Return to ATR & generate" affordance and
+    // returning reopens this wizard exactly where it left off (see ReportsView).
+    goTo('preview');
+    saveAtrDraft(toAtrReportData(state.session));
+    const n = handoffToManageExceptions(state.session);
+    logEvent({ action: 'Export', description: `Handed off ${n} exception row${n === 1 ? '' : 's'} from the uploaded report to Manage Exceptions`, module: 'Reports', entity: 'Exception Case' });
+    if (onManageExceptions) onManageExceptions();
+    else addToast({ type: 'warning', message: 'Manage Exceptions is not available in this context.' });
+  };
+
   const pickMethod = (method: UploadMethod) => {
     setMethod(method);
     goTo(method === 'template' ? 'template' : 'upload');
@@ -154,7 +277,7 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr }: {
 
   return (
     <FooterSlotContext.Provider value={footerEl}>
-      <div className="flex flex-col h-full min-h-0">
+      <div className="relative flex flex-col h-full min-h-0">
         {/* Modal chrome — title + clickable step rail (mirrors the ATR-builder modal) */}
         <header className="shrink-0 px-6 pt-3.5 pb-3 border-b border-canvas-border print:hidden">
           <div className="flex items-center justify-between gap-4 mb-3">
@@ -166,14 +289,15 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr }: {
               </div>
             </div>
             {onClose && (
-              <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Close"><X size={16} /></button>
+              <button onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Close"><X size={16} /></button>
             )}
           </div>
           <Stepper stage={state.stage} method={state.method} onJump={goTo} />
         </header>
 
-        {/* Screen router */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+        {/* Screen router. The summary step runs full-bleed — it owns its own
+            padding so the rail + list span the modal edge-to-edge. */}
+        <div className={`flex-1 min-h-0 ${state.stage === 'summary' ? 'overflow-hidden' : 'overflow-y-auto px-6 py-5'}`}>
           {state.stage === 'method' && <Step1MethodSelect onPick={pickMethod} />}
           {state.stage === 'template' && (
             <Step2aTemplateDownload onUpload={file => beginExtraction(file, 'template')} />
@@ -183,12 +307,21 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr }: {
           )}
           {state.stage === 'processing' && <Step3Processing onDone={() => goTo('summary')} />}
           {state.stage === 'summary' && <Step4ExtractionSummary onContinue={() => goTo('annexures')} />}
-          {state.stage === 'annexures' && <Step5AnnexureMapping onContinue={() => goTo('preview')} />}
-          {(state.stage === 'preview' || state.stage === 'decision') && <Step7AtrPreview onManageExceptions={goToManageExceptions} onSaveAtr={onSaveAtr} />}
+          {state.stage === 'annexures' && <Step5AnnexureMapping onContinue={() => goTo('decision')} />}
+          {state.stage === 'decision' && <Step6Decision onGenerate={() => goTo('preview')} onManageExceptions={goToManageExceptionsAll} />}
+          {state.stage === 'preview' && <Step7AtrPreview onManageExceptions={goToManageExceptions} onSaveAtr={onSaveAtr} />}
         </div>
 
         {/* Sticky footer — steps portal their primary action here. Hidden when empty. */}
         <footer ref={setFooterEl} className="shrink-0 empty:hidden print:hidden" />
+
+        {/* Close guard — a single scrim scoped to this card (no second backdrop). */}
+        <CloseConfirm
+          open={confirmClose}
+          kind={closeConfirmKind}
+          onConfirm={() => { setConfirmClose(false); onClose?.(); }}
+          onCancel={() => setConfirmClose(false)}
+        />
       </div>
     </FooterSlotContext.Provider>
   );

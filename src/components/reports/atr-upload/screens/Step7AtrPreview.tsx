@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Pencil, Download, Save, SlidersHorizontal,
+  Pencil, Download, Save, SlidersHorizontal, ArrowLeft,
   ChevronUp, ChevronDown, Eye, EyeOff, ListTodo, RotateCcw,
 } from 'lucide-react';
 import Modal from '../../../shared/Modal';
@@ -12,6 +12,7 @@ import AtrDocument from '../../AtrDocument';
 import { ATR_SECTION_ORDER, ATR_SECTION_LABEL, type AtrSectionKey } from '../../atrSections';
 import { toAtrReportData } from '../toAtrReportData';
 import { useAtrUpload } from '../AtrUploadContext';
+import { WizardFooter } from '../footerSlot';
 import ObservationExceptionsModal from '../components/ObservationExceptionsModal';
 import type { AtrReportData } from '../../atrTypes';
 import type { AtrVersion } from '../types';
@@ -30,7 +31,7 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
   /** Persist the generated ATR into My Reports → ATR tab (upsert by session id). */
   onSaveAtr?: (sessionId: string, label: string | undefined, data: AtrReportData) => void;
 }) {
-  const { state, updateSession, addVersion } = useAtrUpload();
+  const { state, updateSession, addVersion, goTo } = useAtrUpload();
   const { addToast } = useToast();
   const { currentUser } = useCurrentUser();
   const session = state.session;
@@ -107,26 +108,27 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
 
   return (
     <div>
-      {/* Floating toolbar — sticks to the top of the modal's scroll area. */}
-      <div className="sticky top-0 z-20 -mx-1 mb-4 print:hidden">
-        <div className="flex items-center justify-between gap-3 rounded-[12px] border border-canvas-border bg-canvas-elevated/95 backdrop-blur px-4 py-2.5 shadow-sm flex-wrap">
-          <div className="flex items-center gap-3">
-            <span className="text-[13px] font-semibold text-ink-800">ATR Preview</span>
+      {/* Action bar — pinned to the modal's sticky footer (bottom), mirroring the
+          rest of the wizard. Back on the left; the report actions on the right. */}
+      <WizardFooter>
+        <div className="flex items-center justify-between gap-3 flex-wrap border-t border-canvas-border bg-canvas-elevated px-6 py-3 print:hidden">
+          <div className="flex items-center gap-2.5">
+            <Button variant="ghost" size="md" leftIcon={<ArrowLeft size={15} />} onClick={() => goTo('decision')}>Back</Button>
             {state.versions[0] && <span className="text-[11px] font-semibold tabular-nums text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">{state.versions[0].versionNumber}</span>}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <Button variant={isEditing ? 'secondary' : 'outline'} size="sm" pressed={isEditing} leftIcon={<Pencil size={14} />} onClick={() => setEditMode(e => !e)} title="Toggle inline editing">
-              {isEditing ? 'Editing' : 'Edit'}
+            <Button variant={isEditing ? 'secondary' : 'outline'} size="md" pressed={isEditing} leftIcon={<Pencil size={15} />} onClick={() => setEditMode(e => !e)} title="Toggle inline editing">
+              {isEditing ? 'Editing' : 'Edit items'}
             </Button>
 
             <div className="relative">
-              <Button variant="outline" size="sm" leftIcon={<SlidersHorizontal size={14} />} onClick={() => setSectionsOpen(o => !o)}>Sections</Button>
+              <Button variant="outline" size="md" leftIcon={<SlidersHorizontal size={15} />} onClick={() => setSectionsOpen(o => !o)}>Sections</Button>
               <AnimatePresence>
                 {sectionsOpen && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setSectionsOpen(false)} />
-                    <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="absolute right-0 mt-1.5 w-[306px] z-20 rounded-[12px] border border-canvas-border bg-canvas-elevated shadow-xl overflow-hidden">
+                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className="absolute right-0 bottom-full mb-2 w-[306px] z-20 rounded-[12px] border border-canvas-border bg-canvas-elevated shadow-xl overflow-hidden">
                       <div className="flex items-center justify-between px-3 py-2.5 border-b border-canvas-border">
                         <span className="text-[12px] font-semibold text-ink-800">Reorder &amp; skip sections</span>
                         <span className="text-[11px] tabular-nums text-ink-400">{visibleCount} of {order.length} shown</span>
@@ -158,12 +160,12 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
               </AnimatePresence>
             </div>
 
-            <Button variant="outline" size="sm" leftIcon={<Download size={14} />} onClick={handleDownload}>Download</Button>
+            <Button variant="outline" size="md" leftIcon={<Download size={15} />} onClick={handleDownload}>Download</Button>
             <span className="w-px h-5 bg-canvas-border mx-0.5 hidden sm:block" aria-hidden="true" />
-            <Button variant="primary" size="sm" leftIcon={<Save size={14} />} onClick={() => setSaveOpen(true)}>Save Version</Button>
+            <Button variant="primary" size="md" leftIcon={<Save size={15} />} onClick={() => setSaveOpen(true)}>Save Version</Button>
           </div>
         </div>
-      </div>
+      </WizardFooter>
 
       {/* The document — reuses the existing renderer for exact brand fidelity */}
       <AtrDocument

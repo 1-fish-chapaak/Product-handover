@@ -57,15 +57,15 @@ export default function ObservationExtractCard({
     <div className="bg-canvas-elevated">
       {/* Selection is shown only by the checkbox — no row tint or accent bar. */}
       {/* Header row */}
-      <div className="flex items-start gap-3 px-5 py-3">
+      <div className="flex items-start gap-3.5 px-5 py-3.5">
         <div className="pt-0.5"><Checkbox checked={obs.selected} onChange={onToggleSelect} ariaLabel={`Select observation ${obs.number}`} /></div>
 
         <button onClick={() => setOpen(o => !o)} className="flex-1 min-w-0 text-left cursor-pointer">
           <div className="flex items-baseline gap-2">
-            <span className="text-[11px] font-semibold tabular-nums text-ink-400 shrink-0">#{obs.number}</span>
-            <span className="text-[13.5px] font-semibold text-ink-900 truncate">{title}</span>
+            <span className="text-[11px] font-semibold tabular-nums text-ink-300 shrink-0">#{obs.number}</span>
+            <span className="text-[14px] font-semibold text-ink-900 truncate">{title}</span>
           </div>
-          <div className="mt-1 flex items-center gap-x-2 gap-y-1 flex-wrap text-[11.5px] text-ink-500">
+          <div className="mt-1.5 flex items-center gap-x-2 gap-y-1 flex-wrap text-[11.5px] text-ink-500">
             {metaParts.map((node, i) => (
               <span key={i} className="inline-flex items-center gap-2">
                 {i > 0 && <span className="text-ink-300" aria-hidden="true">·</span>}
@@ -75,10 +75,10 @@ export default function ObservationExtractCard({
           </div>
         </button>
 
-        <div className="flex items-center gap-3 shrink-0 pt-0.5">
-          <span className="inline-flex items-center gap-1 text-[11.5px] text-ink-500" title="Action plans"><ClipboardList size={13} aria-hidden="true" />{obs.actionPlans.length}</span>
-          <span className="inline-flex items-center gap-1 text-[11.5px] text-ink-500" title="Linked annexure rows"><Paperclip size={13} aria-hidden="true" />{linkedRows}{linkedAnnexures > 1 ? ` · ${linkedAnnexures} files` : ''}</span>
-          <button onClick={() => setOpen(o => !o)} aria-label={open ? 'Collapse' : 'Expand'} className="text-ink-400 hover:text-ink-700 cursor-pointer">
+        <div className="flex items-center gap-3.5 shrink-0 pt-1">
+          <span className="inline-flex items-center gap-1 text-[11.5px] tabular-nums text-ink-400" title={`${obs.actionPlans.length} action plan${obs.actionPlans.length === 1 ? '' : 's'}`}><ClipboardList size={13} aria-hidden="true" />{obs.actionPlans.length}</span>
+          <span className="inline-flex items-center gap-1 text-[11.5px] tabular-nums text-ink-400" title={`${linkedRows} linked annexure row${linkedRows === 1 ? '' : 's'}${linkedAnnexures > 1 ? ` across ${linkedAnnexures} files` : ''}`}><Paperclip size={13} aria-hidden="true" />{linkedRows}{linkedAnnexures > 1 ? ` · ${linkedAnnexures}` : ''}</span>
+          <button onClick={() => setOpen(o => !o)} aria-label={open ? 'Collapse' : 'Expand'} className="text-ink-300 hover:text-ink-700 cursor-pointer">
             <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }} className="inline-block"><ChevronDown size={16} aria-hidden="true" /></motion.span>
           </button>
         </div>
@@ -98,9 +98,9 @@ export default function ObservationExtractCard({
                   <div key={field.key} className={isWide ? 'sm:col-span-2 lg:col-span-3' : ''}>
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">{field.label}</span>
-                      {mf?.state === 'missing' && <span className="text-[9.5px] font-bold uppercase text-risk-700 bg-risk-50 px-1.5 py-0.5 rounded">Missing</span>}
-                      {mf?.state === 'filled-by-user' && <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold uppercase text-evidence bg-evidence-50 px-1.5 py-0.5 rounded"><UserCheck size={10} aria-hidden="true" />Filled by user</span>}
-                      {mf?.state === 'skipped' && <span className="text-[9.5px] font-semibold uppercase text-ink-500 bg-canvas-border/60 px-1.5 py-0.5 rounded">Skipped · N/A</span>}
+                      {mf?.state === 'missing' && <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold uppercase tracking-wide text-risk-600 bg-risk-50 px-1.5 py-0.5 rounded-[5px]"><span className="w-1 h-1 rounded-full bg-risk-500" aria-hidden="true" />Missing</span>}
+                      {mf?.state === 'filled-by-user' && <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold uppercase tracking-wide text-evidence bg-evidence-50 px-1.5 py-0.5 rounded-[5px]"><UserCheck size={10} aria-hidden="true" />Filled by you</span>}
+                      {mf?.state === 'skipped' && <span className="text-[9.5px] font-semibold uppercase tracking-wide text-ink-500 bg-canvas-border/60 px-1.5 py-0.5 rounded-[5px]">Skipped · N/A</span>}
                     </div>
 
                     {isEditing ? (

@@ -92,120 +92,149 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
   // Left accent strip — lets the eye land on the rows that still need a decision.
   const ACCENT: Record<LinkState, string> = { confirmed: '', review: 'bg-mitigated-500', unlinked: 'bg-risk-400' };
 
+  // Shared grid template so the column header and every row line up.
+  const COLS = 'grid grid-cols-[minmax(0,1.6fr)_minmax(0,2fr)_64px_150px] gap-4 items-center';
+
   return (
-    <div className="max-w-[760px] mx-auto">
-      {/* Heading — plain title line, no card chrome */}
-      <div className="mb-4 flex items-baseline justify-between gap-4">
+    <div className="w-full">
+      {/* Heading */}
+      <div className="mb-1 flex items-baseline justify-between gap-4">
         <h2 className="text-[1.0625rem] font-semibold text-ink-900 leading-tight">Confirm annexure mapping</h2>
-        <span className="shrink-0 text-[12px] text-ink-400 tabular-nums">{confirmedCount} of {shownObs.length} confirmed</span>
+        <span className="shrink-0 text-[12px] font-medium text-ink-500 tabular-nums">{confirmedCount} of {shownObs.length} confirmed</span>
       </div>
-      <p className="text-[12.5px] text-ink-500 leading-snug mb-3">
-        We linked each annexure to an observation. Confirm the suggestions, or adjust any that need attention — unlinked annexures won't create exception cases.
+      <p className="text-[12.5px] text-ink-500 leading-snug mb-4">
+        Each observation is linked to its annexure. Confirm the suggestions, or adjust any that need a second look.
       </p>
 
-      {/* Needs-review alert — the one blocker that needs action, kept loud. */}
-      {needsReview > 0 && (
-        <div className="mb-3 flex items-center gap-2.5 rounded-[10px] border border-mitigated/30 bg-mitigated-50 px-4 py-2.5 text-[12.5px] text-mitigated-700">
-          <AlertCircle size={15} className="shrink-0" aria-hidden="true" />
-          <span className="flex-1">
-            <span className="font-semibold">{needsReview} mapping{needsReview === 1 ? '' : 's'} need{needsReview === 1 ? 's' : ''} your review.</span> Confirm the suggested link or adjust it before continuing.
-          </span>
-          <button onClick={confirmAll} className="shrink-0 inline-flex items-center gap-1 h-7 px-2.5 text-[11.5px] font-semibold text-mitigated-700 border border-mitigated/40 hover:bg-mitigated/10 rounded-[6px] cursor-pointer transition-colors">
-            <CheckCheck size={13} aria-hidden="true" /> Confirm all
-          </button>
-        </div>
-      )}
-
-      {/* Toolbar — sticky so the live count + Upload stay in reach. */}
-      <div className="sticky top-0 z-10 mb-3 flex items-center justify-between gap-4 rounded-[10px] border border-canvas-border bg-canvas-elevated/90 backdrop-blur px-4 py-2.5">
-        <span className="text-[12.5px] text-ink-700">
-          <span className="font-bold tabular-nums text-ink-900">{confirmedCount}</span> of {shownObs.length} confirmed
-          {orphanAnnex.length > 0 && <span className="text-ink-400"> · {orphanAnnex.length} unlinked annexure{orphanAnnex.length === 1 ? '' : 's'}</span>}
-        </span>
-        <Button variant="ghost" size="sm" leftIcon={<Upload size={14} />} onClick={() => setUploadOpen(true)}>Upload annexure</Button>
-      </div>
-
-      {/* Mapping list — one bordered card, hairline-divided rows */}
-      <div className="rounded-[12px] border border-canvas-border overflow-visible bg-canvas-elevated divide-y divide-canvas-border">
-        {shownObs.length === 0 && (
-          <div className="px-4 py-10 text-center">
-            <Unlink size={20} className="mx-auto text-ink-300 mb-2" aria-hidden="true" />
-            <div className="text-[13px] font-medium text-ink-700">No observations to link</div>
-            <div className="text-[12px] text-ink-500 mt-0.5">Select observations on the previous step to map annexures here.</div>
+      {/* Mapping table — toolbar strip + column header + hairline-divided rows,
+          all in one card so it reads as a single component. */}
+      <div className="rounded-[12px] border border-canvas-border overflow-visible bg-canvas-elevated">
+        {/* Toolbar — a status breakdown (what still needs attention) on the left,
+            table-level actions as real buttons on the right. */}
+        <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-b border-canvas-border">
+          <div className="flex items-center gap-x-4 gap-y-1 flex-wrap text-[12px] text-ink-600">
+            {needsReview > 0 ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-mitigated-500" aria-hidden="true" />
+                <span className="font-medium text-ink-800">{needsReview}</span> need{needsReview === 1 ? 's' : ''} review
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-compliant-500" aria-hidden="true" />
+                All mappings confirmed
+              </span>
+            )}
+            {orphanAnnex.length > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-ink-300" aria-hidden="true" />
+                <span className="font-medium text-ink-800">{orphanAnnex.length}</span> unlinked annexure{orphanAnnex.length === 1 ? '' : 's'}
+              </span>
+            )}
           </div>
-        )}
-        {shownObs.map(o => {
-          const obsTitle = o.title?.trim() || `Observation #${o.number}`;
-          const linked = annexures.filter(a => a.observationId === o.id);
-          const rowCount = linked.reduce((n, a) => n + a.rows.length, 0);
-          const linkState = linkStateOf(linked);
-          const meta = STATE_META[linkState];
-          // Orphan annexures available to link onto this observation.
-          const available = orphanAnnex;
-          return (
-            <div key={o.id} className="relative flex items-center gap-4 px-4 py-3 hover:bg-canvas/50 transition-colors">
-              {ACCENT[linkState] && <span className={`absolute inset-y-0 left-0 w-[3px] ${ACCENT[linkState]}`} aria-hidden="true" />}
+          <div className="flex items-center gap-2 shrink-0">
+            {needsReview > 0 && (
+              <Button variant="outline" size="sm" leftIcon={<CheckCheck size={14} />} onClick={confirmAll}>Confirm all</Button>
+            )}
+            <Button variant="outline" size="sm" leftIcon={<Upload size={14} />} onClick={() => setUploadOpen(true)}>Upload annexure</Button>
+          </div>
+        </div>
 
-              {/* Observation */}
-              <div className="min-w-0 w-[36%] shrink-0">
-                <div className="text-[13px] font-semibold text-ink-900 truncate" title={obsTitle}>{obsTitle}</div>
-                {o.process && <div className="text-[11.5px] text-ink-500 truncate">{o.process}</div>}
-              </div>
+        {/* Column header */}
+        <div className={`${COLS} px-4 py-2 border-b border-canvas-border bg-canvas/60 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400`}>
+          <span>Observation</span>
+          <span>Annexure</span>
+          <span className="text-right">Rows</span>
+          <span className="text-right">Status</span>
+        </div>
 
-              {/* Linked annexures */}
-              <div className="min-w-0 flex-1 relative">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {linked.map(a => (
-                    <span key={a.id} className="inline-flex items-center gap-1 h-6 pl-1.5 pr-0.5 rounded-[6px] bg-canvas border border-canvas-border text-[11.5px] text-ink-700 max-w-full">
-                      <FileSpreadsheet size={11} className="text-compliant-700 shrink-0" aria-hidden="true" />
-                      <button onClick={() => setViewId(a.id)} title={`View ${a.filename}`} className="truncate max-w-[170px] hover:text-brand-700 hover:underline underline-offset-2 cursor-pointer">{a.filename}</button>
-                      <button onClick={() => unlink(a.id)} className="w-4 h-4 rounded-full hover:bg-risk-50 text-ink-400 hover:text-risk-700 flex items-center justify-center cursor-pointer shrink-0" aria-label={`Unlink ${a.filename}`}><X size={10} aria-hidden="true" /></button>
+        <div className="divide-y divide-canvas-border">
+          {shownObs.length === 0 && (
+            <div className="px-4 py-10 text-center">
+              <Unlink size={20} className="mx-auto text-ink-300 mb-2" aria-hidden="true" />
+              <div className="text-[13px] font-medium text-ink-700">No observations to link</div>
+              <div className="text-[12px] text-ink-500 mt-0.5">Select observations on the previous step to map annexures here.</div>
+            </div>
+          )}
+          {shownObs.map(o => {
+            const obsTitle = o.title?.trim() || `Observation #${o.number}`;
+            const linked = annexures.filter(a => a.observationId === o.id);
+            const rowCount = linked.reduce((n, a) => n + a.rows.length, 0);
+            const linkState = linkStateOf(linked);
+            const meta = STATE_META[linkState];
+            // Orphan annexures available to link onto this observation.
+            const available = orphanAnnex;
+            return (
+              <div key={o.id} className={`relative ${COLS} px-4 py-3 hover:bg-canvas/50 transition-colors`}>
+                {ACCENT[linkState] && <span className={`absolute inset-y-0 left-0 w-[3px] ${ACCENT[linkState]}`} aria-hidden="true" />}
+
+                {/* Observation */}
+                <div className="min-w-0">
+                  <div className="text-[13px] font-semibold text-ink-900 truncate" title={obsTitle}>{obsTitle}</div>
+                  {o.process && <div className="text-[11.5px] text-ink-500 truncate">{o.process}</div>}
+                </div>
+
+                {/* Linked annexures */}
+                <div className="min-w-0 relative">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {linked.map(a => (
+                      <span key={a.id} className="inline-flex items-center gap-1 h-6 pl-1.5 pr-0.5 rounded-[6px] bg-canvas border border-canvas-border text-[11.5px] text-ink-700 max-w-full">
+                        <FileSpreadsheet size={11} className="text-compliant-700 shrink-0" aria-hidden="true" />
+                        <button onClick={() => setViewId(a.id)} title={`View ${a.filename}`} className="truncate max-w-[200px] hover:text-brand-700 hover:underline underline-offset-2 cursor-pointer">{a.filename}</button>
+                        <button onClick={() => unlink(a.id)} className="w-4 h-4 rounded-full hover:bg-risk-50 text-ink-400 hover:text-risk-700 flex items-center justify-center cursor-pointer shrink-0" aria-label={`Unlink ${a.filename}`}><X size={10} aria-hidden="true" /></button>
+                      </span>
+                    ))}
+                    {available.length > 0 && (
+                      <button onClick={() => setPicker(picker === o.id ? null : o.id)} className="inline-flex items-center gap-1 h-6 px-1.5 rounded-[6px] text-[11.5px] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors">
+                        <Plus size={12} aria-hidden="true" /> Link
+                      </button>
+                    )}
+                    {linked.length === 0 && available.length === 0 && <span className="text-[11.5px] text-ink-400">No annexure linked</span>}
+                  </div>
+                  {picker === o.id && (
+                    <>
+                      <div className="fixed inset-0 z-[65]" onClick={() => setPicker(null)} />
+                      <div className="absolute left-0 top-full mt-1 z-[70] w-72 max-h-56 overflow-y-auto bg-canvas-elevated border border-canvas-border shadow-xl rounded-[10px] p-1">
+                        {available.length === 0 ? (
+                          <div className="px-3 py-3 text-[11px] text-ink-500 text-center">No unlinked annexures. Upload one to link it here.</div>
+                        ) : available.map(a => (
+                          <button key={a.id} onClick={() => { link(a.id, o.id); setPicker(null); }} title={a.filename} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[7px] hover:bg-brand-50 text-left cursor-pointer">
+                            <FileSpreadsheet size={13} className="text-compliant-700 shrink-0" aria-hidden="true" />
+                            <span className="min-w-0 flex-1"><span className="block text-[11.5px] font-medium text-ink-800 truncate">{a.filename}</span><span className="block text-[10px] text-ink-400">{a.rows.length} exception row{a.rows.length === 1 ? '' : 's'}</span></span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Rows */}
+                <div className="text-right text-[11.5px] text-ink-500 tabular-nums">{rowCount || '—'}</div>
+
+                {/* Status / action — surfaces only the decision that matters per row */}
+                <div className="flex items-center justify-end">
+                  {linkState === 'confirmed' && (
+                    <span title={meta.hint} className="inline-flex items-center gap-1 text-[11.5px] font-medium text-compliant-700">
+                      <CheckCircle2 size={13} aria-hidden="true" /> Confirmed
                     </span>
-                  ))}
-                  {available.length > 0 && (
-                    <button onClick={() => setPicker(picker === o.id ? null : o.id)} className="inline-flex items-center gap-1 h-6 px-1.5 rounded-[6px] text-[11.5px] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors">
-                      <Plus size={12} aria-hidden="true" /> Link
+                  )}
+                  {linkState === 'review' && (
+                    <button onClick={() => confirmObs(o.id)} title={meta.hint} className="inline-flex items-center gap-1 h-7 px-3 rounded-[7px] border border-mitigated/40 bg-mitigated-50 text-[11.5px] font-semibold text-mitigated-700 hover:bg-mitigated-100 transition-colors cursor-pointer">
+                      <Check size={13} aria-hidden="true" /> Confirm
                     </button>
                   )}
-                  {linked.length === 0 && available.length === 0 && <span className="text-[11.5px] text-ink-400">No annexure linked</span>}
+                  {linkState === 'unlinked' && (
+                    <span title={meta.hint} className="text-[11.5px] text-ink-400">Not linked</span>
+                  )}
                 </div>
-                {picker === o.id && (
-                  <>
-                    <div className="fixed inset-0 z-[65]" onClick={() => setPicker(null)} />
-                    <div className="absolute left-0 top-full mt-1 z-[70] w-72 max-h-56 overflow-y-auto bg-canvas-elevated border border-canvas-border shadow-xl rounded-[10px] p-1">
-                      {available.length === 0 ? (
-                        <div className="px-3 py-3 text-[11px] text-ink-500 text-center">No unlinked annexures. Upload one to link it here.</div>
-                      ) : available.map(a => (
-                        <button key={a.id} onClick={() => { link(a.id, o.id); setPicker(null); }} title={a.filename} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[7px] hover:bg-brand-50 text-left cursor-pointer">
-                          <FileSpreadsheet size={13} className="text-compliant-700 shrink-0" aria-hidden="true" />
-                          <span className="min-w-0 flex-1"><span className="block text-[11.5px] font-medium text-ink-800 truncate">{a.filename}</span><span className="block text-[10px] text-ink-400">{a.rows.length} exception row{a.rows.length === 1 ? '' : 's'}</span></span>
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
               </div>
-
-              {/* Rows */}
-              <div className="shrink-0 w-12 text-right text-[11.5px] text-ink-500 tabular-nums">{rowCount ? `${rowCount} row${rowCount === 1 ? '' : 's'}` : '—'}</div>
-
-              {/* Status + confirm */}
-              <div className="shrink-0 w-[132px] flex flex-col items-end gap-1.5">
-                <span title={meta.hint} className={`inline-flex items-center gap-1 h-5 px-2 rounded-full border text-[11px] font-semibold cursor-help ${meta.cls}`}>
-                  <meta.icon size={11} aria-hidden="true" /> {meta.label}
-                </span>
-                {linkState === 'review' && (
-                  <button onClick={() => confirmObs(o.id)} title="Mark this mapping as confirmed" className="inline-flex items-center gap-1 h-6 px-2 rounded-[6px] border border-brand-200 bg-brand-50 text-[11px] font-semibold text-brand-700 hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer"><Check size={12} aria-hidden="true" /> Confirm</button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {orphanAnnex.length > 0 && (
-        <p className="mt-2 text-[11.5px] text-ink-500">
-          <span className="font-medium text-ink-600">{orphanAnnex.length} unlinked annexure{orphanAnnex.length === 1 ? '' : 's'}</span> not yet mapped — use “Link” on an observation to attach {orphanAnnex.length === 1 ? 'it' : 'them'}.
+        <p className="mt-2.5 text-[11.5px] text-ink-500">
+          <span className="font-medium text-ink-600">{orphanAnnex.length} unlinked annexure{orphanAnnex.length === 1 ? '' : 's'}</span> — use <span className="font-medium text-brand-700">Link</span> on an observation to attach {orphanAnnex.length === 1 ? 'it' : 'them'}.
         </p>
       )}
 

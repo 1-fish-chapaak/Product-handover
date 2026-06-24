@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import {
   FileSpreadsheet, FileText, Download, Check, Upload, Sparkles, ArrowDown,
-  Type, AlignLeft, ShieldAlert, Lightbulb, Wrench, Paperclip, UserCheck, Tags, Gauge, CalendarClock,
+  Heading, AlignLeft, ShieldAlert, Lightbulb, Wrench, Paperclip, UserCheck, Tag, Gauge, CalendarClock,
 } from 'lucide-react';
 import { Button } from '../../../shared/Button';
 import UploadDataModal from '../../../concierge-workflow-builder/UploadDataModal';
@@ -67,21 +67,21 @@ const FIELD_BY_KEY = Object.fromEntries(REQUIRED_FIELDS.map(f => [f.key, f.label
 // A meaningful icon per column so the list reads as "what to write" rather than
 // a row of identical ticks.
 const FIELD_ICON: Record<string, typeof Check> = {
-  title: Type,
+  title: Heading,
   description: AlignLeft,
   riskSummary: ShieldAlert,
   recommendation: Lightbulb,
   actionTaken: Wrench,
   evidence: Paperclip,
   verification: UserCheck,
-  classification: Tags,
+  classification: Tag,
   risk: Gauge,
   dueDate: CalendarClock,
 };
 const GUIDE_GROUPS: { label: string; keys: string[] }[] = [
-  { label: 'The finding', keys: ['title', 'description', 'riskSummary'] },
-  { label: 'The response', keys: ['recommendation', 'actionTaken', 'evidence', 'verification'] },
-  { label: 'Classification', keys: ['classification', 'risk', 'dueDate'] },
+  { label: 'What you found', keys: ['title', 'description', 'riskSummary'] },
+  { label: 'How it was handled', keys: ['recommendation', 'actionTaken', 'evidence', 'verification'] },
+  { label: 'Rating & timeline', keys: ['classification', 'risk', 'dueDate'] },
 ];
 
 /** Always-visible "how to fill the template" guidance — required columns grouped
@@ -94,11 +94,11 @@ function TemplateGuide() {
       transition={{ duration: 0.45, ease: EASE }}
       className="flex flex-col h-full min-h-0 overflow-hidden rounded-[14px] border border-canvas-border bg-canvas-elevated p-5"
     >
-      <h3 className="text-[13.5px] font-semibold text-ink-900">How to fill the template</h3>
-      <p className="text-[11.5px] text-ink-500 leading-snug">One observation per row (Excel) or per table (Word).</p>
+      <h3 className="text-[13.5px] font-semibold text-ink-900">How to fill it in</h3>
+      <p className="text-[11.5px] text-ink-500 leading-snug">One observation per row in Excel, or one table per observation in Word.</p>
 
       <div className="flex items-center justify-between mt-5 mb-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Required columns</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Columns to complete</p>
         <span className="text-[10.5px] font-semibold text-ink-400 tabular-nums">{REQUIRED_FIELDS.length}</span>
       </div>
 

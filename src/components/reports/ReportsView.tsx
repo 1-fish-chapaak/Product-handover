@@ -18,6 +18,7 @@ import UploadTemplateModal from './UploadTemplateModal';
 import ConfirmDialog from './ConfirmDialog';
 import AtrReportView from './AtrReportView';
 import AtrUploadTab from './atr-upload/AtrUploadTab';
+import { consumeAtrResume, clearAtrDraft } from './atrDraft';
 import type { AtrMeta, AtrObservation, AtrInsight, AtrReportData } from './atrTypes';
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS, GENERATED_REPORTS_KEY } from '../../data/mockData';
 import { ATR_LIBRARY, EVIDENCE_LIBRARY, type AtrLibraryReport } from '../../data/atrLibrary';
@@ -217,6 +218,20 @@ export default function ReportsView({
   // cross-cutting Bulk Audit engagement style.
   const [allTypeFilter, setAllTypeFilter] = useState<string[]>([]);
   const [atrUploadOpen, setAtrUploadOpen] = useState(false);
+  // Returning from "Manage exceptions first": the Manage-Exceptions view sets the
+  // resume flag via its "Return to ATR & generate" button. On landing back here we
+  // reopen the upload wizard, which resumes its persisted ATR-Preview stage, and
+  // clear the parked draft so the banner doesn't linger on a later visit.
+  useEffect(() => {
+    if (!consumeAtrResume()) return;
+    const hasSession = (() => {
+      try {
+        const raw = localStorage.getItem('irame.atr-upload.v1');
+        return raw ? !!JSON.parse(raw)?.session : false;
+      } catch { return false; }
+    })();
+    if (hasSession) { setAtrUploadOpen(true); clearAtrDraft(); }
+  }, []);
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [gridSearch, setGridSearch] = useState('');
   const [sharedGridSearch, setSharedGridSearch] = useState('');
@@ -1635,16 +1650,18 @@ export default function ReportsView({
       <AnimatePresence>
         {atrUploadOpen && (
           <>
+            {/* Backdrop is inert — the wizard owns its own close so an outside
+                click can't discard in-progress work without confirmation. */}
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-              className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50" onClick={() => setAtrUploadOpen(false)} />
+              className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50" />
             <motion.div
               initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
               transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
               className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[680px] max-h-[92vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col overflow-hidden"
               role="dialog" aria-modal="true" aria-label="Generate ATR by Upload"
             >
-              <AtrUploadTab onClose={() => setAtrUploadOpen(false)} onManageExceptions={onManageExceptions} onSaveAtr={saveUploadedAtr} />
+              <AtrUploadTab onClose={() => { setAtrUploadOpen(false); clearAtrDraft(); }} onManageExceptions={onManageExceptions} onSaveAtr={saveUploadedAtr} />
             </motion.div>
           </>
         )}
