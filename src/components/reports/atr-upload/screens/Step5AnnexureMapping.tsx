@@ -5,11 +5,12 @@ import Modal from '../../../shared/Modal';
 import { Button } from '../../../shared/Button';
 import { useToast } from '../../../shared/Toast';
 import { useAtrUpload } from '../AtrUploadContext';
+import { WizardFooter } from '../footerSlot';
 import AnnexureMappingRow from '../components/AnnexureMappingRow';
 import type { ExtractedAnnexure, ExtractionSession } from '../types';
 
 /** Screen 5 — confirm / adjust how annexures link to observations. */
-export default function Step5AnnexureMapping({ onBack, onContinue }: { onBack: () => void; onContinue: () => void }) {
+export default function Step5AnnexureMapping({ onContinue }: { onContinue: () => void }) {
   const { state, updateSession } = useAtrUpload();
   const { addToast } = useToast();
   const session = state.session;
@@ -70,10 +71,10 @@ export default function Step5AnnexureMapping({ onBack, onContinue }: { onBack: (
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-4 mb-4 flex-wrap">
+      <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
         <div>
-          <h2 className="text-[1.125rem] font-semibold text-ink-900 mb-1">Confirm annexure mapping</h2>
-          <p className="text-[13px] text-ink-500 max-w-[560px]">Each annexure was matched to an observation automatically. Review the links, adjust any that need attention, or upload a new annexure and link it yourself. Exception rows power the linked cases in Manage Exceptions.</p>
+          <h2 className="text-[1.0625rem] font-semibold text-ink-900 mb-0.5">Confirm annexure mapping</h2>
+          <p className="text-[12.5px] text-ink-500 max-w-[560px] leading-snug">Each annexure was matched to an observation automatically. Review the links, adjust any that need attention, or upload a new annexure and link it yourself. Exception rows power the linked cases in Manage Exceptions.</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <input
@@ -89,7 +90,7 @@ export default function Step5AnnexureMapping({ onBack, onContinue }: { onBack: (
       </div>
 
       {needsReview > 0 && (
-        <div className="mb-4 flex items-start gap-2.5 rounded-[8px] border border-mitigated/30 bg-mitigated-50 px-4 py-3 text-[12.5px] text-mitigated-700">
+        <div className="mb-3 flex items-start gap-2.5 rounded-[8px] border border-mitigated/30 bg-mitigated-50 px-4 py-2.5 text-[12.5px] text-mitigated-700">
           <AlertTriangle size={15} className="shrink-0 mt-0.5" aria-hidden="true" />
           <span><span className="font-semibold">{needsReview} annexure{needsReview === 1 ? '' : 's'} need{needsReview === 1 ? 's' : ''} review.</span> Confirm or unlink each one before continuing.</span>
         </div>
@@ -122,11 +123,13 @@ export default function Step5AnnexureMapping({ onBack, onContinue }: { onBack: (
         </table>
       </div>
 
-      {/* Footer */}
-      <div className="mt-6 flex items-center justify-end gap-3 flex-wrap">
-        <Button variant="ghost" size="md" onClick={() => proceed(true)} title="Manage Exceptions will be unavailable without confirmed annexure links.">Skip annexures &amp; proceed</Button>
-        <Button variant="primary" size="md" rightIcon={<ArrowRight size={15} />} disabled={!canContinue} onClick={() => proceed(false)} title={canContinue ? undefined : 'Resolve every "Needs Review" annexure first.'}>Confirm mapping &amp; continue</Button>
-      </div>
+      {/* Footer — pinned below the scroll area */}
+      <WizardFooter>
+        <div className="flex items-center justify-end gap-3 flex-wrap border-t border-canvas-border bg-canvas-elevated px-6 py-3">
+          <Button variant="ghost" size="md" onClick={() => proceed(true)} title="Manage Exceptions will be unavailable without confirmed annexure links.">Skip annexures &amp; proceed</Button>
+          <Button variant="primary" size="md" rightIcon={<ArrowRight size={15} />} disabled={!canContinue} onClick={() => proceed(false)} title={canContinue ? undefined : 'Resolve every "Needs Review" annexure first.'}>Confirm mapping &amp; continue</Button>
+        </div>
+      </WizardFooter>
 
       {/* Edit / relink modal */}
       <AnimatePresence>

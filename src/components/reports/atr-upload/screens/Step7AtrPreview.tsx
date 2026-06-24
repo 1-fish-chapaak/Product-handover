@@ -24,8 +24,7 @@ function parseVersion(s?: string): { maj: number; min: number } {
 /** Screen 7 — ATR preview. Reuses the existing AtrDocument renderer (brand
  *  fidelity), adds the floating toolbar, inline editing, section skip/reorder,
  *  version save and finalize-with-RBAC. */
-export default function Step7AtrPreview({ onBack, onManageExceptions, onSaveAtr }: {
-  onBack: () => void;
+export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
   /** Hand the linked exception cases for a single observation to case management. */
   onManageExceptions?: (observationId: string) => void;
   /** Persist the generated ATR into My Reports → ATR tab (upsert by session id). */
@@ -106,8 +105,8 @@ export default function Step7AtrPreview({ onBack, onManageExceptions, onSaveAtr 
 
   return (
     <div>
-      {/* Floating toolbar — sits just below the sticky wizard stepper (top-[64px]). */}
-      <div className="sticky top-[64px] z-20 -mx-1 mb-4 print:hidden">
+      {/* Floating toolbar — sticks to the top of the modal's scroll area. */}
+      <div className="sticky top-0 z-20 -mx-1 mb-4 print:hidden">
         <div className="flex items-center justify-between gap-3 rounded-[12px] border border-canvas-border bg-canvas-elevated/95 backdrop-blur px-4 py-2.5 shadow-sm flex-wrap">
           <div className="flex items-center gap-3">
             <span className="text-[13px] font-semibold text-ink-800">ATR Preview</span>

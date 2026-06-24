@@ -1,5 +1,4 @@
-import { CheckSquare, Square, ListChecks, AlertCircle, ArrowRight } from 'lucide-react';
-import { Button } from '../../../shared/Button';
+import { CheckSquare, Square, ListChecks, AlertCircle } from 'lucide-react';
 import type { AtrClassification, AtrRisk } from '../../atrTypes';
 
 export type SummaryFilter = 'all' | 'complete' | 'issues';
@@ -12,7 +11,7 @@ export interface RailBreakdown {
 }
 
 export default function ExtractionRightRail({
-  selectedCount, totalCount, filter, onFilter, onSelectAll, onDeselectAll, breakdown, canContinue, blockReason, onContinue,
+  selectedCount, totalCount, filter, onFilter, onSelectAll, onDeselectAll, breakdown,
 }: {
   selectedCount: number;
   totalCount: number;
@@ -21,14 +20,11 @@ export default function ExtractionRightRail({
   onSelectAll: () => void;
   onDeselectAll: () => void;
   breakdown: RailBreakdown;
-  canContinue: boolean;
-  blockReason: string | null;
-  onContinue: () => void;
 }) {
   const toggle = (f: SummaryFilter) => onFilter(filter === f ? 'all' : f);
 
   return (
-    <aside className="sticky top-[76px] space-y-4">
+    <aside className="sticky top-0 space-y-4">
       {/* Live counter */}
       <div className="rounded-[12px] border border-canvas-border bg-canvas-elevated p-4">
         <div className="text-[1.5rem] font-bold tabular-nums text-ink-900">
@@ -60,14 +56,6 @@ export default function ExtractionRightRail({
           <Row label="Total action plans" value={breakdown.totalActionPlans} strong />
           <Row label="Total annexure rows" value={breakdown.totalAnnexureRows} strong />
         </div>
-      </div>
-
-      {/* CTA */}
-      <div>
-        <Button variant="primary" size="md" className="w-full" rightIcon={<ArrowRight size={15} />} disabled={!canContinue} onClick={onContinue} title={blockReason ?? undefined}>
-          Continue to Annexure Mapping
-        </Button>
-        {blockReason && <p className="mt-2 text-[11.5px] text-mitigated-700 text-center">{blockReason}</p>}
       </div>
     </aside>
   );

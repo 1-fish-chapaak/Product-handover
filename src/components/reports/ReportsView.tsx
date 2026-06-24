@@ -1238,28 +1238,24 @@ export default function ReportsView({
         )}
 
         {/* ATR — every generated Action Taken Report, browsable. The upload wizard
-            opens inline behind the "Generate ATR by Upload" CTA. */}
+            opens in a modal over the library behind the "Generate ATR by Upload" CTA. */}
         {activeTab === 'my-reports' && reportType === 'atr' && (
-          atrUploadOpen ? (
-            <AtrUploadTab onManageExceptions={onManageExceptions} onSaveAtr={saveUploadedAtr} />
-          ) : (
-            <AtrReportsLibrary
-              atrs={allAtrs}
-              onOpen={openAtr}
-              onShare={onShare ? (atr) => onShare(atr.id) : undefined}
-              onDownload={(atr) => { exportAtrWord(atr.atrData.meta, atr.atrData.observations); addToast({ type: 'success', message: `Downloading “${atr.name}”.` }); }}
-              view={viewMode}
-              onViewChange={setViewMode}
-              trailingAction={
-                <button
-                  onClick={() => setAtrUploadOpen(true)}
-                  className="inline-flex items-center gap-2 h-10 px-4 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[10px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 whitespace-nowrap"
-                >
-                  <CloudUpload size={15} /> Generate ATR by Upload
-                </button>
-              }
-            />
-          )
+          <AtrReportsLibrary
+            atrs={allAtrs}
+            onOpen={openAtr}
+            onShare={onShare ? (atr) => onShare(atr.id) : undefined}
+            onDownload={(atr) => { exportAtrWord(atr.atrData.meta, atr.atrData.observations); addToast({ type: 'success', message: `Downloading “${atr.name}”.` }); }}
+            view={viewMode}
+            onViewChange={setViewMode}
+            trailingAction={
+              <button
+                onClick={() => setAtrUploadOpen(true)}
+                className="inline-flex items-center gap-2 h-10 px-4 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[10px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 whitespace-nowrap"
+              >
+                <CloudUpload size={15} /> Generate ATR by Upload
+              </button>
+            }
+          />
         )}
 
         {/* Evidence — segregated repository, each item linked to its source ATR.
@@ -1930,6 +1926,26 @@ export default function ReportsView({
         })()}
         </div>
       </div>
+
+      {/* Generate ATR by Upload — the upload-to-ATR wizard, hosted in a modal
+          over the ATR library. Uses the shared ATR-builder modal box size. */}
+      <AnimatePresence>
+        {atrUploadOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+              className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50" onClick={() => setAtrUploadOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[680px] max-h-[92vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col overflow-hidden"
+              role="dialog" aria-modal="true" aria-label="Generate ATR by Upload"
+            >
+              <AtrUploadTab onClose={() => setAtrUploadOpen(false)} onManageExceptions={onManageExceptions} onSaveAtr={saveUploadedAtr} />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Generate-from-template wizard */}
       <AnimatePresence>

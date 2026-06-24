@@ -1,8 +1,10 @@
-import { Check, ArrowLeft } from 'lucide-react';
+import { useState } from 'react';
+import { Check, ArrowLeft, X, CloudUpload } from 'lucide-react';
 import { AtrUploadProvider, useAtrUpload } from './AtrUploadContext';
 import { seedSession, seedEmptySession } from './mockExtraction';
 import { handoffToManageExceptions } from './handoff';
 import { useAuditLog } from '../../../context/AdminDataContext';
+import { FooterSlotContext } from './footerSlot';
 import type { WizardStage, UploadedFile, UploadMethod, ReportMeta } from './types';
 import type { AtrReportData } from '../atrTypes';
 import Step1MethodSelect from './screens/Step1MethodSelect';
@@ -31,31 +33,58 @@ const STAGE_INDEX: Record<WizardStage, number> = {
   method: 0, template: 1, upload: 1, processing: 2, summary: 2, annexures: 3, decision: 4, preview: 4,
 };
 
-// Display-only progress rail — not clickable. Step navigation happens via the
-// single "Back" control below the rail (forward is driven by each screen's CTA).
-function Stepper({ stage }: { stage: WizardStage }) {
+// Step-back tip per step. Forward is driven by each screen's primary CTA;
+// completed steps are clickable to jump back (mirrors the ATR-builder modal).
+const STEP_TIP: Record<string, string> = {
+  method: 'Choose how to bring in your report',
+  upload: 'Upload your report or filled template',
+  summary: 'Review and select the extracted observations',
+  annexures: 'Link exception annexures to observations',
+  preview: 'Generate, edit and save the ATR',
+};
+
+// Where clicking a completed step lands. The two upload paths share the
+// "Upload" slot, so step 1 resolves to whichever method the user picked.
+function stepBackTarget(i: number, method: UploadMethod): WizardStage {
+  if (i === 0) return 'method';
+  if (i === 1) return method === 'template' ? 'template' : 'upload';
+  if (i === 2) return 'summary';
+  if (i === 3) return 'annexures';
+  return 'preview';
+}
+
+// Clickable progress rail in the modal header. Completed steps navigate back;
+// the active/upcoming steps are inert. Processing locks navigation.
+function Stepper({ stage, method, onJump }: { stage: WizardStage; method: UploadMethod; onJump: (s: WizardStage) => void }) {
   const active = STAGE_INDEX[stage];
   return (
-    <ol className="flex items-center gap-2 flex-wrap">
+    <div className="flex items-center gap-2">
       {STEPS.map((s, i) => {
-        const done = i < active;
-        const isActive = i === active;
+        const state = i < active ? 'done' : i === active ? 'active' : 'todo';
+        const canGoBack = state === 'done' && stage !== 'processing';
+        const tip = state === 'done' ? 'Click to go back to this step'
+          : state === 'active' ? STEP_TIP[s.stage]
+          : `Complete Step ${active + 1} to unlock`;
         return (
-          <li key={s.stage} className="flex items-center gap-2">
-            <span
-              className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-semibold tabular-nums ${
-                done ? 'bg-compliant text-white' : isActive ? 'bg-brand-600 text-white' : 'bg-canvas-border text-ink-500'
-              }`}
-              aria-current={isActive ? 'step' : undefined}
+          <div key={s.stage} className="flex items-center gap-2">
+            <button
+              type="button"
+              title={tip}
+              aria-label={canGoBack ? `Go back to ${s.label}` : undefined}
+              aria-current={state === 'active' ? 'step' : undefined}
+              aria-disabled={!canGoBack}
+              onClick={() => canGoBack && onJump(stepBackTarget(i, method))}
+              className={`group inline-flex items-center gap-1.5 h-7 pl-1.5 pr-2.5 rounded-full text-[0.75rem] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${state === 'active' ? 'bg-brand-50 text-brand-700' : state === 'done' ? 'bg-compliant-50 text-compliant-700 hover:bg-compliant-100 cursor-pointer' : 'bg-draft-50 text-ink-500 cursor-default'}`}
             >
-              {done ? <Check size={11} aria-hidden="true" /> : i + 1}
-            </span>
-            <span className={`text-[12px] ${isActive ? 'font-semibold text-ink-800' : 'text-ink-500'}`}>{s.label}</span>
-            {i < STEPS.length - 1 && <span className="w-6 h-px bg-canvas-border" aria-hidden="true" />}
-          </li>
+              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[0.625rem] ${state === 'active' ? 'bg-brand-600 text-white' : state === 'done' ? 'bg-compliant text-white' : 'bg-ink-300 text-white'}`}>{state === 'done' ? <Check size={10} aria-hidden="true" /> : i + 1}</span>
+              {s.label}
+              {canGoBack && <ArrowLeft size={11} className="-mr-0.5 max-w-0 opacity-0 group-hover:max-w-[14px] group-hover:opacity-100 transition-all duration-150" aria-hidden="true" />}
+            </button>
+            {i < STEPS.length - 1 && <span className="w-5 h-px bg-canvas-border" aria-hidden="true" />}
+          </div>
         );
       })}
-    </ol>
+    </div>
   );
 }
 
@@ -70,13 +99,16 @@ function toUploadedFile(f: File): UploadedFile {
   };
 }
 
-function AtrUploadInner({ onManageExceptions, onSaveAtr }: {
+function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr }: {
+  onClose?: () => void;
   onManageExceptions?: () => void;
   onSaveAtr?: (sessionId: string, label: string | undefined, data: AtrReportData) => void;
 }) {
   const { state, setMethod, setSession, goTo } = useAtrUpload();
   const { addToast } = useToast();
   const logEvent = useAuditLog();
+  // The sticky footer DOM node — steps portal their primary CTA into it.
+  const [footerEl, setFooterEl] = useState<HTMLElement | null>(null);
 
   // Build the session (with the uploaded file's metadata) up front, then run the
   // processing animation. Seeding before processing keeps refresh-mid-processing
@@ -115,67 +147,63 @@ function AtrUploadInner({ onManageExceptions, onSaveAtr }: {
     else addToast({ type: 'warning', message: 'Manage Exceptions is not available in this context.' });
   };
 
-  // Single back control (below the rail) — steps one stage back. The rail itself
-  // is display-only; forward movement is driven by each screen's primary CTA.
-  const goBack = () => {
-    const s = state.stage;
-    if (s === 'template' || s === 'upload') goTo('method');
-    else if (s === 'summary') goTo(state.method === 'template' ? 'template' : 'upload');
-    else if (s === 'annexures') goTo('summary');
-    else if (s === 'preview' || s === 'decision') goTo('annexures');
-  };
-  const canGoBack = state.stage !== 'method' && state.stage !== 'processing';
-
   const pickMethod = (method: UploadMethod) => {
     setMethod(method);
     goTo(method === 'template' ? 'template' : 'upload');
   };
 
   return (
-    <div className="max-w-[1100px] mx-auto">
-      {/* Stepper (centered, width-hugging) with the step-back control parallel
-          on its left — sticky so it stays visible while scrolling. */}
-      <div className="sticky top-0 z-30 mb-5 print:hidden">
-        <div className="relative flex items-center justify-center">
-          {canGoBack && (
-            <button
-              onClick={goBack}
-              className="absolute left-0 inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
-            >
-              <ArrowLeft size={15} aria-hidden="true" /> Back
-            </button>
-          )}
-          <div className="w-fit max-w-full rounded-[12px] border border-canvas-border bg-canvas-elevated px-5 py-4 shadow-sm">
-            <Stepper stage={state.stage} />
+    <FooterSlotContext.Provider value={footerEl}>
+      <div className="flex flex-col h-full min-h-0">
+        {/* Modal chrome — title + clickable step rail (mirrors the ATR-builder modal) */}
+        <header className="shrink-0 px-6 pt-3.5 pb-3 border-b border-canvas-border print:hidden">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><CloudUpload size={16} /></div>
+              <div>
+                <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Generate ATR by Upload</h2>
+                <p className="text-[0.75rem] text-ink-500 leading-snug">Pick a method, upload, validate, link annexures, then generate.</p>
+              </div>
+            </div>
+            {onClose && (
+              <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Close"><X size={16} /></button>
+            )}
           </div>
-        </div>
-      </div>
+          <Stepper stage={state.stage} method={state.method} onJump={goTo} />
+        </header>
 
-      {/* Screen router */}
-      {state.stage === 'method' && <Step1MethodSelect onPick={pickMethod} />}
-      {state.stage === 'template' && (
-        <Step2aTemplateDownload onBack={() => goTo('method')} onUpload={file => beginExtraction(file, 'template')} />
-      )}
-      {state.stage === 'upload' && (
-        <Step2bReportUpload onBack={() => goTo('method')} onExtract={(report, annexures, meta) => beginExtraction(report, 'report', annexures, meta)} />
-      )}
-      {state.stage === 'processing' && <Step3Processing onDone={() => goTo('summary')} />}
-      {state.stage === 'summary' && <Step4ExtractionSummary onContinue={() => goTo('annexures')} />}
-      {state.stage === 'annexures' && <Step5AnnexureMapping onBack={() => goTo('summary')} onContinue={() => goTo('preview')} />}
-      {(state.stage === 'preview' || state.stage === 'decision') && <Step7AtrPreview onBack={() => goTo('annexures')} onManageExceptions={goToManageExceptions} onSaveAtr={onSaveAtr} />}
-    </div>
+        {/* Screen router */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+          {state.stage === 'method' && <Step1MethodSelect onPick={pickMethod} />}
+          {state.stage === 'template' && (
+            <Step2aTemplateDownload onUpload={file => beginExtraction(file, 'template')} />
+          )}
+          {state.stage === 'upload' && (
+            <Step2bReportUpload onExtract={(report, annexures, meta) => beginExtraction(report, 'report', annexures, meta)} />
+          )}
+          {state.stage === 'processing' && <Step3Processing onDone={() => goTo('summary')} />}
+          {state.stage === 'summary' && <Step4ExtractionSummary onContinue={() => goTo('annexures')} />}
+          {state.stage === 'annexures' && <Step5AnnexureMapping onContinue={() => goTo('preview')} />}
+          {(state.stage === 'preview' || state.stage === 'decision') && <Step7AtrPreview onManageExceptions={goToManageExceptions} onSaveAtr={onSaveAtr} />}
+        </div>
+
+        {/* Sticky footer — steps portal their primary action here. Hidden when empty. */}
+        <footer ref={setFooterEl} className="shrink-0 empty:hidden print:hidden" />
+      </div>
+    </FooterSlotContext.Provider>
   );
 }
 
 /** The "Generate by Upload" tab — self-contained: owns its own provider so the
  *  wizard state persists independently of the rest of the reports module. */
-export default function AtrUploadTab({ onManageExceptions, onSaveAtr }: {
+export default function AtrUploadTab({ onClose, onManageExceptions, onSaveAtr }: {
+  onClose?: () => void;
   onManageExceptions?: () => void;
   onSaveAtr?: (sessionId: string, label: string | undefined, data: AtrReportData) => void;
 }) {
   return (
     <AtrUploadProvider>
-      <AtrUploadInner onManageExceptions={onManageExceptions} onSaveAtr={onSaveAtr} />
+      <AtrUploadInner onClose={onClose} onManageExceptions={onManageExceptions} onSaveAtr={onSaveAtr} />
     </AtrUploadProvider>
   );
 }

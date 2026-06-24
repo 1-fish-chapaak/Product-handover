@@ -3,6 +3,7 @@ import { AlertTriangle, FileSearch, RotateCcw, ArrowRight } from 'lucide-react';
 import { Button } from '../../../shared/Button';
 import { useToast } from '../../../shared/Toast';
 import { useAtrUpload } from '../AtrUploadContext';
+import { WizardFooter } from '../footerSlot';
 import { formatBytes } from '../format';
 import ObservationExtractCard from '../components/ObservationExtractCard';
 import ExtractionRightRail, { type SummaryFilter, type RailBreakdown } from '../components/ExtractionRightRail';
@@ -104,8 +105,8 @@ export default function Step4ExtractionSummary({ onContinue }: { onContinue: () 
   return (
     <div>
       {/* Header banner */}
-      <div className="mb-4 rounded-[12px] border border-canvas-border bg-gradient-to-br from-brand-700 to-brand-600 text-white px-5 py-4">
-        <h2 className="text-[1.0625rem] font-semibold">
+      <div className="mb-3 rounded-[12px] border border-canvas-border bg-gradient-to-br from-brand-700 to-brand-600 text-white px-4 py-3">
+        <h2 className="text-[1rem] font-semibold leading-snug">
           We found {observations.length} observation{observations.length === 1 ? '' : 's'} and {annexures.length} annexure{annexures.length === 1 ? '' : 's'} in your report
         </h2>
         <p className="text-[12px] text-white/80 mt-0.5">
@@ -116,7 +117,7 @@ export default function Step4ExtractionSummary({ onContinue }: { onContinue: () 
       {/* Global missing-fields alert — actionable so the blocker is never hidden
           behind a filter. */}
       {obsWithIssues.length > 0 && (
-        <div className="mb-4 flex items-center gap-2.5 rounded-[8px] border border-mitigated/30 bg-mitigated-50 px-4 py-3 text-[12.5px] text-mitigated-700">
+        <div className="mb-3 flex items-center gap-2.5 rounded-[8px] border border-mitigated/30 bg-mitigated-50 px-4 py-2.5 text-[12.5px] text-mitigated-700">
           <AlertTriangle size={15} className="shrink-0" aria-hidden="true" />
           <span className="flex-1"><span className="font-semibold">{obsWithIssues.length} observation{obsWithIssues.length === 1 ? '' : 's'} {obsWithIssues.length === 1 ? 'has' : 'have'} missing fields.</span> Fill or skip each one before continuing.</span>
           {filter !== 'issues' && (
@@ -127,7 +128,7 @@ export default function Step4ExtractionSummary({ onContinue }: { onContinue: () 
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
         {/* Main column */}
         <div className="space-y-3 min-w-0">
           {visible.map(o => (
@@ -157,11 +158,20 @@ export default function Step4ExtractionSummary({ onContinue }: { onContinue: () 
           onSelectAll={() => setAll(true)}
           onDeselectAll={() => setAll(false)}
           breakdown={breakdown}
-          canContinue={canContinue}
-          blockReason={blockReason}
-          onContinue={onContinue}
         />
       </div>
+
+      {/* Footer — pinned below the scroll area */}
+      <WizardFooter>
+        <div className="flex items-center justify-between gap-4 border-t border-canvas-border bg-canvas-elevated px-6 py-3">
+          <p className="text-[12px] text-ink-500">
+            {blockReason ?? <span className="text-compliant-700 font-medium">{selected.length} observation{selected.length === 1 ? '' : 's'} selected — ready to map annexures.</span>}
+          </p>
+          <Button variant="primary" size="md" rightIcon={<ArrowRight size={15} />} disabled={!canContinue} onClick={onContinue} title={blockReason ?? undefined}>
+            Continue to Annexures
+          </Button>
+        </div>
+      </WizardFooter>
     </div>
   );
 }
