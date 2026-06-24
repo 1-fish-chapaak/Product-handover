@@ -10,32 +10,32 @@ export interface ReportQueryAtr {
 
 export const REPORT_QUERIES_ATR: Record<string, ReportQueryAtr> = {
   Q01: {
-    title: 'Detects duplicate invoice entries by vendor, date, and amount to streamline audit review and assign case identifiers.',
-    summary: 'The workflow identified 140 duplicate invoice entries across vendors, each grouped into case IDs. Duplicates represent ~95.6M in invoice value, with some cases exceeding 24.2M for a single vendor-date-amount combination.',
+    title: 'Scans the uploaded Excel workbook for data-quality issues — blank cells, type mismatches, duplicates, and format errors — across every sheet.',
+    summary: 'The workflow scanned 24,806 rows across 6 sheets and logged data-quality issues at 96.8% cell-level completeness. It found 342 blank cells, 89 duplicate rows, and a spread of type mismatches and format errors — concentrated in the Invoices, Vendors, and Payments sheets.',
     findings: [
-      '140 rows across 6 columns — 70 distinct duplicate cases (each with duplicate_count = 2).',
-      'Total duplicated INVOICE_VALUE: 95,631,064.00 (mean: 683,079.00 per invoice).',
-      'VENDOR_002: highest total at 32,676,258.0. VENDOR_006: most frequent with 16 records.',
-      'Largest single case: CASE_000007 at 24,231,986.0 in duplicated value.',
-      'Invoice values range from 62.79 to 12,115,993.00 — both small and very high-value invoices affected.',
+      '24,806 rows across 6 sheets scanned — 96.8% cell-level completeness.',
+      '342 blank cells, concentrated in Vendors (Email) and Invoices (Vendor Name).',
+      '89 duplicate rows — the most severe is Invoice ID INV-005790 on the Payments sheet (Critical).',
+      'Format errors in dates and identifiers — e.g. an invalid date 13/25/2025 and a malformed GSTIN ABCDE1234Z, both expected to fail validation.',
+      'Type mismatches in numeric columns — Amount stored as the text "12,500 INR" instead of a number.',
     ],
     observations: [
-      'Widespread duplicates across vendors — some with particularly high exposure in both frequency and value.',
-      'Each case has exactly two matching invoices — auditors can quickly validate which to keep or reverse.',
-      'Multi-million cases represent significant financial risk — should be prioritized in review workflows.',
+      'Blank mandatory fields (Email, Vendor Name) break downstream matching — they should be fixed at source before re-upload.',
+      'The Payments duplicate (INV-005790) is the only Critical issue — reverse or merge it before posting.',
+      'Date and format errors cluster on the Invoices sheet — a single import template would prevent most of them.',
     ],
-    answer: `Scanned the AP invoice ledger and surfaced **140 duplicate invoice entries**, grouped into **70 distinct cases** that each pair two matching invoices. Together these duplicates carry **₹95.6M** in invoice value, averaging ₹6.83L per invoice.
+    answer: `Scanned the uploaded Excel workbook and logged data-quality issues across **24,806 rows in 6 sheets**, at **96.8% cell-level completeness**. The pass surfaced **342 blank cells**, **89 duplicate rows**, plus a handful of type mismatches and format errors.
 
-> Sample-data preview: figures are from the connected sandbox source. Re-run against the production SAP AP module before promoting any case to a formal finding.
+> Sample-data preview: figures are from the connected sandbox source. Re-run against the production workbook before promoting any issue to a formal finding.
 
 ### Where to look first
 
-- **VENDOR_002** holds the highest exposure at **₹32.68M** in duplicated value.
-  - **VENDOR_006** is the most frequent offender, with 16 duplicate records — treat it as a control gap, not a one-off reversal.
-- **CASE_000007** is the single largest case at **₹24.23M** — triage this one before anything else.
-- Invoice values span ₹62.79 to ₹1.21Cr, so low-value noise and high-value risk are mixed together.
+- **Payments → Invoice ID \`INV-005790\`** is the only **Critical** issue — a duplicate where the value should be unique. Reverse or merge it before posting.
+- **Invoices → Amount** holds a **High** type mismatch: \`"12,500 INR"\` is stored as text where a number is expected, so it won't roll up in totals.
+- **Format errors** are **High** too — the date \`13/25/2025\` isn't valid DD-MM-YYYY, and \`ABCDE1234Z\` isn't a 15-char GSTIN.
+- **342 blank cells** sit mostly in **Vendors → Email** and **Invoices → Vendor Name**, both mandatory for matching.
 
-Every case has exactly two matching invoices, so an auditor can quickly decide which to keep and which to reverse. Promote a case to a finding from the \`Flagged cases\` table, or open the [duplicate-payment SOP](#) for the standard remediation path.`,
+Severity skews low: most rows are **Medium** (blank cells, an amount outlier) or **Low** (a past expiry date already **Reviewed**). Fix the Critical and High issues at source, then re-upload — the \`Excel Issues Log\` table tracks each row's status from \`Open\` to \`Flagged\` to \`Reviewed\`.`,
   },
   Q02: {
     title: 'Identifies unauthorized vendor master changes without proper approval workflow in the last 90 days.',

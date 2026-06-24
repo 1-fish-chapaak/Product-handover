@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState, type ElementType } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, Reorder, useDragControls } from 'motion/react';
-import { ArrowLeft, Download, History, MoreVertical, ExternalLink, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2, GripVertical, Edit3, StickyNote, Sparkles } from 'lucide-react';
+import { ArrowLeft, Download, History, MoreVertical, SquareArrowOutUpRight, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2, GripVertical, Edit3, StickyNote, Sparkles, RefreshCw } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import EmptyState from '../shared/EmptyState';
@@ -17,8 +17,8 @@ import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { ReportBrandBanner, ReportMetaPanel, ReportNumberedHeading, ReportKpiTiles } from './ReportDocumentChrome';
 import { statTone } from './reportTones';
-import { exportReportWord, exportReportPpt, exportReportPdf, exportReportHtml, exportBulkAuditExcel } from './reportExport';
-import type { DownloadPreviewSection } from './ReportDownloadModal';
+import { exportBulkAuditExcel } from './reportExport';
+import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import { REPORT_TEMPLATES } from '../../data/mockData';
 import type { WorkflowResult } from './reportShared';
 import AddObservationModal, {
@@ -28,6 +28,7 @@ import AddObservationModal, {
 } from './AddObservationModal';
 import ObservationCard, { type ObservationCardData } from './ObservationCard';
 import GenerateATRModal from '../exceptions/GenerateATRModal';
+import QueryWidgetModal from './QueryWidgetModal';
 
 // ─────────────────────────────────────────────────────────────────────
 // Output catalog — what the "Add output" modal can attach to a workflow.
@@ -65,8 +66,30 @@ const GRAPH_CATALOG = [
 ];
 
 const TABLE_CATALOG = [
-  { id: 'table-vendor-summary', title: 'Vendor summary',  description: 'Records grouped by vendor with totals.' },
-  { id: 'table-severity-split', title: 'Severity split',  description: 'Records broken out by severity tier.' },
+  {
+    id: 'table-vendor-summary',
+    title: 'Vendor summary',
+    description: 'Records grouped by vendor with totals.',
+    columns: ['Vendor', 'Records', 'Exceptions', 'Flagged Amount', 'Severity'],
+    rows: [
+      ['Vendor A', '12', '3', '₹4.20L', 'High'],
+      ['Vendor B', '9', '2', '₹2.80L', 'Medium'],
+      ['Vendor C', '7', '1', '₹1.10L', 'Low'],
+      ['Vendor D', '5', '2', '₹3.50L', 'High'],
+      ['Vendor E', '4', '0', '₹0.60L', 'Low'],
+    ],
+  },
+  {
+    id: 'table-severity-split',
+    title: 'Severity split',
+    description: 'Records broken out by severity tier.',
+    columns: ['Severity', 'Records', 'Open', 'Closed', '% of Total'],
+    rows: [
+      ['High', '14', '6', '8', '42%'],
+      ['Medium', '11', '3', '8', '33%'],
+      ['Low', '8', '1', '7', '24%'],
+    ],
+  },
 ];
 
 type Report = {
@@ -96,6 +119,7 @@ export function BulkAuditVariantView({
   const { can } = useCan();
   const [workflows, setWorkflows] = useState<WorkflowResult[]>(report.workflowResults ?? []);
   const [pendingDelete, setPendingDelete] = useState<WorkflowResult | null>(null);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   // ─── Report-level observations (parity with Internal Audit reports) ───
   const [observations, setObservations] = useState<ObservationCardData[]>([]);
@@ -230,64 +254,37 @@ export function BulkAuditVariantView({
   const allFailed = successfulWorkflows.length === 0 && failedWorkflows.length > 0;
   const totals = computeTotals(successfulWorkflows);
 
-  // Real exports — same composers as standard reports, so the downloaded
-  // document mirrors the on-screen ATR-style layout.
-  const handleExport = (ext: 'pdf' | 'doc' | 'ppt' | 'html' | 'xlsx') => {
-    if (ext === 'xlsx') {
-      exportBulkAuditExcel(report.name, successfulWorkflows);
-      addToast({ type: 'success', message: `${report.name}.xlsx downloaded.` });
-      return;
-    }
-    const sections: DownloadPreviewSection[] = [
-      {
-        id: 'bulk-exec-summary',
-        kind: 'summary',
-        title: 'Executive Summary',
-        content: `This audit returned ${totals.records} flagged records across ${totals.workflows} ${totals.workflows === 1 ? 'workflow' : 'workflows'}. High-severity items should be triaged first; the remainder are queued for AP review.`,
-        stats: bulkSummaryStats(totals).map(s => ({ label: s.label, value: s.value, accent: statTone(s.color).hex })),
-      },
-      ...successfulWorkflows.map(w => ({
-        id: w.id,
-        kind: 'workflow' as const,
-        title: `Workflow · ${w.workflowId}`,
-        workflowId: w.workflowId,
-        workflowName: w.name,
-        severity: w.severity,
-        summary: resultSummary(w),
-        findings: w.findings,
-        observations: w.observations,
-      })),
-      ...observations.map(o => ({
-        id: o.id,
-        kind: 'observation' as const,
-        title: o.title,
-        obsId: o.obsId,
-        description: o.description,
-      })),
-    ];
-    const ctx = {
-      reportName: report.name,
-      reportTag: report.tag,
-      reportId: report.id?.toUpperCase(),
-      generatedBy: report.generatedBy,
-      generatedAt: report.generatedAt,
-      sections,
-    };
-    if (ext === 'doc') {
-      exportReportWord(ctx);
-      addToast({ type: 'success', message: `${report.name}.doc downloaded.` });
-    } else if (ext === 'ppt') {
-      exportReportPpt(ctx);
-      addToast({ type: 'success', message: `${report.name}.ppt downloaded.` });
-    } else if (ext === 'html') {
-      exportReportHtml(ctx);
-      addToast({ type: 'success', message: `${report.name}.html downloaded.` });
-    } else if (exportReportPdf(ctx)) {
-      addToast({ type: 'info', message: 'Opening print dialog — choose “Save as PDF”.' });
-    } else {
-      addToast({ type: 'error', message: 'Pop-up blocked — allow pop-ups to export the PDF.' });
-    }
-  };
+  // Map the bulk run onto the shared download-preview section model so the bulk
+  // report exports through the same modal (preview + PDF/DOCX/PPTX/HTML/Excel) as
+  // every other report. The modal owns the non-Excel composers; Excel is tabular
+  // and delegated back via onExcelExport.
+  const buildDownloadSections = (): DownloadPreviewSection[] => [
+    {
+      id: 'bulk-exec-summary',
+      kind: 'summary',
+      title: 'Executive Summary',
+      content: `This audit returned ${totals.records} flagged records across ${totals.workflows} ${totals.workflows === 1 ? 'workflow' : 'workflows'}. High-severity items should be triaged first; the remainder are queued for AP review.`,
+      stats: bulkSummaryStats(totals).map(s => ({ label: s.label, value: s.value, accent: statTone(s.color).hex })),
+    },
+    ...successfulWorkflows.map((w): DownloadPreviewSection => ({
+      id: w.id,
+      kind: 'workflow',
+      title: `Workflow · ${w.workflowId}`,
+      workflowId: w.workflowId,
+      workflowName: w.name,
+      severity: w.severity,
+      summary: resultSummary(w),
+      findings: w.findings,
+      observations: w.observations,
+    })),
+    ...observations.map((o): DownloadPreviewSection => ({
+      id: o.id,
+      kind: 'observation',
+      title: o.title,
+      obsId: o.obsId,
+      description: o.description,
+    })),
+  ];
 
   const handleOpenWorkflow = (w: WorkflowResult) => {
     addToast({ type: 'info', message: `Opening ${w.workflowId} — ${w.name}…` });
@@ -348,21 +345,21 @@ export function BulkAuditVariantView({
     >
       {/* Report actions — pinned to the top of the scroll area (page-coloured,
           borderless — no header-bar chrome) so they stay reachable on scroll. */}
-      <div className="sticky top-0 z-30 bg-canvas max-w-[1480px] mx-auto px-6 lg:px-10 h-16 flex items-center justify-between gap-4 print:hidden">
+      <div className="sticky top-0 z-30 bg-canvas px-6 lg:px-12 xl:px-[124px] h-16 flex items-center justify-between gap-4 print:hidden">
         <BulkBackLink onBack={onBack} />
         {!allFailed && (
           <div className="flex items-center gap-2">
-            <BulkCoverActions onShare={onShare} onExport={handleExport} templates={templates} />
+            <BulkCoverActions onShare={onShare} onDownload={() => setShowDownloadModal(true)} templates={templates} />
           </div>
         )}
       </div>
 
       {allFailed ? (
-        <div className="max-w-[1480px] mx-auto px-6 lg:px-10 pt-3 pb-8">
+        <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8">
           <AllFailedEmpty report={report} failedWorkflows={failedWorkflows} onBack={onBack} />
         </div>
       ) : (
-        <div className="max-w-[1480px] mx-auto px-6 lg:px-10 pt-3 pb-8 flex items-start gap-8 xl:gap-10">
+        <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10">
           <aside className="hidden xl:block w-[252px] shrink-0 sticky top-[72px] self-start max-h-[calc(100vh-96px)] overflow-y-auto pr-1 -mr-1 print:hidden">
             <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-3.5">
               <EditorialContents
@@ -385,7 +382,7 @@ export function BulkAuditVariantView({
               />
             </div>
           </aside>
-          <div className="min-w-0 flex-1 max-w-[920px]">
+          <div className="min-w-0 flex-1">
             <EditorialLayout
               report={report}
               workflows={successfulWorkflows}
@@ -410,7 +407,6 @@ export function BulkAuditVariantView({
               onGenerateAtr={() => setAtrModalOpen(true)}
               onBack={onBack}
               onShare={onShare}
-              onExport={handleExport}
               templates={templates}
             />
           </div>
@@ -445,6 +441,21 @@ export function BulkAuditVariantView({
         onClose={closeAddObservation}
         onSave={handleObservationSave}
       />
+
+      <AnimatePresence>
+        {showDownloadModal && (
+          <ReportDownloadModal
+            reportName={report.name}
+            reportTag={report.tag}
+            reportId={report.id?.toUpperCase()}
+            generatedBy={report.generatedBy}
+            generatedAt={report.generatedAt}
+            sections={buildDownloadSections()}
+            onExcelExport={() => exportBulkAuditExcel(report.name, successfulWorkflows)}
+            onClose={() => setShowDownloadModal(false)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -685,16 +696,15 @@ function BulkBackLink({ onBack }: { onBack: () => void }) {
 // Apply Template / Share / Download — rendered in the cover banner's action slot.
 // Apply Template is a UX match here: a bulk audit report has a fixed editorial
 // layout, so applying a template animates + toasts without swapping sections.
-function BulkCoverActions({ onShare, onExport, templates = REPORT_TEMPLATES }: {
+function BulkCoverActions({ onShare, onDownload, templates = REPORT_TEMPLATES }: {
   onShare?: () => void;
-  onExport: (ext: 'pdf' | 'doc' | 'ppt' | 'html' | 'xlsx') => void;
+  onDownload: () => void;
   templates?: typeof REPORT_TEMPLATES[number][];
 }) {
   const { addToast } = useToast();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
-  const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
 
   const handleApplyTemplate = (template: typeof REPORT_TEMPLATES[0]) => {
     setApplyingTemplate(true);
@@ -744,34 +754,13 @@ function BulkCoverActions({ onShare, onExport, templates = REPORT_TEMPLATES }: {
           <Share2 size={14} /> Share
         </button>
       )}
-      {/* Download */}
-      <div className="relative">
-        <button
-          onClick={() => setShowDownloadDropdown(p => !p)}
-          className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-500 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
-        >
-          <Download size={14} /> Download <ChevronDown size={12} className={`transition-transform ${showDownloadDropdown ? 'rotate-180' : ''}`} />
-        </button>
-        {showDownloadDropdown && (
-          <div className="absolute right-0 top-full mt-1 bg-white border border-canvas-border shadow-xl z-50 py-1 w-48 rounded-[8px]">
-            {([
-              { label: 'Download as PDF', ext: 'pdf' },
-              { label: 'Download as DOCX', ext: 'doc' },
-              { label: 'Download as PPTX', ext: 'ppt' },
-              { label: 'Download as HTML', ext: 'html' },
-              { label: 'Download as Excel', ext: 'xlsx' },
-            ] as const).map(({ label, ext }) => (
-              <button
-                key={ext}
-                onClick={() => { onExport(ext); setShowDownloadDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 transition-colors cursor-pointer"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Download — opens the shared preview modal (same as every other report) */}
+      <button
+        onClick={onDownload}
+        className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-[8px] hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+      >
+        <Download size={14} /> Download
+      </button>
       {/* Applying Template Overlay */}
       <AnimatePresence>
         {applyingTemplate && (
@@ -848,7 +837,7 @@ function AllFailedEmpty({ report, failedWorkflows, onBack }: {
 function EditorialLayout({
   report, workflows, failedWorkflows, totals, onOpenWorkflow, onRequestDelete,
   observations, onEditObservation, onToggleObservationAttachment, onDeleteObservation,
-  onGenerateAtr, onBack, onShare, onExport, templates,
+  onGenerateAtr, onBack, onShare, templates,
 }: {
   report: Report;
   workflows: WorkflowResult[];
@@ -873,7 +862,6 @@ function EditorialLayout({
   onGenerateAtr: () => void;
   onBack: () => void;
   onShare?: () => void;
-  onExport: (ext: 'pdf' | 'doc' | 'ppt' | 'html' | 'xlsx') => void;
   templates?: typeof REPORT_TEMPLATES[number][];
 }) {
   const { addToast } = useToast();
@@ -883,73 +871,42 @@ function EditorialLayout({
       <ReportBrandBanner
         title={report.name}
         className="rounded-t-[12px]"
-        facts={[
-          { value: totals.workflows, label: 'Workflows' },
-          { value: totals.records, label: 'Flagged Records' },
-          { value: observations.length, label: 'Observations' },
-        ]}
-        actions={
-          <>
-            <button
-              onClick={onGenerateAtr}
-              title="Generate Action Taken Report"
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-            >
-              <FileText size={14} />
-              Generate ATR
-            </button>
-            <button
-              onClick={() => addToast({ type: 'info', message: 'Activity log coming soon for bulk audit.' })}
-              title="View this report's activity log"
-              aria-label="View report activity log"
-              className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/85 bg-white/10 border border-white/25 hover:bg-white/20 hover:text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-            >
-              <History size={16} />
-            </button>
-            <button
-              onClick={() => addToast({ type: 'success', message: 'Generating report summary…' })}
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-            >
-              <Sparkles size={13} />
-              Generate Summary
-            </button>
-          </>
-        }
-      >
-        {report.pages != null && (
-          <p className="text-[0.8125rem] leading-snug text-white/75 mb-3">
-            {totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'} · {totals.records} flagged records
-          </p>
+        eyebrow={report.id && (
+          <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{report.id.toUpperCase()}</span>
         )}
-        <div className="flex items-center gap-1.5 text-[0.8125rem] flex-wrap">
-          <span className="font-semibold text-white">{report.generatedBy}</span>
-          <span className="text-white/30 mx-0.5">|</span>
-          <span className="text-white/70">{report.generatedAt}</span>
-          <span className="text-white/30 mx-0.5">|</span>
-          <span className="text-white/70">
-            {totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}
-          </span>
-          {report.tag && (
-            <span className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[0.625rem] font-semibold whitespace-nowrap rounded-full bg-white/15 text-white border border-white/25">
-              {report.tag}
-            </span>
-          )}
-        </div>
+        actions={
+          <button
+            onClick={onGenerateAtr}
+            title="Generate Action Taken Report"
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-700 border border-white/25 rounded-[8px] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-brand-600 hover:border-white/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+          >
+            <FileText size={14} />
+            Generate ATR
+          </button>
+        }
+        footer={(() => {
+          const parts = [report.generatedBy, report.generatedAt].filter(Boolean);
+          return (
+            <div className="flex items-center gap-2.5 text-[0.8125rem] flex-wrap">
+              {parts.map((p, i) => (
+                <span key={i} className="inline-flex items-center gap-2.5">
+                  {i > 0 && <span className="text-white/30" aria-hidden="true">|</span>}
+                  <span className={i === 0 ? 'font-semibold text-white' : 'text-white/70'}>{p}</span>
+                </span>
+              ))}
+              {report.tag && (
+                <span className="inline-flex items-center px-2 h-5 ml-0.5 text-[0.625rem] font-semibold whitespace-nowrap rounded-full bg-white/15 text-white border border-white/25">
+                  {report.tag}
+                </span>
+              )}
+            </div>
+          );
+        })()}
+      >
+        <p className="text-[0.8125rem] leading-snug text-white/75 mb-3 line-clamp-2">
+          Consolidated results across all workflow runs in this bulk audit.
+        </p>
       </ReportBrandBanner>
-
-      {/* Metadata — structured report-facts panel, attached below the banner */}
-      <div className="bg-white border-x border-b border-canvas-border px-9 py-6">
-        <ReportMetaPanel
-          items={[
-            { label: 'Report ID', value: report.id?.toUpperCase() },
-            { label: 'Report Type', value: report.tag ?? 'Bulk Audit' },
-            { label: 'Scope', value: `${totals.workflows} ${totals.workflows === 1 ? 'workflow' : 'workflows'}` },
-            { label: 'Prepared By', value: report.generatedBy },
-            { label: 'Generated On', value: report.generatedAt },
-            { label: 'Flagged Records', value: String(totals.records) },
-          ]}
-        />
-      </div>
 
       {/* Editorial body — white card attached to the header (no gap). The table
           of contents now lives in the persistent outline rail, not inline. */}
@@ -1263,17 +1220,86 @@ function bulkSummaryStats(totals: Totals) {
 }
 
 function EditorialSummary({ totals }: { totals: Totals }) {
+  const { addToast } = useToast();
+  const [summaryGenerated, setSummaryGenerated] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [override, setOverride] = useState<string | null>(null);
+  const ALT_SUMMARY = "Re-run of the bulk audit confirms the flagged-record counts and surfaces three additional medium-severity items in the vendor-master workflow, now queued with proposed remediation owners.";
+
+  const generate = () => {
+    if (isGenerating || summaryGenerated) return;
+    setIsGenerating(true);
+    addToast({ type: 'success', message: 'Generating report summary...' });
+    setTimeout(() => {
+      setIsGenerating(false);
+      setSummaryGenerated(true);
+      addToast({ type: 'success', message: 'Executive summary ready.' });
+    }, 1400);
+  };
+
+  const kpis = [
+    ...bulkSummaryStats(totals),
+    { label: 'Low Severity', value: String(totals.low), icon: CheckCircle2, color: 'text-compliant-700 bg-compliant-50' },
+  ];
+
   return (
     <div>
-      <ReportNumberedHeading n={1} title="Executive Summary" subtitle="Overall workflow result rollup" />
-      <div className="pb-5 border-b border-ink-900/15 mb-5">
-        <ReportKpiTiles stats={bulkSummaryStats(totals)} animate />
+      <ReportNumberedHeading
+        n={1}
+        title="Executive Summary"
+        subtitle="Overall workflow result rollup"
+        right={summaryGenerated ? (
+          <button
+            onClick={() => {
+              if (isRegenerating) return;
+              setIsRegenerating(true);
+              setTimeout(() => {
+                setOverride(ALT_SUMMARY);
+                setIsRegenerating(false);
+                addToast({ type: 'success', message: 'Executive summary regenerated.' });
+              }, 1200);
+            }}
+            disabled={isRegenerating}
+            aria-busy={isRegenerating || undefined}
+            title="Regenerate this summary with the latest workflow results"
+            className="group/regen inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isRegenerating ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} className="transition-transform duration-300 group-hover/regen:rotate-180" />}
+            {isRegenerating ? 'Regenerating...' : 'Regenerate'}
+          </button>
+        ) : (
+          <button
+            onClick={generate}
+            disabled={isGenerating}
+            aria-busy={isGenerating || undefined}
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-[8px] hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            {isGenerating ? 'Generating...' : 'Generate Summary'}
+          </button>
+        )}
+      />
+      <div className={(summaryGenerated || isGenerating) ? 'pb-5 border-b border-ink-900/15 mb-5' : ''}>
+        <ReportKpiTiles stats={kpis} animate />
       </div>
-      <p className="max-w-[80ch] text-[0.9375rem] leading-[1.75] text-ink-800">
-        This audit returned <strong className="font-semibold text-ink-900">{totals.records} flagged records</strong> across{' '}
-        <strong className="font-semibold text-ink-900">{totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}</strong>.
-        High-severity items should be triaged first; the remainder are queued for AP review.
-      </p>
+      {summaryGenerated ? (
+        <p className="max-w-[68ch] text-[1.0625rem] leading-[1.75] text-ink-700">
+          {override ?? (
+            <>
+              This audit returned <strong className="font-semibold text-ink-900">{totals.records} flagged records</strong> across{' '}
+              <strong className="font-semibold text-ink-900">{totals.workflows} {totals.workflows === 1 ? 'workflow' : 'workflows'}</strong>.
+              High-severity items should be triaged first; the remainder are queued for AP review.
+            </>
+          )}
+        </p>
+      ) : isGenerating ? (
+        <div className="max-w-[68ch] space-y-2.5" aria-live="polite">
+          <div className="h-3.5 w-full rounded bg-ink-900/10 animate-pulse" />
+          <div className="h-3.5 w-[92%] rounded bg-ink-900/10 animate-pulse" />
+          <div className="h-3.5 w-[78%] rounded bg-ink-900/10 animate-pulse" />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1424,27 +1450,30 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
             <MoreVertical size={16} />
           </button>
           {menuOpen && (
-            <div className="absolute right-0 top-10 z-20 w-[200px] bg-white border border-canvas-border rounded-[8px] shadow-xl py-1">
-              <button
-                onClick={() => { setMenuOpen(false); onOpenWorkflow(); }}
-                className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
-              >
-                <ExternalLink size={14} />
-                Open workflow
-              </button>
-              <button
-                onClick={() => { setMenuOpen(false); setOutputModalOpen(true); }}
-                className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
-              >
-                <Plus size={14} />
-                Add output
-              </button>
-              <div className="my-1 border-t border-canvas-border/60" />
+            <div className="absolute right-0 top-10 z-20 w-[180px] bg-white border border-canvas-border rounded-[12px] shadow-[0_12px_32px_-8px_rgba(15,8,30,0.18)] p-1.5">
+              {[
+                { icon: SquareArrowOutUpRight, label: 'Open workflow', tile: 'text-brand-600 bg-brand-50', onClick: () => { setMenuOpen(false); onOpenWorkflow(); } },
+                { icon: Plus, label: 'Add output', tile: 'text-evidence-700 bg-evidence-50', onClick: () => { setMenuOpen(false); setOutputModalOpen(true); } },
+              ].map(item => (
+                <button
+                  key={item.label}
+                  onClick={item.onClick}
+                  className="group/mi flex items-center gap-2.5 w-full text-left px-2 h-9 rounded-[8px] text-[0.8125rem] font-medium text-ink-700 hover:bg-brand-50 hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-brand-50"
+                >
+                  <span className={`shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-[7px] ${item.tile}`}>
+                    <item.icon size={14} strokeWidth={2.25} />
+                  </span>
+                  {item.label}
+                </button>
+              ))}
+              <div className="my-1.5 -mx-1.5 border-t border-canvas-border" />
               <button
                 onClick={() => { setMenuOpen(false); onRequestDelete(); }}
-                className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-risk-700 hover:bg-risk-50 cursor-pointer"
+                className="group/mi flex items-center gap-2.5 w-full text-left px-2 h-9 rounded-[8px] text-[0.8125rem] font-medium text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-risk-50"
               >
-                <Trash2 size={14} />
+                <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-[7px] text-risk-700 bg-risk-50">
+                  <Trash2 size={14} strokeWidth={2.25} />
+                </span>
                 Delete workflow
               </button>
             </div>
@@ -1481,7 +1510,14 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
             </thead>
             <tbody>
               {workflow.outputTable.rows.map((row, ri) => (
-                <tr key={ri} className="border-b border-ink-900/10">
+                <motion.tr
+                  key={ri}
+                  initial={{ opacity: 0, y: 4 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-20px' }}
+                  transition={{ duration: 0.28, delay: Math.min(ri, 12) * 0.03, ease: [0.22, 1, 0.36, 1] }}
+                  className="border-b border-ink-900/10"
+                >
                   {row.map((cell, ci) => {
                     const cellStr = String(cell);
                     const isSeverity = cellStr === 'High' || cellStr === 'Medium' || cellStr === 'Low';
@@ -1495,7 +1531,7 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
                       </td>
                     );
                   })}
-                </tr>
+                </motion.tr>
               ))}
             </tbody>
           </table>
@@ -1760,216 +1796,35 @@ function AddOutputModal({
   onClose: () => void;
   onAttach: (items: AttachedOutput[]) => void;
 }) {
-  const [tab, setTab] = useState<'kpi' | 'graph' | 'table'>('kpi');
-  const [selection, setSelection] = useState<Set<string>>(() => new Set(attached.map(a => `${a.kind}:${a.id}`)));
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  useFocusTrap(dialogRef, true, onClose);
-
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
-
-  const toggle = (kind: AttachedOutput['kind'], id: string) => {
-    const key = `${kind}:${id}`;
-    setSelection(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-  const isPicked = (kind: AttachedOutput['kind'], id: string) => selection.has(`${kind}:${id}`);
-
-  const handleAttach = () => {
-    const items: AttachedOutput[] = Array.from(selection).map(key => {
-      const [kind, ...rest] = key.split(':');
-      return { kind: kind as AttachedOutput['kind'], id: rest.join(':') };
-    });
-    onAttach(items);
-  };
-
-  const tabs: { id: 'kpi' | 'graph' | 'table'; label: string; count: number }[] = [
-    { id: 'kpi',   label: 'KPI',    count: KPI_CATALOG.length },
-    { id: 'graph', label: 'Graph',  count: GRAPH_CATALOG.length },
-    { id: 'table', label: 'Table',  count: TABLE_CATALOG.length },
-  ];
-
+  // Reuses the shared QueryWidgetModal (same design as the report query card) —
+  // only the heading / eyebrow / button label differ. Maps the workflow output
+  // catalog ↔ the modal's KPI/graph/table selection shape.
+  // Nothing attached yet → open with all KPIs pre-selected (matches the query
+  // card, whose KPIs are on by default); otherwise reflect what's attached.
+  const isFresh = attached.length === 0;
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.15 }}
-        onClick={onClose}
-        className="fixed inset-0 z-[60] bg-ink-900/40 backdrop-blur-[2px] flex items-center justify-center p-6"
-      >
-        <motion.div
-          ref={dialogRef}
-          initial={{ opacity: 0, y: 6, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 4, scale: 0.98 }}
-          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-          onClick={(e) => e.stopPropagation()}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="add-output-title"
-          tabIndex={-1}
-          className="w-full max-w-[840px] max-h-[calc(100vh-48px)] bg-white border border-canvas-border rounded-[16px] shadow-xl overflow-hidden flex flex-col"
-        >
-          <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-canvas-border">
-            <div>
-              <h3 id="add-output-title" className="text-[1rem] font-bold text-ink-800 tracking-tight">Add output to report</h3>
-              <p className="text-[0.75rem] text-ink-500 mt-1">
-                <span className="font-bold text-brand-600 uppercase tracking-wider text-[0.6875rem]">Workflow · {workflow.workflowId}</span>
-                <span className="mx-1.5 text-ink-400">·</span>
-                {workflow.name}
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              aria-label="Close"
-              className="w-8 h-8 inline-flex items-center justify-center rounded-[8px] text-ink-400 hover:text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-            >
-              <X size={20} />
-            </button>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex items-center gap-1 px-6 pt-3 border-b border-canvas-border">
-            {tabs.map(t => {
-              const active = tab === t.id;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`relative pb-3 pt-1 px-2 mr-2 text-[0.8125rem] font-semibold transition-colors cursor-pointer ${active ? 'text-brand-600' : 'text-ink-400 hover:text-ink-800'}`}
-                >
-                  <span>{t.label}</span>
-                  <span className={`ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[0.625rem] font-semibold tabular-nums ${active ? 'bg-brand-600/10 text-brand-600' : 'bg-paper-50 text-ink-400'}`}>
-                    {t.count}
-                  </span>
-                  {active && <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-brand-600 rounded-full" />}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Tab body */}
-          <div className="flex-1 overflow-y-auto px-6 py-5">
-            {tab === 'kpi' && (
-              <div className="grid grid-cols-2 gap-3">
-                {KPI_CATALOG.map(kpi => {
-                  const picked = isPicked('kpi', kpi.id);
-                  const Icon = kpi.icon;
-                  return (
-                    <button
-                      key={kpi.id}
-                      onClick={() => toggle('kpi', kpi.id)}
-                      className={`text-left bg-white border-2 rounded-[12px] p-3.5 transition-all cursor-pointer focus:outline-none ${picked ? 'border-brand-600 shadow-[0_0_0_3px_rgba(106,18,205,0.12)]' : 'border-canvas-border hover:border-brand-600/40'}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full border transition-colors ${picked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white border-canvas-border text-transparent'}`}>
-                          <Check size={12} />
-                        </span>
-                        <div className={`p-2 rounded-[8px] ${kpi.color}`}><Icon size={16} /></div>
-                        <div className="min-w-0">
-                          <div className="text-[0.8125rem] font-semibold text-ink-800">{kpi.label}</div>
-                          <div className="text-[0.6875rem] text-ink-400">Current value · <span className="text-ink-800 tabular-nums font-medium">{kpi.compute(workflow)}</span></div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {tab === 'graph' && (
-              <div className="grid grid-cols-2 gap-3">
-                {GRAPH_CATALOG.map(g => {
-                  const picked = isPicked('graph', g.id);
-                  return (
-                    <button
-                      key={g.id}
-                      onClick={() => toggle('graph', g.id)}
-                      className={`text-left bg-white border-2 rounded-[12px] p-3 transition-all cursor-pointer focus:outline-none ${picked ? 'border-brand-600 shadow-[0_0_0_3px_rgba(106,18,205,0.12)]' : 'border-canvas-border hover:border-brand-600/40'}`}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full border transition-colors ${picked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white border-canvas-border text-transparent'}`}>
-                          <Check size={12} />
-                        </span>
-                        <span className="text-[0.75rem] font-semibold text-ink-800">{g.title}</span>
-                      </div>
-                      <div className="h-[160px] bg-canvas-elevated rounded-[12px] p-1.5 pointer-events-none">
-                        <ConfigurableChart
-                          type={g.chartType}
-                          xAxis={g.xAxis}
-                          yAxis={g.yAxis}
-                          color={g.color}
-                          showTarget={false}
-                          showLegend={false}
-                        />
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {tab === 'table' && (
-              <div className="grid grid-cols-1 gap-3">
-                {TABLE_CATALOG.map(t => {
-                  const picked = isPicked('table', t.id);
-                  return (
-                    <button
-                      key={t.id}
-                      onClick={() => toggle('table', t.id)}
-                      className={`text-left bg-white border-2 rounded-[12px] p-4 transition-all cursor-pointer focus:outline-none ${picked ? 'border-brand-600 shadow-[0_0_0_3px_rgba(106,18,205,0.12)]' : 'border-canvas-border hover:border-brand-600/40'}`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <span className={`mt-0.5 inline-flex items-center justify-center w-5 h-5 rounded-full border transition-colors ${picked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white border-canvas-border text-transparent'}`}>
-                          <Check size={12} />
-                        </span>
-                        <div className="p-2 rounded-[8px] text-ink-500 bg-paper-50"><TableIcon size={16} /></div>
-                        <div className="flex-1">
-                          <div className="text-[0.8125rem] font-semibold text-ink-800">{t.title}</div>
-                          <div className="text-[0.6875rem] text-ink-500 mt-0.5">{t.description}</div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between px-6 py-4 border-t border-canvas-border bg-paper-50/40">
-            <span className="text-[0.75rem] text-ink-400">
-              {selection.size === 0 ? 'Nothing selected' : `${selection.size} selected`}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={onClose}
-                className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAttach}
-                disabled={selection.size === 0}
-                className={`inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${selection.size === 0 ? 'bg-brand-600/40 text-white/85 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-500 text-white'}`}
-              >
-                Add to report
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+    <QueryWidgetModal
+      queryId={workflow.workflowId}
+      queryTitle={workflow.name}
+      eyebrowLabel="Workflow"
+      kpis={KPI_CATALOG.map(k => ({ label: k.label, value: k.compute(workflow) }))}
+      charts={GRAPH_CATALOG.map(g => ({ id: g.id, title: g.title, type: g.chartType, xAxis: g.xAxis, yAxis: g.yAxis, color: g.color }))}
+      tables={TABLE_CATALOG.map(t => ({ id: t.id, title: t.title, columns: t.columns, rows: t.rows }))}
+      initialKpis={isFresh
+        ? new Set<string>(KPI_CATALOG.map(k => k.label))
+        : new Set<string>(attached.filter(a => a.kind === 'kpi').map(a => KPI_CATALOG.find(k => k.id === a.id)?.label).filter((l): l is NonNullable<typeof l> => !!l))}
+      initialCharts={new Set(attached.filter(a => a.kind === 'graph').map(a => a.id))}
+      initialTables={new Set(attached.filter(a => a.kind === 'table').map(a => a.id))}
+      onConfirm={(sel) => {
+        const items: AttachedOutput[] = [
+          ...Array.from(sel.kpis).map(label => KPI_CATALOG.find(k => k.label === label)?.id).filter((id): id is NonNullable<typeof id> => !!id).map(id => ({ kind: 'kpi' as const, id })),
+          ...Array.from(sel.charts).map(id => ({ kind: 'graph' as const, id })),
+          ...Array.from(sel.tables).map(id => ({ kind: 'table' as const, id })),
+        ];
+        onAttach(items);
+      }}
+      onClose={onClose}
+    />
   );
 }
 

@@ -5,7 +5,6 @@ import ListToolbar, { ToolbarViewToggle } from '../shared/ListToolbar';
 import ColumnFilter from '../shared/ColumnFilter';
 import ReportCard from '../shared/ReportCard';
 import { BTN_CTA_PRIMARY, BTN_CTA_OUTLINE } from '../admin/adminTokens';
-import { KpiCountUp } from '../shared/KpiTile';
 import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
@@ -35,6 +34,7 @@ import {
   type EditableTemplate, type GeneratedReport,
 } from './reportShared';
 import SmartTable from '../shared/SmartTable';
+import { KpiCountUp } from '../shared/KpiTile';
 import { useToast } from '../shared/Toast';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useCan } from '../../context/CurrentUserContext';
@@ -84,6 +84,96 @@ interface ReportsViewProps {
 
 // SEED_APPROVED_TEMPLATE lives in the shared keystone (re-exported above) so this
 // component file exports only components — keeping React Fast Refresh intact.
+
+// Branded placeholder shown for a beat while a clicked report "opens". Mirrors
+// the reader layout (top bar · outline rail · gradient banner · KPI row ·
+// section cards) so the real reader resolves into the same shape rather than
+// hard-cutting in. Uses the app's standard `animate-pulse` skeleton language.
+function ReportOpenSkeleton({ onBack }: { onBack: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.15 }}
+      className="h-full overflow-hidden bg-canvas"
+      aria-busy="true"
+      aria-label="Opening report"
+    >
+      {/* Top bar — real Back button so the user is never trapped */}
+      <div className="sticky top-0 z-30 bg-canvas px-6 lg:px-12 xl:px-[124px] h-16 flex items-center justify-between gap-4">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 transition-colors cursor-pointer"
+        >
+          <ArrowLeft size={14} /> Back to reports
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="skeleton-cool h-9 w-9 rounded-[8px]" />
+          <div className="skeleton-cool h-9 w-24 rounded-[8px]" />
+        </div>
+      </div>
+
+      <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10">
+        {/* Outline rail */}
+        <aside className="hidden xl:block w-[252px] shrink-0">
+          <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-3.5 space-y-2">
+            <div className="skeleton-cool h-3 w-24 rounded mb-3" />
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="skeleton-cool h-7 rounded-[8px]" style={{ '--sk-delay': `${i * 90}ms` } as React.CSSProperties} />
+            ))}
+          </div>
+        </aside>
+
+        {/* Document column */}
+        <div className="min-w-0 flex-1">
+          {/* Gradient banner — keeps the report's identity while it loads */}
+          <div
+            className="relative overflow-hidden rounded-[12px] mb-5 px-9 pt-9 pb-8"
+            style={{ backgroundImage: 'linear-gradient(125deg, #3b0b72 0%, #6a12cd 62%, #6a12cd 100%)' }}
+          >
+            <div className="skeleton-on-brand h-3 w-28 rounded mb-4" />
+            <div className="skeleton-on-brand h-8 w-2/3 max-w-[440px] rounded mb-3" />
+            <div className="skeleton-on-brand h-3.5 w-1/2 max-w-[360px] rounded mb-7" />
+            <div className="skeleton-on-brand h-3.5 w-44 rounded" />
+          </div>
+
+          {/* KPI bar — matches the live unified divided stat-bar */}
+          <div className="overflow-hidden rounded-[14px] border border-canvas-border bg-canvas-elevated mb-5">
+            <div className="-mt-px -ml-px grid grid-cols-2 md:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="border-l border-t border-canvas-border px-5 py-6">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="skeleton-cool h-2.5 w-20 rounded mt-0.5" style={{ '--sk-delay': `${i * 70}ms` } as React.CSSProperties} />
+                    <div className="skeleton-cool h-4 w-4 rounded" style={{ '--sk-delay': `${i * 70}ms` } as React.CSSProperties} />
+                  </div>
+                  <div className="skeleton-cool h-9 w-16 rounded mt-4" style={{ '--sk-delay': `${i * 70 + 40}ms` } as React.CSSProperties} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Section cards */}
+          <div className="space-y-4">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="rounded-[12px] border border-canvas-border bg-white px-9 py-7">
+                <div className="flex items-center gap-2.5 mb-6">
+                  <div className="skeleton-cool h-4 w-10 rounded" />
+                  <div className="skeleton-cool h-4 w-28 rounded" />
+                </div>
+                <div className="skeleton-cool h-6 w-2/3 rounded mb-7" />
+                <div className="space-y-2.5 max-w-[80ch]">
+                  <div className="skeleton-cool h-3.5 w-full rounded" />
+                  <div className="skeleton-cool h-3.5 w-[94%] rounded" />
+                  <div className="skeleton-cool h-3.5 w-[80%] rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 // ─── Main Reports View ───
 export default function ReportsView({
@@ -143,6 +233,18 @@ export default function ReportsView({
   // Type filter for Shared Reports — same Type taxonomy as the All feed.
   const [sharedTypeFilter, setSharedTypeFilter] = useState<string[]>([]);
   const [viewingReport, setViewingReport] = useState<GeneratedReport | null>(null);
+  // Brief skeleton "open" state when a report is clicked from the list/grid, so
+  // the reader doesn't hard-cut in. Shows a branded report skeleton for ~600ms,
+  // then mounts the real reader (which streams its own content in).
+  const [openingReport, setOpeningReport] = useState(false);
+  const openReportTimer = useRef<number | null>(null);
+  const openReport = useCallback((report: GeneratedReport) => {
+    if (openReportTimer.current) window.clearTimeout(openReportTimer.current);
+    setViewingReport(report);
+    setOpeningReport(true);
+    openReportTimer.current = window.setTimeout(() => setOpeningReport(false), 600);
+  }, []);
+  useEffect(() => () => { if (openReportTimer.current) window.clearTimeout(openReportTimer.current); }, []);
   // ATR template "Generate" opens the Generate-ATR-from-Observations wizard.
   const [atrWizardOpen, setAtrWizardOpen] = useState(false);
   const [reportToDelete, setReportToDelete] = useState<{ id: string; name: string } | null>(null);
@@ -255,6 +357,18 @@ export default function ReportsView({
     }
   }, [generatedReports, addToast]);
 
+  // Report-type counts for the My Reports filter band (only reports I generated).
+  const typeCounts = useMemo(() => {
+    let sox = 0, ia = 0;
+    generatedReports.forEach(r => {
+      if (r.generatedBy !== 'You') return;
+      const k = reportKind(r);
+      if (k === 'sox') sox++;
+      else if (k === 'ia') ia++;
+    });
+    return { sox, ia };
+  }, [generatedReports]);
+
   // ── ATR library: the curated mock ATRs plus any the user generated (have atrData). ──
   const allAtrs = useMemo<AtrLibraryReport[]>(() => {
     const generated = generatedReports
@@ -277,16 +391,6 @@ export default function ReportsView({
     return [...generated, ...ATR_LIBRARY];
   }, [generatedReports]);
   // Per-type counts for the My Reports sub-tab badges (ATR uses allAtrs).
-  const typeCounts = useMemo(() => {
-    let sox = 0, ia = 0;
-    generatedReports.forEach(r => { // My Reports = only reports I generated
-      if (r.generatedBy !== 'You') return;
-      const k = reportKind(r);
-      if (k === 'sox') sox++;
-      else if (k === 'ia') ia++;
-    });
-    return { sox, ia };
-  }, [generatedReports]);
   const openAtr = useCallback((atr: AtrLibraryReport) => {
     setViewingReport(atr as unknown as GeneratedReport);
   }, []);
@@ -344,7 +448,7 @@ export default function ReportsView({
         description: reportDesc(r), pills: reportPills(r),
         status: r.status === 'final' ? 'final' : 'draft',
         date: r.generatedAt, sortDate: ts(r.generatedAt),
-        open: () => setViewingReport(r),
+        open: () => openReport(r),
         download: () => startReportDownload(addToast, updateToast, r.name),
         shareId: r.id,
         del: () => setReportToDelete({ id: r.id, name: r.name }),
@@ -362,8 +466,23 @@ export default function ReportsView({
         shareId: a.id,
       });
     });
-    // Evidence is intentionally excluded from the All feed — it lives behind its
-    // own Evidence button now, not as a report type in this list.
+    // Evidence files — folded into the unified feed so they're listed and
+    // filterable by the "Evidence" Type option. Clicking a row opens the file
+    // itself (it's a document, not a report) — not the source ATR, which read as
+    // confusing in the all-reports list.
+    EVIDENCE_LIBRARY.forEach(ev => {
+      const openFile = () => addToast({ type: 'success', message: `Opening “${ev.name}”…` });
+      rows.push({
+        id: ev.id, kind: 'evidence', name: ev.name, bulk: false,
+        description: `${ev.area} · linked to ${ev.atrName}`,
+        pills: [ev.type, ev.size],
+        status: 'final',
+        date: ev.uploadedAt, sortDate: ts(ev.uploadedAt),
+        open: openFile,
+        download: () => addToast({ type: 'success', message: `Downloading “${ev.name}”.` }),
+        shareId: ev.id,
+      });
+    });
     return rows.sort((a, b) => b.sortDate - a.sortDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generatedReports, allAtrs, addToast, updateToast, openAtr, openAtrById]);
@@ -396,12 +515,15 @@ export default function ReportsView({
       || (r.bulk && 'bulk audit'.includes(q))
     ) : rows;
   }, [allReportsUnified, allSearch, allTypeFilter, KIND_FULL_LABEL]);
-  // Type-filter options: 'All', each framework present in the feed, then the
-  // cross-cutting Bulk Audit option (only when bulk reports exist).
+  // Type-filter options: each framework present in the feed, then the
+  // cross-cutting Bulk Audit option, with Evidence pinned last (it's a linked
+  // artifact, not a report framework, so it reads as its own trailing group).
   const allTypeOptions = useMemo(() => {
-    const kinds = Array.from(new Set(allReportsUnified.map(r => KIND_FULL_LABEL[r.kind])));
+    const kinds = Array.from(new Set(allReportsUnified.map(r => KIND_FULL_LABEL[r.kind])))
+      .filter(k => k !== 'Evidence');
     const opts = [...kinds];
     if (allReportsUnified.some(r => r.bulk)) opts.push('Bulk Audit');
+    if (allReportsUnified.some(r => r.kind === 'evidence')) opts.push('Evidence');
     return opts;
   }, [allReportsUnified, KIND_FULL_LABEL]);
   const sharedTypeOptions = useMemo(
@@ -784,6 +906,11 @@ export default function ReportsView({
 
 
   if (viewingReport) {
+    // Brief branded skeleton while the report "opens", before the real reader
+    // mounts. Gives the click immediate feedback instead of a hard cut.
+    if (openingReport) {
+      return <ReportOpenSkeleton onBack={() => { setOpeningReport(false); setViewingReport(null); }} />;
+    }
     // Generated Action Taken Reports render in their dedicated view (the same
     // content shown in the preview, with Manage Exceptions + Generate ATR).
     if (viewingReport.atrData) {
@@ -907,7 +1034,7 @@ export default function ReportsView({
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => { setActiveTab(tab.id); if (tab.id === 'my-reports') setReportType('all'); }}
                 className={`pb-3 text-[0.8125rem] font-semibold relative transition-colors cursor-pointer whitespace-nowrap ${
                   isActive ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700'
                 }`}
@@ -973,13 +1100,6 @@ export default function ReportsView({
                 label: t.label, onClick: () => { setReportType(t.key); setAtrUploadOpen(false); }, index: i,
               }))}
             </div>
-            {/* Evidence — a linked repository, not a report type; same tile shape,
-                set apart on the right so it reads as its own destination. */}
-            {renderKpiTile({
-              key: 'evidence', active: reportType === 'evidence', icon: FolderArchive,
-              value: EVIDENCE_LIBRARY.length, label: 'Evidence',
-              onClick: () => { setReportType('evidence'); setAtrUploadOpen(false); }, fixed: true, animate: false,
-            })}
           </div>
         )}
 
@@ -1142,7 +1262,9 @@ export default function ReportsView({
           )
         )}
 
-        {/* Evidence — segregated repository, each item linked to its source ATR */}
+        {/* Evidence — segregated repository, each item linked to its source ATR.
+            Reached via the "Evidence" toolbar button; the My Reports tab returns
+            to the unified all-reports list. */}
         {activeTab === 'my-reports' && reportType === 'evidence' && (
           <EvidenceRepository onOpenSource={openAtrById} view={viewMode} onViewChange={setViewMode} />
         )}
@@ -1230,7 +1352,7 @@ export default function ReportsView({
                   iconClass={UNIFIED_KIND_META[reportType].classes}
                   name={String(item.name)}
                   subline={item.generatedBy && String(item.generatedBy) !== 'You' ? `By ${String(item.generatedBy)}` : undefined}
-                  onClick={() => { const report = generatedReports.find(r => r.id === item.id); if (report) setViewingReport(report); }}
+                  onClick={() => { const report = generatedReports.find(r => r.id === item.id); if (report) openReport(report); }}
                   selectable
                   selected={selectedReportIds.has(String(item.id))}
                   isSelecting={isSelectingReports}
@@ -1327,7 +1449,7 @@ export default function ReportsView({
                     description={reportDesc(r)}
                     pills={r.tag === 'Bulk Audit' ? ['Bulk Audit', ...reportPills(r)] : reportPills(r)}
                     footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{r.generatedAt}</span>}
-                    onClick={() => setViewingReport(r)}
+                    onClick={() => openReport(r)}
                     selectable
                     selected={selectedReportIds.has(r.id)}
                     isSelecting={isSelectingReports}

@@ -908,6 +908,7 @@ export interface ConfigurableChartProps {
     | "area"
     | "bar"
     | "pie"
+    | "combo"
     | "table"
     | "KPI"
     | "Line Chart"
