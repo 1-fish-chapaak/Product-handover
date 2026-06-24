@@ -166,7 +166,7 @@ export default function ReportDownloadModal({
         className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       >
         <div
-          className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]"
+          className="absolute inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px]"
           onClick={onClose}
         />
         <motion.div

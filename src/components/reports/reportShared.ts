@@ -340,6 +340,9 @@ export type GeneratedReport = typeof GENERATED_REPORTS[number] & {
   /** Present when this report is a generated Action Taken Report (renders via
    *  AtrReportView instead of the standard template/query report layout). */
   atrData?: AtrReportData;
+  /** Monotonic save counter for an uploaded ATR — drives the v1, v2, … label.
+   *  Lives on the persisted card so it survives the wizard closing on save. */
+  atrVersion?: number;
   /** ATR-tab metadata for a saved ATR version. */
   riskOwner?: string;
   sourceReport?: string;

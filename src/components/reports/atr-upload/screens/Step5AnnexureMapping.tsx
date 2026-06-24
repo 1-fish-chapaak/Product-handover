@@ -133,9 +133,9 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {needsReview > 0 && (
-              <Button variant="outline" size="sm" leftIcon={<CheckCheck size={14} />} onClick={confirmAll}>Confirm all</Button>
+              <Button variant="outline" size="sm" shape="md" leftIcon={<CheckCheck size={14} />} onClick={confirmAll}>Confirm all</Button>
             )}
-            <Button variant="outline" size="sm" leftIcon={<Upload size={14} />} onClick={() => setUploadOpen(true)}>Upload annexure</Button>
+            <Button variant="outline" size="sm" shape="md" leftIcon={<Upload size={14} />} onClick={() => setUploadOpen(true)}>Upload annexure</Button>
           </div>
         </div>
 

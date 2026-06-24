@@ -1,11 +1,14 @@
 import { useState, type ReactNode } from 'react';
-import { ArrowRight, Upload, FileText, X } from 'lucide-react';
+import { motion } from 'motion/react';
+import { ArrowRight, Upload, FileText, FileSpreadsheet, X, Plus } from 'lucide-react';
 import { Button } from '../../../shared/Button';
 import UploadDataModal from '../../../concierge-workflow-builder/UploadDataModal';
 import DatePicker from '../../../shared/DatePicker';
 import { WizardFooter } from '../footerSlot';
 import type { ReportMeta } from '../types';
 
+// Match Step 2a's entrance + tokens so the two upload screens read as one family.
+const EASE = [0.22, 1, 0.36, 1] as const;
 const INPUT_CLS = 'w-full h-9 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
 
 // ISO "yyyy-mm-dd" → "DD Mon YYYY".
@@ -18,7 +21,7 @@ const fmtDate = (iso: string) => {
 function Field({ label, required, hint, children, className = '' }: { label: string; required?: boolean; hint?: string; children: ReactNode; className?: string }) {
   return (
     <div className={className}>
-      <label className="block text-[12px] font-semibold text-ink-700 mb-1">
+      <label className="block text-[12px] font-semibold text-ink-700 mb-1.5">
         {label}{required && <span className="text-risk-700"> *</span>}
         {hint && <span className="font-normal text-ink-400"> · {hint}</span>}
       </label>
@@ -27,8 +30,76 @@ function Field({ label, required, hint, children, className = '' }: { label: str
   );
 }
 
+// One uploaded file, as a compact removable row.
+function FileChip({ name, onRemove }: { name: string; onRemove: () => void }) {
+  return (
+    <div className="flex items-center gap-2.5 rounded-[8px] border border-canvas-border bg-canvas px-2.5 py-1.5">
+      <span className="w-6 h-6 rounded-[6px] bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileText size={13} aria-hidden="true" /></span>
+      <span className="text-[12px] font-medium text-ink-800 truncate flex-1">{name}</span>
+      <button type="button" onClick={onRemove} aria-label={`Remove ${name}`} className="w-5 h-5 inline-flex items-center justify-center rounded-full text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"><X size={12} aria-hidden="true" /></button>
+    </div>
+  );
+}
+
+// Compact upload slot in the platform's card style (icon chip + title + blurb,
+// action button at the bottom) — kept short so the screen never scrolls.
+function UploadCard({ icon: Icon, tint, title, blurb, cta, badge, badgeCls, files, onAdd, onRemove, recommended, delay }: {
+  icon: typeof FileText;
+  tint: string;
+  title: string;
+  blurb: string;
+  cta: string;
+  badge: string;
+  badgeCls: string;
+  files: File[];
+  onAdd: () => void;
+  onRemove: (i: number) => void;
+  recommended?: boolean;
+  delay: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: EASE, delay }}
+      className={`relative flex flex-col rounded-[14px] border bg-canvas-elevated p-4 transition-colors ${files.length > 0 ? 'border-compliant/40' : 'border-canvas-border hover:border-brand-300'}`}
+    >
+      <span className={`absolute top-3.5 right-3.5 inline-flex items-center rounded-full text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 ${badgeCls}`}>{badge}</span>
+      <div className="flex items-center gap-3 mb-3 pr-20">
+        <span className={`w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 ${tint}`}><Icon size={19} aria-hidden="true" /></span>
+        <div className="min-w-0">
+          <h3 className="text-[14px] font-semibold text-ink-900 leading-tight">{title}</h3>
+          <p className="text-[11.5px] text-ink-400 mt-0.5 truncate">{blurb}</p>
+        </div>
+      </div>
+
+      {files.length > 0 && (
+        <div className="mb-3">
+          <div className="mb-1.5 text-[11px] font-semibold text-ink-500 tabular-nums">{files.length} file{files.length === 1 ? '' : 's'} added</div>
+          {/* Capped + internally scrollable so adding many files never grows the
+              card unbounded (which broke the layout + forced a page scroll). */}
+          <ul className="space-y-1.5 max-h-[92px] overflow-y-auto pr-1 -mr-1">
+            {files.map((f, i) => <li key={`${f.name}-${i}`}><FileChip name={f.name} onRemove={() => onRemove(i)} /></li>)}
+          </ul>
+        </div>
+      )}
+
+      <Button
+        variant={files.length > 0 || !recommended ? 'outline' : 'primary'}
+        size="md"
+        leftIcon={files.length > 0 ? <Plus size={15} /> : <Upload size={15} />}
+        onClick={onAdd}
+        className="w-full mt-auto"
+      >
+        {files.length > 0 ? 'Add more files' : cta}
+      </Button>
+    </motion.div>
+  );
+}
+
 /** Screen 2B — upload an existing audit report (+ optional annexures) and fill
- *  the mandatory report details that flow into the ATR's top section. */
+ *  the mandatory report details that flow into the ATR's top section. Single
+ *  compact column (no scroll), sharing Screen 2A's card + CTA language. */
 export default function Step2bReportUpload({ onExtract }: {
   onExtract: (report: File, annexures: File[], meta: Partial<ReportMeta>) => void;
 }) {
@@ -60,60 +131,19 @@ export default function Step2bReportUpload({ onExtract }: {
   };
 
   return (
-    <div className="w-full max-w-[860px] mx-auto">
-      <h2 className="text-[1.0625rem] font-semibold text-ink-900 mb-0.5 text-center">Upload your audit report</h2>
-      <p className="text-[0.8125rem] text-ink-500 mb-3 leading-snug text-center">
-        The audit report generates the ATR; annexures (optional) power the linked cases in Manage Exceptions. Nothing is re-audited here.
-      </p>
-
-      <div className="grid sm:grid-cols-2 gap-3 items-start mb-3">
-        {/* Audit report — opens the shared "Add data" upload modal. */}
-        <div>
-          <label className="block text-xs font-semibold text-ink-800 mb-1.5">Upload Audit Report</label>
-          {report.length > 0 && (
-            <ul className="space-y-1.5 mb-2">
-              {report.map((f, i) => (
-                <li key={`${f.name}-${i}`} className="flex items-center gap-2.5 rounded-[8px] border border-canvas-border bg-canvas-elevated px-3 py-2">
-                  <FileText size={15} className="text-brand-600 shrink-0" aria-hidden="true" />
-                  <span className="text-[12.5px] font-medium text-ink-800 truncate flex-1">{f.name}</span>
-                  <button type="button" onClick={() => setReport(prev => prev.filter((_, idx) => idx !== i))} aria-label={`Remove ${f.name}`} className="w-5 h-5 inline-flex items-center justify-center rounded-full text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"><X size={13} aria-hidden="true" /></button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <Button variant="outline" size="md" leftIcon={<Upload size={15} />} onClick={() => setUploadTarget('report')} className="w-full">
-            {report.length > 0 ? 'Add more report files' : 'Upload audit report'}
-          </Button>
-        </div>
-
-        {/* Annexures (optional) */}
-        <div>
-          <label className="block text-xs font-semibold text-ink-800 mb-1.5">Upload Annexures <span className="text-ink-400 font-normal">(optional)</span></label>
-          {annexures.length > 0 && (
-            <ul className="space-y-1.5 mb-2">
-              {annexures.map((f, i) => (
-                <li key={`${f.name}-${i}`} className="flex items-center gap-2.5 rounded-[8px] border border-canvas-border bg-canvas-elevated px-3 py-2">
-                  <FileText size={15} className="text-brand-600 shrink-0" aria-hidden="true" />
-                  <span className="text-[12.5px] font-medium text-ink-800 truncate flex-1">{f.name}</span>
-                  <button type="button" onClick={() => setAnnexures(prev => prev.filter((_, idx) => idx !== i))} aria-label={`Remove ${f.name}`} className="w-5 h-5 inline-flex items-center justify-center rounded-full text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"><X size={13} aria-hidden="true" /></button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <Button variant="outline" size="md" leftIcon={<Upload size={15} />} onClick={() => setUploadTarget('annexures')} className="w-full">
-            {annexures.length > 0 ? 'Add more annexures' : 'Upload annexures'}
-          </Button>
-        </div>
-      </div>
-
-      {/* Mandatory report details — these populate the ATR's top section. */}
-      <div className="rounded-[12px] border border-canvas-border bg-canvas-elevated p-4 text-left">
-        <div className="flex items-baseline justify-between gap-3 mb-2.5">
+    <div className="w-full">
+      {/* Report details first — fill these, then upload the file(s) below */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: EASE, delay: 0.04 }}
+        className="text-left"
+      >
+        <div className="mb-3.5">
           <h3 className="text-[13px] font-semibold text-ink-900">Report details</h3>
-          <p className="text-[11.5px] text-ink-400">Appear atop the ATR · all required</p>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2">
+        <div className="grid sm:grid-cols-2 gap-x-4 gap-y-3">
           <Field label="Audit Title" required>
             <input value={auditTitle} onChange={e => setAuditTitle(e.target.value)} placeholder="e.g. Procurement, Inventory & Dispatch Process" className={INPUT_CLS} />
           </Field>
@@ -136,6 +166,39 @@ export default function Step2bReportUpload({ onExtract }: {
             <input value={generatedOn} readOnly aria-readonly className={`${INPUT_CLS} bg-canvas text-ink-600 cursor-default focus:ring-0 focus:border-canvas-border`} />
           </Field>
         </div>
+      </motion.div>
+
+      {/* Upload targets — two cards in the platform's format-card style.
+          items-start so the empty card keeps its natural (short) height instead
+          of stretching to match a file-filled sibling. */}
+      <div className="grid sm:grid-cols-2 gap-4 items-start mt-4">
+        <UploadCard
+          icon={FileText}
+          tint="bg-brand-50 text-brand-700"
+          title="Audit report"
+          blurb="PDF, Word, Excel or CSV · max 25 MB"
+          cta="Upload audit report"
+          badge="Required"
+          badgeCls="bg-risk-50 text-risk-700"
+          files={report}
+          onAdd={() => setUploadTarget('report')}
+          onRemove={i => setReport(prev => prev.filter((_, idx) => idx !== i))}
+          recommended
+          delay={0.16}
+        />
+        <UploadCard
+          icon={FileSpreadsheet}
+          tint="bg-evidence-50 text-evidence-700"
+          title="Annexures"
+          blurb=".xlsx workbooks · power Manage Exceptions"
+          cta="Upload annexures"
+          badge="Optional"
+          badgeCls="bg-paper-100 text-ink-500"
+          files={annexures}
+          onAdd={() => setUploadTarget('annexures')}
+          onRemove={i => setAnnexures(prev => prev.filter((_, idx) => idx !== i))}
+          delay={0.2}
+        />
       </div>
 
       <WizardFooter>

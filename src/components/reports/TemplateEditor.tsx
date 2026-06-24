@@ -489,7 +489,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }} className="fixed inset-0 z-[60] flex items-center justify-center" onClick={attemptClose}>
-      <div className="absolute inset-0 bg-ink-900/60 backdrop-blur-[3px]" />
+      <div className="absolute inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px]" />
       <motion.div
         ref={containerRef}
         initial={{ opacity: 0, scale: 0.97, y: 12 }}

@@ -81,7 +81,7 @@ function MetaCell({ label, value, onCommit }: { label: string; value?: string; o
   return (
     <div>
       <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-1.5">{label}</div>
-      <div className="border-l-[3px] border-brand-500 pl-3">
+      <div>
         <div className="text-[0.8125rem] font-bold text-ink-900"><EditableText value={value ?? ''} editable onCommit={onCommit} placeholder={`Add ${label.toLowerCase()}`} /></div>
       </div>
     </div>
@@ -363,7 +363,7 @@ function ObservationCard({ index, obs, editable, onChange, actions }: { index: n
             <FieldRow label="Issue Description" value={obs.description} editable={editable} onCommit={v => onChange?.({ ...obs, description: v })} />
           </div>
         )}
-        <div className="space-y-3">
+        <div className="space-y-5">
           {obs.actionPlans.map((ap, i) => (
             <ActionPlanCard key={i} index={i + 1} plan={ap} classification={obs.classification} editable={editable} onChange={next => setPlan(i, next)} />
           ))}
@@ -375,39 +375,38 @@ function ObservationCard({ index, obs, editable, onChange, actions }: { index: n
 
 function ActionPlanCard({ index, plan, classification, editable, onChange }: { index: number; plan: AtrActionPlan; classification?: AtrClassification; editable?: boolean; onChange?: (next: AtrActionPlan) => void }) {
   const tone = plan.status ? ACTION_STATUS[plan.status] : null;
+  // Flat block — the MAP pill delimits the action plan; no left rail.
   return (
-    <div className="border border-canvas-border rounded-[12px] overflow-hidden bg-canvas-elevated">
-      <div className="p-4">
-        <div className="flex items-center gap-2.5 flex-wrap mb-2.5">
-          <span className="inline-flex items-center h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded bg-brand-50 text-brand-700 shrink-0">Management Action Plan {index}</span>
-          {(plan.title || editable) && <h4 className="text-[0.875rem] font-bold text-ink-900 leading-snug"><EditableText value={plan.title ?? ''} editable={editable} placeholder="Add a title" onCommit={v => onChange?.({ ...plan, title: v })} /></h4>}
-        </div>
-
-        <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-          {plan.dueDate ? (
-            <span className="inline-flex items-center gap-1.5 h-7 px-3 text-[0.75rem] font-semibold rounded-full bg-brand-50 text-brand-700"><Calendar size={12} /> Due {fmt(plan.dueDate)}</span>
-          ) : <span />}
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            {classification && (
-              <span className={`inline-flex items-center h-7 px-3 text-[0.625rem] font-bold uppercase tracking-wider rounded-full ${CLASSIFICATION_PILL[classification]}`}>{classification}</span>
-            )}
-            {plan.status && tone && (
-              <span className={`inline-flex items-center gap-1.5 h-7 px-3 text-[0.6875rem] font-bold uppercase tracking-wider rounded-full ${tone.pill}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />{plan.status === 'Pending' ? 'In-Progress' : plan.status}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {(plan.text || plan.actionTaken || plan.evidence || plan.verification || editable) && (
-          <div className="grid grid-cols-[150px_1fr] gap-x-5 gap-y-3 items-start border-t border-canvas-border pt-3.5">
-            <FieldRow label="MAP Details" value={plan.text} editable={editable} onCommit={v => onChange?.({ ...plan, text: v })} />
-            <FieldRow label="Action Taken" value={plan.actionTaken} editable={editable} onCommit={v => onChange?.({ ...plan, actionTaken: v })} />
-            <FieldRow label="Evidence" value={plan.evidence} editable={editable} italic onCommit={v => onChange?.({ ...plan, evidence: v })} />
-            <FieldRow label="Auditor Verification" value={plan.verification} editable={editable} onCommit={v => onChange?.({ ...plan, verification: v })} />
-          </div>
-        )}
+    <div>
+      <div className="flex items-center gap-2.5 flex-wrap mb-2.5">
+        <span className="inline-flex items-center h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded bg-brand-50 text-brand-700 shrink-0">Management Action Plan {index}</span>
+        {(plan.title || editable) && <h4 className="text-[0.875rem] font-bold text-ink-900 leading-snug"><EditableText value={plan.title ?? ''} editable={editable} placeholder="Add a title" onCommit={v => onChange?.({ ...plan, title: v })} /></h4>}
       </div>
+
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+        {plan.dueDate ? (
+          <span className="inline-flex items-center gap-1.5 h-7 px-3 text-[0.75rem] font-semibold rounded-full bg-brand-50 text-brand-700"><Calendar size={12} /> Due {fmt(plan.dueDate)}</span>
+        ) : <span />}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {classification && (
+            <span className={`inline-flex items-center h-7 px-3 text-[0.625rem] font-bold uppercase tracking-wider rounded-full ${CLASSIFICATION_PILL[classification]}`}>{classification}</span>
+          )}
+          {plan.status && tone && (
+            <span className={`inline-flex items-center gap-1.5 h-7 px-3 text-[0.6875rem] font-bold uppercase tracking-wider rounded-full ${tone.pill}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />{plan.status === 'Pending' ? 'In-Progress' : plan.status}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {(plan.text || plan.actionTaken || plan.evidence || plan.verification || editable) && (
+        <div className="grid grid-cols-[150px_1fr] gap-x-5 gap-y-3 items-start border-t border-canvas-border pt-3.5">
+          <FieldRow label="MAP Details" value={plan.text} editable={editable} onCommit={v => onChange?.({ ...plan, text: v })} />
+          <FieldRow label="Action Taken" value={plan.actionTaken} editable={editable} onCommit={v => onChange?.({ ...plan, actionTaken: v })} />
+          <FieldRow label="Evidence" value={plan.evidence} editable={editable} italic onCommit={v => onChange?.({ ...plan, evidence: v })} />
+          <FieldRow label="Auditor Verification" value={plan.verification} editable={editable} onCommit={v => onChange?.({ ...plan, verification: v })} />
+        </div>
+      )}
     </div>
   );
 }

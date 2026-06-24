@@ -4,23 +4,16 @@ import {
   Pencil, Download, Save, SlidersHorizontal, ArrowLeft,
   ChevronUp, ChevronDown, Eye, EyeOff, ListTodo, RotateCcw,
 } from 'lucide-react';
-import Modal from '../../../shared/Modal';
 import { Button } from '../../../shared/Button';
 import { useToast } from '../../../shared/Toast';
-import { useCurrentUser } from '../../../../context/CurrentUserContext';
 import AtrDocument from '../../AtrDocument';
+import { exportAtrWord } from '../../atrTemplate';
 import { ATR_SECTION_ORDER, ATR_SECTION_LABEL, type AtrSectionKey } from '../../atrSections';
 import { toAtrReportData } from '../toAtrReportData';
 import { useAtrUpload } from '../AtrUploadContext';
 import { WizardFooter } from '../footerSlot';
 import ObservationExceptionsModal from '../components/ObservationExceptionsModal';
 import type { AtrReportData } from '../../atrTypes';
-import type { AtrVersion } from '../types';
-
-function parseVersion(s?: string): { maj: number; min: number } {
-  const m = s?.match(/v(\d+)\.(\d+)/);
-  return m ? { maj: +m[1], min: +m[2] } : { maj: 1, min: 0 };
-}
 
 /** Screen 7 — ATR preview. Reuses the existing AtrDocument renderer (brand
  *  fidelity), adds the floating toolbar, inline editing, section skip/reorder,
@@ -29,17 +22,16 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
   /** Hand the linked exception cases for a single observation to case management. */
   onManageExceptions?: (observationId: string) => void;
   /** Persist the generated ATR into My Reports → ATR tab (upsert by session id). */
-  onSaveAtr?: (sessionId: string, label: string | undefined, data: AtrReportData) => void;
+  onSaveAtr?: (sessionId: string, label: string | undefined, data: AtrReportData) => string;
 }) {
-  const { state, updateSession, addVersion, goTo } = useAtrUpload();
+  const { state, updateSession, goTo } = useAtrUpload();
   const { addToast } = useToast();
-  const { currentUser } = useCurrentUser();
   const session = state.session;
 
   const [editMode, setEditMode] = useState(false);
   const [sectionsOpen, setSectionsOpen] = useState(false);
-  const [saveOpen, setSaveOpen] = useState(false);
-  const [saveLabel, setSaveLabel] = useState('');
+  // Download menu — PDF or Word.
+  const [showFormats, setShowFormats] = useState(false);
   const [order, setOrder] = useState<AtrSectionKey[]>(ATR_SECTION_ORDER);
   const [hidden, setHidden] = useState<AtrSectionKey[]>([]);
   // Observation whose linked exceptions are open in the per-observation modal.
@@ -64,20 +56,16 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
   const patch = (partial: Partial<AtrReportData>) =>
     updateSession(s => ({ ...s, atrDraft: { ...(s.atrDraft ?? toAtrReportData(s)), ...partial } }));
 
-  const newVersion = (label?: string): AtrVersion => {
-    const latest = parseVersion(state.versions[0]?.versionNumber);
-    const num = `v${latest.maj}.${latest.min + 1}`;
-    return { id: `atrv-${Date.now()}`, versionNumber: num, status: 'draft', data, generatedAt: new Date().toISOString(), generatedBy: currentUser?.name ?? 'You', label };
-  };
-
-  const handleDownload = () => {
-    // PDF download via the browser's print engine: the global print stylesheet
+  const handleDownload = (kind: 'pdf' | 'word') => {
+    setShowFormats(false);
+    if (kind === 'word') { exportAtrWord(data.meta, data.observations); addToast({ type: 'success', message: 'ATR exported to Word.' }); return; }
+    // PDF via the browser's print engine: the global print stylesheet
     // (index.css @media print) hides all chrome and emits only the
     // `.report-printable` ATR document. Setting document.title gives the saved
     // PDF a meaningful filename; we restore it once the dialog closes.
     const filename = `${data.meta.reportId || 'ATR'} — Action Taken Report`;
     const prevTitle = document.title;
-    addToast({ type: 'info', message: 'Generating the PDF — pick “Save as PDF” as the destination.' });
+    addToast({ type: 'info', message: 'Opening the print dialog — pick “Save as PDF” as the destination.' });
     window.setTimeout(() => {
       document.title = filename;
       window.print();
@@ -85,15 +73,12 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
     }, 250);
   };
 
+  // Save directly — no dialog. The host upserts the ATR into My Reports and
+  // returns the version label (v1, v2, …), incremented from the saved card so
+  // it survives the wizard closing on save.
   const handleSave = () => {
-    const label = saveLabel.trim() || undefined;
-    const v = newVersion(label);
-    addVersion(v);
-    // Persist into My Reports → ATR tab so the generated ATR lives alongside
-    // every other report (upsert by session id — re-saving updates the card).
-    onSaveAtr?.(session.id, label, data);
-    addToast({ type: 'success', message: `Saved ${v.versionNumber} to My Reports → ATR${label ? ` — "${label}"` : ''}.` });
-    setSaveOpen(false); setSaveLabel('');
+    const versionNumber = onSaveAtr?.(session.id, undefined, data) ?? 'v1';
+    addToast({ type: 'success', message: `Saved ${versionNumber} to My Reports → ATR.` });
   };
 
   // Section reorder / visibility
@@ -160,9 +145,23 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
               </AnimatePresence>
             </div>
 
-            <Button variant="outline" size="md" leftIcon={<Download size={15} />} onClick={handleDownload}>Download</Button>
+            <div className="relative">
+              <Button variant="outline" size="md" leftIcon={<Download size={15} />} rightIcon={<ChevronDown size={13} className={`transition-transform ${showFormats ? 'rotate-180' : ''}`} />} onClick={() => setShowFormats(o => !o)}>Preview &amp; Download</Button>
+              <AnimatePresence>
+                {showFormats && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowFormats(false)} />
+                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className="absolute right-0 bottom-full mb-2 w-[224px] z-20 rounded-[12px] border border-canvas-border bg-canvas-elevated shadow-xl overflow-hidden py-1">
+                      {[{ k: 'pdf' as const, l: 'Print / Save as PDF' }, { k: 'word' as const, l: 'Download as Word' }].map(f => (
+                        <button key={f.k} onClick={() => handleDownload(f.k)} className="w-full text-left px-3.5 py-2.5 text-[12.5px] text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer">{f.l}</button>
+                      ))}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
             <span className="w-px h-5 bg-canvas-border mx-0.5 hidden sm:block" aria-hidden="true" />
-            <Button variant="primary" size="md" leftIcon={<Save size={15} />} onClick={() => setSaveOpen(true)}>Save Version</Button>
+            <Button variant="primary" size="md" leftIcon={<Save size={15} />} onClick={handleSave}>Save Version</Button>
           </div>
         </div>
       </WizardFooter>
@@ -215,28 +214,6 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
               onManageExceptions?.(id);
             }}
           />
-        )}
-      </AnimatePresence>
-
-      {/* Save Version modal */}
-      <AnimatePresence>
-        {saveOpen && (
-          <Modal
-            title="Save version"
-            subtitle="Snapshot the current report as a labelled version."
-            width="max-w-[460px]"
-            onClose={() => setSaveOpen(false)}
-            footer={<><Button variant="outline" onClick={() => setSaveOpen(false)}>Cancel</Button><Button variant="primary" leftIcon={<Save size={14} />} onClick={handleSave}>Save version</Button></>}
-          >
-            <label className="block text-[12px] font-semibold text-ink-700 mb-1.5">Version label (optional)</label>
-            <input
-              autoFocus value={saveLabel} onChange={e => setSaveLabel(e.target.value)}
-              placeholder="e.g. Draft for partner review"
-              onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
-              className="w-full text-[13px] text-ink-800 bg-canvas-elevated border border-canvas-border rounded-[8px] px-3 py-2 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15"
-            />
-            <p className="text-[11.5px] text-ink-400 mt-2">Saved versions are listed with a version number; the next save will be <span className="font-semibold tabular-nums">{`v${parseVersion(state.versions[0]?.versionNumber).maj}.${parseVersion(state.versions[0]?.versionNumber).min + 1}`}</span>.</p>
-          </Modal>
         )}
       </AnimatePresence>
     </div>

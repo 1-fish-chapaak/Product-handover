@@ -61,7 +61,8 @@ export { CUSTOM_TEMPLATES, SEED_APPROVED_TEMPLATE } from './reportShared';
 interface ReportsViewProps {
   onOpenBuilder?: () => void;
   onShare?: (id: string) => void;
-  onManageExceptions?: () => void;
+  /** Opens Manage Exceptions. Pass a report id to make its Back return there. */
+  onManageExceptions?: (returnReportId?: string) => void;
   onOpenQuery?: (query: { id: string; title: string }) => void;
   customTemplates?: typeof REPORT_TEMPLATES[number][];
   onAddCustomTemplate?: (template: typeof REPORT_TEMPLATES[number]) => void;
@@ -218,6 +219,9 @@ export default function ReportsView({
   // cross-cutting Bulk Audit engagement style.
   const [allTypeFilter, setAllTypeFilter] = useState<string[]>([]);
   const [atrUploadOpen, setAtrUploadOpen] = useState(false);
+  // True while the wizard's close-confirm is up — hides this host backdrop so the
+  // confirm's own full-screen scrim is the only dim (no double-dim / vignette).
+  const [atrConfirmOpen, setAtrConfirmOpen] = useState(false);
   // Returning from "Manage exceptions first": the Manage-Exceptions view sets the
   // resume flag via its "Return to ATR & generate" button. On landing back here we
   // reopen the upload wizard, which resumes its persisted ATR-Preview stage, and
@@ -392,7 +396,10 @@ export default function ReportsView({
         sourceReport: r.sourceReport ?? r.name,
         atrData: r.atrData!,
       }));
-    return [...generated, ...ATR_LIBRARY];
+    // A generated card with a curated-library id is an edited override of it —
+    // keep the edited one, drop the original so the list shows no duplicates.
+    const generatedIds = new Set(generated.map(g => g.id));
+    return [...generated, ...ATR_LIBRARY.filter(l => !generatedIds.has(l.id))];
   }, [generatedReports]);
   // Per-type counts for the My Reports sub-tab badges (ATR uses allAtrs).
   const openAtr = useCallback((atr: AtrLibraryReport) => {
@@ -609,31 +616,59 @@ export default function ReportsView({
 
   // Save Version from the Generate-by-upload wizard → upsert a card in My
   // Reports keyed by the wizard session id (re-saving updates the same card).
-  const saveUploadedAtr = useCallback((sessionId: string, label: string | undefined, data: AtrReportData) => {
+  const saveUploadedAtr = useCallback((sessionId: string, label: string | undefined, data: AtrReportData): string => {
     const now = new Date();
     const stamp = `${now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
     const base = data.meta.auditTitle ?? 'Action Taken Report';
     const id = `gr-atr-upload-${sessionId}`;
+    // Build the card synchronously (re-using the existing name on re-save) so we
+    // have it in hand to open — don't rely on the setState updater running now.
+    // The version counter lives on the saved card, so re-saving increments it
+    // (v1 → v2 → …) even though the wizard unmounts on each save.
+    const existing = generatedReports.find(r => r.id === id);
+    const nextVersion = (existing?.atrVersion ?? 0) + 1;
+    const versionNumber = `v${nextVersion}`;
+    const card = {
+      id,
+      templateId: 'rt-007',
+      kind: 'atr' as const,
+      name: existing?.name ?? uniqueReportName(label ? `${base} — ${label}` : base),
+      tag: 'Internal Audit' as const,
+      generatedBy: 'You',
+      generatedAt: stamp,
+      status: 'draft' as const,
+      pages: Math.max(1, data.observations.length * 2),
+      queries: data.observations.length,
+      atrData: data,
+      atrVersion: nextVersion,
+      riskOwner: 'Tushar Goel',
+      sourceReport: base,
+    } as unknown as GeneratedReport;
+    setGeneratedReports(prev =>
+      prev.some(r => r.id === id) ? prev.map(r => (r.id === id ? card : r)) : [card, ...prev],
+    );
+    // Saving just opens the saved ATR — close the wizard and land full-page on
+    // the report (viewingReport → AtrReportView).
+    setAtrUploadOpen(false);
+    clearAtrDraft();
+    openReport(card);
+    return versionNumber;
+  }, [generatedReports, uniqueReportName, openReport]);
+
+  // Inline edits saved from the library ATR view. Updating a generated card
+  // patches it in place; editing a curated library ATR persists an override card
+  // (same id) into the generated store so the change survives a reload.
+  const saveAtrEdits = useCallback((id: string, data: AtrReportData) => {
     setGeneratedReports(prev => {
-      const existing = prev.find(r => r.id === id);
-      const card = {
-        id,
-        templateId: 'rt-007',
-        kind: 'atr' as const,
-        name: existing?.name ?? uniqueReportName(label ? `${base} — ${label}` : base),
-        tag: 'Internal Audit' as const,
-        generatedBy: 'You',
-        generatedAt: stamp,
-        status: 'draft' as const,
-        pages: Math.max(1, data.observations.length * 2),
-        queries: data.observations.length,
-        atrData: data,
-        riskOwner: 'Tushar Goel',
-        sourceReport: base,
-      } as unknown as GeneratedReport;
-      return existing ? prev.map(r => (r.id === id ? card : r)) : [card, ...prev];
+      if (prev.some(r => r.id === id)) return prev.map(r => (r.id === id ? { ...r, atrData: data } : r));
+      const lib = ATR_LIBRARY.find(a => a.id === id);
+      if (!lib) return prev;
+      return [{ ...lib, kind: 'atr', atrData: data } as unknown as GeneratedReport, ...prev];
     });
-  }, [uniqueReportName]);
+    // Reflect the save in the open view so the editor's `dirty` flag clears.
+    setViewingReport(v => (v && v.id === id ? ({ ...v, atrData: data } as GeneratedReport) : v));
+    addToast({ type: 'success', message: 'Changes saved.' });
+  }, [addToast]);
 
   // Offline banner — listens to online/offline events.
   const [isOffline, setIsOffline] = useState(() =>
@@ -668,9 +703,12 @@ export default function ReportsView({
   useEffect(() => {
     if (!focusReportId) return;
     const report = generatedReports.find(r => r.id === focusReportId);
-    if (report) {
+    // Fall back to the ATR library so a curated ATR (e.g. returning from Manage
+    // Exceptions) re-opens too — those ids aren't in generatedReports.
+    const atr = report ? null : allAtrs.find(a => a.id === focusReportId);
+    if (report || atr) {
       setActiveTab('my-reports');
-      setViewingReport(report);
+      setViewingReport((report ?? atr) as unknown as GeneratedReport);
       setMissingFocusReport(false);
       onFocusReportConsumed?.();
     } else if (generatedReports.length > 0) {
@@ -678,7 +716,7 @@ export default function ReportsView({
       setMissingFocusReport(true);
       onFocusReportConsumed?.();
     }
-  }, [focusReportId, generatedReports, onFocusReportConsumed]);
+  }, [focusReportId, generatedReports, allAtrs, onFocusReportConsumed]);
 
   const updateReportDescription = (reportId: string, description: string) => {
     setGeneratedReports(prev => prev.map(r =>
@@ -886,9 +924,11 @@ export default function ReportsView({
     if (viewingReport.atrData) {
       return (
         <AtrReportView
-          report={{ ...viewingReport, atrData: viewingReport.atrData }}
+          report={{ ...viewingReport, atrData: viewingReport.atrData, status: viewingReport.status === 'final' ? 'final' : 'draft' }}
           onBack={() => setViewingReport(null)}
           onShare={onShare ? () => onShare(viewingReport.id) : undefined}
+          onSave={data => saveAtrEdits(viewingReport.id, data)}
+          onManageExceptions={onManageExceptions ? () => onManageExceptions(viewingReport.id) : undefined}
         />
       );
     }
@@ -1653,15 +1693,15 @@ export default function ReportsView({
             {/* Backdrop is inert — the wizard owns its own close so an outside
                 click can't discard in-progress work without confirmation. */}
             <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-              className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50" />
+              initial={{ opacity: 0 }} animate={{ opacity: atrConfirmOpen ? 0 : 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+              className="fixed inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px] z-50" />
             <motion.div
               initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
               transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
               className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[680px] max-h-[92vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col overflow-hidden"
               role="dialog" aria-modal="true" aria-label="Generate ATR by Upload"
             >
-              <AtrUploadTab onClose={() => { setAtrUploadOpen(false); clearAtrDraft(); }} onManageExceptions={onManageExceptions} onSaveAtr={saveUploadedAtr} />
+              <AtrUploadTab onClose={() => { setAtrUploadOpen(false); setAtrConfirmOpen(false); clearAtrDraft(); }} onManageExceptions={onManageExceptions} onSaveAtr={saveUploadedAtr} onConfirmOpenChange={setAtrConfirmOpen} />
             </motion.div>
           </>
         )}

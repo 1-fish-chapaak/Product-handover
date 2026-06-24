@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Check, ArrowLeft, X, CloudUpload, AlertTriangle } from 'lucide-react';
+import { Check, ArrowLeft, X, CloudUpload } from 'lucide-react';
 import { AtrUploadProvider, useAtrUpload } from './AtrUploadContext';
 import { seedSession, seedEmptySession } from './mockExtraction';
 import { handoffToManageExceptions } from './handoff';
@@ -19,7 +18,7 @@ import Step5AnnexureMapping from './screens/Step5AnnexureMapping';
 import Step6Decision from './screens/Step6Decision';
 import Step7AtrPreview from './screens/Step7AtrPreview';
 import { useToast } from '../../shared/Toast';
-import { Button } from '../../shared/Button';
+import ReportDiscardDialog from '../ReportDiscardDialog';
 
 // ─── Stepper ───
 const STEPS: { stage: WizardStage; label: string }[] = [
@@ -118,67 +117,6 @@ const CLOSE_CONFIRM_COPY: Record<CloseConfirmKind, { title: string; body: string
   },
 };
 
-// Close-confirm scoped to the wizard card — NOT a second full-screen modal.
-// The shared ConfirmationModal paints its own viewport-wide scrim, which stacks
-// on top of the host modal's backdrop (double-dim + a bright halo on the card's
-// rounded border). MUI ships `hideBackdrop` for exactly this nested case. Here we
-// instead render an `absolute inset-0` overlay that the host card's
-// `overflow-hidden` rounding clips, so there's a single clean scrim over the one
-// surface being discarded, corners and all.
-function CloseConfirm({ open, kind, onConfirm, onCancel }: {
-  open: boolean;
-  kind: CloseConfirmKind;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel(); } };
-    // Capture so we intercept Escape before the host modal's own close handler.
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [open, onCancel]);
-
-  const copy = CLOSE_CONFIRM_COPY[kind];
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="absolute inset-0 z-30 flex items-center justify-center p-6"
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby="atr-close-confirm-title"
-          aria-describedby="atr-close-confirm-body"
-        >
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]"
-            onClick={onCancel}
-          />
-          <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.97 }}
-            transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-            className="relative w-full max-w-[400px] bg-canvas-elevated rounded-[20px] shadow-2xl ring-1 ring-ink-900/[0.06] p-7 text-center"
-          >
-            {/* Icon centered above the copy — reads as a deliberate alert, not a default box. */}
-            <div className="mx-auto w-12 h-12 rounded-full bg-risk-50 ring-[6px] ring-risk-50/40 text-risk-600 flex items-center justify-center">
-              <AlertTriangle size={22} strokeWidth={2.25} />
-            </div>
-            <h2 id="atr-close-confirm-title" className="mt-4 text-[18px] font-semibold text-ink-900 tracking-tight leading-tight">{copy.title}</h2>
-            <p id="atr-close-confirm-body" className="mt-2 text-[13px] text-ink-500 leading-relaxed">{copy.body}</p>
-
-            {/* Full-width, equal-weight actions — destructive on the right, safe option focused. */}
-            <div className="mt-6 grid grid-cols-2 gap-2.5">
-              <Button variant="outline" size="md" shape="md" className="w-full h-11" onClick={onCancel} autoFocus>{copy.cancel}</Button>
-              <Button variant="destructive" size="md" shape="md" className="w-full h-11" onClick={onConfirm}>{copy.confirm}</Button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
 
 function toUploadedFile(f: File): UploadedFile {
   return {
@@ -191,10 +129,13 @@ function toUploadedFile(f: File): UploadedFile {
   };
 }
 
-function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr }: {
+function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenChange }: {
   onClose?: () => void;
   onManageExceptions?: () => void;
-  onSaveAtr?: (sessionId: string, label: string | undefined, data: AtrReportData) => void;
+  onSaveAtr?: (sessionId: string, label: string | undefined, data: AtrReportData) => string;
+  /** Fires when the close-confirm opens/closes so the host can hide its own
+   *  backdrop and leave a single uniform scrim. */
+  onConfirmOpenChange?: (open: boolean) => void;
 }) {
   const { state, setMethod, setSession, goTo } = useAtrUpload();
   const { addToast } = useToast();
@@ -216,6 +157,8 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr }: {
     if (hasWorkInProgress) setConfirmClose(true);
     else onClose?.();
   };
+  // Let the host drop its backdrop while the confirm is up — one scrim, not two.
+  useEffect(() => { onConfirmOpenChange?.(confirmClose); }, [confirmClose, onConfirmOpenChange]);
 
   // Build the session (with the uploaded file's metadata) up front, then run the
   // processing animation. Seeding before processing keeps refresh-mid-processing
@@ -315,10 +258,15 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr }: {
         {/* Sticky footer — steps portal their primary action here. Hidden when empty. */}
         <footer ref={setFooterEl} className="shrink-0 empty:hidden print:hidden" />
 
-        {/* Close guard — a single scrim scoped to this card (no second backdrop). */}
-        <CloseConfirm
+        {/* Close guard — full-screen dialog over the upload model's own backdrop.
+            The host hides its backdrop while this is open (onConfirmOpenChange)
+            so there's a single uniform scrim. */}
+        <ReportDiscardDialog
           open={confirmClose}
-          kind={closeConfirmKind}
+          title={CLOSE_CONFIRM_COPY[closeConfirmKind].title}
+          body={CLOSE_CONFIRM_COPY[closeConfirmKind].body}
+          confirmLabel={CLOSE_CONFIRM_COPY[closeConfirmKind].confirm}
+          cancelLabel={CLOSE_CONFIRM_COPY[closeConfirmKind].cancel}
           onConfirm={() => { setConfirmClose(false); onClose?.(); }}
           onCancel={() => setConfirmClose(false)}
         />
@@ -329,14 +277,15 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr }: {
 
 /** The "Generate by Upload" tab — self-contained: owns its own provider so the
  *  wizard state persists independently of the rest of the reports module. */
-export default function AtrUploadTab({ onClose, onManageExceptions, onSaveAtr }: {
+export default function AtrUploadTab({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenChange }: {
   onClose?: () => void;
   onManageExceptions?: () => void;
-  onSaveAtr?: (sessionId: string, label: string | undefined, data: AtrReportData) => void;
+  onSaveAtr?: (sessionId: string, label: string | undefined, data: AtrReportData) => string;
+  onConfirmOpenChange?: (open: boolean) => void;
 }) {
   return (
     <AtrUploadProvider>
-      <AtrUploadInner onClose={onClose} onManageExceptions={onManageExceptions} onSaveAtr={onSaveAtr} />
+      <AtrUploadInner onClose={onClose} onManageExceptions={onManageExceptions} onSaveAtr={onSaveAtr} onConfirmOpenChange={onConfirmOpenChange} />
     </AtrUploadProvider>
   );
 }

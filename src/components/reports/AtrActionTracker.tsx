@@ -74,7 +74,7 @@ export default function AtrActionTracker({ atrs, onOpen, onClose }: {
 
   return (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="fixed inset-0 bg-ink-900/50 backdrop-blur-[2px] z-[60]" onClick={onClose} />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="fixed inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px] z-[60]" onClick={onClose} />
       <motion.div
         initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }} transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
         className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[82vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[65] flex flex-col" role="dialog" aria-label="Action item tracker"

@@ -44,7 +44,7 @@ export default function AtrReviewDrawer({ reportId, reportName, tab, onClose, on
 
   return (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="fixed inset-0 bg-ink-900/30 z-[60] print:hidden" onClick={onClose} />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="fixed inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px] z-[60] print:hidden" onClick={onClose} />
       <motion.aside
         initial={{ x: 380 }} animate={{ x: 0 }} exit={{ x: 380 }} transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
         className="fixed right-0 top-0 bottom-0 w-[380px] max-w-[92vw] bg-canvas-elevated border-l border-canvas-border z-[65] flex flex-col print:hidden"

@@ -51,6 +51,7 @@ function FormatCard({ icon: Icon, tint, title, ext, blurb, desc, recommended, do
       <Button
         variant={downloaded || !recommended ? 'outline' : 'primary'}
         size="md"
+        shape="md"
         leftIcon={downloaded ? <Check size={15} /> : <Download size={15} />}
         onClick={onDownload}
         className="w-full"
@@ -61,22 +62,12 @@ function FormatCard({ icon: Icon, tint, title, ext, blurb, desc, recommended, do
   );
 }
 
-// The 10 required columns grouped into the three phases of an observation —
-// gives the list meaning and rhythm instead of a flat wall of fields.
+// The 10 required columns grouped into the three phases of an observation.
 const FIELD_BY_KEY = Object.fromEntries(REQUIRED_FIELDS.map(f => [f.key, f.label]));
-// A meaningful icon per column so the list reads as "what to write" rather than
-// a row of identical ticks.
 const FIELD_ICON: Record<string, typeof Check> = {
-  title: Heading,
-  description: AlignLeft,
-  riskSummary: ShieldAlert,
-  recommendation: Lightbulb,
-  actionTaken: Wrench,
-  evidence: Paperclip,
-  verification: UserCheck,
-  classification: Tag,
-  risk: Gauge,
-  dueDate: CalendarClock,
+  title: Heading, description: AlignLeft, riskSummary: ShieldAlert,
+  recommendation: Lightbulb, actionTaken: Wrench, evidence: Paperclip, verification: UserCheck,
+  classification: Tag, risk: Gauge, dueDate: CalendarClock,
 };
 const GUIDE_GROUPS: { label: string; keys: string[] }[] = [
   { label: 'What you found', keys: ['title', 'description', 'riskSummary'] },
@@ -85,7 +76,7 @@ const GUIDE_GROUPS: { label: string; keys: string[] }[] = [
 ];
 
 /** Always-visible "how to fill the template" guidance — required columns grouped
- *  by the phase of an observation, distributed to fill the column height. */
+ *  by the phase of an observation. */
 function TemplateGuide() {
   return (
     <motion.aside
@@ -102,10 +93,6 @@ function TemplateGuide() {
         <span className="text-[10.5px] font-semibold text-ink-400 tabular-nums">{REQUIRED_FIELDS.length}</span>
       </div>
 
-      {/* Three groups. justify-between owns the whitespace between groups — it
-          expands to fill a tall modal and collapses on a short one, so the list
-          breathes when there's room but never clips when there isn't. gap-y is
-          the floor; per-item spacing is a small fixed minimum. */}
       <div className="flex-1 flex flex-col justify-between gap-y-3 pt-1">
         {GUIDE_GROUPS.map(g => (
           <div key={g.label}>
@@ -197,7 +184,7 @@ export default function Step2aTemplateDownload({ onUpload }: {
           <p className="text-[12px] text-ink-500 mb-3">
             {hasDownloaded ? 'Filled it in? Upload it here — we’ll extract every observation.' : 'Once you’ve filled a template, upload it here — we’ll extract every observation.'}
           </p>
-          <Button variant="primary" size="md" leftIcon={<Upload size={15} />} onClick={() => setUploadOpen(true)} className="w-full">
+          <Button variant="primary" size="md" shape="md" leftIcon={<Upload size={15} />} onClick={() => setUploadOpen(true)} className="w-full">
             Upload filled template
           </Button>
 
