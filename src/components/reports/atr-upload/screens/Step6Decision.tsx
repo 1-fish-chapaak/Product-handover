@@ -26,9 +26,13 @@ export default function Step6Decision({ onGenerate, onManageExceptions }: {
   // Counts shown under the heading — what's flowing into the decision.
   const selectedObs = session.observations.filter(o => o.selected);
   const obsCount = selectedObs.length || session.observations.length;
-  const linkedRows = session.annexures
-    .filter(a => a.observationId)
-    .reduce((n, a) => n + a.rows.length, 0);
+  // Skipping annexures means nothing is actually linked — don't count the
+  // mock's pre-suggested rows, or the subtext claims links that don't exist.
+  const linkedRows = session.annexuresSkipped
+    ? 0
+    : session.annexures
+        .filter(a => a.observationId)
+        .reduce((n, a) => n + a.rows.length, 0);
 
   // Manage-Exceptions needs confirmed annexure links. If the user skipped
   // annexures (or none are linked), that path is unavailable — lock to Generate.
@@ -39,7 +43,7 @@ export default function Step6Decision({ onGenerate, onManageExceptions }: {
     <div className="w-full">
       <h2 className="text-[1.0625rem] font-semibold text-ink-900 leading-tight mb-1">How would you like to proceed?</h2>
       <p className="text-[12.5px] text-ink-500 leading-snug mb-6">
-        {obsCount} observation{obsCount === 1 ? '' : 's'} · {linkedRows} linked exception row{linkedRows === 1 ? '' : 's'}.
+        {obsCount} observation{obsCount === 1 ? '' : 's'}{linkedRows > 0 ? ` · ${linkedRows} linked exception row${linkedRows === 1 ? '' : 's'}` : ''}.
       </p>
 
       <div className="grid grid-cols-2 gap-4 max-w-[720px] items-stretch">
