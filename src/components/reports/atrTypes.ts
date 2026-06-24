@@ -57,7 +57,6 @@ export interface AtrMeta {
   auditTitle?: string;
   auditPeriod?: string;
   preparedBy?: string;
-  /** Reviewer name — surfaces in the Approvals & Sign-Off "Reviewed by" block. */
   reviewedBy?: string;
   generatedOn?: string;
   auditEntity?: string;

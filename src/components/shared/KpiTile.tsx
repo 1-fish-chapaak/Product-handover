@@ -52,7 +52,7 @@ export function KpiCountUp({ value, delay = 0, duration = 1400 }: { value: strin
       animate={popped && !prefersReducedMotion ? { scale: [1, 1.04, 1] } : { scale: 1 }}
       transition={{ duration: 0.36, ease: [0.34, 1.56, 0.64, 1] }}
     >
-      {parsed.prefix}{n.toFixed(parsed.decimals)}{parsed.suffix}
+      {parsed.prefix}{n.toLocaleString('en-IN', { minimumFractionDigits: parsed.decimals, maximumFractionDigits: parsed.decimals })}{parsed.suffix}
     </motion.span>
   );
 }

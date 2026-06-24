@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Share2, Download, List, MessageSquare, GitBranch, Link2, ListChecks } from 'lucide-react';
+import { ArrowLeft, Share2, Download, List } from 'lucide-react';
 import AtrDocument from './AtrDocument';
 import type { AtrReportData } from './atrTypes';
-import { useToast } from '../shared/Toast';
-import AtrReviewDrawer from './AtrReviewDrawer';
-import { loadVersions, nowStamp, type AtrVersionStatus } from './atrReview';
+import { computeExecSummary, exportAtrExcel } from './atrTemplate';
+import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
+// ATR KPI tone → export accent hex (mirrors the on-screen exec-summary tiles).
+const ATR_TONE_HEX = { brand: '#6A12CD', ink: '#334155', high: '#C2410C', compliant: '#15803D', mitigated: '#B45309' };
 
 interface AtrReport {
   id: string;
@@ -13,20 +14,17 @@ interface AtrReport {
   generatedBy?: string;
   generatedAt?: string;
   tag?: string;
-  status?: string;
   atrData: AtrReportData;
 }
 
 /** Saved-ATR report page. Renders the generated Action Taken Report inside the
  *  shared reader workspace: plain page-level actions (no header bar), a persistent
  *  scroll-spy outline rail, and a constrained document column. */
-export default function AtrReportView({ report, onBack, onShare, onManageExceptions }: {
+export default function AtrReportView({ report, onBack, onShare }: {
   report: AtrReport;
   onBack: () => void;
   onShare?: () => void;
-  onManageExceptions?: () => void;
 }) {
-  const { addToast } = useToast();
   const { meta, observations, insights } = report.atrData;
 
   // The ATR document's sections are fixed; the rail mirrors them in order.
@@ -62,24 +60,48 @@ export default function AtrReportView({ report, onBack, onShare, onManageExcepti
   const scrollToSection = (id: string) =>
     document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  const download = () => {
-    addToast({ type: 'info', message: 'Opening print dialog — choose “Save as PDF”.' });
-    window.setTimeout(() => window.print(), 250);
-  };
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
 
-  const [review, setReview] = useState<'comments' | 'versions' | null>(null);
-  const [versions] = useState(() => loadVersions(report.id, { status: (report.status as AtrVersionStatus) ?? 'draft', by: report.generatedBy ?? 'You', at: report.generatedAt ?? nowStamp() }));
-
-  const copyLink = () => {
-    const url = `${window.location.origin}${window.location.pathname}?view=reports&tab=my-reports&atr=${encodeURIComponent(report.id)}`;
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(url).then(
-        () => addToast({ type: 'success', message: 'Report link copied to clipboard.' }),
-        () => addToast({ type: 'info', message: url }),
-      );
-    } else {
-      addToast({ type: 'info', message: url });
-    }
+  // Map the ATR data onto the shared download-preview section model so the ATR
+  // exports through the same modal (preview + PDF/DOCX/PPTX/HTML/Excel) as every
+  // other report, instead of a bare window.print().
+  const buildDownloadSections = (): DownloadPreviewSection[] => {
+    const ex = computeExecSummary(observations);
+    const totalExceptions = meta.totalExceptions ?? ex.totalExceptions;
+    const openCount = ex.obsStatus.Open + ex.obsStatus.Overdue;
+    const stats = [
+      { label: 'Observations', value: String(ex.totalObservations), accent: ATR_TONE_HEX.brand },
+      { label: 'Exceptions', value: String(totalExceptions), accent: ATR_TONE_HEX.ink },
+      { label: 'Action Plans', value: String(ex.totalActionPlans), accent: ATR_TONE_HEX.brand },
+      { label: 'Open', value: String(openCount), accent: ATR_TONE_HEX.high },
+      { label: 'Closed', value: String(ex.obsStatus.Closed), accent: ATR_TONE_HEX.compliant },
+      { label: 'In Progress', value: String(ex.obsStatus['In Progress']), accent: ATR_TONE_HEX.mitigated },
+    ];
+    return [
+      {
+        id: 'atr-exec',
+        kind: 'summary',
+        title: 'Executive Summary',
+        content: `${ex.totalObservations} observation${ex.totalObservations === 1 ? '' : 's'} carrying ${totalExceptions} exception${totalExceptions === 1 ? '' : 's'} across ${ex.totalActionPlans} management action plan${ex.totalActionPlans === 1 ? '' : 's'}${ex.progressPct != null ? `, ${ex.progressPct}% remediated` : ''}.`,
+        stats,
+      },
+      ...observations.map((o, i): DownloadPreviewSection => {
+        const apCount = o.actionPlans.length;
+        const apRoll = apCount
+          ? ` ${apCount} management action plan${apCount === 1 ? '' : 's'}: ${o.actionPlans.map(p => p.title || p.text).filter(Boolean).join('; ')}.`
+          : '';
+        return {
+          id: `atr-obs-${i}`,
+          kind: 'observation',
+          obsId: `OBS-${String(i + 1).padStart(2, '0')}`,
+          title: o.title,
+          description: `${o.description ?? ''}${apRoll}`.trim() || o.title,
+        };
+      }),
+      ...insights.map((ins, i): DownloadPreviewSection => ({
+        id: `atr-insight-${i}`, kind: 'note', title: ins.title, content: ins.body,
+      })),
+    ];
   };
 
   return (
@@ -92,7 +114,7 @@ export default function AtrReportView({ report, onBack, onShare, onManageExcepti
     >
       {/* Report actions — pinned to the top of the scroll area (page-coloured,
           borderless — no header-bar chrome) so they stay reachable on scroll. */}
-      <div className="sticky top-0 z-30 bg-canvas max-w-[1480px] mx-auto px-6 lg:px-10 h-16 flex items-center justify-between gap-4 print:hidden">
+      <div className="sticky top-0 z-30 bg-canvas px-6 lg:px-12 xl:px-[124px] h-16 flex items-center justify-between gap-4 print:hidden">
         <button
           onClick={onBack}
           className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
@@ -100,12 +122,6 @@ export default function AtrReportView({ report, onBack, onShare, onManageExcepti
           <ArrowLeft size={14} /> Back to Reports
         </button>
         <div className="flex items-center gap-2">
-          {onManageExceptions && (
-            <button onClick={onManageExceptions} title="Review exception cases for this ATR" className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-evidence-700 bg-evidence-50 border border-evidence-200 rounded-[8px] hover:bg-evidence-100 transition-colors cursor-pointer"><ListChecks size={14} /> Manage Exceptions</button>
-          )}
-          <button onClick={() => setReview('comments')} className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer"><MessageSquare size={14} /> Comments</button>
-          <button onClick={() => setReview('versions')} className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer"><GitBranch size={14} /> v{versions[versions.length - 1]?.version ?? 1}</button>
-          <button onClick={copyLink} className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer"><Link2 size={14} /> Copy link</button>
           {onShare && (
             <button
               onClick={onShare}
@@ -115,30 +131,16 @@ export default function AtrReportView({ report, onBack, onShare, onManageExcepti
             </button>
           )}
           <button
-            onClick={download}
-            className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-500 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+            onClick={() => setShowDownloadModal(true)}
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-[8px] hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
           >
             <Download size={14} /> Download
           </button>
         </div>
       </div>
 
-      <AnimatePresence>
-        {review && (
-          <AtrReviewDrawer
-            reportId={report.id}
-            reportName={report.name}
-            tab={review}
-            onTab={setReview}
-            onClose={() => setReview(null)}
-            initialVersions={versions}
-            me={report.generatedBy || 'You'}
-          />
-        )}
-      </AnimatePresence>
-
       {/* Reader workspace — outline rail + constrained document column. */}
-      <div className="max-w-[1480px] mx-auto px-6 lg:px-10 pt-3 pb-8 flex items-start gap-8 xl:gap-10">
+      <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10">
         <aside className="hidden xl:block w-[252px] shrink-0 sticky top-[72px] self-start max-h-[calc(100vh-96px)] overflow-y-auto pr-1 -mr-1 print:hidden">
           <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-3.5">
             <div className="flex items-center gap-2 mb-3 px-1">
@@ -157,7 +159,7 @@ export default function AtrReportView({ report, onBack, onShare, onManageExcepti
                       className={`w-full flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px] text-left transition-colors cursor-pointer ${isActive ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
                     >
                       <span className={`shrink-0 w-5 text-[0.6875rem] font-semibold font-mono tabular-nums text-right ${isActive ? 'text-brand-700' : 'text-brand-500'}`}>{String(i + 1).padStart(2, '0')}</span>
-                      <span className={`flex-1 min-w-0 text-[0.78125rem] truncate ${isActive ? 'font-semibold text-brand-700' : 'font-medium text-ink-600'}`}>{e.title}</span>
+                      <span className={`flex-1 min-w-0 text-[0.8125rem] truncate ${isActive ? 'font-semibold text-brand-700' : 'font-medium text-ink-600'}`}>{e.title}</span>
                     </button>
                   </li>
                 );
@@ -165,7 +167,7 @@ export default function AtrReportView({ report, onBack, onShare, onManageExcepti
             </ol>
           </div>
         </aside>
-        <div className="min-w-0 flex-1 max-w-[920px] pb-10">
+        <div className="min-w-0 flex-1 pb-10">
           <AtrDocument
             meta={meta}
             observations={observations}
@@ -174,6 +176,21 @@ export default function AtrReportView({ report, onBack, onShare, onManageExcepti
           />
         </div>
       </div>
+
+      <AnimatePresence>
+        {showDownloadModal && (
+          <ReportDownloadModal
+            reportName={report.name}
+            reportTag={report.tag}
+            reportId={meta.reportId?.toUpperCase()}
+            generatedBy={report.generatedBy ?? meta.preparedBy ?? '—'}
+            generatedAt={report.generatedAt ?? meta.generatedOn ?? ''}
+            sections={buildDownloadSections()}
+            onExcelExport={() => exportAtrExcel(meta, observations)}
+            onClose={() => setShowDownloadModal(false)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

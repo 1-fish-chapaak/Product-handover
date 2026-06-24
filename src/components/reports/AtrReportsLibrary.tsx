@@ -1,7 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { FileText, FolderOpen, Download, Share2, Lock, ListChecks, Sparkles } from 'lucide-react';
-import AtrActionTracker from './AtrActionTracker';
+import { motion } from 'motion/react';
+import { FileText, FolderOpen, Download, Share2, Sparkles } from 'lucide-react';
 import { type AtrLibraryReport, EVIDENCE_LIBRARY } from '../../data/atrLibrary';
 import ListToolbar, { ToolbarSelect, ToolbarFilterMenu, ToolbarViewToggle } from '../shared/ListToolbar';
 import SmartTable from '../shared/SmartTable';
@@ -55,7 +54,6 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
   trailingAction?: ReactNode;
 }) {
   const [q, setQ] = useState('');
-  const [trackerOpen, setTrackerOpen] = useState(false);
   const [area, setArea] = useState('All');
   const [auditor, setAuditor] = useState('All');
   const [riskOwner, setRiskOwner] = useState('All');
@@ -122,7 +120,6 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
         searchPlaceholder="Search ATRs…"
         trailing={
           <>
-            <button onClick={() => setTrackerOpen(true)} className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"><ListChecks size={14} /> Action Tracker</button>
             <ToolbarFilterMenu activeCount={activeFilterCount} onClear={clearFilters}>
               <ToolbarSelect block label="Area" value={area} onChange={setArea} options={areaOpts} />
               <ToolbarSelect block label="Auditor" value={auditor} onChange={setAuditor} options={auditorOpts} />
@@ -165,25 +162,20 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
                     <FileText size={16} strokeWidth={1.75} aria-hidden="true" />
                   </span>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="text-[0.90625rem] font-semibold tracking-[-0.006em] text-ink-900 truncate group-hover:text-brand-600 transition-colors" title={reportDisplayName(atr.name)}>{reportDisplayName(atr.name)}</div>
-                      {atr.status === 'frozen' && (
-                        <span className="shrink-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-full border border-ink-200 bg-paper-50 text-[0.625rem] font-semibold text-ink-600"><Lock size={9} /> Frozen</span>
-                      )}
-                    </div>
+                    <div className="text-[0.875rem] font-semibold tracking-[-0.006em] text-ink-900 truncate group-hover:text-brand-600 transition-colors" title={reportDisplayName(atr.name)}>{reportDisplayName(atr.name)}</div>
                     <div className="mt-1 flex items-center gap-2 min-w-0">
                       <OriginBadge />
-                      <span className="text-[0.71875rem] text-ink-400 truncate">{atr.atrData.observations.length} obs · {plans} plans · {evidenceCount[atr.id] ?? 0} evidence</span>
+                      <span className="text-[0.75rem] text-ink-400 truncate">{atr.atrData.observations.length} obs · {plans} plans · {evidenceCount[atr.id] ?? 0} evidence</span>
                     </div>
                   </div>
                 </div>
               );
             }},
-            { key: 'area', label: 'Area', width: '180px', render: (item) => {
+            { key: 'area', label: 'Area', width: '248px', render: (item) => {
               const atr = item as unknown as AtrLibraryReport;
               return (
-                <div className="max-w-[164px]" title={atr.area}>
-                  <ReportPill tone={AREA_TONE_MAP[atr.area] ?? 'draft'}><span className="block max-w-[140px] truncate">{atr.area}</span></ReportPill>
+                <div className="max-w-[232px]" title={atr.area}>
+                  <ReportPill tone={AREA_TONE_MAP[atr.area] ?? 'draft'}><span className="block max-w-[208px] truncate">{atr.area}</span></ReportPill>
                 </div>
               );
             }},
@@ -213,17 +205,12 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
                 index={i}
                 icon={FileText}
                 iconClass="bg-info-50 text-info-700"
-                eyebrow={atr.status === 'frozen' ? 'ATR · FROZEN' : 'ATR'}
+                eyebrow="ATR"
                 title={reportDisplayName(atr.name)}
                 subtitle={<OriginBadge />}
                 description={`${atr.atrData.meta.auditEntity} — ${atr.atrData.meta.auditPeriod}`}
                 pills={[`${atr.atrData.observations.length} observations`, `${plans} action plans`, `${ev} evidence`]}
-                footerRight={
-                  <span className="flex items-center gap-2">
-                    {atr.status === 'frozen' && <span className="inline-flex items-center gap-1 text-[0.625rem] font-semibold text-ink-600"><Lock size={10} /> Frozen</span>}
-                    <span className="text-[0.6875rem] tabular-nums text-ink-400">{atr.generatedAt}</span>
-                  </span>
-                }
+                footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{atr.generatedAt}</span>}
                 onClick={() => onOpen(atr)}
                 actions={<>
                   {onDownload && <button title="Download" onClick={(e) => { e.stopPropagation(); onDownload(atr); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button>}
@@ -234,10 +221,6 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
           })}
         </div>
       )}
-
-      <AnimatePresence>
-        {trackerOpen && <AtrActionTracker atrs={atrs} onOpen={(id) => { const a = atrs.find(x => x.id === id); if (a) onOpen(a); }} onClose={() => setTrackerOpen(false)} />}
-      </AnimatePresence>
     </motion.div>
   );
 }

@@ -7,18 +7,21 @@
 export type QueryGraph = {
   id: string;
   title: string;
-  type: 'bar' | 'line' | 'pie' | 'area';
+  type: 'bar' | 'line' | 'pie' | 'area' | 'combo';
   xAxis: string;
   yAxis?: string;
   color?: string;
 };
 
 export const QUERY_GRAPHS: Record<string, QueryGraph[]> = {
+  // Q01 surfaces the real Excel-sample dashboard widgets (DashboardView "Excel
+  // Sample Example"): "Issues by Type" (combo) + "Row Count by Sheet" (area),
+  // rendered by the same ConfigurableChart with the same axes.
   Q01: [
-    { id: 'q01-g1', title: 'Duplicates by vendor', type: 'pie', xAxis: 'Vendor Name' },
-    { id: 'q01-g2', title: 'Duplicate detection trend', type: 'line', xAxis: 'Month', yAxis: 'Duplicate Count' },
-    { id: 'q01-g3', title: 'Resolution status', type: 'pie', xAxis: 'Status' },
-    { id: 'q01-g4', title: 'Cumulative duplicates', type: 'area', xAxis: 'Month', yAxis: 'Duplicate Count' },
+    { id: 'q01-g1', title: 'Issues by Type', type: 'combo', xAxis: 'Month', yAxis: 'Duplicate Count' },
+    { id: 'q01-g2', title: 'Row Count by Sheet', type: 'area', xAxis: 'Month', yAxis: 'Duplicate Count' },
+    { id: 'q01-g3', title: 'Issues by Sheet', type: 'bar', xAxis: 'Month', yAxis: 'Duplicate Count' },
+    { id: 'q01-g4', title: 'Data Quality Breakdown', type: 'pie', xAxis: 'Category' },
   ],
   Q02: [
     { id: 'q02-g1', title: 'Changes by department', type: 'bar', xAxis: 'Department' },
@@ -53,6 +56,20 @@ export const QUERY_GRAPHS: Record<string, QueryGraph[]> = {
   ],
 };
 
+// Per-query KPI override. When present, ReportView surfaces these instead of
+// the generic computeQueryKpis() rollup. Q01 carries the real Excel-sample
+// dashboard KPIs (DashboardView "Excel Sample Example").
+export type QueryKpi = { label: string; value: string };
+
+export const QUERY_KPIS: Record<string, QueryKpi[]> = {
+  Q01: [
+    { label: 'Total Rows', value: '24,806' },
+    { label: 'Blank Cells', value: '342' },
+    { label: 'Duplicate Rows', value: '89' },
+    { label: 'Data Completeness', value: '96.8%' },
+  ],
+};
+
 // Sample results table per query — surfaced as the "Results Table" section in
 // the QueryCard's "Choose What to Include" modal and rendered on the card when
 // attached. Mirrors the chat result's table shape (columns + rows).
@@ -61,16 +78,86 @@ export type QueryTable = {
   rows: string[][];
 };
 
+// A named, selectable table. A query can surface several of these in the
+// "Choose What to Include" modal (Table tab), each attached independently.
+export type QueryTableDef = QueryTable & { id: string; title: string };
+
+// Multi-table sets per query. When present, ReportView surfaces these in the
+// Table tab instead of the single QUERY_TABLES entry. Q01 carries the four
+// Excel data-quality tables (the Issues Log plus three rollups).
+export const QUERY_TABLE_SETS: Record<string, QueryTableDef[]> = {
+  Q01: [
+    {
+      id: 'q01-t1',
+      title: 'Excel Issues Log',
+      columns: ['Row', 'Sheet', 'Column', 'Issue Type', 'Severity', 'Cell Value', 'Expected', 'Status'],
+      rows: [
+        ['Row 142', 'Invoices', 'Amount', 'Type Mismatch', 'High', '"12,500 INR"', 'Number', 'Open'],
+        ['Row 87', 'Vendors', 'Email', 'Blank Cell', 'Medium', '—', 'Email', 'Open'],
+        ['Row 203', 'Invoices', 'Date', 'Format Error', 'High', '13/25/2025', 'DD-MM-YYYY', 'Open'],
+        ['Row 56', 'Payments', 'Invoice ID', 'Duplicate', 'Critical', 'INV-005790', 'Unique', 'Flagged'],
+        ['Row 312', 'Invoices', 'Vendor Name', 'Blank Cell', 'Medium', '—', 'Text', 'Open'],
+        ['Row 441', 'Contracts', 'Expiry Date', 'Past Date', 'Low', '15-Jan-2024', 'Future Date', 'Reviewed'],
+        ['Row 98', 'Vendors', 'GST Number', 'Format Error', 'High', 'ABCDE1234Z', '15-char GSTIN', 'Open'],
+        ['Row 167', 'Payments', 'Amount', 'Outlier', 'Medium', '₹9,84,500', 'Range 1K-50K', 'Flagged'],
+      ],
+    },
+    {
+      id: 'q01-t2',
+      title: 'Issues by Sheet',
+      columns: ['Sheet', 'Rows', 'Issues', 'Blank Cells', 'Completeness'],
+      rows: [
+        ['Invoices', '9,420', '142', '156', '95.2%'],
+        ['Vendors', '3,180', '87', '94', '96.1%'],
+        ['Payments', '6,540', '54', '48', '97.8%'],
+        ['Contracts', '2,260', '38', '24', '98.4%'],
+        ['Assets', '2,180', '21', '12', '98.9%'],
+        ['Summary', '1,226', '9', '8', '99.3%'],
+      ],
+    },
+    {
+      id: 'q01-t3',
+      title: 'Duplicate Rows',
+      columns: ['Row', 'Sheet', 'Key Field', 'Value', 'Matches', 'Status'],
+      rows: [
+        ['Row 56', 'Payments', 'Invoice ID', 'INV-005790', '2', 'Flagged'],
+        ['Row 211', 'Invoices', 'Invoice ID', 'INV-004821', '3', 'Open'],
+        ['Row 388', 'Vendors', 'GST Number', '27AAEPM1234C1Z5', '2', 'Open'],
+        ['Row 502', 'Payments', 'UTR', 'UTR99830012', '2', 'Reviewed'],
+        ['Row 640', 'Invoices', 'PO Number', 'PO-2026-0345', '4', 'Open'],
+      ],
+    },
+    {
+      id: 'q01-t4',
+      title: 'Blank Cells by Column',
+      columns: ['Sheet', 'Column', 'Blank Count', 'Required', 'Severity'],
+      rows: [
+        ['Vendors', 'Email', '94', 'Yes', 'High'],
+        ['Invoices', 'Vendor Name', '63', 'Yes', 'High'],
+        ['Vendors', 'PAN', '42', 'Yes', 'High'],
+        ['Invoices', 'Cost Center', '71', 'No', 'Medium'],
+        ['Contracts', 'Owner', '24', 'Yes', 'Medium'],
+        ['Payments', 'UTR', '48', 'No', 'Low'],
+      ],
+    },
+  ],
+};
+
 export const QUERY_TABLES: Record<string, QueryTable> = {
+  // Real "Excel Issues Log" table from the Excel-sample dashboard
+  // (DashboardView) — same columns + rows, so the Severity column renders the
+  // dashboard's coloured pills.
   Q01: {
-    columns: ['Case ID', 'Vendor', 'Invoice Date', 'Invoice Value', 'Match %', 'Status'],
+    columns: ['Row', 'Sheet', 'Column', 'Issue Type', 'Severity', 'Cell Value', 'Expected', 'Status'],
     rows: [
-      ['CASE_000007', 'VENDOR_002', '14 Feb 2026', '₹2.42Cr', '96%', 'Open'],
-      ['CASE_000012', 'VENDOR_006', '03 Mar 2026', '₹89.40L', '94%', 'Open'],
-      ['CASE_000019', 'VENDOR_006', '21 Jan 2026', '₹21.19L', '91%', 'In Review'],
-      ['CASE_000024', 'VENDOR_011', '09 Mar 2026', '₹10.03L', '89%', 'Open'],
-      ['CASE_000031', 'VENDOR_002', '27 Feb 2026', '₹6.83L', '88%', 'In Review'],
-      ['CASE_000045', 'VENDOR_018', '05 Jan 2026', '₹0.63L', '85%', 'Resolved'],
+      ['Row 142', 'Invoices', 'Amount', 'Type Mismatch', 'High', '"12,500 INR"', 'Number', 'Open'],
+      ['Row 87', 'Vendors', 'Email', 'Blank Cell', 'Medium', '—', 'Email', 'Open'],
+      ['Row 203', 'Invoices', 'Date', 'Format Error', 'High', '13/25/2025', 'DD-MM-YYYY', 'Open'],
+      ['Row 56', 'Payments', 'Invoice ID', 'Duplicate', 'Critical', 'INV-005790', 'Unique', 'Flagged'],
+      ['Row 312', 'Invoices', 'Vendor Name', 'Blank Cell', 'Medium', '—', 'Text', 'Open'],
+      ['Row 441', 'Contracts', 'Expiry Date', 'Past Date', 'Low', '15-Jan-2024', 'Future Date', 'Reviewed'],
+      ['Row 98', 'Vendors', 'GST Number', 'Format Error', 'High', 'ABCDE1234Z', '15-char GSTIN', 'Open'],
+      ['Row 167', 'Payments', 'Amount', 'Outlier', 'Medium', '₹9,84,500', 'Range 1K-50K', 'Flagged'],
     ],
   },
   Q02: {

@@ -38,7 +38,7 @@ export default function AssigneeWorkPanel({ exceptions }: { exceptions: GrcExcep
   );
 }
 
-function WorkCard({ assignment, ex }: { assignment: Assignment; ex: GrcException }) {
+export function WorkCard({ assignment, ex }: { assignment: Assignment; ex: GrcException }) {
   const { submitForApproval, updateDraft } = useWorkflow();
   const { addToast } = useToast();
   const [draft, setDraft] = useState(assignment.draft ?? {});

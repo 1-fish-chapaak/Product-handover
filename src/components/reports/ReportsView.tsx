@@ -5,17 +5,15 @@ import ListToolbar, { ToolbarViewToggle } from '../shared/ListToolbar';
 import ColumnFilter from '../shared/ColumnFilter';
 import ReportCard from '../shared/ReportCard';
 import { BTN_CTA_PRIMARY, BTN_CTA_OUTLINE } from '../admin/adminTokens';
-import { KpiCountUp } from '../shared/KpiTile';
 import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
   X, Edit3, BookOpen, Upload, Trash2, Plus, Search, Layers, Check,
-  WifiOff, FileCheck2, FolderArchive, Copy, ShieldCheck,
+  WifiOff, FileCheck2, FolderArchive, Copy, ShieldCheck, CloudUpload,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
 import UploadReportModal from './UploadReportModal';
-import { loadAtrDraft, clearAtrDraft, consumeAtrResume } from './atrDraft';
 import UploadTemplateModal from './UploadTemplateModal';
 import ConfirmDialog from './ConfirmDialog';
 import AtrReportView from './AtrReportView';
@@ -23,6 +21,7 @@ import type { AtrMeta, AtrObservation, AtrInsight, AtrReportData } from './atrTy
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS, GENERATED_REPORTS_KEY } from '../../data/mockData';
 import { ATR_LIBRARY, EVIDENCE_LIBRARY, type AtrLibraryReport } from '../../data/atrLibrary';
 import AtrReportsLibrary from './AtrReportsLibrary';
+import AtrUploadTab from './atr-upload/AtrUploadTab';
 import EvidenceRepository from './EvidenceRepository';
 import { exportAtrWord } from './atrTemplate';
 import { type Tone } from '../shared/StatusBadge';
@@ -35,6 +34,7 @@ import {
   type EditableTemplate, type GeneratedReport,
 } from './reportShared';
 import SmartTable from '../shared/SmartTable';
+import { KpiCountUp } from '../shared/KpiTile';
 import { useToast } from '../shared/Toast';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useCan } from '../../context/CurrentUserContext';
@@ -85,6 +85,96 @@ interface ReportsViewProps {
 // SEED_APPROVED_TEMPLATE lives in the shared keystone (re-exported above) so this
 // component file exports only components — keeping React Fast Refresh intact.
 
+// Branded placeholder shown for a beat while a clicked report "opens". Mirrors
+// the reader layout (top bar · outline rail · gradient banner · KPI row ·
+// section cards) so the real reader resolves into the same shape rather than
+// hard-cutting in. Uses the app's standard `animate-pulse` skeleton language.
+function ReportOpenSkeleton({ onBack }: { onBack: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.15 }}
+      className="h-full overflow-hidden bg-canvas"
+      aria-busy="true"
+      aria-label="Opening report"
+    >
+      {/* Top bar — real Back button so the user is never trapped */}
+      <div className="sticky top-0 z-30 bg-canvas px-6 lg:px-12 xl:px-[124px] h-16 flex items-center justify-between gap-4">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 transition-colors cursor-pointer"
+        >
+          <ArrowLeft size={14} /> Back to reports
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="skeleton-cool h-9 w-9 rounded-[8px]" />
+          <div className="skeleton-cool h-9 w-24 rounded-[8px]" />
+        </div>
+      </div>
+
+      <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10">
+        {/* Outline rail */}
+        <aside className="hidden xl:block w-[252px] shrink-0">
+          <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-3.5 space-y-2">
+            <div className="skeleton-cool h-3 w-24 rounded mb-3" />
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="skeleton-cool h-7 rounded-[8px]" style={{ '--sk-delay': `${i * 90}ms` } as React.CSSProperties} />
+            ))}
+          </div>
+        </aside>
+
+        {/* Document column */}
+        <div className="min-w-0 flex-1">
+          {/* Gradient banner — keeps the report's identity while it loads */}
+          <div
+            className="relative overflow-hidden rounded-[12px] mb-5 px-9 pt-9 pb-8"
+            style={{ backgroundImage: 'linear-gradient(125deg, #3b0b72 0%, #6a12cd 62%, #6a12cd 100%)' }}
+          >
+            <div className="skeleton-on-brand h-3 w-28 rounded mb-4" />
+            <div className="skeleton-on-brand h-8 w-2/3 max-w-[440px] rounded mb-3" />
+            <div className="skeleton-on-brand h-3.5 w-1/2 max-w-[360px] rounded mb-7" />
+            <div className="skeleton-on-brand h-3.5 w-44 rounded" />
+          </div>
+
+          {/* KPI bar — matches the live unified divided stat-bar */}
+          <div className="overflow-hidden rounded-[14px] border border-canvas-border bg-canvas-elevated mb-5">
+            <div className="-mt-px -ml-px grid grid-cols-2 md:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="border-l border-t border-canvas-border px-5 py-6">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="skeleton-cool h-2.5 w-20 rounded mt-0.5" style={{ '--sk-delay': `${i * 70}ms` } as React.CSSProperties} />
+                    <div className="skeleton-cool h-4 w-4 rounded" style={{ '--sk-delay': `${i * 70}ms` } as React.CSSProperties} />
+                  </div>
+                  <div className="skeleton-cool h-9 w-16 rounded mt-4" style={{ '--sk-delay': `${i * 70 + 40}ms` } as React.CSSProperties} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Section cards */}
+          <div className="space-y-4">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="rounded-[12px] border border-canvas-border bg-white px-9 py-7">
+                <div className="flex items-center gap-2.5 mb-6">
+                  <div className="skeleton-cool h-4 w-10 rounded" />
+                  <div className="skeleton-cool h-4 w-28 rounded" />
+                </div>
+                <div className="skeleton-cool h-6 w-2/3 rounded mb-7" />
+                <div className="space-y-2.5 max-w-[80ch]">
+                  <div className="skeleton-cool h-3.5 w-full rounded" />
+                  <div className="skeleton-cool h-3.5 w-[94%] rounded" />
+                  <div className="skeleton-cool h-3.5 w-[80%] rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Main Reports View ───
 export default function ReportsView({
   onShare,
@@ -105,9 +195,9 @@ export default function ReportsView({
     if (typeof window === 'undefined') return 'my-reports';
     const t = new URLSearchParams(window.location.search).get('tab');
     if (t === 'shared-reports' || t === 'templates' || t === 'my-reports') return t;
-    // Legacy deep-links to the old top-level ATR / Evidence tabs now all land in
-    // My Reports.
-    if (t === 'atr-reports' || t === 'evidence') return 'my-reports';
+    // Legacy deep-links to the old top-level ATR / Evidence / Generate-by-upload
+    // tabs now all land in My Reports (upload lives under the ATR sub-tab).
+    if (t === 'atr-reports' || t === 'evidence' || t === 'atr-upload' || t === 'generate-by-upload') return 'my-reports';
     return 'my-reports';
   });
   // Segmented sub-tabs inside My Reports: the 3 report types + the evidence repository.
@@ -115,10 +205,24 @@ export default function ReportsView({
     if (typeof window === 'undefined') return 'all';
     const t = new URLSearchParams(window.location.search).get('tab');
     if (t === 'evidence') return 'evidence';
-    if (t === 'atr-reports') return 'atr';
+    if (t === 'atr-reports' || t === 'atr-upload') return 'atr';
     return 'all';
   });
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  // Inside the ATR sub-tab: the upload wizard lives behind a CTA. `atr-upload`
+  // deep-link opens it straight away — this powers the Manage Exceptions "Back"
+  // return path (see handoff.ts).
+  const [atrUploadOpen, setAtrUploadOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('tab') === 'atr-upload';
+  });
+  // View mode (list/grid) persists across refresh so a chosen card view sticks.
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => {
+    if (typeof window === 'undefined') return 'list';
+    return localStorage.getItem('irame.reports.viewMode') === 'grid' ? 'grid' : 'list';
+  });
+  useEffect(() => {
+    try { localStorage.setItem('irame.reports.viewMode', viewMode); } catch { /* ignore */ }
+  }, [viewMode]);
   const [allSearch, setAllSearch] = useState('');
   // Type filter for the All feed — a framework (SOX / IA / ATR / Evidence) or the
   // cross-cutting Bulk Audit engagement style.
@@ -129,16 +233,20 @@ export default function ReportsView({
   // Type filter for Shared Reports — same Type taxonomy as the All feed.
   const [sharedTypeFilter, setSharedTypeFilter] = useState<string[]>([]);
   const [viewingReport, setViewingReport] = useState<GeneratedReport | null>(null);
+  // Brief skeleton "open" state when a report is clicked from the list/grid, so
+  // the reader doesn't hard-cut in. Shows a branded report skeleton for ~600ms,
+  // then mounts the real reader (which streams its own content in).
+  const [openingReport, setOpeningReport] = useState(false);
+  const openReportTimer = useRef<number | null>(null);
+  const openReport = useCallback((report: GeneratedReport) => {
+    if (openReportTimer.current) window.clearTimeout(openReportTimer.current);
+    setViewingReport(report);
+    setOpeningReport(true);
+    openReportTimer.current = window.setTimeout(() => setOpeningReport(false), 600);
+  }, []);
+  useEffect(() => () => { if (openReportTimer.current) window.clearTimeout(openReportTimer.current); }, []);
   // ATR template "Generate" opens the Generate-ATR-from-Observations wizard.
   const [atrWizardOpen, setAtrWizardOpen] = useState(false);
-  const [atrResumeDraft, setAtrResumeDraft] = useState<AtrReportData | null>(null);
-  // Returning from Manage Exceptions: reopen the parked ATR at its preview.
-  useEffect(() => {
-    if (consumeAtrResume()) {
-      const d = loadAtrDraft();
-      if (d) { setAtrResumeDraft(d); setReportType('atr'); setActiveTab('my-reports'); setAtrWizardOpen(true); }
-    }
-  }, []);
   const [reportToDelete, setReportToDelete] = useState<{ id: string; name: string } | null>(null);
   // Multi-select for the My Reports list — checkbox-on-tile + floating bulk bar,
   // mirroring the Knowledge Hub data-source selection pattern.
@@ -249,6 +357,18 @@ export default function ReportsView({
     }
   }, [generatedReports, addToast]);
 
+  // Report-type counts for the My Reports filter band (only reports I generated).
+  const typeCounts = useMemo(() => {
+    let sox = 0, ia = 0;
+    generatedReports.forEach(r => {
+      if (r.generatedBy !== 'You') return;
+      const k = reportKind(r);
+      if (k === 'sox') sox++;
+      else if (k === 'ia') ia++;
+    });
+    return { sox, ia };
+  }, [generatedReports]);
+
   // ── ATR library: the curated mock ATRs plus any the user generated (have atrData). ──
   const allAtrs = useMemo<AtrLibraryReport[]>(() => {
     const generated = generatedReports
@@ -260,7 +380,7 @@ export default function ReportsView({
         tag: 'Internal Audit',
         generatedBy: r.generatedBy,
         generatedAt: r.generatedAt,
-        status: r.status === 'final' ? 'final' : r.status === 'frozen' ? 'frozen' : 'draft',
+        status: r.status === 'final' ? 'final' : 'draft',
         pages: r.pages ?? 1,
         queries: r.queries ?? 0,
         area: r.atrData!.meta.auditTitle ?? 'Custom ATR',
@@ -271,16 +391,6 @@ export default function ReportsView({
     return [...generated, ...ATR_LIBRARY];
   }, [generatedReports]);
   // Per-type counts for the My Reports sub-tab badges (ATR uses allAtrs).
-  const typeCounts = useMemo(() => {
-    let sox = 0, ia = 0;
-    generatedReports.forEach(r => { // My Reports = only reports I generated
-      if (r.generatedBy !== 'You') return;
-      const k = reportKind(r);
-      if (k === 'sox') sox++;
-      else if (k === 'ia') ia++;
-    });
-    return { sox, ia };
-  }, [generatedReports]);
   const openAtr = useCallback((atr: AtrLibraryReport) => {
     setViewingReport(atr as unknown as GeneratedReport);
   }, []);
@@ -338,7 +448,7 @@ export default function ReportsView({
         description: reportDesc(r), pills: reportPills(r),
         status: r.status === 'final' ? 'final' : 'draft',
         date: r.generatedAt, sortDate: ts(r.generatedAt),
-        open: () => setViewingReport(r),
+        open: () => openReport(r),
         download: () => startReportDownload(addToast, updateToast, r.name),
         shareId: r.id,
         del: () => setReportToDelete({ id: r.id, name: r.name }),
@@ -349,15 +459,30 @@ export default function ReportsView({
       rows.push({
         id: a.id, kind: 'atr', name: a.name, bulk: false,
         description: atrDesc(a), pills: atrPills(a),
-        status: a.status === 'draft' ? 'draft' : 'final',
+        status: a.status === 'final' ? 'final' : 'draft',
         date: a.generatedAt, sortDate: ts(a.generatedAt),
         open: () => openAtr(a),
         download: () => { exportAtrWord(a.atrData.meta, a.atrData.observations); addToast({ type: 'success', message: `Downloading “${a.name}”.` }); },
         shareId: a.id,
       });
     });
-    // Evidence is intentionally excluded from the All feed — it lives behind its
-    // own Evidence button now, not as a report type in this list.
+    // Evidence files — folded into the unified feed so they're listed and
+    // filterable by the "Evidence" Type option. Clicking a row opens the file
+    // itself (it's a document, not a report) — not the source ATR, which read as
+    // confusing in the all-reports list.
+    EVIDENCE_LIBRARY.forEach(ev => {
+      const openFile = () => addToast({ type: 'success', message: `Opening “${ev.name}”…` });
+      rows.push({
+        id: ev.id, kind: 'evidence', name: ev.name, bulk: false,
+        description: `${ev.area} · linked to ${ev.atrName}`,
+        pills: [ev.type, ev.size],
+        status: 'final',
+        date: ev.uploadedAt, sortDate: ts(ev.uploadedAt),
+        open: openFile,
+        download: () => addToast({ type: 'success', message: `Downloading “${ev.name}”.` }),
+        shareId: ev.id,
+      });
+    });
     return rows.sort((a, b) => b.sortDate - a.sortDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generatedReports, allAtrs, addToast, updateToast, openAtr, openAtrById]);
@@ -390,12 +515,15 @@ export default function ReportsView({
       || (r.bulk && 'bulk audit'.includes(q))
     ) : rows;
   }, [allReportsUnified, allSearch, allTypeFilter, KIND_FULL_LABEL]);
-  // Type-filter options: 'All', each framework present in the feed, then the
-  // cross-cutting Bulk Audit option (only when bulk reports exist).
+  // Type-filter options: each framework present in the feed, then the
+  // cross-cutting Bulk Audit option, with Evidence pinned last (it's a linked
+  // artifact, not a report framework, so it reads as its own trailing group).
   const allTypeOptions = useMemo(() => {
-    const kinds = Array.from(new Set(allReportsUnified.map(r => KIND_FULL_LABEL[r.kind])));
+    const kinds = Array.from(new Set(allReportsUnified.map(r => KIND_FULL_LABEL[r.kind])))
+      .filter(k => k !== 'Evidence');
     const opts = [...kinds];
     if (allReportsUnified.some(r => r.bulk)) opts.push('Bulk Audit');
+    if (allReportsUnified.some(r => r.kind === 'evidence')) opts.push('Evidence');
     return opts;
   }, [allReportsUnified, KIND_FULL_LABEL]);
   const sharedTypeOptions = useMemo(
@@ -476,6 +604,35 @@ export default function ReportsView({
     addToast({ type: 'success', message: `Saved “${label}” to the ATR tab.` });
   }, [addToast, uniqueReportName]);
 
+  // Save Version from the Generate-by-upload wizard → upsert a card in
+  // My Reports → ATR tab so the generated ATR is persisted alongside every
+  // other report. Keyed by the wizard session id so re-saving updates the same
+  // card (rather than spawning a duplicate on each save).
+  const saveUploadedAtr = useCallback((sessionId: string, label: string | undefined, data: AtrReportData) => {
+    const now = new Date();
+    const stamp = `${now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+    const base = data.meta.auditTitle ?? 'Action Taken Report';
+    const id = `gr-atr-upload-${sessionId}`;
+    setGeneratedReports(prev => {
+      const existing = prev.find(r => r.id === id);
+      const card = {
+        id,
+        templateId: 'rt-007',
+        kind: 'atr' as const,
+        name: existing?.name ?? uniqueReportName(label ? `${base} — ${label}` : base),
+        tag: 'Internal Audit' as const,
+        generatedBy: 'You',
+        generatedAt: stamp,
+        status: 'draft' as const,
+        pages: Math.max(1, data.observations.length * 2),
+        queries: data.observations.length,
+        atrData: data,
+        riskOwner: 'Tushar Goel',
+        sourceReport: base,
+      } as unknown as GeneratedReport;
+      return existing ? prev.map(r => (r.id === id ? card : r)) : [card, ...prev];
+    });
+  }, [uniqueReportName]);
 
   // Offline banner — listens to online/offline events.
   const [isOffline, setIsOffline] = useState(() =>
@@ -725,8 +882,8 @@ export default function ReportsView({
           )}
         </span>
         <div className="min-w-0">
-          <div className="text-[0.90625rem] font-semibold tracking-[-0.006em] text-ink-900 truncate" title={display.length > 100 ? display : undefined}>{truncated}</div>
-          {subline && <div className="mt-0.5 text-[0.71875rem] text-ink-400 truncate">{subline}</div>}
+          <div className="text-[0.875rem] font-semibold tracking-[-0.006em] text-ink-900 truncate" title={display.length > 100 ? display : undefined}>{truncated}</div>
+          {subline && <div className="mt-0.5 text-[0.75rem] text-ink-400 truncate">{subline}</div>}
         </div>
       </div>
     );
@@ -749,6 +906,11 @@ export default function ReportsView({
 
 
   if (viewingReport) {
+    // Brief branded skeleton while the report "opens", before the real reader
+    // mounts. Gives the click immediate feedback instead of a hard cut.
+    if (openingReport) {
+      return <ReportOpenSkeleton onBack={() => { setOpeningReport(false); setViewingReport(null); }} />;
+    }
     // Generated Action Taken Reports render in their dedicated view (the same
     // content shown in the preview, with Manage Exceptions + Generate ATR).
     if (viewingReport.atrData) {
@@ -757,7 +919,6 @@ export default function ReportsView({
           report={{ ...viewingReport, atrData: viewingReport.atrData }}
           onBack={() => setViewingReport(null)}
           onShare={onShare ? () => onShare(viewingReport.id) : undefined}
-          onManageExceptions={onManageExceptions}
         />
       );
     }
@@ -873,7 +1034,7 @@ export default function ReportsView({
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => { setActiveTab(tab.id); if (tab.id === 'my-reports') setReportType('all'); }}
                 className={`pb-3 text-[0.8125rem] font-semibold relative transition-colors cursor-pointer whitespace-nowrap ${
                   isActive ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700'
                 }`}
@@ -936,16 +1097,9 @@ export default function ReportsView({
                 { key: 'sox', label: 'SOX', value: typeCounts.sox, icon: Shield },
               ] as const).map((t, i) => renderKpiTile({
                 key: t.key, active: reportType === t.key, icon: t.icon, value: t.value,
-                label: t.label, onClick: () => setReportType(t.key), index: i,
+                label: t.label, onClick: () => { setReportType(t.key); setAtrUploadOpen(false); }, index: i,
               }))}
             </div>
-            {/* Evidence — a linked repository, not a report type; same tile shape,
-                set apart on the right so it reads as its own destination. */}
-            {renderKpiTile({
-              key: 'evidence', active: reportType === 'evidence', icon: FolderArchive,
-              value: EVIDENCE_LIBRARY.length, label: 'Evidence',
-              onClick: () => setReportType('evidence'), fixed: true, animate: false,
-            })}
           </div>
         )}
 
@@ -1083,19 +1237,34 @@ export default function ReportsView({
           </>
         )}
 
-        {/* ATR — every generated Action Taken Report, browsable. */}
+        {/* ATR — every generated Action Taken Report, browsable. The upload wizard
+            opens inline behind the "Generate ATR by Upload" CTA. */}
         {activeTab === 'my-reports' && reportType === 'atr' && (
-          <AtrReportsLibrary
-            atrs={allAtrs}
-            onOpen={openAtr}
-            onShare={onShare ? (atr) => onShare(atr.id) : undefined}
-            onDownload={(atr) => { exportAtrWord(atr.atrData.meta, atr.atrData.observations); addToast({ type: 'success', message: `Downloading “${atr.name}”.` }); }}
-            view={viewMode}
-            onViewChange={setViewMode}
-          />
+          atrUploadOpen ? (
+            <AtrUploadTab onManageExceptions={onManageExceptions} onSaveAtr={saveUploadedAtr} />
+          ) : (
+            <AtrReportsLibrary
+              atrs={allAtrs}
+              onOpen={openAtr}
+              onShare={onShare ? (atr) => onShare(atr.id) : undefined}
+              onDownload={(atr) => { exportAtrWord(atr.atrData.meta, atr.atrData.observations); addToast({ type: 'success', message: `Downloading “${atr.name}”.` }); }}
+              view={viewMode}
+              onViewChange={setViewMode}
+              trailingAction={
+                <button
+                  onClick={() => setAtrUploadOpen(true)}
+                  className="inline-flex items-center gap-2 h-10 px-4 text-[13px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[10px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 whitespace-nowrap"
+                >
+                  <CloudUpload size={15} /> Generate ATR by Upload
+                </button>
+              }
+            />
+          )
         )}
 
-        {/* Evidence — segregated repository, each item linked to its source ATR */}
+        {/* Evidence — segregated repository, each item linked to its source ATR.
+            Reached via the "Evidence" toolbar button; the My Reports tab returns
+            to the unified all-reports list. */}
         {activeTab === 'my-reports' && reportType === 'evidence' && (
           <EvidenceRepository onOpenSource={openAtrById} view={viewMode} onViewChange={setViewMode} />
         )}
@@ -1183,7 +1352,7 @@ export default function ReportsView({
                   iconClass={UNIFIED_KIND_META[reportType].classes}
                   name={String(item.name)}
                   subline={item.generatedBy && String(item.generatedBy) !== 'You' ? `By ${String(item.generatedBy)}` : undefined}
-                  onClick={() => { const report = generatedReports.find(r => r.id === item.id); if (report) setViewingReport(report); }}
+                  onClick={() => { const report = generatedReports.find(r => r.id === item.id); if (report) openReport(report); }}
                   selectable
                   selected={selectedReportIds.has(String(item.id))}
                   isSelecting={isSelectingReports}
@@ -1201,7 +1370,7 @@ export default function ReportsView({
               { key: 'queries', label: 'Queries', width: COL_W.queries, render: (item) => {
                 const n = Number(item.queries) || 0;
                 return (
-                  <span className={`inline-flex items-center justify-center min-w-[26px] h-[22px] px-2 rounded-full text-[0.71875rem] font-semibold tabular-nums ${n > 0 ? 'bg-paper-100 text-ink-600' : 'bg-paper-100 text-ink-400'}`}>{n}</span>
+                  <span className={`inline-flex items-center justify-center min-w-[26px] h-[22px] px-2 rounded-full text-[0.75rem] font-semibold tabular-nums ${n > 0 ? 'bg-paper-100 text-ink-600' : 'bg-paper-100 text-ink-400'}`}>{n}</span>
                 );
               }},
               { key: 'generatedAt', label: 'Generated', width: COL_W.generated, render: (item) => (
@@ -1280,7 +1449,7 @@ export default function ReportsView({
                     description={reportDesc(r)}
                     pills={r.tag === 'Bulk Audit' ? ['Bulk Audit', ...reportPills(r)] : reportPills(r)}
                     footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{r.generatedAt}</span>}
-                    onClick={() => setViewingReport(r)}
+                    onClick={() => openReport(r)}
                     selectable
                     selected={selectedReportIds.has(r.id)}
                     isSelecting={isSelectingReports}
@@ -1808,47 +1977,34 @@ export default function ReportsView({
         )}
       </AnimatePresence>
 
-      {/* ATR Builder — opened by the ATR template "Generate". Source actionable
-          items from an iRAME report or upload, edit them, then save a draft or
-          freeze a locked version into My Reports. */}
-      {atrWizardOpen && (() => {
-        const buildAtr = (
-          meta: AtrMeta, observations: AtrObservation[], insights: AtrInsight[],
-          frozen: boolean,
-        ) => {
-          const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          const name = uniqueReportName(meta.auditTitle ? meta.auditTitle : 'Action Taken Report');
-          const newReport: GeneratedReport = {
-            id: `gr-atr-${Date.now()}`,
-            templateId: 'rt-007',
-            kind: 'atr',
-            name,
-            tag: 'Internal Audit',
-            generatedBy: 'You',
-            generatedAt: today,
-            status: frozen ? 'frozen' : 'draft',
-            isReadOnly: frozen || undefined,
-            pages: Math.max(1, observations.length),
-            queries: observations.length,
-            atrData: { meta, observations, insights },
-          };
-          setGeneratedReports(prev => [newReport, ...prev]);
-          setViewingReport(newReport);
-          setAtrWizardOpen(false);
-          setAtrResumeDraft(null);
-          clearAtrDraft();
-          addToast({ type: 'success', message: frozen ? 'Action Taken Report frozen and added to My Reports.' : 'Draft Action Taken Report added to My Reports.' });
-        };
-        return (
-          <UploadReportModal
-            onClose={() => { setAtrWizardOpen(false); setAtrResumeDraft(null); }}
-            onManageExceptions={onManageExceptions}
-            resumeDraft={atrResumeDraft}
-            onAddToReport={(meta, observations, insights) => buildAtr(meta, observations, insights, false)}
-            onFreeze={(meta, observations, insights) => buildAtr(meta, observations, insights, true)}
-          />
-        );
-      })()}
+      {/* Generate ATR from Observations — opened by the ATR template "Generate".
+          The review step's "Add to Report" saves the ATR into My Reports. */}
+      {atrWizardOpen && (
+        <UploadReportModal
+          onClose={() => setAtrWizardOpen(false)}
+          onAddToReport={(meta: AtrMeta, observations: AtrObservation[], insights: AtrInsight[]) => {
+            const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const name = uniqueReportName(meta.auditTitle ? meta.auditTitle : 'Action Taken Report');
+            const newReport: GeneratedReport = {
+              id: `gr-atr-${Date.now()}`,
+              templateId: 'rt-007',
+              kind: 'atr',
+              name,
+              tag: 'Internal Audit',
+              generatedBy: 'You',
+              generatedAt: today,
+              status: 'draft',
+              pages: Math.max(1, observations.length),
+              queries: observations.length,
+              atrData: { meta, observations, insights },
+            };
+            setGeneratedReports(prev => [newReport, ...prev]);
+            setViewingReport(newReport);
+            setAtrWizardOpen(false);
+            addToast({ type: 'success', message: 'Action Taken Report added to My Reports.' });
+          }}
+        />
+      )}
 
       <ConfirmDialog
         open={!!templateToDelete}

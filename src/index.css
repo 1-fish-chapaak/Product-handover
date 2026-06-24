@@ -369,19 +369,51 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
 .skeleton-title { height: 18px; width: 60%; border-radius: 6px; }
 .skeleton-card  { border-radius: 12px; min-height: 80px; }
 
-/* Cool, neutral shimmer for Knowledge Hub skeletons — a soft highlight sweeps
-   across translucent ink, so the load reads as alive rather than a flat block
-   of grey. No warm paper tint. */
-.skeleton-cool {
-  background: linear-gradient(90deg,
-    rgb(15 8 30 / 0.045) 0%,
-    rgb(15 8 30 / 0.10) 50%,
-    rgb(15 8 30 / 0.045) 100%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
+/* A highlight bar that translates across the element — GPU-accelerated and
+   seamless (it's fully off-screen at both ends, so the loop never jumps) with
+   constant linear speed. This is the smooth, premium skeleton sweep. Per-bar
+   cascade via the optional `--sk-delay` custom property. */
+@keyframes shimmer-sweep {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
 }
+
+/* Cool, neutral shimmer for app skeletons — a soft white highlight sweeps over
+   a faint ink base, so the load reads as alive rather than a flat grey block. */
+.skeleton-cool {
+  position: relative;
+  overflow: hidden;
+  background-color: rgb(15 8 30 / 0.07);
+}
+.skeleton-cool::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.55) 50%, transparent 100%);
+  transform: translateX(-100%);
+  animation: shimmer-sweep 1.6s linear infinite;
+  animation-delay: var(--sk-delay, 0s);
+}
+
+/* White shimmer for skeletons sitting on a dark/brand surface (e.g. the report
+   banner placeholder), so the sweep reads against the purple gradient. */
+.skeleton-on-brand {
+  position: relative;
+  overflow: hidden;
+  background-color: rgb(255 255 255 / 0.14);
+}
+.skeleton-on-brand::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.34) 50%, transparent 100%);
+  transform: translateX(-100%);
+  animation: shimmer-sweep 1.6s linear infinite;
+  animation-delay: var(--sk-delay, 0s);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .skeleton-cool { animation: none; background: rgb(15 8 30 / 0.07); }
+  .skeleton-cool::after, .skeleton-on-brand::after { animation: none; opacity: 0; }
 }
 
 /* ── AI thinking dots — three brand-400 dots, 900ms stagger ── */

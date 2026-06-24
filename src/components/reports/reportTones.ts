@@ -11,6 +11,7 @@ const STAT_TONES: Record<string, StatTone> = {
   mitigated: { border: 'border-l-mitigated', text: 'text-mitigated-700', hex: '#B45309' },
   compliant: { border: 'border-l-compliant', text: 'text-compliant-700', hex: '#15803D' },
   evidence:  { border: 'border-l-evidence',  text: 'text-evidence-700',  hex: '#0369A1' },
+  ink:       { border: 'border-l-ink-300',   text: 'text-ink-700',       hex: '#475569' },
 };
 
 export const statTone = (color: string): StatTone =>
