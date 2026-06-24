@@ -95,13 +95,33 @@ export interface Assignment {
   sendBackCount: number;
   assignedBy: string;           // OrgUser id
   assignedAt: string;           // ISO
+  /** True once a Risk Owner route has handed off to the Auditor phase — the
+   *  auditor route levels (or a single Auditor sign-off) are appended and the
+   *  chain continues until the final auditor approver, who marks it approved. */
+  auditorPhase?: boolean;
+  /** True once the plan was fully approved and the Risk Owner's Action Taken is
+   *  being reviewed through the chain again (the second cycle). On final approval
+   *  of this cycle the case is closed rather than handed back for action. */
+  actionCycle?: boolean;
+  /** Snapshots of completed route cycles (e.g. the plan-approval chain) so the
+   *  full approval history renders as stacked chains, not just the current cycle. */
+  priorCycles?: { label: string; levels: WorkflowLevel[]; levelStates: LevelState[] }[];
+  /** Auditor approval route the Auditor attached to THIS case (separate from the
+   *  Risk Owner route). Stored on the same record — consumed at handoff to build
+   *  the Auditor phase. Absent → the Auditor lead is the sole final approver. */
+  auditorRouteLevels?: WorkflowLevel[];
+  /** Snapshot of the attached auditor route for display ("Auditor route assigned"). */
+  auditorRouteName?: string;
   /** Snapshot of the assignee's drafted result, applied to the exception on
    *  final approval (the hook into the existing classification/review flow). */
   draft?: {
     classification?: string;
+    // Management Action Plan — set in cycle 1 and preserved through the lifecycle.
     actionName?: string;
     actionDetails?: string;
     dueDate?: string;
+    // Action Taken — set in cycle 2; kept separate so the plan is never clobbered.
+    actionTaken?: string;
     actionReview?: 'Approved' | 'Rejected' | 'Implemented';
     actionStatus?: 'Implemented' | 'Partially Implemented';
   };

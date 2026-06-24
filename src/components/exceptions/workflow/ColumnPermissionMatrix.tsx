@@ -61,7 +61,9 @@ export default function ColumnPermissionMatrix({
               <Toggle on={p.visible} disabled={readOnly || p.key === 'id'} onClick={() => update(p.key, { visible: !p.visible })} label={`${p.label} visible`} />
             </span>
             <span className="justify-self-center w-[80px] flex justify-center">
-              <Toggle on={p.editable} disabled={readOnly || !p.visible} onClick={() => update(p.key, { editable: !p.editable })} label={`${p.label} editable`} />
+              {/* Editable can be toggled even when not yet visible — turning it on
+                  auto-enables Visible for the column (handled in `update`). */}
+              <Toggle on={p.editable} disabled={readOnly} onClick={() => update(p.key, { editable: !p.editable })} label={`${p.label} editable`} />
             </span>
           </div>
         ))}

@@ -15,7 +15,11 @@ import {
   Loader2,
   XOctagon,
   FolderOpen,
+  GitBranch,
+  Inbox,
 } from 'lucide-react';
+import { useWorkflow } from './workflow/WorkflowContext';
+import { canAct } from './workflow/workflowEngine';
 import {
   GRC_CASE_DETAILS,
   type GrcException,
@@ -276,6 +280,22 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
   const [detailEx, setDetailEx] = useState<GrcException | null>(null);
   const openDrawer = useCallback((key: string) => setOpenPresetKey(key), []);
 
+  // ── Approval-route journey — assignments delegated through an approval chain.
+  // Drives the "Approval routes" KPI band; tiles open a filtered case list.
+  const { assignments, currentUserId } = useWorkflow();
+  const [wfDrawer, setWfDrawer] = useState<{ title: string; subtitle: string; exceptions: GrcException[] } | null>(null);
+  const wf = useMemo(() => {
+    const active = assignments.filter(a => a.status !== 'pulled-back');
+    const byEx = (pred: (a: typeof active[number]) => boolean) => exceptions.filter(e => active.some(a => a.exceptionId === e.id && pred(a)));
+    return {
+      inRoute: byEx(() => true),
+      awaitingApproval: byEx(a => a.status === 'in-approval'),
+      myWork: byEx(a => (a.status === 'drafting' || a.status === 'rejected') && a.assigneeId === currentUserId),
+      myApprovals: byEx(a => a.status === 'in-approval' && canAct(a, currentUserId).ok),
+      approved: byEx(a => a.status === 'approved'),
+    };
+  }, [assignments, exceptions, currentUserId]);
+
   const m = useMemo(() => {
     const total = exceptions.length;
     const count = (f: (ex: GrcException) => boolean) => exceptions.filter(f).length;
@@ -415,6 +435,22 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
           <KpiTile icon={XOctagon}      label="Discrepancy"           value={m.discrepancy}   tone="risk"      onClick={() => openDrawer('discrepancy')} />
         </div>
 
+        {/* ── Approval routes — delegated work moving through an approval chain ── */}
+        {wf.inRoute.length > 0 && (
+          <>
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-[0.75rem] uppercase tracking-[0.14em] text-ink-500 font-medium">Approval routes</span>
+              <span className="text-[0.6875rem] text-ink-400">· where delegated work sits · tap a tile to see the cases</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+              <KpiTile icon={GitBranch}   label="In approval route"     value={wf.inRoute.length}          tone="brand"     onClick={() => setWfDrawer({ title: 'In approval route', subtitle: 'Delegated through an approval chain', exceptions: wf.inRoute })} />
+              <KpiTile icon={Inbox}       label="Awaiting approval"     value={wf.awaitingApproval.length} tone="mitigated" onClick={() => setWfDrawer({ title: 'Awaiting approval', subtitle: 'Submitted and moving through approvers', exceptions: wf.awaitingApproval })} />
+              <KpiTile icon={Wrench}      label="My work pending"       value={wf.myWork.length}           tone="evidence"  onClick={() => setWfDrawer({ title: 'My work pending', subtitle: 'Assigned to you — draft and submit', exceptions: wf.myWork })} />
+              <KpiTile icon={ShieldCheck} label="Awaiting my approval"  value={wf.myApprovals.length}      tone="risk"      onClick={() => setWfDrawer({ title: 'Awaiting my approval', subtitle: 'Pending your decision', exceptions: wf.myApprovals })} />
+            </div>
+          </>
+        )}
+
         {/* ── Classification breakdown ── */}
         {m.classified > 0 && (
           <CollapsibleSection icon={BarChart3} title="Classification Breakdown" subtitle={`${m.classified} classified · ${m.unclassified} unclassified · tap a type to see the cases`}>
@@ -425,6 +461,22 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
         {/* ── Per-case status & journey detail ── */}
         <ExceptionStatusTracker exceptions={exceptions} role={role} onAction={onAction} />
       </div>
+
+      {/* Approval-route case list (from the Approval routes KPI band) */}
+      <AnimatePresence>
+        {wfDrawer && (
+          <ExceptionListDrawer
+            key="wf-drawer"
+            title={wfDrawer.title}
+            subtitle={wfDrawer.subtitle}
+            exceptions={wfDrawer.exceptions}
+            onClose={() => setWfDrawer(null)}
+            onSelectException={setDetailEx}
+            role={role}
+            onAction={(kind, ex) => { setWfDrawer(null); onAction?.(kind, ex); }}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {openPreset && (

@@ -4,11 +4,10 @@ import { ChevronDown, ChevronRight, ShieldCheck } from 'lucide-react';
 import {
   GRC_EXCEPTIONS,
   GRC_BULK_ACTIONS,
-  ACTION_HUB_TIMELINE,
+  GRC_CASE_DETAILS,
   type GrcException,
   type GrcExceptionStatus,
   type GrcExceptionClassification,
-  type ActionHubEvent,
 } from '../../data/mockData';
 import ExceptionDetailDrawer from './ExceptionDetailDrawer';
 import type { ExceptionActionKind } from './statusModel';
@@ -77,9 +76,16 @@ function buildActionPlans(exceptions: GrcException[]): ActionPlanBuckets {
   return { bulk, individual };
 }
 
-function lastActionFor(id: string, timeline: ActionHubEvent[]): { message: string; date: string } | null {
-  const hit = timeline.find(ev => ev.exceptionId === id);
-  return hit ? { message: hit.message, date: hit.date.replace(/ 2026$/, ' 26') } : null;
+// Last action is read LIVE from the case's own activity log (newest first), so it
+// reflects the real flow — classify, approvals, handoff, action taken — as it runs.
+function lastActionFor(id: string): { message: string; date: string } | null {
+  const hit = GRC_CASE_DETAILS[id]?.activityLog?.[0];
+  if (!hit) return null;
+  const d = new Date(hit.timestamp);
+  const date = Number.isNaN(d.getTime())
+    ? hit.timestamp
+    : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
+  return { message: hit.message, date };
 }
 
 function statusPills(exceptions: GrcException[]) {
@@ -180,7 +186,7 @@ function ActionGroupRow({
                 </thead>
                 <tbody>
                   {group.exceptions.map(ex => {
-                    const last = lastActionFor(ex.id, ACTION_HUB_TIMELINE);
+                    const last = lastActionFor(ex.id);
                     return (
                       <tr
                         key={ex.id}

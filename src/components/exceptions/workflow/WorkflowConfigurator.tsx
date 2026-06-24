@@ -102,6 +102,7 @@ export default function WorkflowConfigurator({ role }: { role: Persona }) {
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h4 className="text-[13.5px] font-semibold text-ink-900">{t.name}</h4>
+                  <span className={`inline-flex items-center h-5 px-2 text-[10px] font-semibold rounded-full ${t.persona === 'auditor' ? 'bg-evidence-50 text-evidence-700' : 'bg-brand-50 text-brand-700'}`}>{PERSONA_LABEL[t.persona]} route</span>
                   {t.isDefault && <span className="inline-flex items-center gap-1 h-5 px-2 text-[10px] font-semibold bg-brand-50 text-brand-700 rounded-full"><Star size={9} /> Default</span>}
                   <span className="text-[10px] text-ink-400">v{t.version}</span>
                 </div>
