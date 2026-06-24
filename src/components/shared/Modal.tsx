@@ -77,6 +77,7 @@ export default function Modal({
               {subtitle && <p className="text-[0.8125rem] text-ink-500 mt-0.5 leading-snug">{subtitle}</p>}
             </div>
             <button
+              type="button"
               onClick={onClose}
               aria-label="Close"
               className="w-8 h-8 rounded-md text-ink-500 hover:text-ink-800 hover:bg-canvas flex items-center justify-center cursor-pointer shrink-0"

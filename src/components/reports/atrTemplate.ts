@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import type {
   AtrMeta,
   AtrObservation,
+  AtrReportData,
   AtrActionStatus,
   AtrObservationStatus,
   AtrClassification,
@@ -305,6 +306,48 @@ export async function parseObservationsFromFile(file: File): Promise<AtrObservat
   } catch {
     return null;
   }
+}
+
+// ─── Derive actionable items from an existing (iRAME) report ───
+// A report sourced from inside the product becomes the seed for an ATR: if it
+// already carries ATR data we reuse it verbatim, otherwise each generated query
+// is mapped to one draft observation (the user edits these in the next step).
+interface DerivableQuery {
+  title?: string;
+  summary?: string;
+  answer?: string;
+  risk?: string;        // risk category label, e.g. "Financial Risk"
+  severity?: string;    // High | Medium | Low
+  findings?: string[];
+  observations?: string[];
+  kpis?: { label: string; value: string }[];
+}
+export interface DerivableReport {
+  name?: string;
+  atrData?: AtrReportData;
+  generatedQueries?: DerivableQuery[];
+}
+
+export function deriveObservationsFromReport(report: DerivableReport): AtrObservation[] {
+  if (report.atrData?.observations?.length) return report.atrData.observations;
+  const queries = report.generatedQueries ?? [];
+  if (queries.length === 0) return SAMPLE_OBSERVATIONS;
+  return queries.map((q): AtrObservation => {
+    const firstKpi = q.kpis?.[0]?.value;
+    const exceptions = firstKpi ? Number.parseInt(firstKpi.replace(/[^0-9]/g, ''), 10) || undefined : undefined;
+    const recommendation =
+      q.observations?.[0] ?? q.findings?.[0] ?? 'Define a management action plan for this observation.';
+    const obs: AtrObservation = {
+      title: q.title || 'Untitled Observation',
+      description: q.summary || q.answer || undefined,
+      riskSummary: q.risk || (q.findings && q.findings.length > 1 ? q.findings.join(' ') : undefined),
+      risk: normaliseRisk(q.severity),
+      exceptions,
+      actionPlans: [{ text: recommendation }],
+    };
+    obs.status = deriveObservationStatus(obs);
+    return obs;
+  });
 }
 
 // ─── Sample observations (simulated extraction for PDF/Word uploads) ───

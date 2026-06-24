@@ -566,7 +566,7 @@ function CommentDrawer({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
-        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50"
+        className="fixed inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px] z-50"
         onClick={onClose}
       />
       <motion.aside
@@ -821,7 +821,7 @@ function ReportActivityLogDrawer({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
-        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50"
+        className="fixed inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px] z-50"
         onClick={onClose}
       />
       <motion.aside
@@ -2738,7 +2738,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-ink-900/40 backdrop-blur-[2px]"
+              className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px]"
               onClick={() => setPendingTemplate(null)}
             >
               <motion.div

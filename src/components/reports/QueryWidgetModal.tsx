@@ -98,7 +98,7 @@ export default function QueryWidgetModal({
         exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
         onClick={onClose}
-        className="fixed inset-0 z-[60] bg-ink-900/40 backdrop-blur-[2px] flex items-center justify-center p-6"
+        className="fixed inset-0 z-[60] bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px] flex items-center justify-center p-6"
       >
         <motion.div
           ref={containerRef}

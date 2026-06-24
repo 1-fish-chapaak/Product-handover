@@ -1,45 +1,37 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Pencil, Download, Save, SlidersHorizontal,
-  ChevronUp, ChevronDown, Eye, EyeOff, ListTodo,
+  Pencil, Download, Save, SlidersHorizontal, ArrowLeft,
+  ChevronUp, ChevronDown, Eye, EyeOff, ListTodo, RotateCcw,
 } from 'lucide-react';
-import Modal from '../../../shared/Modal';
 import { Button } from '../../../shared/Button';
 import { useToast } from '../../../shared/Toast';
-import { useCurrentUser } from '../../../../context/CurrentUserContext';
 import AtrDocument from '../../AtrDocument';
+import { exportAtrWord } from '../../atrTemplate';
 import { ATR_SECTION_ORDER, ATR_SECTION_LABEL, type AtrSectionKey } from '../../atrSections';
 import { toAtrReportData } from '../toAtrReportData';
 import { useAtrUpload } from '../AtrUploadContext';
+import { WizardFooter } from '../footerSlot';
 import ObservationExceptionsModal from '../components/ObservationExceptionsModal';
 import type { AtrReportData } from '../../atrTypes';
-import type { AtrVersion } from '../types';
-
-function parseVersion(s?: string): { maj: number; min: number } {
-  const m = s?.match(/v(\d+)\.(\d+)/);
-  return m ? { maj: +m[1], min: +m[2] } : { maj: 1, min: 0 };
-}
 
 /** Screen 7 — ATR preview. Reuses the existing AtrDocument renderer (brand
  *  fidelity), adds the floating toolbar, inline editing, section skip/reorder,
  *  version save and finalize-with-RBAC. */
-export default function Step7AtrPreview({ onBack, onManageExceptions, onSaveAtr }: {
-  onBack: () => void;
+export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
   /** Hand the linked exception cases for a single observation to case management. */
   onManageExceptions?: (observationId: string) => void;
   /** Persist the generated ATR into My Reports → ATR tab (upsert by session id). */
-  onSaveAtr?: (sessionId: string, label: string | undefined, data: AtrReportData) => void;
+  onSaveAtr?: (sessionId: string, label: string | undefined, data: AtrReportData) => string;
 }) {
-  const { state, updateSession, addVersion } = useAtrUpload();
+  const { state, updateSession, goTo } = useAtrUpload();
   const { addToast } = useToast();
-  const { currentUser } = useCurrentUser();
   const session = state.session;
 
   const [editMode, setEditMode] = useState(false);
   const [sectionsOpen, setSectionsOpen] = useState(false);
-  const [saveOpen, setSaveOpen] = useState(false);
-  const [saveLabel, setSaveLabel] = useState('');
+  // Download menu — PDF or Word.
+  const [showFormats, setShowFormats] = useState(false);
   const [order, setOrder] = useState<AtrSectionKey[]>(ATR_SECTION_ORDER);
   const [hidden, setHidden] = useState<AtrSectionKey[]>([]);
   // Observation whose linked exceptions are open in the per-observation modal.
@@ -64,20 +56,16 @@ export default function Step7AtrPreview({ onBack, onManageExceptions, onSaveAtr 
   const patch = (partial: Partial<AtrReportData>) =>
     updateSession(s => ({ ...s, atrDraft: { ...(s.atrDraft ?? toAtrReportData(s)), ...partial } }));
 
-  const newVersion = (label?: string): AtrVersion => {
-    const latest = parseVersion(state.versions[0]?.versionNumber);
-    const num = `v${latest.maj}.${latest.min + 1}`;
-    return { id: `atrv-${Date.now()}`, versionNumber: num, status: 'draft', data, generatedAt: new Date().toISOString(), generatedBy: currentUser?.name ?? 'You', label };
-  };
-
-  const handleDownload = () => {
-    // PDF download via the browser's print engine: the global print stylesheet
+  const handleDownload = (kind: 'pdf' | 'word') => {
+    setShowFormats(false);
+    if (kind === 'word') { exportAtrWord(data.meta, data.observations); addToast({ type: 'success', message: 'ATR exported to Word.' }); return; }
+    // PDF via the browser's print engine: the global print stylesheet
     // (index.css @media print) hides all chrome and emits only the
     // `.report-printable` ATR document. Setting document.title gives the saved
     // PDF a meaningful filename; we restore it once the dialog closes.
     const filename = `${data.meta.reportId || 'ATR'} — Action Taken Report`;
     const prevTitle = document.title;
-    addToast({ type: 'info', message: 'Generating the PDF — pick “Save as PDF” as the destination.' });
+    addToast({ type: 'info', message: 'Opening the print dialog — pick “Save as PDF” as the destination.' });
     window.setTimeout(() => {
       document.title = filename;
       window.print();
@@ -85,15 +73,12 @@ export default function Step7AtrPreview({ onBack, onManageExceptions, onSaveAtr 
     }, 250);
   };
 
+  // Save directly — no dialog. The host upserts the ATR into My Reports and
+  // returns the version label (v1, v2, …), incremented from the saved card so
+  // it survives the wizard closing on save.
   const handleSave = () => {
-    const label = saveLabel.trim() || undefined;
-    const v = newVersion(label);
-    addVersion(v);
-    // Persist into My Reports → ATR tab so the generated ATR lives alongside
-    // every other report (upsert by session id — re-saving updates the card).
-    onSaveAtr?.(session.id, label, data);
-    addToast({ type: 'success', message: `Saved ${v.versionNumber} to My Reports → ATR${label ? ` — "${label}"` : ''}.` });
-    setSaveOpen(false); setSaveLabel('');
+    const versionNumber = onSaveAtr?.(session.id, undefined, data) ?? 'v1';
+    addToast({ type: 'success', message: `Saved ${versionNumber} to My Reports → ATR.` });
   };
 
   // Section reorder / visibility
@@ -103,52 +88,83 @@ export default function Step7AtrPreview({ onBack, onManageExceptions, onSaveAtr 
     const next = [...prev]; [next[i], next[j]] = [next[j], next[i]]; return next;
   });
   const toggleHidden = (key: AtrSectionKey) => setHidden(prev => (prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]));
+  const resetSections = () => { setOrder(ATR_SECTION_ORDER); setHidden([]); };
+  const visibleCount = order.length - hidden.length;
 
   return (
     <div>
-      {/* Floating toolbar — sits just below the sticky wizard stepper (top-[64px]). */}
-      <div className="sticky top-[64px] z-20 -mx-1 mb-4 print:hidden">
-        <div className="flex items-center justify-between gap-3 rounded-[12px] border border-canvas-border bg-canvas-elevated/95 backdrop-blur px-4 py-2.5 shadow-sm flex-wrap">
-          <div className="flex items-center gap-3">
-            <span className="text-[13px] font-semibold text-ink-800">ATR Preview</span>
+      {/* Action bar — pinned to the modal's sticky footer (bottom), mirroring the
+          rest of the wizard. Back on the left; the report actions on the right. */}
+      <WizardFooter>
+        <div className="flex items-center justify-between gap-3 flex-wrap border-t border-canvas-border bg-canvas-elevated px-6 py-3 print:hidden">
+          <div className="flex items-center gap-2.5">
+            <Button variant="ghost" size="md" leftIcon={<ArrowLeft size={15} />} onClick={() => goTo('decision')}>Back</Button>
             {state.versions[0] && <span className="text-[11px] font-semibold tabular-nums text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">{state.versions[0].versionNumber}</span>}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <Button variant={isEditing ? 'secondary' : 'outline'} size="sm" pressed={isEditing} leftIcon={<Pencil size={14} />} onClick={() => setEditMode(e => !e)} title="Toggle inline editing">
-              {isEditing ? 'Editing' : 'Edit'}
+            <Button variant={isEditing ? 'secondary' : 'outline'} size="md" pressed={isEditing} leftIcon={<Pencil size={15} />} onClick={() => setEditMode(e => !e)} title="Toggle inline editing">
+              {isEditing ? 'Editing' : 'Edit items'}
             </Button>
 
             <div className="relative">
-              <Button variant="outline" size="sm" leftIcon={<SlidersHorizontal size={14} />} onClick={() => setSectionsOpen(o => !o)}>Sections</Button>
+              <Button variant="outline" size="md" leftIcon={<SlidersHorizontal size={15} />} onClick={() => setSectionsOpen(o => !o)}>Sections</Button>
               <AnimatePresence>
                 {sectionsOpen && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setSectionsOpen(false)} />
-                    <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="absolute right-0 mt-1.5 w-[290px] z-20 rounded-[10px] border border-canvas-border bg-canvas-elevated shadow-xl p-2">
-                      <div className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-400 px-2 py-1.5">Reorder &amp; skip sections</div>
-                      {order.map((key, i) => {
-                        const isHidden = hidden.includes(key);
-                        return (
-                          <div key={key} className="flex items-center gap-1.5 px-2 py-1.5 rounded-[6px] hover:bg-canvas">
-                            <span className={`flex-1 text-[12px] ${isHidden ? 'text-ink-400 line-through' : 'text-ink-700'}`}>{ATR_SECTION_LABEL[key]}</span>
-                            <button onClick={() => move(key, -1)} disabled={i === 0} aria-label="Move up" className="w-6 h-6 inline-flex items-center justify-center rounded text-ink-400 hover:text-ink-700 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"><ChevronUp size={14} /></button>
-                            <button onClick={() => move(key, 1)} disabled={i === order.length - 1} aria-label="Move down" className="w-6 h-6 inline-flex items-center justify-center rounded text-ink-400 hover:text-ink-700 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"><ChevronDown size={14} /></button>
-                            <button onClick={() => toggleHidden(key)} aria-label={isHidden ? 'Show section' : 'Skip section'} className="w-6 h-6 inline-flex items-center justify-center rounded text-ink-400 hover:text-brand-700 cursor-pointer">{isHidden ? <EyeOff size={14} /> : <Eye size={14} />}</button>
-                          </div>
-                        );
-                      })}
+                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className="absolute right-0 bottom-full mb-2 w-[306px] z-20 rounded-[12px] border border-canvas-border bg-canvas-elevated shadow-xl overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2.5 border-b border-canvas-border">
+                        <span className="text-[12px] font-semibold text-ink-800">Reorder &amp; skip sections</span>
+                        <span className="text-[11px] tabular-nums text-ink-400">{visibleCount} of {order.length} shown</span>
+                      </div>
+                      <div className="p-1.5 max-h-[320px] overflow-y-auto">
+                        {order.map((key, i) => {
+                          const isHidden = hidden.includes(key);
+                          return (
+                            <div key={key} className="flex items-center gap-1 pl-1.5 pr-1 py-1 rounded-[8px] hover:bg-canvas transition-colors">
+                              <span className="w-5 shrink-0 text-center text-[11px] font-semibold tabular-nums text-ink-300">{i + 1}</span>
+                              <span className={`flex-1 min-w-0 truncate text-[12px] ${isHidden ? 'text-ink-400 line-through' : 'text-ink-700'}`}>{ATR_SECTION_LABEL[key]}</span>
+                              <div className="flex items-center rounded-[7px] border border-canvas-border overflow-hidden mr-0.5">
+                                <button onClick={() => move(key, -1)} disabled={i === 0} aria-label="Move up" className="w-6 h-6 inline-flex items-center justify-center text-ink-400 hover:text-ink-800 hover:bg-canvas disabled:opacity-25 cursor-pointer disabled:cursor-not-allowed transition-colors"><ChevronUp size={13} /></button>
+                                <span className="w-px h-4 bg-canvas-border" aria-hidden="true" />
+                                <button onClick={() => move(key, 1)} disabled={i === order.length - 1} aria-label="Move down" className="w-6 h-6 inline-flex items-center justify-center text-ink-400 hover:text-ink-800 hover:bg-canvas disabled:opacity-25 cursor-pointer disabled:cursor-not-allowed transition-colors"><ChevronDown size={13} /></button>
+                              </div>
+                              <button onClick={() => toggleHidden(key)} aria-label={isHidden ? 'Show section' : 'Skip section'} title={isHidden ? 'Show in report' : 'Skip in report'} className={`w-7 h-7 inline-flex items-center justify-center rounded-[7px] cursor-pointer transition-colors ${isHidden ? 'text-ink-400 hover:text-ink-700 hover:bg-canvas' : 'text-brand-700 bg-brand-50 hover:bg-brand-100'}`}>{isHidden ? <EyeOff size={14} /> : <Eye size={14} />}</button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-canvas-border">
+                        <span className="text-[10.5px] text-ink-400 leading-tight">Hidden sections are skipped in the PDF.</span>
+                        <button onClick={resetSections} className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 hover:underline cursor-pointer"><RotateCcw size={11} aria-hidden="true" /> Reset</button>
+                      </div>
                     </motion.div>
                   </>
                 )}
               </AnimatePresence>
             </div>
 
-            <Button variant="outline" size="sm" leftIcon={<Download size={14} />} onClick={handleDownload}>Download</Button>
-            <Button variant="secondary" size="sm" leftIcon={<Save size={14} />} onClick={() => setSaveOpen(true)}>Save Version</Button>
+            <div className="relative">
+              <Button variant="outline" size="md" leftIcon={<Download size={15} />} rightIcon={<ChevronDown size={13} className={`transition-transform ${showFormats ? 'rotate-180' : ''}`} />} onClick={() => setShowFormats(o => !o)}>Preview &amp; Download</Button>
+              <AnimatePresence>
+                {showFormats && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowFormats(false)} />
+                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className="absolute right-0 bottom-full mb-2 w-[224px] z-20 rounded-[12px] border border-canvas-border bg-canvas-elevated shadow-xl overflow-hidden py-1">
+                      {[{ k: 'pdf' as const, l: 'Print / Save as PDF' }, { k: 'word' as const, l: 'Download as Word' }].map(f => (
+                        <button key={f.k} onClick={() => handleDownload(f.k)} className="w-full text-left px-3.5 py-2.5 text-[12.5px] text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer">{f.l}</button>
+                      ))}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+            <span className="w-px h-5 bg-canvas-border mx-0.5 hidden sm:block" aria-hidden="true" />
+            <Button variant="primary" size="md" leftIcon={<Save size={15} />} onClick={handleSave}>Save Version</Button>
           </div>
         </div>
-      </div>
+      </WizardFooter>
 
       {/* The document — reuses the existing renderer for exact brand fidelity */}
       <AtrDocument
@@ -198,28 +214,6 @@ export default function Step7AtrPreview({ onBack, onManageExceptions, onSaveAtr 
               onManageExceptions?.(id);
             }}
           />
-        )}
-      </AnimatePresence>
-
-      {/* Save Version modal */}
-      <AnimatePresence>
-        {saveOpen && (
-          <Modal
-            title="Save version"
-            subtitle="Snapshot the current report as a labelled version."
-            width="max-w-[460px]"
-            onClose={() => setSaveOpen(false)}
-            footer={<><Button variant="outline" onClick={() => setSaveOpen(false)}>Cancel</Button><Button variant="primary" leftIcon={<Save size={14} />} onClick={handleSave}>Save version</Button></>}
-          >
-            <label className="block text-[12px] font-semibold text-ink-700 mb-1.5">Version label (optional)</label>
-            <input
-              autoFocus value={saveLabel} onChange={e => setSaveLabel(e.target.value)}
-              placeholder="e.g. Draft for partner review"
-              onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
-              className="w-full text-[13px] text-ink-800 bg-canvas-elevated border border-canvas-border rounded-[8px] px-3 py-2 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/15"
-            />
-            <p className="text-[11.5px] text-ink-400 mt-2">Saved versions are listed with a version number; the next save will be <span className="font-semibold tabular-nums">{`v${parseVersion(state.versions[0]?.versionNumber).maj}.${parseVersion(state.versions[0]?.versionNumber).min + 1}`}</span>.</p>
-          </Modal>
         )}
       </AnimatePresence>
     </div>
