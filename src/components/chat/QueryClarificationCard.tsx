@@ -161,19 +161,42 @@ export default function QueryClarificationCard({
         style={pinnedHeight ? { minHeight: `${pinnedHeight}px` } : undefined}
         className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden flex flex-col"
       >
-        {/* Header — question count + close on top, then the question */}
+        {/* Header — question count (left) + Back / Next (right), then the question */}
         <div className="px-5 pt-3.5 pb-3">
           <div className="flex items-center justify-between gap-3 mb-2">
             <span className="text-[0.75rem] font-medium text-ink-500 tabular-nums">Question {safeIndex + 1} of {total}</span>
-            <button
-              type="button"
-              onClick={onCancel}
-              aria-label="Close clarification"
-              title="Close — cancels this question set"
-              className="inline-flex items-center justify-center size-7 -mr-1 rounded-md text-ink-500 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 shrink-0"
-            >
-              <X size={15} />
-            </button>
+            {/* Back / Next (or Done) — top-right corner (replaces the old ✕). */}
+            <div className="flex items-center gap-2 shrink-0 -mr-1">
+              <button
+                type="button"
+                onClick={goBack}
+                disabled={!canBack}
+                className="inline-flex items-center gap-1 h-8 pl-2 pr-3 rounded-lg text-[0.8125rem] font-medium text-ink-600 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                <ChevronLeft size={15} /> Back
+              </button>
+              {isLast ? (
+                <button
+                  type="button"
+                  onClick={done}
+                  disabled={!answeredCurrent && !customInput.trim()}
+                  title={answeredCurrent ? undefined : 'Pick an answer to continue'}
+                  className="inline-flex items-center justify-center h-8 px-4 rounded-lg text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  Done
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={goNext}
+                  disabled={!answeredCurrent && !customInput.trim()}
+                  title={answeredCurrent ? undefined : 'Pick an answer to continue'}
+                  className="inline-flex items-center gap-1 h-8 pl-3 pr-2 rounded-lg text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  Next <ChevronRight size={15} />
+                </button>
+              )}
+            </div>
           </div>
           <p className="text-[0.9375rem] font-semibold leading-[1.4] text-ink-900 break-words" title={viewQ.question}>{viewQ.question}</p>
           {isMulti && <p className="mt-0.5 text-[0.71875rem] font-medium text-ink-400">Select all that apply</p>}
@@ -281,43 +304,16 @@ export default function QueryClarificationCard({
             <input
               ref={inputRef}
               value={customInput}
+              onFocus={() => {
+                // Clicking into the field means the user is choosing "other",
+                // so deselect any currently-picked radio option right away.
+                if (!isMulti && selected.length > 0) onSetAnswer(safeIndex, []);
+              }}
               onChange={e => setCustomInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && customInputRef.current.trim()) { e.preventDefault(); e.stopPropagation(); addCustom(); } }}
               placeholder="Type something else…"
               className="no-focus-ring flex-1 bg-transparent text-[0.875rem] text-ink-800 placeholder:text-ink-400 outline-none h-8"
             />
-            {/* Back / Next (or Done) live here in the input row — no separate footer */}
-            <div className="flex items-center gap-2 shrink-0 ml-1">
-              <button
-                type="button"
-                onClick={goBack}
-                disabled={!canBack}
-                className="inline-flex items-center gap-1 h-8 pl-2 pr-3 rounded-lg text-[0.8125rem] font-medium text-ink-600 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-              >
-                <ChevronLeft size={15} /> Back
-              </button>
-              {isLast ? (
-                <button
-                  type="button"
-                  onClick={done}
-                  disabled={!answeredCurrent && !customInput.trim()}
-                  title={answeredCurrent ? undefined : 'Pick an answer to continue'}
-                  className="inline-flex items-center justify-center h-8 px-4 rounded-lg text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                >
-                  Done
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={goNext}
-                  disabled={!answeredCurrent && !customInput.trim()}
-                  title={answeredCurrent ? undefined : 'Pick an answer to continue'}
-                  className="inline-flex items-center gap-1 h-8 pl-3 pr-2 rounded-lg text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                >
-                  Next <ChevronRight size={15} />
-                </button>
-              )}
-            </div>
           </div>
         </div>
       </div>

@@ -483,11 +483,11 @@ export default function UploadDataModal({
               </div>
 
               {/* Tabs — hidden entirely when there's a single tab (e.g. ATR's
-                  upload-only picker). The row still appears for the "Choose
-                  files/folder" edit buttons once something is picked. */}
-              {(TABS.length > 1 || (tab === 'upload' && totalSelected > 0)) && (
+                  upload-only picker). The Choose files/folder buttons now live in
+                  the Selected & uploaded section below, not this row. */}
+              {TABS.length > 1 && (
               <div className="flex items-center gap-1 px-5 border-b border-canvas-border">
-                {TABS.length > 1 && TABS.map((t) => {
+                {TABS.map((t) => {
                   const active = tab === t.id;
                   const Icon = t.icon;
                   return (
@@ -518,28 +518,6 @@ export default function UploadDataModal({
                     </button>
                   );
                 })}
-                {/* Once something's picked the drop zone collapses to the list,
-                    so the pickers move up here (mirrors the chat picker). */}
-                {tab === 'upload' && totalSelected > 0 && (
-                  <div className="ml-auto flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
-                    >
-                      <Upload size={13} />
-                      Choose files
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => folderInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-canvas-border bg-canvas-elevated text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
-                    >
-                      <Folder size={13} />
-                      Choose folder
-                    </button>
-                  </div>
-                )}
               </div>
               )}
 
@@ -638,10 +616,28 @@ export default function UploadDataModal({
                         'rounded-lg border bg-canvas-elevated overflow-hidden transition-colors',
                         dragOver ? 'border-brand-400 ring-2 ring-brand-200' : 'border-canvas-border',
                       )}>
-                        <div className="px-3 py-2 border-b border-canvas-border bg-canvas">
+                        <div className="flex items-center gap-2 px-3 py-2 border-b border-canvas-border bg-canvas">
                           <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500">
                             Selected &amp; uploaded · {pendingFiles.length + selectedAssets.length}
                           </span>
+                          <div className="ml-auto flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.71875rem] font-semibold transition-colors cursor-pointer"
+                            >
+                              <Upload size={12} />
+                              Choose files
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => folderInputRef.current?.click()}
+                              className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.71875rem] font-semibold transition-colors cursor-pointer"
+                            >
+                              <Folder size={12} />
+                              Choose folder
+                            </button>
+                          </div>
                         </div>
                         <ul className="divide-y divide-canvas-border">
                           {/* Fresh uploads */}

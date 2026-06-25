@@ -717,7 +717,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
           {/* Title doubles as the chart switcher: name + chevron opens a
               dropdown of all charts. Replaces the old right-aligned selector
               box (commented out below). Name is capped at 25 chars. */}
-          <div ref={selectorRef} className="min-w-0 flex-1 relative">
+          <div ref={selectorRef} className="min-w-0 flex-1 relative flex items-center gap-2">
             {charts.length > 1 ? (
               <>
                 <button
@@ -729,7 +729,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                   className="-ml-1 inline-flex items-center gap-2 max-w-full rounded-lg px-1 py-0.5 hover:bg-brand-50/60 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-                  <span className="text-[0.8125rem] font-semibold text-ink-800 truncate min-w-0">{titleLabel}</span>
+                  <span className="text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 rounded-md px-2 py-0.5 truncate min-w-0">{titleLabel}</span>
                   <ChevronDown size={14} className={`text-ink-400 shrink-0 transition-transform ${selectorOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {selectorOpen && (
@@ -763,8 +763,13 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
             ) : (
               <div className="flex items-center gap-2">
                 <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-                <span className="text-[0.8125rem] font-semibold text-ink-800 truncate min-w-0">{titleLabel}</span>
+                <span className="text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 rounded-md px-2 py-0.5 truncate min-w-0">{titleLabel}</span>
               </div>
+            )}
+            {charts.length > 1 && (
+              <span className="shrink-0 text-[0.6875rem] font-medium text-ink-500 tabular-nums">
+                Chart {charts.findIndex(c => c.id === activeId) + 1} of {charts.length}
+              </span>
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1108,7 +1113,7 @@ function ResultsTable({
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-canvas-border/70">
           <div className="min-w-0 flex items-center gap-2">
             <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{title}</span>
+            <span className="text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 rounded-md px-2 py-0.5 truncate">{title}</span>
             <span className="font-mono text-[0.6875rem] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1315,7 +1320,7 @@ function FullscreenTableModal({
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border shrink-0">
           <div className="min-w-0 flex items-center gap-2">
             <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{title}</span>
+            <span className="text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 rounded-md px-2 py-0.5 truncate">{title}</span>
             <span className="font-mono text-[0.6875rem] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -2036,10 +2041,17 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
               exposing it as a runtime parameter on the workflow. */}
           {configurables.length > 0 && (
             <div>
-              <label className="block text-[0.75rem] font-semibold text-ink-900 mb-1">Configuration</label>
-              <p className="text-[0.6875rem] text-ink-500 mb-2.5 leading-relaxed">
-                Adjust values the LLM detected as configurable. Removing a key inlines its value as a literal in the saved code.
-              </p>
+              <div className="flex items-center gap-1.5 mb-2.5">
+                <label className="text-[0.75rem] font-semibold text-ink-900">Configuration</label>
+                <span
+                  tabIndex={0}
+                  aria-label="Adjust values the LLM detected as configurable. Removing a key inlines its value as a literal in the saved code."
+                  title="Adjust values the LLM detected as configurable. Removing a key inlines its value as a literal in the saved code."
+                  className="inline-flex items-center text-ink-400 hover:text-ink-600 cursor-help focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded"
+                >
+                  <Info size={12} aria-hidden="true" />
+                </span>
+              </div>
               <div className="space-y-3">
                 {configurables.map((cfg, idx) => (
                   <div key={cfg.key} className={`transition-opacity ${cfg.removed ? 'opacity-50' : ''}`}>
@@ -2893,6 +2905,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // Tracks the saved-conversation id that is currently loaded — drives the
   // active row highlight in the chat-history sidebar. Cleared by resetChat
   // and by sending the first message in a fresh thread.
+  // Highlight the current chat in the recent sheet. Defaults to the most-recent
+  // chat so the sheet always shows which one is selected; updates when another
+  // is loaded, clears on a brand-new chat.
   const [activeChatHistoryId, setActiveChatHistoryId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -3302,7 +3317,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       const el = textareaRef.current;
       if (el) {
         el.style.height = 'auto';
-        el.style.height = Math.min(el.scrollHeight, 260) + 'px';
+        // Edits seeded from the plan (whole-plan or per-step) open at least
+        // ~4 lines tall so the text has room to be revised comfortably.
+        const FOUR_LINES_PX = 112;
+        el.style.height = Math.min(Math.max(el.scrollHeight, FOUR_LINES_PX), 260) + 'px';
         el.focus();
         const len = el.value.length;
         el.setSelectionRange(len, len);
@@ -4904,6 +4922,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
   const [editingTitle, setEditingTitle] = useState(false);
   const [chatTitleOverride, setChatTitleOverride] = useState<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  // The switcher chip is one button: a single click opens the recent-chats
+  // sheet, a double-click renames. We delay the single-click action briefly so
+  // a double-click can cancel it (otherwise the first click of a double would
+  // toggle the sheet before rename fires).
+  const switcherClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const copyMessage = useCallback(async (msg: ChatMessage) => {
     // For plain text, copy the body. For audit-result, copy a KPI summary so
@@ -4921,6 +4944,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     }
   }, [addToast]);
 
+  // Retry version counter, keyed by the user query's message id (stable across
+  // retries since the assistant turn is replaced). The pager shows N / N —
+  // the latest answer wins; prior answers aren't stored.
+  const [retryVersions, setRetryVersions] = useState<Record<string, number>>({});
+
   const retryFromMessage = useCallback((msgIdx: number) => {
     if (processingRef.current) return;
     // Walk back to find the user query that produced this assistant message.
@@ -4930,7 +4958,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     }
     if (userIdx === -1) return;
     const userText = messages[userIdx].text;
+    const userId = messages[userIdx].id;
     processingRef.current = true;
+    // Bump the version count for this query (1 → 2 → 3 …).
+    setRetryVersions(prev => ({ ...prev, [userId]: (prev[userId] ?? 1) + 1 }));
     // Drop the previous assistant turn(s) and re-simulate from the same query.
     setMessages(prev => prev.slice(0, userIdx + 1));
     simulateResponse(userText, buildWorkflowMode ? undefined : 'query');
@@ -5151,6 +5182,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             {/* Header */}
             <div className="h-12 shrink-0 px-4 flex items-center justify-between border-b border-canvas-border">
               <h3 className="text-[0.8125rem] font-semibold text-ink-900 tracking-tight">Chat history</h3>
+              {/* Close lives INSIDE the sheet; the chat screen only carries an
+                  OPEN affordance (shown when the sheet is closed). */}
               <button
                 type="button"
                 onClick={toggleChatHistory}
@@ -5158,7 +5191,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 title="Close (⌘.)"
                 className="size-7 inline-flex items-center justify-center text-ink-400 hover:text-brand-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
-                <PanelLeftClose size={15} />
+                <PanelLeftClose size={16} />
               </button>
             </div>
 
@@ -5170,7 +5203,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 title="New chat (⌘⇧O)"
                 className="w-full inline-flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-medium text-ink-700 hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
-                <Plus size={14} strokeWidth={2.25} />
+                <Plus size={16} strokeWidth={2.25} />
                 New chat
               </button>
             </div>
@@ -5189,7 +5222,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                     className={`w-full text-left px-2.5 py-2.5 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                       isActive
-                        ? 'bg-canvas-elevated border border-brand-300 shadow-[0_2px_4px_-1px_rgba(106,18,205,0.18),0_10px_24px_-8px_rgba(106,18,205,0.32)]'
+                        ? 'bg-canvas-elevated border border-brand-300'
                         : 'border border-transparent hover:bg-brand-50/40'
                     }`}
                   >
@@ -5264,9 +5297,16 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           {floatingLinesBg}
 
           <div className="absolute top-0 left-0 right-0 z-20 flex justify-between px-5 py-3">
-            <button onClick={toggleChatHistory} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label="Chat history" title="Chat history (⌘.)">
-              <PanelLeftOpen size={18} />
-            </button>
+            {/* Open-only: the chat screen shows this icon to OPEN the sheet;
+                once open, closing happens from inside the sheet (so no closing
+                icon sits on the chat screen). Placeholder keeps New chat right. */}
+            {!showChatHistory ? (
+              <button onClick={toggleChatHistory} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label="Chat history" title="Chat history (⌘.)">
+                <PanelLeftOpen size={18} />
+              </button>
+            ) : (
+              <span aria-hidden="true" />
+            )}
             <button onClick={() => requestNewChat()} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label="New chat" title="New chat (⌘⇧O)">
               <Plus size={18} />
             </button>
@@ -5306,13 +5346,21 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             </div>
           )}
 
-          <div className="flex-1 flex justify-center overflow-auto px-6">
+          <div className="flex-1 overflow-y-auto">
             <motion.div
               initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: prefersReducedMotion ? 0 : 0.5 }}
-              className={`w-[52.5rem] max-w-full text-center ${buildWorkflowMode ? 'flex flex-col min-h-full pt-10 pb-12' : 'grid grid-rows-[1fr_auto_1fr] h-full'}`}
+              // Hero + composer anchored so the composer's bottom lands at the
+              // SAME spot it had when centered (50% + 102px = the centred
+              // resting line for this block's height), IDENTICALLY in both
+              // modes — so toggling Chat/Workflow never moves them. justify-end
+              // pins the block to that line; removing the centring slack lets
+              // the suggestions below sit a fixed 30px beneath it (Section B's
+              // mt) instead of floating far down the page.
+              className="min-h-[calc(50%+6.375rem)] flex flex-col items-center justify-end px-6"
             >
+              <div className="w-[52.5rem] max-w-full text-center">
               {/* Row 1 — heading group, anchored to the bottom of its row
                   so it sits just above the centered input. pb-8 gives the
                   subtitle a comfortable gap to the shadowed composer below
@@ -5524,7 +5572,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       className="relative inline-flex items-center rounded-full bg-paper-100 p-0.5 shadow-[inset_0_0_0_1px_rgba(15,8,30,0.06)]"
                     >
                       {[
-                        { key: 'query', label: 'Query', Icon: Sparkles, active: !buildWorkflowMode, title: 'Query — ask Ira a question, get an answer' },
+                        { key: 'query', label: 'Chat', Icon: Sparkles, active: !buildWorkflowMode, title: 'Chat — ask Ira a question, get an answer' },
                         { key: 'workflow', label: 'Workflow', Icon: Workflow, active: buildWorkflowMode, title: 'Workflow — build a re-runnable audit workflow' },
                       ].map((m) => (
                         <button
@@ -5544,7 +5592,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                               layoutId="composer-mode-indicator"
                               aria-hidden="true"
                               className="absolute inset-0 -z-10 rounded-full bg-canvas-elevated shadow-[0_1px_2px_rgba(15,8,30,0.10),0_2px_6px_-2px_rgba(15,8,30,0.10),inset_0_0_0_1px_rgba(106,18,205,0.22)]"
-                              transition={prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 440, damping: 36 }}
+                              transition={prefersReducedMotion ? { duration: 0 } : { type: 'tween', duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
                             />
                           )}
                           <m.Icon size={14} strokeWidth={2.25} className={`shrink-0 transition-colors duration-200 ${m.active ? 'text-brand-600' : 'text-ink-400'}`} />
@@ -5568,7 +5616,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 </div>
               </div>
               </div>
+              </div>
+            </motion.div>
 
+            {/* Content section — sits a fixed 30px (mt-[1.875rem]) below the
+                composer; the page scrolls to reveal the rest. Same horizontal
+                width as the hero. */}
+            <div className="mt-[1.875rem] flex flex-col items-center px-6 pb-12">
+              <div className="w-[52.5rem] max-w-full text-center">
               {/* Row 3 — starter prompts, anchored to the top of the row
                   so they sit just below the centered input.
                   Mode-aware AND user-aware:
@@ -5614,7 +5669,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   // content-sized chips, centered container + rows.
                   // No w-[...] lock, no items-start (per the empty-state
                   // chip layout feedback memory).
-                  <div className="pt-7 mx-auto flex flex-col items-center content-start gap-2.5">
+                  <div className="mx-auto flex flex-col items-center content-start gap-2.5">
                     {[suggestions.slice(0, 2), suggestions.slice(2, 5)].map((row, rowIdx) => (
                       <div key={rowIdx} className="flex items-center justify-center gap-2.5">
                         {row.map((label, i) => {
@@ -5647,8 +5702,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   </div>
                 );
               })()}
-
-            </motion.div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -5706,28 +5761,48 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               className="max-w-[280px] sm:max-w-[340px] text-[1rem] font-normal tracking-normal text-ink-900 bg-white border border-brand-200 rounded-md px-2 py-1 -mx-2 outline-none focus:ring-2 focus:ring-primary/20"
             />
           ) : (
-            <button
-              onClick={toggleChatHistory}
-              onDoubleClick={(e) => { e.stopPropagation(); setEditingTitle(true); }}
-              title="Click for history · Double-click to rename"
-              aria-label="Chat history"
-              aria-expanded={showChatHistory}
-              className="group flex items-center gap-2.5 max-w-[280px] sm:max-w-[340px] text-[1rem] font-normal tracking-normal text-ink-900 hover:bg-brand-50 rounded-md px-2 py-1 -mx-2 transition-colors cursor-pointer"
-            >
-              <span className="truncate">{currentChatTitle || 'New chat'}</span>
-              <motion.span
-                animate={{
-                  rotate: showChatHistory ? -180 : 0,
-                  scale: showChatHistory ? 1.05 : 1,
+            <div className="flex items-center max-w-[280px] sm:max-w-[340px]">
+              {/* Switcher chip — ONE button holding the chat name + a history
+                  icon. Single click opens the recent-chats sheet; double-click
+                  renames. A short timer lets the double-click cancel the
+                  single-click action so the sheet doesn't flicker open first. */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (switcherClickTimer.current) clearTimeout(switcherClickTimer.current);
+                  switcherClickTimer.current = setTimeout(() => {
+                    toggleChatHistory();
+                    switcherClickTimer.current = null;
+                  }, 220);
                 }}
-                whileHover={{ scale: 1.12 }}
-                whileTap={{ scale: 0.92 }}
-                transition={{ type: 'spring', stiffness: 380, damping: 22 }}
-                className="inline-flex shrink-0 text-ink-500 group-hover:text-ink-700"
+                onDoubleClick={() => {
+                  if (switcherClickTimer.current) {
+                    clearTimeout(switcherClickTimer.current);
+                    switcherClickTimer.current = null;
+                  }
+                  setEditingTitle(true);
+                }}
+                title="Click for recent chats · double-click to rename"
+                aria-label="Recent chats"
+                aria-expanded={showChatHistory}
+                className="group inline-flex items-center min-w-0 h-8 pl-2.5 pr-2 gap-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.9375rem] font-medium text-ink-800 hover:border-brand-200 hover:bg-brand-50/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
-                <History size={14} />
-              </motion.span>
-            </button>
+                <span className="truncate">{currentChatTitle || 'New chat'}</span>
+                <span className="h-4 w-px bg-canvas-border shrink-0" aria-hidden="true" />
+                <motion.span
+                  animate={{
+                    rotate: showChatHistory ? -180 : 0,
+                    scale: showChatHistory ? 1.05 : 1,
+                  }}
+                  whileHover={{ scale: 1.12 }}
+                  whileTap={{ scale: 0.92 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 22 }}
+                  className="inline-flex shrink-0 text-ink-500 group-hover:text-brand-700 transition-colors"
+                >
+                  <History size={16} />
+                </motion.span>
+              </button>
+            </div>
           )}
           <div className="flex items-center gap-2">
             <Button
@@ -5739,27 +5814,26 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               title="New chat"
               aria-label="New chat"
             >
-              <Plus size={14} />
+              <Plus size={16} />
             </Button>
-            {/* Workspace toggle — always visible. Renders in its
-                pressed/active state when the panel is open so the chat
-                header reflects "workspace is the active section." Icon
-                stays as PanelRightOpen in both states so it doesn't
-                visually duplicate the PanelRightClose inside the panel
-                header (which is the actual close affordance). */}
-            <Button
-              variant="ghost"
-              size="sm"
-              iconOnly
-              shape="md"
-              pressed={showArtifacts}
-              onClick={() => setShowArtifacts(!showArtifacts)}
-              title={showArtifacts ? 'Close Workspace' : 'Open Workspace'}
-              aria-label={showArtifacts ? 'Close Workspace' : 'Open Workspace'}
-              aria-expanded={showArtifacts}
-            >
-              <PanelRightOpen size={14} />
-            </Button>
+            {/* Workspace toggle — OPENS the panel only; shown when the panel
+                is closed. Closing happens from inside the panel (the
+                PanelRightClose button next to Share), not from the chat
+                header. */}
+            {!showArtifacts && (
+              <Button
+                variant="ghost"
+                size="sm"
+                iconOnly
+                shape="md"
+                onClick={() => setShowArtifacts(true)}
+                title="Open Workspace"
+                aria-label="Open Workspace"
+                aria-expanded={false}
+              >
+                <PanelRightOpen size={16} />
+              </Button>
+            )}
           </div>
         </header>
 
@@ -6569,6 +6643,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       const visibilityClass = isLastAssistant
                         ? 'opacity-100'
                         : 'opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 transition-opacity';
+                      // Retry version count for this answer's query (1/1, 2/2 …).
+                      const retryUserId = (() => {
+                        for (let i = msgIdx - 1; i >= 0; i--) {
+                          if (messages[i].role === 'user') return messages[i].id;
+                        }
+                        return null;
+                      })();
+                      const versionCount = retryUserId ? (retryVersions[retryUserId] ?? 1) : 1;
                       return (
                       <div className={`mt-1.5 flex items-center gap-1 ${visibilityClass}`}>
                         {/* Copy */}
@@ -6641,6 +6723,15 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             Retry
                           </span>
                         </span>
+
+                        {/* Response version counter — increments on Retry; latest answer shown. */}
+                        <span
+                          className="inline-flex items-center px-1.5 h-7 text-[0.6875rem] tabular-nums font-medium text-ink-400 select-none"
+                          title="Response version"
+                          aria-label={`Response version ${versionCount} of ${versionCount}`}
+                        >
+                          {versionCount} / {versionCount}
+                        </span>
                       </div>
                       );
                     })()}
@@ -6701,13 +6792,25 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                         initial={{ opacity: 0, y: 6 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: 0.3, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                                        className="mb-2 flex items-center gap-2"
+                                        className="mb-2 flex items-center"
                                       >
-                                        <span className={`inline-flex items-center justify-center size-6 rounded-md ${meta.badge}`}>
-                                          <BadgeIcon size={13} strokeWidth={2} />
+                                        {/* Badge — icon + label as a pill; the caption now
+                                            lives in a hover tooltip instead of inline text. */}
+                                        <span className="relative group/track inline-flex">
+                                          <span
+                                            tabIndex={0}
+                                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${meta.badge}`}
+                                          >
+                                            <BadgeIcon size={13} strokeWidth={2} className="shrink-0" />
+                                            <span className="text-[0.8125rem] font-semibold">{meta.label}</span>
+                                          </span>
+                                          <span
+                                            role="tooltip"
+                                            className="pointer-events-none absolute top-full left-0 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/track:opacity-100 group-focus-within/track:opacity-100 transition-opacity z-10"
+                                          >
+                                            {meta.caption}
+                                          </span>
                                         </span>
-                                        <span className="text-[0.8125rem] font-semibold text-ink-900">{meta.label}</span>
-                                        <span className="text-[0.75rem] text-ink-400">{meta.caption}</span>
                                       </motion.div>
                                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                                         {msg.followUpTracks![track].map(q => {
@@ -7169,7 +7272,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             ? <Workflow size={11} strokeWidth={2.25} />
                             : <MessageSquare size={11} strokeWidth={2.25} />}
                         </span>
-                        {buildWorkflowMode ? 'Workflow' : 'Q&A'}
+                        {buildWorkflowMode ? 'Workflow' : 'Chat'}
                       </div>
 
                       {isGenerating ? (
