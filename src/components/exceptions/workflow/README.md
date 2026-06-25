@@ -26,14 +26,14 @@ column permissions are all data. The same engine can later drive other use cases
 | `WorkflowPipelineBuilder` · `ColumnPermissionMatrix` · `ApprovalActionBar` · `SLABadge` · `WorkflowPipelineView` · `UserPicker` | Reusable sub-components. |
 
 ## How to create an approval route
-1. Open **Approval & Configuration → Route Configurator**.
+1. Open **Approval & Configuration → Approval Routes**.
 2. The persona is fixed to the current **role toggle** (Risk Owner *or* Auditor) — you only see/edit your own side's routes.
 3. **Create Route** → name it, add 1..N levels. Per level: name, approver(s), approval **mode** (All / Any / Sequential), **SLA** (hours/days), and whether it may **send back**. Reorder or delete levels freely.
 4. Optionally mark it the **default** for new assignments.
 5. Editing an existing template **bumps its version**; in-flight assignments keep the version they were created with (template versioning).
 
 ## How to assign exceptions
-1. In the **Exceptions** tab, select one or more rows → **Assign to Route** (header).
+1. In the **Exceptions** tab, select one or more rows → **Send for Approval** (header).
 2. Pick the approval route, the **assignee** (the team member who does the work), the **column visibility & edit rights** (the assignee sees only visible columns and can edit only editable ones), an optional note and assignment due date.
 3. The chain preview and a **self-approval guard** are shown — you can't assign work to a user who also approves it.
 

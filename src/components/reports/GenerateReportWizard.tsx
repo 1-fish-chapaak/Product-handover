@@ -206,7 +206,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: suppressed ? 0 : 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }}
-        className={`fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50 ${suppressed ? 'pointer-events-none' : ''}`}
+        className={`fixed inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px] z-50 ${suppressed ? 'pointer-events-none' : ''}`}
         onClick={attemptClose}
       />
       <motion.div
@@ -505,7 +505,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                       value={reportName}
                       onChange={e => setReportName(e.target.value)}
                       placeholder={`${currentPeriod()} ${template.name}`}
-                      className="w-full h-10 px-3.5 rounded-[8px] border border-canvas-border bg-white text-[0.78125rem] text-ink-800 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                      className="w-full h-10 px-3.5 rounded-[8px] border border-canvas-border bg-white text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
                     />
                   </div>
                   <div>
@@ -522,7 +522,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                         onChange={e => setReportPeriod(e.target.value)}
                         onFocus={() => setPeriodMenuOpen(false)}
                         placeholder="e.g. FY26 Q2"
-                        className="w-full h-10 pl-9 pr-10 rounded-[8px] border border-canvas-border bg-white text-[0.78125rem] text-ink-800 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                        className="w-full h-10 pl-9 pr-10 rounded-[8px] border border-canvas-border bg-white text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
                       />
                       <button
                         type="button"
@@ -552,7 +552,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                                   onClick={() => { setReportPeriod(o.value); setPeriodMenuOpen(false); }}
                                   className={`w-full flex items-center justify-between gap-3 px-3 h-9 text-left transition-colors cursor-pointer ${active ? 'bg-brand-600/[0.04]' : 'hover:bg-canvas'}`}
                                 >
-                                  <span className={`text-[0.78125rem] ${active ? 'text-brand-600 font-medium' : 'text-ink-800'}`}>{o.label}</span>
+                                  <span className={`text-[0.8125rem] ${active ? 'text-brand-600 font-medium' : 'text-ink-800'}`}>{o.label}</span>
                                   <span className="flex items-center gap-2 shrink-0">
                                     <span className="font-mono text-[0.6875rem] tabular-nums text-ink-400">{o.value}</span>
                                     {active && <Check size={13} className="text-brand-600" />}
@@ -580,7 +580,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                   value={execSummary}
                   onChange={e => { setExecSummary(e.target.value); setSummaryEdited(true); }}
                   rows={4}
-                  className="w-full px-3.5 py-3 rounded-[8px] border border-canvas-border bg-white text-[0.78125rem] leading-relaxed text-ink-500 resize-none focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                  className="w-full px-3.5 py-3 rounded-[8px] border border-canvas-border bg-white text-[0.8125rem] leading-relaxed text-ink-500 resize-none focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
                 />
               </div>
 
@@ -598,7 +598,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                         <GripVertical size={14} className="text-ink-300 shrink-0" />
                         <span className="text-[0.625rem] font-bold text-brand-600/60 w-5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
                         <span className="flex-1 min-w-0">
-                          <span className="block text-[0.78125rem] font-medium text-ink-800 truncate">{q.title}</span>
+                          <span className="block text-[0.8125rem] font-medium text-ink-800 truncate">{q.title}</span>
                           <span className="block text-[0.6875rem] text-ink-400 truncate">{q.risk}</span>
                         </span>
                         <span className="shrink-0">
@@ -628,7 +628,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                           <GripVertical size={14} className="text-ink-300 shrink-0" />
                           <span className="text-[0.625rem] font-bold text-brand-600/60 w-5 shrink-0">{String(ordered.length + i + 1).padStart(2, '0')}</span>
                           <span className="flex-1 min-w-0">
-                            <span className="block text-[0.78125rem] font-medium text-ink-800 truncate">{w.name}</span>
+                            <span className="block text-[0.8125rem] font-medium text-ink-800 truncate">{w.name}</span>
                             <span className="block text-[0.6875rem] text-ink-400 truncate font-mono tabular-nums">{w.workflowId} · {w.businessProcess ?? '—'} · {n} flagged {n === 1 ? 'record' : 'records'}</span>
                           </span>
                           <span className="shrink-0">

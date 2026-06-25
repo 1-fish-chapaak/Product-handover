@@ -2,6 +2,8 @@ import { useMemo, useState, useEffect, type ElementType } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft,
+  ArrowRight,
+  FileText,
   AlertTriangle,
   Tag,
   Clock,
@@ -22,7 +24,6 @@ import {
 import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, GRC_BULK_ACTIONS, type GrcException, type GrcExceptionSeverity, type GrcActivityEntry, type GrcActivityAuthorRole, type GrcExceptionClassification, type GrcReviewStatus, type GrcDueDateRevision, type GrcActionStatus, type GrcCaseDetail } from '../../data/mockData';
 import { deriveStatus, requiresActionPlan, isMemberEligibleForDrawer, nextActionableId, auditorReviewStage, type ExceptionActionKind, type DrawerActionType } from './statusModel';
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
-import { QUERY_TABLES } from '../../data/queryGraphs';
 import type { ExceptionRole } from '../../hooks/useAppState';
 import { useCan } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -53,9 +54,11 @@ import { useToast } from '../shared/Toast';
 // ─── Assignment & Approval Workflow module (configurable, data-driven) ───
 import { WorkflowProvider } from './workflow/WorkflowContext';
 import WorkflowModule from './workflow/WorkflowModule';
+import ActingAsSwitcher from './ActingAsSwitcher';
 import AssignmentModal from './workflow/AssignmentModal';
 import WorkflowAssignButton from './workflow/WorkflowAssignButton';
 import type { Assignment } from './workflow/workflowTypes';
+import { hasAtrDraft, requestAtrResume } from '../reports/atrDraft';
 
 // `scopeIds` is the set of cases the action applies to — always includes
 // `exceptionId` (the opened/primary case that drives the drawer's content).
@@ -249,11 +252,6 @@ function KpiBarInline({ cells }: { cells: KpiCell[] }) {
   );
 }
 
-// ─── Derive exceptions from a query's output table ───────────────────────
-// When the user lands on Manage Exceptions via ?from=Q01 we don't want to
-// show the generic GRC_EXCEPTIONS mock — we want the actual rows from
-// QUERY_TABLES[Q01] so the data columns (Vendor, Invoice Date, Match %, …)
-// align row-for-row with the cells the auditor saw in the query result.
 // Format an ISO date for activity-log messages (e.g. "30 Apr 2026").
 const fmtDue = (iso?: string) => {
   if (!iso) return 'Not set';
@@ -265,105 +263,6 @@ const fmtStamp = (iso: string) => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
-
-function deriveExceptionsFromOutputTable(
-  table: { columns: string[]; rows: string[][] },
-  riskCategory = 'Financial Controls',
-): GrcException[] {
-  const idxOf = (re: RegExp) => table.columns.findIndex(c => re.test(c));
-  const matchCol = idxOf(/match|score|similarity/i);
-  const dateCol  = idxOf(/date/i);
-  const labelCol = table.columns.findIndex((c, i) => i > 0 && !/^status$/i.test(c));
-
-  return table.rows.map((row, i): GrcException => {
-    let severity: GrcExceptionSeverity = 'Medium';
-    if (matchCol >= 0) {
-      const pct = parseFloat(String(row[matchCol]).replace('%', ''));
-      if (!Number.isNaN(pct)) severity = pct >= 95 ? 'High' : pct >= 85 ? 'Medium' : 'Low';
-    }
-    // Seed dueDate on a few rows so the demo shows the dynamic Overdue chip.
-    // Bulk grouping is NOT seeded — the Bulk chip appears only once a Risk Owner
-    // actually bulk-classifies cases together (select cases → Bulk Classify).
-    const flags: Array<'Overdue' | 'Bulk'> = [];
-    const bulkId: string | undefined = undefined;
-    let dueDate: string | undefined;
-    if (i % 5 === 0) {
-      // Past due date so the dynamic Overdue chip renders via the dueDate path.
-      dueDate = '2026-04-15';
-    } else if (i % 7 === 0) {
-      // Future due date so the chip stays hidden (sanity check).
-      dueDate = '2026-08-30';
-    }
-
-    // Pre-classify a couple of rows with a future due date so the due-date
-    // revision flow is demoable without classifying first — one carries a
-    // pending request for the Auditor to review out of the box.
-    let classification: GrcExceptionClassification = 'Unclassified';
-    let classificationReview: GrcReviewStatus = 'Pending';
-    let dueDateRevision: GrcDueDateRevision | undefined;
-    if (i === 1) {
-      classification = 'Procedural Non-Compliance';
-      classificationReview = 'Approved';
-      dueDate = '2026-06-15';
-      dueDateRevision = {
-        previousDueDate: '2026-06-15',
-        revisedDueDate: '2026-07-10',
-        reason: 'Dependent control owner is on leave until early July; remediation evidence cannot be gathered before then.',
-        status: 'Pending',
-        requestedBy: 'Rohan Kapoor',
-        requestedAt: '2026-06-03T11:20:00.000Z',
-      };
-    } else if (i === 2) {
-      classification = 'Design Deficiency';
-      classificationReview = 'Approved';
-      dueDate = '2026-06-25';
-    } else if (i === 3) {
-      classification = 'System Deficiency';
-      classificationReview = 'Approved';
-      dueDate = '2026-06-30';
-    } else if (i === 4) {
-      classification = 'Procedural Non-Compliance';
-      classificationReview = 'Approved';
-      dueDate = '2026-06-18';
-      dueDateRevision = {
-        previousDueDate: '2026-06-18',
-        revisedDueDate: '2026-07-15',
-        reason: 'Third-party remediation vendor confirmed availability only from mid-July; cannot close earlier.',
-        status: 'Pending',
-        requestedBy: 'Rohan Kapoor',
-        requestedAt: '2026-06-03T09:10:00.000Z',
-      };
-    }
-
-    // Seed a distinct Actionable ID for each pre-classified actionable row (they
-    // are independent until a Risk Owner bulk-classifies cases together).
-    let actionableId: string | undefined;
-    if (requiresActionPlan(classification)) {
-      actionableId = i === 1 ? 'ACT-0001' : i === 2 ? 'ACT-0002' : i === 3 ? 'ACT-0003' : i === 4 ? 'ACT-0004' : undefined;
-    }
-
-    return {
-      id: `EXC${String(i + 1).padStart(3, '0')}`,
-      riskCategory,
-      severity,
-      // Status is derived from the classification (all seed rows start with the
-      // action review Pending): classified → In-Progress, else Open.
-      status: deriveStatus(classification, 'Pending', 'Pending'),
-      classification,
-      classificationReview,
-      actionReview: 'Pending',
-      // Pre-classified actionable rows await the Auditor's plan review.
-      actionPhase: requiresActionPlan(classification) ? ('plan-review' as const) : undefined,
-      lastUpdated: dateCol >= 0 ? String(row[dateCol]) : '—',
-      title: labelCol >= 0 ? `Case — ${row[labelCol]}` : `Case ${row[0]}`,
-      flags: flags.length ? flags : undefined,
-      bulkId,
-      actionableId,
-      dueDate,
-      dueDateRevision,
-    };
-  });
-}
 
 function RoleToggle({ role, setRole }: { role: ExceptionRole; setRole: (r: ExceptionRole) => void }) {
   return (
@@ -402,6 +301,12 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
 
   const [activeNav, setActiveNav] = useState<'exceptions' | 'action-hub' | 'workflow'>('exceptions');
   const [atrModalOpen, setAtrModalOpen] = useState(false);
+  // Persistent return-to-ATR affordance when the user came here mid-ATR-build.
+  const [fromAtrBuild] = useState(() => hasAtrDraft());
+  const returnToAtr = () => {
+    requestAtrResume();
+    window.dispatchEvent(new CustomEvent('irame:command-palette-navigate', { detail: { view: 'reports', id: '', kind: 'risk' } }));
+  };
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [drawer, setDrawer] = useState<DrawerState>(null);
   // When a single action targets a case in a bulk group, the chooser asks which
@@ -445,15 +350,11 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     return REPORT_QUERIES_ATR[fromId] ? { id: fromId, ...REPORT_QUERIES_ATR[fromId] } : null;
   }, []);
 
-  // Local exception state — when the user landed via a source query we derive
-  // exceptions from that query's output table so the IDs and data columns
-  // match exactly. Props win when explicitly supplied by an embedded host.
+  // Local exception state — always the canonical 10-case GRC_EXCEPTIONS set so the
+  // same cases show whether opened standalone or via a report/ATR query drill-in.
+  // Props still win when explicitly supplied by an embedded host.
   const [localExceptions, setLocalExceptions] = useState<GrcException[]>(() => {
     if (propsExceptions) return propsExceptions;
-    if (sourceQuery) {
-      const table = QUERY_TABLES[sourceQuery.id];
-      if (table) return deriveExceptionsFromOutputTable(table);
-    }
     return GRC_EXCEPTIONS;
   });
   // Sync if props change (e.g. new run generates more exceptions)
@@ -845,13 +746,39 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     updateExceptions(prev => prev.map(e => {
       if (e.id !== a.exceptionId) return e;
       if (a.persona === 'risk-owner') {
+        // Second cycle: the Action Taken cleared the whole chain → case closed.
+        if (a.actionCycle) {
+          return {
+            ...e,
+            actionReview: 'Approved' as const,
+            actionPhase: undefined,
+            status: 'Closed' as const,
+            lastUpdated: today,
+          };
+        }
         const classification = (a.draft?.classification as GrcException['classification']) ?? e.classification;
+        // The whole chain (Risk Owner route → Auditor phase) has now approved.
+        if (!requiresActionPlan(classification)) {
+          // Business as Usual / False Positive → no action needed → case closed.
+          return {
+            ...e,
+            classification,
+            classificationReview: 'Approved' as const,
+            actionReview: 'Approved' as const,
+            actionPhase: undefined,
+            status: 'Closed' as const,
+            lastUpdated: today,
+          };
+        }
+        // Design/System Deficiency or Procedural Non-Compliance → the plan is
+        // approved; hand back to the Risk Owner who classified it to carry out the
+        // action (Action Taken), which then goes through review step by step.
         return {
           ...e,
           classification,
           classificationReview: 'Approved' as const,
-          actionReview: 'Pending' as const, // now available for Auditor review
-          actionPhase: requiresActionPlan(classification) ? ('plan-review' as const) : undefined,
+          actionReview: 'Pending' as const,
+          actionPhase: 'in-progress' as const,
           status: deriveStatus(classification, 'Pending', 'Pending'),
           dueDate: a.draft?.dueDate ?? e.dueDate,
           lastUpdated: today,
@@ -870,8 +797,46 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     }));
   };
 
+  // A route rejection reopens the case for the Risk Owner who classified it —
+  // same end-state as an auditor reject, so the Re-Classify CTA + editable classify
+  // drawer light up via the existing actionReview === 'Rejected' path.
+  const handleWorkflowReject = (a: Assignment) => {
+    const today = new Date().toISOString().slice(0, 10);
+    updateExceptions(prev => prev.map(e =>
+      e.id === a.exceptionId
+        ? {
+            ...e,
+            actionReview: 'Rejected' as const,
+            actionPhase: undefined,
+            status: deriveStatus(e.classification, 'Rejected', 'Discrepancy'),
+            lastUpdated: today,
+          }
+        : e
+    ));
+  };
+
+  // Partially Implemented: the action review column shows "Approved (Partially
+  // Implemented)" while the case reopens for the Risk Owner to re-classify and
+  // finish the remaining work — so it stays In-Progress (not Closed).
+  const handleWorkflowReopenPartial = (a: Assignment) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const detail = GRC_CASE_DETAILS[a.exceptionId];
+    if (detail) detail.actionStatus = 'Partially Implemented';
+    updateExceptions(prev => prev.map(e =>
+      e.id === a.exceptionId
+        ? {
+            ...e,
+            actionReview: 'Approved' as const,
+            actionPhase: undefined,
+            status: 'Under Review' as const,
+            lastUpdated: today,
+          }
+        : e
+    ));
+  };
+
   return (
-    <WorkflowProvider role={role} onFinalize={handleWorkflowFinalize}>
+    <WorkflowProvider role={role} onFinalize={handleWorkflowFinalize} onReject={handleWorkflowReject} onReopenPartial={handleWorkflowReopenPartial}>
     <div className="h-full w-full flex flex-col overflow-hidden bg-canvas">
       {/* Top chrome — only shown when standalone (Back button); hidden when embedded */}
       {!embedded && (
@@ -886,6 +851,20 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
           </button>
           <div className="flex-1" />
         </header>
+      )}
+
+      {/* Return-to-ATR banner — shown when the user is reviewing exceptions
+          mid-ATR-build, so they can finalize the parked report when done. */}
+      {fromAtrBuild && (
+        <div className="shrink-0 px-6 py-2.5 bg-brand-50 border-b border-brand-200 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 min-w-0 text-[0.8125rem] text-brand-800">
+            <FileText size={15} className="shrink-0 text-brand-700" />
+            <span className="truncate"><span className="font-semibold">You're managing exceptions for ATR generation.</span> Review the cases, then return to generate the report.</span>
+          </div>
+          <button onClick={returnToAtr} className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-500 transition-colors cursor-pointer">
+            Return to ATR &amp; generate <ArrowRight size={14} />
+          </button>
+        </div>
       )}
 
       {/* Page header — title + subtitle + tabs (Knowledge Hub pattern) */}
@@ -913,6 +892,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               >
                 <History size={15} />
               </button>
+              <ActingAsSwitcher />
               <RoleToggle role={role} setRole={setRole} />
             </div>
           </div>
@@ -923,7 +903,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               {([
                 { id: 'exceptions' as const, label: 'Exceptions', icon: Layers },
                 { id: 'action-hub' as const, label: 'Action Hub', icon: FileBarChart },
-                { id: 'workflow' as const, label: 'Approval & Configuration', icon: Workflow },
+                { id: 'workflow' as const, label: 'Approval Routes', icon: Workflow },
               ] as const).map(t => {
                 const Icon = t.icon;
                 const isActive = activeNav === t.id;
@@ -956,7 +936,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
       {activeNav === 'action-hub' ? (
         <ActionHubView exceptions={exceptions} role={role} onAction={runExceptionAction} />
       ) : activeNav === 'workflow' ? (
-        <WorkflowModule role={role} exceptions={exceptions} />
+        <WorkflowModule role={role} />
       ) : (
         <motion.div
           initial={{ opacity: 0, y: 4 }}
@@ -1096,7 +1076,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               onAssign={(ex) => {
                 setSingleAssignCase(ex);
               }}
-              extraColumns={sourceQuery ? QUERY_TABLES[sourceQuery.id] : undefined}
+              extraColumns={undefined}
               onOpenDetail={(ex) => openDetail(ex.id)}
               headerLeading={
                 <div className="flex items-center gap-2">
@@ -1438,6 +1418,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             key="action-drawer"
             exception={drawerException}
             role={role}
+            scopeIds={drawer?.scopeIds ?? [drawerException.id]}
             onPostComment={(text, attachment) => postComment(text, drawer?.scopeIds ?? [drawerException.id], attachment)}
             onClose={() => setDrawer(null)}
             onDecision={(decision, { implementation, comment }) => {
@@ -1528,6 +1509,10 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               scope.forEach(id => {
                 const detail = GRC_CASE_DETAILS[id];
                 if (!detail) return;
+                // Record the reported implementation as the case's action status so
+                // the Action Review column shows the SAME outcome (Implemented vs
+                // Partially Implemented), not a stale value.
+                detail.actionStatus = implementation;
                 detail.completion = { note, evidence, completedAt: fmtStamp(nowIso), selfAssessment: implementation };
                 detail.activityLog = [{
                   id: `act-done-${id}-${Date.now()}`,
@@ -1539,7 +1524,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                 }, ...detail.activityLog];
               });
               updateExceptions(list => list.map(e => scope.includes(e.id)
-                ? { ...e, actionPhase: 'completion-review' as const, status: deriveStatus(e.classification, 'Pending', 'Pending'), lastUpdated: nowIso.slice(0, 10) }
+                ? { ...e, actionReview: 'Pending' as const, actionPhase: 'completion-review' as const, status: deriveStatus(e.classification, 'Pending', 'Pending'), lastUpdated: nowIso.slice(0, 10) }
                 : e));
               logEvent({ action: 'Update', description: `Marked ${scope.length > 1 ? `${scope.length} linked cases` : drawerException.id} action complete — Risk Owner reports ${implementation}`, module: 'Exceptions', entity: 'Exception' });
               addToast({ type: 'success', message: scope.length > 1
@@ -1759,7 +1744,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
             <ExceptionDetailDrawer
               key="exception-detail-drawer"
               exception={ex}
-              extraColumns={sourceQuery ? QUERY_TABLES[sourceQuery.id] : undefined}
+              extraColumns={undefined}
               role={role}
               onAction={(kind, target) => { setDetailExceptionId(null); runExceptionAction(kind, target); }}
               onComment={(text, attachment) => postComment(text, [ex.id], attachment)}

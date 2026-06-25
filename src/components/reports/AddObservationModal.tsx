@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import Gated from '../shared/Gated';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  X, CloudUpload, Paperclip, FileText, FileSpreadsheet, Loader2,
+  X, CloudUpload, Paperclip, FileText, FileSpreadsheet, Loader2, Lock,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -285,7 +285,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
         className="reports-focus-noring fixed inset-0 z-[60] flex items-center justify-center p-6"
         onClick={handleBackdropClose}
       >
-        <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
+        <div className="absolute inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px]" />
         <motion.div
           ref={dialogRef}
           initial={{ opacity: 0, scale: 0.96, y: 8 }}
@@ -321,7 +321,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
           <button
             onClick={handleBackdropClose}
             aria-label="Close"
-            className="absolute top-4 right-4 w-7 h-7 inline-flex items-center justify-center rounded-[8px] text-ink-400 hover:text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="absolute top-4 right-4 w-7 h-7 inline-flex items-center justify-center rounded-[8px] text-ink-400 hover:text-ink-800 hover:bg-canvas transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             <X size={16} />
           </button>
@@ -355,13 +355,24 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
 
           <div className="space-y-4">
             <div>
-              <label className="block text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wider mb-1.5">Observation ID</label>
-              <input
-                type="text"
-                value={editing?.obsId ?? nextObsId}
-                readOnly
-                className="w-full bg-paper-50 border border-canvas-border rounded-[8px] px-3 py-2 text-[0.8125rem] font-mono text-ink-800 tabular-nums cursor-default"
-              />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wider">Observation ID</label>
+                <span className="inline-flex items-center gap-1 text-[0.625rem] font-medium text-ink-400">
+                  <Lock size={10} strokeWidth={2.25} />
+                  Auto-assigned
+                </span>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={editing?.obsId ?? nextObsId}
+                  readOnly
+                  tabIndex={-1}
+                  aria-label="Observation ID (auto-assigned)"
+                  className="w-full bg-canvas border border-canvas-border rounded-[8px] pl-3 pr-9 py-2 text-[0.8125rem] font-mono font-medium text-ink-500 tabular-nums cursor-default select-all"
+                />
+                <Lock size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-300 pointer-events-none" />
+              </div>
             </div>
 
             <div>
@@ -408,7 +419,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                       return (
                         <li
                           key={att.id}
-                          className="flex items-center gap-2.5 px-2 py-1.5 bg-paper-50 border border-canvas-border rounded-[8px]"
+                          className="flex items-center gap-2.5 px-2 py-1.5 bg-canvas border border-canvas-border rounded-[8px]"
                         >
                           {isImage ? (
                             <div className="w-8 h-8 rounded-[8px] border border-canvas-border overflow-hidden bg-white shrink-0">
@@ -436,7 +447,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                     })}
                   </ul>
                 )}
-                <div className="flex items-center justify-between px-2 py-1.5 border-t border-canvas-border/60 bg-paper-50/40">
+                <div className="flex items-center justify-between px-2 py-1.5 border-t border-canvas-border/60 bg-canvas">
                   <label
                     title={`Attach files (PNG, JPG, PDF up to ${ATTACHMENT_MAX_LABEL})`}
                     className="inline-flex items-center gap-1.5 h-7 px-2 rounded-[8px] text-[0.6875rem] font-medium text-ink-500 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer focus-within:ring-2 focus-within:ring-brand-600/40 focus-within:ring-offset-1"
@@ -471,7 +482,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
             <button
               onClick={onClose}
               disabled={isSaving}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-canvas transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Cancel
             </button>
@@ -500,7 +511,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
               className="fixed inset-0 z-[70] flex items-center justify-center p-6"
               onClick={() => setShowDiscardConfirm(false)}
             >
-              <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
+              <div className="absolute inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px]" />
               <motion.div
                 initial={{ opacity: 0, scale: 0.96, y: 8 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -517,7 +528,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                 <div className="flex items-center justify-end gap-2.5">
                   <button
                     onClick={() => setShowDiscardConfirm(false)}
-                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer"
+                    className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-canvas transition-colors cursor-pointer"
                   >
                     Keep editing
                   </button>

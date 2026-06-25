@@ -45,8 +45,9 @@ export function ManageExceptionsLaunchButton({ queryId, compact = false }: { que
     }, 700);
   };
 
-  // Compact link — lives in the QueryCard meta row alongside the icon buttons.
-  // Editorial register: type-only, no fill, no shadow. Hover lifts to brand.
+  // Compact CTA — lives in the QueryCard meta row alongside the icon buttons.
+  // An outlined brand chip so it reads as the row's primary action (not plain
+  // text), staying lightweight next to the ghost icon buttons.
   if (compact) {
     return (
       <button
@@ -54,14 +55,15 @@ export function ManageExceptionsLaunchButton({ queryId, compact = false }: { que
         disabled={launching}
         title="Review & classify exceptions · opens in a new tab"
         aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-        className={`group inline-flex items-center gap-1.5 h-8 px-2 -mx-2 rounded-[8px] text-[0.75rem] leading-4 font-semibold text-ink-500 hover:text-brand-600 hover:bg-canvas cursor-pointer transition-colors ${
+        className={`group inline-flex items-center gap-1.5 h-8 pl-2.5 pr-2.5 rounded-[8px] text-[0.75rem] leading-4 font-semibold text-brand-700 border border-brand-200 hover:bg-brand-50 hover:border-brand-300 cursor-pointer transition-colors ${
           launching ? 'opacity-60' : ''
         }`}
       >
+        <ShieldAlert size={14} className="shrink-0 text-brand-600" />
         <span>Manage exceptions</span>
         <ArrowRight
-          size={16}
-          className="shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
+          size={14}
+          className="shrink-0 text-brand-500 transition-transform duration-200 group-hover:translate-x-0.5"
         />
       </button>
     );
@@ -73,10 +75,9 @@ export function ManageExceptionsLaunchButton({ queryId, compact = false }: { que
       disabled={launching}
       title="Review & classify exceptions · opens in a new tab"
       aria-label={`Review & classify exceptions for ${queryId} — opens in a new tab`}
-      className={`group relative overflow-hidden inline-flex items-center gap-1.5 h-8 pl-3 pr-2.5 text-[0.75rem] font-semibold text-white rounded-[8px] cursor-pointer transition-all duration-200 shadow-[0_2px_8px_rgba(106,18,205,0.25)] hover:shadow-[0_4px_14px_rgba(106,18,205,0.35)] ${
-        launching ? 'scale-[0.97] shadow-[0_0_0_4px_rgba(106,18,205,0.25),0_4px_14px_rgba(106,18,205,0.35)]' : 'hover:-translate-y-[1px] active:translate-y-0'
+      className={`group relative overflow-hidden inline-flex items-center gap-1.5 h-8 pl-3 pr-2.5 text-[0.75rem] font-semibold text-white rounded-[8px] cursor-pointer transition-colors duration-200 bg-brand-600 hover:bg-brand-700 ${
+        launching ? 'bg-brand-700' : ''
       }`}
-      style={{ background: 'linear-gradient(135deg, #6A12CD 0%, #A366F0 100%)' }}
     >
       <ShieldAlert size={14} className="shrink-0 relative z-10" />
       <span className="relative z-10">Manage Exceptions</span>

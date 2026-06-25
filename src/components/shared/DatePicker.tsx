@@ -221,7 +221,7 @@ export default function DatePicker({
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={toggle}
-        className={className}
+        className={`${className} cursor-pointer disabled:cursor-not-allowed`}
       >
         <span className="flex items-center justify-between gap-2 w-full min-w-0">
           <span className={`truncate ${selected ? '' : 'text-ink-400'}`}>

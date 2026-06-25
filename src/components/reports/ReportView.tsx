@@ -10,9 +10,9 @@ import {
   FileText, Shield, AlertTriangle, CheckCircle2, BarChart3,
   TrendingUp, Download, Share2, ArrowLeft, ChevronDown,
   ChevronLeft, ChevronRight,
-  Layout, X, Edit3, BookOpen, Loader2, Trash2,
+  Layout, X, Edit3, Loader2, Trash2,
   List, LayoutGrid, GripVertical, Plus,
-  MoreVertical, Eye, EyeOff, ExternalLink,
+  MoreVertical, Eye, EyeOff, SquareArrowOutUpRight,
   MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
   Layers, Check, RefreshCw, Lock, Sparkles,
 } from 'lucide-react';
@@ -24,7 +24,8 @@ import type { AtrReportData } from './atrTypes';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { REPORT_TEMPLATES } from '../../data/mockData';
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
-import { QUERY_GRAPHS, QUERY_TABLES } from '../../data/queryGraphs';
+import { QUERY_GRAPHS, QUERY_TABLES, QUERY_KPIS, QUERY_TABLE_SETS } from '../../data/queryGraphs';
+import { cellRender } from './queryTableCell';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { reportDisplayName } from './reportName';
 import { ApplyTemplateDropdown } from './TemplateEditor';
@@ -39,7 +40,7 @@ import QueryWidgetModal from './QueryWidgetModal';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import { KpiCountUp } from '../shared/KpiTile';
-import { ReportBrandBanner, ReportMetaPanel, ReportNumberedHeading, ReportKpiTiles } from './ReportDocumentChrome';
+import { ReportBrandBanner, ReportNumberedHeading, ReportKpiTiles } from './ReportDocumentChrome';
 import { statTone } from './reportTones';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import { composeExecSummary, composeSectionContent, workflowToQueryDef } from './templateQueryPool';
@@ -53,11 +54,32 @@ import AddObservationModal, {
   type ObservationAttachment,
 } from './AddObservationModal';
 
+// Audit Period shown in the banner byline. Uses the report's stored period when
+// present (wizard-generated), else the current fiscal quarter — so every report
+// type carries a period (matches the GenerateReportWizard "FY26 Q2" format).
+const reportAuditPeriod = (period?: string): string => {
+  if (period && period.trim()) return period.trim();
+  const now = new Date();
+  return `FY${String(now.getFullYear()).slice(-2)} Q${Math.floor(now.getMonth() / 3) + 1}`;
+};
+
 /**
  * Gates the "Manage Exceptions" CTA behind an explicit "Generate Cases" toggle.
  * idle → switch off; user flips it on → brief generating state; once ready the
  * toggle is replaced inline by the existing ManageExceptionsLaunchButton.
  */
+// Tone a query-card inline KPI value by what its label means, so the strip
+// carries a glanceable read (open work = attention, closed = resolved) instead
+// of a flat row of identical-weight numbers.
+function kpiInlineTone(label: string): string {
+  const l = label.toLowerCase();
+  if (/overdue|fail|breach|critical|violation/.test(l)) return 'text-risk-700';
+  if (/open|pending|unmatched|flagged/.test(l)) return 'text-high-700';
+  if (/closed|resolved|remediat|cleared|matched/.test(l)) return 'text-compliant-700';
+  if (/health|score|rate|coverage|%/.test(l)) return 'text-brand-700';
+  return 'text-ink-900';
+}
+
 type CasesPhase = 'idle' | 'generating' | 'ready';
 
 function GenerateCasesGate({ queryId, phase, onPhaseChange }: { queryId: string; phase: CasesPhase; onPhaseChange: (p: CasesPhase) => void }) {
@@ -75,33 +97,26 @@ function GenerateCasesGate({ queryId, phase, onPhaseChange }: { queryId: string;
   return (
     <button
       type="button"
-      role="switch"
-      aria-checked={isOn}
       aria-label={isOn ? 'Generating cases' : 'Generate cases'}
+      aria-busy={isOn}
       onClick={handleToggle}
       disabled={isOn}
-      className="inline-flex items-center gap-2 h-8 pl-2.5 pr-3 text-[0.75rem] font-semibold text-ink-500 bg-white border border-canvas-border rounded-[8px] cursor-pointer hover:border-brand-600/40 hover:text-brand-600 transition-colors"
+      className={`group inline-flex items-center gap-1.5 h-8 pl-2.5 pr-3 text-[0.75rem] font-semibold rounded-[8px] border transition-colors cursor-pointer ${
+        isOn
+          ? 'text-brand-700 bg-brand-50 border-brand-200 cursor-default'
+          : 'text-ink-600 bg-canvas-elevated border-canvas-border hover:text-brand-700 hover:border-brand-300 hover:bg-brand-50/40'
+      }`}
     >
-      <span
-        className={`relative inline-flex w-8 h-[18px] rounded-full transition-colors duration-200 ${
-          isOn ? 'bg-brand-600' : 'bg-border'
-        }`}
-      >
-        <motion.span
-          layout
-          transition={{ type: 'spring', stiffness: 500, damping: 32 }}
-          className={`absolute top-0.5 w-[14px] h-[14px] rounded-full bg-white shadow-sm ${
-            isOn ? 'right-0.5' : 'left-0.5'
-          }`}
-        />
-      </span>
       {isOn ? (
-        <span className="inline-flex items-center gap-1.5">
-          <Loader2 size={12} className="animate-spin" />
-          Generating cases…
-        </span>
+        <>
+          <Loader2 size={14} className="shrink-0 animate-spin text-brand-600" />
+          <span>Generating cases…</span>
+        </>
       ) : (
-        'Generate Cases'
+        <>
+          <Sparkles size={14} className="shrink-0 text-brand-600 transition-transform duration-200 group-hover:scale-110" />
+          <span>Generate Cases</span>
+        </>
       )}
     </button>
   );
@@ -115,13 +130,22 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
   const [menuOpen, setMenuOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Pending removal of an attached widget (graph/table) — confirmed via dialog.
+  const [pendingWidgetRemove, setPendingWidgetRemove] = useState<{ kind: 'chart' | 'table'; id: string; title: string } | null>(null);
   const [widgetModalOpen, setWidgetModalOpen] = useState(false);
   const availableGraphs = QUERY_GRAPHS[safeQuery.id] ?? [];
-  const queryTable = QUERY_TABLES[safeQuery.id];
-  const queryKpis = computeQueryKpis(safeQuery);
+  // Multi-table set when defined (Q01 = the four Excel tables); otherwise wrap
+  // the single QUERY_TABLES entry so other queries still surface one table.
+  const single = QUERY_TABLES[safeQuery.id];
+  const queryTables = QUERY_TABLE_SETS[safeQuery.id]
+    ?? (single ? [{ id: 'results', title: 'Results Table', columns: single.columns, rows: single.rows }] : []);
+  const queryKpis = QUERY_KPIS[safeQuery.id] ?? computeQueryKpis(safeQuery);
+  // Card stays lean by default (KPIs inline; graphs/tables opt-in). The modal
+  // always reflects what's actually on the card — already-added items show
+  // checked; the rest unchecked. "Select all" in the modal adds everything at once.
   const [selectedKpis, setSelectedKpis] = useState<Set<string>>(() => new Set(queryKpis.map(k => k.label)));
   const [selectedCharts, setSelectedCharts] = useState<Set<string>>(new Set());
-  const [tableAttached, setTableAttached] = useState(false);
+  const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set());
   const menuRef = useRef<HTMLDivElement>(null);
   const baseDelay = index * 0.08;
 
@@ -150,7 +174,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
       className="relative bg-white border border-canvas-border overflow-hidden"
     >
 
-      <div className="px-7 py-6">
+      <div className="px-9 py-7">
         {/* Meta band — type-only line: Q01 · risk · severity · status on the left;
             Manage Exceptions (text-link), Comments, 3-dots on the right. */}
         <motion.div
@@ -175,68 +199,100 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
               {can('rp_comment') && (() => {
                 const myComments = comments.filter(c => c.queryId === query.id).length;
                 return (
-                  <button
-                    onClick={() => setCommentsOpen(true)}
-                    title="Comments on this query"
-                    aria-label="Comments on this query"
-                    className="relative inline-flex items-center justify-center w-7 h-7 -mx-1 text-ink-400 rounded-[8px] cursor-pointer hover:text-brand-600 hover:bg-brand-50/50 transition-colors"
-                  >
-                    <MessageSquare size={16} className="shrink-0" />
-                    {myComments > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[0.5625rem] font-semibold bg-brand-600 text-white rounded-full tabular-nums border border-white">
-                        {myComments}
-                      </span>
-                    )}
-                  </button>
+                  <div className="relative group/cm">
+                    <button
+                      onClick={() => setCommentsOpen(true)}
+                      aria-label="Comments on this query"
+                      className="relative inline-flex items-center justify-center w-8 h-8 text-ink-400 rounded-[8px] cursor-pointer hover:text-brand-600 hover:bg-brand-50 transition-colors"
+                    >
+                      <MessageSquare size={16} className="shrink-0" />
+                      {myComments > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 text-[0.5625rem] font-semibold bg-brand-600 text-white rounded-full tabular-nums border border-white">
+                          {myComments}
+                        </span>
+                      )}
+                    </button>
+                    <span className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 z-30 whitespace-nowrap rounded-md bg-ink-900 text-white text-[0.625rem] font-semibold px-2 py-1 opacity-0 translate-y-0.5 transition-all duration-150 shadow-md group-hover/cm:opacity-100 group-hover/cm:translate-y-0">
+                      Comments
+                    </span>
+                  </div>
                 );
               })()}
-              <div className="relative -ml-1" ref={menuRef}>
+              <div className="relative group/aw">
+                <button
+                  onClick={() => setWidgetModalOpen(true)}
+                  aria-label="Add widgets"
+                  className="w-8 h-8 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
+                >
+                  <LayoutGrid size={16} className="shrink-0" />
+                </button>
+                <span className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 z-30 whitespace-nowrap rounded-md bg-ink-900 text-white text-[0.625rem] font-semibold px-2 py-1 opacity-0 translate-y-0.5 transition-all duration-150 shadow-md group-hover/aw:opacity-100 group-hover/aw:translate-y-0">
+                  Add Widgets
+                </span>
+              </div>
+              <div className="relative group/dots -ml-1" ref={menuRef}>
                 <button
                   onClick={() => setMenuOpen(o => !o)}
-                  title="More options"
                   aria-label="More options"
-                  className="w-7 h-7 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50/50 transition-colors cursor-pointer"
+                  className="w-8 h-8 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
                 >
                   <MoreVertical size={16} />
                 </button>
-                {menuOpen && (
-                  <div className="absolute right-0 top-10 z-10 w-[200px] bg-white border border-canvas-border rounded-[8px] shadow-xl py-1">
-                    <button
-                      onClick={() => {
-                        setMenuOpen(false);
-                        onOpenQuery?.({ id: query.id, title: query.title });
-                      }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
-                    >
-                      <ExternalLink size={14} />
-                      Open Query
-                    </button>
-                    <button
-                      onClick={() => { setMenuOpen(false); setWidgetModalOpen(true); }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
-                    >
-                      <LayoutGrid size={14} />
-                      Add Widgets
-                    </button>
-                    <button
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-ink-500 hover:bg-brand-50 hover:text-brand-600 cursor-pointer"
-                    >
-                      <Download size={14} />
-                      Download
-                    </button>
-                    {can('rp_delete') && <>
-                    <div className="my-1 border-t border-canvas-border" />
-                    <button
-                      onClick={() => { setMenuOpen(false); setShowDeleteConfirm(true); }}
-                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-[0.75rem] text-risk-700 hover:bg-risk-50 cursor-pointer"
-                    >
-                      <Trash2 size={14} />
-                      Delete Query
-                    </button>
-                    </>}
-                  </div>
+                {!menuOpen && (
+                  <span className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 z-30 whitespace-nowrap rounded-md bg-ink-900 text-white text-[0.625rem] font-semibold px-2 py-1 opacity-0 translate-y-0.5 transition-all duration-150 shadow-md group-hover/dots:opacity-100 group-hover/dots:translate-y-0">
+                    More options
+                  </span>
                 )}
+                <AnimatePresence>
+                  {menuOpen && (
+                    <motion.div
+                      role="menu"
+                      initial={{ opacity: 0, scale: 0.96, y: -6 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: -6 }}
+                      transition={{ type: 'spring', stiffness: 520, damping: 32, mass: 0.6 }}
+                      className="absolute right-0 top-10 z-10 w-[164px] origin-top-right bg-white border border-canvas-border rounded-[12px] shadow-[0_12px_32px_-8px_rgba(15,8,30,0.18)] p-1.5"
+                    >
+                      {[
+                        { icon: SquareArrowOutUpRight, label: 'Open Query', tile: 'text-brand-600 bg-brand-50', onClick: () => { setMenuOpen(false); onOpenQuery?.({ id: query.id, title: query.title }); } },
+                        { icon: Download, label: 'Download', tile: 'text-evidence-700 bg-evidence-50', onClick: () => setMenuOpen(false) },
+                      ].map((item, i) => (
+                        <motion.button
+                          key={item.label}
+                          role="menuitem"
+                          initial={{ opacity: 0, x: -6 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.05 + i * 0.04, duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                          onClick={item.onClick}
+                          className="group/mi flex items-center gap-2.5 w-full text-left px-2 h-9 rounded-[8px] text-[0.8125rem] font-medium text-ink-700 hover:bg-brand-50 hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-brand-50"
+                        >
+                          <span className={`shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-[7px] ${item.tile}`}>
+                            <item.icon size={14} strokeWidth={2.25} />
+                          </span>
+                          {item.label}
+                        </motion.button>
+                      ))}
+                      {can('rp_delete') && (
+                        <>
+                          <div className="my-1.5 -mx-1.5 border-t border-canvas-border" />
+                          <motion.button
+                            role="menuitem"
+                            initial={{ opacity: 0, x: -6 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.05 + 3 * 0.04, duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                            onClick={() => { setMenuOpen(false); setShowDeleteConfirm(true); }}
+                            className="group/mi flex items-center gap-2.5 w-full text-left px-2 h-9 rounded-[8px] text-[0.8125rem] font-medium text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-risk-50"
+                          >
+                            <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-[7px] text-risk-700 bg-risk-50">
+                              <Trash2 size={14} strokeWidth={2.25} />
+                            </span>
+                            Delete Query
+                          </motion.button>
+                        </>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           </div>
@@ -253,27 +309,28 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
           {query.title}
         </motion.h3>
 
-        {/* Inline metrics — sit directly below the query title so the numbers
-            read as the answer to the question above. Driven by the "Add
-            Widgets" modal selection. */}
+        {/* Inline metrics — a compact stat strip directly below the query title so
+            the numbers read as the answer to the question. Value stacks over an
+            uppercase label; the value is tone-coloured by meaning (open = needs
+            attention, closed = resolved). Driven by the "Add Widgets" modal. */}
         {(() => {
           const kpis = queryKpis.filter(k => selectedKpis.has(k.label));
           if (kpis.length === 0) return null;
           return (
-            <div className="flex items-baseline flex-wrap gap-x-6 gap-y-1.5 tabular-nums mb-5">
+            <div className="flex flex-wrap items-stretch gap-x-6 gap-y-4 tabular-nums mb-7">
               {kpis.map((k, ki) => (
-                <motion.span
+                <motion.div
                   key={k.label}
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: baseDelay + 0.3 + ki * 0.05, duration: 0.3 }}
-                  className="flex items-baseline gap-2"
+                  className="flex-1 min-w-[120px] flex flex-col gap-1.5"
                 >
-                  <span className="text-[1rem] font-semibold text-ink-800 leading-none">
+                  <span className={`text-[1.5rem] font-bold leading-none tracking-[-0.02em] ${kpiInlineTone(k.label)}`}>
                     <KpiCountUp value={k.value} delay={120 + ki * 80} />
                   </span>
-                  <span className="text-[0.75rem] text-ink-400 font-medium">{k.label}</span>
-                </motion.span>
+                  <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500 leading-none">{k.label}</span>
+                </motion.div>
               ))}
             </div>
           );
@@ -294,7 +351,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 {g.title}
               </div>
               <button
-                onClick={() => setSelectedCharts(prev => { const n = new Set(prev); n.delete(g.id); return n; })}
+                onClick={() => setPendingWidgetRemove({ kind: 'chart', id: g.id, title: g.title })}
                 title="Remove graph"
                 aria-label="Remove graph"
                 className="w-6 h-6 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
@@ -302,7 +359,7 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                 <X size={14} />
               </button>
             </div>
-            <div className="h-[200px]">
+            <div className="h-[340px]">
               <ConfigurableChart
                 type={g.type}
                 xAxis={g.xAxis}
@@ -315,9 +372,12 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
           </motion.div>
         ))}
 
-        {/* Attached results table — selected via the "Add Widgets" modal */}
-        {tableAttached && queryTable && (
+        {/* Attached tables — selected via the "Add Widgets" modal. Rendered with
+            the dashboard table styling (surface-2 headers, brand-700 first column,
+            severity pills) via the shared cellRender. */}
+        {queryTables.filter(t => selectedTables.has(t.id)).map(t => (
           <motion.div
+            key={t.id}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
@@ -326,10 +386,10 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider">
                 <LayoutGrid size={12} />
-                Results Table
+                {t.title}
               </div>
               <button
-                onClick={() => setTableAttached(false)}
+                onClick={() => setPendingWidgetRemove({ kind: 'table', id: t.id, title: t.title })}
                 title="Remove table"
                 aria-label="Remove table"
                 className="w-6 h-6 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
@@ -338,13 +398,13 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
               </button>
             </div>
             <div className="overflow-x-auto rounded-[12px] border border-canvas-border">
-              <table className="w-full border-collapse">
+              <table className="w-full text-left">
                 <thead>
-                  <tr className="bg-canvas">
-                    {queryTable.columns.map(c => (
+                  <tr className="border-b border-canvas-border bg-surface-2/50">
+                    {t.columns.map(c => (
                       <th
                         key={c}
-                        className="px-3 py-2 text-left text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider border-b border-canvas-border whitespace-nowrap"
+                        className="px-4 py-3 text-left text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider whitespace-nowrap"
                       >
                         {c}
                       </th>
@@ -352,28 +412,41 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
                   </tr>
                 </thead>
                 <tbody>
-                  {queryTable.rows.map((row, ri) => (
-                    <tr key={ri} className="border-b border-canvas-border last:border-b-0">
+                  {t.rows.map((row, ri) => (
+                    <motion.tr
+                      key={ri}
+                      initial={{ opacity: 0, y: 4 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true, margin: '-20px' }}
+                      transition={{ duration: 0.28, delay: Math.min(ri, 12) * 0.03, ease: [0.22, 1, 0.36, 1] }}
+                      className="border-b border-canvas-border/50 last:border-0 hover:bg-brand-50/30 transition-colors"
+                    >
                       {row.map((cell, ci) => (
-                        <td key={ci} className="px-3 py-2 text-[0.75rem] text-ink-500 whitespace-nowrap">
-                          {cell}
+                        <td key={ci} className="px-4 py-3 text-[0.75rem] whitespace-nowrap">
+                          {cellRender(cell, t.columns[ci] || '', ci === 0)}
                         </td>
                       ))}
-                    </tr>
+                    </motion.tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </motion.div>
-        )}
+        ))}
 
-        {/* Answer — rendered in the chat's rich markdown format (shared renderer) */}
+        {/* Answer — report's document markdown variant. This is a report
+            DOCUMENT (not a chat conversation), so the 66ch chat rule doesn't
+            bind: 66ch left a narrow ragged strip with a big right gutter under
+            the full-width title, which read as "too many lines". Capped at 80ch
+            — fills the column, aligns with the title, and keeps line length in
+            the comfortable document range. */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: baseDelay + 0.6, duration: 0.4 }}
+          className="max-w-[80ch]"
         >
-          {renderAssistantText(query.answer)}
+          {renderAssistantText(query.answer, 'document')}
         </motion.div>
       </div>
 
@@ -400,20 +473,37 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
         }}
       />
 
+      <ConfirmDialog
+        open={pendingWidgetRemove !== null}
+        onClose={() => setPendingWidgetRemove(null)}
+        title={pendingWidgetRemove?.kind === 'table' ? 'Remove table?' : 'Remove graph?'}
+        description={pendingWidgetRemove ? `Remove “${pendingWidgetRemove.title}” from this query card?` : ''}
+        confirmLabel="Remove"
+        destructive
+        onConfirm={() => {
+          if (pendingWidgetRemove?.kind === 'chart') {
+            setSelectedCharts(prev => { const n = new Set(prev); n.delete(pendingWidgetRemove.id); return n; });
+          } else if (pendingWidgetRemove?.kind === 'table') {
+            setSelectedTables(prev => { const n = new Set(prev); n.delete(pendingWidgetRemove.id); return n; });
+          }
+          setPendingWidgetRemove(null);
+        }}
+      />
+
       {widgetModalOpen && createPortal(
         <QueryWidgetModal
           queryId={query.id}
           queryTitle={query.title}
           kpis={queryKpis}
           charts={availableGraphs}
-          table={queryTable}
+          tables={queryTables}
           initialKpis={selectedKpis}
           initialCharts={selectedCharts}
-          initialTable={tableAttached}
+          initialTables={selectedTables}
           onConfirm={(sel) => {
             setSelectedKpis(sel.kpis);
             setSelectedCharts(sel.charts);
-            setTableAttached(sel.table);
+            setSelectedTables(sel.tables);
             setWidgetModalOpen(false);
             addToast({ type: 'success', message: 'Query card updated.' });
           }}
@@ -476,7 +566,7 @@ function CommentDrawer({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
-        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50"
+        className="fixed inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px] z-50"
         onClick={onClose}
       />
       <motion.aside
@@ -701,6 +791,18 @@ function ReportActivityLogDrawer({
   // Newest first.
   const sorted = [...comments].reverse();
 
+  // Coarse date buckets derived from the relative timestamp string — entries
+  // only carry a relative label ("5 hours ago"), so bucket by keyword.
+  const bucketOf = (ts: string): 'Today' | 'Yesterday' | 'Earlier' => {
+    const t = ts.toLowerCase();
+    if (/just now|second|minute|hour|today/.test(t)) return 'Today';
+    if (/^1\s*day|yesterday/.test(t)) return 'Yesterday';
+    return 'Earlier';
+  };
+  const grouped = (['Today', 'Yesterday', 'Earlier'] as const)
+    .map(label => ({ label, items: sorted.filter(c => bucketOf(c.timestamp) === label) }))
+    .filter(g => g.items.length > 0);
+
   const handlePost = () => {
     const body = text.trim();
     if (!body || isPosting) return;
@@ -719,7 +821,7 @@ function ReportActivityLogDrawer({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
-        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50"
+        className="fixed inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px] z-50"
         onClick={onClose}
       />
       <motion.aside
@@ -728,7 +830,7 @@ function ReportActivityLogDrawer({
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: 24, opacity: 0 }}
         transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-white shadow-xl border-l border-canvas-border flex flex-col z-[60]"
+        className="font-sans fixed top-0 right-0 bottom-0 w-full max-w-[560px] bg-white shadow-xl border-l border-canvas-border flex flex-col z-[60]"
         role="dialog"
         aria-modal="true"
         aria-label="Report activity log"
@@ -739,30 +841,48 @@ function ReportActivityLogDrawer({
               <History size={20} />
             </div>
             <div>
-              <h2 className="text-[1rem] font-semibold text-ink-800 leading-tight">Report Activity Log</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-[1rem] font-semibold text-ink-800 leading-tight">Report Activity Log</h2>
+                {sorted.length > 0 && (
+                  <motion.span
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.15, type: 'spring', stiffness: 520, damping: 24 }}
+                    className="inline-flex items-center h-[18px] px-1.5 rounded-full bg-brand-50 text-brand-700 text-[0.625rem] font-semibold tabular-nums"
+                  >
+                    {sorted.length}
+                  </motion.span>
+                )}
+              </div>
               <p className="text-[0.75rem] text-ink-400 mt-0.5 leading-snug">
                 All actions and comments across every query card on this report.
               </p>
             </div>
           </div>
-          <button
+          <motion.button
             onClick={onClose}
+            whileTap={{ scale: 0.88 }}
+            whileHover={{ rotate: 90 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 22 }}
             className="w-8 h-8 rounded-full text-ink-400 hover:text-ink-800 hover:bg-brand-50 flex items-center justify-center cursor-pointer shrink-0"
             aria-label="Close"
           >
             <X size={16} />
-          </button>
+          </motion.button>
         </header>
 
-        {/* Comment input with attachment */}
+        {/* Comment composer — textarea + inline toolbar (attach · post) */}
         <section className="shrink-0 px-6 py-4 border-b border-canvas-border bg-canvas">
-          <div className="relative">
+          <div className="bg-white border border-canvas-border rounded-[10px] focus-within:border-brand-600/40 focus-within:ring-2 focus-within:ring-brand-600/15 transition-all overflow-hidden">
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handlePost(); }
+              }}
               placeholder="Add a comment to the report activity log…"
               rows={3}
-              className="w-full resize-none p-3 pr-10 bg-white border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+              className="w-full resize-none bg-transparent border-0 px-3 pt-3 pb-1.5 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-0"
             />
             <input
               ref={fileInputRef}
@@ -773,43 +893,58 @@ function ReportActivityLogDrawer({
                 if (f) setAttachment(f.name);
               }}
             />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="absolute bottom-2 right-2 w-7 h-7 flex items-center justify-center text-ink-400 hover:text-brand-600 cursor-pointer"
-              aria-label="Attach file"
-              title="Attach file"
-            >
-              <Paperclip size={14} />
-            </button>
-          </div>
-          {attachment && (
-            <div className="mt-2 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/5 text-brand-600 text-[0.6875rem] font-medium rounded-full">
-              <Paperclip size={12} />
-              {attachment}
-              <button onClick={() => setAttachment(null)} className="hover:text-brand-600/70 cursor-pointer" aria-label="Remove attachment">
-                <X size={12} />
-              </button>
+            <AnimatePresence>
+              {attachment && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-3 pb-2">
+                    <span className="inline-flex items-center gap-1.5 h-6 pl-2 pr-1.5 bg-brand-50 text-brand-700 text-[0.6875rem] font-medium rounded-full">
+                      <Paperclip size={12} />
+                      <span className="truncate max-w-[200px]">{attachment}</span>
+                      <button onClick={() => setAttachment(null)} className="ml-0.5 text-brand-700/60 hover:text-brand-700 cursor-pointer" aria-label="Remove attachment">
+                        <X size={12} />
+                      </button>
+                    </span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <div className="flex items-center justify-between px-2 py-2 border-t border-canvas-border/60">
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.9 }}
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center justify-center w-8 h-8 rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+                aria-label="Attach file"
+                title="Attach file"
+              >
+                <Paperclip size={15} />
+              </motion.button>
+              <motion.button
+                onClick={handlePost}
+                disabled={!text.trim() || isPosting}
+                whileTap={text.trim() && !isPosting ? { scale: 0.96 } : undefined}
+                title="Post comment (⌘↵)"
+                className={`inline-flex items-center gap-1.5 h-8 px-4 text-[0.75rem] font-semibold rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                  text.trim() && !isPosting
+                    ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
+                    : 'bg-brand-600/40 text-white/80 cursor-not-allowed'
+                }`}
+              >
+                {isPosting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                {isPosting ? 'Posting…' : 'Post'}
+              </motion.button>
             </div>
-          )}
-          <div className="mt-2 flex justify-end">
-            <button
-              onClick={handlePost}
-              disabled={!text.trim() || isPosting}
-              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
-                text.trim() && !isPosting
-                  ? 'bg-brand-600 text-white hover:bg-brand-600/90 cursor-pointer'
-                  : 'bg-brand-600/40 text-white/80 cursor-not-allowed'
-              }`}
-            >
-              {isPosting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-              {isPosting ? 'Posting…' : 'Post'}
-            </button>
           </div>
         </section>
 
-        {/* Activity feed */}
-        <div className="flex-1 overflow-y-auto px-6 py-4" aria-live="polite">
+        {/* Activity feed — vertical timeline grouped by date */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 bg-white" aria-live="polite">
           {sorted.length === 0 ? (
             <EmptyState
               icon={History}
@@ -818,34 +953,82 @@ function ReportActivityLogDrawer({
               size="compact"
             />
           ) : (
-            <ol className="space-y-4">
-              {sorted.map(c => (
-                <li key={c.id} className="flex gap-3">
-                  <div className="shrink-0 w-8 h-8 rounded-full bg-brand-600/10 text-brand-600 flex items-center justify-center text-[0.6875rem] font-semibold">
-                    {c.initials}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline justify-between gap-3 mb-0.5">
-                      <span className="text-[0.75rem] font-semibold text-ink-800">{c.author}</span>
-                      <span className="text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap">{c.timestamp}</span>
-                    </div>
-                    <div className="text-[0.6875rem] text-ink-400 mb-1.5">
-                      <span className="inline-flex items-center h-4 px-1.5 font-mono font-medium bg-brand-600/5 text-brand-600 rounded">
-                        {c.queryId}
-                      </span>{' '}
-                      <span className="ml-1 line-clamp-1">{c.queryTitle}</span>
-                    </div>
-                    <p className="text-[0.75rem] text-ink-800 leading-relaxed">{c.text}</p>
-                    {c.attachment && (
-                      <button className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/5 text-brand-600 text-[0.6875rem] font-medium rounded-full hover:bg-brand-600/10 cursor-pointer">
-                        <Paperclip size={12} />
-                        {c.attachment}
-                      </button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ol>
+            <div className="relative">
+              {/* one continuous spine threading every node — draws in on open */}
+              <motion.span
+                aria-hidden
+                initial={{ scaleY: 0 }}
+                animate={{ scaleY: 1 }}
+                transition={{ duration: 0.5, ease: [0.2, 0, 0, 1] }}
+                className="absolute left-[15px] top-1 bottom-1 w-px origin-top bg-canvas-border"
+              />
+              <div className="space-y-6">
+                {grouped.map((group, gi) => {
+                  const offset = grouped.slice(0, gi).reduce((n, g) => n + g.items.length, 0);
+                  return (
+                  <section key={group.label}>
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.3, delay: 0.04 * offset }}
+                      className="flex items-center gap-2.5 mb-3 pl-[46px]"
+                    >
+                      <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-400">{group.label}</h3>
+                      <div className="flex-1 h-px bg-canvas-border/70" />
+                      <span className="text-[0.625rem] tabular-nums text-ink-300">
+                        {group.items.length} {group.items.length === 1 ? 'entry' : 'entries'}
+                      </span>
+                    </motion.div>
+                    <ol className="space-y-5">
+                      {group.items.map((c, ii) => {
+                        const idx = offset + ii;
+                        return (
+                        <motion.li
+                          key={c.id}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.28, delay: 0.04 * idx + 0.08, ease: [0.2, 0, 0, 1] }}
+                          className="relative flex gap-3.5"
+                        >
+                          <motion.div
+                            initial={{ scale: 0.4, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ delay: 0.04 * idx + 0.12, type: 'spring', stiffness: 480, damping: 28 }}
+                            className="relative z-[1] shrink-0 w-8 h-8 rounded-full bg-brand-600/10 text-brand-700 ring-[3px] ring-white flex items-center justify-center text-[0.625rem] font-semibold tracking-tight"
+                          >
+                            {c.initials}
+                          </motion.div>
+                          <div className="flex-1 min-w-0 pb-0.5">
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{c.author}</span>
+                              <span className="ml-auto text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap">{c.timestamp}</span>
+                            </div>
+                            <div className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-ink-400 min-w-0">
+                              <span className="inline-flex items-center h-[18px] px-1.5 font-mono font-semibold text-[0.625rem] bg-brand-50 text-brand-700 rounded-[5px] shrink-0">
+                                {c.queryId}
+                              </span>
+                              <span className="truncate">{c.queryTitle}</span>
+                            </div>
+                            <p className="mt-2 text-[0.8125rem] text-ink-700 leading-relaxed">{c.text}</p>
+                            {c.attachment && (
+                              <motion.button
+                                whileTap={{ scale: 0.97 }}
+                                className="mt-2.5 inline-flex items-center gap-1.5 max-w-full h-7 px-2.5 bg-canvas border border-canvas-border text-ink-700 text-[0.6875rem] font-medium rounded-[7px] hover:border-brand-600/30 hover:text-brand-700 transition-colors cursor-pointer"
+                              >
+                                <Paperclip size={12} className="text-ink-400 shrink-0" />
+                                <span className="truncate">{c.attachment}</span>
+                              </motion.button>
+                            )}
+                          </div>
+                        </motion.li>
+                        );
+                      })}
+                    </ol>
+                  </section>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       </motion.aside>
@@ -907,13 +1090,13 @@ function ContentsRow({
           }}
           autoFocus
           onClick={(e) => e.stopPropagation()}
-          className="flex-1 min-w-0 bg-white border border-brand-600/40 rounded-[8px] px-2 py-1 text-[0.78125rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/15"
+          className="flex-1 min-w-0 bg-white border border-brand-600/40 rounded-[8px] px-2 py-1 text-[0.8125rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/15"
         />
       ) : (
         <button
           onClick={onScroll}
           aria-current={active ? 'true' : undefined}
-          className={`flex-1 min-w-0 text-left text-[0.78125rem] truncate transition-colors cursor-pointer ${active ? 'font-semibold text-brand-700' : 'font-medium text-ink-600 group-hover/crow:text-brand-700'}`}
+          className={`flex-1 min-w-0 text-left text-[0.8125rem] truncate transition-colors cursor-pointer ${active ? 'font-semibold text-brand-700' : 'font-medium text-ink-600 group-hover/crow:text-brand-700'}`}
         >
           {section.title}
         </button>
@@ -1098,7 +1281,7 @@ function ObservationCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-b border-canvas-border' : 'border border-canvas-border rounded-[12px]'}`}
+      className={`relative bg-white overflow-hidden ${attached ? 'border-x border-canvas-border' : 'border border-canvas-border rounded-[12px]'}`}
     >
       <div className="px-6 py-5">
         {/* Meta row — mirrors QueryCard */}
@@ -1314,9 +1497,9 @@ function WorkflowResultCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: baseDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className="relative border-x border-b border-canvas-border bg-white overflow-hidden"
+      className="relative border-x border-canvas-border bg-white overflow-hidden"
     >
-      <div className="px-6 py-5">
+      <div className="px-9 py-7">
         {/* Meta row */}
         <motion.div
           initial={{ opacity: 0, y: 4 }}
@@ -1477,7 +1660,7 @@ function WorkflowResultCard({
                     {workflow.outputTable.rows.map((row, ri) => (
                       <tr
                         key={ri}
-                        className="hover:bg-brand-50/30 transition-colors"
+                        className="border-b border-canvas-border/60 last:border-b-0 hover:bg-brand-50/30 transition-colors"
                       >
                         {row.map((cell, ci) => {
                           const cellStr = String(cell);
@@ -1487,7 +1670,7 @@ function WorkflowResultCard({
                           return (
                             <td
                               key={ci}
-                              className={`px-3 py-2 text-ink-800 border-b border-canvas-border/60 last:border-b-0 ${isLast ? 'text-right' : ''} ${isId ? 'font-mono text-[0.75rem] text-ink-500 tabular-nums' : ''}`}
+                              className={`px-3 py-2 text-ink-800 ${isLast ? 'text-right' : ''} ${isId ? 'font-mono text-[0.75rem] text-ink-500 tabular-nums' : ''}`}
                             >
                               {isSeverity ? (
                                 <span
@@ -1539,10 +1722,51 @@ function WorkflowResultCard({
   );
 }
 
+// Shimmer placeholder shown while a query card streams in on report open.
+// Mirrors QueryCard proportions (meta band · title · KPI row · body lines) so
+// the resolve into real content reads as the same block filling in. Uses the
+// app's standard `animate-pulse` + `bg-canvas-border` skeleton language.
+function QueryCardSkeleton() {
+  return (
+    <div className="relative bg-white border border-canvas-border overflow-hidden" aria-hidden="true">
+      <div className="px-9 py-7">
+        {/* meta band */}
+        <div className="flex items-center gap-2.5 mb-6">
+          <div className="skeleton-cool h-4 w-10 rounded" />
+          <div className="h-3.5 w-px bg-canvas-border" />
+          <div className="skeleton-cool h-4 w-28 rounded" />
+          <div className="skeleton-cool h-4 w-16 rounded" />
+          <div className="skeleton-cool ml-auto h-6 w-6 rounded-full" />
+        </div>
+        {/* title */}
+        <div className="skeleton-cool h-6 w-2/3 rounded mb-7" />
+        {/* KPI bar — matches the live unified divided stat-bar */}
+        <div className="overflow-hidden rounded-[14px] border border-canvas-border mb-7">
+          <div className="-mt-px -ml-px grid grid-cols-2 md:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, k) => (
+              <div key={k} className="border-l border-t border-canvas-border px-5 py-6">
+                <div className="skeleton-cool h-2.5 w-20 rounded" style={{ '--sk-delay': `${k * 70}ms` } as React.CSSProperties} />
+                <div className="skeleton-cool h-8 w-16 rounded mt-4" style={{ '--sk-delay': `${k * 70 + 40}ms` } as React.CSSProperties} />
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* body lines */}
+        <div className="space-y-2.5 max-w-[80ch]">
+          <div className="skeleton-cool h-3.5 w-full rounded" />
+          <div className="skeleton-cool h-3.5 w-[94%] rounded" />
+          <div className="skeleton-cool h-3.5 w-[80%] rounded" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DraggableQuerySection({
   section,
   index,
   sectionProps,
+  ready = true,
   onOpenQuery,
   onDelete,
   comments,
@@ -1551,6 +1775,7 @@ function DraggableQuerySection({
   section: { id: string; kind: 'query'; title: string; query: QueryShape };
   index: number;
   sectionProps: SectionProps;
+  ready?: boolean;
   onOpenQuery?: (query: { id: string; title: string }) => void;
   onDelete: () => void;
   comments: QueryComment[];
@@ -1558,15 +1783,22 @@ function DraggableQuerySection({
 }) {
   return (
     <Reorder.Item {...sectionProps} className={`${sectionProps.className} relative`}>
-      <QueryCard
-        query={section.query}
-        index={index}
-        title={section.title}
-        onOpenQuery={onOpenQuery}
-        onDelete={onDelete}
-        comments={comments}
-        onAddComment={onAddComment}
-      />
+      {ready ? (
+        // index 0 → no section-index delay: the skeleton reveal already
+        // staggers cards, so each resolves promptly (its own meta→title→KPI
+        // cascade still plays) with no empty-card gap.
+        <QueryCard
+          query={section.query}
+          index={0}
+          title={section.title}
+          onOpenQuery={onOpenQuery}
+          onDelete={onDelete}
+          comments={comments}
+          onAddComment={onAddComment}
+        />
+      ) : (
+        <QueryCardSkeleton />
+      )}
     </Reorder.Item>
   );
 }
@@ -1590,6 +1822,18 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   const { addToast } = useToast();
   const { can } = useCan();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
+  // One-time skeleton "stream-in" on open: query sections resolve from a
+  // shimmer placeholder top-to-bottom. `revealStep` ticks up one section at a
+  // time; section i is resolved once revealStep > i. Once it passes the section
+  // count it stops, so any later additions render instantly (no skeleton).
+  const [revealStep, setRevealStep] = useState(0);
+  useEffect(() => {
+    if (revealStep > sections.length) return;
+    const t = window.setTimeout(() => setRevealStep(s => s + 1), revealStep === 0 ? 180 : 240);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealStep]);
+  const sectionReady = (i: number) => revealStep > i;
   const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(initialTemplate ?? null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [pendingTemplate, setPendingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
@@ -1697,16 +1941,20 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       );
     }
     return (
-      <div className="group/desc flex items-start gap-1.5 mb-3 -ml-0.5">
-        <p className={`text-[0.8125rem] leading-snug pl-0.5 ${onDark ? 'text-white/75' : 'text-ink-500'}`}>
+      <div className="group/desc flex items-start gap-2 mb-3">
+        <p
+          title={displayDescription || undefined}
+          className={`min-w-0 flex-1 text-[0.8125rem] leading-snug line-clamp-2 ${onDark ? 'text-white/75' : 'text-ink-500'}`}
+        >
           {displayDescription || <span className={`italic ${onDark ? 'text-white/45' : 'text-ink-400'}`}>No description</span>}
         </p>
         <button
           onClick={startEditDesc}
           aria-label="Edit description"
-          className={`shrink-0 p-1 -mt-0.5 rounded-[8px] opacity-0 group-hover/desc:opacity-100 focus-visible:opacity-100 transition-all duration-150 cursor-pointer ${onDark ? 'text-white/60 hover:text-white hover:bg-white/15' : 'text-ink-400 hover:text-brand-700 hover:bg-brand-50'}`}
+          title="Edit description"
+          className={`shrink-0 inline-flex items-center justify-center w-6 h-6 -mt-0.5 rounded-[6px] border opacity-0 group-hover/desc:opacity-100 focus-visible:opacity-100 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 ${onDark ? 'text-white/80 bg-white/10 border-white/25 hover:bg-white/20 hover:text-white focus-visible:ring-white/50' : 'text-ink-500 bg-canvas border-canvas-border hover:border-brand-300 hover:text-brand-700 focus-visible:ring-brand-600/30'}`}
         >
-          <Edit3 size={12} />
+          <Edit3 size={13} />
         </button>
       </div>
     );
@@ -1979,6 +2227,13 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       ? []
       : DEFAULT_QUERIES;
   const [sections, setSections] = useState<SectionItem[]>(() => buildInitialSections(seededQueries));
+  // Structure signature → drives the "report changed" gate. The baseline is
+  // (re)captured whenever the report is freshly built/templated; once the user
+  // reorders, adds, or removes sections the signature diverges and the
+  // "Save current as template" affordance appears.
+  const structureSig = (secs: SectionItem[]) => secs.filter(s => s.kind !== 'cover').map(s => `${s.kind}:${s.title ?? ''}`).join('|');
+  const sectionsBaselineRef = useRef<string | null>(null);
+  const structureChanged = sectionsBaselineRef.current !== null && structureSig(sections) !== sectionsBaselineRef.current;
   const appliedTemplateId = appliedTemplate?.id ?? null;
 
   // Summary lifecycle — "Generate Summary" (header) and "Regenerate" (section)
@@ -1989,13 +2244,28 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   // alternative blurb after a short simulated delay so the action feels real.
   const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
   const [summaryOverride, setSummaryOverride] = useState<string | null>(null);
+  // Initial-generation loading flag: the summary prose is gated behind it so
+  // "Generate Summary" produces a visible empty → loading → content transition.
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const ALT_SUMMARY = "Updated review identifies three additional control gaps in the vendor master review workflow, with proposed remediation owners. Findings reflect data through this morning's reconciliation cycle.";
+  const generateSummary = () => {
+    if (isGeneratingSummary || summaryGenerated) return;
+    setIsGeneratingSummary(true);
+    addToast({ type: 'success', message: 'Generating report summary…' });
+    setTimeout(() => {
+      setIsGeneratingSummary(false);
+      setSummaryGenerated(true);
+      addToast({ type: 'success', message: 'Executive summary ready.' });
+    }, 1400);
+  };
 
   useEffect(() => {
     const queries = appliedTemplateId && TEMPLATE_QUERIES[appliedTemplateId]
       ? TEMPLATE_QUERIES[appliedTemplateId]
       : seededQueries;
-    setSections(buildInitialSections(queries));
+    const fresh = buildInitialSections(queries);
+    setSections(fresh);
+    sectionsBaselineRef.current = structureSig(fresh);
     setSummaryOverride(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appliedTemplateId, isBulkAudit, reportWorkflows.length]);
@@ -2239,7 +2509,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             {tmplSections.map((s, i) => (
               <li key={`${s.name}-${i}`} className="flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px] hover:bg-brand-50/30 transition-colors">
                 <span className="shrink-0 w-5 text-[0.6875rem] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
-                <span className="flex-1 min-w-0 text-[0.78125rem] font-medium text-ink-600 truncate">{s.name}</span>
+                <span className="flex-1 min-w-0 text-[0.8125rem] font-medium text-ink-600 truncate">{s.name}</span>
               </li>
             ))}
             {appliedObservations.map((o, i) => (
@@ -2277,7 +2547,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           {outlineEntries.map((e, i) => (
             <li key={e.id} className="flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px]">
               <span className="shrink-0 w-5 text-[0.6875rem] text-brand-500 font-semibold font-mono tabular-nums text-right">{String(i + 1).padStart(2, '0')}</span>
-              <span className="flex-1 min-w-0 text-[0.78125rem] font-medium text-ink-600 truncate">{e.title}</span>
+              <span className="flex-1 min-w-0 text-[0.8125rem] font-medium text-ink-600 truncate">{e.title}</span>
             </li>
           ))}
         </ol>
@@ -2407,29 +2677,29 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   activeId={appliedTemplate?.id ?? reportTemplate?.id ?? null}
                   onSelect={handleApplyTemplate}
                   onClose={() => setShowApplyTemplate(false)}
+                  onSaveAsTemplate={onSaveAsTemplate && structureChanged ? handleSaveAsTemplate : undefined}
                 />
               </>
             )}
           </AnimatePresence>
         </div>
       )}
+      <button
+        onClick={() => setActivityLogOpen(true)}
+        title="View this report's activity log"
+        aria-label="View report activity log"
+        className="flex items-center justify-center w-9 h-9 text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+      >
+        <History size={16} />
+      </button>
       {onShare && can('rp_share') && (
         <button onClick={onShare} className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30">
           <Share2 size={14} /> <span className="hidden sm:inline">Share</span>
         </button>
       )}
-      {!isReadOnly && onSaveAsTemplate && (
-        <button
-          onClick={handleSaveAsTemplate}
-          title="Save this report's structure as a custom template"
-          className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-        >
-          <BookOpen size={14} /> <span className="hidden lg:inline">Save as template</span>
-        </button>
-      )}
       <button
         onClick={() => setShowDownloadModal(true)}
-        className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-500 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+        className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-[8px] hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
       >
         <Download size={14} /> Download
       </button>
@@ -2468,7 +2738,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-ink-900/40 backdrop-blur-[2px]"
+              className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px]"
               onClick={() => setPendingTemplate(null)}
             >
               <motion.div
@@ -2507,7 +2777,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       {/* Report actions — pinned to the top of the scroll area so they stay
           reachable while the document scrolls under them. No header-bar chrome:
           page-coloured + borderless, so content slides cleanly beneath it. */}
-      <div className="sticky top-0 z-30 bg-canvas max-w-[1480px] mx-auto px-6 lg:px-10 h-16 flex items-center justify-between gap-4 print:hidden">
+      <div className="sticky top-0 z-30 bg-canvas px-6 lg:px-12 xl:px-[124px] h-16 flex items-center justify-between gap-4 print:hidden">
         {backLink}
         <div className="flex items-center gap-2">{coverActions}</div>
       </div>
@@ -2516,11 +2786,11 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           centered document column. The rail tracks scroll position and jumps
           between sections; the document keeps a comfortable reading measure
           instead of spanning the full page. */}
-      <div className="max-w-[1480px] mx-auto px-6 lg:px-10 pt-3 pb-8 flex items-start gap-8 xl:gap-10">
+      <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10">
         <aside className="hidden xl:block w-[252px] shrink-0 sticky top-[72px] self-start max-h-[calc(100vh-96px)] overflow-y-auto pr-1 -mr-1 print:hidden">
           <OutlineRail />
         </aside>
-        <div className="min-w-0 flex-1 max-w-[920px]">
+        <div className="min-w-0 flex-1">
         {appliedTemplate ? (
           <>
             {/* Report Cover — light letterhead with theme accent,
@@ -2535,27 +2805,10 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     <button
                       onClick={() => setAtrModalOpen(true)}
                       title="Open the live Action Taken Report"
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-700 border border-white/25 rounded-[8px] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-brand-600 hover:border-white/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                     >
                       <FileText size={14} />
                       Live ATR
-                    </button>
-                    )}
-                    <button
-                      onClick={() => setActivityLogOpen(true)}
-                      title="View this report's activity log"
-                      aria-label="View report activity log"
-                      className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/85 bg-white/10 border border-white/25 hover:bg-white/20 hover:text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                    >
-                      <History size={16} />
-                    </button>
-                    {!summaryGenerated && (
-                    <button
-                      onClick={() => { setSummaryGenerated(true); addToast({ type: 'success', message: 'Generating report summary…' }); }}
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.78125rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-                    >
-                      <Sparkles size={13} />
-                      Generate Summary
                     </button>
                     )}
                   </>
@@ -2568,28 +2821,20 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   <span className="text-white/70">{report.generatedAt}</span>
                   <span className="text-white/30 mx-0.5">|</span>
                   <span className="text-white/70">{activeQueries.length} {activeQueries.length === 1 ? 'query' : 'queries'}</span>
+                  <span className="text-white/30 mx-0.5">|</span>
+                  <span className="text-white/70">{reportAuditPeriod(report.reportPeriod)}</span>
                   {/* When a template is applied, show only the applied-template chip. */}
                   <span className="inline-flex items-center h-6 px-2.5 ml-1 text-[0.6875rem] font-medium text-white bg-white/15 border border-white/25 rounded-full whitespace-nowrap">
                     {appliedTemplate.name}
                   </span>
                 </div>
               </ReportBrandBanner>
-              <div className="px-9 py-6">
-                {/* Template chip, Scope, Prepared By and Generated On live in the banner byline. */}
-                <ReportMetaPanel
-                  items={[
-                    { label: 'Report ID', value: report.id?.toUpperCase() },
-                    { label: 'Report Type', value: report.tag ?? 'Internal Audit' },
-                    { label: 'Audit Period', value: report.reportPeriod },
-                  ]}
-                />
-              </div>
             </div>
 
 
             {/* Summary Stats Bar — ATR-style KPI tiles */}
             <div className="mb-5">
-              <ReportKpiTiles stats={activeStats} />
+              <ReportKpiTiles stats={activeStats} animate />
             </div>
 
             <AnimatePresence mode="wait">
@@ -2619,12 +2864,18 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                           : composeSectionContent(s.name, activeQueries);
                         return (
                           <div key={`${s.name}-${i}`} className="space-y-4">
-                            <div className="bg-white rounded-[12px] border border-canvas-border p-5">
+                            <motion.div
+                              initial={{ opacity: 0, y: 14 }}
+                              whileInView={{ opacity: 1, y: 0 }}
+                              viewport={{ once: true, margin: '-60px' }}
+                              transition={{ duration: 0.4, delay: Math.min(i, 6) * 0.05, ease: [0.22, 1, 0.36, 1] }}
+                              className="bg-white rounded-[12px] border border-canvas-border p-5"
+                            >
                               <h3 className="text-[0.8125rem] font-bold text-ink-800 mb-2 flex items-center gap-2">
                                 <Icon size={14} className="text-brand-600" /> {s.name}
                               </h3>
                               <p className="text-[0.875rem] text-ink-700 leading-relaxed">{content}</p>
-                            </div>
+                            </motion.div>
                             {(i === anchorIdx || (anchorIdx === -1 && i === tmplSections.length - 1)) && queryBlocks}
                           </div>
                         );
@@ -2657,18 +2908,27 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           <div className="w-full">
             {/* Sections rendered as a continuous report (drag-to-reorder enabled for query cards) */}
             <main className="min-w-0">
-              <Reorder.Group axis="y" values={sections} onReorder={setSections} as="div" className="list-none p-0 m-0 [&>*:last-child>*]:rounded-b-[12px]">
+              <Reorder.Group axis="y" values={sections} onReorder={setSections} as="div" className="list-none p-0 m-0 [&>*:last-child>*]:rounded-b-[12px] [&>*:last-child>*]:border-b [&>*:last-child>*]:border-canvas-border">
                 {sections.map((section, i) => {
                   // `key` is intentionally NOT in here — React requires keys to
                   // be passed directly on each element, never via a spread prop.
+                  const ease = [0.22, 1, 0.36, 1] as [number, number, number, number];
                   const sectionProps = {
                     value: section,
                     id: `section-${section.id}`,
                     layout: true as const,
-                    initial: { opacity: 0, y: 8 },
+                    initial: { opacity: 0, y: 10 },
                     animate: { opacity: 1, y: 0 },
                     exit: { opacity: 0, y: -4, scale: 0.98 },
-                    transition: { duration: 0.25, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
+                    // Skeleton cards appear together on open and resolve to content
+                    // top-to-bottom (the streaming). Keep reorder (layout) snappy by
+                    // giving it its own delay-free transition.
+                    transition: {
+                      layout: { duration: 0.25, ease },
+                      duration: 0.4,
+                      delay: Math.min(i, 8) * 0.04,
+                      ease,
+                    },
                     className: 'scroll-mt-20 list-none',
                     dragListener: false as const,
                   };
@@ -2683,64 +2943,43 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                           title={reportDisplayName(report.name)}
                                     className="rounded-t-[12px]"
                           gradient={report.theme ? TEMPLATE_THEME_GRADIENT[report.theme] : undefined}
+                          eyebrow={report.id && (
+                            <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{report.id.toUpperCase()}</span>
+                          )}
                           actions={
                             <>
                               {canGenerateAtr && (
                               <button
                                 onClick={() => setAtrModalOpen(true)}
                                 title="Generate Action Taken Report"
-                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-white/10 border border-white/25 rounded-[8px] hover:bg-white/20 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-700 border border-white/25 rounded-[8px] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-brand-600 hover:border-white/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                               >
                                 <FileText size={14} />
                                 Generate ATR
                               </button>
                               )}
-                              <button
-                                onClick={() => setActivityLogOpen(true)}
-                                title="View this report's activity log"
-                                aria-label="View report activity log"
-                                className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white/85 bg-white/10 border border-white/25 hover:bg-white/20 hover:text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                              >
-                                <History size={16} />
-                              </button>
-                              {!summaryGenerated && (
-                              <button
-                                onClick={() => { setSummaryGenerated(true); addToast({ type: 'success', message: 'Generating report summary…' }); }}
-                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.78125rem] font-semibold text-brand-700 bg-white rounded-[8px] hover:bg-white/90 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-                              >
-                                <Sparkles size={13} />
-                                Generate Summary
-                              </button>
-                              )}
-                                      </>
+                            </>
                           }
+                          footer={(() => {
+                            // Inline byline: who/when/scope plus the Audit Period. The
+                            // meta strip below carries the Report ID + Report Type.
+                            const parts = [report.generatedBy, report.generatedAt, scopeLabel, reportAuditPeriod(report.reportPeriod)].filter(Boolean);
+                            if (parts.length === 0) return null;
+                            return (
+                              <div className="flex items-center gap-2.5 text-[0.8125rem] flex-wrap">
+                                {parts.map((p, i) => (
+                                  <span key={i} className="inline-flex items-center gap-2.5">
+                                    {i > 0 && <span className="text-white/30" aria-hidden="true">|</span>}
+                                    <span className={i === 0 ? 'font-semibold text-white' : 'text-white/70'}>{p}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         >
                           <EditableDescription onDark />
-                          <div className="flex items-center gap-1.5 text-[0.8125rem] flex-wrap">
-                            <span className="font-semibold text-white">{report.generatedBy}</span>
-                            <span className="text-white/30 mx-0.5">|</span>
-                            <span className="text-white/70">{report.generatedAt}</span>
-                            <span className="text-white/30 mx-0.5">|</span>
-                            <span className="text-white/70">{scopeLabel}</span>
-                            {report.tag === 'Bulk Audit' && (
-                              <span className="inline-flex items-center gap-1 px-2 h-5 ml-1 text-[0.625rem] font-semibold whitespace-nowrap rounded-full bg-white/15 text-white border border-white/25">
-                                Bulk Audit
-                              </span>
-                            )}
-                          </div>
                         </ReportBrandBanner>
                       </Reorder.Item>,
-                      <div key={`${section.id}-meta`} className="border-x border-b border-canvas-border bg-white px-9 py-6">
-                        {/* Scope, Prepared By and Generated On live in the banner byline. */}
-                        <ReportMetaPanel
-                          items={[
-                            { label: 'Report ID', value: report.id?.toUpperCase() },
-                            { label: 'Report Type', value: report.tag ?? 'Internal Audit' },
-                            { label: 'Template', value: reportTemplate?.name },
-                            { label: 'Audit Period', value: report.reportPeriod },
-                          ]}
-                        />
-                      </div>,
                     ];
                   }
 
@@ -2748,12 +2987,12 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     const hasQueries = sections.some(s => s.kind === 'query');
                     return (
                       <Reorder.Item key={section.id} {...sectionProps}>
-                        <div className="border-x border-b border-canvas-border bg-white px-9 pt-7 pb-6">
+                        <div className="border-x border-canvas-border bg-white px-9 pt-6 pb-6">
                           <ReportNumberedHeading
                             n={sectionNumber(section.id)}
                             title={section.title}
                             subtitle={isBulkAudit ? 'Overall workflow result rollup' : 'Overall observation and action plan rollup'}
-                            right={hasQueries && summaryGenerated && (
+                            right={summaryGenerated ? (hasQueries && (
                               <button
                                 onClick={() => {
                                   if (isRegeneratingSummary) return;
@@ -2767,21 +3006,39 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                 disabled={isRegeneratingSummary}
                                 aria-busy={isRegeneratingSummary || undefined}
                                 title="Regenerate this summary with the latest queries"
-                                className="group/regen inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="group/regen inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                               >
                                 {isRegeneratingSummary ? (
                                   <Loader2 size={14} className="animate-spin" />
                                 ) : (
-                                  <RefreshCw size={12} className="transition-transform duration-300 group-hover/regen:rotate-180" />
+                                  <RefreshCw size={14} className="transition-transform duration-300 group-hover/regen:rotate-180" />
                                 )}
                                 {isRegeneratingSummary ? 'Regenerating…' : 'Regenerate'}
                               </button>
+                            )) : (
+                              <button
+                                onClick={generateSummary}
+                                disabled={isGeneratingSummary}
+                                aria-busy={isGeneratingSummary || undefined}
+                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-[8px] hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 disabled:opacity-60 disabled:cursor-not-allowed"
+                              >
+                                {isGeneratingSummary ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                                {isGeneratingSummary ? 'Generating…' : 'Generate Summary'}
+                              </button>
                             )}
                           />
-                          <div className="pb-5 border-b border-canvas-border mb-5">
+                          <div className={(summaryGenerated || isGeneratingSummary) ? 'pb-6 border-b border-canvas-border mb-6' : ''}>
                             <ReportKpiTiles stats={activeStats} animate />
                           </div>
-                          <p className="text-[0.875rem] text-ink-700 leading-relaxed">{summaryOverride ?? section.content}</p>
+                          {summaryGenerated ? (
+                            <p className="max-w-[80ch] text-[1.0625rem] text-ink-700 leading-[1.8]">{summaryOverride ?? section.content}</p>
+                          ) : isGeneratingSummary ? (
+                            <div className="max-w-[80ch] space-y-2.5" aria-live="polite">
+                              <div className="h-3.5 w-full rounded bg-canvas-border/70 animate-pulse" />
+                              <div className="h-3.5 w-[92%] rounded bg-canvas-border/70 animate-pulse" />
+                              <div className="h-3.5 w-[78%] rounded bg-canvas-border/70 animate-pulse" />
+                            </div>
+                          ) : null}
                         </div>
                       </Reorder.Item>
                     );
@@ -2790,8 +3047,8 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   if (section.kind === 'stats') {
                     return (
                       <Reorder.Item key={section.id} {...sectionProps}>
-                        <div className="border-x border-b border-canvas-border bg-white px-9 py-6">
-                          <ReportKpiTiles stats={activeStats} />
+                        <div className="border-x border-canvas-border bg-white px-9 py-6">
+                          <ReportKpiTiles stats={activeStats} animate />
                         </div>
                       </Reorder.Item>
                     );
@@ -2804,6 +3061,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                         section={section}
                         index={i}
                         sectionProps={sectionProps}
+                        ready={sectionReady(i)}
                         onOpenQuery={onOpenQuery}
                         onDelete={() => {
                           // Snapshot the card and its position so Undo restores both.
@@ -2850,9 +3108,9 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   if (section.kind === 'note') {
                     return (
                       <Reorder.Item key={section.id} {...sectionProps}>
-                        <div className="border-x border-b border-canvas-border bg-white px-9 pt-7 pb-6">
+                        <div className="border-x border-canvas-border bg-white px-9 pt-6 pb-6">
                           <ReportNumberedHeading n={sectionNumber(section.id)} title={section.title} />
-                          <p className="text-[0.8125rem] text-ink-800 leading-relaxed">{section.content}</p>
+                          <p className="max-w-[80ch] text-[0.9375rem] text-ink-700 leading-[1.8]">{section.content}</p>
                         </div>
                       </Reorder.Item>
                     );
@@ -2911,9 +3169,11 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             sections={sections.map((s): DownloadPreviewSection => {
               if (s.kind === 'query') {
                 const q = s.query;
-                const kpis = computeQueryKpis(q).map(k => ({ label: k.label, value: k.value }));
+                const kpis = (QUERY_KPIS[q.id] ?? computeQueryKpis(q)).map(k => ({ label: k.label, value: k.value }));
                 const charts = QUERY_GRAPHS[q.id] ?? [];
-                const table = QUERY_TABLES[q.id] ?? null;
+                const t = QUERY_TABLES[q.id];
+                const tables = QUERY_TABLE_SETS[q.id]
+                  ?? (t ? [{ id: 'results', title: 'Results Table', columns: t.columns, rows: t.rows }] : []);
                 return {
                   id: s.id,
                   kind: 'query',
@@ -2928,7 +3188,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   observations: q.observations,
                   kpis,
                   charts,
-                  table,
+                  tables,
                 };
               }
               if (s.kind === 'workflow') {

@@ -1,8 +1,28 @@
 import { Check, X, CornerUpLeft, Circle, Clock } from 'lucide-react';
 import type { Assignment, LevelStatus } from './workflowTypes';
-import { userById } from './workflowData';
+import { userById, userName } from './workflowData';
 
 const MODE_LABEL: Record<string, string> = { all: 'All must approve', any: 'Any one approves', sequential: 'Sequential' };
+
+// Plain-language "where is it right now" line, so a non-technical user can read
+// the state at a glance instead of decoding the chain dots.
+function positionLine(a: Assignment): { text: string; cls: string } {
+  const assignee = userName(a.assigneeId);
+  switch (a.status) {
+    case 'approved':            return { text: 'Fully approved — complete', cls: 'bg-compliant-50 text-compliant-700' };
+    case 'rejected':            return { text: `Rejected — back with ${assignee} to revise`, cls: 'bg-risk-50 text-risk-700' };
+    case 'pulled-back':         return { text: 'Pulled back by the assigner', cls: 'bg-[#EEEEF1] text-ink-600' };
+    case 'needs-reassignment':  return { text: 'Needs reassignment (assignee inactive)', cls: 'bg-risk-50 text-risk-700' };
+    case 'escalated':           return { text: 'Escalated to the assigner', cls: 'bg-mitigated-50 text-mitigated-700' };
+    case 'drafting':            return { text: `Being worked on by ${assignee}`, cls: 'bg-brand-50 text-brand-700' };
+    default: {
+      const lvl = a.levels[a.currentLevelIndex];
+      if (!lvl) return { text: `Being worked on by ${assignee}`, cls: 'bg-brand-50 text-brand-700' };
+      const approvers = lvl.assigneeIds.map(userName).join(', ');
+      return { text: `Waiting on ${approvers} · ${lvl.name}`, cls: 'bg-brand-50 text-brand-700' };
+    }
+  }
+}
 
 const STATUS_DOT: Record<LevelStatus, { cls: string; Icon: typeof Check }> = {
   pending:       { cls: 'bg-[#EEEEF1] text-ink-500',          Icon: Circle },
@@ -26,8 +46,14 @@ function Avatar({ id }: { id: string }) {
 
 /** Read-only view of an assignment's approval chain + current position. */
 export default function WorkflowPipelineView({ assignment }: { assignment: Assignment }) {
+  const pos = positionLine(assignment);
   return (
     <div className="flex flex-col gap-2">
+      {/* Plain-language current position — "what's pending and where". */}
+      <div className={`inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full text-[11px] font-semibold ${pos.cls} mb-1`}>
+        {pos.text}
+      </div>
+
       {/* Assignee (drafting) node */}
       <div className="flex items-center gap-2.5">
         <span className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${assignment.currentLevelIndex < 0 && assignment.status !== 'approved' ? 'bg-brand-50 text-brand-700 ring-2 ring-brand-200' : 'bg-compliant-50 text-compliant-700'}`}>

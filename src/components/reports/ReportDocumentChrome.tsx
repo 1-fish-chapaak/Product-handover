@@ -3,8 +3,6 @@
 // brand banner, metadata grid, numbered sections, KPI tile grid.
 
 import { motion } from 'motion/react';
-import { KpiCountUp } from '../shared/KpiTile';
-import { statTone } from './reportTones';
 import FloatingLines from '../shared/FloatingLines';
 
 export type ReportStat = {
@@ -16,43 +14,40 @@ export type ReportStat = {
   color: string;
 };
 
-export function ReportKpiTiles({ stats, animate = false }: { stats: ReportStat[]; animate?: boolean }) {
+// All KPIs sit on a single row — one column per metric.
+const KPI_COL_CLASS: Record<number, string> = {
+  1: 'md:grid-cols-1', 2: 'md:grid-cols-2', 3: 'md:grid-cols-3',
+  4: 'md:grid-cols-4', 5: 'md:grid-cols-5', 6: 'md:grid-cols-6',
+};
+export function ReportKpiTiles({ stats }: { stats: ReportStat[]; animate?: boolean }) {
+  // Unified stat-bar (Stripe / Mercury pattern): one surface, the metrics split
+  // by hairline dividers — not a grid of separate boxes. Interior dividers only:
+  // each cell draws its top+left hairline, the grid is nudged -1px up/left and
+  // the rounded surface clips the outermost lines, so any column count (incl. 5
+  // or 6) and wrapping rows divide cleanly. Column count follows the tile count.
+  // Static — no entry animation or count-up; the value reads instantly.
+  const cols = KPI_COL_CLASS[Math.min(stats.length, 6)] ?? 'md:grid-cols-4';
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      {stats.map((stat, si) => {
-        const tone = statTone(stat.color);
-        // Canonical card chrome: flat at rest, hover tints the border (Border-First,
-        // §4). The tone is carried by the corner wash + the value colour — not by a
-        // 3px side-stripe, which §5 reserves for alert cards only.
-        const cls = `relative overflow-hidden rounded-[14px] border border-canvas-border bg-canvas-elevated p-4 transition-colors duration-150 hover:border-brand-200`;
-        const inner = (
-          <>
-            {/* Tone wash in the top-right corner for a subtle lift. */}
-            <span
-              className="absolute inset-0 pointer-events-none print:hidden"
-              style={{ background: `radial-gradient(120% 120% at 100% 0%, ${tone.hex}14, transparent 58%)` }}
-              aria-hidden="true"
-            />
-            <div className="relative">
-              <div className={`text-[1.75rem] font-bold tabular-nums leading-none mb-1.5 ${tone.text}`}>
-                {animate ? <KpiCountUp value={stat.value} delay={120 + si * 80} /> : stat.value}
-              </div>
-              <div className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 leading-tight">{stat.label}</div>
-            </div>
-          </>
-        );
-        return animate ? (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 10, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 18, mass: 0.7, delay: 0.08 + si * 0.08 }}
-            className={cls}
-          >
-            {inner}
-          </motion.div>
-        ) : (
-          <div key={stat.label} className={cls}>{inner}</div>
+    // Matches the platform's KPI vocabulary (DESIGN.md §7.2.2 / 7.10.2): flat
+    // glass-card tiles, hairline borders, no shadow, no gradient. The semantic
+    // red→amber→green ramp is forbidden (No-RAG rule), so colour is a single
+    // uniform brand-purple icon chip (the SourceCard pattern) — never a heat
+    // strip. Label (11px uppercase ink-500) over a bold tabular ink-900 value.
+    <div className={`grid grid-cols-2 gap-3 ${cols}`}>
+      {stats.map((stat) => {
+        // The number and its underline tick take the metric's semantic tone
+        // (text-<tone>-700 from stat.color); the label stays muted ink.
+        const toneText = stat.color.match(/text-[\w-]+/)?.[0] ?? 'text-ink-900';
+        return (
+          <div key={stat.label} className="glass-card rounded-xl px-5 py-5">
+            <p className={`text-[2.5rem] font-bold leading-none tabular-nums tracking-[-0.035em] ${toneText}`}>
+              {stat.value}
+            </p>
+            <span className={`mt-3.5 mb-3 block h-[2px] w-8 rounded-full bg-current ${toneText}`} aria-hidden="true" />
+            <p className="text-[0.625rem] font-semibold uppercase tracking-[0.05em] text-ink-400 leading-snug whitespace-nowrap">
+              {stat.label}
+            </p>
+          </div>
         );
       })}
     </div>
@@ -62,17 +57,39 @@ export function ReportKpiTiles({ stats, animate = false }: { stats: ReportStat[]
 export function ReportNumberedHeading({ n, title, subtitle, right }: {
   n: number; title: string; subtitle?: string; right?: React.ReactNode;
 }) {
+  // Editorial section header: a zero-padded brand index reads as an
+  // annual-report chapter mark and the title carries the weight. A short brand
+  // tick accents the header — the old full-width hairline rule was dropped to cut
+  // the divider-line clutter; whitespace now separates sections instead.
   return (
-    <div className="flex items-start justify-between gap-3 mb-5">
-      <div className="flex items-start gap-3 min-w-0">
-        <span className="shrink-0 w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[0.8125rem] font-bold flex items-center justify-center mt-0.5">{n}</span>
-        <div className="min-w-0">
-          <h2 className="text-[1.1875rem] font-semibold text-ink-900 tracking-tight leading-tight">{title}</h2>
-          {subtitle && <p className="text-[0.75rem] text-ink-500">{subtitle}</p>}
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      className="mb-5"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-baseline gap-3.5 min-w-0">
+          <span className="shrink-0 text-[0.8125rem] font-semibold tabular-nums tracking-[0.16em] text-brand-700 leading-none">
+            {String(n).padStart(2, '0')}
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15]">{title}</h2>
+            {subtitle && <p className="text-[0.8125rem] text-ink-500 mt-1 leading-snug">{subtitle}</p>}
+          </div>
         </div>
+        {right && <div className="shrink-0">{right}</div>}
       </div>
-      {right && <div className="shrink-0">{right}</div>}
-    </div>
+      <motion.span
+        initial={{ scaleX: 0 }}
+        whileInView={{ scaleX: 1 }}
+        viewport={{ once: true, margin: '-80px' }}
+        transition={{ duration: 0.45, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+        className="mt-3.5 block h-[2px] w-8 origin-left rounded-full bg-brand-500/80"
+        aria-hidden="true"
+      />
+    </motion.div>
   );
 }
 
@@ -88,33 +105,31 @@ export function ReportMetaCell({ label, value }: { label: string; value?: string
   );
 }
 
-// Metadata as a structured, bordered panel with internal dividers, so the facts
-// read as a single report-info table rather than cells floating in a wide band.
+// Metadata as a clean key-facts band. The facts read as a single report-info
+// unit via a top brand accent + whitespace — the old internal cell dividers
+// (border-r/border-b on every cell) were dropped to cut divider-line clutter.
 // Empty-value facts are dropped, and the column count auto-fits the remaining
-// facts (single row up to 4) unless an explicit `columns` is given. Divider
-// edges are computed per item so any count stays clean.
+// facts (single row up to 4) unless an explicit `columns` is given.
 const META_COL_CLASS: Record<number, string> = { 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4' };
 export function ReportMetaPanel({ items, columns }: { items: { label: string; value?: string }[]; columns?: 1 | 2 | 3 | 4 }) {
   const facts = items.filter(it => it.value);
   if (facts.length === 0) return null;
   const cols = columns ?? (facts.length <= 4 ? facts.length : 3);
-  const lastRowStart = facts.length - (facts.length % cols || cols);
   return (
-    <div className={`grid ${META_COL_CLASS[cols]} border border-canvas-border rounded-[12px] overflow-hidden bg-canvas-elevated`}>
-      {facts.map((it, i) => {
-        const isLastCol = i % cols === cols - 1;
-        const hasRightNeighbor = !isLastCol && i + 1 < facts.length;
-        const isLastRow = i >= lastRowStart;
-        return (
-          <div key={it.label} className={`px-5 py-4 border-canvas-border ${hasRightNeighbor ? 'border-r' : ''} ${isLastRow ? '' : 'border-b'}`}>
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="w-1 h-1 rounded-full bg-brand-500" aria-hidden="true" />
-              <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.13em] text-ink-400">{it.label}</div>
-            </div>
-            <div className="text-[0.875rem] font-bold text-ink-900 leading-snug">{it.value || '—'}</div>
-          </div>
-        );
-      })}
+    <div className={`grid ${META_COL_CLASS[cols]} gap-x-8 gap-y-6 px-6 pt-5 pb-6`}>
+      {facts.map((it, i) => (
+        <motion.div
+          key={it.label}
+          initial={{ opacity: 0, y: 8 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          transition={{ duration: 0.35, delay: Math.min(i, 6) * 0.06, ease: [0.22, 1, 0.36, 1] }}
+          className="min-w-0"
+        >
+          <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.15em] text-ink-400 mb-2">{it.label}</div>
+          <div className="text-[0.875rem] font-medium text-ink-700 leading-snug tabular-nums break-words">{it.value || '—'}</div>
+        </motion.div>
+      ))}
     </div>
   );
 }
@@ -177,8 +192,10 @@ export function CoverBanner({ title, gradient, description, byline, actions, fac
   );
 }
 
-export function ReportBrandBanner({ title, back, actions, children, className = '', gradient, headerText, facts }: {
+export function ReportBrandBanner({ title, back, actions, children, className = '', gradient, headerText, facts, footer, aside, eyebrow, titleClassName }: {
   title: string;
+  /** Tailwind size class for the title (defaults to the 33px letterhead size). */
+  titleClassName?: string;
   /** Optional "Back to Reports" affordance rendered above the title (top-left). */
   back?: React.ReactNode;
   /** CTAs rendered top-right on the banner, like the ATR document. */
@@ -192,6 +209,14 @@ export function ReportBrandBanner({ title, back, actions, children, className = 
   headerText?: string;
   /** Glanceable key-facts capsule, rendered top-right in the letterhead tone. */
   facts?: { value: React.ReactNode; label: string }[];
+  /** Full-width metadata strip rendered below the title/actions row, edge to
+      edge, with its own top hairline. Used for the report key-facts letterhead. */
+  footer?: React.ReactNode;
+  /** Right-column content on the title row (e.g. a metadata panel). Lets the
+      banner read as two balanced columns instead of a tall left-aligned stack. */
+  aside?: React.ReactNode;
+  /** Small overline rendered directly above the title (e.g. a report ID). */
+  eyebrow?: React.ReactNode;
 }) {
   // Purple gradient letterhead — title + byline over floating-line art, with
   // actions stacked top-right. A template's theme gradient overrides the default.
@@ -215,8 +240,8 @@ export function ReportBrandBanner({ title, back, actions, children, className = 
         style={{ maskImage: 'linear-gradient(to right, transparent 18%, white 56%)', WebkitMaskImage: 'linear-gradient(to right, transparent 18%, white 56%)' }}
         aria-hidden="true"
       >
-        <FloatingLines enabledWaves={['top', 'middle', 'bottom']} lineCount={[7, 8, 7]} lineDistance={5} interactive={false} parallax={false} color="#c084fc" opacity={0.22} />
-        <FloatingLines enabledWaves={['top', 'middle']} lineCount={6} lineDistance={7} interactive={false} parallax={false} color="#f5d0fe" opacity={0.4} />
+        <FloatingLines enabledWaves={['top', 'middle', 'bottom']} lineCount={[3, 4, 3]} lineDistance={8} interactive={false} parallax={false} color="#c084fc" opacity={0.14} />
+        <FloatingLines enabledWaves={['top', 'middle']} lineCount={3} lineDistance={10} interactive={false} parallax={false} color="#f5d0fe" opacity={0.24} />
       </div>
       {/* Readability scrim — darkens the left, where the title and byline sit,
           so text keeps full contrast while the weave stays dense on the right. */}
@@ -226,28 +251,74 @@ export function ReportBrandBanner({ title, back, actions, children, className = 
         aria-hidden="true"
       />
       {back && <div className="relative z-10 mb-3 print:hidden">{back}</div>}
-      <div className="relative z-10 flex items-start justify-between gap-4 flex-wrap">
+      {/* Title anchors the top-left as the hero; actions balance top-right,
+          pinned (items-start) to the title's first line. Keeping them on one row
+          preserves the reading hierarchy — title first, actions second. */}
+      <div className="relative z-10 flex items-start justify-between gap-5 lg:gap-6 flex-wrap">
         <div className="min-w-0 flex-1">
-          <h1 className="text-[2.0625rem] font-bold tracking-[-0.02em] leading-[1.08] text-white mb-1.5" style={{ textShadow: '0 1px 2px rgba(10,2,30,0.22)' }}>{title}</h1>
-          {children}
+          {eyebrow && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
+              className="mb-2"
+            >
+              {eyebrow}
+            </motion.div>
+          )}
+          <motion.h1
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            title={typeof title === 'string' ? title : undefined}
+            className={`${titleClassName ?? 'text-[2rem]'} truncate font-bold tracking-[-0.02em] leading-[1.08] text-white mb-1.5`}
+            style={{ textShadow: '0 1px 2px rgba(10,2,30,0.22)' }}
+          >
+            {title}
+          </motion.h1>
+          {children && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {children}
+            </motion.div>
+          )}
         </div>
-        <div className="shrink-0 flex flex-col items-end gap-3">
+        {aside && <div className="shrink-0 w-full sm:w-auto">{aside}</div>}
+        <div className="shrink-0 flex flex-col items-end gap-3 empty:hidden">
           {headerText && (
             <span className="text-[0.75rem] font-semibold uppercase tracking-[0.12em] text-white/60">{headerText}</span>
           )}
           {facts && facts.length > 0 && (
-            <div className="flex items-stretch rounded-[12px] border border-white/20 bg-white/10 overflow-hidden">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="flex items-stretch rounded-[12px] border border-white/20 bg-white/10 overflow-hidden"
+            >
               {facts.map((f, i) => (
                 <div key={f.label} className={`px-5 py-3 text-center ${i > 0 ? 'border-l border-white/15' : ''}`}>
                   <div className="text-[1.5rem] font-bold tabular-nums leading-none text-white">{f.value}</div>
                   <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-white/65 mt-1.5 whitespace-nowrap">{f.label}</div>
                 </div>
               ))}
-            </div>
+            </motion.div>
           )}
           {actions && <div className="flex items-center gap-2 print:hidden">{actions}</div>}
         </div>
       </div>
+      {footer && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.26, ease: [0.22, 1, 0.36, 1] }}
+          className="relative z-10 mt-5"
+        >
+          {footer}
+        </motion.div>
+      )}
     </div>
   );
 }

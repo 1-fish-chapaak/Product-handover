@@ -13,7 +13,7 @@ export interface AtrLibraryReport {
   tag: 'Internal Audit';
   generatedBy: string;
   generatedAt: string;
-  status: 'final' | 'draft';
+  status: 'final' | 'draft' | 'frozen';
   pages: number;
   queries: number;
   /** Audit area used to group/segregate. */

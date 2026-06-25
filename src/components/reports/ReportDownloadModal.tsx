@@ -8,7 +8,8 @@ import { useToast } from '../shared/Toast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { exportReportWord, exportReportPpt, exportReportPdf, exportReportHtml } from './reportExport';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
-import type { QueryGraph, QueryTable } from '../../data/queryGraphs';
+import type { QueryGraph, QueryTableDef } from '../../data/queryGraphs';
+import { cellRender } from './queryTableCell';
 
 export type DownloadPreviewKpi = { label: string; value: string };
 /** Report-level KPI tile — accent is the resolved hex of the tile's tone. */
@@ -32,7 +33,7 @@ export type DownloadPreviewSection =
       observations: string[];
       kpis?: DownloadPreviewKpi[];
       charts?: QueryGraph[];
-      table?: QueryTable | null;
+      tables?: QueryTableDef[];
     }
   | {
       id: string;
@@ -56,17 +57,22 @@ interface Props {
   generatedBy: string;
   generatedAt: string;
   sections: DownloadPreviewSection[];
+  /** Optional spreadsheet export. When provided, an "Excel" tab is shown and the
+   *  Download action delegates to this callback (the report owns the .xlsx
+   *  composer — e.g. ATR / bulk-audit tabular exports). */
+  onExcelExport?: () => void;
   onClose: () => void;
 }
 
-type Format = 'pdf' | 'docx' | 'pptx' | 'html';
+type Format = 'pdf' | 'docx' | 'pptx' | 'html' | 'xlsx';
 
-const FORMATS: { id: Format; label: string; ext: string }[] = [
+const BASE_FORMATS: { id: Format; label: string; ext: string }[] = [
   { id: 'pdf', label: 'PDF', ext: 'pdf' },
   { id: 'docx', label: 'DOCX', ext: 'doc' },
   { id: 'pptx', label: 'PPTX', ext: 'ppt' },
   { id: 'html', label: 'HTML', ext: 'html' },
 ];
+const EXCEL_FORMAT = { id: 'xlsx' as Format, label: 'Excel', ext: 'xlsx' };
 
 // Severity badge colour mapping — High (red) / Medium (amber) / Low (green).
 function severityBadgeClass(severity: string): string {
@@ -83,9 +89,11 @@ export default function ReportDownloadModal({
   generatedBy,
   generatedAt,
   sections,
+  onExcelExport,
   onClose,
 }: Props) {
   const { addToast } = useToast();
+  const FORMATS = useMemo(() => (onExcelExport ? [...BASE_FORMATS, EXCEL_FORMAT] : BASE_FORMATS), [onExcelExport]);
   const [format, setFormat] = useState<Format>('pdf');
   const [isDownloading, setIsDownloading] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -124,7 +132,10 @@ export default function ReportDownloadModal({
     // before the export fires and the modal closes.
     window.setTimeout(() => {
       const ctx = { reportName, reportTag, reportId, templateName, generatedBy, generatedAt, sections };
-      if (format === 'docx') {
+      if (format === 'xlsx') {
+        onExcelExport?.();
+        addToast({ type: 'success', message: `${reportName}.xlsx downloaded.` });
+      } else if (format === 'docx') {
         exportReportWord(ctx);
         addToast({ type: 'success', message: `${reportName}.${activeFormat.ext} downloaded.` });
       } else if (format === 'pptx') {
@@ -155,7 +166,7 @@ export default function ReportDownloadModal({
         className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       >
         <div
-          className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]"
+          className="absolute inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px]"
           onClick={onClose}
         />
         <motion.div
@@ -168,27 +179,22 @@ export default function ReportDownloadModal({
           aria-modal="true"
           aria-label={`Download preview for ${reportName}`}
           tabIndex={-1}
-          className="relative w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] flex flex-col bg-white rounded-[16px] shadow-xl overflow-hidden"
+          className="relative w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] flex flex-col bg-canvas-elevated rounded-2xl border border-canvas-border shadow-xl overflow-hidden"
         >
-          {/* Header */}
-          <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="p-2 rounded-[8px] bg-brand-600/10 text-brand-600 shrink-0">
-                <Download size={16} />
-              </div>
-              <h2 className="text-[0.9375rem] font-bold text-ink-800">Download Report</h2>
-            </div>
+          {/* Header — matches the shared Modal chrome (px-7, canonical title) */}
+          <div className="shrink-0 flex items-center justify-between gap-4 px-7 py-3.5 border-b border-canvas-border">
+            <h2 className="text-[1.25rem] leading-tight font-semibold text-ink-900 tracking-tight">Download Report</h2>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-[8px] text-ink-400 hover:text-ink-800 hover:bg-canvas transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="w-8 h-8 flex items-center justify-center rounded-md text-ink-500 hover:text-ink-800 hover:bg-canvas transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
               aria-label="Close preview"
             >
-              <X size={16} />
+              <X size={18} />
             </button>
           </div>
 
           {/* Format Tabs */}
-          <div className="shrink-0 px-6 border-b border-canvas-border bg-canvas-elevated-1/40">
+          <div className="shrink-0 px-7 border-b border-canvas-border">
             <div role="tablist" aria-label="Download format" className="flex items-center gap-1">
               {FORMATS.map(f => {
                 const isActive = format === f.id;
@@ -219,7 +225,7 @@ export default function ReportDownloadModal({
           {/* Preview Body — fixed-pixel-width PDF/PPT/DOCX page mockups need
               horizontal scroll + scale-down on narrow viewports so the preview
               doesn't clip past the modal edge. */}
-          <div className="flex-1 overflow-y-auto overflow-x-auto bg-paper-100 py-8">
+          <div className="flex-1 overflow-y-auto overflow-x-auto bg-canvas py-8">
             <AnimatePresence mode="wait">
               <motion.div
                 key={format}
@@ -256,12 +262,13 @@ export default function ReportDownloadModal({
                     sections={bodySections}
                   />
                 )}
+                {format === 'xlsx' && <XlsxPreview reportName={reportName} sections={bodySections} />}
               </motion.div>
             </AnimatePresence>
           </div>
 
           {/* Footer — primary Download action */}
-          <div className="shrink-0 px-6 py-4 border-t border-canvas-border bg-white flex items-center justify-end">
+          <div className="shrink-0 px-7 py-3 border-t border-canvas-border bg-canvas-elevated flex items-center justify-end">
             <Gated permission="rp_edit" mode="disable" title="You don't have permission to export reports">
             <button
               onClick={handleDownload}
@@ -305,7 +312,7 @@ function PdfPreview({
       {/* Cover page — chrome carries the tag + Irame mark, body shows title + meta */}
       <PdfPage pageNo={1} totalPages={totalPages} variant="cover" reportName={reportName} reportTag={reportTag}>
         <div className="h-full flex flex-col justify-center text-center">
-          <h1 className="text-[1.875rem] leading-[1.15] font-semibold text-ink-900 tracking-tight mb-4">
+          <h1 className="text-[1.75rem] leading-[1.15] font-semibold text-ink-900 tracking-tight mb-4">
             {reportName}
           </h1>
           <div className="mx-auto h-px bg-ink-900/20 w-16 mb-5" />
@@ -373,7 +380,7 @@ function PageBlockBody({ block, typeface }: { block: DownloadPreviewSection[]; t
 function PdfContents({ sections }: { sections: DownloadPreviewSection[] }) {
   return (
     <div>
-      <h2 className="text-[1.375rem] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-1">
+      <h2 className="text-[1.25rem] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-1">
         Table of Contents
       </h2>
       <div className="h-px bg-ink-900/20 w-12 mb-6" />
@@ -736,6 +743,54 @@ function DocxPreview({
   );
 }
 
+// ───────────────────────── XLSX Preview ─────────────────────────
+// Spreadsheet mockup — one row per content section, the columns an export would
+// carry. Excel-green chrome so the format reads at a glance; no page metaphor.
+
+function XlsxPreview({ reportName, sections }: { reportName: string; sections: DownloadPreviewSection[] }) {
+  const rows = sections.map((s, i) => {
+    if (s.kind === 'query') return { ref: s.queryId, title: s.queryTitle, type: 'Query', status: s.severity };
+    if (s.kind === 'workflow') return { ref: s.workflowId, title: s.workflowName, type: 'Workflow', status: s.severity };
+    if (s.kind === 'observation') return { ref: s.obsId, title: s.title, type: 'Observation', status: '—' };
+    if (s.kind === 'summary') return { ref: `R${String(i + 1).padStart(2, '0')}`, title: s.title || 'Executive Summary', type: 'Summary', status: '—' };
+    return { ref: `R${String(i + 1).padStart(2, '0')}`, title: s.title, type: 'Note', status: '—' };
+  });
+  const cols = ['Ref', 'Title', 'Type', 'Severity / Status'];
+  return (
+    <div className="flex flex-col items-center">
+      <div className="bg-white shadow-[0_2px_12px_rgba(0,0,0,0.10)] overflow-hidden rounded-[4px]" style={{ width: 720 }}>
+        {/* Sheet tab bar */}
+        <div className="flex items-center gap-2 px-4 h-10 bg-[#107C41] text-white">
+          <LayoutGrid size={14} />
+          <span className="text-[0.8125rem] font-semibold truncate">{reportName}.xlsx</span>
+        </div>
+        <table className="w-full border-collapse text-[0.75rem]">
+          <thead>
+            <tr className="bg-[#E9F2EC] text-[#0B5A30]">
+              <th className="w-10 px-2 py-2 text-left font-bold border border-[#CFE3D7]">#</th>
+              {cols.map(c => (
+                <th key={c} className="px-3 py-2 text-left font-bold border border-[#CFE3D7] whitespace-nowrap">{c}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="odd:bg-white even:bg-[#F6FBF8]">
+                <td className="px-2 py-2 text-ink-400 font-mono tabular-nums border border-[#E3EDE7]">{i + 1}</td>
+                <td className="px-3 py-2 font-mono text-ink-600 border border-[#E3EDE7] whitespace-nowrap">{r.ref}</td>
+                <td className="px-3 py-2 text-ink-800 border border-[#E3EDE7]">{r.title}</td>
+                <td className="px-3 py-2 text-ink-500 border border-[#E3EDE7] whitespace-nowrap">{r.type}</td>
+                <td className="px-3 py-2 text-ink-500 border border-[#E3EDE7] whitespace-nowrap">{r.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-4 text-[0.75rem] text-ink-400">Workbook with one row per section. Underlying result tables export as additional sheets.</p>
+    </div>
+  );
+}
+
 // ───────────────────────── Shared section renderer ─────────────────────────
 
 function SectionContent({ section, typeface, compact = false }: {
@@ -782,7 +837,7 @@ function SectionContent({ section, typeface, compact = false }: {
   if (section.kind === 'query') {
     const kpis = section.kpis ?? [];
     const charts = section.charts ?? [];
-    const table = section.table ?? null;
+    const tables = section.tables ?? [];
     return (
       <div>
         <div className={labelClass + ' mb-2'}>{section.queryId}</div>
@@ -828,29 +883,29 @@ function SectionContent({ section, typeface, compact = false }: {
           </div>
         ))}
 
-        {/* Results table */}
-        {!compact && table && table.rows.length > 0 && (
-          <div className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-3 mb-3">
+        {/* Results tables — each attached table, dashboard styling via cellRender */}
+        {!compact && tables.filter(t => t.rows.length > 0).map(t => (
+          <div key={t.id} className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-3 mb-3">
             <div className="flex items-center gap-1.5 mb-2 text-[0.625rem] font-bold uppercase tracking-[0.14em] text-ink-500">
-              <LayoutGrid size={12} /> Results Table
+              <LayoutGrid size={12} /> {t.title}
             </div>
             <div className="overflow-hidden rounded-[12px] border border-canvas-border">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="bg-paper-50">
-                    {table.columns.map(c => (
-                      <th key={c} className="px-2 py-1.5 text-left text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider border-b border-canvas-border whitespace-nowrap">
+                  <tr className="bg-surface-2/50">
+                    {t.columns.map(c => (
+                      <th key={c} className="px-2 py-1.5 text-left text-[0.5625rem] font-bold text-ink-500 uppercase tracking-wider border-b border-canvas-border whitespace-nowrap">
                         {c}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {table.rows.slice(0, 8).map((row, ri) => (
-                    <tr key={ri} className="border-b border-canvas-border last:border-b-0">
+                  {t.rows.slice(0, 8).map((row, ri) => (
+                    <tr key={ri} className="border-b border-canvas-border/50 last:border-b-0">
                       {row.map((cell, ci) => (
-                        <td key={ci} className="px-2 py-1.5 text-[0.625rem] text-ink-500 whitespace-nowrap">
-                          {cell}
+                        <td key={ci} className="px-2 py-1.5 text-[0.625rem] whitespace-nowrap">
+                          {cellRender(cell, t.columns[ci] || '', ci === 0)}
                         </td>
                       ))}
                     </tr>
@@ -859,7 +914,7 @@ function SectionContent({ section, typeface, compact = false }: {
               </table>
             </div>
           </div>
-        )}
+        ))}
 
         {!compact && section.findings.length > 0 && (
           <FindingsBlock title="Findings" items={section.findings} bodyClass={bodyClass} labelClass={labelClass} />

@@ -164,6 +164,22 @@ export function applyDecision(
 }
 
 // ─── Selectors ───
+const STATUS_RANK: Record<Assignment['status'], number> = {
+  'in-approval': 5, approved: 4, rejected: 3, escalated: 3, 'needs-reassignment': 3, drafting: 2, 'pulled-back': 0,
+};
+/** A case can carry two SEPARATE routes — the Risk Owner's (the lifecycle: classify
+ *  → plan → action, then the Auditor phase at handoff) and an auditor route the
+ *  Auditor marked independently. For the case's status display the Risk Owner
+ *  assignment always wins when present (it owns the lifecycle); the auditor route is
+ *  a config consumed only at handoff and must NOT bleed into the Risk Owner column.
+ *  Only a case with no Risk Owner assignment shows its auditor assignment. */
+export function primaryAssignment(all: Assignment[], exceptionId: string): Assignment | undefined {
+  const rank = (a: Assignment) => (a.persona === 'risk-owner' ? 100 : 0) + (STATUS_RANK[a.status] ?? 0);
+  return all
+    .filter(a => a.exceptionId === exceptionId && a.status !== 'pulled-back')
+    .sort((x, y) => rank(y) - rank(x))[0];
+}
+
 export function assignmentsForAssignee(all: Assignment[], userId: string): Assignment[] {
   return all.filter(a => a.assigneeId === userId && (a.status === 'drafting' || a.status === 'rejected'));
 }
