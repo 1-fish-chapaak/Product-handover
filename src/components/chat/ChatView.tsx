@@ -314,13 +314,13 @@ const FOLLOWUP_TRACK_META: Record<
     Icon: Layers,
     label: 'Go deeper',
     caption: 'Drill into the results you just got',
-    badge: 'bg-brand-50 text-brand-600',
+    badge: 'bg-compliant-50 text-compliant-700',
   },
   breadth: {
     Icon: Compass,
     label: 'Go wider',
     caption: 'Run adjacent checks across your sources',
-    badge: 'bg-ink-100 text-ink-500',
+    badge: 'bg-evidence-50 text-evidence-700',
   },
 };
 
@@ -334,13 +334,17 @@ function FollowUpCard({
   isSelected,
   onClick,
   reduced,
+  tag,
 }: {
   q: string;
   delayIndex: number;
   isSelected: boolean;
   onClick: () => void;
   reduced: boolean;
+  /** Optional Go-deeper / Go-wider tag shown at the start of the row. */
+  tag?: { label: string; caption: string; badge: string; Icon: LucideIcon };
 }) {
+  const TagIcon = tag?.Icon;
   return (
     <motion.button
       type="button"
@@ -361,13 +365,34 @@ function FollowUpCard({
         scale: 0.985,
         transition: { type: 'spring', stiffness: 800, damping: 34, mass: 0.12 },
       }}
-      className={`flex h-full items-start text-left px-4 py-3 rounded-xl text-[0.8125rem] leading-snug cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+      className={`group/card flex h-full items-center gap-3 text-left px-4 py-3 rounded-xl text-[0.8125rem] leading-snug cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
         isSelected
           ? 'bg-brand-50 text-brand-700 border border-brand-200'
           : 'bg-canvas-elevated text-ink-700 border border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
       }`}
     >
-      <span>{q}</span>
+      {tag && TagIcon && (
+        <span className="relative group/tag shrink-0">
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold ${tag.badge}`}>
+            <TagIcon size={11} strokeWidth={2} className="shrink-0" />
+            {tag.label}
+          </span>
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute top-full left-0 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.6875rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/tag:opacity-100 transition-opacity z-10"
+          >
+            {tag.caption}
+          </span>
+        </span>
+      )}
+      <span className="flex-1 min-w-0">{q}</span>
+      {/* Decorative cue — the whole card is one click that drops the text into
+          the composer to edit before sending. */}
+      <ArrowRight
+        size={15}
+        aria-hidden
+        className="shrink-0 -translate-x-1 opacity-0 transition-all duration-150 group-hover/card:translate-x-0 group-hover/card:opacity-100"
+      />
     </motion.button>
   );
 }
@@ -726,7 +751,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                   aria-haspopup="menu"
                   aria-expanded={selectorOpen}
                   title={active.label}
-                  className="-ml-1 inline-flex items-center gap-2 max-w-full rounded-lg px-1 py-0.5 hover:bg-brand-50/60 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="-ml-1 inline-flex items-center gap-2 max-w-full rounded-md px-1 py-0.5 hover:bg-brand-50/60 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
                   <span className="text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 rounded-md px-2 py-0.5 truncate min-w-0">{titleLabel}</span>
@@ -857,7 +882,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                 aria-expanded={downloadOpen}
                 aria-label="Download chart"
                 title="Download"
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <Download size={13} className="text-ink-400" />
                 <span>Download</span>
@@ -1125,7 +1150,7 @@ function ResultsTable({
                   aria-haspopup="menu"
                   aria-expanded={downloadOpen}
                   title="Download"
-                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <Download size={13} className="text-ink-400" />
                   <span>Download</span>
@@ -1331,7 +1356,7 @@ function FullscreenTableModal({
                 aria-haspopup="menu"
                 aria-expanded={downloadOpen}
                 title="Download"
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <Download size={13} className="text-ink-400" />
                 <span>Download</span>
@@ -1629,7 +1654,7 @@ function SaveWorkflowButton() {
     );
   }
   return (
-    <button onClick={() => setSaved(true)} className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer">
+    <button onClick={() => setSaved(true)} className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer">
       <Save size={12} /> Save to Library
     </button>
   );
@@ -2292,7 +2317,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
             <button
               type="button"
               onClick={() => setStep('details')}
-              className="inline-flex items-center h-9 px-3 rounded-lg text-[0.75rem] font-medium text-ink-600 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center h-9 px-3 rounded-md text-[0.75rem] font-medium text-ink-600 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <ChevronLeft size={13} className="mr-0.5" /> Back
             </button>
@@ -2300,7 +2325,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
           <div className="flex items-center gap-2">
             <button
               onClick={onCancel}
-              className="inline-flex items-center h-9 px-4 rounded-lg text-[0.8125rem] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center h-9 px-4 rounded-md text-[0.8125rem] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               Cancel
             </button>
@@ -2308,7 +2333,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
               <button
                 onClick={() => canAdvance && setStep('pickWidgets')}
                 disabled={!canAdvance}
-                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 Next <ChevronRight size={13} strokeWidth={2.25} />
               </button>
@@ -2316,7 +2341,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
               <button
                 onClick={handleConfirm}
                 disabled={!canConfirm}
-                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <Save size={13} strokeWidth={2.25} /> Save & switch to workflow
               </button>
@@ -4637,6 +4662,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     setTimeout(() => { processingRef.current = false; }, 2000);
   };
 
+  // Arrow action on a follow-up card: drop the suggestion into the composer so
+  // the user can edit it before sending (Enter), instead of firing immediately.
+  const loadFollowUpIntoComposer = (question: string) => {
+    setInput(question);
+    textareaRef.current?.focus();
+    requestAnimationFrame(() => handleTextareaInput());
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Skip Enter-to-send while an IME composition is in flight (CJK input).
     // Without this, Enter commits the composition AND submits the message,
@@ -5201,7 +5234,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 type="button"
                 onClick={handleNewChatFromSidebar}
                 title="New chat (⌘⇧O)"
-                className="w-full inline-flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-medium text-ink-700 hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="w-full inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-medium text-ink-700 hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <Plus size={16} strokeWidth={2.25} />
                 New chat
@@ -5330,7 +5363,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     const mockFields = ['Date', 'Region', 'Category', 'Vendor Name', 'Invoice Amount (₹)', 'Status', 'Department', 'Quantity'];
                     onAddToDashboard?.(mockFields);
                   }}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold rounded-lg transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold rounded-md transition-colors cursor-pointer"
                 >
                   <BarChart3 size={12} />
                   Add to Dashboard
@@ -5785,7 +5818,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 title="Click for recent chats · double-click to rename"
                 aria-label="Recent chats"
                 aria-expanded={showChatHistory}
-                className="group inline-flex items-center min-w-0 h-8 pl-2.5 pr-2 gap-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.9375rem] font-medium text-ink-800 hover:border-brand-200 hover:bg-brand-50/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="group inline-flex items-center min-w-0 h-8 pl-2.5 pr-2 gap-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.9375rem] font-medium text-ink-800 hover:border-brand-200 hover:bg-brand-50/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <span className="truncate">{currentChatTitle || 'New chat'}</span>
                 <span className="h-4 w-px bg-canvas-border shrink-0" aria-hidden="true" />
@@ -6266,7 +6299,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           <p className="text-[0.75rem] text-text-muted mb-3">Ready to save this workflow to your library for recurring use?</p>
                           <div className="flex gap-2">
                             <SaveWorkflowButton />
-                            <button className="px-3 py-2 text-[0.75rem] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-2 rounded-lg transition-colors cursor-pointer">
+                            <button className="px-3 py-2 text-[0.75rem] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-2 rounded-md transition-colors cursor-pointer">
                               Continue editing
                             </button>
                           </div>
@@ -6777,67 +6810,34 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             const tracks = (['depth', 'breadth'] as const).filter(
                               t => msg.followUpTracks![t]?.length,
                             );
-                            // Running index across BOTH groups so the entrance
-                            // cascade reads as one continuous sequence rather
-                            // than two competing staggers.
-                            let cascade = 0;
+                            // One single section: flatten both tracks into a single
+                            // stacked list. The depth/breadth distinction now rides on
+                            // a per-row Go-deeper / Go-wider tag instead of separate
+                            // section headers. Flat index drives the entrance cascade.
+                            const items = tracks.flatMap(track =>
+                              msg.followUpTracks![track].map(q => ({ q, track })),
+                            );
                             return (
-                              <div className="space-y-4">
-                                {tracks.map(track => {
+                              <div className="grid grid-cols-1 gap-2">
+                                {items.map(({ q, track }, delayIndex) => {
                                   const meta = FOLLOWUP_TRACK_META[track];
-                                  const BadgeIcon = meta.Icon;
                                   return (
-                                    <div key={`${msg.id}-track-${track}`}>
-                                      <motion.div
-                                        initial={{ opacity: 0, y: 6 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: 0.3, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                                        className="mb-2 flex items-center"
-                                      >
-                                        {/* Badge — icon + label as a pill; the caption now
-                                            lives in a hover tooltip instead of inline text. */}
-                                        <span className="relative group/track inline-flex">
-                                          <span
-                                            tabIndex={0}
-                                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${meta.badge}`}
-                                          >
-                                            <BadgeIcon size={13} strokeWidth={2} className="shrink-0" />
-                                            <span className="text-[0.8125rem] font-semibold">{meta.label}</span>
-                                          </span>
-                                          <span
-                                            role="tooltip"
-                                            className="pointer-events-none absolute top-full left-0 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/track:opacity-100 group-focus-within/track:opacity-100 transition-opacity z-10"
-                                          >
-                                            {meta.caption}
-                                          </span>
-                                        </span>
-                                      </motion.div>
-                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                        {msg.followUpTracks![track].map(q => {
-                                          const delayIndex = cascade++;
-                                          return (
-                                            <FollowUpCard
-                                              key={`${msg.id}-${track}-${delayIndex}`}
-                                              q={q}
-                                              delayIndex={delayIndex}
-                                              isSelected={selectedFollowUpByMsgId[msg.id] === q}
-                                              reduced={!!prefersReducedMotion}
-                                              onClick={() => {
-                                                setSelectedFollowUpByMsgId(prev => ({ ...prev, [msg.id]: q }));
-                                                handleFollowUpClick(q);
-                                              }}
-                                            />
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
+                                    <FollowUpCard
+                                      key={`${msg.id}-${track}-${delayIndex}`}
+                                      q={q}
+                                      tag={{ label: meta.label, caption: meta.caption, badge: meta.badge, Icon: meta.Icon }}
+                                      delayIndex={delayIndex}
+                                      isSelected={selectedFollowUpByMsgId[msg.id] === q}
+                                      reduced={!!prefersReducedMotion}
+                                      onClick={() => loadFollowUpIntoComposer(q)}
+                                    />
                                   );
                                 })}
                               </div>
                             );
                           })()
                         ) : (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                          <div className="grid grid-cols-1 gap-2">
                             {msg.followUps!.map((q, i) => (
                               <FollowUpCard
                                 key={`${msg.id}-followup-${i}`}
@@ -7532,14 +7532,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 <button
                   type="button"
                   onClick={cancelFeedback}
-                  className="inline-flex items-center h-9 px-3.5 rounded-lg text-[0.8125rem] font-medium text-ink-700 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center h-9 px-3.5 rounded-md text-[0.8125rem] font-medium text-ink-700 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={submitFeedback}
-                  className="inline-flex items-center h-9 px-4 rounded-lg text-[0.8125rem] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center h-9 px-4 rounded-md text-[0.8125rem] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Send feedback
                 </button>
@@ -7601,7 +7601,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 <button
                   type="button"
                   onClick={() => setNewChatConfirmAfter(null)}
-                  className="inline-flex items-center h-9 px-3.5 rounded-lg text-[0.8125rem] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center h-9 px-3.5 rounded-md text-[0.8125rem] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Keep generating
                 </button>
@@ -7612,7 +7612,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     newChatConfirmAfter?.();
                     setNewChatConfirmAfter(null);
                   }}
-                  className="inline-flex items-center h-9 px-4 rounded-lg text-[0.8125rem] font-semibold bg-risk text-white hover:bg-risk-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-risk/40"
+                  className="inline-flex items-center h-9 px-4 rounded-md text-[0.8125rem] font-semibold bg-risk text-white hover:bg-risk-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-risk/40"
                 >
                   Discard & start new
                 </button>

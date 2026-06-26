@@ -171,7 +171,7 @@ export default function QueryClarificationCard({
                 type="button"
                 onClick={goBack}
                 disabled={!canBack}
-                className="inline-flex items-center gap-1 h-8 pl-2 pr-3 rounded-lg text-[0.8125rem] font-medium text-ink-600 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1 h-8 pl-2 pr-3 rounded-md text-[0.8125rem] font-medium text-ink-600 hover:bg-brand-50 hover:text-ink-800 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <ChevronLeft size={15} /> Back
               </button>
@@ -181,7 +181,7 @@ export default function QueryClarificationCard({
                   onClick={done}
                   disabled={!answeredCurrent && !customInput.trim()}
                   title={answeredCurrent ? undefined : 'Pick an answer to continue'}
-                  className="inline-flex items-center justify-center h-8 px-4 rounded-lg text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center justify-center h-8 px-4 rounded-md text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Done
                 </button>
@@ -191,7 +191,7 @@ export default function QueryClarificationCard({
                   onClick={goNext}
                   disabled={!answeredCurrent && !customInput.trim()}
                   title={answeredCurrent ? undefined : 'Pick an answer to continue'}
-                  className="inline-flex items-center gap-1 h-8 pl-3 pr-2 rounded-lg text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center gap-1 h-8 pl-3 pr-2 rounded-md text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Next <ChevronRight size={15} />
                 </button>
