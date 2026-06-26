@@ -193,8 +193,6 @@ export default function DataPickerModal({
   // All currently-selected existing sources (across every tab) — shown alongside
   // fresh uploads in the combined list on the Upload tab.
   const selectedSources = SEED.filter(s => selectedSourceIds.has(s.id));
-  // Upload tab is in its default (empty) state when nothing has been picked yet.
-  const uploadEmpty = pendingUploads.length === 0 && selectedSources.length === 0;
 
   // Only fully-validated, fully-uploaded files count toward the Attach total —
   // in-flight files aren't attachable yet, and errored files never are.
@@ -368,28 +366,6 @@ export default function DataPickerModal({
                   </button>
                 );
               })}
-              {/* Upload actions on the tab row — only once something is picked. The
-                  default (empty) state keeps its centered buttons in the drop zone. */}
-              {tab === 'upload' && !uploadEmpty && (
-                <div className="ml-auto flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => uploadTriggersRef.current?.chooseFiles()}
-                    className="inline-flex items-center gap-1.5 px-3 h-8 shrink-0 whitespace-nowrap rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
-                  >
-                    <Upload size={13} />
-                    Choose files
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => uploadTriggersRef.current?.chooseFolder()}
-                    className="inline-flex items-center gap-1.5 px-3 h-8 shrink-0 whitespace-nowrap rounded-md border border-paper-200 bg-white text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
-                  >
-                    <Folder size={13} />
-                    Choose folder
-                  </button>
-                </div>
-              )}
             </div>
 
             {/* Search — sits directly below the tabs (it filters the active
@@ -1060,27 +1036,45 @@ function UploadPanel({ pendingUploads, setPendingUploads, selectedSources, onReq
           parent confirms first). Folder uploads keep their path tag inline. */}
       {!empty && (
         <div className={`flex-1 min-h-0 flex flex-col rounded-lg border bg-white overflow-hidden transition-colors ${isDragging ? 'border-brand-600 ring-2 ring-brand-200' : 'border-paper-200'}`}>
-          <div className="shrink-0 px-4 py-2 border-b border-paper-200 bg-canvas flex items-center justify-between">
+          <div className="shrink-0 px-4 py-2 border-b border-paper-200 bg-canvas flex items-center gap-2">
             <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500">
               Selected &amp; uploaded · {totalItems}
             </span>
-            {(() => {
-              const inFlight = pendingUploads.filter(u => u.status === 'validating' || u.status === 'uploading').length;
-              const failed = pendingUploads.filter(u => u.status === 'error').length;
-              if (inFlight > 0) return (
-                <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-600">
-                  <Loader2 size={10} className="animate-spin" />
-                  Uploading {inFlight}…
-                </span>
-              );
-              if (failed > 0) return (
-                <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-risk">
-                  <AlertTriangle size={10} />
-                  {failed} failed
-                </span>
-              );
-              return null;
-            })()}
+            <div className="ml-auto flex items-center gap-2">
+              {(() => {
+                const inFlight = pendingUploads.filter(u => u.status === 'validating' || u.status === 'uploading').length;
+                const failed = pendingUploads.filter(u => u.status === 'error').length;
+                if (inFlight > 0) return (
+                  <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-600">
+                    <Loader2 size={10} className="animate-spin" />
+                    Uploading {inFlight}…
+                  </span>
+                );
+                if (failed > 0) return (
+                  <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-risk">
+                    <AlertTriangle size={10} />
+                    {failed} failed
+                  </span>
+                );
+                return null;
+              })()}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-2.5 h-7 shrink-0 whitespace-nowrap rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.71875rem] font-semibold transition-colors cursor-pointer"
+              >
+                <Upload size={12} />
+                Choose files
+              </button>
+              <button
+                type="button"
+                onClick={() => folderInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-2.5 h-7 shrink-0 whitespace-nowrap rounded-md border border-paper-200 bg-white text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.71875rem] font-semibold transition-colors cursor-pointer"
+              >
+                <Folder size={12} />
+                Choose folder
+              </button>
+            </div>
           </div>
 
           <ul className="flex-1 min-h-0 overflow-y-auto divide-y divide-paper-200">

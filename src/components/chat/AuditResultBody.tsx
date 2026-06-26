@@ -1,9 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { KpiTile } from '../shared/KpiTile';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import { sanitizePartialMarkdown } from './reveal/sanitizePartialMarkdown';
 import { useTypewriter } from './reveal/useTypewriter';
+import { useStream } from './stream/useStream';
+import { useSmoothText } from './stream/useSmoothText';
+import { mockAuditStream, type MockAuditData } from './stream/mockStream';
 
 // ── Reveal choreography ──────────────────────────────────────────────────────
 // Prose leads and is meant to be *watched*. The compact KPI grid brews
@@ -32,6 +35,12 @@ interface AuditResultBodyProps {
   previewRowCount: number;
   /** Snap straight to the finished state (generation stopped). */
   forceComplete?: boolean;
+  /** Flag-gated streaming path: when present, the prose streams from this mock
+   *  event stream (the spine) instead of the fixed-string typewriter. Absent =
+   *  legacy behavior, untouched. */
+  streamData?: MockAuditData;
+  /** Fired once when the stream reaches its 'done' phase. */
+  onDone?: () => void;
 }
 
 // ── Skeletons — sized to the real cards so there is zero layout shift when the
@@ -87,6 +96,17 @@ function TableSkeleton({ columns }: { columns: number }) {
   );
 }
 
+// Simple on/off blink for the streaming caret — a real blinking element rather
+// than a static glyph (toggles a boolean on an interval).
+function useBlink(intervalMs: number): boolean {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    const id = setInterval(() => setOn(o => !o), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return on;
+}
+
 export default function AuditResultBody({
   messageId,
   text,
@@ -96,9 +116,12 @@ export default function AuditResultBody({
   renderTable,
   previewRowCount,
   forceComplete = false,
+  streamData,
+  onDone,
 }: AuditResultBodyProps) {
   const prefersReducedMotion = useReducedMotion();
   const instant = !!prefersReducedMotion || forceComplete;
+  const streaming = !!streamData;
 
   // Animated onsets start false and are flipped only from timer callbacks. The
   // `instant` case is OR'd in at render time, so the effect never sets state
@@ -108,18 +131,44 @@ export default function AuditResultBody({
   const [chartOn, setChartOn] = useState(false);
   const [tableRows, setTableRows] = useState(0);
 
-  const { shown, done } = useTypewriter(text, { enabled: !instant });
+  // ── Prose source ──────────────────────────────────────────────────────────
+  // Streaming path: prose grows from text.delta events via the spine, smoothed
+  // for display. Legacy path: fixed-string typewriter. Both hooks run every
+  // render; the inactive one is inert (null source / disabled).
+  const source = useMemo(
+    () => (streamData && !instant ? mockAuditStream(streamData) : null),
+    [streamData, instant],
+  );
+  const stream = useStream(source);
+  const { shown: streamShown, done: streamCaught } = useSmoothText(stream.text, { reduced: instant });
+  const { shown: typed, done: typedDone } = useTypewriter(text, { enabled: !instant && !streaming });
 
-  // KPI scoreboard brews alongside the prose.
+  const streamTextDone = stream.phase === 'materializing' || stream.phase === 'done';
+  const done = instant ? true : streaming ? (streamCaught && streamTextDone) : typedDone;
+
+  // Fire onDone exactly once when the stream completes.
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+  const firedDone = useRef(false);
   useEffect(() => {
-    if (instant) return;
+    if (streaming && stream.phase === 'done' && !firedDone.current) {
+      firedDone.current = true;
+      onDoneRef.current?.();
+    }
+  }, [streaming, stream.phase]);
+
+  // KPI scoreboard brews on a fixed onset in legacy mode. In streaming mode the
+  // grid is gated on the kpi block arriving (data-driven), so this timer is off.
+  useEffect(() => {
+    if (instant || streaming) return;
     const t = setTimeout(() => setKpiOn(true), KPI_ONSET);
     return () => clearTimeout(t);
-  }, [messageId, instant]);
+  }, [messageId, instant, streaming]);
 
-  // Heavy artifacts wait for the typewriter to land, then stagger in.
+  // Heavy artifacts wait for the typewriter to land, then stagger in. Legacy
+  // only — in streaming mode the chart/table are driven by their block events.
   useEffect(() => {
-    if (instant || !done) return;
+    if (instant || streaming || !done) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
     timers.push(setTimeout(() => {
       setTableOn(true);
@@ -134,25 +183,60 @@ export default function AuditResultBody({
     }, TABLE_AFTER_PROSE));
     timers.push(setTimeout(() => setChartOn(true), CHART_AFTER_PROSE));
     return () => { timers.forEach(clearTimeout); };
-  }, [messageId, instant, done, previewRowCount]);
+  }, [messageId, instant, streaming, done, previewRowCount]);
 
-  const proseSource = instant ? text : shown;
-  const showCaret = !instant && !done && !!text;
+  const proseSource = instant ? text : streaming ? streamShown : typed;
+  const showCaret = !instant && !done && (streaming ? stream.phase !== 'idle' : !!text);
+  const blink = useBlink(530);
+  const caretGlyph = showCaret && (streaming ? blink : true) ? '▌' : '';
 
-  const showKpi = instant || kpiOn;
-  const showTable = instant || tableOn;
-  const showChart = instant || chartOn;
-  const rowsToShow = instant ? previewRowCount : tableRows;
+  // Streaming blocks materialize from the spine's events (data-driven), not the
+  // legacy onset timers: KPIs when the kpi block lands, table rows as the
+  // table block's batches accumulate, chart when its block completes.
+  const kpiBlock = stream.blocks.find(b => b.kind === 'kpi');
+  const tableBlock = stream.blocks.find(b => b.kind === 'table');
+  const chartBlock = stream.blocks.find(b => b.kind === 'chart');
+
+  const showKpi = instant || (streaming ? !!kpiBlock : kpiOn);
+  const showTable = instant || (streaming ? !!tableBlock : tableOn);
+  const showChart = instant || (streaming ? chartBlock?.status === 'complete' : chartOn);
+  const rowsToShow = instant
+    ? previewRowCount
+    : streaming
+      ? Math.min(previewRowCount, tableBlock?.rows?.length ?? 0)
+      : tableRows;
 
   return (
     <div className="space-y-4 w-full">
+      {/* Reasoning trail — the brief "working" beat before the answer streams.
+          Shown only in streaming mode while still reasoning; it gives way to the
+          prose the moment the first answer token lands. */}
+      {streaming && stream.phase === 'reasoning' && stream.reasoning.steps.length > 0 && (
+        <div className="space-y-1" aria-label="Working">
+          {stream.reasoning.steps.map(s => (
+            <div key={s.id} className="flex items-center gap-2 text-[0.75rem] text-ink-500">
+              <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'done' ? 'bg-brand-300' : 'bg-primary'}`} aria-hidden="true" />
+              {s.label}{s.status === 'active' ? '…' : ''}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Prose — streamed char-by-char, markdown kept stable each frame. The
           caret is a glyph appended into the source (before sanitising) so it
           tracks the last character inline instead of dropping below the block
           paragraph, and never reflows the trailing word as it would if toggled. */}
       {text && (
         <div className="text-[0.9375rem] leading-[1.65] text-ink-800 max-w-[66ch]">
-          {renderAssistantText(sanitizePartialMarkdown(proseSource + (showCaret ? '▌' : '')))}
+          {renderAssistantText(sanitizePartialMarkdown(proseSource + caretGlyph))}
+        </div>
+      )}
+
+      {/* Stream failure (defensive — the mock never errors, but the contract and
+          UI handle it for the real source). */}
+      {streaming && stream.phase === 'error' && (
+        <div className="text-[0.8125rem] text-risk-700" role="alert">
+          Couldn’t finish generating this result{stream.error ? ` — ${stream.error}` : ''}.
         </div>
       )}
 
@@ -180,9 +264,12 @@ export default function AuditResultBody({
           the whole card rather than touch the shared ConfigurableChart. */}
       {showChart ? (
         <motion.div
-          initial={instant ? false : { opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: 'spring', stiffness: 240, damping: 26 }}
+          // Streaming: a bottom-up clip wipe so the chart "builds" from its
+          // baseline (reads as rising bars) as recharts draws underneath.
+          // Legacy: the original spring fade.
+          initial={instant ? false : streaming ? { opacity: 0, clipPath: 'inset(100% 0% 0% 0%)' } : { opacity: 0, y: 10 }}
+          animate={streaming ? { opacity: 1, clipPath: 'inset(0% 0% 0% 0%)' } : { opacity: 1, y: 0 }}
+          transition={streaming ? { duration: 0.7, ease: [0.22, 1, 0.36, 1] } : { type: 'spring', stiffness: 240, damping: 26 }}
         >
           {renderChart()}
         </motion.div>
@@ -191,8 +278,19 @@ export default function AuditResultBody({
       )}
 
       {/* Table — header is the schema, rows stream in; the card's fixed height
-          means the body fills without any reflow. */}
-      {showTable ? renderTable(rowsToShow) : <TableSkeleton columns={10} />}
+          means the body fills without any reflow. In streaming mode the rows are
+          driven by the table block's batches, with a live count tracking
+          arrival. */}
+      {showTable ? (
+        <div className="space-y-1.5">
+          {streaming && tableBlock && tableBlock.status !== 'complete' && (
+            <div className="text-[0.6875rem] text-ink-500 tabular-nums" aria-live="polite">
+              Streaming rows… {rowsToShow}
+            </div>
+          )}
+          {renderTable(rowsToShow)}
+        </div>
+      ) : <TableSkeleton columns={10} />}
     </div>
   );
 }

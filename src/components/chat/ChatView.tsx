@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import DatePicker from '../shared/DatePicker';
+import type { MockAuditData } from './stream/mockStream';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import {
@@ -313,13 +314,13 @@ const FOLLOWUP_TRACK_META: Record<
     Icon: Layers,
     label: 'Go deeper',
     caption: 'Drill into the results you just got',
-    badge: 'bg-brand-50 text-brand-600',
+    badge: 'bg-compliant-50 text-compliant-700',
   },
   breadth: {
     Icon: Compass,
     label: 'Go wider',
     caption: 'Run adjacent checks across your sources',
-    badge: 'bg-ink-100 text-ink-500',
+    badge: 'bg-evidence-50 text-evidence-700',
   },
 };
 
@@ -333,13 +334,17 @@ function FollowUpCard({
   isSelected,
   onClick,
   reduced,
+  tag,
 }: {
   q: string;
   delayIndex: number;
   isSelected: boolean;
   onClick: () => void;
   reduced: boolean;
+  /** Optional Go-deeper / Go-wider tag shown at the start of the row. */
+  tag?: { label: string; caption: string; badge: string; Icon: LucideIcon };
 }) {
+  const TagIcon = tag?.Icon;
   return (
     <motion.button
       type="button"
@@ -360,13 +365,34 @@ function FollowUpCard({
         scale: 0.985,
         transition: { type: 'spring', stiffness: 800, damping: 34, mass: 0.12 },
       }}
-      className={`flex h-full items-start text-left px-4 py-3 rounded-xl text-[0.8125rem] leading-snug cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+      className={`group/card flex h-full items-center gap-3 text-left px-4 py-3 rounded-xl text-[0.8125rem] leading-snug cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
         isSelected
           ? 'bg-brand-50 text-brand-700 border border-brand-200'
           : 'bg-canvas-elevated text-ink-700 border border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
       }`}
     >
-      <span>{q}</span>
+      {tag && TagIcon && (
+        <span className="relative group/tag shrink-0">
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold ${tag.badge}`}>
+            <TagIcon size={11} strokeWidth={2} className="shrink-0" />
+            {tag.label}
+          </span>
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute top-full left-0 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.6875rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/tag:opacity-100 transition-opacity z-10"
+          >
+            {tag.caption}
+          </span>
+        </span>
+      )}
+      <span className="flex-1 min-w-0">{q}</span>
+      {/* Decorative cue — the whole card is one click that drops the text into
+          the composer to edit before sending. */}
+      <ArrowRight
+        size={15}
+        aria-hidden
+        className="shrink-0 -translate-x-1 opacity-0 transition-all duration-150 group-hover/card:translate-x-0 group-hover/card:opacity-100"
+      />
     </motion.button>
   );
 }
@@ -478,6 +504,42 @@ const LOADING_STEPS: { label: string; tab: ArtifactTab | null }[] = [
   { label: 'Connecting data sources…',    tab: 'sources' },
   { label: 'Processing 1.2M records…',    tab: null },
 ];
+
+// Streaming v2 — opt-in via ?stream=v2. When on, the audit answer streams from
+// the event spine (text.delta + smoothing + collapsed wait) instead of the
+// fixed 8.4s loader → typewriter. Read once at load; the legacy path is the
+// default and stays byte-identical.
+const STREAM_V2 = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('stream') === 'v2';
+
+// The audit answer prose — shared by the legacy completion path and the v2
+// stream so both render the exact same content.
+const AUDIT_PROSE = `## Duplicate invoice detection — Q1 FY26
+
+Scanned **1.2M invoice records** across the last **90 days** and surfaced **8 high-confidence duplicates** totalling **₹6.16L** in exposure. The strongest pair sits at a **96% match** on **Acme Corp**, which alone accounts for *half of the flags*.
+
+> Sample-data preview: this run used the connected sandbox source. Re-run against your production SAP AP module before promoting any flag to a finding.
+
+### Where to look first
+
+- **Acme Corp** — 4 of 8 flags. Two invoices were posted **3 days apart** for identical amounts under near-identical PO references.
+  - One pair was approved by the same AP clerk; check whether the duplicate-payment control failed open.
+  - The other pair crossed an approval-limit boundary; payment may have already cleared.
+- **Bluepeak Logistics** — 2 flags, both at month-end, both **₹84,000** exactly. Confirm whether one is a credit-note reversal.
+- **Two tail vendors** — single flags each, lower priority but worth a glance before sign-off.
+
+The full plan, SQL, and sources are in the Workspace on the right. Promote any pair to a formal finding from the \`Flagged pairs\` table, or open the [duplicate-payment SOP](https://docs.auditify.example/sops/duplicate-payment) for the standard remediation path.`;
+
+// The v2 stream's content — same numbers/prose/rows as the legacy result, fed
+// to the mock emitter so the answer materializes from events.
+const AUDIT_STREAM_DATA: MockAuditData = {
+  reasoning: ['Generating execution plan', 'Writing SQL query', 'Connecting to data sources'],
+  answer: AUDIT_PROSE,
+  kpis: AUDIT_RESULT.kpis,
+  chart: { id: 'confidence' },
+  columns: AUDIT_RESULT.table.columns,
+  rows: AUDIT_RESULT.table.rows,
+};
 
 const WORKFLOW_TYPE_NAMES: Record<WorkflowTypeId, string> = {
   reconciliation: 'Three-Way Reconciliation',
@@ -680,7 +742,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
           {/* Title doubles as the chart switcher: name + chevron opens a
               dropdown of all charts. Replaces the old right-aligned selector
               box (commented out below). Name is capped at 25 chars. */}
-          <div ref={selectorRef} className="min-w-0 flex-1 relative">
+          <div ref={selectorRef} className="min-w-0 flex-1 relative flex items-center gap-2">
             {charts.length > 1 ? (
               <>
                 <button
@@ -689,10 +751,10 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                   aria-haspopup="menu"
                   aria-expanded={selectorOpen}
                   title={active.label}
-                  className="-ml-1 inline-flex items-center gap-2 max-w-full rounded-lg px-1 py-0.5 hover:bg-brand-50/60 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="-ml-1 inline-flex items-center gap-2 max-w-full rounded-md px-1 py-0.5 hover:bg-brand-50/60 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-                  <span className="text-[0.8125rem] font-semibold text-ink-800 truncate min-w-0">{titleLabel}</span>
+                  <span className="text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 rounded-md px-2 py-0.5 truncate min-w-0">{titleLabel}</span>
                   <ChevronDown size={14} className={`text-ink-400 shrink-0 transition-transform ${selectorOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {selectorOpen && (
@@ -726,8 +788,13 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
             ) : (
               <div className="flex items-center gap-2">
                 <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-                <span className="text-[0.8125rem] font-semibold text-ink-800 truncate min-w-0">{titleLabel}</span>
+                <span className="text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 rounded-md px-2 py-0.5 truncate min-w-0">{titleLabel}</span>
               </div>
+            )}
+            {charts.length > 1 && (
+              <span className="shrink-0 text-[0.6875rem] font-medium text-ink-500 tabular-nums">
+                Chart {charts.findIndex(c => c.id === activeId) + 1} of {charts.length}
+              </span>
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -815,7 +882,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                 aria-expanded={downloadOpen}
                 aria-label="Download chart"
                 title="Download"
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <Download size={13} className="text-ink-400" />
                 <span>Download</span>
@@ -972,7 +1039,7 @@ function FullscreenChartModal({
 const PREVIEW_ROW_COUNT = 9;
 
 function ResultsTable({
-  columns, rows, totalRows, onDownload, title = 'Flagged duplicate pairs',
+  columns, rows, totalRows, onDownload, title = 'Flagged duplicate pairs', animateRows = false,
 }: {
   columns: string[];
   rows: string[][];
@@ -984,6 +1051,10 @@ function ResultsTable({
    *  "Flagged duplicate pairs"; the workflow-run recap passes the run's own
    *  result title (e.g. "Duplicate Invoice Matches"). */
   title?: string;
+  /** Opt-in: each row animates in (fade + slide-up, lightly staggered) as it
+   *  mounts — used by the streaming result so rows visibly arrive instead of
+   *  popping. Off by default; legacy callers are unchanged. */
+  animateRows?: boolean;
 }) {
   const [fullscreen, setFullscreen] = useState(false);
   const prefersReducedMotion = useReducedMotion();
@@ -1067,7 +1138,7 @@ function ResultsTable({
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-canvas-border/70">
           <div className="min-w-0 flex items-center gap-2">
             <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{title}</span>
+            <span className="text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 rounded-md px-2 py-0.5 truncate">{title}</span>
             <span className="font-mono text-[0.6875rem] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1079,7 +1150,7 @@ function ResultsTable({
                   aria-haspopup="menu"
                   aria-expanded={downloadOpen}
                   title="Download"
-                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <Download size={13} className="text-ink-400" />
                   <span>Download</span>
@@ -1148,13 +1219,27 @@ function ResultsTable({
               </tr>
             </thead>
             <tbody>
-              {rows.slice(0, PREVIEW_ROW_COUNT).map((row, i) => (
-                <tr key={i} className="border-b border-canvas-border/40 last:border-b-0 hover:bg-brand-50/40 transition-colors">
-                  {row.map((cell, j) => (
-                    <td key={j} className={`px-5 py-2.5 text-ink-700 whitespace-nowrap ${j >= 3 ? 'tabular-nums' : ''}`}>{cell}</td>
-                  ))}
-                </tr>
-              ))}
+              {rows.slice(0, PREVIEW_ROW_COUNT).map((row, i) => {
+                const cells = row.map((cell, j) => (
+                  <td key={j} className={`px-5 py-2.5 text-ink-700 whitespace-nowrap ${j >= 3 ? 'tabular-nums' : ''}`}>{cell}</td>
+                ));
+                const rowCls = 'border-b border-canvas-border/40 last:border-b-0 hover:bg-brand-50/40 transition-colors';
+                // Each newly-mounted row slides + fades up (streaming reveal),
+                // lightly staggered within a batch. Mounted rows never replay.
+                return animateRows && !prefersReducedMotion ? (
+                  <motion.tr
+                    key={i}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1], delay: (i % 3) * 0.04 }}
+                    className={rowCls}
+                  >
+                    {cells}
+                  </motion.tr>
+                ) : (
+                  <tr key={i} className={rowCls}>{cells}</tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1260,7 +1345,7 @@ function FullscreenTableModal({
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border shrink-0">
           <div className="min-w-0 flex items-center gap-2">
             <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{title}</span>
+            <span className="text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 rounded-md px-2 py-0.5 truncate">{title}</span>
             <span className="font-mono text-[0.6875rem] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1271,7 +1356,7 @@ function FullscreenTableModal({
                 aria-haspopup="menu"
                 aria-expanded={downloadOpen}
                 title="Download"
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[0.75rem] font-medium border bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <Download size={13} className="text-ink-400" />
                 <span>Download</span>
@@ -1569,7 +1654,7 @@ function SaveWorkflowButton() {
     );
   }
   return (
-    <button onClick={() => setSaved(true)} className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.75rem] font-semibold transition-colors cursor-pointer">
+    <button onClick={() => setSaved(true)} className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer">
       <Save size={12} /> Save to Library
     </button>
   );
@@ -1981,10 +2066,17 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
               exposing it as a runtime parameter on the workflow. */}
           {configurables.length > 0 && (
             <div>
-              <label className="block text-[0.75rem] font-semibold text-ink-900 mb-1">Configuration</label>
-              <p className="text-[0.6875rem] text-ink-500 mb-2.5 leading-relaxed">
-                Adjust values the LLM detected as configurable. Removing a key inlines its value as a literal in the saved code.
-              </p>
+              <div className="flex items-center gap-1.5 mb-2.5">
+                <label className="text-[0.75rem] font-semibold text-ink-900">Configuration</label>
+                <span
+                  tabIndex={0}
+                  aria-label="Adjust values the LLM detected as configurable. Removing a key inlines its value as a literal in the saved code."
+                  title="Adjust values the LLM detected as configurable. Removing a key inlines its value as a literal in the saved code."
+                  className="inline-flex items-center text-ink-400 hover:text-ink-600 cursor-help focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded"
+                >
+                  <Info size={12} aria-hidden="true" />
+                </span>
+              </div>
               <div className="space-y-3">
                 {configurables.map((cfg, idx) => (
                   <div key={cfg.key} className={`transition-opacity ${cfg.removed ? 'opacity-50' : ''}`}>
@@ -2225,7 +2317,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
             <button
               type="button"
               onClick={() => setStep('details')}
-              className="inline-flex items-center h-9 px-3 rounded-lg text-[0.75rem] font-medium text-ink-600 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center h-9 px-3 rounded-md text-[0.75rem] font-medium text-ink-600 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <ChevronLeft size={13} className="mr-0.5" /> Back
             </button>
@@ -2233,7 +2325,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
           <div className="flex items-center gap-2">
             <button
               onClick={onCancel}
-              className="inline-flex items-center h-9 px-4 rounded-lg text-[0.8125rem] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center h-9 px-4 rounded-md text-[0.8125rem] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               Cancel
             </button>
@@ -2241,7 +2333,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
               <button
                 onClick={() => canAdvance && setStep('pickWidgets')}
                 disabled={!canAdvance}
-                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 Next <ChevronRight size={13} strokeWidth={2.25} />
               </button>
@@ -2249,7 +2341,7 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
               <button
                 onClick={handleConfirm}
                 disabled={!canConfirm}
-                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary hover:bg-primary-hover disabled:bg-ink-100 disabled:text-ink-400 disabled:cursor-not-allowed text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <Save size={13} strokeWidth={2.25} /> Save & switch to workflow
               </button>
@@ -2838,6 +2930,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // Tracks the saved-conversation id that is currently loaded — drives the
   // active row highlight in the chat-history sidebar. Cleared by resetChat
   // and by sending the first message in a fresh thread.
+  // Highlight the current chat in the recent sheet. Defaults to the most-recent
+  // chat so the sheet always shows which one is selected; updates when another
+  // is loaded, clears on a brand-new chat.
   const [activeChatHistoryId, setActiveChatHistoryId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -3247,7 +3342,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       const el = textareaRef.current;
       if (el) {
         el.style.height = 'auto';
-        el.style.height = Math.min(el.scrollHeight, 260) + 'px';
+        // Edits seeded from the plan (whole-plan or per-step) open at least
+        // ~4 lines tall so the text has room to be revised comfortably.
+        const FOUR_LINES_PX = 112;
+        el.style.height = Math.min(Math.max(el.scrollHeight, FOUR_LINES_PX), 260) + 'px';
         el.focus();
         const len = el.value.length;
         el.setSelectionRange(len, len);
@@ -3284,6 +3382,11 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     timersRef.current.push(t);
   };
 
+  // Streaming v2: true while the event-driven audit answer is materializing.
+  // Keeps the composer in "generating" mode (Stop button, Esc-to-stop) since
+  // the v2 path doesn't use isTyping / showProgressiveLoader.
+  const [streamingActive, setStreamingActive] = useState(false);
+
   // Cancel an in-flight typing simulation. Clears pending timers, hides the
   // thinking trail, and flips isTyping off so the composer returns to Send.
   // If an audit run was mid-flight, tag its message so the UI shows "Stopped"
@@ -3293,19 +3396,30 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setIsTyping(false);
     setThinkingSteps([]);
     setShowProgressiveLoader(false);
+    setStreamingActive(false);
     const haltedId = auditRunMsgIdRef.current;
     auditRunMsgIdRef.current = null;
     activeQueryFlowRef.current = null;
     if (haltedId) {
       setMessages(prev => prev.map(m => {
         if (m.id !== haltedId) return m;
-        // Drop the audit-loading richType so the loader unmounts; keep the
-        // thinking trail and mark the message as stopped for the badge.
-        return { ...m, richType: undefined, stopped: true };
+        // Drop the loader richType so it unmounts; for a streaming result keep
+        // its richType so it snaps to the finished state via forceComplete.
+        // Mark stopped for the badge.
+        return { ...m, richType: m.richType === 'audit-loading' ? undefined : m.richType, stopped: true };
       }));
     }
     addToast({ type: 'info', message: 'Stopped generating.' });
   }, [addToast]);
+
+  // v2 stream finished: leave generating mode and reveal the follow-ups (added
+  // now so they don't show mid-stream).
+  const handleStreamDone = useCallback((id: string) => {
+    setStreamingActive(false);
+    setMessages(prev => prev.map(m => (
+      m.id === id && !m.followUpTracks ? { ...m, followUpTracks: AUDIT_FOLLOWUP_TRACKS } : m
+    )));
+  }, []);
 
   // Reset the entire conversation. Wired to: the header's "+ New chat" button
   // (was the floating chip's button) and the locked-workflow inline link
@@ -3337,7 +3451,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // discard the in-progress response. We surface a confirm dialog before
   // proceeding so the user doesn't accidentally lose work.
   const [newChatConfirmAfter, setNewChatConfirmAfter] = useState<null | (() => void)>(null);
-  const isGenerating = isTyping || showProgressiveLoader;
+  const isGenerating = isTyping || showProgressiveLoader || streamingActive;
   const requestNewChat = useCallback((after?: () => void) => {
     if (isGenerating) {
       // Stash the post-reset callback so the confirmation dialog can run it
@@ -3428,6 +3542,24 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     activeQueryFlowRef.current = 'audit-query';
     const msgId = `msg-audit-run-${Date.now()}`;
     auditRunMsgIdRef.current = msgId;
+
+    if (STREAM_V2) {
+      // v2: create the result message directly and let AuditResultBody stream it
+      // from the spine — no fixed 8.4s loader. Follow-ups are attached on done.
+      setMessages(prev => [...prev, {
+        id: msgId,
+        role: 'assistant',
+        text: AUDIT_PROSE,
+        timestamp: new Date(),
+        richType: 'audit-result',
+        richData: AUDIT_RESULT,
+      }]);
+      setStreamingActive(true);
+      setArtifactMode('query');
+      setShowArtifacts(true);
+      setActiveArtifactTab('plan');
+      return;
+    }
 
     setMessages(prev => [...prev, {
       id: msgId,
@@ -4530,6 +4662,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     setTimeout(() => { processingRef.current = false; }, 2000);
   };
 
+  // Arrow action on a follow-up card: drop the suggestion into the composer so
+  // the user can edit it before sending (Enter), instead of firing immediately.
+  const loadFollowUpIntoComposer = (question: string) => {
+    setInput(question);
+    textareaRef.current?.focus();
+    requestAnimationFrame(() => handleTextareaInput());
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Skip Enter-to-send while an IME composition is in flight (CJK input).
     // Without this, Enter commits the composition AND submits the message,
@@ -4815,6 +4955,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
   const [editingTitle, setEditingTitle] = useState(false);
   const [chatTitleOverride, setChatTitleOverride] = useState<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  // The switcher chip is one button: a single click opens the recent-chats
+  // sheet, a double-click renames. We delay the single-click action briefly so
+  // a double-click can cancel it (otherwise the first click of a double would
+  // toggle the sheet before rename fires).
+  const switcherClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const copyMessage = useCallback(async (msg: ChatMessage) => {
     // For plain text, copy the body. For audit-result, copy a KPI summary so
@@ -4832,6 +4977,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     }
   }, [addToast]);
 
+  // Retry version counter, keyed by the user query's message id (stable across
+  // retries since the assistant turn is replaced). The pager shows N / N —
+  // the latest answer wins; prior answers aren't stored.
+  const [retryVersions, setRetryVersions] = useState<Record<string, number>>({});
+
   const retryFromMessage = useCallback((msgIdx: number) => {
     if (processingRef.current) return;
     // Walk back to find the user query that produced this assistant message.
@@ -4841,7 +4991,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     }
     if (userIdx === -1) return;
     const userText = messages[userIdx].text;
+    const userId = messages[userIdx].id;
     processingRef.current = true;
+    // Bump the version count for this query (1 → 2 → 3 …).
+    setRetryVersions(prev => ({ ...prev, [userId]: (prev[userId] ?? 1) + 1 }));
     // Drop the previous assistant turn(s) and re-simulate from the same query.
     setMessages(prev => prev.slice(0, userIdx + 1));
     simulateResponse(userText, buildWorkflowMode ? undefined : 'query');
@@ -5062,6 +5215,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             {/* Header */}
             <div className="h-12 shrink-0 px-4 flex items-center justify-between border-b border-canvas-border">
               <h3 className="text-[0.8125rem] font-semibold text-ink-900 tracking-tight">Chat history</h3>
+              {/* Close lives INSIDE the sheet; the chat screen only carries an
+                  OPEN affordance (shown when the sheet is closed). */}
               <button
                 type="button"
                 onClick={toggleChatHistory}
@@ -5069,7 +5224,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 title="Close (⌘.)"
                 className="size-7 inline-flex items-center justify-center text-ink-400 hover:text-brand-700 hover:bg-brand-50 rounded-md transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
-                <PanelLeftClose size={15} />
+                <PanelLeftClose size={16} />
               </button>
             </div>
 
@@ -5079,9 +5234,9 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 type="button"
                 onClick={handleNewChatFromSidebar}
                 title="New chat (⌘⇧O)"
-                className="w-full inline-flex items-center justify-center gap-2 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-medium text-ink-700 hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="w-full inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-medium text-ink-700 hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
-                <Plus size={14} strokeWidth={2.25} />
+                <Plus size={16} strokeWidth={2.25} />
                 New chat
               </button>
             </div>
@@ -5100,7 +5255,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                     className={`w-full text-left px-2.5 py-2.5 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                       isActive
-                        ? 'bg-canvas-elevated border border-brand-300 shadow-[0_2px_4px_-1px_rgba(106,18,205,0.18),0_10px_24px_-8px_rgba(106,18,205,0.32)]'
+                        ? 'bg-canvas-elevated border border-brand-300'
                         : 'border border-transparent hover:bg-brand-50/40'
                     }`}
                   >
@@ -5175,9 +5330,16 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
           {floatingLinesBg}
 
           <div className="absolute top-0 left-0 right-0 z-20 flex justify-between px-5 py-3">
-            <button onClick={toggleChatHistory} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label="Chat history" title="Chat history (⌘.)">
-              <PanelLeftOpen size={18} />
-            </button>
+            {/* Open-only: the chat screen shows this icon to OPEN the sheet;
+                once open, closing happens from inside the sheet (so no closing
+                icon sits on the chat screen). Placeholder keeps New chat right. */}
+            {!showChatHistory ? (
+              <button onClick={toggleChatHistory} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label="Chat history" title="Chat history (⌘.)">
+                <PanelLeftOpen size={18} />
+              </button>
+            ) : (
+              <span aria-hidden="true" />
+            )}
             <button onClick={() => requestNewChat()} className="p-2.5 text-text-muted hover:text-text-secondary hover:bg-brand-50 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label="New chat" title="New chat (⌘⇧O)">
               <Plus size={18} />
             </button>
@@ -5201,7 +5363,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     const mockFields = ['Date', 'Region', 'Category', 'Vendor Name', 'Invoice Amount (₹)', 'Status', 'Department', 'Quantity'];
                     onAddToDashboard?.(mockFields);
                   }}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold rounded-lg transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold rounded-md transition-colors cursor-pointer"
                 >
                   <BarChart3 size={12} />
                   Add to Dashboard
@@ -5217,13 +5379,21 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
             </div>
           )}
 
-          <div className="flex-1 flex justify-center overflow-auto px-6">
+          <div className="flex-1 overflow-y-auto">
             <motion.div
               initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: prefersReducedMotion ? 0 : 0.5 }}
-              className={`w-[52.5rem] max-w-full text-center ${buildWorkflowMode ? 'flex flex-col min-h-full pt-10 pb-12' : 'grid grid-rows-[1fr_auto_1fr] h-full'}`}
+              // Hero + composer anchored so the composer's bottom lands at the
+              // SAME spot it had when centered (50% + 102px = the centred
+              // resting line for this block's height), IDENTICALLY in both
+              // modes — so toggling Chat/Workflow never moves them. justify-end
+              // pins the block to that line; removing the centring slack lets
+              // the suggestions below sit a fixed 30px beneath it (Section B's
+              // mt) instead of floating far down the page.
+              className="min-h-[calc(50%+6.375rem)] flex flex-col items-center justify-end px-6"
             >
+              <div className="w-[52.5rem] max-w-full text-center">
               {/* Row 1 — heading group, anchored to the bottom of its row
                   so it sits just above the centered input. pb-8 gives the
                   subtitle a comfortable gap to the shadowed composer below
@@ -5435,7 +5605,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       className="relative inline-flex items-center rounded-full bg-paper-100 p-0.5 shadow-[inset_0_0_0_1px_rgba(15,8,30,0.06)]"
                     >
                       {[
-                        { key: 'query', label: 'Query', Icon: Sparkles, active: !buildWorkflowMode, title: 'Query — ask Ira a question, get an answer' },
+                        { key: 'query', label: 'Chat', Icon: Sparkles, active: !buildWorkflowMode, title: 'Chat — ask Ira a question, get an answer' },
                         { key: 'workflow', label: 'Workflow', Icon: Workflow, active: buildWorkflowMode, title: 'Workflow — build a re-runnable audit workflow' },
                       ].map((m) => (
                         <button
@@ -5455,7 +5625,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                               layoutId="composer-mode-indicator"
                               aria-hidden="true"
                               className="absolute inset-0 -z-10 rounded-full bg-canvas-elevated shadow-[0_1px_2px_rgba(15,8,30,0.10),0_2px_6px_-2px_rgba(15,8,30,0.10),inset_0_0_0_1px_rgba(106,18,205,0.22)]"
-                              transition={prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 440, damping: 36 }}
+                              transition={prefersReducedMotion ? { duration: 0 } : { type: 'tween', duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
                             />
                           )}
                           <m.Icon size={14} strokeWidth={2.25} className={`shrink-0 transition-colors duration-200 ${m.active ? 'text-brand-600' : 'text-ink-400'}`} />
@@ -5479,7 +5649,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 </div>
               </div>
               </div>
+              </div>
+            </motion.div>
 
+            {/* Content section — sits a fixed 30px (mt-[1.875rem]) below the
+                composer; the page scrolls to reveal the rest. Same horizontal
+                width as the hero. */}
+            <div className="mt-[1.875rem] flex flex-col items-center px-6 pb-12">
+              <div className="w-[52.5rem] max-w-full text-center">
               {/* Row 3 — starter prompts, anchored to the top of the row
                   so they sit just below the centered input.
                   Mode-aware AND user-aware:
@@ -5525,7 +5702,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   // content-sized chips, centered container + rows.
                   // No w-[...] lock, no items-start (per the empty-state
                   // chip layout feedback memory).
-                  <div className="pt-7 mx-auto flex flex-col items-center content-start gap-2.5">
+                  <div className="mx-auto flex flex-col items-center content-start gap-2.5">
                     {[suggestions.slice(0, 2), suggestions.slice(2, 5)].map((row, rowIdx) => (
                       <div key={rowIdx} className="flex items-center justify-center gap-2.5">
                         {row.map((label, i) => {
@@ -5558,8 +5735,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   </div>
                 );
               })()}
-
-            </motion.div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -5617,28 +5794,48 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               className="max-w-[280px] sm:max-w-[340px] text-[1rem] font-normal tracking-normal text-ink-900 bg-white border border-brand-200 rounded-md px-2 py-1 -mx-2 outline-none focus:ring-2 focus:ring-primary/20"
             />
           ) : (
-            <button
-              onClick={toggleChatHistory}
-              onDoubleClick={(e) => { e.stopPropagation(); setEditingTitle(true); }}
-              title="Click for history · Double-click to rename"
-              aria-label="Chat history"
-              aria-expanded={showChatHistory}
-              className="group flex items-center gap-2.5 max-w-[280px] sm:max-w-[340px] text-[1rem] font-normal tracking-normal text-ink-900 hover:bg-brand-50 rounded-md px-2 py-1 -mx-2 transition-colors cursor-pointer"
-            >
-              <span className="truncate">{currentChatTitle || 'New chat'}</span>
-              <motion.span
-                animate={{
-                  rotate: showChatHistory ? -180 : 0,
-                  scale: showChatHistory ? 1.05 : 1,
+            <div className="flex items-center max-w-[280px] sm:max-w-[340px]">
+              {/* Switcher chip — ONE button holding the chat name + a history
+                  icon. Single click opens the recent-chats sheet; double-click
+                  renames. A short timer lets the double-click cancel the
+                  single-click action so the sheet doesn't flicker open first. */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (switcherClickTimer.current) clearTimeout(switcherClickTimer.current);
+                  switcherClickTimer.current = setTimeout(() => {
+                    toggleChatHistory();
+                    switcherClickTimer.current = null;
+                  }, 220);
                 }}
-                whileHover={{ scale: 1.12 }}
-                whileTap={{ scale: 0.92 }}
-                transition={{ type: 'spring', stiffness: 380, damping: 22 }}
-                className="inline-flex shrink-0 text-ink-500 group-hover:text-ink-700"
+                onDoubleClick={() => {
+                  if (switcherClickTimer.current) {
+                    clearTimeout(switcherClickTimer.current);
+                    switcherClickTimer.current = null;
+                  }
+                  setEditingTitle(true);
+                }}
+                title="Click for recent chats · double-click to rename"
+                aria-label="Recent chats"
+                aria-expanded={showChatHistory}
+                className="group inline-flex items-center min-w-0 h-8 pl-2.5 pr-2 gap-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.9375rem] font-medium text-ink-800 hover:border-brand-200 hover:bg-brand-50/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
-                <History size={14} />
-              </motion.span>
-            </button>
+                <span className="truncate">{currentChatTitle || 'New chat'}</span>
+                <span className="h-4 w-px bg-canvas-border shrink-0" aria-hidden="true" />
+                <motion.span
+                  animate={{
+                    rotate: showChatHistory ? -180 : 0,
+                    scale: showChatHistory ? 1.05 : 1,
+                  }}
+                  whileHover={{ scale: 1.12 }}
+                  whileTap={{ scale: 0.92 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 22 }}
+                  className="inline-flex shrink-0 text-ink-500 group-hover:text-brand-700 transition-colors"
+                >
+                  <History size={16} />
+                </motion.span>
+              </button>
+            </div>
           )}
           <div className="flex items-center gap-2">
             <Button
@@ -5650,27 +5847,26 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               title="New chat"
               aria-label="New chat"
             >
-              <Plus size={14} />
+              <Plus size={16} />
             </Button>
-            {/* Workspace toggle — always visible. Renders in its
-                pressed/active state when the panel is open so the chat
-                header reflects "workspace is the active section." Icon
-                stays as PanelRightOpen in both states so it doesn't
-                visually duplicate the PanelRightClose inside the panel
-                header (which is the actual close affordance). */}
-            <Button
-              variant="ghost"
-              size="sm"
-              iconOnly
-              shape="md"
-              pressed={showArtifacts}
-              onClick={() => setShowArtifacts(!showArtifacts)}
-              title={showArtifacts ? 'Close Workspace' : 'Open Workspace'}
-              aria-label={showArtifacts ? 'Close Workspace' : 'Open Workspace'}
-              aria-expanded={showArtifacts}
-            >
-              <PanelRightOpen size={14} />
-            </Button>
+            {/* Workspace toggle — OPENS the panel only; shown when the panel
+                is closed. Closing happens from inside the panel (the
+                PanelRightClose button next to Share), not from the chat
+                header. */}
+            {!showArtifacts && (
+              <Button
+                variant="ghost"
+                size="sm"
+                iconOnly
+                shape="md"
+                onClick={() => setShowArtifacts(true)}
+                title="Open Workspace"
+                aria-label="Open Workspace"
+                aria-expanded={false}
+              >
+                <PanelRightOpen size={16} />
+              </Button>
+            )}
           </div>
         </header>
 
@@ -5808,6 +6004,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           kpis={AUDIT_RESULT.kpis}
                           previewRowCount={Math.min(PREVIEW_ROW_COUNT, AUDIT_RESULT.table.rows.length)}
                           forceComplete={msg.stopped}
+                          streamData={STREAM_V2 ? AUDIT_STREAM_DATA : undefined}
+                          onDone={() => handleStreamDone(msg.id)}
                           afterProse={
                             /* Affordance: link inline result to the auto-opened
                                panel. Hidden when the panel is already open (the
@@ -5832,6 +6030,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                               rows={AUDIT_RESULT.table.rows.slice(0, revealedRows)}
                               totalRows={AUDIT_RESULT.table.totalRows}
                               onDownload={() => addToast({ type: 'success', message: 'CSV download started.' })}
+                              animateRows={STREAM_V2}
                             />
                           )}
                         />
@@ -5842,7 +6041,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             to multi-row when the chat column narrows (e.g. with both
                             side panels open) — each button keeps its single-line
                             label instead of squeezing into a 2-line text block. */}
-                        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-canvas-border">
+                        <div className={`flex flex-wrap items-center gap-2 pt-3 border-t border-canvas-border${streamingActive && msg.id === auditRunMsgIdRef.current ? ' hidden' : ''}`}>
                           <ExportReportButton messages={messages} upToMessageId={msg.id} chatTitle={currentChatTitle} />
                           {/* Dashboard button — pressed when one or more dashboards linked. */}
                           {(() => {
@@ -6100,7 +6299,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           <p className="text-[0.75rem] text-text-muted mb-3">Ready to save this workflow to your library for recurring use?</p>
                           <div className="flex gap-2">
                             <SaveWorkflowButton />
-                            <button className="px-3 py-2 text-[0.75rem] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-2 rounded-lg transition-colors cursor-pointer">
+                            <button className="px-3 py-2 text-[0.75rem] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-2 rounded-md transition-colors cursor-pointer">
                               Continue editing
                             </button>
                           </div>
@@ -6477,6 +6676,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       const visibilityClass = isLastAssistant
                         ? 'opacity-100'
                         : 'opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 transition-opacity';
+                      // Retry version count for this answer's query (1/1, 2/2 …).
+                      const retryUserId = (() => {
+                        for (let i = msgIdx - 1; i >= 0; i--) {
+                          if (messages[i].role === 'user') return messages[i].id;
+                        }
+                        return null;
+                      })();
+                      const versionCount = retryUserId ? (retryVersions[retryUserId] ?? 1) : 1;
                       return (
                       <div className={`mt-1.5 flex items-center gap-1 ${visibilityClass}`}>
                         {/* Copy */}
@@ -6549,6 +6756,15 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             Retry
                           </span>
                         </span>
+
+                        {/* Response version counter — increments on Retry; latest answer shown. */}
+                        <span
+                          className="inline-flex items-center px-1.5 h-7 text-[0.6875rem] tabular-nums font-medium text-ink-400 select-none"
+                          title="Response version"
+                          aria-label={`Response version ${versionCount} of ${versionCount}`}
+                        >
+                          {versionCount} / {versionCount}
+                        </span>
                       </div>
                       );
                     })()}
@@ -6594,55 +6810,34 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             const tracks = (['depth', 'breadth'] as const).filter(
                               t => msg.followUpTracks![t]?.length,
                             );
-                            // Running index across BOTH groups so the entrance
-                            // cascade reads as one continuous sequence rather
-                            // than two competing staggers.
-                            let cascade = 0;
+                            // One single section: flatten both tracks into a single
+                            // stacked list. The depth/breadth distinction now rides on
+                            // a per-row Go-deeper / Go-wider tag instead of separate
+                            // section headers. Flat index drives the entrance cascade.
+                            const items = tracks.flatMap(track =>
+                              msg.followUpTracks![track].map(q => ({ q, track })),
+                            );
                             return (
-                              <div className="space-y-4">
-                                {tracks.map(track => {
+                              <div className="grid grid-cols-1 gap-2">
+                                {items.map(({ q, track }, delayIndex) => {
                                   const meta = FOLLOWUP_TRACK_META[track];
-                                  const BadgeIcon = meta.Icon;
                                   return (
-                                    <div key={`${msg.id}-track-${track}`}>
-                                      <motion.div
-                                        initial={{ opacity: 0, y: 6 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: 0.3, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                                        className="mb-2 flex items-center gap-2"
-                                      >
-                                        <span className={`inline-flex items-center justify-center size-6 rounded-md ${meta.badge}`}>
-                                          <BadgeIcon size={13} strokeWidth={2} />
-                                        </span>
-                                        <span className="text-[0.8125rem] font-semibold text-ink-900">{meta.label}</span>
-                                        <span className="text-[0.75rem] text-ink-400">{meta.caption}</span>
-                                      </motion.div>
-                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                        {msg.followUpTracks![track].map(q => {
-                                          const delayIndex = cascade++;
-                                          return (
-                                            <FollowUpCard
-                                              key={`${msg.id}-${track}-${delayIndex}`}
-                                              q={q}
-                                              delayIndex={delayIndex}
-                                              isSelected={selectedFollowUpByMsgId[msg.id] === q}
-                                              reduced={!!prefersReducedMotion}
-                                              onClick={() => {
-                                                setSelectedFollowUpByMsgId(prev => ({ ...prev, [msg.id]: q }));
-                                                handleFollowUpClick(q);
-                                              }}
-                                            />
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
+                                    <FollowUpCard
+                                      key={`${msg.id}-${track}-${delayIndex}`}
+                                      q={q}
+                                      tag={{ label: meta.label, caption: meta.caption, badge: meta.badge, Icon: meta.Icon }}
+                                      delayIndex={delayIndex}
+                                      isSelected={selectedFollowUpByMsgId[msg.id] === q}
+                                      reduced={!!prefersReducedMotion}
+                                      onClick={() => loadFollowUpIntoComposer(q)}
+                                    />
                                   );
                                 })}
                               </div>
                             );
                           })()
                         ) : (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                          <div className="grid grid-cols-1 gap-2">
                             {msg.followUps!.map((q, i) => (
                               <FollowUpCard
                                 key={`${msg.id}-followup-${i}`}
@@ -7077,7 +7272,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             ? <Workflow size={11} strokeWidth={2.25} />
                             : <MessageSquare size={11} strokeWidth={2.25} />}
                         </span>
-                        {buildWorkflowMode ? 'Workflow' : 'Q&A'}
+                        {buildWorkflowMode ? 'Workflow' : 'Chat'}
                       </div>
 
                       {isGenerating ? (
@@ -7337,14 +7532,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 <button
                   type="button"
                   onClick={cancelFeedback}
-                  className="inline-flex items-center h-9 px-3.5 rounded-lg text-[0.8125rem] font-medium text-ink-700 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center h-9 px-3.5 rounded-md text-[0.8125rem] font-medium text-ink-700 hover:text-ink-800 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={submitFeedback}
-                  className="inline-flex items-center h-9 px-4 rounded-lg text-[0.8125rem] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center h-9 px-4 rounded-md text-[0.8125rem] font-semibold bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Send feedback
                 </button>
@@ -7406,7 +7601,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 <button
                   type="button"
                   onClick={() => setNewChatConfirmAfter(null)}
-                  className="inline-flex items-center h-9 px-3.5 rounded-lg text-[0.8125rem] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center h-9 px-3.5 rounded-md text-[0.8125rem] font-medium text-ink-700 hover:text-ink-900 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Keep generating
                 </button>
@@ -7417,7 +7612,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     newChatConfirmAfter?.();
                     setNewChatConfirmAfter(null);
                   }}
-                  className="inline-flex items-center h-9 px-4 rounded-lg text-[0.8125rem] font-semibold bg-risk text-white hover:bg-risk-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-risk/40"
+                  className="inline-flex items-center h-9 px-4 rounded-md text-[0.8125rem] font-semibold bg-risk text-white hover:bg-risk-600 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-risk/40"
                 >
                   Discard & start new
                 </button>

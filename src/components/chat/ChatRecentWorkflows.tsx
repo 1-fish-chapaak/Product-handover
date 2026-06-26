@@ -26,7 +26,7 @@ export default function ChatRecentWorkflows({ onPick }: Props) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-      className="w-full text-left pt-8 pb-2"
+      className="w-full text-left pb-2"
     >
       <div className="flex items-start justify-between mb-3">
         <div>

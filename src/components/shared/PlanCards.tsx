@@ -8,8 +8,8 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ListChecks, ChevronDown, AlertTriangle,
-  FileSpreadsheet, FileText, Database, File as FileIcon,
+  ListChecks, ChevronDown, AlertTriangle, RefreshCw, Pencil,
+  FileText,
 } from 'lucide-react';
 
 // ─── Data contracts ──────────────────────────────────────────────────────
@@ -51,13 +51,6 @@ const STEP_BADGE: Record<PlanStepType, { label: string; bg: string; text: string
   calculate: { label: 'CALCULATION', bg: 'bg-mitigated-50',  text: 'text-mitigated-700' },
 };
 
-function typeIcon(type: string) {
-  if (type === 'csv' || type === 'excel') return FileSpreadsheet;
-  if (type === 'pdf') return FileText;
-  if (type === 'sql') return Database;
-  return FileIcon;
-}
-
 function typeColor(type: string): string {
   if (type === 'csv' || type === 'excel') return 'text-compliant-700 bg-compliant-50';
   if (type === 'pdf') return 'text-high-700 bg-high-50';
@@ -66,90 +59,89 @@ function typeColor(type: string): string {
 }
 
 function StepFilesAndColumns({ sources }: { sources: PlanCardSource[] }) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [showAllExpanded, setShowAllExpanded] = useState<Set<string>>(new Set());
+  // One file open at a time — clicking a pill reveals that file's columns in a
+  // full-width strip below the pill row; clicking it again (or another pill)
+  // collapses / switches.
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const COLLAPSED_COLUMN_CAP = 6;
-  const toggle = (id: string) => setExpanded(prev => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
-  const toggleShowAll = (id: string) => setShowAllExpanded(prev => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
+
+  const selectFile = (id: string) => {
+    setActiveId(prev => (prev === id ? null : id));
+    setShowAll(false);
+  };
+
+  const activeSource = sources.find(s => s.id === activeId) ?? null;
+  const activeCols = activeSource?.columns ?? [];
+  const visibleCols = showAll ? activeCols : activeCols.slice(0, COLLAPSED_COLUMN_CAP);
+  const hiddenCount = activeCols.length - visibleCols.length;
+
   return (
-    <div className="rounded-lg border border-canvas-border bg-canvas/40 overflow-hidden">
-      <ul className="flex flex-col">
-        {sources.map((input, i) => {
+    <div className="flex flex-col gap-1.5">
+      {/* File pills — name · column count · file-type tag. */}
+      <div className="flex flex-wrap gap-1.5">
+        {sources.map((input) => {
           const cols = input.columns ?? [];
-          const isExpanded = expanded.has(input.id);
-          const isShowAll = showAllExpanded.has(input.id);
-          const Icon = typeIcon(input.type);
-          const visibleCols = isShowAll ? cols : cols.slice(0, COLLAPSED_COLUMN_CAP);
-          const hiddenCount = cols.length - visibleCols.length;
+          const isActive = input.id === activeId;
           return (
-            <li key={input.id} className={i > 0 ? 'border-t border-canvas-border/60' : ''}>
-              <button
-                type="button"
-                onClick={() => toggle(input.id)}
-                aria-expanded={isExpanded}
-                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-canvas-elevated transition-colors cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
-              >
-                <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 ${typeColor(input.type)}`}>
-                  <Icon size={11} />
-                </div>
-                <div className="flex-1 min-w-0 flex items-center gap-2">
-                  <span className="text-[12.5px] font-semibold text-ink-800 truncate">{input.name}</span>
-                  <span className="text-[11px] font-mono text-ink-500 tabular-nums shrink-0">
-                    {cols.length} col{cols.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-ink-400 shrink-0">
-                  {input.type}
-                </span>
-                <ChevronDown
-                  size={12}
-                  className={`text-ink-400 shrink-0 transition-transform duration-150 ${isExpanded ? '' : '-rotate-90'}`}
-                />
-              </button>
-              {isExpanded && cols.length > 0 && (
-                <div className="px-3 pb-2.5 pt-0.5">
-                  <div className="flex flex-wrap gap-1">
-                    {visibleCols.map(col => (
-                      <span
-                        key={col}
-                        className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[11.5px] font-mono text-brand-700"
-                      >
-                        {col}
-                      </span>
-                    ))}
-                    {hiddenCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => toggleShowAll(input.id)}
-                        className="inline-flex items-center rounded-md bg-canvas-elevated border border-canvas-border hover:border-brand-200 hover:bg-brand-50/40 px-1.5 py-0.5 text-[11.5px] font-mono text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
-                      >
-                        +{hiddenCount} more
-                      </button>
-                    )}
-                    {isShowAll && cols.length > COLLAPSED_COLUMN_CAP && (
-                      <button
-                        type="button"
-                        onClick={() => toggleShowAll(input.id)}
-                        className="inline-flex items-center rounded-md bg-canvas-elevated border border-canvas-border hover:border-brand-200 hover:bg-brand-50/40 px-1.5 py-0.5 text-[11.5px] font-mono text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
-                      >
-                        Show less
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </li>
+            <button
+              key={input.id}
+              type="button"
+              onClick={() => selectFile(input.id)}
+              aria-expanded={isActive}
+              title={`${input.name} — ${cols.length} column${cols.length === 1 ? '' : 's'}`}
+              className={`inline-flex items-center gap-1.5 rounded-lg border border-canvas-border px-2.5 py-1.5 text-[0.8125rem] font-semibold text-brand-700 transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                isActive
+                  ? 'bg-paper-100'
+                  : 'bg-white hover:bg-paper-50/60'
+              }`}
+            >
+              <FileText size={14} strokeWidth={2} className="shrink-0" />
+              <span className="truncate max-w-[12rem]">{input.name}</span>
+              <span className={`text-[0.625rem] font-bold uppercase tracking-wider rounded px-1 py-0.5 ${typeColor(input.type)}`}>
+                {input.type}
+              </span>
+            </button>
           );
         })}
-      </ul>
+      </div>
+
+      {/* Columns for the open file. */}
+      {activeSource && activeCols.length > 0 && (
+        <div className="rounded-lg border border-canvas-border/70 bg-canvas/30 px-3 py-2.5">
+          <div className="text-[11px] font-semibold text-ink-600 mb-1.5">
+            Columns in {activeSource.name}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {visibleCols.map(col => (
+              <span
+                key={col}
+                className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-1.5 py-0.5 text-[11.5px] font-mono text-brand-700"
+              >
+                {col}
+              </span>
+            ))}
+            {hiddenCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowAll(true)}
+                className="inline-flex items-center rounded-md bg-canvas-elevated border border-canvas-border hover:border-brand-200 hover:bg-brand-50/40 px-1.5 py-0.5 text-[11.5px] font-mono text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
+              >
+                +{hiddenCount} more
+              </button>
+            )}
+            {showAll && activeCols.length > COLLAPSED_COLUMN_CAP && (
+              <button
+                type="button"
+                onClick={() => setShowAll(false)}
+                className="inline-flex items-center rounded-md bg-canvas-elevated border border-canvas-border hover:border-brand-200 hover:bg-brand-50/40 px-1.5 py-0.5 text-[11.5px] font-mono text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
+              >
+                Show less
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -157,9 +149,11 @@ function StepFilesAndColumns({ sources }: { sources: PlanCardSource[] }) {
 // ─── Query Execution Plan card ───────────────────────────────────────────
 // Numbered steps + type badge + description + expandable source chips.
 
-export function QueryExecutionPlanCard({ steps, onEdit }: {
+export function QueryExecutionPlanCard({ steps, onEdit, onRegenerate, onStepEdit }: {
   steps: PlanCardStep[];
   onEdit?: () => void;
+  onRegenerate?: () => void;
+  onStepEdit?: (step: PlanCardStep) => void;
 }) {
   return (
     <div className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]">
@@ -167,8 +161,18 @@ export function QueryExecutionPlanCard({ steps, onEdit }: {
         <div className="flex-1 flex items-center gap-2 text-[14px] font-semibold tracking-tight text-ink-900">
           <ListChecks size={14} className="text-primary shrink-0" />
           <span className="flex-1 text-left">Query Execution Plan</span>
-          <span className="text-[12px] font-normal text-ink-500">{steps.length} total</span>
         </div>
+        {onRegenerate && (
+          <button
+            type="button"
+            onClick={onRegenerate}
+            title="Regenerate plan"
+            className="ml-1 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-2 py-1 rounded-md cursor-pointer transition-colors"
+          >
+            <RefreshCw size={12} />
+            Regenerate
+          </button>
+        )}
         {onEdit && (
           <button
             type="button"
@@ -186,10 +190,10 @@ export function QueryExecutionPlanCard({ steps, onEdit }: {
           return (
             <li
               key={step.id}
-              className={`px-4 py-3 hover:bg-brand-50/30 transition-colors ${idx > 0 ? 'border-t border-canvas-border/70' : ''}`}
+              className={`group/step px-4 py-3 hover:bg-brand-50/30 transition-colors ${idx > 0 ? 'border-t border-canvas-border/70' : ''}`}
             >
               <div className="flex items-start gap-3">
-                <span className="w-6 h-6 rounded-full bg-ink-900 text-white flex items-center justify-center text-[12px] font-bold shrink-0 mt-0.5 tabular-nums">
+                <span className="shrink-0 mt-0.5 size-5 rounded-full bg-brand-600 text-white text-[0.6875rem] font-bold flex items-center justify-center tabular-nums" aria-hidden>
                   {idx + 1}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -208,6 +212,18 @@ export function QueryExecutionPlanCard({ steps, onEdit }: {
                     </div>
                   )}
                 </div>
+                {onStepEdit && (
+                  <button
+                    type="button"
+                    onClick={() => onStepEdit(step)}
+                    title={`Edit step — ${step.name}`}
+                    aria-label={`Edit step — ${step.name}`}
+                    className="shrink-0 -mt-0.5 inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-1.5 py-0.5 rounded-md cursor-pointer transition-[color,background-color,opacity] opacity-0 group-hover/step:opacity-100 focus-visible:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  >
+                    <Pencil size={11} />
+                    Edit
+                  </button>
+                )}
               </div>
             </li>
           );
