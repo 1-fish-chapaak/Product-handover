@@ -9,8 +9,9 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ListChecks, ChevronDown, AlertTriangle, RefreshCw, Pencil,
-  FileText,
+  FileText, Brain, Check, ShieldCheck,
 } from 'lucide-react';
+import type { AssumptionMemory } from '../../data/insightMemory';
 
 // ─── Data contracts ──────────────────────────────────────────────────────
 
@@ -37,6 +38,9 @@ export interface PlanCardStep {
 export interface PlanAssumption {
   key: string;
   value: string;
+  /** When present, this value was recalled from prior input rather than asked
+   *  again — the AssumptionsCard renders a memory-provenance row beneath it. */
+  memory?: AssumptionMemory;
 }
 
 // ─── Internal helpers ────────────────────────────────────────────────────
@@ -236,13 +240,52 @@ export function QueryExecutionPlanCard({ steps, onEdit, onRegenerate, onStepEdit
 // ─── Assumptions card ────────────────────────────────────────────────────
 // Collapsible key/value list; "Edit" hands the assumptions to the composer.
 
-export function AssumptionsCard({ assumptions, onEdit, context = 'query' }: {
+// Memory-provenance row shown beneath an assumption recalled from prior input.
+// This is the "fewer clarifications" payoff — instead of re-asking, IRA shows
+// what it assumed, where it learned it, and a one-tap way to correct it.
+function AssumptionMemoryRow({ memory, onCorrect }: {
+  memory: AssumptionMemory;
+  onCorrect?: () => void;
+}) {
+  const pct = Math.round(memory.confidence * 100);
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.6875rem]">
+      <span className="inline-flex items-center gap-1 rounded-md bg-brand-50 ring-1 ring-inset ring-brand-100 px-1.5 py-0.5 font-semibold text-brand-700">
+        {memory.enterprise ? <ShieldCheck size={11} /> : <Brain size={11} />}
+        {memory.enterprise ? 'Enterprise memory' : 'From memory'}
+      </span>
+      <span className="text-ink-500">
+        You set this in <span className="font-medium text-ink-700">{memory.source}</span> · {memory.learnedOn}
+      </span>
+      <span
+        title="Memory's confidence that your earlier answer still applies"
+        className="inline-flex items-center gap-1 rounded-md bg-compliant-50 px-1.5 py-0.5 font-semibold text-compliant-700 tabular-nums"
+      >
+        <Check size={10} strokeWidth={3} /> {pct}% still applies
+      </span>
+      {onCorrect && (
+        <button
+          type="button"
+          onClick={onCorrect}
+          className="inline-flex items-center gap-1 text-ink-400 hover:text-brand-700 font-medium transition-colors cursor-pointer"
+        >
+          <Pencil size={10} /> Not right? Correct it
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function AssumptionsCard({ assumptions, onEdit, onCorrectAssumption, context = 'query' }: {
   assumptions: PlanAssumption[];
   onEdit?: () => void;
+  /** Called when the user taps "Correct it" on a memory-backed assumption. */
+  onCorrectAssumption?: (assumption: PlanAssumption) => void;
   context?: 'query' | 'workflow';
 }) {
   const [open, setOpen] = useState(true);
   if (assumptions.length === 0) return null;
+  const recalledCount = assumptions.filter(a => a.memory).length;
   return (
     <section
       aria-label="Assumptions"
@@ -263,6 +306,11 @@ export function AssumptionsCard({ assumptions, onEdit, context = 'query' }: {
             <h3 className="text-[0.75rem] font-semibold text-ink-900 leading-tight tracking-tight">Assumptions</h3>
             <p className="text-[0.75rem] text-ink-500 mt-px leading-tight">
               {assumptions.length} defaults applied to this {context}
+              {recalledCount > 0 && (
+                <span className="text-brand-700 font-medium">
+                  {' · '}saved you {recalledCount} clarification{recalledCount === 1 ? '' : 's'}
+                </span>
+              )}
             </p>
           </div>
         </button>
@@ -310,10 +358,18 @@ export function AssumptionsCard({ assumptions, onEdit, context = 'query' }: {
               {assumptions.map((a) => (
                 <div
                   key={a.key}
-                  className="grid grid-cols-[130px_minmax(0,1fr)] gap-4 px-2 py-2 rounded-md hover:bg-paper-50/70 transition-colors"
+                  className={`grid grid-cols-[130px_minmax(0,1fr)] gap-4 px-2 py-2 rounded-md transition-colors ${a.memory ? 'bg-brand-50/30 hover:bg-brand-50/50' : 'hover:bg-paper-50/70'}`}
                 >
                   <dt className="text-[0.75rem] font-medium text-ink-500 leading-[1.45] self-start">{a.key}</dt>
-                  <dd className="text-[0.8125rem] text-ink-900 leading-[1.5]">{a.value}</dd>
+                  <dd className="text-[0.8125rem] text-ink-900 leading-[1.5]">
+                    {a.value}
+                    {a.memory && (
+                      <AssumptionMemoryRow
+                        memory={a.memory}
+                        onCorrect={onCorrectAssumption ? () => onCorrectAssumption(a) : undefined}
+                      />
+                    )}
+                  </dd>
                 </div>
               ))}
             </dl>

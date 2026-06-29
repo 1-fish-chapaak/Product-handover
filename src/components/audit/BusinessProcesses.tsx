@@ -30,6 +30,8 @@ import { AuditLogsView, deterministicCaseCount, type LibraryWorkflow, type BulkR
 // the Workflow Library's bulk run).
 type BulkAuditRun = { name: string; workflows: BulkRunWorkflowResult[]; skippedCount: number; date: string };
 import BPOverviewDashboard from './BPOverviewDashboard';
+import ProcessInsightsTab from './ProcessInsightsTab';
+import { PROCESS_INSIGHTS } from '../../data/insightMemory';
 import RiskRegister, { SEED_RISKS } from './RiskRegister';
 import ColumnFilter from '../shared/ColumnFilter';
 import ConfirmationModal from '../shared/ConfirmationModal';
@@ -4959,7 +4961,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   const reduceMotion = useReducedMotion();
   const [animateOverviewIn] = useState(() => { const first = !overviewHasAnimated; overviewHasAnimated = true; return first; });
 
-  type SectionKey = 'sop' | 'racm' | 'risks' | 'controls' | 'workflows';
+  type SectionKey = 'sop' | 'racm' | 'risks' | 'controls' | 'workflows' | 'ai-insights';
 
   // ─── Data: single query per entity, filtered by business_process_id ───
   const bpRacms = RACMS.filter(r => r.bpId === bp.id);
@@ -5112,8 +5114,9 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     risks: { title: 'Risks', count: bpRisks.length, countLabel: 'risks', warning: bpRisks.length === 0 ? 'no risks captured' : undefined },
     controls: { title: 'Controls', count: bpControls.length, countLabel: 'controls', warning: bpControls.length === 0 ? 'no controls defined' : undefined },
     workflows: { title: 'Workflows', count: getSeedWorkflows(bp.abbr).length, countLabel: 'workflows', warning: getSeedWorkflows(bp.abbr).length === 0 ? 'no workflows linked' : undefined },
+    'ai-insights': { title: 'AI Insights', count: PROCESS_INSIGHTS.length, countLabel: 'insights' },
   };
-  const sectionOrder: SectionKey[] = ['sop', 'racm', 'risks', 'controls', 'workflows'];
+  const sectionOrder: SectionKey[] = ['sop', 'racm', 'risks', 'controls', 'workflows', 'ai-insights'];
 
   // Single source of truth for "is this section set up?" — shared by both the
   // "Set up this business process" checklist and the "Coverage by section"
@@ -5323,13 +5326,28 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
         healthRatioText: bpWfs.length === 0 ? '' : `${activeWfs}/${bpWfs.length} active`,
         entries: workflowEntries,
       },
+      // AI Insights is a read-only intelligence view, not a setup section, so it
+      // carries no coverage ratio (null → excluded from the health rollup).
+      'ai-insights': {
+        icon: Sparkles,
+        health: 'healthy',
+        breakdown: 'Learned across runs',
+        lastActivity: 'Updated after every run',
+        ctaLabel: 'Open',
+        ratio: null,
+        openCount: 0,
+        openLabel: '',
+        description: 'Patterns memory learned across this process’s workflow runs.',
+        healthRatioText: '',
+        entries: [],
+      },
     };
   }, [bpSops, bpRacms, createdRacms, bpRisks, bpControls, bpWfs]);
 
   // ── "What needs attention" items — computed from the same seed data. ───────
   // Each item links to the section where the user can act on it.
   const attentionItems = useMemo(() => {
-    const items: Array<{ text: string; section: SectionKey }> = [];
+    const items: Array<{ text: string; section: Exclude<SectionKey, 'ai-insights'> }> = [];
     const draftRacms = bpRacms.filter(r => r.status === 'draft').length
                      + createdRacms.filter(r => r.isFrozen === false).length;
     if (draftRacms > 0) {
@@ -5387,12 +5405,14 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     risks: 'Risks',
     controls: 'Controls',
     workflows: 'Workflows',
+    'ai-insights': 'AI Insights',
   };
 
   // Tooltips for the tab buttons (all tabs for completeness).
   const sectionTabTooltip: Partial<Record<SectionKey, string>> = {
     sop: 'Standard Operating Procedures',
     racm: 'Risk & Control Matrices',
+    'ai-insights': 'Patterns memory learned across this process’s workflow runs',
   };
   // Tab icons — SOP upload, RACM document, risk triangle, control shield, workflow nodes.
   const sectionTabIcon: Record<SectionKey, React.ComponentType<{ size?: number; className?: string }>> = {
@@ -5401,6 +5421,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     risks: AlertTriangle,
     controls: Shield,
     workflows: Workflow,
+    'ai-insights': Sparkles,
   };
   // Switch to a different drilled section in-place (also updates URL).
   const switchDrilledSection = (next: SectionKey) => {
@@ -5432,6 +5453,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     risks: 'Create new Risk',
     controls: 'Create new Control',
     workflows: 'Create Workflow',
+    'ai-insights': '',
   };
 
   // Trigger the create flow for a given section. RACM lives in this component;
@@ -5766,6 +5788,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
           {drilledSection === 'risks' && <RiskRegister processFilter={bp.abbr} />}
           {drilledSection === 'controls' && <ControlDesignTab bpAbbr={bp.abbr} seeded={isSeedProcess} onGoToRacm={() => switchDrilledSection('racm')} />}
           {drilledSection === 'workflows' && <WorkflowGovernanceTab bpAbbr={bp.abbr} seeded={isSeedProcess} onOpenWorkflowDetail={onOpenWorkflowDetail} onCreateWorkflow={onCreateWorkflow} onRunWorkflow={onRunWorkflow} onBulkRunComplete={setBulkAuditRun} />}
+          {drilledSection === 'ai-insights' && <ProcessInsightsTab bpAbbr={bp.abbr} bpName={bp.name} />}
         </div>
       </div>
     );
