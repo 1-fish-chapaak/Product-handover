@@ -86,7 +86,7 @@ export default function SopProcessFlow({ nodes }: { nodes: FlowNode[] }) {
       rendered.add(currentId);
       out.push(<NodeCard key={`f${key++}`} node={node} />);
 
-      const nexts = node.next ?? [];
+      const nexts: string[] = node.next ?? [];
       if (node.type === 'decision' && nexts.length >= 2) {
         const branches = [
           { label: 'Yes', target: nexts[0], tone: 'compliant' as const },
