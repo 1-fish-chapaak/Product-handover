@@ -2257,13 +2257,13 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         return (
           <SopDocumentModal
             open={!!viewingSop}
+            sopId={viewingSop?.id}
             sopName={viewingSop?.name ?? ''}
-            subProcess={viewingSop?.businessProcess}
             version={viewingSop?.version}
             uploadedBy={viewingSop?.uploadedBy}
             uploadedAgo={viewingSop?.uploadedAt}
             sections={DEFAULT_SOP_SECTIONS}
-            onDownload={() => viewingSop && addToast({ message: `Downloading ${viewingSop.name}…`, type: 'info' })}
+            onDownload={(kind) => viewingSop && addToast({ message: `Downloading ${viewingSop.name}${kind ? ` (${kind})` : ''}…`, type: 'info' })}
             onClose={() => setViewingSopId(null)}
           />
         );
