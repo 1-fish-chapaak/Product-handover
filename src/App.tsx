@@ -320,6 +320,9 @@ function AppInner() {
   // One-shot: when the SOX report flow routes to Engagements, open it pre-filtered
   // to Compliance. Cleared on consume so plain visits stay unfiltered.
   const [engagementsSoxFilter, setEngagementsSoxFilter] = useState(false);
+  // One-shot: open the Engagements view directly on its Approval Flow tab (e.g. from
+  // the report "Create new approval flow" action).
+  const [engApprovalFlow, setEngApprovalFlow] = useState(false);
   useEffect(() => {
     const handler = (e: Event) => {
       const id = (e as CustomEvent<{ id: string }>).detail?.id;
@@ -357,7 +360,22 @@ function AppInner() {
     return () => window.removeEventListener('irame:command-palette-navigate', handler);
   }, [setView, setSelectedBP, setFocusedNotificationRefId]);
 
+  // Generic in-app view navigation — lets deep components (e.g. the report
+  // "Assign Approval Flow" modal jumping to Administration → Approval Flow)
+  // switch views without prop-drilling setView through every layer.
   useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ view?: string; engTab?: string }>).detail;
+      // Optional: open the Engagements view directly on its Approval Flow tab.
+      if (detail?.engTab === 'approval-flow') setEngApprovalFlow(true);
+      if (detail?.view) setView(detail.view as View);
+    };
+    window.addEventListener('app:navigate-view', handler);
+    return () => window.removeEventListener('app:navigate-view', handler);
+  }, [setView]);
+
+  useEffect(() => {
+    // Skip the skeleton for instant destinations — chat and home.
     if (state.view === 'chat' || state.view === 'home') return;
     // Intentional: flash a 400ms skeleton on every view change. The extra render
     // this triggers is the desired behaviour (skeleton in, then out), not the
@@ -857,6 +875,7 @@ function AppInner() {
               if (mexReturnReportId) { setFocusReportId(mexReturnReportId); setMexReturnReportId(null); }
             }}
             embedded={LAUNCHED_FROM_REPORT}
+            showApprovalFlowAssign
           />
         );
 
@@ -880,6 +899,8 @@ function AppInner() {
             onOpenEngagement={openEngagement}
             initialTypeFilter={engagementsSoxFilter ? 'Compliance' : undefined}
             onInitialFilterConsumed={() => setEngagementsSoxFilter(false)}
+            initialApprovalFlow={engApprovalFlow}
+            onApprovalFlowConsumed={() => setEngApprovalFlow(false)}
           />
         );
 
@@ -919,6 +940,7 @@ function AppInner() {
             onBack={() => setView('engagement-overview')}
             exceptions={exceptionsForEngagementAsGrc(caseEngId)}
             contextLabel={caseEng?.name}
+            showApprovalFlowAssign={caseEng?.type === 'Internal Audit' || caseEng?.type === 'Automation'}
           />
         );
       }

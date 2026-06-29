@@ -65,7 +65,7 @@ export default function WorkflowPipelineBuilder({
               <label className="text-[11px] font-semibold text-ink-600 mb-1 block">Approver(s)</label>
               <UserMultiSelect users={users} selectedIds={lvl.assigneeIds} onChange={ids => update(lvl.id, { assigneeIds: ids })} />
             </div>
-            <div>
+            <div className="col-span-2">
               <label className="text-[11px] font-semibold text-ink-600 mb-1 block">Approval mode</label>
               <select
                 value={lvl.mode}
@@ -74,32 +74,6 @@ export default function WorkflowPipelineBuilder({
               >
                 {MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
-            </div>
-            <div>
-              <label className="text-[11px] font-semibold text-ink-600 mb-1 block">SLA</label>
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number" min={1}
-                  value={lvl.slaHours % 24 === 0 ? lvl.slaHours / 24 : lvl.slaHours}
-                  onChange={e => {
-                    const n = Math.max(1, Number(e.target.value) || 1);
-                    const unitIsDays = lvl.slaHours % 24 === 0;
-                    update(lvl.id, { slaHours: unitIsDays ? n * 24 : n });
-                  }}
-                  className="w-16 h-9 px-2.5 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[12.5px] text-ink-800 focus:outline-none focus:border-brand-600"
-                />
-                <select
-                  value={lvl.slaHours % 24 === 0 ? 'days' : 'hours'}
-                  onChange={e => {
-                    const base = lvl.slaHours % 24 === 0 ? lvl.slaHours / 24 : lvl.slaHours;
-                    update(lvl.id, { slaHours: e.target.value === 'days' ? base * 24 : base });
-                  }}
-                  className="flex-1 h-9 px-2 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[12.5px] text-ink-800 focus:outline-none focus:border-brand-600 cursor-pointer"
-                >
-                  <option value="hours">hours</option>
-                  <option value="days">days</option>
-                </select>
-              </div>
             </div>
             <label className="col-span-2 flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={lvl.allowSendBack} onChange={e => update(lvl.id, { allowSendBack: e.target.checked })} className="w-4 h-4 accent-brand-600 cursor-pointer" />
