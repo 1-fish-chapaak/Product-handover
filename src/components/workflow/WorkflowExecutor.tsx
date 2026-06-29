@@ -16,6 +16,7 @@ import { PlanSection, type ExecutorParameters } from '../concierge-workflow-buil
 import ExecutorColumnMapping from './ExecutorColumnMapping';
 import SlotFunctionTag from './SlotFunctionTag';
 import ArtifactPanel from '../artifacts/ArtifactPanel';
+import WorkflowMemoryPanel, { RowMemoryMarker, GoldenRecordPlanCard } from './WorkflowMemoryPanel';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { seedAlignments } from '../concierge-workflow-builder/mockApi';
 import type {
@@ -2732,7 +2733,10 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                           className="grid grid-cols-[140px_1fr_120px_110px_90px] gap-3 px-5 py-3 border-b border-canvas-border last:border-0 hover:bg-brand-50/30 transition-colors items-center min-w-[640px]"
                         >
                           <span className="text-[12px] font-mono text-brand-700 font-medium">{row.invoiceNo}</span>
-                          <span className="text-[12px] text-ink-800 truncate">{row.vendor}</span>
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-[12px] text-ink-800 truncate">{row.vendor}</span>
+                            <RowMemoryMarker vendor={row.vendor} />
+                          </span>
                           <span className="text-[12px] font-mono text-ink-800 font-medium">{row.amount}</span>
                           <span className="text-[12px] font-mono text-ink-500 bg-canvas px-2 py-0.5 rounded w-fit">{row.duplicateGroup}</span>
                           <ConfidenceChip value={row.confidence} />
@@ -2761,6 +2765,10 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       Run again
                     </button>
                   </div>
+
+                  {/* Memory surfaces — golden-record bypass, source-drift
+                      re-ask, cross-workflow correlation, output compare. */}
+                  <WorkflowMemoryPanel />
 
                   {/* Follow-up — bridge from "here are results" to a chat
                       thread that already carries the run as context. */}
@@ -2852,7 +2860,14 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                 activeTab={wsTab}
                 setActiveTab={setWsTab}
                 onClose={() => setRightOpen(false)}
-                planSlot={<PlanSection workflow={workflow} />}
+                planSlot={
+                  <div className="pt-4 space-y-3">
+                    {/* Golden-record reuse + cost summary — only meaningful once
+                        the run has executed, so it rides above the plan post-run. */}
+                    {phase === 'complete' && <GoldenRecordPlanCard />}
+                    <PlanSection workflow={workflow} />
+                  </div>
+                }
                 showHistory
                 onShareResults={onShareResults}
                 onOpenInKnowledgeHub={onOpenInKnowledgeHub}

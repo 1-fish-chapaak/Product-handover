@@ -13,7 +13,7 @@ import Gated from '../shared/Gated';
 import { useToast } from '../shared/Toast';
 import { SEED as DATA_SOURCE_SEED, TYPE_META, formatDate, type DataSource } from '../data-sources/sources';
 import { type ComposerContext, editPlanContext, editCodeContext } from '../chat/composerContext';
-import { QueryExecutionPlanCard, AssumptionsCard, type PlanCardStep } from '../shared/PlanCards';
+import { QueryExecutionPlanCard, AssumptionsCard, type PlanCardStep, type PlanAssumption } from '../shared/PlanCards';
 
 interface ArtifactPanelProps {
   activeTab: ArtifactTab;
@@ -94,18 +94,28 @@ function CollapsibleSection({ title, icon: Icon, defaultOpen = true, children, a
   );
 }
 
-interface PlanAssumption {
-  key: string;
-  value: string;
-}
-
+// Assumptions for the QnA Plan tab. Two are recalled from memory (carry a
+// `memory` provenance block) so the AssumptionsCard shows "saved you 2
+// clarifications" instead of IRA re-asking which column / how to scope vendors.
 const PLAN_ASSUMPTIONS: PlanAssumption[] = [
+  {
+    key: 'Revenue field', value: 'total_revenue → "Net Sales" column',
+    memory: {
+      source: 'Q1 Revenue Recon', learnedOn: '2 weeks ago', confidence: 0.94, enterprise: true,
+      sparedQuestion: 'Which column is total_revenue — Net Sales or Gross Sales?',
+    },
+  },
+  {
+    key: 'Vendor scope', value: 'All vendors in SAP AP Module',
+    memory: {
+      source: 'AP Duplicate run', learnedOn: 'last month', confidence: 0.88,
+      sparedQuestion: 'Should I scope to active vendors only or all vendors?',
+    },
+  },
   { key: 'Date range',       value: 'Full FY26 (Apr 2025 – Mar 2026)' },
   { key: 'Amount tolerance', value: '± 5% on invoice amounts' },
-  { key: 'Vendor scope',     value: 'All vendors in SAP AP Module' },
   { key: 'Matching logic',   value: 'Fuzzy match on invoice number + vendor + amount' },
   { key: 'Excluded',         value: 'Voided and reversed invoices' },
-  { key: 'Currency',         value: 'INR (converted at booking rate)' },
 ];
 
 // Chat/QnA execution-plan steps, in the shared PlanCard shape so they render
@@ -222,6 +232,13 @@ function PlanTab({
         assumptions={assumptions}
         context="query"
         onEdit={onComposeInChat ? handleEditAssumptions : undefined}
+        onCorrectAssumption={onComposeInChat ? (a) => {
+          // Tapping "Correct it" on a recalled assumption seeds the composer
+          // with the original question memory spared the user, so they can
+          // override it in one turn (and re-teach memory).
+          const q = a.memory?.sparedQuestion ?? `the "${a.key}" assumption`;
+          onComposeInChat(`Memory assumed ${a.key} = "${a.value}" (from ${a.memory?.source ?? 'a prior run'}). That's not right for this query — ${q} `);
+        } : undefined}
       />
     </div>
   );
