@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Check, ArrowLeft, X, CloudUpload } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Check, ArrowLeft, X, CloudUpload, Loader2, Maximize2 } from 'lucide-react';
 import { AtrUploadProvider, useAtrUpload } from './AtrUploadContext';
-import { seedSession, seedEmptySession } from './mockExtraction';
+import { seedSession, seedEmptySession, PROCESSING_MESSAGES, PROCESSING_DURATION_MS } from './mockExtraction';
 import { handoffToManageExceptions } from './handoff';
 import { saveAtrDraft } from '../atrDraft';
 import { toAtrReportData } from './toAtrReportData';
@@ -129,19 +129,53 @@ function toUploadedFile(f: File): UploadedFile {
   };
 }
 
-function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenChange }: {
+function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenChange, onMinimizedChange }: {
   onClose?: () => void;
   onManageExceptions?: () => void;
   onSaveAtr?: (sessionId: string, label: string | undefined, data: AtrReportData) => string;
   /** Fires when the close-confirm opens/closes so the host can hide its own
    *  backdrop and leave a single uniform scrim. */
   onConfirmOpenChange?: (open: boolean) => void;
+  /** Fires when the wizard minimizes to / restores from the floating toast, so the
+   *  host can drop the backdrop and shrink the container (non-blocking extraction). */
+  onMinimizedChange?: (minimized: boolean) => void;
 }) {
   const { state, setMethod, setSession, goTo } = useAtrUpload();
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   // The sticky footer DOM node — steps portal their primary CTA into it.
   const [footerEl, setFooterEl] = useState<HTMLElement | null>(null);
+
+  // Extraction runs HERE (not in Step3Processing) so it keeps advancing while the
+  // wizard is minimized to a floating toast. Progress/step drive both the full
+  // processing screen and the toast.
+  const [progress, setProgress] = useState(0);
+  const [step, setStep] = useState(0);
+  // Minimized → shown as a small fixed progress toast; the rest of the app is usable.
+  const [minimized, setMinimized] = useState(false);
+  useEffect(() => { onMinimizedChange?.(minimized); }, [minimized, onMinimizedChange]);
+
+  // Drive the progress whenever we're on the processing stage; on completion,
+  // advance to the summary. Survives minimize/restore (lives above the screens).
+  const goToRef = useRef(goTo);
+  goToRef.current = goTo;
+  useEffect(() => {
+    if (state.stage !== 'processing') return;
+    setProgress(0); setStep(0);
+    const start = performance.now();
+    let raf = 0;
+    const loop = (now: number) => {
+      const elapsed = now - start;
+      const t = Math.min(1, elapsed / PROCESSING_DURATION_MS);
+      const eased = 1 - Math.pow(1 - t, 2);
+      setProgress(eased * 100);
+      setStep(Math.min(PROCESSING_MESSAGES.length - 1, Math.floor(eased * PROCESSING_MESSAGES.length)));
+      if (elapsed < PROCESSING_DURATION_MS) raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    const done = window.setTimeout(() => goToRef.current('summary'), PROCESSING_DURATION_MS);
+    return () => { cancelAnimationFrame(raf); window.clearTimeout(done); };
+  }, [state.stage]);
 
   // Closing mid-flow discards in-progress work — guard every exit past the
   // method picker. The confirm copy scales with how much is on the line: a live
@@ -182,19 +216,19 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenC
       module: 'Reports',
       entity: 'ATR Extraction',
     });
+    // Minimize to the floating toast so extraction runs without blocking the app.
+    setMinimized(true);
     goTo('processing');
   };
 
-  // Per-observation hand-off: send only the exception rows linked to one
-  // observation to Manage Exceptions, keeping each observation's cases segregated.
+  // Per-observation hand-off: send the exception rows linked to one observation
+  // to Manage Exceptions, opened in a NEW TAB so the ATR preview stays put.
   const goToManageExceptions = (observationId: string) => {
     if (!state.session) return;
     const obs = state.session.observations.find(o => o.id === observationId);
-    const n = handoffToManageExceptions(state.session, observationId);
+    const n = handoffToManageExceptions(state.session, observationId, { newTab: true });
     const label = obs ? (obs.title?.trim() || `Observation #${obs.number}`) : 'an observation';
-    logEvent({ action: 'Export', description: `Handed off ${n} exception row${n === 1 ? '' : 's'} from "${label}" to Manage Exceptions`, module: 'Reports', entity: 'Exception Case' });
-    if (onManageExceptions) onManageExceptions();
-    else addToast({ type: 'warning', message: 'Manage Exceptions is not available in this context.' });
+    logEvent({ action: 'Export', description: `Handed off ${n} exception row${n === 1 ? '' : 's'} from "${label}" to Manage Exceptions (new tab)`, module: 'Reports', entity: 'Exception Case' });
   };
 
   // Whole-report hand-off from the decision screen (Step 6): send every linked
@@ -217,6 +251,48 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenC
     setMethod(method);
     goTo(method === 'template' ? 'template' : 'upload');
   };
+
+  if (minimized) {
+    const done = state.stage !== 'processing';
+    const obsCount = state.session?.observations.length ?? 0;
+    return (
+      <FooterSlotContext.Provider value={footerEl}>
+        <div className="p-4">
+          <div className="flex items-start gap-3">
+            <span className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
+              {done ? <Check size={16} aria-hidden="true" /> : <Loader2 size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-semibold text-ink-900 leading-tight">{done ? 'Extraction complete' : 'Extracting your report'}</div>
+              <div className="text-[11.5px] text-ink-500 truncate mt-0.5">{done ? `${obsCount} observation${obsCount === 1 ? '' : 's'} ready` : PROCESSING_MESSAGES[step]}</div>
+            </div>
+            {!done && <span className="text-[13px] font-bold tabular-nums text-brand-700 shrink-0">{Math.round(progress)}%</span>}
+            <button onClick={requestClose} className="w-7 h-7 rounded-full text-ink-400 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Close"><X size={14} /></button>
+          </div>
+          {!done && (
+            <div className="mt-3 h-1.5 rounded-full bg-brand-50 overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-500 transition-[width]" style={{ width: `${progress}%` }} />
+            </div>
+          )}
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <span className="text-[11px] text-ink-400">{done ? 'Your ATR is ready to review.' : 'Running in the background — keep working.'}</span>
+            <button onClick={() => setMinimized(false)} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[8px] text-[12px] font-semibold text-white bg-brand-600 hover:bg-brand-500 cursor-pointer transition-colors">
+              <Maximize2 size={13} aria-hidden="true" /> {done ? 'Open ATR' : 'Open'}
+            </button>
+          </div>
+        </div>
+        <ReportDiscardDialog
+          open={confirmClose}
+          title={CLOSE_CONFIRM_COPY[closeConfirmKind].title}
+          body={CLOSE_CONFIRM_COPY[closeConfirmKind].body}
+          confirmLabel={CLOSE_CONFIRM_COPY[closeConfirmKind].confirm}
+          cancelLabel={CLOSE_CONFIRM_COPY[closeConfirmKind].cancel}
+          onConfirm={() => { setConfirmClose(false); onClose?.(); }}
+          onCancel={() => setConfirmClose(false)}
+        />
+      </FooterSlotContext.Provider>
+    );
+  }
 
   return (
     <FooterSlotContext.Provider value={footerEl}>
@@ -243,14 +319,14 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenC
         <div className={`flex-1 min-h-0 ${state.stage === 'summary' ? 'overflow-hidden' : 'overflow-y-auto px-6 py-5'}`}>
           {state.stage === 'method' && <Step1MethodSelect onPick={pickMethod} />}
           {state.stage === 'template' && (
-            <Step2aTemplateDownload onUpload={file => beginExtraction(file, 'template')} />
+            <Step2aTemplateDownload onUpload={(file, annexures) => beginExtraction(file, 'template', annexures)} />
           )}
           {state.stage === 'upload' && (
             <Step2bReportUpload onExtract={(report, annexures, meta) => beginExtraction(report, 'report', annexures, meta)} />
           )}
-          {state.stage === 'processing' && <Step3Processing onDone={() => goTo('summary')} />}
+          {state.stage === 'processing' && <Step3Processing progress={progress} step={step} />}
           {state.stage === 'summary' && <Step4ExtractionSummary onContinue={() => goTo('annexures')} />}
-          {state.stage === 'annexures' && <Step5AnnexureMapping onContinue={() => goTo('decision')} />}
+          {state.stage === 'annexures' && <Step5AnnexureMapping onContinue={() => goTo('preview')} />}
           {state.stage === 'decision' && <Step6Decision onGenerate={() => goTo('preview')} onManageExceptions={goToManageExceptionsAll} />}
           {state.stage === 'preview' && <Step7AtrPreview onManageExceptions={goToManageExceptions} onSaveAtr={onSaveAtr} />}
         </div>
@@ -277,15 +353,16 @@ function AtrUploadInner({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenC
 
 /** The "Generate by Upload" tab — self-contained: owns its own provider so the
  *  wizard state persists independently of the rest of the reports module. */
-export default function AtrUploadTab({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenChange }: {
+export default function AtrUploadTab({ onClose, onManageExceptions, onSaveAtr, onConfirmOpenChange, onMinimizedChange }: {
   onClose?: () => void;
   onManageExceptions?: () => void;
   onSaveAtr?: (sessionId: string, label: string | undefined, data: AtrReportData) => string;
   onConfirmOpenChange?: (open: boolean) => void;
+  onMinimizedChange?: (minimized: boolean) => void;
 }) {
   return (
     <AtrUploadProvider>
-      <AtrUploadInner onClose={onClose} onManageExceptions={onManageExceptions} onSaveAtr={onSaveAtr} onConfirmOpenChange={onConfirmOpenChange} />
+      <AtrUploadInner onClose={onClose} onManageExceptions={onManageExceptions} onSaveAtr={onSaveAtr} onConfirmOpenChange={onConfirmOpenChange} onMinimizedChange={onMinimizedChange} />
     </AtrUploadProvider>
   );
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AlertTriangle, FileSearch, RotateCcw, ArrowRight, CheckCheck } from 'lucide-react';
+import Checkbox from '../../../shared/Checkbox';
 import { Button } from '../../../shared/Button';
 import { useToast } from '../../../shared/Toast';
 import { useAtrUpload } from '../AtrUploadContext';
@@ -159,8 +160,23 @@ export default function Step4ExtractionSummary({ onContinue }: { onContinue: () 
 
       {/* ── Right pane: the list, full modal height, full-bleed ───────────── */}
       <div className="flex-1 min-w-0 min-h-0 overflow-y-auto px-6 pt-4 pb-4">
+        {/* Select-all header — one checkbox to include/exclude every observation. */}
+        <div className="flex items-center justify-between gap-3 mb-3 px-1">
+          <label className="inline-flex items-center gap-2.5 cursor-pointer text-[12.5px] font-semibold text-ink-800">
+            <Checkbox
+              checked={selected.length === observations.length && observations.length > 0}
+              onChange={() => setAll(selected.length !== observations.length)}
+              ariaLabel="Select all observations"
+            />
+            Select all observations
+          </label>
+          <span className="text-[11.5px] text-ink-400 tabular-nums">
+            <span className="font-semibold text-ink-700">{selected.length}</span> of {observations.length} selected · only selected proceed
+          </span>
+        </div>
+
         {visible.length > 0 ? (
-          <div className="rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-hidden divide-y divide-canvas-border">
+          <div className="space-y-2.5">
             {visible.map(o => (
               <ObservationExtractCard
                 key={o.id}

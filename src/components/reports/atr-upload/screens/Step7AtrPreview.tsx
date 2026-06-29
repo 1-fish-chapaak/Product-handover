@@ -12,7 +12,6 @@ import { ATR_SECTION_ORDER, ATR_SECTION_LABEL, type AtrSectionKey } from '../../
 import { toAtrReportData } from '../toAtrReportData';
 import { useAtrUpload } from '../AtrUploadContext';
 import { WizardFooter } from '../footerSlot';
-import ObservationExceptionsModal from '../components/ObservationExceptionsModal';
 import type { AtrReportData } from '../../atrTypes';
 
 /** Screen 7 — ATR preview. Reuses the existing AtrDocument renderer (brand
@@ -30,12 +29,8 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
 
   const [editMode, setEditMode] = useState(false);
   const [sectionsOpen, setSectionsOpen] = useState(false);
-  // Download menu — PDF or Word.
-  const [showFormats, setShowFormats] = useState(false);
   const [order, setOrder] = useState<AtrSectionKey[]>(ATR_SECTION_ORDER);
   const [hidden, setHidden] = useState<AtrSectionKey[]>([]);
-  // Observation whose linked exceptions are open in the per-observation modal.
-  const [exceptionsObsId, setExceptionsObsId] = useState<string | null>(null);
 
   // Snapshot the session into an editable ATR draft on first entry.
   useEffect(() => {
@@ -49,7 +44,6 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
   // filters by `selected`), so the per-observation action slot's index maps back here.
   const selectedObs = session.observations.filter(o => o.selected);
   const annexFor = (obsId: string) => session.annexures.filter(a => a.observationId === obsId);
-  const exceptionObs = exceptionsObsId ? session.observations.find(o => o.id === exceptionsObsId) ?? null : null;
 
   const isEditing = editMode;
 
@@ -57,7 +51,6 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
     updateSession(s => ({ ...s, atrDraft: { ...(s.atrDraft ?? toAtrReportData(s)), ...partial } }));
 
   const handleDownload = (kind: 'pdf' | 'word') => {
-    setShowFormats(false);
     if (kind === 'word') { exportAtrWord(data.meta, data.observations); addToast({ type: 'success', message: 'ATR exported to Word.' }); return; }
     // PDF via the browser's print engine: the global print stylesheet
     // (index.css @media print) hides all chrome and emits only the
@@ -98,7 +91,7 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
       <WizardFooter>
         <div className="flex items-center justify-between gap-3 flex-wrap border-t border-canvas-border bg-canvas-elevated px-6 py-3 print:hidden">
           <div className="flex items-center gap-2.5">
-            <Button variant="ghost" size="md" leftIcon={<ArrowLeft size={15} />} onClick={() => goTo('decision')}>Back</Button>
+            <Button variant="ghost" size="md" leftIcon={<ArrowLeft size={15} />} onClick={() => goTo('annexures')}>Back</Button>
             {state.versions[0] && <span className="text-[11px] font-semibold tabular-nums text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">{state.versions[0].versionNumber}</span>}
           </div>
 
@@ -145,23 +138,9 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
               </AnimatePresence>
             </div>
 
-            <div className="relative">
-              <Button variant="outline" size="md" leftIcon={<Download size={15} />} rightIcon={<ChevronDown size={13} className={`transition-transform ${showFormats ? 'rotate-180' : ''}`} />} onClick={() => setShowFormats(o => !o)}>Preview &amp; Download</Button>
-              <AnimatePresence>
-                {showFormats && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setShowFormats(false)} />
-                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className="absolute right-0 bottom-full mb-2 w-[224px] z-20 rounded-[12px] border border-canvas-border bg-canvas-elevated shadow-xl overflow-hidden py-1">
-                      {[{ k: 'pdf' as const, l: 'Print / Save as PDF' }, { k: 'word' as const, l: 'Download as Word' }].map(f => (
-                        <button key={f.k} onClick={() => handleDownload(f.k)} className="w-full text-left px-3.5 py-2.5 text-[12.5px] text-ink-700 hover:bg-brand-50 hover:text-brand-700 transition-colors cursor-pointer">{f.l}</button>
-                      ))}
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
+            <Button variant="outline" size="md" leftIcon={<Download size={15} />} onClick={() => handleDownload('pdf')} title="Download the ATR as a PDF">Download</Button>
             <span className="w-px h-5 bg-canvas-border mx-0.5 hidden sm:block" aria-hidden="true" />
-            <Button variant="primary" size="md" leftIcon={<Save size={15} />} onClick={handleSave}>Save Version</Button>
+            <Button variant="primary" size="md" leftIcon={<Save size={15} />} onClick={handleSave}>Save Report</Button>
           </div>
         </div>
       </WizardFooter>
@@ -187,7 +166,8 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
           return (
             <button
               type="button"
-              onClick={() => setExceptionsObsId(eo.id)}
+              onClick={() => onManageExceptions?.(eo.id)}
+              title="Open these cases in Manage Exceptions (new tab)"
               className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[7px] text-[11.5px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 cursor-pointer transition-colors"
             >
               <ListTodo size={13} aria-hidden="true" /> Manage Exceptions
@@ -200,22 +180,6 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
       {isEditing && (
         <p className="text-center text-[11.5px] text-ink-400 mt-4 print:hidden">Click any text in the report to edit it. Changes save automatically.</p>
       )}
-
-      {/* Per-observation linked-exceptions modal */}
-      <AnimatePresence>
-        {exceptionObs && (
-          <ObservationExceptionsModal
-            obs={exceptionObs}
-            annexures={annexFor(exceptionObs.id)}
-            onClose={() => setExceptionsObsId(null)}
-            onGoToCaseManagement={() => {
-              const id = exceptionObs.id;
-              setExceptionsObsId(null);
-              onManageExceptions?.(id);
-            }}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }
