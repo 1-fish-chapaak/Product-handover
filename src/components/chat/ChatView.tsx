@@ -14,7 +14,7 @@ import {
   Bookmark, BookmarkCheck,
   Search, GitCompare, ShieldCheck, Info, Loader2, AlertTriangle, type LucideIcon,
   LayoutDashboard, ListChecks, FileCode,
-  Layers, Compass,
+  Layers, Compass, Trash2,
 } from 'lucide-react';
 import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS, WORKFLOWS } from '../../data/mockData';
 import {
@@ -751,11 +751,10 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                   aria-haspopup="menu"
                   aria-expanded={selectorOpen}
                   title={active.label}
-                  className="-ml-1 inline-flex items-center gap-2 max-w-full rounded-md px-1 py-0.5 hover:bg-brand-50/60 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex items-center gap-1 max-w-full rounded-md px-2 py-0.5 text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
-                  <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-                  <span className="text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 rounded-md px-2 py-0.5 truncate min-w-0">{titleLabel}</span>
-                  <ChevronDown size={14} className={`text-ink-400 shrink-0 transition-transform ${selectorOpen ? 'rotate-180' : ''}`} />
+                  <span className="truncate min-w-0">{titleLabel}</span>
+                  <ChevronDown size={14} className={`text-brand-600 shrink-0 transition-transform ${selectorOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {selectorOpen && (
                   <div
@@ -786,8 +785,7 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
                 )}
               </>
             ) : (
-              <div className="flex items-center gap-2">
-                <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
+              <div className="flex items-center min-w-0">
                 <span className="text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 rounded-md px-2 py-0.5 truncate min-w-0">{titleLabel}</span>
               </div>
             )}
@@ -955,6 +953,27 @@ function FullscreenChartModal({
   onClose: () => void;
 }) {
   const active = charts.find(c => c.id === activeId) ?? charts[0];
+  // Chart switcher: a name + chevron pill that opens a dropdown of all charts —
+  // matches the embedded chart card. Replaces the old right-aligned segmented
+  // tabs. Click-outside / Escape close the menu.
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const selectorRef = useRef<HTMLDivElement | null>(null);
+  const TITLE_MAX = 25;
+  const titleLabel = active.label.length > TITLE_MAX ? `${active.label.slice(0, TITLE_MAX).trimEnd()}…` : active.label;
+  useEffect(() => {
+    if (!selectorOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const r = selectorRef.current;
+      if (r && !r.contains(e.target as Node)) setSelectorOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectorOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [selectorOpen]);
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -977,39 +996,57 @@ function FullscreenChartModal({
         style={{ width: '96vw', height: '94vh' }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Header — same layout as the embedded chart card: legend dot
-            + active chart name on the left, bordered segmented control
-            on the right, close X at the far right. */}
+        {/* Header — matches the embedded chart card: the title doubles as the
+            chart switcher (name + chevron pill → dropdown of all charts) on the
+            left, close button at the far right. */}
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border shrink-0">
-          <div className="min-w-0 flex items-center gap-2">
-            <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
-            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{active.label}</span>
+          <div ref={selectorRef} className="min-w-0 relative flex items-center gap-2">
+            {charts.length > 1 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setSelectorOpen(o => !o)}
+                  aria-haspopup="menu"
+                  aria-expanded={selectorOpen}
+                  title={active.label}
+                  className="inline-flex items-center gap-1 max-w-full rounded-md px-2 py-0.5 text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                >
+                  <span className="truncate min-w-0">{titleLabel}</span>
+                  <ChevronDown size={14} className={`text-brand-600 shrink-0 transition-transform ${selectorOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {selectorOpen && (
+                  <div
+                    role="menu"
+                    className="absolute left-0 top-full mt-1 z-40 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_28px_-12px_rgba(15,8,30,0.22)] overflow-hidden py-1 max-h-80 overflow-y-auto"
+                  >
+                    {charts.map(c => {
+                      const isActive = c.id === activeId;
+                      const Icon = chartIcon(c.id);
+                      return (
+                        <button
+                          key={c.id}
+                          role="menuitemradio"
+                          aria-checked={isActive}
+                          onClick={() => { onActiveChange(c.id); setSelectorOpen(false); }}
+                          title={c.label}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-[0.78125rem] text-left transition-colors cursor-pointer ${
+                            isActive ? 'bg-brand-50/60 text-brand-700 font-medium' : 'text-ink-800 hover:bg-paper-50'
+                          }`}
+                        >
+                          <Icon size={13} className={`shrink-0 ${isActive ? 'text-brand-600' : 'text-ink-500'}`} />
+                          <span className="flex-1 min-w-0 truncate">{c.label}</span>
+                          {isActive && <Check size={12} strokeWidth={3} className="text-brand-600 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            ) : (
+              <span className="text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 rounded-md px-2 py-0.5 truncate min-w-0">{titleLabel}</span>
+            )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {charts.length > 1 && (
-              <div className="inline-flex items-center gap-1" role="tablist">
-                {charts.map(c => {
-                  const isActive = c.id === activeId;
-                  const Icon = c.id === 'vendor' ? PieChart : BarChart3;
-                  return (
-                    <button
-                      key={c.id}
-                      role="tab"
-                      aria-selected={isActive}
-                      onClick={() => onActiveChange(c.id)}
-                      className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[0.75rem] font-medium border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                        isActive
-                          ? 'bg-brand-50 text-brand-700 border-brand-200'
-                          : 'bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
-                      }`}
-                    >
-                      <Icon size={13} className={isActive ? 'text-brand-600' : 'text-ink-400'} />
-                      <span>{c.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
             <button
               onClick={onClose}
               className="inline-flex items-center justify-center size-8 rounded-lg text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
@@ -1137,7 +1174,6 @@ function ResultsTable({
             tight strip. */}
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-canvas-border/70">
           <div className="min-w-0 flex items-center gap-2">
-            <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
             <span className="text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 rounded-md px-2 py-0.5 truncate">{title}</span>
             <span className="font-mono text-[0.6875rem] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
           </div>
@@ -1344,7 +1380,6 @@ function FullscreenTableModal({
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border shrink-0">
           <div className="min-w-0 flex items-center gap-2">
-            <span className="size-2 rounded-sm bg-brand-600 shrink-0" aria-hidden="true" />
             <span className="text-[0.8125rem] font-semibold text-brand-700 bg-brand-50 rounded-md px-2 py-0.5 truncate">{title}</span>
             <span className="font-mono text-[0.6875rem] tabular-nums text-ink-400 shrink-0">· {totalRows}</span>
           </div>
@@ -2083,7 +2118,6 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
                     <div className="flex items-baseline justify-between gap-2 mb-1.5">
                       <div className="inline-flex items-baseline gap-2 min-w-0">
                         <span className="text-[0.8125rem] font-semibold text-ink-900 truncate">{cfg.key}</span>
-                        <span className="text-[0.6875rem] text-ink-400 font-normal shrink-0">{cfg.type}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -2098,18 +2132,22 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
                         className="no-focus-ring flex-1 h-10 px-3 text-[0.8125rem] text-ink-800 border border-canvas-border hover:border-ink-300 rounded-lg bg-canvas-elevated focus:border-brand-400 outline-none transition-colors disabled:bg-paper-50 disabled:text-ink-400 disabled:cursor-not-allowed"
                         aria-label={`Value for ${cfg.key}`}
                       />
-                      <label className="inline-flex items-center gap-2 cursor-pointer select-none text-[0.75rem] text-ink-700 shrink-0">
-                        <input
-                          type="checkbox"
-                          checked={cfg.removed}
-                          onChange={e => {
-                            const checked = e.target.checked;
-                            setConfigurables(prev => prev.map((c, i) => i === idx ? { ...c, removed: checked } : c));
-                          }}
-                          className="size-4 rounded border-ink-300 text-brand-600 focus:ring-2 focus:ring-brand-300 focus:ring-offset-0 cursor-pointer"
-                        />
-                        Remove
-                      </label>
+                      {/* Trash toggle — replaces the old checkbox + "Remove"
+                          label. Behavior is unchanged: clicking marks the row
+                          removed (dims it + locks the value via the same
+                          `removed` flag, filtered out on Save); clicking again
+                          restores it. aria-pressed carries the toggle state for
+                          assistive tech now that the visible text is gone. */}
+                      <button
+                        type="button"
+                        onClick={() => setConfigurables(prev => prev.map((c, i) => i === idx ? { ...c, removed: !c.removed } : c))}
+                        aria-pressed={cfg.removed}
+                        aria-label={cfg.removed ? `Restore ${cfg.key}` : `Remove ${cfg.key}`}
+                        title={cfg.removed ? 'Restore' : 'Remove'}
+                        className="inline-flex items-center justify-center size-7 rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -2358,10 +2396,46 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
 // brand-tint as the pill so the in-place edit reads as "the same message,
 // just opened up", not as a foreign control.
 
+// Append a new conversation branch at message `idx` carrying `newText`,
+// snapshotting the current downstream into the active branch first (so it
+// stays restorable via the version pager) and then truncating the thread to
+// just past the branch point. Shared by edit-save and retry so BOTH grow the
+// same `‹ x / y ›` pager under the question rather than discarding old answers.
+function appendQueryBranch(
+  prev: ChatMessage[],
+  idx: number,
+  newText: string,
+  touchTimestamp: boolean,
+): ChatMessage[] {
+  const current = prev[idx];
+  const downstreamBefore = prev.slice(idx + 1);
+  const previousBranches: { text: string; downstream: ChatMessage[] }[] =
+    current.branches ?? [{ text: current.text, downstream: downstreamBefore }];
+  // Refresh the active branch's downstream snapshot so any in-thread state
+  // changes (added-to-dashboard, bookmarks, picked follow-ups) are preserved
+  // before we move off it.
+  const refreshedBranches = previousBranches.map((b, i) =>
+    i === (current.branchIndex ?? previousBranches.length - 1)
+      ? { ...b, downstream: downstreamBefore }
+      : b
+  );
+  const updatedBranches = [...refreshedBranches, { text: newText, downstream: [] as ChatMessage[] }];
+  const next = prev.slice(0, idx + 1);
+  next[idx] = {
+    ...current,
+    text: newText,
+    branches: updatedBranches,
+    branchIndex: updatedBranches.length - 1,
+    ...(touchTimestamp ? { timestamp: new Date() } : {}),
+  };
+  return next;
+}
+
 function InlineEditBubble({
-  value, onChange, onSave, onCancel,
+  value, original, onChange, onSave, onCancel,
 }: {
   value: string;
+  original: string;
   onChange: (next: string) => void;
   onSave: () => void;
   onCancel: () => void;
@@ -2386,16 +2460,19 @@ function InlineEditBubble({
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 240) + 'px';
   };
+  // Save is gated on a real change: empty text OR text identical to the
+  // original keeps it disabled, so a stray open-then-save can never truncate
+  // the downstream answer and leave a blank version behind.
+  const canSave = value.trim().length > 0 && value.trim() !== original.trim();
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      onSave();
+      if (canSave) onSave();
     } else if (e.key === 'Escape') {
       e.preventDefault();
       onCancel();
     }
   };
-  const canSave = value.trim().length > 0;
   return (
     // Claude-style edit card with smooth open/close. Outer tinted container
     // carries the brand focus border; inner panel stays white with a
@@ -4891,44 +4968,27 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     if (idx === -1) return;
     const original = messages[idx];
     if (original.role !== 'user') return;
-    const wasUnchanged = original.text === trimmed;
+
+    // Unchanged save is a no-op: close the editor and leave the thread
+    // intact. The Save button is disabled in this state; this guard is the
+    // belt-and-suspenders that ensures an unchanged save can never truncate
+    // the downstream answer (which used to leave a blank version behind).
+    if (original.text.trim() === trimmed) {
+      setEditingMsgId(null);
+      setEditingDraft('');
+      return;
+    }
 
     // Exit edit mode first so the regular bubble renders the new text
     // immediately when React commits the next batch.
     setEditingMsgId(null);
     setEditingDraft('');
 
-    // Update the user message text + trim everything after it. Branching:
-    // snapshot the OLD text + the downstream messages it produced into the
-    // branches array, then add the NEW text with an empty downstream
-    // (simulateResponse will populate it). Switching branches restores
-    // the full conversation under that branch.
-    setMessages(prev => {
-      const current = prev[idx];
-      const downstreamBefore = prev.slice(idx + 1);
-      const previousBranches: { text: string; downstream: ChatMessage[] }[] =
-        current.branches ?? [{ text: current.text, downstream: downstreamBefore }];
-      // If branches already existed, refresh the active branch's downstream
-      // snapshot so it reflects any in-thread state changes (added-to-dashboard,
-      // bookmarks, etc.) before we move off it.
-      const refreshedBranches = previousBranches.map((b, i) =>
-        i === (current.branchIndex ?? previousBranches.length - 1)
-          ? { ...b, downstream: downstreamBefore }
-          : b
-      );
-      const updatedBranches = [...refreshedBranches, { text: trimmed, downstream: [] as ChatMessage[] }];
-      const next = prev.slice(0, idx + 1);
-      next[idx] = {
-        ...current,
-        text: trimmed,
-        branches: updatedBranches,
-        branchIndex: updatedBranches.length - 1,
-        timestamp: new Date(),
-      };
-      return next;
-    });
-
-    if (wasUnchanged) return;
+    // Snapshot the OLD text + its downstream into the branch history, then
+    // add the NEW text with an empty downstream (simulateResponse populates
+    // it). Switching branches restores the full conversation under that
+    // version.
+    setMessages(prev => appendQueryBranch(prev, idx, trimmed, true));
 
     // Reset any flow flags left over from the previous response so
     // simulateResponse can't be short-circuited by stale state
@@ -4977,11 +5037,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     }
   }, [addToast]);
 
-  // Retry version counter, keyed by the user query's message id (stable across
-  // retries since the assistant turn is replaced). The pager shows N / N —
-  // the latest answer wins; prior answers aren't stored.
-  const [retryVersions, setRetryVersions] = useState<Record<string, number>>({});
-
+  // Retry now branches like edit: instead of discarding the previous answer,
+  // it snapshots the current answer as a version and appends a fresh same-text
+  // version, so the question's `‹ x / y ›` pager covers BOTH edits and retries
+  // and prior answers stay reachable via the arrows.
   const retryFromMessage = useCallback((msgIdx: number) => {
     if (processingRef.current) return;
     // Walk back to find the user query that produced this assistant message.
@@ -4991,12 +5050,12 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     }
     if (userIdx === -1) return;
     const userText = messages[userIdx].text;
-    const userId = messages[userIdx].id;
     processingRef.current = true;
-    // Bump the version count for this query (1 → 2 → 3 …).
-    setRetryVersions(prev => ({ ...prev, [userId]: (prev[userId] ?? 1) + 1 }));
-    // Drop the previous assistant turn(s) and re-simulate from the same query.
-    setMessages(prev => prev.slice(0, userIdx + 1));
+    // Snapshot the current answer into the branch history and append a fresh
+    // same-text version (rather than dropping the previous answer), then
+    // re-simulate. Mirrors edit-save so retries and edits grow one pager. The
+    // timestamp is left untouched — the question itself wasn't re-asked.
+    setMessages(prev => appendQueryBranch(prev, userIdx, userText, false));
     simulateResponse(userText, buildWorkflowMode ? undefined : 'query');
     setTimeout(() => { processingRef.current = false; }, 2000);
   }, [messages, buildWorkflowMode]);
@@ -6509,6 +6568,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             <InlineEditBubble
                               key="edit-bubble"
                               value={editingDraft}
+                              original={msg.text}
                               onChange={setEditingDraft}
                               onSave={saveEditingMessage}
                               onCancel={cancelEditingMessage}
@@ -6676,14 +6736,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       const visibilityClass = isLastAssistant
                         ? 'opacity-100'
                         : 'opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 transition-opacity';
-                      // Retry version count for this answer's query (1/1, 2/2 …).
-                      const retryUserId = (() => {
-                        for (let i = msgIdx - 1; i >= 0; i--) {
-                          if (messages[i].role === 'user') return messages[i].id;
-                        }
-                        return null;
-                      })();
-                      const versionCount = retryUserId ? (retryVersions[retryUserId] ?? 1) : 1;
                       return (
                       <div className={`mt-1.5 flex items-center gap-1 ${visibilityClass}`}>
                         {/* Copy */}
@@ -6755,15 +6807,6 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.75rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/retry:opacity-100 transition-opacity z-10">
                             Retry
                           </span>
-                        </span>
-
-                        {/* Response version counter — increments on Retry; latest answer shown. */}
-                        <span
-                          className="inline-flex items-center px-1.5 h-7 text-[0.6875rem] tabular-nums font-medium text-ink-400 select-none"
-                          title="Response version"
-                          aria-label={`Response version ${versionCount} of ${versionCount}`}
-                        >
-                          {versionCount} / {versionCount}
                         </span>
                       </div>
                       );
