@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import DatePicker from '../shared/DatePicker';
 import type { MockAuditData } from './stream/mockStream';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
@@ -14,7 +14,7 @@ import {
   Bookmark, BookmarkCheck,
   Search, GitCompare, ShieldCheck, Info, Loader2, AlertTriangle, type LucideIcon,
   LayoutDashboard, ListChecks, FileCode,
-  Layers, Compass, Trash2,
+  FileOutput, FileInput, Trash2,
 } from 'lucide-react';
 import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS, WORKFLOWS } from '../../data/mockData';
 import {
@@ -98,8 +98,8 @@ export interface ChatMessage {
   // Categorised follow-ups for data results. `depth` drills into the OUTPUT
   // the run just produced (e.g. the flagged pairs); `breadth` explores
   // adjacent dimensions of the INPUT sources the run hasn't touched yet. When
-  // present, the "What next?" block renders two labelled groups ("Go deeper" /
-  // "Go wider") instead of a flat card grid. Falls back to `followUps` for
+  // present, the "What next?" block renders the two tracks (output / input) as
+  // labelled cards instead of a flat card grid. Falls back to `followUps` for
   // conversational quick-replies that don't split this way.
   followUpTracks?: { depth: string[]; breadth: string[] };
   timestamp: Date;
@@ -287,7 +287,7 @@ const AUDIT_RESULT = {
 // OUTPUT the run just surfaced (the 8 flagged pairs); BREADTH questions point
 // outward at adjacent dimensions of the INPUT sources (POs, vendor master,
 // credit notes) the run never looked at. Keeping them as separate lists lets
-// the "What next?" UI group them under "Go deeper" / "Go wider".
+// the "What next?" UI tag them as the output track / input track.
 const AUDIT_FOLLOWUP_TRACKS: { depth: string[]; breadth: string[] } = {
   depth: [
     'Drill into Acme Corp’s 4 flagged pairs',
@@ -311,18 +311,27 @@ const FOLLOWUP_TRACK_META: Record<
   { Icon: LucideIcon; label: string; caption: string; badge: string }
 > = {
   depth: {
-    Icon: Layers,
-    label: 'Go deeper',
+    Icon: FileOutput,
+    label: 'Drill the output',
     caption: 'Drill into the results you just got',
     badge: 'bg-compliant-50 text-compliant-700',
   },
   breadth: {
-    Icon: Compass,
-    label: 'Go wider',
+    Icon: FileInput,
+    label: 'Explore inputs',
     caption: 'Run adjacent checks across your sources',
     badge: 'bg-evidence-50 text-evidence-700',
   },
 };
+
+// "What next?" follow-up layout. Option 2 (horizontal carousel) is the chosen
+// layout. Option 1 (responsive grid) is kept here, commented, in case we revisit:
+//   const FOLLOWUP_WRAP_CLASS = 'grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-2';
+//   const FOLLOWUP_CARD_EXTRA = '';
+//   const FOLLOWUP_CARD_STACKED = false;
+const FOLLOWUP_WRAP_CLASS = 'flex items-stretch gap-2 overflow-x-auto snap-x snap-mandatory px-1 py-1.5';
+const FOLLOWUP_CARD_EXTRA = 'snap-start shrink-0 w-[280px]';
+const FOLLOWUP_CARD_STACKED = true;
 
 // A single follow-up suggestion card. Shared by the flat list and the two
 // grouped tracks so the visual + motion contract stays identical everywhere.
@@ -335,16 +344,40 @@ function FollowUpCard({
   onClick,
   reduced,
   tag,
+  extraClass = '',
+  stacked = false,
 }: {
   q: string;
   delayIndex: number;
   isSelected: boolean;
   onClick: () => void;
   reduced: boolean;
-  /** Optional Go-deeper / Go-wider tag shown at the start of the row. */
+  /** Optional output/input track tag shown on the card. */
   tag?: { label: string; caption: string; badge: string; Icon: LucideIcon };
+  /** Extra classes appended to the card (e.g. carousel fixed width). */
+  extraClass?: string;
+  /** Carousel layout — stack the question over a bottom-left tag instead of a row. */
+  stacked?: boolean;
 }) {
   const TagIcon = tag?.Icon;
+  // Tag pill + hover tooltip. In stacked (carousel) layout it anchors bottom-left
+  // and the tooltip opens upward so the carousel's scroll-overflow can't clip it;
+  // in row layout it leads the row and the tooltip drops below.
+  const tagEl =
+    tag && TagIcon ? (
+      <span className={`relative group/tag ${stacked ? 'self-start' : 'shrink-0'}`}>
+        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold ${tag.badge}`}>
+          <TagIcon size={11} strokeWidth={2} className="shrink-0" />
+          {tag.label}
+        </span>
+        <span
+          role="tooltip"
+          className={`pointer-events-none absolute left-0 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.6875rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/tag:opacity-100 transition-opacity z-10 ${stacked ? 'bottom-full mb-1.5' : 'top-full mt-1.5'}`}
+        >
+          {tag.caption}
+        </span>
+      </span>
+    ) : null;
   return (
     <motion.button
       type="button"
@@ -365,35 +398,94 @@ function FollowUpCard({
         scale: 0.985,
         transition: { type: 'spring', stiffness: 800, damping: 34, mass: 0.12 },
       }}
-      className={`group/card flex h-full items-center gap-3 text-left px-4 py-3 rounded-xl text-[0.8125rem] leading-snug cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+      className={`group/card flex ${stacked ? 'flex-col gap-2' : 'items-center gap-2.5'} text-left px-3.5 py-2.5 rounded-xl text-[0.8125rem] leading-snug cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
         isSelected
           ? 'bg-brand-50 text-brand-700 border border-brand-200'
           : 'bg-canvas-elevated text-ink-700 border border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200'
-      }`}
+      } ${extraClass}`}
     >
-      {tag && TagIcon && (
-        <span className="relative group/tag shrink-0">
-          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold ${tag.badge}`}>
-            <TagIcon size={11} strokeWidth={2} className="shrink-0" />
-            {tag.label}
-          </span>
-          <span
-            role="tooltip"
-            className="pointer-events-none absolute top-full left-0 mt-1.5 px-2 py-1 rounded-md bg-brand-900 text-canvas-elevated text-[0.6875rem] font-medium whitespace-nowrap opacity-0 delay-300 group-hover/tag:opacity-100 transition-opacity z-10"
-          >
-            {tag.caption}
-          </span>
-        </span>
+      {stacked ? (
+        <>
+          <span className="flex-1">{q}</span>
+          {tagEl}
+        </>
+      ) : (
+        <>
+          {tagEl}
+          <span className="flex-1 min-w-0">{q}</span>
+          {/* Decorative cue — the whole card is one click that drops the text into
+              the composer to edit before sending. */}
+          <ArrowRight
+            size={15}
+            aria-hidden
+            className="shrink-0 -translate-x-1 opacity-0 transition-all duration-150 group-hover/card:translate-x-0 group-hover/card:opacity-100"
+          />
+        </>
       )}
-      <span className="flex-1 min-w-0">{q}</span>
-      {/* Decorative cue — the whole card is one click that drops the text into
-          the composer to edit before sending. */}
-      <ArrowRight
-        size={15}
-        aria-hidden
-        className="shrink-0 -translate-x-1 opacity-0 transition-all duration-150 group-hover/card:translate-x-0 group-hover/card:opacity-100"
-      />
     </motion.button>
+  );
+}
+
+// Carousel shell for the follow-up cards: a horizontal snap-scroller with side
+// scroll buttons that surface only when there's more content in that direction.
+function FollowUpCarousel({ children }: { children: ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const updateArrows = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 4);
+    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    updateArrows();
+    const el = scrollRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', updateArrows, { passive: true });
+    window.addEventListener('resize', updateArrows);
+    return () => {
+      el.removeEventListener('scroll', updateArrows);
+      window.removeEventListener('resize', updateArrows);
+    };
+  }, [updateArrows]);
+
+  const nudge = (dir: 1 | -1) => {
+    const el = scrollRef.current;
+    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' });
+  };
+
+  const navBtn =
+    'absolute top-1/2 -translate-y-1/2 z-10 grid place-items-center size-7 rounded-full bg-canvas-elevated border border-canvas-border text-ink-500 shadow-sm hover:text-ink-800 hover:bg-paper-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30';
+
+  return (
+    <div className="relative">
+      <div ref={scrollRef} className={`${FOLLOWUP_WRAP_CLASS} mx-8`}>
+        {children}
+      </div>
+      {canLeft && (
+        <button
+          type="button"
+          aria-label="Scroll to previous suggestions"
+          onClick={() => nudge(-1)}
+          className={`${navBtn} left-0`}
+        >
+          <ChevronLeft size={16} />
+        </button>
+      )}
+      {canRight && (
+        <button
+          type="button"
+          aria-label="Scroll to more suggestions"
+          onClick={() => nudge(1)}
+          className={`${navBtn} right-0`}
+        >
+          <ChevronRight size={16} />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -6825,8 +6917,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
 
                     {/* Follow-up suggestions under a quiet "What next?" label.
                         When the message carries `followUpTracks`, they split
-                        into two labelled groups — "Go deeper" (drill into the
-                        result) and "Go wider" (explore adjacent input sources).
+                        each tagged by its track — the output track (drill into the
+                        result) and the input track (explore adjacent input sources).
                         Otherwise a flat card grid renders for conversational
                         quick-replies. Cards stay one neutral family per
                         DESIGN.md; the depth/breadth signal lives in the group
@@ -6855,13 +6947,13 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             );
                             // One single section: flatten both tracks into a single
                             // stacked list. The depth/breadth distinction now rides on
-                            // a per-row Go-deeper / Go-wider tag instead of separate
+                            // a per-row output/input track tag instead of separate
                             // section headers. Flat index drives the entrance cascade.
                             const items = tracks.flatMap(track =>
                               msg.followUpTracks![track].map(q => ({ q, track })),
                             );
                             return (
-                              <div className="grid grid-cols-1 gap-2">
+                              <FollowUpCarousel>
                                 {items.map(({ q, track }, delayIndex) => {
                                   const meta = FOLLOWUP_TRACK_META[track];
                                   return (
@@ -6869,6 +6961,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                       key={`${msg.id}-${track}-${delayIndex}`}
                                       q={q}
                                       tag={{ label: meta.label, caption: meta.caption, badge: meta.badge, Icon: meta.Icon }}
+                                      extraClass={FOLLOWUP_CARD_EXTRA}
+                                      stacked={FOLLOWUP_CARD_STACKED}
                                       delayIndex={delayIndex}
                                       isSelected={selectedFollowUpByMsgId[msg.id] === q}
                                       reduced={!!prefersReducedMotion}
@@ -6876,15 +6970,17 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                     />
                                   );
                                 })}
-                              </div>
+                              </FollowUpCarousel>
                             );
                           })()
                         ) : (
-                          <div className="grid grid-cols-1 gap-2">
+                          <FollowUpCarousel>
                             {msg.followUps!.map((q, i) => (
                               <FollowUpCard
                                 key={`${msg.id}-followup-${i}`}
                                 q={q}
+                                extraClass={FOLLOWUP_CARD_EXTRA}
+                                stacked={FOLLOWUP_CARD_STACKED}
                                 delayIndex={i}
                                 isSelected={selectedFollowUpByMsgId[msg.id] === q}
                                 reduced={!!prefersReducedMotion}
@@ -6894,7 +6990,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                                 }}
                               />
                             ))}
-                          </div>
+                          </FollowUpCarousel>
                         )}
                       </div>
                     )}
