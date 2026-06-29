@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import {
   ArrowRight, CheckCheck, Upload, Plus, X, Check,
@@ -9,7 +9,6 @@ import { Button } from '../../../shared/Button';
 import { useToast } from '../../../shared/Toast';
 import { useAtrUpload } from '../AtrUploadContext';
 import { WizardFooter } from '../footerSlot';
-import UploadDataModal from '../../../concierge-workflow-builder/UploadDataModal';
 import type { ExtractedAnnexure, ExtractionSession } from '../types';
 
 type LinkState = 'confirmed' | 'review' | 'unlinked';
@@ -29,8 +28,11 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
   const session = state.session;
   const [picker, setPicker] = useState<string | null>(null); // observation id with open link-picker
   const [viewId, setViewId] = useState<string | null>(null);  // annexure id open in the view modal
-  // Upload-annexure surface — the platform's shared "Add data" upload modal.
-  const [uploadOpen, setUploadOpen] = useState(false);
+  // Native OS file picker for uploading annexures (no intermediate modal).
+  const annexInputRef = useRef<HTMLInputElement>(null);
+  // Upload-and-link straight onto one observation (from its "+ Link" picker).
+  const linkUploadInputRef = useRef<HTMLInputElement>(null);
+  const [linkTargetObs, setLinkTargetObs] = useState<string | null>(null);
 
   // Upload a new annexure → adds it unlinked (orphan), then surfaces a toast so the
   // user can link it to an observation via any row's picker. (Mocked: a starter row
@@ -47,6 +49,22 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
     };
     updateSession(s => ({ ...s, annexures: [...s.annexures, newAnnex] }));
     addToast({ type: 'success', message: `"${filename}" added — use “Link annexure” on an observation to map it.` });
+  };
+
+  // Upload an annexure already linked to a specific observation (from its "+ Link"
+  // picker) — lands as Needs Review so the user can confirm the auto-link.
+  const onUploadAnnexureLinked = (filename: string, obsId: string) => {
+    const id = `ax-upload-${Date.now()}`;
+    const newAnnex: ExtractedAnnexure = {
+      id,
+      filename,
+      observationId: obsId,
+      status: 'Needs Review',
+      columns: ['Reference', 'Detail', 'Amount ₹'],
+      rows: [{ id: `${id}-r1`, annexureId: id, data: { 'Reference': '—', 'Detail': 'Uploaded annexure', 'Amount ₹': '—' } }],
+    };
+    updateSession(s => ({ ...s, annexures: [...s.annexures, newAnnex] }));
+    addToast({ type: 'success', message: `"${filename}" uploaded and linked to this observation.` });
   };
 
   if (!session) return null;
@@ -93,7 +111,7 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
   const ACCENT: Record<LinkState, string> = { confirmed: '', review: 'bg-mitigated-500', unlinked: 'bg-risk-400' };
 
   // Shared grid template so the column header and every row line up.
-  const COLS = 'grid grid-cols-[minmax(0,1.6fr)_minmax(0,2fr)_64px_150px] gap-4 items-center';
+  const COLS = 'grid grid-cols-[minmax(0,1.7fr)_minmax(0,2.3fr)_150px] gap-4 items-center';
 
   return (
     <div className="w-full">
@@ -135,7 +153,7 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
             {needsReview > 0 && (
               <Button variant="outline" size="sm" shape="md" leftIcon={<CheckCheck size={14} />} onClick={confirmAll}>Confirm all</Button>
             )}
-            <Button variant="outline" size="sm" shape="md" leftIcon={<Upload size={14} />} onClick={() => setUploadOpen(true)}>Upload annexure</Button>
+            <Button variant="outline" size="sm" shape="md" leftIcon={<Upload size={14} />} onClick={() => annexInputRef.current?.click()}>Upload annexure</Button>
           </div>
         </div>
 
@@ -143,7 +161,6 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
         <div className={`${COLS} px-4 py-2 border-b border-canvas-border bg-canvas/60 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400`}>
           <span>Observation</span>
           <span>Annexure</span>
-          <span className="text-right">Rows</span>
           <span className="text-right">Status</span>
         </div>
 
@@ -158,7 +175,6 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
           {shownObs.map(o => {
             const obsTitle = o.title?.trim() || `Observation #${o.number}`;
             const linked = annexures.filter(a => a.observationId === o.id);
-            const rowCount = linked.reduce((n, a) => n + a.rows.length, 0);
             const linkState = linkStateOf(linked);
             const meta = STATE_META[linkState];
             // Orphan annexures available to link onto this observation.
@@ -183,32 +199,35 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
                         <button onClick={() => unlink(a.id)} className="w-4 h-4 rounded-full hover:bg-risk-50 text-ink-400 hover:text-risk-700 flex items-center justify-center cursor-pointer shrink-0" aria-label={`Unlink ${a.filename}`}><X size={10} aria-hidden="true" /></button>
                       </span>
                     ))}
-                    {available.length > 0 && (
-                      <button onClick={() => setPicker(picker === o.id ? null : o.id)} className="inline-flex items-center gap-1 h-6 px-1.5 rounded-[6px] text-[11.5px] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors">
-                        <Plus size={12} aria-hidden="true" /> Link
-                      </button>
-                    )}
-                    {linked.length === 0 && available.length === 0 && <span className="text-[11.5px] text-ink-400">No annexure linked</span>}
+                    <button onClick={() => setPicker(picker === o.id ? null : o.id)} className="inline-flex items-center gap-1 h-6 px-1.5 rounded-[6px] text-[11.5px] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors">
+                      <Plus size={12} aria-hidden="true" /> Link
+                    </button>
+                    {linked.length === 0 && <span className="text-[11.5px] text-ink-400">No annexure linked yet</span>}
                   </div>
                   {picker === o.id && (
                     <>
                       <div className="fixed inset-0 z-[65]" onClick={() => setPicker(null)} />
-                      <div className="absolute left-0 top-full mt-1 z-[70] w-72 max-h-56 overflow-y-auto bg-canvas-elevated border border-canvas-border shadow-xl rounded-[10px] p-1">
+                      <div className="absolute left-0 top-full mt-1 z-[70] w-72 max-h-64 overflow-y-auto bg-canvas-elevated border border-canvas-border shadow-xl rounded-[10px] p-1">
                         {available.length === 0 ? (
-                          <div className="px-3 py-3 text-[11px] text-ink-500 text-center">No unlinked annexures. Upload one to link it here.</div>
+                          <div className="px-3 py-2.5 text-[11px] text-ink-500 text-center">No unlinked annexures to pick.</div>
                         ) : available.map(a => (
                           <button key={a.id} onClick={() => { link(a.id, o.id); setPicker(null); }} title={a.filename} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[7px] hover:bg-brand-50 text-left cursor-pointer">
                             <FileSpreadsheet size={13} className="text-compliant-700 shrink-0" aria-hidden="true" />
                             <span className="min-w-0 flex-1"><span className="block text-[11.5px] font-medium text-ink-800 truncate">{a.filename}</span><span className="block text-[10px] text-ink-400">{a.rows.length} exception row{a.rows.length === 1 ? '' : 's'}</span></span>
                           </button>
                         ))}
+                        {/* Upload a new annexure → linked straight to this observation. */}
+                        <button
+                          onClick={() => { setLinkTargetObs(o.id); setPicker(null); linkUploadInputRef.current?.click(); }}
+                          className="w-full flex items-center gap-2 px-2.5 py-2 mt-1 rounded-[7px] border-t border-canvas-border text-brand-700 hover:bg-brand-50 text-left cursor-pointer"
+                        >
+                          <Upload size={13} className="shrink-0" aria-hidden="true" />
+                          <span className="text-[11.5px] font-semibold">Upload annexure &amp; link</span>
+                        </button>
                       </div>
                     </>
                   )}
                 </div>
-
-                {/* Rows */}
-                <div className="text-right text-[11.5px] text-ink-500 tabular-nums">{rowCount || '—'}</div>
 
                 {/* Status / action — surfaces only the decision that matters per row */}
                 <div className="flex items-center justify-end">
@@ -280,15 +299,28 @@ export default function Step5AnnexureMapping({ onContinue }: { onContinue: () =>
         )}
       </AnimatePresence>
 
-      {/* Upload annexure — the platform's shared "Add data" upload modal. */}
-      <UploadDataModal
-        open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
-        title="Upload annexure"
-        allowedTabs={['upload', 'all', 'files', 'folder']}
-        hideSessionFiles
-        footerHint="Add an annexure workbook, then link it to an observation."
-        onAttachDraft={({ files }) => files.forEach(f => onUploadAnnexure(f.name))}
+      {/* Upload annexure — native OS file picker, opened by the toolbar button. */}
+      <input
+        ref={annexInputRef}
+        type="file"
+        multiple
+        hidden
+        accept=".xlsx,.xls,.csv"
+        onChange={e => { Array.from(e.target.files ?? []).forEach(f => onUploadAnnexure(f.name)); e.currentTarget.value = ''; }}
+      />
+      {/* Upload-and-link — links the uploaded annexure straight to the observation
+          whose "+ Link" picker opened it. */}
+      <input
+        ref={linkUploadInputRef}
+        type="file"
+        hidden
+        accept=".xlsx,.xls,.csv"
+        onChange={e => {
+          const f = e.target.files?.[0];
+          if (f && linkTargetObs) onUploadAnnexureLinked(f.name, linkTargetObs);
+          e.currentTarget.value = '';
+          setLinkTargetObs(null);
+        }}
       />
     </div>
   );
