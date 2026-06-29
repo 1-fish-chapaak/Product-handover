@@ -56,7 +56,7 @@ export function buildDefaultPermissions(): ColumnPermission[] {
 export const SEED_TEMPLATES: WorkflowTemplate[] = [
   {
     id: 'wf-ro-default',
-    name: 'P2P Quarterly Review – RO Route',
+    name: 'P2P Quarterly Review – RO Flow',
     persona: 'risk-owner',
     isDefault: true,
     version: 1,

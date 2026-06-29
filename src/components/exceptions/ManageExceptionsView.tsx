@@ -13,7 +13,6 @@ import {
   History,
   UserPlus,
   CalendarClock,
-  Workflow,
   ClipboardList,
   MessageSquare,
   Send,
@@ -51,7 +50,8 @@ import { markCommentUnread, clearCommentUnread } from './commentStore';
 import { useToast } from '../shared/Toast';
 // ─── Assignment & Approval Workflow module (configurable, data-driven) ───
 import { WorkflowProvider } from './workflow/WorkflowContext';
-import WorkflowModule from './workflow/WorkflowModule';
+import { ORG_USERS } from './workflow/workflowData';
+import { queryFlows } from './workflow/queryFlowStore';
 import ActingAsSwitcher from './ActingAsSwitcher';
 import AssignmentModal from './workflow/AssignmentModal';
 import WorkflowAssignButton from './workflow/WorkflowAssignButton';
@@ -129,6 +129,10 @@ interface ManageExceptionsViewProps {
   contextLabel?: string;
   /** Callback for bulk assign action — when provided, shows "Mark as Case & Assign" button. */
   onBulkAssign?: (selectedExceptionIds: string[]) => void;
+  /** Show the in-table "Assign Approval Flow" CTA (before Bulk Actions). Used in the
+   *  Engagements module (Internal Audit / Automation) exception-management tab, where
+   *  there's no report query-card entry point for assigning a flow. */
+  showApprovalFlowAssign?: boolean;
 }
 
 // ─── Editorial KPI bar ────────────────────────────────────────────────
@@ -286,7 +290,7 @@ function RoleToggle({ role, setRole }: { role: ExceptionRole; setRole: (r: Excep
   );
 }
 
-export default function ManageExceptionsView({ role, setRole, onBack, embedded = false, exceptions: propsExceptions, onExceptionsChange, contextLabel, onBulkAssign }: ManageExceptionsViewProps) {
+export default function ManageExceptionsView({ role, setRole, onBack, embedded = false, exceptions: propsExceptions, onExceptionsChange, contextLabel, onBulkAssign, showApprovalFlowAssign = false }: ManageExceptionsViewProps) {
   // Unify with RBAC: the active role's permissions decide the exception persona.
   // Risk Owner roles resolve exceptions; everyone else operates as the auditor.
   const { can } = useCan();
@@ -296,7 +300,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [can]);
 
-  const [activeNav, setActiveNav] = useState<'exceptions' | 'action-hub' | 'workflow'>('exceptions');
+  const [activeNav, setActiveNav] = useState<'exceptions' | 'action-hub'>('exceptions');
   const [atrModalOpen, setAtrModalOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [drawer, setDrawer] = useState<DrawerState>(null);
@@ -826,8 +830,34 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     ));
   };
 
+  // Who each case is assigned to (the "Assigned to" column) → user id. This is the
+  // work-assignee an approval flow uses; the assign modal no longer asks for it.
+  const caseAssignees = useMemo(() => {
+    const m: Record<string, string> = {};
+    exceptions.forEach(e => {
+      const name = e.assignees?.[0]?.name ?? e.assignedTo?.name;
+      const u = name ? ORG_USERS.find(o => o.name === name) : undefined;
+      if (u) m[e.id] = u.id;
+    });
+    return m;
+  }, [exceptions]);
+
+  // A flow chosen up-front on the report QueryCard (see queryFlowStore) is applied
+  // to every exception in that query the moment this view opens. We resolve it once
+  // at mount from the `from` deep-link query id; the provider seeds it as the initial
+  // assignment (Risk Owner flow) or auditor route (Auditor flow).
+  const queryFlowSeed = useMemo(() => {
+    // Read the raw `from` deep-link id directly — it works for any report query,
+    // not only ATR queries (sourceQuery resolves only the ATR subset).
+    const qid = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('from');
+    const set = qid ? queryFlows.get(qid) : {};
+    if (!set['risk-owner'] && !set.auditor) return undefined;
+    return { exceptionIds: exceptions.map(e => e.id), riskOwner: set['risk-owner'], auditor: set.auditor };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
-    <WorkflowProvider role={role} onFinalize={handleWorkflowFinalize} onReject={handleWorkflowReject} onReopenPartial={handleWorkflowReopenPartial}>
+    <WorkflowProvider role={role} onFinalize={handleWorkflowFinalize} onReject={handleWorkflowReject} onReopenPartial={handleWorkflowReopenPartial} caseAssignees={caseAssignees} queryFlowSeed={queryFlowSeed}>
     <div className="h-full w-full flex flex-col overflow-hidden bg-canvas">
       {/* Top chrome — only shown when standalone (Back button); hidden when embedded */}
       {!embedded && (
@@ -880,7 +910,6 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               {([
                 { id: 'exceptions' as const, label: 'Exceptions', icon: Layers },
                 { id: 'action-hub' as const, label: 'Action Hub', icon: FileBarChart },
-                { id: 'workflow' as const, label: 'Approval Routes', icon: Workflow },
               ] as const).map(t => {
                 const Icon = t.icon;
                 const isActive = activeNav === t.id;
@@ -912,8 +941,6 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
 
       {activeNav === 'action-hub' ? (
         <ActionHubView exceptions={exceptions} role={role} onAction={runExceptionAction} />
-      ) : activeNav === 'workflow' ? (
-        <WorkflowModule role={role} />
       ) : (
         <motion.div
           initial={{ opacity: 0, y: 4 }}
@@ -1057,8 +1084,10 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               onOpenDetail={(ex) => openDetail(ex.id)}
               headerLeading={
                 <div className="flex items-center gap-2">
-                  {/* Assignment & Approval Workflow — distinct workflow action. */}
-                  <WorkflowAssignButton selectedIds={[...selected]} />
+                  {/* Assign Approval Flow — shown only in the Engagements module
+                      (Internal Audit / Automation) exception-management tab, where
+                      there's no report query-card entry point. Sits before Bulk Actions. */}
+                  {showApprovalFlowAssign && <WorkflowAssignButton selectedIds={[...selected]} />}
                   {/* Bulk Actions — one CTA grouping every multi-select action.
                       Always visible; inactive until a case is selected, then it
                       activates (and reveals the persona's applicable actions). */}

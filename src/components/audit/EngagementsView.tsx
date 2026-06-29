@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
   Play, Trash2, AlertTriangle, X, LayoutDashboard, List,
-  Pencil, UserPlus, CheckCircle2,
+  Pencil, UserPlus, CheckCircle2, GitBranch,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { ENGAGEMENTS, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
@@ -11,6 +11,10 @@ import CreateEngagementWizard from './CreateEngagementWizard';
 import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
 import { useCan } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
+import WorkflowConfigurator from '../exceptions/workflow/WorkflowConfigurator';
+import type { Persona } from '../exceptions/workflow/workflowTypes';
+
+type EngViewMode = 'overview' | 'list' | 'approval-flow';
 
 interface Props {
   onOpenEngagement: (engagementId: string) => void;
@@ -21,6 +25,10 @@ interface Props {
   /** Called once on mount after the initial filter is applied, so the parent
    *  can clear its one-shot flag (normal navigation stays unfiltered). */
   onInitialFilterConsumed?: () => void;
+  /** Open directly on the Approval Flow tab (e.g. from "Create new approval flow"). */
+  initialApprovalFlow?: boolean;
+  /** Called once the Approval Flow tab has been opened, to clear the one-shot flag. */
+  onApprovalFlowConsumed?: () => void;
 }
 
 const STATUS_CLS: Record<EngStatus, string> = {
@@ -76,13 +84,18 @@ function healthTier(pct: number): { bar: string; text: string } {
   return { bar: 'bg-risk', text: 'text-risk-700' };
 }
 
-export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning, initialTypeFilter, onInitialFilterConsumed }: Props) {
+export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning, initialTypeFilter, onInitialFilterConsumed, initialApprovalFlow, onApprovalFlowConsumed }: Props) {
   const { can } = useCan();
   const { addToast } = useToast();
   const presetType = initialTypeFilter && initialTypeFilter !== 'All';
   // When routed with an initial type (e.g. SOX → 'Compliance'), open straight
-  // onto the list view, pre-filtered to that type.
-  const [mode, setMode] = useState<'overview' | 'list'>(presetType ? 'list' : 'overview');
+  // onto the list view, pre-filtered to that type. When routed to create an
+  // approval flow, open straight onto the Approval Flow tab.
+  const [mode, setMode] = useState<EngViewMode>(initialApprovalFlow ? 'approval-flow' : presetType ? 'list' : 'overview');
+  // Which side's flows the Approval Flow tab manages.
+  const [flowRole, setFlowRole] = useState<Persona>('risk-owner');
+  // Clear the parent's one-shot approval-flow flag once consumed.
+  useEffect(() => { if (initialApprovalFlow) { setMode('approval-flow'); onApprovalFlowConsumed?.(); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'All' | EngType>(initialTypeFilter ?? 'All');
   // Clear the parent's one-shot flag once we've taken the initial filter, so a
@@ -146,7 +159,9 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
             <p className="text-[13px] text-text-secondary mt-1.5 max-w-xl">
               {mode === 'overview'
                 ? 'A cross-engagement snapshot — health, attention, and activity across your whole portfolio.'
-                : 'Browse all engagements — compliance audits, internal audits, and automation programs.'}
+                : mode === 'approval-flow'
+                  ? 'Manage reusable approval chains used when exceptions are sent for approval across engagements.'
+                  : 'Browse all engagements — compliance audits, internal audits, and automation programs.'}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -372,6 +387,15 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
           </div>
         )}
         </>)}
+
+        {mode === 'approval-flow' && (
+          <div>
+            <p className="text-[12.5px] text-text-secondary mb-4 max-w-[620px]">
+              Define reusable approval chains that apply wherever exceptions are sent for approval. Switch sides to manage Risk Owner or Auditor flows.
+            </p>
+            <WorkflowConfigurator role={flowRole} onRoleChange={setFlowRole} currentUserId={flowRole === 'auditor' ? 'u-au-owner' : 'u-ro-owner'} />
+          </div>
+        )}
       </div>
 
       <AnimatePresence>
@@ -394,13 +418,14 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
 function ViewToggle({
   mode, onChange, count,
 }: {
-  mode: 'overview' | 'list';
-  onChange: (m: 'overview' | 'list') => void;
+  mode: EngViewMode;
+  onChange: (m: EngViewMode) => void;
   count: number;
 }) {
-  const tabs: { id: 'overview' | 'list'; label: string; Icon: typeof List; badge?: number }[] = [
+  const tabs: { id: EngViewMode; label: string; Icon: typeof List; badge?: number }[] = [
     { id: 'overview', label: 'Overview', Icon: LayoutDashboard },
     { id: 'list', label: 'All Engagements', Icon: List, badge: count },
+    { id: 'approval-flow', label: 'Approval Flow', Icon: GitBranch },
   ];
   return (
     <div className="flex items-center gap-1" role="tablist" aria-label="Engagements view">
