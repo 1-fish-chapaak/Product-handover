@@ -285,7 +285,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
         className="reports-focus-noring fixed inset-0 z-[60] flex items-center justify-center p-6"
         onClick={handleBackdropClose}
       >
-        <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
+        <div className="absolute inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px]" />
         <motion.div
           ref={dialogRef}
           initial={{ opacity: 0, scale: 0.96, y: 8 }}
@@ -511,7 +511,7 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
               className="fixed inset-0 z-[70] flex items-center justify-center p-6"
               onClick={() => setShowDiscardConfirm(false)}
             >
-              <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
+              <div className="absolute inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px]" />
               <motion.div
                 initial={{ opacity: 0, scale: 0.96, y: 8 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}

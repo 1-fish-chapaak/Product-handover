@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { X } from 'lucide-react';
 import DataSourcePanel from '../concierge-workflow-builder/DataSourcePanel';
 import { generateWorkflow } from '../concierge-workflow-builder/mockApi';
 import type { JourneyFiles } from '../concierge-workflow-builder/types';
@@ -36,13 +35,6 @@ export default function ChatWorkflowWorkspace({ onClose, workflowType, onCanvasA
         step={3}
         onCanvasAction={onCanvasAction}
       />
-      <button
-        onClick={onClose}
-        aria-label="Close workspace"
-        className="absolute top-2 right-3 z-20 p-1.5 text-text-muted hover:text-text-secondary rounded-md hover:bg-paper-50 cursor-pointer"
-      >
-        <X size={16} />
-      </button>
     </div>
   );
 }

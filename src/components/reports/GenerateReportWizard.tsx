@@ -206,7 +206,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: suppressed ? 0 : 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }}
-        className={`fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50 ${suppressed ? 'pointer-events-none' : ''}`}
+        className={`fixed inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px] z-50 ${suppressed ? 'pointer-events-none' : ''}`}
         onClick={attemptClose}
       />
       <motion.div

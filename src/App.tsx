@@ -314,6 +314,9 @@ function AppInner() {
   // switching to the Reports view and passing the id down so ReportsView
   // can open the report in its full-page view.
   const [focusReportId, setFocusReportId] = useState<string | null>(null);
+  // When Manage Exceptions is opened from a specific report (e.g. the ATR view),
+  // remember it so "Back" returns to that report instead of the report list.
+  const [mexReturnReportId, setMexReturnReportId] = useState<string | null>(null);
   // One-shot: when the SOX report flow routes to Engagements, open it pre-filtered
   // to Compliance. Cleared on consume so plain visits stay unfiltered.
   const [engagementsSoxFilter, setEngagementsSoxFilter] = useState(false);
@@ -846,7 +849,7 @@ function AppInner() {
           <ReportsView
             onOpenBuilder={() => openReportBuilder('new')}
             onShare={(id) => setShowShareModal(true, { type: 'report', id })}
-            onManageExceptions={() => setView('manage-exceptions')}
+            onManageExceptions={(returnId) => { setMexReturnReportId(returnId ?? null); setView('manage-exceptions'); }}
             onOpenQuery={(q) => {
               setChatInitialQuery(`Open ${q.id}: ${q.title}`);
               setView('chat');
@@ -866,7 +869,11 @@ function AppInner() {
           <ManageExceptionsView
             role={state.exceptionRole}
             setRole={setExceptionRole}
-            onBack={() => setView('reports')}
+            onBack={() => {
+              setView('reports');
+              // Re-open the originating report (e.g. the ATR) so Back lands there.
+              if (mexReturnReportId) { setFocusReportId(mexReturnReportId); setMexReturnReportId(null); }
+            }}
             embedded={LAUNCHED_FROM_REPORT}
             showApprovalFlowAssign
           />

@@ -364,6 +364,13 @@ export default function DataSourcePanel({
   const [acceptedSuggestions, setAcceptedSuggestions] = useState<Set<string>>(
     () => new Set(['variance']),
   );
+  // Regenerate-plan affordance: briefly swap the plan card for a flat shimmer
+  // skeleton, then re-show it. Self-contained — mirrors the chat ArtifactPanel.
+  const [planRegenerating, setPlanRegenerating] = useState(false);
+  const handlePlanRegenerate = () => {
+    setPlanRegenerating(true);
+    setTimeout(() => setPlanRegenerating(false), 1200);
+  };
 
   const visibleColumnCount = outputColumns.filter((c) => c.visible).length;
 
@@ -1081,19 +1088,6 @@ export default function DataSourcePanel({
 
         {tab === 'plan' && (
           <div className="flex flex-col gap-3">
-            {/* Plan intro — title + summary. Code now has its own top-level
-                tab, so the Workflow/Code toggle has been removed. */}
-            <div className="flex items-center gap-2 px-1">
-              <div className="min-w-0 flex-1">
-                <div className="text-[14px] font-semibold tracking-tight text-ink-900 leading-tight">
-                  Plan
-                </div>
-                <div className="text-[12px] text-ink-500 mt-0.5">
-                  {workflow.steps.length} step{workflow.steps.length === 1 ? '' : 's'} · {workflow.inputs.length} source{workflow.inputs.length === 1 ? '' : 's'} · {totalColumnsInUse} column{totalColumnsInUse === 1 ? '' : 's'} in use
-                </div>
-              </div>
-            </div>
-
             {/* References — matches the Generated Code CollapsibleSection
                 chrome (rounded-xl border + hover shadow, icon + title +
                 chevron header, border-top separator on the body). */}
@@ -1162,18 +1156,23 @@ export default function DataSourcePanel({
             </div>
 
             {/* Query Execution Plan — shared with the chat/QnA canvas. */}
-            <QueryExecutionPlanCard
-              steps={workflow.steps.map((step): PlanCardStep => ({
-                id: step.id,
-                name: step.name,
-                type: step.type,
-                description: step.description,
-                sources: workflow.inputs
-                  .filter((i) => step.dataFiles.includes(i.id))
-                  .map((i) => ({ id: i.id, name: i.name, type: i.type, columns: i.columns })),
-              }))}
-              onEdit={onCanvasAction ? () => onCanvasAction(editPlanContext(workflow.steps.length)) : undefined}
-            />
+            {planRegenerating ? (
+              <PlanRegenerateSkeleton />
+            ) : (
+              <QueryExecutionPlanCard
+                steps={workflow.steps.map((step): PlanCardStep => ({
+                  id: step.id,
+                  name: step.name,
+                  type: step.type,
+                  description: step.description,
+                  sources: workflow.inputs
+                    .filter((i) => step.dataFiles.includes(i.id))
+                    .map((i) => ({ id: i.id, name: i.name, type: i.type, columns: i.columns })),
+                }))}
+                onRegenerate={handlePlanRegenerate}
+                onStepEdit={onCanvasAction ? () => onCanvasAction(editPlanContext(workflow.steps.length)) : undefined}
+              />
+            )}
 
             {/* Assumptions — shared with the chat/QnA canvas. */}
             <AssumptionsCard
@@ -1194,6 +1193,36 @@ export default function DataSourcePanel({
         )}
       </div>
     </aside>
+  );
+}
+
+// Flat shimmer placeholder shown while the plan "regenerates" — matches the
+// QueryExecutionPlanCard chrome so the swap reads as the same card thinking.
+function PlanRegenerateSkeleton() {
+  return (
+    <div
+      className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden"
+      role="status"
+      aria-label="Regenerating plan"
+    >
+      <div className="flex items-center gap-2 px-4 py-3">
+        <ListChecks size={14} className="text-brand-400 shrink-0" />
+        <span className="text-[13px] font-medium text-ink-500">Regenerating plan…</span>
+      </div>
+      <ul className="flex flex-col border-t border-canvas-border">
+        {[0, 1, 2].map((i) => (
+          <li key={i} className={`px-4 py-3 ${i > 0 ? 'border-t border-canvas-border/70' : ''}`}>
+            <div className="flex items-start gap-3">
+              <span className="size-2.5 rounded-full bg-paper-100 shrink-0 mt-[7px] animate-pulse" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="h-3 w-1/3 rounded bg-paper-100 animate-pulse" />
+                <div className="h-2.5 w-3/4 rounded bg-paper-50 animate-pulse" />
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

@@ -125,7 +125,7 @@ function WizardPanel({ subtitle, activeIdx, onClose, footer, children }: {
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }}
-        className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-50"
+        className="fixed inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px] z-50"
         onClick={onClose}
       />
       <motion.div

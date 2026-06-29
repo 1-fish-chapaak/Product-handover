@@ -2,19 +2,18 @@ import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  X, ChevronDown, FileCode, PanelRightClose,
+  X, ChevronDown, FileCode,
   Database, BarChart3, Copy, Download,
   Wand2, HelpCircle,
   Check, Search, ListChecks, MessageSquare, Share2,
-  History as HistoryIcon, Clock,
+  History as HistoryIcon, Clock, PanelRightClose,
 } from 'lucide-react';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import Gated from '../shared/Gated';
 import { useToast } from '../shared/Toast';
-import { KpiTile } from '../shared/KpiTile';
 import { SEED as DATA_SOURCE_SEED, TYPE_META, formatDate, type DataSource } from '../data-sources/sources';
 import { type ComposerContext, editPlanContext, editCodeContext } from '../chat/composerContext';
-import { QueryExecutionPlanCard, AssumptionsCard, type PlanCardStep } from '../shared/PlanCards';
+import { QueryExecutionPlanCard, AssumptionsCard, type PlanCardStep, type PlanAssumption } from '../shared/PlanCards';
 
 interface ArtifactPanelProps {
   activeTab: ArtifactTab;
@@ -95,18 +94,28 @@ function CollapsibleSection({ title, icon: Icon, defaultOpen = true, children, a
   );
 }
 
-interface PlanAssumption {
-  key: string;
-  value: string;
-}
-
+// Assumptions for the QnA Plan tab. Two are recalled from memory (carry a
+// `memory` provenance block) so the AssumptionsCard shows "saved you 2
+// clarifications" instead of IRA re-asking which column / how to scope vendors.
 const PLAN_ASSUMPTIONS: PlanAssumption[] = [
+  {
+    key: 'Revenue field', value: 'total_revenue → "Net Sales" column',
+    memory: {
+      source: 'Q1 Revenue Recon', learnedOn: '2 weeks ago', confidence: 0.94, enterprise: true,
+      sparedQuestion: 'Which column is total_revenue — Net Sales or Gross Sales?',
+    },
+  },
+  {
+    key: 'Vendor scope', value: 'All vendors in SAP AP Module',
+    memory: {
+      source: 'AP Duplicate run', learnedOn: 'last month', confidence: 0.88,
+      sparedQuestion: 'Should I scope to active vendors only or all vendors?',
+    },
+  },
   { key: 'Date range',       value: 'Full FY26 (Apr 2025 – Mar 2026)' },
   { key: 'Amount tolerance', value: '± 5% on invoice amounts' },
-  { key: 'Vendor scope',     value: 'All vendors in SAP AP Module' },
   { key: 'Matching logic',   value: 'Fuzzy match on invoice number + vendor + amount' },
   { key: 'Excluded',         value: 'Voided and reversed invoices' },
-  { key: 'Currency',         value: 'INR (converted at booking rate)' },
 ];
 
 // Chat/QnA execution-plan steps, in the shared PlanCard shape so they render
@@ -141,6 +150,37 @@ const CHAT_PLAN_STEPS: PlanCardStep[] = [
   },
 ];
 
+// Flat shimmer placeholder shown while the plan "regenerates" — matches the
+// QueryExecutionPlanCard chrome (rounded-xl border, header + step rows) so the
+// swap reads as the same card thinking, not a different surface.
+function PlanRegenerateSkeleton() {
+  return (
+    <div
+      className="rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden"
+      role="status"
+      aria-label="Regenerating plan"
+    >
+      <div className="flex items-center gap-2 px-4 py-3">
+        <ListChecks size={14} className="text-brand-400 shrink-0" />
+        <span className="text-[13px] font-medium text-ink-500">Regenerating plan…</span>
+      </div>
+      <ul className="flex flex-col border-t border-canvas-border">
+        {[0, 1, 2].map(i => (
+          <li key={i} className={`px-4 py-3 ${i > 0 ? 'border-t border-canvas-border/70' : ''}`}>
+            <div className="flex items-start gap-3">
+              <span className="size-2.5 rounded-full bg-paper-100 shrink-0 mt-[7px] animate-pulse" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="h-3 w-1/3 rounded bg-paper-100 animate-pulse" />
+                <div className="h-2.5 w-3/4 rounded bg-paper-50 animate-pulse" />
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function PlanTab({
   steps = CHAT_PLAN_STEPS,
   assumptions = PLAN_ASSUMPTIONS,
@@ -153,6 +193,9 @@ function PlanTab({
   onCanvasAction?: (ctx: ComposerContext) => void;
 } = {}) {
   const { addToast } = useToast();
+  // Regenerate-plan affordance: briefly swap the plan for a flat shimmer
+  // skeleton, then re-show it. Self-contained — no ChatView involvement.
+  const [regenerating, setRegenerating] = useState(false);
 
   // Compose the chat draft from the current assumption set so the user
   // sees what they're editing and where to type their change. Falls back to
@@ -166,18 +209,36 @@ function PlanTab({
     onComposeInChat(`Update assumptions for this query — currently:\n${lines}\n\nWhat should change? `);
   };
 
+  const handleRegenerate = () => {
+    setRegenerating(true);
+    setTimeout(() => setRegenerating(false), 1200);
+  };
+
   return (
     <div className="space-y-4 pt-4">
       {/* Query Execution Plan — shared with the workflow-builder canvas. */}
-      <QueryExecutionPlanCard
-        steps={steps}
-        onEdit={onCanvasAction ? () => onCanvasAction(editPlanContext(steps.length)) : undefined}
-      />
+      {regenerating ? (
+        <PlanRegenerateSkeleton />
+      ) : (
+        <QueryExecutionPlanCard
+          steps={steps}
+          onEdit={onCanvasAction ? () => onCanvasAction(editPlanContext(steps.length)) : undefined}
+          onRegenerate={handleRegenerate}
+          onStepEdit={(step) => onComposeInChat?.(`Refine this step — "${step.name}": ${step.description}\n\nWhat should change? `)}
+        />
+      )}
       {/* Assumptions — shared with the workflow-builder canvas. */}
       <AssumptionsCard
         assumptions={assumptions}
         context="query"
         onEdit={onComposeInChat ? handleEditAssumptions : undefined}
+        onCorrectAssumption={onComposeInChat ? (a) => {
+          // Tapping "Correct it" on a recalled assumption seeds the composer
+          // with the original question memory spared the user, so they can
+          // override it in one turn (and re-teach memory).
+          const q = a.memory?.sparedQuestion ?? `the "${a.key}" assumption`;
+          onComposeInChat(`Memory assumed ${a.key} = "${a.value}" (from ${a.memory?.source ?? 'a prior run'}). That's not right for this query — ${q} `);
+        } : undefined}
       />
     </div>
   );
@@ -276,11 +337,25 @@ ORDER BY
         </div>
       </CollapsibleSection>
 
-      <CollapsibleSection title="Execution Stats" icon={BarChart3} defaultOpen={false}>
-        <div className="grid grid-cols-3 gap-3 pt-3">
-          <KpiTile label="Records scanned" value="1.2M" index={0} />
-          <KpiTile label="Query time"      value="0.3s" index={1} />
-          <KpiTile label="Results"          value="9"    index={2} />
+      <CollapsibleSection title="Execution Stats" icon={BarChart3} defaultOpen={true}>
+        <div className="grid grid-cols-3 gap-2 pt-3">
+          {[
+            { label: 'Records scanned', value: '1.2M' },
+            { label: 'Query time',      value: '0.3s' },
+            { label: 'Results',         value: '9' },
+          ].map(stat => (
+            <div
+              key={stat.label}
+              className="rounded-lg border border-canvas-border bg-canvas px-3 py-2.5"
+            >
+              <div className="text-[1.25rem] font-semibold text-ink-900 leading-none tabular-nums">
+                {stat.value}
+              </div>
+              <div className="text-[0.6875rem] font-medium uppercase tracking-[0.04em] text-ink-500 mt-1.5">
+                {stat.label}
+              </div>
+            </div>
+          ))}
         </div>
       </CollapsibleSection>
     </div>
@@ -1149,10 +1224,8 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
             );
           })}
         </div>
-        {/* Close lives inside the panel — the chat header's workspace
-            toggle only shows when the panel is closed (to open it),
-            then this button takes over while open. Single icon per
-            state, no duplication. */}
+        {/* Panel-level actions — Share, then a close control that collapses
+            the workspace (mirrors the chat header's workspace toggle). */}
         <div className="flex items-center gap-1 shrink-0">
           {onShareResults && (
             <Gated permission="wf_output" mode="disable" title="You don't have permission to share results">
@@ -1167,12 +1240,13 @@ export default function ArtifactPanel({ activeTab, setActiveTab, onClose, onOpen
             </Gated>
           )}
           <button
+            type="button"
             onClick={onClose}
-            aria-label="Close panel"
-            title="Close panel"
-            className="size-8 mb-1 inline-flex items-center justify-center text-ink-400 hover:text-brand-700 rounded-md hover:bg-brand-50 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            aria-label="Collapse workspace"
+            title="Collapse workspace"
+            className="size-8 mb-1 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
-            <PanelRightClose size={14} />
+            <PanelRightClose size={16} />
           </button>
         </div>
       </div>

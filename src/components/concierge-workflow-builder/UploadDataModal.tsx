@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
   Search,
-  UploadCloud,
   Upload,
   Layers,
   FileText,
+  FileSpreadsheet,
+  FileJson,
   Database,
   Cloud,
   MessageSquare,
@@ -35,6 +37,17 @@ interface Props {
     files: UploadedFile[];
     linkedSources: string[];
   }) => void;
+  /** Modal heading. Defaults to "Add data". */
+  title?: string;
+  /** Restrict the tab strip to these tabs (e.g. ['upload'] for a pure uploader).
+   *  Omit to show the full chat/workflow tab set. */
+  allowedTabs?: TabId[];
+  /** Footer hint shown when nothing is selected yet. Overrides the default
+   *  chat-composer copy for callers embedding the picker elsewhere (e.g. ATR). */
+  footerHint?: ReactNode;
+  /** Hide chat "Session file" assets from the data lists (e.g. ATR, where a
+   *  prior chat session's CSV is never a valid audit input). */
+  hideSessionFiles?: boolean;
 }
 
 type TabId = 'upload' | 'all' | 'files' | 'db' | 'favourites' | 'folder';
@@ -127,18 +140,42 @@ const ALL_ASSETS: Asset[] = [
   ...EXTRA_ASSETS,
 ];
 
-function kindIcon(kind: AssetKind) {
-  if (kind === 'db') return Database;
-  if (kind === 'cloud') return Cloud;
-  if (kind === 'session') return MessageSquare;
-  if (kind === 'api') return Globe;
-  return FileText;
+// Sample folders so the Folder tab has content out of the box (mirrors the
+// mock catalog behind All Data / Files). Real uploaded folders appear above these.
+const MOCK_FOLDERS: { name: string; count: number; bytes: number }[] = [
+  { name: 'FY26 Q1 — SOX Evidence', count: 8, bytes: 18_400_000 },
+  { name: 'Procure-to-Pay Walkthroughs', count: 5, bytes: 9_100_000 },
+  { name: 'ITGC Access Reviews', count: 12, bytes: 24_700_000 },
+];
+
+// File rows are colored by their format (PDF red, spreadsheet green, …) so the
+// list is scannable at a glance; non-file kinds keep their canonical tile color.
+function fileSubtype(a: Asset): string {
+  return (a.subtype || '').toUpperCase();
+}
+
+function assetIcon(a: Asset) {
+  if (a.kind === 'db') return Database;
+  if (a.kind === 'cloud') return Cloud;
+  if (a.kind === 'session') return MessageSquare;
+  if (a.kind === 'api') return Globe;
+  switch (fileSubtype(a)) {
+    case 'CSV':
+    case 'XLSX':
+    case 'XLS':
+      return FileSpreadsheet;
+    case 'JSON':
+      return FileJson;
+    default:
+      return FileText;
+  }
 }
 
 // Canonical kind→token mapping from data-sources/sources.ts (TYPE_META). Keeps
-// this modal's tile colors in sync with DataSourcesView and DataPickerModal.
-function kindStyles(kind: AssetKind): { wrap: string; icon: string } {
-  switch (kind) {
+// this modal's tile colors in sync with DataSourcesView and DataPickerModal;
+// file rows branch further on format.
+function assetStyles(a: Asset): { wrap: string; icon: string } {
+  switch (a.kind) {
     case 'db':
       return { wrap: 'bg-evidence-50', icon: 'text-evidence-700' };
     case 'cloud':
@@ -149,7 +186,22 @@ function kindStyles(kind: AssetKind): { wrap: string; icon: string } {
       return { wrap: 'bg-mitigated-50', icon: 'text-mitigated-700' };
     case 'file':
     default:
-      return { wrap: 'bg-brand-50', icon: 'text-brand-700' };
+      switch (fileSubtype(a)) {
+        case 'PDF':
+          return { wrap: 'bg-risk-50', icon: 'text-risk-700' };
+        case 'CSV':
+        case 'XLSX':
+        case 'XLS':
+          return { wrap: 'bg-compliant-50', icon: 'text-compliant-700' };
+        case 'DOC':
+        case 'DOCX':
+          return { wrap: 'bg-evidence-50', icon: 'text-evidence-700' };
+        case 'PPT':
+        case 'PPTX':
+          return { wrap: 'bg-mitigated-50', icon: 'text-mitigated-700' };
+        default:
+          return { wrap: 'bg-brand-50', icon: 'text-brand-700' };
+      }
   }
 }
 
@@ -169,6 +221,17 @@ function kindBadgeLabel(kind: AssetKind): string {
   }
 }
 
+// Map an asset's subtype to a file extension so a picked existing source can be
+// handed back as a real (synthetic) File that downstream uploaders accept.
+const SUBTYPE_EXT: Record<string, string> = {
+  PDF: 'pdf', CSV: 'csv', XLSX: 'xlsx', XLS: 'xls', DOCX: 'docx', DOC: 'doc', PPTX: 'pptx', PPT: 'ppt', JSON: 'json', TXT: 'txt',
+};
+function sourceFileName(name: string, subtype: string): string {
+  if (/\.[a-z0-9]{2,5}$/i.test(name)) return name;              // already has an extension
+  const ext = SUBTYPE_EXT[(subtype || '').toUpperCase()];
+  return ext ? `${name}.${ext}` : name;
+}
+
 export default function UploadDataModal({
   open,
   onClose,
@@ -177,11 +240,21 @@ export default function UploadDataModal({
   setFiles,
   onLinkSource,
   onAttachDraft,
+  title = 'Add data',
+  allowedTabs,
+  footerHint,
+  hideSessionFiles,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const { favs, toggleFav } = useFavouriteSources();
-  const [tab, setTab] = useState<TabId>('upload');
+  const [tab, setTab] = useState<TabId>(allowedTabs?.[0] ?? 'upload');
+  // The catalog this instance shows — chat "Session file" assets are dropped
+  // for callers that pass hideSessionFiles (e.g. the ATR upload journey).
+  const assets = useMemo(
+    () => (hideSessionFiles ? ALL_ASSETS.filter((a) => a.kind !== 'session') : ALL_ASSETS),
+    [hideSessionFiles],
+  );
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pendingFiles, setPendingFiles] = useState<UploadedFile[]>([]);
@@ -190,7 +263,7 @@ export default function UploadDataModal({
   // Reset transient modal state on close.
   useEffect(() => {
     if (open) return;
-    setTab('upload');
+    setTab(allowedTabs?.[0] ?? 'upload');
     setSearch('');
     setSelectedIds(new Set());
     setPendingFiles([]);
@@ -212,15 +285,15 @@ export default function UploadDataModal({
   }, [open, onClose]);
 
   const filesCount = useMemo(
-    () => ALL_ASSETS.filter((a) => a.kind === 'file' || a.kind === 'session').length,
-    [],
+    () => assets.filter((a) => a.kind === 'file' || a.kind === 'session').length,
+    [assets],
   );
-  const dbCount = useMemo(() => ALL_ASSETS.filter((a) => a.kind === 'db').length, []);
-  const allCount = ALL_ASSETS.length;
-  const favCount = useMemo(() => ALL_ASSETS.filter((a) => favs.has(a.id)).length, [favs]);
+  const dbCount = useMemo(() => assets.filter((a) => a.kind === 'db').length, [assets]);
+  const allCount = assets.length;
+  const favCount = useMemo(() => assets.filter((a) => favs.has(a.id)).length, [assets, favs]);
 
   const visibleAssets = useMemo(() => {
-    let list = ALL_ASSETS;
+    let list = assets;
     if (tab === 'files') list = list.filter((a) => a.kind === 'file' || a.kind === 'session');
     else if (tab === 'db') list = list.filter((a) => a.kind === 'db');
     else if (tab === 'favourites') list = list.filter((a) => favs.has(a.id));
@@ -231,13 +304,13 @@ export default function UploadDataModal({
       );
     }
     return list;
-  }, [tab, search, favs]);
+  }, [assets, tab, search, favs]);
 
   // Existing assets the user has ticked across the data tabs — shown alongside
   // fresh uploads in one combined list on the Upload tab.
   const selectedAssets = useMemo(
-    () => ALL_ASSETS.filter((a) => selectedIds.has(a.id)),
-    [selectedIds],
+    () => assets.filter((a) => selectedIds.has(a.id)),
+    [assets, selectedIds],
   );
 
   const toggleAsset = (id: string) => {
@@ -257,6 +330,9 @@ export default function UploadDataModal({
       // webkitRelativePath is set for files picked via a folder ("Folder/file.csv");
       // empty for loose files. Drives the Folder tab grouping.
       path: f.webkitRelativePath || undefined,
+      // Keep the real File blob so callers that actually parse the upload
+      // (e.g. the ATR report extractor) can read it.
+      file: f,
     }));
     setPendingFiles((prev) => [...prev, ...arr]);
   };
@@ -279,6 +355,13 @@ export default function UploadDataModal({
     }
     return [...map.values()];
   }, [pendingFiles]);
+
+  // Display list for the Folder tab: real uploaded folders first, then the
+  // sample folders so the tab is never empty.
+  const folderList = useMemo(() => [
+    ...uploadedFolders.map((f) => ({ name: f.name, count: f.files.length, bytes: f.bytes, uploaded: true })),
+    ...MOCK_FOLDERS.map((f) => ({ ...f, uploaded: false })),
+  ], [uploadedFolders]);
 
   const removeFolder = (name: string) => {
     setPendingFiles((prev) => prev.filter((f) => !(f.path && f.path.includes('/') && f.path.split('/')[0] === name)));
@@ -333,25 +416,36 @@ export default function UploadDataModal({
 
       setFiles(next);
     } else {
-      // No workflow yet — defer the picks back to the caller.
+      // No workflow — defer the picks to the caller. Selected EXISTING sources
+      // are surfaced as files too (with a synthetic File blob + a real
+      // extension) so callers that only read `files` receive them as well.
+      const sourceFiles: UploadedFile[] = selectedAssets.map(a => {
+        const filename = sourceFileName(a.name, a.subtype);
+        return { name: filename, size: 0, linkedSource: true, file: new File([], filename) };
+      });
       onAttachDraft?.({
-        files: pendingFiles.slice(),
+        files: [...pendingFiles.slice(), ...sourceFiles],
         linkedSources: linkedSourceNames,
       });
     }
     onClose();
   };
 
-  const TABS: { id: TabId; label: string; icon: typeof Upload; count?: number }[] = [
+  const ALL_TABS: { id: TabId; label: string; icon: typeof Upload; count?: number }[] = [
     { id: 'favourites', label: 'Favourites', icon: Star, count: favCount },
     { id: 'upload', label: 'Upload', icon: Upload },
     { id: 'all', label: 'All Data', icon: Layers, count: allCount },
     { id: 'files', label: 'Files', icon: FileText, count: filesCount },
-    { id: 'folder', label: 'Folder', icon: Folder, count: uploadedFolders.length },
+    { id: 'folder', label: 'Folder', icon: Folder, count: folderList.length },
     { id: 'db', label: 'DB', icon: Database, count: dbCount },
   ];
+  // Callers can restrict the tab set (e.g. ATR uses Upload only).
+  const TABS = allowedTabs ? ALL_TABS.filter(t => allowedTabs.includes(t.id)) : ALL_TABS;
 
-  return (
+  // Portal to <body> so the overlay is fixed to the viewport (not trapped inside
+  // a transformed ancestor, e.g. when opened over the ATR wizard modal) and its
+  // scrim fully covers whatever is behind.
+  return createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -360,8 +454,8 @@ export default function UploadDataModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="fixed inset-0 z-[190]"
-            style={{ background: 'rgba(15, 8, 30, 0.5)' }}
+            className="fixed inset-0 z-[190] backdrop-blur-[6px]"
+            style={{ background: 'rgba(15, 8, 30, 0.78)' }}
             onClick={onClose}
           />
           <motion.div
@@ -376,7 +470,7 @@ export default function UploadDataModal({
                   tabs, matching the chat picker). */}
               <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border">
                 <h2 className="text-[15px] font-semibold text-ink-800 shrink-0">
-                  Add data
+                  {title}
                 </h2>
                 <button
                   type="button"
@@ -388,7 +482,10 @@ export default function UploadDataModal({
                 </button>
               </div>
 
-              {/* Tabs */}
+              {/* Tabs — hidden entirely when there's a single tab (e.g. ATR's
+                  upload-only picker). The Choose files/folder buttons now live in
+                  the Selected & uploaded section below, not this row. */}
+              {TABS.length > 1 && (
               <div className="flex items-center gap-1 px-5 border-b border-canvas-border">
                 {TABS.map((t) => {
                   const active = tab === t.id;
@@ -421,29 +518,8 @@ export default function UploadDataModal({
                     </button>
                   );
                 })}
-                {/* Once something's picked the drop zone collapses to the list,
-                    so the pickers move up here (mirrors the chat picker). */}
-                {tab === 'upload' && totalSelected > 0 && (
-                  <div className="ml-auto flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
-                    >
-                      <Upload size={13} />
-                      Choose files
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => folderInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-canvas-border bg-canvas-elevated text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.75rem] font-semibold transition-colors cursor-pointer"
-                    >
-                      <Folder size={13} />
-                      Choose folder
-                    </button>
-                  </div>
-                )}
               </div>
+              )}
 
               {/* Search — sits directly below the tabs (it filters the active
                   tab's list). Data tabs only; Upload/Folder tabs have none. */}
@@ -463,7 +539,7 @@ export default function UploadDataModal({
               )}
 
               {/* Body */}
-              <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5">
+              <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col">
                 {/* Always-mounted folder picker — triggered from the Folder tab
                     and the Upload tab's "Choose folder" button. webkitdirectory
                     set via ref (no typed prop). */}
@@ -482,6 +558,7 @@ export default function UploadDataModal({
                 />
                 {tab === 'upload' && (
                   <div
+                    className="flex-1 flex flex-col min-h-0"
                     onDragOver={(e) => {
                       e.preventDefault();
                       setDragOver(true);
@@ -505,45 +582,31 @@ export default function UploadDataModal({
                     />
 
                     {totalSelected === 0 ? (
-                      // Nothing picked yet — full drop zone with both pickers.
+                      // Standard "Add data" drop zone — plain target, no custom chrome.
                       <div
                         className={cn(
-                          'rounded-xl border-2 border-dashed flex flex-col items-center justify-center text-center px-6 transition-colors',
-                          'min-h-[320px]',
-                          dragOver
-                            ? 'border-brand-400 bg-brand-50/60'
-                            : 'border-canvas-border bg-canvas',
+                          'w-full flex-1 min-h-[260px] rounded-xl border-2 border-dashed flex flex-col items-center justify-center text-center px-6 py-7 transition-colors',
+                          dragOver ? 'border-brand-600 bg-brand-50' : 'border-canvas-border bg-canvas',
                         )}
                       >
-                        <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3 text-ink-400">
-                          <UploadCloud size={32} strokeWidth={1.5} />
-                        </div>
-                        <div className="text-[15px] font-semibold text-ink-800">
-                          Drop files here
-                        </div>
-                        <div className="text-[13px] text-ink-500 mt-1">
-                          or pick from your computer
-                        </div>
-                        <div className="inline-flex items-center gap-2 mt-4">
-                          <Button
-                            variant="primary"
-                            size="md"
+                        <Upload size={24} className={cn('mb-2', dragOver ? 'text-brand-600' : 'text-ink-400')} aria-hidden="true" />
+                        <p className="text-[0.875rem] font-medium text-ink-700">Drop files or a folder here</p>
+                        <p className="text-[0.75rem] text-ink-500 mt-1">or pick from your computer</p>
+                        <div className="inline-flex items-center gap-2 mt-3">
+                          <button
+                            type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            leadingIcon={<UploadCloud size={13} />}
+                            className="inline-flex items-center gap-2 px-4 h-10 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
                           >
-                            Choose files
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="md"
+                            <Upload size={14} aria-hidden="true" /> Choose files
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => folderInputRef.current?.click()}
-                            leadingIcon={<Folder size={13} />}
+                            className="inline-flex items-center gap-2 px-4 h-10 rounded-md border border-canvas-border bg-canvas-elevated text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.8125rem] font-semibold transition-colors cursor-pointer"
                           >
-                            Choose folder
-                          </Button>
-                        </div>
-                        <div className="text-[12px] text-ink-400 mt-3 tabular-nums">
-                          CSV · Excel · PDF · ≤ 50 MB each
+                            <Folder size={14} aria-hidden="true" /> Choose folder
+                          </button>
                         </div>
                       </div>
                     ) : (
@@ -553,10 +616,28 @@ export default function UploadDataModal({
                         'rounded-lg border bg-canvas-elevated overflow-hidden transition-colors',
                         dragOver ? 'border-brand-400 ring-2 ring-brand-200' : 'border-canvas-border',
                       )}>
-                        <div className="px-3 py-2 border-b border-canvas-border bg-canvas">
+                        <div className="flex items-center gap-2 px-3 py-2 border-b border-canvas-border bg-canvas">
                           <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500">
                             Selected &amp; uploaded · {pendingFiles.length + selectedAssets.length}
                           </span>
+                          <div className="ml-auto flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md bg-brand-600 hover:bg-brand-500 active:bg-brand-800 text-white text-[0.71875rem] font-semibold transition-colors cursor-pointer"
+                            >
+                              <Upload size={12} />
+                              Choose files
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => folderInputRef.current?.click()}
+                              className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-800 hover:border-brand-300 hover:bg-brand-50 text-[0.71875rem] font-semibold transition-colors cursor-pointer"
+                            >
+                              <Folder size={12} />
+                              Choose folder
+                            </button>
+                          </div>
                         </div>
                         <ul className="divide-y divide-canvas-border">
                           {/* Fresh uploads */}
@@ -592,8 +673,8 @@ export default function UploadDataModal({
                           ))}
                           {/* Existing sources ticked on the data tabs */}
                           {selectedAssets.map((a) => {
-                            const Icon = kindIcon(a.kind);
-                            const styles = kindStyles(a.kind);
+                            const Icon = assetIcon(a);
+                            const styles = assetStyles(a);
                             return (
                               <li
                                 key={`sel-${a.id}`}
@@ -649,10 +730,9 @@ export default function UploadDataModal({
                       </div>
                     </div>
                   ) : (
-                    <ul className="flex flex-col">
-                      {visibleAssets.map((a, i) => {
-                        const Icon = kindIcon(a.kind);
-                        const styles = kindStyles(a.kind);
+                    <ul className="divide-y divide-canvas-border">
+                      {visibleAssets.map((a) => {
+                        const Icon = assetIcon(a);
                         const selected = selectedIds.has(a.id);
                         const fav = favs.has(a.id);
                         return (
@@ -660,15 +740,14 @@ export default function UploadDataModal({
                             key={a.id}
                             className={cn(
                               'flex items-stretch transition-colors',
-                              i === 0 ? '' : 'border-t border-canvas-border',
-                              selected ? 'bg-brand-50/40' : 'hover:bg-canvas',
+                              selected ? 'bg-brand-50' : 'hover:bg-canvas',
                             )}
                           >
                             <button
                               type="button"
                               onClick={() => toggleAsset(a.id)}
                               aria-pressed={selected}
-                              className="flex-1 min-w-0 flex items-center gap-3 px-2 py-2.5 text-left cursor-pointer"
+                              className="flex-1 min-w-0 flex items-center gap-3 pr-0 py-3 text-left cursor-pointer"
                             >
                               {/* Square checkbox — matches the chat picker + shared DS Checkbox. */}
                               <div className={cn(
@@ -677,20 +756,19 @@ export default function UploadDataModal({
                               )}>
                                 {selected && <Check size={11} className="text-white" strokeWidth={3} />}
                               </div>
-                              <div
-                                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${styles.wrap}`}
-                              >
-                                <Icon size={14} className={styles.icon} />
+                              {/* One calm lavender tile for every source; the glyph distinguishes type. */}
+                              <div className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-brand-50 text-brand-700">
+                                <Icon size={15} />
                               </div>
                               <div className="min-w-0 flex-1">
-                                <div className="text-[13px] font-semibold text-ink-800 truncate">
+                                <div className={cn('text-[13px] font-medium truncate', selected ? 'text-brand-700' : 'text-ink-800')}>
                                   {a.name}
                                 </div>
-                                <div className="text-[12px] text-ink-400 truncate mt-0.5 tabular-nums">
+                                <div className="text-[11.5px] text-ink-500 truncate mt-0.5 tabular-nums">
                                   {a.meta}
                                 </div>
                               </div>
-                              <span className="text-[12px] text-ink-500 font-semibold rounded-md px-2 py-0.5 border border-canvas-border bg-canvas shrink-0">
+                              <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold text-ink-600 bg-paper-100">
                                 {kindBadgeLabel(a.kind)}
                               </span>
                             </button>
@@ -701,7 +779,7 @@ export default function UploadDataModal({
                               aria-label={fav ? `Remove ${a.name} from favourites` : `Add ${a.name} to favourites`}
                               aria-pressed={fav}
                               title={fav ? 'Favourited' : 'Add to favourites'}
-                              className="shrink-0 px-3 flex items-center justify-center cursor-pointer text-ink-400 hover:text-amber-500 transition-colors"
+                              className="shrink-0 px-4 flex items-center justify-center cursor-pointer text-ink-400 hover:text-amber-500 transition-colors"
                             >
                               <Star size={15} className={fav ? 'text-amber-500 fill-amber-500' : ''} />
                             </button>
@@ -714,52 +792,34 @@ export default function UploadDataModal({
 
                 {/* Folder tab — folders uploaded this session (0 until one is added). */}
                 {tab === 'folder' && (
-                  uploadedFolders.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center text-center py-16">
-                      <Folder size={24} className="text-ink-300 mb-3" />
-                      <div className="text-[13px] font-semibold text-ink-700">No folders uploaded yet</div>
-                      <div className="text-[12px] text-ink-400 mt-1">Upload a folder to see it here.</div>
-                      <Button
-                        variant="ghost"
-                        size="md"
-                        onClick={() => folderInputRef.current?.click()}
-                        className="mt-4"
-                        leadingIcon={<Folder size={13} />}
+                  <ul className="divide-y divide-canvas-border">
+                    {folderList.map((f) => (
+                      <li
+                        key={f.name}
+                        className="group flex items-center gap-3 py-3 transition-colors hover:bg-canvas"
                       >
-                        Choose folder
-                      </Button>
-                    </div>
-                  ) : (
-                    <ul className="flex flex-col">
-                      {uploadedFolders.map((f, i) => (
-                        <li
-                          key={f.name}
-                          className={cn(
-                            'flex items-center gap-3 px-2 py-2.5 transition-colors hover:bg-canvas',
-                            i === 0 ? '' : 'border-t border-canvas-border',
-                          )}
-                        >
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-brand-50 text-brand-700">
-                            <Folder size={14} />
+                        <div className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-brand-50 text-brand-700">
+                          <Folder size={15} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px] font-medium text-ink-800 truncate">{f.name}</div>
+                          <div className="text-[11.5px] text-ink-500 truncate mt-0.5 tabular-nums">
+                            {f.count} {f.count === 1 ? 'file' : 'files'} · {f.bytes > 1024 * 1024 ? `${(f.bytes / (1024 * 1024)).toFixed(1)} MB` : `${(f.bytes / 1024).toFixed(1)} KB`}
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[13px] font-semibold text-ink-800 truncate">{f.name}</div>
-                            <div className="text-[12px] text-ink-400 truncate mt-0.5 tabular-nums">
-                              {f.files.length} {f.files.length === 1 ? 'file' : 'files'} · {f.bytes > 1024 * 1024 ? `${(f.bytes / (1024 * 1024)).toFixed(1)} MB` : `${(f.bytes / 1024).toFixed(1)} KB`}
-                            </div>
-                          </div>
+                        </div>
+                        {f.uploaded && (
                           <button
                             type="button"
                             onClick={() => removeFolder(f.name)}
                             aria-label={`Remove folder ${f.name}`}
-                            className="shrink-0 w-7 h-7 rounded-md text-ink-400 hover:text-risk hover:bg-canvas flex items-center justify-center transition-colors cursor-pointer"
+                            className="shrink-0 w-7 h-7 rounded-md text-ink-400 hover:text-risk hover:bg-canvas flex items-center justify-center transition-colors cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
                           >
                             <X size={13} />
                           </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
 
@@ -769,7 +829,7 @@ export default function UploadDataModal({
                   {totalSelected > 0 ? (
                     <><span className="font-semibold text-ink-700">{totalSelected}</span> {totalSelected === 1 ? 'item' : 'items'} selected</>
                   ) : (
-                    'Pick sources or files to attach to your message.'
+                    footerHint ?? 'Pick sources or files to attach to your message.'
                   )}
                 </p>
                 <div className="flex items-center gap-2">
@@ -791,6 +851,7 @@ export default function UploadDataModal({
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
