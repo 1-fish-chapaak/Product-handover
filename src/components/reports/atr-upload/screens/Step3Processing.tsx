@@ -1,40 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
 import { Loader2, Check } from 'lucide-react';
-import { PROCESSING_MESSAGES, PROCESSING_DURATION_MS } from '../mockExtraction';
+import { PROCESSING_MESSAGES } from '../mockExtraction';
 
 /**
- * Screen 3 — mocked extraction. The wait is surfaced in-place: a live progress
- * header (spinner + cycling status + percent + bar + step checklist) sits above
- * a calm skeleton of the summary that's loading. Resolves to the summary when
- * extraction completes.
+ * Screen 3 — mocked extraction (presentational). The progress + active step are
+ * driven by the wizard host (AtrUploadInner) so the run keeps advancing even when
+ * the wizard is minimized to a floating toast. Resolves to the summary when the
+ * host's timer completes.
  */
-export default function Step3Processing({ onDone }: { onDone: () => void }) {
-  const [progress, setProgress] = useState(0);
-  const [step, setStep] = useState(0);
-  // onDone's identity can change between renders; pin it so the timer fires once.
-  const onDoneRef = useRef(onDone);
-  onDoneRef.current = onDone;
-
-  useEffect(() => {
-    const start = performance.now();
-    let raf = 0;
-    const loop = (now: number) => {
-      const elapsed = now - start;
-      // Ease-out so the bar advances briskly early and settles near the end —
-      // a longer (~30s) wait feels responsive rather than a slow linear crawl.
-      const t = Math.min(1, elapsed / PROCESSING_DURATION_MS);
-      const eased = 1 - Math.pow(1 - t, 2);
-      setProgress(eased * 100);
-      setStep(Math.min(PROCESSING_MESSAGES.length - 1, Math.floor(eased * PROCESSING_MESSAGES.length)));
-      if (elapsed < PROCESSING_DURATION_MS) raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    const done = window.setTimeout(() => onDoneRef.current(), PROCESSING_DURATION_MS);
-    return () => { cancelAnimationFrame(raf); window.clearTimeout(done); };
-    // Run once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+export default function Step3Processing({ progress, step }: { progress: number; step: number }) {
   return (
     <div
       className="rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-hidden"

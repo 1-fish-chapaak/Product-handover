@@ -5,6 +5,8 @@ import { X, UserPlus, ChevronLeft, ChevronRight, Check, AlertTriangle } from 'lu
 import { RISK_OWNERS, type GrcException, type GrcExceptionStatus } from '../../data/mockData';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import Gated from '../shared/Gated';
+import { useWorkflowOptional } from './workflow/WorkflowContext';
+import { userName } from './workflow/workflowData';
 
 // ─── Styling vocab — mirrors the table chips so the preview reads
 //     identically to the main Exceptions table. ───────────────────────────
@@ -73,6 +75,26 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
 
   // Focus trap — keeps Tab/Shift+Tab inside the drawer; ESC routes through onClose.
   useFocusTrap(drawerRef, true, onClose);
+
+  // ── Segregation of duties ───────────────────────────────────────────────
+  // The person doing the work on a case can't ALSO be an approver in that case's
+  // approval chain — otherwise they'd be approving their own work. Collect the
+  // names of everyone in the checked cases' approval chains (Risk Owner route +
+  // any attached Auditor route) so we can block them from being picked as the
+  // assignee and explain why.
+  const wf = useWorkflowOptional();
+  const chainApproverNames = useMemo(() => {
+    const names = new Set<string>();
+    if (!wf) return names;
+    cases.forEach(c => {
+      if (!checked.has(c.id)) return;
+      wf.assignments
+        .filter(a => a.exceptionId === c.id && a.persona === 'risk-owner')
+        .forEach(a => a.levels.forEach(l => l.assigneeIds.forEach(id => names.add(userName(id)))));
+      wf.auditorRoutes[c.id]?.levels.forEach(l => l.assigneeIds.forEach(id => names.add(userName(id))));
+    });
+    return names;
+  }, [wf, cases, checked]);
 
   // Count of checked cases that already have an assignee — drives the
   // reassignment warning banner above the Cases Preview.
@@ -211,7 +233,14 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
     };
   }, [assigneeOpen, resolvedAssignees.length]);
 
-  const canConfirm = checkedCount > 0 && resolvedAssignees.length > 0;
+  // Picked assignees who are also approvers in a checked case's chain — blocks
+  // confirmation (you can't approve your own work).
+  const conflictingPicks = useMemo(
+    () => resolvedAssignees.filter(a => chainApproverNames.has(a.name)),
+    [resolvedAssignees, chainApproverNames],
+  );
+
+  const canConfirm = checkedCount > 0 && resolvedAssignees.length > 0 && conflictingPicks.length === 0;
 
   const handleConfirm = () => {
     if (!canConfirm) return;
@@ -317,6 +346,21 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
                 {reassignedCount === 1 ? 'case already has' : 'cases already have'} an owner.
                 Confirming will replace the current owner{reassignedCount === 1 ? '' : 's'}.
                 Uncheck rows to skip them.
+              </span>
+            </div>
+          )}
+
+          {/* Segregation-of-duties conflict — a picked assignee is also an approver */}
+          {conflictingPicks.length > 0 && (
+            <div
+              role="alert"
+              className="flex items-start gap-2.5 px-3 py-2.5 bg-risk-50 border border-risk-200 rounded-[10px] text-[12.5px] text-risk-800"
+            >
+              <AlertTriangle size={15} className="text-risk-700 shrink-0 mt-px" aria-hidden="true" />
+              <span className="leading-snug">
+                <span className="font-semibold">{conflictingPicks.map(a => a.name).join(', ')}</span>{' '}
+                {conflictingPicks.length === 1 ? 'is' : 'are'} already in the approval chain for{' '}
+                {conflictingPicks.length === 1 ? 'a selected case' : 'selected cases'}, so they can’t also be assigned to do the work — that would let them approve their own case. Remove them, or change the approval flow.
               </span>
             </div>
           )}
@@ -513,23 +557,29 @@ export default function BulkAssignDrawer({ cases, onClose, onApply, initialAssig
                   >
                     {assigneeMatches.map(u => {
                       const isSelected = pickedUserIds.has(u.id);
+                      const inChain = chainApproverNames.has(u.name);
                       return (
                         <button
                           key={u.id}
                           type="button"
                           role="option"
                           aria-selected={isSelected}
-                          onClick={() => handleTogglePickUser(u.id)}
-                          className="flex items-center gap-2.5 w-full text-left px-3 py-2 text-[12.5px] hover:bg-[#FAFAFB] cursor-pointer"
+                          aria-disabled={inChain}
+                          disabled={inChain}
+                          onClick={() => { if (!inChain) handleTogglePickUser(u.id); }}
+                          title={inChain ? `${u.name} is in this case's approval chain and can't also be the assignee.` : undefined}
+                          className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-[12.5px] ${inChain ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#FAFAFB] cursor-pointer'}`}
                         >
                           <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-brand-700 text-[10px] font-semibold shrink-0">
                             {u.initials}
                           </span>
                           <span className="flex-1 min-w-0">
                             <span className="block text-ink-900 truncate">{u.name}</span>
-                            <span className="block text-ink-500 text-[11px] truncate">{u.role} · {u.email}</span>
+                            <span className="block text-ink-500 text-[11px] truncate">
+                              {inChain ? 'In the approval chain — can’t be the assignee' : `${u.role} · ${u.email}`}
+                            </span>
                           </span>
-                          {isSelected && (
+                          {isSelected && !inChain && (
                             <Check size={14} className="text-brand-600 shrink-0" aria-hidden="true" />
                           )}
                         </button>

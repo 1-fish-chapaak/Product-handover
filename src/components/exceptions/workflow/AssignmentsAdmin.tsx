@@ -31,7 +31,7 @@ export default function AssignmentsAdmin({ role, exceptions }: { role: Persona; 
       <div className="border border-dashed border-canvas-border rounded-[12px] p-10 text-center">
         <ClipboardList size={22} className="text-ink-300 mx-auto mb-2" />
         <p className="text-[13px] font-semibold text-ink-700">No assignments yet</p>
-        <p className="text-[12px] text-ink-500 mt-1">Select exceptions in the Exceptions tab and click "Send for Approval".</p>
+        <p className="text-[12px] text-ink-500 mt-1">Select exceptions in the Exceptions tab and click "Assign Approval Flow".</p>
       </div>
     );
   }

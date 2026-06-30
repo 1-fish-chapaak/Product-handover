@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
-  FileSpreadsheet, FileText, Download, Check, Upload, Sparkles, ArrowDown,
+  FileSpreadsheet, FileText, Download, Check, Upload, Sparkles, ArrowDown, ArrowRight, X, Plus,
   Heading, AlignLeft, ShieldAlert, Lightbulb, Wrench, Paperclip, UserCheck, Tag, Gauge, CalendarClock,
 } from 'lucide-react';
 import { Button } from '../../../shared/Button';
-import UploadDataModal from '../../../concierge-workflow-builder/UploadDataModal';
+import { WizardFooter } from '../footerSlot';
 import { downloadExcelTemplate, downloadWordTemplate, REQUIRED_FIELDS } from '../../atrTemplate';
 import { useToast } from '../../../shared/Toast';
 
@@ -115,13 +115,17 @@ function TemplateGuide() {
   );
 }
 
-/** Screen 2A — download the IRAME template, fill offline, upload it back. */
+/** Screen 2A — download the IRAME template, fill offline, upload it back
+ *  (+ optional annexures, mirroring the existing-report path). */
 export default function Step2aTemplateDownload({ onUpload }: {
-  onUpload: (file: File) => void;
+  onUpload: (file: File, annexures: File[]) => void;
 }) {
   const { addToast } = useToast();
   const [downloaded, setDownloaded] = useState<'excel' | 'word' | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const [templateFile, setTemplateFile] = useState<File | null>(null);
+  const [annexures, setAnnexures] = useState<File[]>([]);
+  const templateInputRef = useRef<HTMLInputElement>(null);
+  const annexInputRef = useRef<HTMLInputElement>(null);
 
   const handleExcel = () => { downloadExcelTemplate(); setDownloaded('excel'); addToast({ type: 'success', message: 'Excel template downloaded. Fill one row per observation and upload it back.' }); };
   const handleWord = () => { downloadWordTemplate(); setDownloaded('word'); addToast({ type: 'success', message: 'Word template downloaded. Fill one table per observation and upload it back.' }); };
@@ -173,32 +177,98 @@ export default function Step2aTemplateDownload({ onUpload }: {
           <div className="flex-1 h-px bg-canvas-border" />
         </div>
 
-        {/* Step 2 — upload the filled template */}
+        {/* Step 2 — upload the filled template (+ optional annexures) */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: EASE, delay: 0.16 }}
-          className="rounded-[14px] border border-canvas-border bg-brand-50/30 p-4"
+          className="grid sm:grid-cols-2 gap-4 items-start"
         >
-          <h3 className="text-[14px] font-semibold text-ink-900 mb-1">Upload filled template</h3>
-          <p className="text-[12px] text-ink-500 mb-3">
-            {hasDownloaded ? 'Filled it in? Upload it here — we’ll extract every observation.' : 'Once you’ve filled a template, upload it here — we’ll extract every observation.'}
-          </p>
-          <Button variant="primary" size="md" shape="md" leftIcon={<Upload size={15} />} onClick={() => setUploadOpen(true)} className="w-full">
-            Upload filled template
-          </Button>
+          {/* Filled template (required) */}
+          <div className={`relative flex flex-col rounded-[14px] border bg-canvas-elevated p-4 transition-colors ${templateFile ? 'border-compliant/40' : 'border-canvas-border hover:border-brand-300'}`}>
+            <span className="absolute top-3.5 right-3.5 inline-flex items-center rounded-full text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 bg-risk-50 text-risk-700">Required</span>
+            <div className="flex items-center gap-3 mb-3 pr-20">
+              <span className="w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 bg-brand-50 text-brand-700"><FileText size={19} aria-hidden="true" /></span>
+              <div className="min-w-0">
+                <h3 className="text-[14px] font-semibold text-ink-900 leading-tight">Filled template</h3>
+                <p className="text-[11.5px] text-ink-400 mt-0.5 truncate">The IRAME .xlsx / .doc you filled in</p>
+              </div>
+            </div>
+            {templateFile && (
+              <div className="mb-3 flex items-center gap-2.5 rounded-[8px] border border-canvas-border bg-canvas px-2.5 py-1.5">
+                <span className="w-6 h-6 rounded-[6px] bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileText size={13} aria-hidden="true" /></span>
+                <span className="text-[12px] font-medium text-ink-800 truncate flex-1">{templateFile.name}</span>
+                <button type="button" onClick={() => setTemplateFile(null)} aria-label="Remove template" className="w-5 h-5 inline-flex items-center justify-center rounded-full text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"><X size={12} aria-hidden="true" /></button>
+              </div>
+            )}
+            <Button variant={templateFile ? 'outline' : 'primary'} size="md" shape="md" leftIcon={templateFile ? <Plus size={15} /> : <Upload size={15} />} onClick={() => templateInputRef.current?.click()} className="w-full mt-auto">
+              {templateFile ? 'Replace file' : 'Upload filled template'}
+            </Button>
+          </div>
 
-          <UploadDataModal
-            open={uploadOpen}
-            onClose={() => setUploadOpen(false)}
-            title="Upload filled template"
-            allowedTabs={['upload', 'all', 'files', 'folder']}
-            hideSessionFiles
-            footerHint="Upload the template you filled — we'll extract every observation."
-            onAttachDraft={({ files }) => { const f = files.find(x => x.file)?.file; if (f) onUpload(f); }}
-          />
+          {/* Annexures (optional) */}
+          <div className={`relative flex flex-col rounded-[14px] border bg-canvas-elevated p-4 transition-colors ${annexures.length > 0 ? 'border-compliant/40' : 'border-canvas-border hover:border-brand-300'}`}>
+            <span className="absolute top-3.5 right-3.5 inline-flex items-center rounded-full text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 bg-paper-100 text-ink-500">Optional</span>
+            <div className="flex items-center gap-3 mb-3 pr-20">
+              <span className="w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 bg-evidence-50 text-evidence-700"><FileSpreadsheet size={19} aria-hidden="true" /></span>
+              <div className="min-w-0">
+                <h3 className="text-[14px] font-semibold text-ink-900 leading-tight">Annexures</h3>
+                <p className="text-[11.5px] text-ink-400 mt-0.5 truncate">.xlsx workbooks · power Manage Exceptions</p>
+              </div>
+            </div>
+            {annexures.length > 0 && (
+              <ul className="mb-3 space-y-1.5 max-h-[92px] overflow-y-auto pr-1 -mr-1">
+                {annexures.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="flex items-center gap-2.5 rounded-[8px] border border-canvas-border bg-canvas px-2.5 py-1.5">
+                    <span className="w-6 h-6 rounded-[6px] bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0"><FileSpreadsheet size={13} aria-hidden="true" /></span>
+                    <span className="text-[12px] font-medium text-ink-800 truncate flex-1">{f.name}</span>
+                    <button type="button" onClick={() => setAnnexures(prev => prev.filter((_, idx) => idx !== i))} aria-label={`Remove ${f.name}`} className="w-5 h-5 inline-flex items-center justify-center rounded-full text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer shrink-0"><X size={12} aria-hidden="true" /></button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Button variant="outline" size="md" shape="md" leftIcon={annexures.length > 0 ? <Plus size={15} /> : <Upload size={15} />} onClick={() => annexInputRef.current?.click()} className="w-full mt-auto">
+              {annexures.length > 0 ? 'Add more files' : 'Upload annexures'}
+            </Button>
+          </div>
         </motion.div>
       </div>
+
+      <WizardFooter>
+        <div className="flex items-center justify-between gap-4 border-t border-canvas-border bg-canvas-elevated px-6 py-3">
+          <p className="text-[12px] text-ink-500">
+            {templateFile
+              ? <span className="text-compliant-700 font-medium">Ready to extract.</span>
+              : 'Upload your filled template to continue.'}
+          </p>
+          <Button
+            variant="primary"
+            rightIcon={<ArrowRight size={15} />}
+            disabled={!templateFile}
+            onClick={() => templateFile && onUpload(templateFile, annexures)}
+            title={templateFile ? undefined : 'Upload your filled template to continue.'}
+          >
+            Extract from template
+          </Button>
+        </div>
+      </WizardFooter>
+
+      {/* Native OS file pickers — opened directly by the upload buttons above. */}
+      <input
+        ref={templateInputRef}
+        type="file"
+        hidden
+        accept=".xlsx,.xls,.doc,.docx"
+        onChange={e => { const f = e.target.files?.[0]; if (f) setTemplateFile(f); e.currentTarget.value = ''; }}
+      />
+      <input
+        ref={annexInputRef}
+        type="file"
+        multiple
+        hidden
+        accept=".xlsx,.xls,.csv"
+        onChange={e => { setAnnexures(prev => [...prev, ...Array.from(e.target.files ?? [])]); e.currentTarget.value = ''; }}
+      />
     </div>
   );
 }

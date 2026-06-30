@@ -3,7 +3,9 @@ import { GRC_CASE_DETAILS, type GrcActivityEntry } from '../../../data/mockData'
 import type {
   Persona, WorkflowTemplate, Assignment, ColumnPermission, WorkflowLevel, LevelState,
 } from './workflowTypes';
-import { SEED_TEMPLATES, SEED_ASSIGNMENTS, userById, userName } from './workflowData';
+import { SEED_ASSIGNMENTS, userById, userName, buildDefaultPermissions } from './workflowData';
+import { approvalFlows, useApprovalFlows } from './approvalFlowStore';
+import type { QueryFlowRecord } from './queryFlowStore';
 import { submit as engineSubmit, applyDecision } from './workflowEngine';
 
 // No persistence: workflow state lives only in memory, so a hard refresh always
@@ -49,6 +51,9 @@ interface WorkflowContextValue {
   decide: (assignmentId: string, userId: string, decision: 'approve' | 'reject' | 'send-back', comment: string) => void;
   reassign: (assignmentId: string, newAssigneeId: string) => void;
   pullBack: (assignmentId: string) => void;
+  /** Remove the approval flow from the given cases — deletes the Risk Owner
+   *  assignment, or clears the Auditor route, depending on the side. */
+  removeAssignments: (exceptionIds: string[], persona: Persona) => void;
   updateDraft: (assignmentId: string, draft: Assignment['draft']) => void;
 }
 
@@ -60,6 +65,11 @@ export const useWorkflow = (): WorkflowContextValue => {
   if (!v) throw new Error('useWorkflow must be used within WorkflowProvider');
   return v;
 };
+
+/** Like useWorkflow but returns null outside a provider — for components that may
+ *  render with or without the workflow context (e.g. the assign drawer). */
+// eslint-disable-next-line react-refresh/only-export-components
+export const useWorkflowOptional = (): WorkflowContextValue | null => useContext(Ctx);
 
 /** Deactivated assignees can't keep working — flag for reassignment (edge case). */
 function applyDeactivation(list: Assignment[]): Assignment[] {
@@ -116,14 +126,54 @@ function handoffToAuditor(a: Assignment, levels: WorkflowLevel[]): Assignment {
   return { ...a, levels: [...a.levels, ...levels], levelStates, currentLevelIndex: firstIdx, status: 'in-approval', auditorPhase: true };
 }
 
+/** Build initial Risk Owner assignments for a flow chosen up-front on the report
+ *  QueryCard — same shape createAssignments produces, so the lifecycle behaves
+ *  identically to a flow assigned from inside the table. */
+function buildSeedAssignments(
+  exceptionIds: string[],
+  template: WorkflowTemplate,
+  caseAssignees: Record<string, string> | undefined,
+  assignedBy: string,
+  assignedAt: string,
+): Assignment[] {
+  const perms = buildDefaultPermissions();
+  return exceptionIds.map((exId, i) => ({
+    id: `as-qflow-${i}-${exId}`,
+    exceptionId: exId,
+    workflowId: template.id,
+    workflowName: template.name,
+    workflowVersion: template.version,
+    persona: template.persona,
+    levels: template.levels.map(l => ({ ...l, assigneeIds: [...l.assigneeIds] })),
+    assigneeId: caseAssignees?.[exId] ?? assignedBy,
+    columnPermissions: perms.map(c => ({ ...c })),
+    status: 'drafting' as const,
+    currentLevelIndex: -1,
+    levelStates: template.levels.map(l => ({ levelId: l.id, status: 'pending' as const, approvals: [] })),
+    sendBackCount: 0,
+    assignedBy,
+    assignedAt,
+  }));
+}
+
 export function WorkflowProvider({
   role,
   onFinalize,
   onReject,
   onReopenPartial,
+  caseAssignees,
+  queryFlowSeed,
   children,
 }: {
   role: Persona;
+  /** exceptionId → user id of the person the case was assigned to (the "Assigned
+   *  to" column). The work-assignee is taken from here, not picked in the modal. */
+  caseAssignees?: Record<string, string>;
+  /** Flows chosen on the report QueryCard, applied to every exception in scope as
+   *  soon as the view opens. A query can carry BOTH sides: the Risk Owner flow →
+   *  initial assignments, the Auditor flow → auditor routes (kept segregated from
+   *  the RO lifecycle, as elsewhere). Either may be absent. */
+  queryFlowSeed?: { exceptionIds: string[]; riskOwner?: QueryFlowRecord; auditor?: QueryFlowRecord };
   /** Called when an assignment clears its final approval — host writes the
    *  drafted result back onto the exception (classification / review hook). */
   onFinalize: (assignment: Assignment) => void;
@@ -135,11 +185,32 @@ export function WorkflowProvider({
   onReopenPartial?: (assignment: Assignment) => void;
   children: React.ReactNode;
 }) {
-  const [templates, setTemplates] = useState<WorkflowTemplate[]>(SEED_TEMPLATES);
-  const [assignments, setAssignments] = useState<Assignment[]>(() => applyDeactivation(SEED_ASSIGNMENTS));
+  // Templates come from the shared app-level store (also used by Administration →
+  // Approval Flow), so flows created there appear here and vice versa.
+  const templates = useApprovalFlows();
+  const [assignments, setAssignments] = useState<Assignment[]>(() => {
+    const base = applyDeactivation(SEED_ASSIGNMENTS);
+    // Seed the up-front Risk Owner flow chosen on the QueryCard, if any.
+    const ro = queryFlowSeed?.riskOwner;
+    if (ro && queryFlowSeed) {
+      return [...buildSeedAssignments(queryFlowSeed.exceptionIds, ro.template, caseAssignees, ro.assignedBy, ro.assignedAt), ...base];
+    }
+    return base;
+  });
   // Auditor routes are a SEPARATE config keyed by exception id — never an
   // assignment, so they don't touch the Risk Owner lifecycle/CTAs.
-  const [auditorRoutes, setAuditorRoutes] = useState<Record<string, { levels: WorkflowLevel[]; name: string }>>({});
+  const [auditorRoutes, setAuditorRoutes] = useState<Record<string, { levels: WorkflowLevel[]; name: string }>>(() => {
+    // Seed the up-front Auditor flow chosen on the QueryCard, if any.
+    const au = queryFlowSeed?.auditor;
+    if (au && queryFlowSeed) {
+      const map: Record<string, { levels: WorkflowLevel[]; name: string }> = {};
+      queryFlowSeed.exceptionIds.forEach(id => {
+        map[id] = { levels: au.template.levels.map(l => ({ ...l, assigneeIds: [...l.assigneeIds] })), name: au.template.name };
+      });
+      return map;
+    }
+    return {};
+  });
   const [currentUserId, setCurrentUserId] = useState<string>('u-ro-1');
   const [assignmentModalIds, setAssignmentModalIds] = useState<string[] | null>(null);
 
@@ -149,25 +220,55 @@ export function WorkflowProvider({
     try { LEGACY_STORAGE_KEYS.forEach(k => localStorage.removeItem(k)); } catch { /* ignore */ }
   }, []);
 
+  // Mirror a QueryCard-seeded flow onto each case's activity log once, so the audit
+  // trail shows where the route came from (the seed itself is set synchronously above).
+  useEffect(() => {
+    if (!queryFlowSeed) return;
+    const { exceptionIds, riskOwner, auditor } = queryFlowSeed;
+    exceptionIds.forEach(exId => {
+      if (riskOwner) {
+        logToCase(exId, 'risk-owner', userName(riskOwner.assignedBy), `Assigned to ${userName(caseAssignees?.[exId] ?? riskOwner.assignedBy)} via "${riskOwner.template.name}" (set for ${riskOwner.queryId})`, riskOwner.note);
+      }
+      if (auditor) {
+        logToCase(exId, 'auditor', userName(auditor.assignedBy), `Auditor route "${auditor.template.name}" assigned for ${auditor.queryId} — runs after Risk Owner approvals`, auditor.note);
+      }
+    });
+    // Run once at mount for this seed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // When the Risk Owner (re)assigns a case to another user — the "Assigned to"
+  // column, surfaced here via caseAssignees — move the in-progress DRAFTING work
+  // to that user, so the new assignee is the one who classifies/acts and the
+  // "Being worked on by …" state follows them. Only touch assignments still in
+  // drafting: once the work is submitted into the approval chain it must not jump.
+  useEffect(() => {
+    if (!caseAssignees) return;
+    const moved = assignments.filter(a =>
+      a.persona === 'risk-owner' &&
+      a.status === 'drafting' &&
+      caseAssignees[a.exceptionId] &&
+      caseAssignees[a.exceptionId] !== a.assigneeId,
+    );
+    if (moved.length === 0) return;
+    setAssignments(prev => prev.map(a => {
+      const target = caseAssignees[a.exceptionId];
+      return a.persona === 'risk-owner' && a.status === 'drafting' && target && target !== a.assigneeId
+        ? { ...a, assigneeId: target }
+        : a;
+    }));
+    moved.forEach(a => logToCase(a.exceptionId, 'risk-owner', userName(a.assignedBy), `Case reassigned to ${userName(caseAssignees[a.exceptionId])} — now being worked on by them`));
+  }, [caseAssignees, assignments]);
+
   const openAssignment = useCallback((ids: string[]) => setAssignmentModalIds(ids), []);
   const closeAssignment = useCallback(() => setAssignmentModalIds(null), []);
   const setCurrentUser = useCallback((id: string) => setCurrentUserId(id), []);
 
-  const upsertTemplate = useCallback((t: WorkflowTemplate) => {
-    setTemplates(prev => {
-      const exists = prev.some(x => x.id === t.id);
-      // Editing an existing template bumps its version (assignments snapshot the
-      // old version, so in-flight work is unaffected — template versioning).
-      const next = exists ? { ...t, version: (prev.find(x => x.id === t.id)?.version ?? 0) + 1 } : t;
-      return exists ? prev.map(x => (x.id === t.id ? next : x)) : [...prev, next];
-    });
-  }, []);
-
-  const deleteTemplate = useCallback((id: string) => setTemplates(prev => prev.filter(t => t.id !== id)), []);
-
-  const setDefaultTemplate = useCallback((id: string, persona: Persona) => {
-    setTemplates(prev => prev.map(t => (t.persona === persona ? { ...t, isDefault: t.id === id } : t)));
-  }, []);
+  // Template CRUD delegates to the shared store (Administration and Exceptions
+  // both read it). Editing bumps the version there so in-flight work is unaffected.
+  const upsertTemplate = useCallback((t: WorkflowTemplate) => approvalFlows.upsert(t), []);
+  const deleteTemplate = useCallback((id: string) => approvalFlows.remove(id), []);
+  const setDefaultTemplate = useCallback((id: string, persona: Persona) => approvalFlows.setDefault(id, persona), []);
 
   const createAssignments = useCallback((p: CreateAssignmentParams) => {
     const now = new Date().toISOString();
@@ -179,7 +280,9 @@ export function WorkflowProvider({
       workflowVersion: p.template.version,
       persona: p.template.persona,
       levels: p.template.levels.map(l => ({ ...l, assigneeIds: [...l.assigneeIds] })),
-      assigneeId: p.assigneeId,
+      // Work-assignee comes from who the case is assigned to (the "Assigned to"
+      // column); falls back to the assigner when the case has no assignee yet.
+      assigneeId: caseAssignees?.[exId] ?? p.assigneeId,
       columnPermissions: p.columnPermissions.map(c => ({ ...c })),
       note: p.note,
       dueDate: p.dueDate,
@@ -191,9 +294,8 @@ export function WorkflowProvider({
       assignedAt: now,
     }));
     setAssignments(prev => [...created, ...prev]);
-    const who = userName(p.assigneeId);
-    created.forEach(a => logToCase(a.exceptionId, a.persona, userName(p.assignedBy), `Assigned to ${who} via "${p.template.name}"`, p.note));
-  }, []);
+    created.forEach(a => logToCase(a.exceptionId, a.persona, userName(p.assignedBy), `Assigned to ${userName(a.assigneeId)} via "${p.template.name}"`, p.note));
+  }, [caseAssignees]);
 
   const attachAuditorRoute = useCallback((p: { exceptionIds: string[]; template: WorkflowTemplate; assignedBy: string; note?: string }) => {
     const cloneLevels = () => p.template.levels.map(l => ({ ...l, assigneeIds: [...l.assigneeIds] }));
@@ -320,11 +422,33 @@ export function WorkflowProvider({
     }));
   }, []);
 
+  const removeAssignments = useCallback((exceptionIds: string[], persona: Persona) => {
+    const idSet = new Set(exceptionIds);
+    if (persona === 'auditor') {
+      // Clear the auditor route config + any mirror on the Risk Owner record.
+      setAuditorRoutes(prev => {
+        const next = { ...prev };
+        exceptionIds.forEach(id => { delete next[id]; });
+        return next;
+      });
+      setAssignments(prev => prev.map(a => (
+        idSet.has(a.exceptionId) && a.auditorRouteName
+          ? { ...a, auditorRouteLevels: undefined, auditorRouteName: undefined }
+          : a
+      )));
+      exceptionIds.forEach(id => logToCase(id, 'auditor', userName(currentUserId), 'Auditor approval flow removed'));
+    } else {
+      // Drop the Risk Owner assignment entirely → case goes back to "no flow".
+      setAssignments(prev => prev.filter(a => !(a.persona === 'risk-owner' && idSet.has(a.exceptionId))));
+      exceptionIds.forEach(id => logToCase(id, 'risk-owner', userName(currentUserId), 'Approval flow removed'));
+    }
+  }, [currentUserId]);
+
   const value: WorkflowContextValue = {
     role, templates, assignments, auditorRoutes, currentUserId, setCurrentUser,
     assignmentModalIds, openAssignment, closeAssignment,
     upsertTemplate, deleteTemplate, setDefaultTemplate,
-    createAssignments, attachAuditorRoute, submitForApproval, submitActionForReview, decide, reassign, pullBack, updateDraft,
+    createAssignments, attachAuditorRoute, submitForApproval, submitActionForReview, decide, reassign, pullBack, removeAssignments, updateDraft,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

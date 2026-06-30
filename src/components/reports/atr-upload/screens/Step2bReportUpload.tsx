@@ -1,8 +1,7 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useRef, type ReactNode } from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight, Upload, FileText, FileSpreadsheet, X, Plus } from 'lucide-react';
 import { Button } from '../../../shared/Button';
-import UploadDataModal from '../../../concierge-workflow-builder/UploadDataModal';
 import DatePicker from '../../../shared/DatePicker';
 import { WizardFooter } from '../footerSlot';
 import type { ReportMeta } from '../types';
@@ -43,7 +42,7 @@ function FileChip({ name, onRemove }: { name: string; onRemove: () => void }) {
 
 // Compact upload slot in the platform's card style (icon chip + title + blurb,
 // action button at the bottom) — kept short so the screen never scrolls.
-function UploadCard({ icon: Icon, tint, title, blurb, cta, badge, badgeCls, files, onAdd, onRemove, recommended, delay }: {
+function UploadCard({ icon: Icon, tint, title, blurb, cta, badge, badgeCls, files, onAdd, onRemove, recommended, delay, single }: {
   icon: typeof FileText;
   tint: string;
   title: string;
@@ -56,6 +55,8 @@ function UploadCard({ icon: Icon, tint, title, blurb, cta, badge, badgeCls, file
   onRemove: (i: number) => void;
   recommended?: boolean;
   delay: number;
+  /** Single-file slot — only one file allowed; the button replaces instead of adding. */
+  single?: boolean;
 }) {
   return (
     <motion.div
@@ -91,7 +92,7 @@ function UploadCard({ icon: Icon, tint, title, blurb, cta, badge, badgeCls, file
         onClick={onAdd}
         className="w-full mt-auto"
       >
-        {files.length > 0 ? 'Add more files' : cta}
+        {files.length > 0 ? (single ? 'Replace file' : 'Add more files') : cta}
       </Button>
     </motion.div>
   );
@@ -105,8 +106,10 @@ export default function Step2bReportUpload({ onExtract }: {
 }) {
   const [report, setReport] = useState<File[]>([]);
   const [annexures, setAnnexures] = useState<File[]>([]);
-  // Which slot the shared "Add data" upload modal is filling (null = closed).
-  const [uploadTarget, setUploadTarget] = useState<'report' | 'annexures' | null>(null);
+  // Native OS file pickers — clicking an upload button opens the system dialog
+  // directly (no intermediate upload modal).
+  const reportInputRef = useRef<HTMLInputElement>(null);
+  const annexInputRef = useRef<HTMLInputElement>(null);
 
   // Mandatory report details → ATR top section. Generated On is auto (today).
   const [auditTitle, setAuditTitle] = useState('');
@@ -181,9 +184,10 @@ export default function Step2bReportUpload({ onExtract }: {
           badge="Required"
           badgeCls="bg-risk-50 text-risk-700"
           files={report}
-          onAdd={() => setUploadTarget('report')}
+          onAdd={() => reportInputRef.current?.click()}
           onRemove={i => setReport(prev => prev.filter((_, idx) => idx !== i))}
           recommended
+          single
           delay={0.16}
         />
         <UploadCard
@@ -195,7 +199,7 @@ export default function Step2bReportUpload({ onExtract }: {
           badge="Optional"
           badgeCls="bg-paper-100 text-ink-500"
           files={annexures}
-          onAdd={() => setUploadTarget('annexures')}
+          onAdd={() => annexInputRef.current?.click()}
           onRemove={i => setAnnexures(prev => prev.filter((_, idx) => idx !== i))}
           delay={0.2}
         />
@@ -220,22 +224,21 @@ export default function Step2bReportUpload({ onExtract }: {
         </div>
       </WizardFooter>
 
-      {/* Shared "Add data" upload modal — fills whichever slot opened it. */}
-      <UploadDataModal
-        open={uploadTarget !== null}
-        onClose={() => setUploadTarget(null)}
-        title={uploadTarget === 'annexures' ? 'Upload annexures' : 'Upload audit report'}
-        allowedTabs={['upload', 'all', 'files', 'folder']}
-        hideSessionFiles
-        footerHint={uploadTarget === 'annexures'
-          ? 'Add annexure workbooks (.xlsx) — optional; they power the linked cases in Manage Exceptions.'
-          : 'Upload the audit report file(s) — this generates the ATR.'}
-        onAttachDraft={({ files }) => {
-          const real = files.map(x => x.file).filter((f): f is File => !!f);
-          if (real.length === 0) return;
-          if (uploadTarget === 'report') setReport(prev => [...prev, ...real]);
-          else if (uploadTarget === 'annexures') setAnnexures(prev => [...prev, ...real]);
-        }}
+      {/* Native OS file pickers — opened directly by the upload buttons above. */}
+      {/* Single report only — one report converts to one ATR. */}
+      <input
+        ref={reportInputRef}
+        type="file"
+        hidden
+        onChange={e => { const f = e.target.files?.[0]; if (f) setReport([f]); e.currentTarget.value = ''; }}
+      />
+      <input
+        ref={annexInputRef}
+        type="file"
+        multiple
+        hidden
+        accept=".xlsx,.xls,.csv"
+        onChange={e => { setAnnexures(prev => [...prev, ...Array.from(e.target.files ?? [])]); e.currentTarget.value = ''; }}
       />
     </div>
   );

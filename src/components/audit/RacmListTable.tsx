@@ -1402,7 +1402,6 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
       <SopDocumentModal
         open={!!viewSop}
         sopName={viewSop?.sopName ?? ''}
-        subProcess={viewSop?.subProcess}
         version={viewSop?.version}
         uploadedBy={viewSop?.uploadedBy}
         uploadedAgo={viewSop?.uploadedAgo}
