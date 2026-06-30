@@ -1,8 +1,8 @@
 import { validationQA } from './helpers';
 import type {
   Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, Deficiency, Discussion, DocStatus,
-  EvidenceFile, HandoffTask, IcfrEngagement, Nature, OperatingStep, OperatingTrack, Sampling, SignificantAccount,
-  TestProcedure, TrackConclusion,
+  EvidenceFile, ExecKind, ExecutionEvent, HandoffTask, IcfrEngagement, Nature, OperatingStep, OperatingTrack,
+  Role, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -21,7 +21,7 @@ const step = (code: string, description: string, assertion: Assertion, precision
 let _f = 0;
 const file = (name: string, by = 'Risk Owner', kind: EvidenceFile['kind'] = 'PDF'): EvidenceFile => ({ id: `f${++_f}`, name, kind, uploadedBy: by, uploadedAt: '12 Apr' });
 const wf = (id: string, name: string, runRef?: string): Partial<OperatingStep> => ({ workflowId: id, workflowName: name, workflowRunRef: runRef });
-const attest = (note: string, by: string, files: string[]): Partial<OperatingStep> => ({ attestEnabled: true, attestation: { note, by, role: 'risk-owner', at: '12 Apr', evidence: files.map(f => file(f, by)) } as Attestation });
+const attest = (note: string, by: string, files: string[]): Partial<OperatingStep> => ({ attestEnabled: true, attestation: { result: 'Pass', note, by, role: 'risk-owner', at: '12 Apr', evidence: files.map(f => file(f, by)) } as Attestation });
 
 const designTrack = (conclusion: TrackConclusion, documents: DesignDoc[], points: DesignPoint[], testedBy: string | null = null): DesignTrack =>
   ({ documents, points, conclusion, testedBy: conclusion !== 'Not tested' ? (testedBy ?? 'A. Mehta · Auditor') : null, testedAt: conclusion !== 'Not tested' ? '14 Apr' : null });
@@ -255,7 +255,7 @@ const DISCUSSIONS: Discussion[] = [
   { id: 'disc-1', controlId: 'P2P-C-02', anchor: 'operating', resolved: false, comments: [
     { id: 'c1', by: 'A. Mehta · Auditor', role: 'auditor', at: '2d', text: 'Two of the 25 sampled POs were approved a tier below the DoA. Can you confirm whether a delegation was in force on those dates?' },
     { id: 'c2', by: 'S. Iyer · Procurement', role: 'risk-owner', at: '1d', text: 'There was a temporary delegation during the Director’s leave — letter attached in the PBC. The system tier wasn’t updated though.' },
-    { id: 'c3', by: 'J. Fernandes · Reviewer', role: 'reviewer', at: '4h', text: 'If the system tier wasn’t updated, treat as an operating exception and assess severity even with the delegation letter.' },
+    { id: 'c3', by: 'J. Fernandes · Audit Manager', role: 'auditor', at: '4h', text: 'If the system tier wasn’t updated, treat as an operating exception and assess severity even with the delegation letter.' },
   ] },
   { id: 'disc-2', controlId: 'P2P-C-04', anchor: 'operating', resolved: false, comments: [
     { id: 'c4', by: 'A. Mehta · Auditor', role: 'auditor', at: '3d', text: 'The duplicate block misses reference variants (leading zeros). 4 duplicates posted. Raising as a deficiency — see DEF-001.' },
@@ -285,16 +285,36 @@ const ACCOUNTS: SignificantAccount[] = [
   { id: 'a5', name: 'Property, plant & equipment', balance: 240_000_000, inScope: false, assertions: ['Existence / Occurrence', 'Valuation'] },
 ];
 
+// ── execution history — both personas act; each sees the other's runs ─────────────
+let _e = 0;
+const ex = (controlId: string, track: 'design' | 'operating', kind: ExecKind, verb: string, by: string, role: Role, at: string, target?: string, result?: TestResult | TrackConclusion): ExecutionEvent =>
+  ({ id: `ex${++_e}`, controlId, track, kind, verb, target, result, by, role, at });
+
+// Newest first — the store prepends, so the seed matches that order.
+const EXECUTIONS: ExecutionEvent[] = [
+  ex('P2P-C-02', 'operating', 'attest', 'self-attested', 'S. Iyer · Risk Owner', 'risk-owner', '2d', 'B1'),
+  ex('P2P-C-02', 'operating', 'attest', 'self-attested', 'S. Iyer · Risk Owner', 'risk-owner', '2d', 'B2'),
+  ex('P2P-C-04', 'operating', 'conclude', 'concluded operating ineffective', 'A. Mehta · Auditor', 'auditor', '3d', undefined, 'Ineffective'),
+  ex('P2P-C-04', 'operating', 'validate', 'validated', 'A. Mehta · Auditor', 'auditor', '3d', 'D2', 'Fail'),
+  ex('P2P-C-04', 'operating', 'validate', 'validated', 'A. Mehta · Auditor', 'auditor', '3d', 'D1', 'Pass'),
+  ex('P2P-C-01', 'operating', 'conclude', 'concluded operating effective', 'A. Mehta · Auditor', 'auditor', '4d', undefined, 'Effective'),
+  ex('P2P-C-01', 'operating', 'pull-run', 'pulled a workflow run', 'A. Mehta · Auditor', 'auditor', '4d', 'A1'),
+  ex('P2P-C-01', 'design', 'conclude', 'concluded design effective', 'A. Mehta · Auditor', 'auditor', '5d', undefined, 'Effective'),
+  ex('P2P-C-01', 'design', 'validate', 'validated 3 considerations', 'A. Mehta · Auditor', 'auditor', '5d'),
+  ex('P2P-C-01', 'design', 'receive-doc', 'provided', 'R. Khanna · Risk Owner', 'risk-owner', '6d', 'Walkthrough'),
+];
+
 const ENGAGEMENT: IcfrEngagement = {
   id: 'eng-1', code: 'ICFR-26', name: 'FY26 ICFR — Air India Express', entity: 'Air India Express Ltd', framework: 'COSO 2013 / SOX 404',
   periodStart: '01 Apr 2025', periodEnd: '31 Mar 2026', period: 'Interim',
-  materiality: 5_000_000, performanceMateriality: 3_750_000, preparer: 'A. Mehta · Auditor', reviewer: 'J. Fernandes · Reviewer',
+  materiality: 5_000_000, performanceMateriality: 3_750_000, preparer: 'A. Mehta · Auditor', reviewer: 'J. Fernandes · Audit Manager',
   rules: { clearlyTrivial: 250_000, sdBandPct: 20, aggregate: true, autoRoute: true, mwIndicators: [] },
   accounts: ACCOUNTS,
   controls: [...DETAILED, ...generate()],
   deficiencies: DEFICIENCIES,
   tasks: TASKS,
   discussions: DISCUSSIONS,
+  executions: EXECUTIONS,
 };
 
 /** Identity carried in from the app-level Engagement record (engagements.ts). */
@@ -332,6 +352,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     deficiencies: [],
     tasks: [],
     discussions: [],
+    executions: [],
   };
 }
 
