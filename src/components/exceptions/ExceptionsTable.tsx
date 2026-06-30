@@ -110,6 +110,7 @@ const CLASSIFICATION_STYLE: Record<GrcExceptionClassification, string> = {
   'Design Deficiency':         'bg-high-50 text-high-700',
   'System Deficiency':         'bg-risk-50 text-risk-700',
   'Procedural Non-Compliance': 'bg-brand-50 text-brand-700',
+  'Others':                    'bg-mitigated-50 text-mitigated-700',
   'Business as Usual':         'bg-compliant-50 text-compliant-700',
   'False Positive':            'bg-[#EEEEF1] text-ink-600',
 };
@@ -241,7 +242,7 @@ interface ColumnDef {
 }
 
 const ALL_CLASSIFICATIONS: GrcExceptionClassification[] = [
-  'Unclassified', 'Design Deficiency', 'System Deficiency', 'Procedural Non-Compliance', 'Business as Usual', 'False Positive',
+  'Unclassified', 'Design Deficiency', 'System Deficiency', 'Procedural Non-Compliance', 'Others', 'Business as Usual', 'False Positive',
 ];
 const ALL_COMBINED_REVIEW_LABELS: string[] = [
   'Under Review',

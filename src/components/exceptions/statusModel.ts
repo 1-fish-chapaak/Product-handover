@@ -29,6 +29,7 @@ export const ACTIONABLE_CLASSIFICATIONS = new Set<GrcExceptionClassification>([
   'Design Deficiency',
   'System Deficiency',
   'Procedural Non-Compliance',
+  'Others',
 ]);
 
 /** Does this classification need an action plan + due date? */

@@ -136,6 +136,10 @@ interface ManageExceptionsViewProps {
    *  Engagements module (Internal Audit / Automation) exception-management tab, where
    *  there's no report query-card entry point for assigning a flow. */
   showApprovalFlowAssign?: boolean;
+  /** Engagement-level classify flow — the classify modal uses the True/False
+   *  Positive verdict + sub-classification / Root Cause Analysis. Report-level keeps
+   *  the single classification dropdown. */
+  engagementMode?: boolean;
 }
 
 // ─── Editorial KPI bar ────────────────────────────────────────────────
@@ -293,7 +297,7 @@ function RoleToggle({ role, setRole }: { role: ExceptionRole; setRole: (r: Excep
   );
 }
 
-export default function ManageExceptionsView({ role, setRole, onBack, embedded = false, exceptions: propsExceptions, onExceptionsChange, contextLabel, onBulkAssign, showApprovalFlowAssign = false }: ManageExceptionsViewProps) {
+export default function ManageExceptionsView({ role, setRole, onBack, embedded = false, exceptions: propsExceptions, onExceptionsChange, contextLabel, onBulkAssign, showApprovalFlowAssign = false, engagementMode = false }: ManageExceptionsViewProps) {
   // Unify with RBAC: the active role's permissions decide the exception persona.
   // Risk Owner roles resolve exceptions; everyone else operates as the auditor.
   const { can } = useCan();
@@ -1227,6 +1231,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
           <ClassifyExceptionDrawer
             key="classify-drawer"
             exception={drawerException}
+            engagementMode={engagementMode}
             onPostComment={(text, attachment) => postComment(text, drawer?.scopeIds ?? [drawerException.id], attachment)}
             actionableId={plannedActionableId}
             scopeCount={clScope.length}

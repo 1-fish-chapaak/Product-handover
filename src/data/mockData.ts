@@ -451,6 +451,7 @@ export type GrcExceptionClassification =
   | 'Design Deficiency'
   | 'System Deficiency'
   | 'Procedural Non-Compliance'
+  | 'Others'
   | 'Business as Usual'
   | 'False Positive';
 export type GrcReviewStatus = 'Pending' | 'Approved' | 'Rejected' | 'Implemented';
@@ -581,6 +582,15 @@ export const GRC_CASE_DETAILS: Record<string, GrcCaseDetail> = {
   'EXC009': BLANK_DETAIL(),
   'EXC010': BLANK_DETAIL(),
 };
+
+/** Guarantee a case-detail record exists for an exception id. Cases surfaced
+ *  from other sources (e.g. an engagement's own exceptions) aren't pre-seeded
+ *  above, so this lazily creates a blank detail — without it the classify /
+ *  action lifecycle (which reads & writes GRC_CASE_DETAILS[id]) is a no-op. */
+export function ensureCaseDetail(id: string): GrcCaseDetail {
+  if (!GRC_CASE_DETAILS[id]) GRC_CASE_DETAILS[id] = BLANK_DETAIL();
+  return GRC_CASE_DETAILS[id];
+}
 
 // ─── Action Hub (Case Mgmt > Action Hub tab) ───
 export type ActionHubActorRole = 'Risk Owner' | 'Auditor' | 'Ira (AI)' | 'System';

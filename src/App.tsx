@@ -941,6 +941,7 @@ function AppInner() {
             exceptions={exceptionsForEngagementAsGrc(caseEngId)}
             contextLabel={caseEng?.name}
             showApprovalFlowAssign={caseEng?.type === 'Internal Audit' || caseEng?.type === 'Automation'}
+            engagementMode
           />
         );
       }
