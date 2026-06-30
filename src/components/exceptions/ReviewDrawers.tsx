@@ -48,6 +48,7 @@ const CLASSIFICATION_STYLE: Record<GrcExceptionClassification, string> = {
   'Design Deficiency':         'bg-high-50 text-high-700',
   'System Deficiency':         'bg-risk-50 text-risk-700',
   'Procedural Non-Compliance': 'bg-brand-50 text-brand-700',
+  'Others':                    'bg-mitigated-50 text-mitigated-700',
   'Business as Usual':         'bg-compliant-50 text-compliant-700',
   'False Positive':            'bg-[#EEEEF1] text-ink-600',
 };
@@ -1429,11 +1430,22 @@ const CLASSIFY_OPTIONS: string[] = [
   'Procedural Non-Compliance',
 ];
 
+// Engagement-mode verdict flow: True Positive → one of these sub-classifications
+// (all actionable → create a management action plan); False Positive → Root Cause
+// Analysis. Used only when the drawer runs in `engagementMode`.
+const SUB_CLASSIFICATIONS: string[] = [
+  'Design Deficiency',
+  'System Deficiency',
+  'Procedural Non-Compliance',
+  'Others',
+];
+
 // Classifications that require an action plan (matches BulkClassifyModal).
 const ACTIONABLE_CLASSIFICATIONS = new Set<string>([
   'Design Deficiency',
   'System Deficiency',
   'Procedural Non-Compliance',
+  'Others',
 ]);
 
 // A single remediation action plan. Actionable classifications can carry several,
@@ -1457,6 +1469,7 @@ export function ClassifyExceptionDrawer({
   scopeCount = 1,
   linkedCases = [],
   bulkSkipped,
+  engagementMode = false,
 }: {
   exception: GrcException;
   onClose: () => void;
@@ -1482,6 +1495,10 @@ export function ClassifyExceptionDrawer({
   /** Cases left out of a bulk classify because they're locked by the auditor flow
    *  — shown as a clear, numbered breakdown so the Risk Owner knows what was skipped. */
   bulkSkipped?: { awaitingReview: number; approved: number };
+  /** Engagement-level classify flow: replaces the classification dropdown with a
+   *  True Positive / False Positive verdict (True → sub-classification; False →
+   *  Root Cause Analysis). The downstream action-plan flow is unchanged. */
+  engagementMode?: boolean;
 }) {
   const isBulk = linkedCases.length > 1;
   // If the acting user is the assignee of a drafting route for this case, saving
@@ -1505,6 +1522,14 @@ export function ClassifyExceptionDrawer({
   // Severity is AI-assigned and no longer editable in the panel — carried through as-is.
   const severity = exception.severity;
   const [classification, setClassification] = useState<string>(isReclassify ? exception.classification : '');
+  // Engagement-mode verdict (True/False Positive) + Root Cause Analysis attachment.
+  const [verdict, setVerdict] = useState<'true-positive' | 'false-positive' | null>(
+    exception.classification === 'False Positive' ? 'false-positive'
+    : exception.classification !== 'Unclassified' ? 'true-positive'
+    : null,
+  );
+  const [rcaAttachment, setRcaAttachment] = useState<{ name: string } | null>(null);
+  const rcaFileRef = useRef<HTMLInputElement>(null);
   const [comment, setComment] = useState(
     isReclassify && reclassDetail?.classificationJustification
       ? reclassDetail.classificationJustification.replace(/^"|"$/g, '')
@@ -1568,13 +1593,15 @@ export function ClassifyExceptionDrawer({
     // classification requires one) are mandatory. Locked (rejected) plans don't
     // count — the user must add at least one fresh plan.
     if (!classification) return false;
+    // Engagement False Positive must carry a Root Cause Analysis.
+    if (engagementMode && verdict === 'false-positive' && !comment.trim()) return false;
     if (requiresActionPlan) {
       const active = actionPlans.filter(p => !p.locked);
       if (active.length === 0) return false;
       if (active.some(p => !p.name.trim() || !p.details.trim() || !p.dueDate)) return false;
     }
     return true;
-  }, [classification, requiresActionPlan, actionPlans]);
+  }, [classification, requiresActionPlan, actionPlans, engagementMode, verdict, comment]);
 
   // Adaptive wizard: actionable classifications get a 2nd "Action Plan" step;
   // Business as Usual / False Positive need no plan, so it's a single step.
@@ -1598,6 +1625,10 @@ export function ClassifyExceptionDrawer({
         ? active.map(p => ({ name: p.name.trim(), details: p.details.trim(), dueDate: p.dueDate }))
         : undefined,
     });
+    // False-positive Root Cause Analysis attachment → logged to the case thread.
+    if (engagementMode && verdict === 'false-positive' && rcaAttachment) {
+      onPostComment?.(comment.trim() || 'Root cause analysis', { name: rcaAttachment.name });
+    }
     // Submit every scoped case the acting user owns into its approval route — the
     // chain then runs for the action plan (Step 4). Covers bulk classify too.
     routeDrafts.forEach(rd => submitForApproval(rd.id, {
@@ -1727,7 +1758,106 @@ export function ClassifyExceptionDrawer({
           </div>
         )}
 
-        {step === 0 && (
+        {/* Engagement-mode verdict flow — True / False Positive instead of a
+            single classification dropdown. */}
+        {step === 0 && engagementMode && (
+          <div className="mb-5 space-y-4">
+            <div>
+              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Is this a valid exception? <span className="text-risk">*</span></label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setVerdict('true-positive'); if (!SUB_CLASSIFICATIONS.includes(classification)) setClassification(''); }}
+                  className={`flex flex-col items-start gap-1 p-3.5 rounded-[10px] border text-left transition-colors cursor-pointer ${verdict === 'true-positive' ? 'border-brand-400 bg-brand-50/60 ring-1 ring-brand-400/40' : 'border-canvas-border hover:border-brand-200'}`}
+                >
+                  <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-900"><CheckCircle2 size={15} className="text-brand-600" /> True Positive</span>
+                  <span className="text-[11.5px] text-ink-500">Confirmed exception — needs remediation.</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setVerdict('false-positive'); setClassification('False Positive'); }}
+                  className={`flex flex-col items-start gap-1 p-3.5 rounded-[10px] border text-left transition-colors cursor-pointer ${verdict === 'false-positive' ? 'border-brand-400 bg-brand-50/60 ring-1 ring-brand-400/40' : 'border-canvas-border hover:border-brand-200'}`}
+                >
+                  <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-900"><XCircle size={15} className="text-ink-500" /> False Positive</span>
+                  <span className="text-[11.5px] text-ink-500">Not a real issue — document the root cause.</span>
+                </button>
+              </div>
+            </div>
+
+            {verdict === 'true-positive' && (
+              <div>
+                <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Sub-classification <span className="text-risk">*</span></label>
+                <div ref={classificationRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setClassificationOpen(o => !o)}
+                    aria-haspopup="listbox"
+                    aria-expanded={classificationOpen}
+                    className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] flex items-center justify-between focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 hover:border-brand-200 cursor-pointer transition-colors"
+                  >
+                    <span className={classification ? 'text-ink-800' : 'text-ink-400'}>{classification || 'Select sub-classification…'}</span>
+                    <ChevronDown size={14} className={`text-ink-400 transition-transform duration-150 ${classificationOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  <AnimatePresence>
+                    {classificationOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                        role="listbox"
+                        className="absolute top-full mt-1 left-0 w-full z-30 bg-canvas-elevated border border-canvas-border rounded-[8px] shadow-lg overflow-hidden py-1"
+                      >
+                        {SUB_CLASSIFICATIONS.map(c => {
+                          const selected = classification === c;
+                          return (
+                            <button
+                              key={c} type="button" role="option" aria-selected={selected}
+                              onClick={() => { setClassification(c); setClassificationOpen(false); }}
+                              className={`w-full text-left px-3 py-2 text-[13px] flex items-center justify-between cursor-pointer transition-colors ${selected ? 'bg-brand-50 text-brand-700' : 'text-ink-800 hover:bg-[#FAFAFB]'}`}
+                            >
+                              <span>{c}</span>{selected && <Check size={14} className="text-brand-700 shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                {classification && (
+                  <span className="mt-2 inline-block text-[11.5px] text-ink-500">A management action plan will be created for this exception.</span>
+                )}
+              </div>
+            )}
+
+            {verdict === 'false-positive' && (
+              <div>
+                <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Root Cause Analysis <span className="text-risk">*</span></label>
+                <div className="rounded-[10px] border border-canvas-border bg-canvas-elevated focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-600/15 transition-colors">
+                  <textarea
+                    value={comment}
+                    onChange={e => setComment(e.target.value)}
+                    rows={4}
+                    placeholder="Explain why this is a false positive — what was checked and the underlying root cause…"
+                    className="w-full px-3 py-2.5 bg-transparent text-[13px] text-ink-800 placeholder:text-ink-400 outline-none resize-none"
+                  />
+                  <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 border-t border-canvas-border">
+                    <button type="button" onClick={() => rcaFileRef.current?.click()} className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-ink-500 hover:text-brand-700 cursor-pointer">
+                      <Paperclip size={13} /> Attach
+                    </button>
+                    {rcaAttachment && (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">
+                        <Paperclip size={10} /> {rcaAttachment.name}
+                        <button type="button" onClick={() => setRcaAttachment(null)} className="ml-0.5 text-ink-400 hover:text-risk-700 cursor-pointer" aria-label="Remove attachment"><X size={10} /></button>
+                      </span>
+                    )}
+                  </div>
+                  <input ref={rcaFileRef} type="file" hidden onChange={e => { const f = e.target.files?.[0]; if (f) setRcaAttachment({ name: f.name }); e.currentTarget.value = ''; }} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 0 && !engagementMode && (
         <div className="mb-5">
           <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
             Classification <span className="text-risk">*</span>

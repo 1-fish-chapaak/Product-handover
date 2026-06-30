@@ -6,7 +6,7 @@
  * drawer opens the full case-management surface for one row.
  */
 
-import type { GrcException } from './mockData';
+import { ensureCaseDetail, type GrcException } from './mockData';
 
 export type Severity = 'Critical' | 'High' | 'Medium' | 'Low';
 export type ExceptionStatus = 'Open' | 'Triaging' | 'Resolved';
@@ -239,6 +239,9 @@ function initialsFor(name: string): string {
 export function exceptionsForEngagementAsGrc(engagementId: string): GrcException[] {
   return exceptionsForEngagement(engagementId).map((ex): GrcException => {
     const resolved = ex.status === 'Resolved';
+    // Seed a case-detail record so the classify / action lifecycle works the same
+    // as the report-level Manage Exceptions (which reads & writes GRC_CASE_DETAILS).
+    ensureCaseDetail(ex.id);
     return {
       id: ex.id,
       riskCategory: ex.workflowName,

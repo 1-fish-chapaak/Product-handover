@@ -204,6 +204,7 @@ export default function AutomationCasesTab({ engagement, runsState, casesState, 
           contextLabel={engagement.name}
           onBulkAssign={handleBulkAssign}
           showApprovalFlowAssign
+          engagementMode
         />
       </div>
 
