@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Gavel, UserCheck, ShieldQuestion, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X } from 'lucide-react';
+import { Gavel, UserCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X } from 'lucide-react';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
 import type { Conclusion, Court, Nature, Role, Severity, TestResult, TrackConclusion } from './types';
@@ -64,7 +64,6 @@ export function Stamp({ result, size = 'sm', animate = true }: { result: 'Effect
 const COURT: Record<Court, { tone: Tone; label: string; Icon: typeof Gavel }> = {
   auditor: { tone: 'info', label: 'Your court', Icon: Gavel },
   'risk-owner': { tone: 'mitigated', label: 'Risk owner', Icon: UserCheck },
-  reviewer: { tone: 'evidence', label: 'Reviewer', Icon: ShieldQuestion },
   none: { tone: 'compliant', label: 'Closed', Icon: CheckCircle2 },
 };
 export function CourtBadge({ court, fromRole }: { court: Court; fromRole?: Role }) {
@@ -76,12 +75,12 @@ export function CourtBadge({ court, fromRole }: { court: Court; fromRole?: Role 
 }
 
 // ─── role switcher (demo affordance) ─────────────────────────────────────────────
-const ROLE_ICON: Record<Role, typeof Gavel> = { auditor: Gavel, reviewer: ShieldQuestion, 'risk-owner': UserCheck };
-const ROLE_NAME: Record<Role, string> = { auditor: 'Auditor', reviewer: 'Reviewer', 'risk-owner': 'Risk Owner' };
+const ROLE_ICON: Record<Role, typeof Gavel> = { auditor: Gavel, 'risk-owner': UserCheck };
+const ROLE_NAME: Record<Role, string> = { auditor: 'Auditor', 'risk-owner': 'Risk Owner' };
 export function RoleSwitcher({ role, onChange }: { role: Role; onChange: (r: Role) => void }) {
   return (
     <div className="inline-flex items-center p-1 rounded-xl bg-paper-50 border border-canvas-border">
-      {(['auditor', 'reviewer', 'risk-owner'] as Role[]).map(r => {
+      {(['auditor', 'risk-owner'] as Role[]).map(r => {
         const Icon = ROLE_ICON[r];
         const active = role === r;
         return (

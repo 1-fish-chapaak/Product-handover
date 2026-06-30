@@ -14,7 +14,7 @@ import {
   Bookmark, BookmarkCheck,
   Search, GitCompare, ShieldCheck, Info, Loader2, AlertTriangle, type LucideIcon,
   LayoutDashboard, ListChecks, FileCode,
-  FileOutput, FileInput, Trash2,
+  Trash2,
 } from 'lucide-react';
 import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS, WORKFLOWS } from '../../data/mockData';
 import {
@@ -311,27 +311,39 @@ const FOLLOWUP_TRACK_META: Record<
   { Icon: LucideIcon; label: string; caption: string; badge: string }
 > = {
   depth: {
-    Icon: FileOutput,
-    label: 'Drill the output',
-    caption: 'Drill into the results you just got',
-    badge: 'bg-compliant-50 text-compliant-700',
+    Icon: MessageSquare,
+    label: 'Ask a follow-up',
+    caption: 'Keep digging into these results — continues in this chat.',
+    badge: 'text-brand-700',
   },
   breadth: {
-    Icon: FileInput,
-    label: 'Explore inputs',
-    caption: 'Run adjacent checks across your sources',
-    badge: 'bg-evidence-50 text-evidence-700',
+    Icon: Sparkles,
+    label: 'Explore in a new chat',
+    caption: 'Take a new direction — opens a fresh chat in a new tab with this run’s datasources attached.',
+    badge: 'text-brand-700',
   },
 };
 
-// "What next?" follow-up layout. Option 2 (horizontal carousel) is the chosen
-// layout. Option 1 (responsive grid) is kept here, commented, in case we revisit:
+// Layout constants for the horizontal carousel — used by the plain conversational
+// follow-ups (and the commented Option 1 in TrackedFollowUps). An earlier
+// responsive-grid variant is kept commented in case we revisit:
 //   const FOLLOWUP_WRAP_CLASS = 'grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-2';
 //   const FOLLOWUP_CARD_EXTRA = '';
 //   const FOLLOWUP_CARD_STACKED = false;
 const FOLLOWUP_WRAP_CLASS = 'flex items-stretch gap-2 overflow-x-auto snap-x snap-mandatory px-1 py-1.5';
 const FOLLOWUP_CARD_EXTRA = 'snap-start shrink-0 w-[280px]';
 const FOLLOWUP_CARD_STACKED = true;
+
+// An "Explore inputs" (input-track) follow-up opens a fresh chat in a NEW
+// browser tab with the question pre-loaded in the composer. The app has no
+// router and a new tab boots its own React app, so the text rides on the URL
+// (?view=chat&draft=…) and is read on load (see the ?draft effect in ChatView).
+// Mirrors the existing ?compose=workflow new-tab deep link.
+function openQuestionInNewTab(question: string) {
+  if (typeof window === 'undefined') return;
+  const params = new URLSearchParams({ view: 'chat', draft: question });
+  window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank', 'noopener,noreferrer');
+}
 
 // A single follow-up suggestion card. Shared by the flat list and the two
 // grouped tracks so the visual + motion contract stays identical everywhere.
@@ -487,6 +499,265 @@ function FollowUpCarousel({ children }: { children: ReactNode }) {
       )}
     </div>
   );
+}
+
+// Heading for the "What next?" block. Shared by the carousel (layout 1) and the
+// two-section layout (3); layout 2 folds this label into its own collapsible
+// header instead.
+function FollowUpHeading({ id, size = 'sm' }: { id: string; size?: 'sm' | 'md' }) {
+  return (
+    <motion.h3
+      id={id}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.35, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      className={`mb-2 font-medium tracking-normal text-ink-900 ${size === 'md' ? 'text-[0.875rem] leading-4' : 'text-[0.75rem]'}`}
+    >
+      What next?
+    </motion.h3>
+  );
+}
+
+// A follow-up rendered as a full-width row (layouts 2 & 3). Output-track rows
+// show a slide-in arrow (click fills the composer); input-track rows reveal an
+// external-link icon on hover (click opens a new tab). `showTag` is true in the
+// single-section layout (2), where each row must self-identify, and false in the
+// two-section layout (3), where the section header already carries the track.
+function FollowUpRow({
+  q,
+  track,
+  showTag,
+  delayIndex,
+  reduced,
+  onClick,
+  variant = 'card',
+}: {
+  q: string;
+  track: 'depth' | 'breadth';
+  showTag: boolean;
+  delayIndex: number;
+  reduced: boolean;
+  onClick: () => void;
+  // 'card' = standalone bordered row (layout 3). 'list' = borderless row inside
+  // one shared container, separated by divider lines (layout 2).
+  variant?: 'card' | 'list';
+}) {
+  const meta = FOLLOWUP_TRACK_META[track];
+  const TagIcon = meta.Icon;
+  const isInput = track === 'breadth';
+  const variantClass =
+    variant === 'list'
+      ? 'px-3.5 py-4 bg-canvas-elevated hover:bg-brand-50 focus-visible:ring-inset'
+      : 'px-3.5 py-2.5 rounded-md bg-canvas-elevated border border-canvas-border hover:bg-brand-50 hover:border-brand-200';
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      initial={reduced ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.4 + delayIndex * 0.13, duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+      className={`group/row w-full flex items-center gap-2.5 text-left text-[0.8125rem] leading-snug text-ink-700 hover:text-brand-700 transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${variantClass}`}
+    >
+      {showTag && (
+        // Fixed-width tag column so every question's text aligns to the same
+        // edge regardless of the pill's width (no ragged left edge in the list).
+        <span className={variant === 'list' ? 'shrink-0 w-36 flex' : 'shrink-0'}>
+          <span className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold ${meta.badge}`}>
+            <TagIcon size={11} strokeWidth={2} className="shrink-0" />
+            {meta.label}
+          </span>
+        </span>
+      )}
+      <span className="flex-1 min-w-0">{q}</span>
+      {isInput ? (
+        <ExternalLink
+          size={14}
+          aria-hidden
+          className="shrink-0 -translate-x-1 opacity-0 text-ink-400 transition-all duration-150 group-hover/row:translate-x-0 group-hover/row:opacity-100 group-hover/row:text-brand-600"
+        />
+      ) : (
+        <ArrowRight
+          size={15}
+          aria-hidden
+          className="shrink-0 -translate-x-1 opacity-0 transition-all duration-150 group-hover/row:translate-x-0 group-hover/row:opacity-100"
+        />
+      )}
+    </motion.button>
+  );
+}
+
+// A collapsible follow-up section: a header button (chevron points down when
+// open, right when collapsed) over a list of rows. Defaults open. Mirrors the
+// RACM-generator disclosure pattern so it stays on the Editorial GRC system.
+function CollapsibleFollowUps({
+  title,
+  subtitle,
+  Icon,
+  badgeClass,
+  defaultOpen = true,
+  headingId,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  Icon?: LucideIcon;
+  badgeClass?: string;
+  defaultOpen?: boolean;
+  headingId?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        type="button"
+        id={headingId}
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="group/sec w-full flex items-start justify-between gap-3 mb-2 cursor-pointer rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+      >
+        <span className="flex flex-col gap-1 min-w-0 text-left">
+          <span className="flex items-center gap-1.5 text-[0.875rem] leading-4 font-medium tracking-normal text-ink-900">
+            {Icon && (
+              <Icon size={16} strokeWidth={2} className={badgeClass} />
+            )}
+            {title}
+          </span>
+          {subtitle && (
+            <span className="text-[0.75rem] leading-4 font-normal text-ink-400">{subtitle}</span>
+          )}
+        </span>
+        <ChevronDown
+          size={15}
+          className={`shrink-0 text-ink-400 transition-transform duration-150 group-hover/sec:text-ink-600 ${open ? '' : '-rotate-90'}`}
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-2 pb-1">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// The tagged result follow-ups ("Drill the output" / "Explore inputs"), rendered
+// as two collapsible sections, each a 3-column grid of cards.
+function TrackedFollowUps({
+  msgId,
+  tracks,
+  reduced,
+  onPick,
+}: {
+  msgId: string;
+  tracks: { depth: string[]; breadth: string[] };
+  reduced: boolean;
+  onPick: (q: string, track: 'depth' | 'breadth') => void;
+}) {
+  // "What next?" heading is commented out in the render below (per design — the
+  // two section headers carry the context). headingId is unused while it's hidden:
+  // const headingId = `followups-heading-${msgId}`;
+  const activeTracks = (['depth', 'breadth'] as const).filter(t => tracks[t]?.length);
+
+  // Continuous entrance-cascade index across both sections.
+  const offsets: Record<string, number> = {};
+  let acc = 0;
+  for (const t of activeTracks) {
+    offsets[t] = acc;
+    acc += tracks[t].length;
+  }
+
+  // Chosen layout — two collapsible sections (output / input), each a 3-column
+  // grid of 8px cards. The section header carries the track, so cards stay
+  // untagged. The other trialled layouts (1: carousel, 2: one divided list,
+  // 3: two divided lists) are kept commented at the foot of this function for
+  // revisit; their live versions are also in git history.
+  return (
+    <>
+      {/* "What next?" heading hidden — the section headers stand alone.
+          Restore: re-enable headingId above and <FollowUpHeading id={headingId} size="md" />. */}
+      <div className="space-y-4">
+        {activeTracks.map(track => {
+          const meta = FOLLOWUP_TRACK_META[track];
+          return (
+            <CollapsibleFollowUps
+              key={`${msgId}-sec-${track}`}
+              title={meta.label}
+              subtitle={meta.caption}
+              Icon={meta.Icon}
+              badgeClass={meta.badge}
+              defaultOpen
+            >
+              {/* Exactly 3 items per track → one tidy row of three cards. */}
+              <div className="grid grid-cols-3 gap-2">
+                {tracks[track].map((q, i) => (
+                  <FollowUpRow
+                    key={`${msgId}-${track}-${i}`}
+                    q={q}
+                    track={track}
+                    showTag={false}
+                    variant="card"
+                    delayIndex={offsets[track] + i}
+                    reduced={reduced}
+                    onClick={() => onPick(q, track)}
+                  />
+                ))}
+              </div>
+            </CollapsibleFollowUps>
+          );
+        })}
+      </div>
+    </>
+  );
+
+  /* ─── Other trialled "What next?" layouts, kept for revisit ──────────────────
+     To restore one, re-add a `layout` prop (1 | 2 | 3) and branch on it.
+     const items = activeTracks.flatMap(t => tracks[t].map(q => ({ q, track: t })));
+
+     Option 1 — horizontal carousel of tagged cards:
+       <>
+         <FollowUpHeading id={headingId} />
+         <FollowUpCarousel>
+           {items.map(({ q, track }, i) => {
+             const meta = FOLLOWUP_TRACK_META[track];
+             return (
+               <FollowUpCard key={...} q={q}
+                 tag={{ label: meta.label, caption: meta.caption, badge: meta.badge, Icon: meta.Icon }}
+                 extraClass={FOLLOWUP_CARD_EXTRA} stacked={FOLLOWUP_CARD_STACKED}
+                 delayIndex={i} isSelected={false} reduced={reduced}
+                 onClick={() => onPick(q, track)} />
+             );
+           })}
+         </FollowUpCarousel>
+       </>
+
+     Option 2 — one collapsible section, table-style divided list (rows keep tags):
+       <CollapsibleFollowUps title="What next?" headingId={headingId} defaultOpen>
+         <div className="border-y border-canvas-border bg-canvas-elevated divide-y divide-canvas-border">
+           {items.map(({ q, track }, i) => (
+             <FollowUpRow key={...} q={q} track={track} showTag variant="list"
+               delayIndex={i} reduced={reduced} onClick={() => onPick(q, track)} />
+           ))}
+         </div>
+       </CollapsibleFollowUps>
+
+     Option 3 — same two sections as Option 4 but each a divided list; swap the
+     grid <div> for:
+       <div className="border-y border-canvas-border bg-canvas-elevated divide-y divide-canvas-border">
+         {tracks[track].map((q, i) => (
+           <FollowUpRow key={...} q={q} track={track} showTag={false} variant="list"
+             delayIndex={offsets[track] + i} reduced={reduced} onClick={() => onPick(q, track)} />
+         ))}
+       </div>
+  ──────────────────────────────────────────────────────────────────────────── */
 }
 
 export interface ChatViewProps {
@@ -3524,6 +3795,28 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [composerDraft]);
 
+  // New-tab handoff for "Explore inputs" follow-ups: a fresh chat tab boots with
+  // ?draft=<question> (see openQuestionInNewTab). On mount, lift that text into
+  // the composer — focused, caret at end, sized — WITHOUT auto-submitting, so the
+  // user can review/edit before sending.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const draft = new URLSearchParams(window.location.search).get('draft');
+    if (!draft) return;
+    setInput(draft);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) {
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 260) + 'px';
+        el.focus();
+        const len = el.value.length;
+        el.setSelectionRange(len, len);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Canvas → composer context handoff. A right-side CTA seeds a context mode;
   // enter it, clear any stale draft, and focus the composer so the user can
   // type their feedback immediately. Does NOT auto-submit.
@@ -4837,6 +5130,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     setInput(question);
     textareaRef.current?.focus();
     requestAnimationFrame(() => handleTextareaInput());
+  };
+
+  // Clicking a tagged result follow-up: the OUTPUT track ("Drill the output")
+  // fills the current composer to edit/send; the INPUT track ("Explore inputs")
+  // opens a fresh chat in a new browser tab with the question pre-loaded.
+  const pickFollowUp = (question: string, track: 'depth' | 'breadth') => {
+    if (track === 'breadth') openQuestionInNewTab(question);
+    else loadFollowUpIntoComposer(question);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -6926,71 +7227,43 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                     {msg.role === 'assistant' && (msg.followUpTracks || (msg.followUps && msg.followUps.length > 0)) && (
                       <div
                         role="region"
-                        aria-labelledby={`followups-heading-${msg.id}`}
+                        aria-label="Suggested follow-ups"
                         className="mt-3"
                       >
-                        <motion.h3
-                          key={`${msg.id}-followups-heading`}
-                          id={`followups-heading-${msg.id}`}
-                          initial={{ opacity: 0, y: 6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.35, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                          className="mb-2 text-[0.75rem] font-medium tracking-normal text-ink-900"
-                        >
-                          What next?
-                        </motion.h3>
-
                         {msg.followUpTracks ? (
-                          (() => {
-                            const tracks = (['depth', 'breadth'] as const).filter(
-                              t => msg.followUpTracks![t]?.length,
-                            );
-                            // One single section: flatten both tracks into a single
-                            // stacked list. The depth/breadth distinction now rides on
-                            // a per-row output/input track tag instead of separate
-                            // section headers. Flat index drives the entrance cascade.
-                            const items = tracks.flatMap(track =>
-                              msg.followUpTracks![track].map(q => ({ q, track })),
-                            );
-                            return (
-                              <FollowUpCarousel>
-                                {items.map(({ q, track }, delayIndex) => {
-                                  const meta = FOLLOWUP_TRACK_META[track];
-                                  return (
-                                    <FollowUpCard
-                                      key={`${msg.id}-${track}-${delayIndex}`}
-                                      q={q}
-                                      tag={{ label: meta.label, caption: meta.caption, badge: meta.badge, Icon: meta.Icon }}
-                                      extraClass={FOLLOWUP_CARD_EXTRA}
-                                      stacked={FOLLOWUP_CARD_STACKED}
-                                      delayIndex={delayIndex}
-                                      isSelected={selectedFollowUpByMsgId[msg.id] === q}
-                                      reduced={!!prefersReducedMotion}
-                                      onClick={() => loadFollowUpIntoComposer(q)}
-                                    />
-                                  );
-                                })}
-                              </FollowUpCarousel>
-                            );
-                          })()
+                          // Tagged result follow-ups — two collapsible sections,
+                          // each a 3-column card grid. Output cards fill the
+                          // composer; input cards open a new chat tab (pickFollowUp).
+                          <TrackedFollowUps
+                            msgId={msg.id}
+                            tracks={msg.followUpTracks}
+                            reduced={!!prefersReducedMotion}
+                            onPick={pickFollowUp}
+                          />
                         ) : (
-                          <FollowUpCarousel>
-                            {msg.followUps!.map((q, i) => (
-                              <FollowUpCard
-                                key={`${msg.id}-followup-${i}`}
-                                q={q}
-                                extraClass={FOLLOWUP_CARD_EXTRA}
-                                stacked={FOLLOWUP_CARD_STACKED}
-                                delayIndex={i}
-                                isSelected={selectedFollowUpByMsgId[msg.id] === q}
-                                reduced={!!prefersReducedMotion}
-                                onClick={() => {
-                                  setSelectedFollowUpByMsgId(prev => ({ ...prev, [msg.id]: q }));
-                                  handleFollowUpClick(q);
-                                }}
-                              />
-                            ))}
-                          </FollowUpCarousel>
+                          // Plain conversational quick-replies (untagged) — left as
+                          // the existing carousel; the layout trial is scoped to the
+                          // tagged result follow-ups only.
+                          <>
+                            <FollowUpHeading id={`followups-heading-${msg.id}`} />
+                            <FollowUpCarousel>
+                              {msg.followUps!.map((q, i) => (
+                                <FollowUpCard
+                                  key={`${msg.id}-followup-${i}`}
+                                  q={q}
+                                  extraClass={FOLLOWUP_CARD_EXTRA}
+                                  stacked={FOLLOWUP_CARD_STACKED}
+                                  delayIndex={i}
+                                  isSelected={selectedFollowUpByMsgId[msg.id] === q}
+                                  reduced={!!prefersReducedMotion}
+                                  onClick={() => {
+                                    setSelectedFollowUpByMsgId(prev => ({ ...prev, [msg.id]: q }));
+                                    handleFollowUpClick(q);
+                                  }}
+                                />
+                              ))}
+                            </FollowUpCarousel>
+                          </>
                         )}
                       </div>
                     )}
