@@ -43,7 +43,7 @@ export function controlConclusion(c: Control): Conclusion {
 
 // ─── Track progress ──────────────────────────────────────────────────────────────
 
-import type { DesignPoint, OperatingStep, TestResult, ValidationQA } from './types';
+import type { DesignPoint, OperatingStep, TestResult, ValidationQA, ValidationTable } from './types';
 export function pointResult(p: DesignPoint): TestResult { return p.override ? (p.override.result as TestResult) : p.result; }
 export function stepResult(s: OperatingStep): TestResult { return s.override ? (s.override.result as TestResult) : s.result; }
 
@@ -55,6 +55,24 @@ export function validationQA(text: string, fail: boolean): ValidationQA[] {
     { q: 'Is the performer segregated from the activity being controlled?', a: 'Yes — distinct system roles were confirmed in the walkthrough.', pass: true },
     { q: 'Is the control’s operation evidenced and retained for the period?', a: fail ? 'Partially — sign-off is retained but does not evidence the pre-posting review.' : 'Yes — evidenced and retained for the full period.', pass: !fail },
   ];
+}
+
+/** Plain-language summary the AI returns after checking the uploaded file. */
+export function validationSummary(text: string, fail: boolean): string {
+  return fail
+    ? `The uploaded file does not fully support “${text}”. 1 of 3 sampled items breaks the control — the required approval/threshold could not be evidenced for that item, so the attribute is concluded Fail. Item-level results are in the table below.`
+    : `The uploaded file supports “${text}”. All 3 sampled items met the control — the required approval and threshold were present and within policy on each. No exceptions found, so the attribute is concluded Pass.`;
+}
+/** A small per-item evidence table to accompany the summary. */
+export function validationTable(fail: boolean): ValidationTable {
+  return {
+    columns: ['Item', 'Approval', 'Tolerance', 'Result'],
+    rows: [
+      ['#1001', 'Approved', 'Within tolerance', 'Pass'],
+      ['#1002', 'Approved', 'Within tolerance', 'Pass'],
+      ['#1003', fail ? 'No approver found' : 'Approved', fail ? 'Breach not cleared' : 'Within tolerance', fail ? 'Fail' : 'Pass'],
+    ],
+  };
 }
 
 export function designProgress(c: Control) {
@@ -82,7 +100,8 @@ export function operatingProgress(c: Control) {
 export function courtFor(c: Control, tasks: HandoffTask[]): Court {
   if (tasks.some(t => t.controlId === c.id && t.assigneeRole === 'risk-owner' && t.status === 'open')) return 'risk-owner';
   const concl = controlConclusion(c);
-  if (concl === 'Effective' || concl === 'Ineffective') return 'reviewer';
+  // A concluded control is closed out (no separate reviewer court on this platform).
+  if (concl === 'Effective' || concl === 'Ineffective') return 'none';
   return 'auditor';
 }
 

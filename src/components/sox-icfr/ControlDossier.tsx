@@ -5,7 +5,7 @@ import {
   ArrowLeft, FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, Download, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
-  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks,
+  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import {
@@ -21,7 +21,7 @@ import { cn } from '../../lib/cn';
 import { DESIGN_DOC_KINDS } from './types';
 import type {
   Control, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, EvidenceMode, OperatingStep,
-  Sampling, TestResult, TrackConclusion, ValidationQA,
+  Role, Sampling, TestResult, TrackConclusion, ValidationResult,
 } from './types';
 
 const DOC_TONE: Record<DocStatus, string> = { Received: 'text-compliant-700', Requested: 'text-mitigated-700', Missing: 'text-ink-400' };
@@ -135,7 +135,7 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
 
 // ── conclude footer — always visible, prominent ───────────────────────────────────
 function ConcludeFooter({ control, which, suggestion, canEdit, disabled }: { control: Control; which: 'design' | 'operating'; suggestion: TrackConclusion; canEdit: boolean; disabled?: boolean }) {
-  const { concludeDesign, concludeOperating, overrideDesign, overrideOperating } = useIcfr();
+  const { me, concludeDesign, concludeOperating, overrideDesign, overrideOperating } = useIcfr();
   const { addToast } = useToast();
   const track = control[which];
   const conclude = which === 'design' ? concludeDesign : concludeOperating;
@@ -156,7 +156,7 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled }: { con
         <button disabled={disabled} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[12.5px] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> Conclude ineffective</button>
         {suggestion !== 'Not tested' && <span className="text-[11.5px] text-ink-400 inline-flex items-center gap-1"><Scale size={12} /> Evidence suggests <b className="font-semibold text-ink-600">{suggestion}</b></span>}
       </div>
-      {pending && <RationaleForm title={`Overriding the evidence — record why you concluded ${pending}`} onCancel={() => setPending(null)} buttons={[{ label: `Save rationale`, onClick: note => { override(control.id, { result: pending === 'Effective' ? 'Effective' : 'Ineffective', by: 'You · Auditor', at: 'just now', rationale: note }); setPending(null); } }]} />}
+      {pending && <RationaleForm title={`Overriding the evidence — record why you concluded ${pending}`} onCancel={() => setPending(null)} buttons={[{ label: `Save rationale`, onClick: note => { override(control.id, { result: pending === 'Effective' ? 'Effective' : 'Ineffective', by: me, at: 'just now', rationale: note }); setPending(null); } }]} />}
       {track.override && (
         <div className="mt-2.5 text-[11.5px] text-high-700 flex items-start gap-1.5 p-2.5 rounded-lg bg-high-50/50 border border-high-200">
           <Pencil size={12} className="mt-0.5 shrink-0" /><span><b>Conclusion overridden</b> — {track.override.rationale} <span className="text-ink-400">· {track.override.by}</span></span>
@@ -167,24 +167,59 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled }: { con
   );
 }
 
-// ── validation Q&A modal — review what the workflow asked and found ───────────────
-function QAResultsModal({ title, qa, onClose }: { title: string; qa: ValidationQA[]; onClose: () => void }) {
+// ── validation results modal — what the AI concluded against the file ─────────────
+function QAResultsModal({ title, validation, onClose }: { title: string; validation: ValidationResult; onClose: () => void }) {
+  const { qa, summary, table, result, fileName } = validation;
   const passed = qa.filter(x => x.pass).length;
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <motion.div className="modal" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border">
           <div className="flex items-center gap-2"><Sparkles size={16} className="text-brand-600" /><h3 className="text-[14px] font-bold text-ink-900">Ask IRA — validation results</h3></div>
-          <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
+          <div className="flex items-center gap-2">
+            {result && <span className={cn('inline-flex items-center gap-1 text-[12px] font-bold px-2 h-6 rounded-full', result === 'Pass' ? 'bg-compliant-50 text-compliant-700' : 'bg-risk-50 text-risk-700')}><Tickmark result={result} size={13} /> {result}</span>}
+            <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
+          </div>
         </div>
-        <div className="px-5 py-2.5 border-b border-canvas-border bg-paper-50/40"><p className="text-[12px] text-ink-600"><b className="text-ink-800">Validated —</b> {title}</p></div>
-        <div className="px-5 py-4 space-y-3.5 max-h-[52vh] overflow-y-auto">
-          {qa.map((item, i) => (
-            <div key={i} className="flex items-start gap-3">
-              <Tickmark result={item.pass ? 'Pass' : 'Fail'} size={18} />
-              <div><div className="text-[12.5px] font-semibold text-ink-900">{item.q}</div><div className="text-[12px] text-ink-600 mt-0.5 leading-relaxed">{item.a}</div></div>
+        <div className="px-5 py-2.5 border-b border-canvas-border bg-paper-50/40 flex items-center gap-2 flex-wrap"><p className="text-[12px] text-ink-600"><b className="text-ink-800">Validated —</b> {title}</p>{fileName && <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md px-1.5 h-[20px]"><Paperclip size={9} />{fileName}</span>}</div>
+        <div className="px-5 py-4 space-y-4 max-h-[58vh] overflow-y-auto">
+          {summary && (
+            <div className="rounded-lg border border-canvas-border bg-paper-50/50 px-3.5 py-3">
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-ink-400 mb-1">Summary</div>
+              <p className="text-[12.5px] text-ink-700 leading-relaxed">{summary}</p>
             </div>
-          ))}
+          )}
+          {table && (
+            <div>
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-ink-400 mb-1.5">Evidence checked</div>
+              <div className="rounded-lg border border-canvas-border overflow-hidden">
+                <table className="w-full text-[12px]">
+                  <thead><tr className="bg-paper-50/60 border-b border-canvas-border">{table.columns.map(c => <th key={c} className="text-left font-semibold text-ink-600 px-3 py-1.5">{c}</th>)}</tr></thead>
+                  <tbody>
+                    {table.rows.map((row, ri) => (
+                      <tr key={ri} className="border-b border-canvas-border/60 last:border-0">
+                        {row.map((cell, ci) => {
+                          const isResult = ci === table.columns.length - 1;
+                          return <td key={ci} className={cn('px-3 py-1.5', isResult ? cn('font-bold', cell === 'Pass' ? 'text-compliant-700' : cell === 'Fail' ? 'text-risk-700' : 'text-ink-600') : 'text-ink-700', ci === 0 && 'font-mono text-[11px] text-ink-500')}>{cell}</td>;
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          <div>
+            <div className="text-[10.5px] font-bold uppercase tracking-wide text-ink-400 mb-1.5">Checks</div>
+            <div className="space-y-3">
+              {qa.map((item, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <Tickmark result={item.pass ? 'Pass' : 'Fail'} size={18} />
+                  <div><div className="text-[12.5px] font-semibold text-ink-900">{item.q}</div><div className="text-[12px] text-ink-600 mt-0.5 leading-relaxed">{item.a}</div></div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
         <div className="flex items-center justify-between px-5 py-3.5 border-t border-canvas-border">
           <span className="text-[11.5px] text-ink-500">{passed}/{qa.length} checks passed</span>
@@ -199,7 +234,7 @@ function QAResultsModal({ title, qa, onClose }: { title: string; qa: ValidationQ
 // ── design consideration row — validated by its own workflow (Q&A) + override ─────
 const VALIDATE_MS = 6000;
 function PointRow({ control, point, canEdit }: { control: Control; point: DesignPoint; canEdit: boolean }) {
-  const { setDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignPoint } = useIcfr();
+  const { me, setDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignPoint } = useIcfr();
   const [over, setOver] = useState(false);
   const [validating, setValidating] = useState(false);
   const [showQA, setShowQA] = useState(false);
@@ -229,17 +264,17 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
       {over && (point.override
         ? <div className="mt-2 flex justify-end"><button onClick={() => { overrideDesignPoint(control.id, point.id, null); setOver(false); }} className="h-7 px-3 text-[12px] font-semibold rounded-lg border border-canvas-border text-ink-600 hover:text-ink-900 inline-flex items-center gap-1.5 cursor-pointer"><RotateCcw size={12} /> Remove override</button></div>
         : <RationaleForm title="Override this consideration — record why" onCancel={() => setOver(false)} buttons={[
-            { label: 'Override · Pass', onClick: n => { overrideDesignPoint(control.id, point.id, { result: 'Pass', by: 'You · Auditor', at: 'just now', rationale: n }); setOver(false); } },
-            { label: 'Override · Fail', onClick: n => { setDesignPoint(control.id, point.id, 'Fail'); overrideDesignPoint(control.id, point.id, { result: 'Fail', by: 'You · Auditor', at: 'just now', rationale: n }); setOver(false); } },
+            { label: 'Override · Pass', onClick: n => { overrideDesignPoint(control.id, point.id, { result: 'Pass', by: me, at: 'just now', rationale: n }); setOver(false); } },
+            { label: 'Override · Fail', onClick: n => { setDesignPoint(control.id, point.id, 'Fail'); overrideDesignPoint(control.id, point.id, { result: 'Fail', by: me, at: 'just now', rationale: n }); setOver(false); } },
           ]} />)}
-      <AnimatePresence>{showQA && point.validation && <QAResultsModal title={point.text} qa={point.validation.qa} onClose={() => setShowQA(false)} />}</AnimatePresence>
+      <AnimatePresence>{showQA && point.validation && <QAResultsModal title={point.text} validation={point.validation} onClose={() => setShowQA(false)} />}</AnimatePresence>
     </div>
   );
 }
 
 // ── operating attribute — its own workflow and/or self-attestation ────────────────
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
-  const { setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
+  const { me, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
   const [over, setOver] = useState(false);
   const [noteDraft, setNoteDraft] = useState(step.attestation?.note ?? '');
   const [validatingWf, setValidatingWf] = useState(false);
@@ -292,13 +327,28 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
             )}
           </div>
           {v1 === 'ai' ? (
-            <div className="rounded-md bg-brand-50/30 border border-brand-100 px-2.5 py-2 flex items-center gap-2.5 flex-wrap">
-              <Sparkles size={14} className="text-brand-600 shrink-0" />
-              <span className="text-[11.5px] text-ink-600 flex-1 min-w-0">Generic validation by Ask IRA · <span className="font-mono text-[10.5px] text-ink-400">{validatingWf ? 'validating…' : (step.validation ? (step.workflowRunRef ?? 'validated') : 'not run yet')}</span></span>
-              {canEdit && (validatingWf
-                ? <span className="text-[11.5px] font-semibold text-brand-600 inline-flex items-center gap-1.5"><Loader2 size={13} className="animate-spin" /> Validating…</span>
-                : <button onClick={runAI} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 inline-flex items-center gap-1 cursor-pointer"><Sparkles size={12} /> {step.validation ? 'Re-run' : 'Run AI validation'}</button>)}
-              {step.validation && <button onClick={() => setShowQA(true)} className="text-[11.5px] font-semibold text-brand-700 underline underline-offset-2 hover:text-brand-800 inline-flex items-center gap-1 cursor-pointer"><ListChecks size={12} /> View results</button>}
+            <div className="rounded-md bg-brand-50/30 border border-brand-100 px-2.5 py-2.5 space-y-2">
+              {/* required file the AI validates against */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Upload size={13} className="text-brand-600 shrink-0" />
+                <span className="text-[11px] font-semibold text-ink-600">Required file</span>
+                {step.inputFile
+                  ? <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md px-1.5 h-[20px] max-w-[180px]"><Paperclip size={9} className="shrink-0" /><span className="truncate">{step.inputFile.name}</span></span>
+                  : <span className="text-[11px] text-ink-400">none uploaded yet</span>}
+                {canEdit && !busy && <button onClick={() => setStepInputFile(control.id, step.id, `${step.code}-evidence.xlsx`)} className="h-6 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[11px] font-semibold hover:border-brand-300 hover:text-brand-700 inline-flex items-center gap-1 cursor-pointer"><Upload size={10} /> {step.inputFile ? 'Replace' : 'Upload file'}</button>}
+              </div>
+              {/* run + result */}
+              <div className="flex items-center gap-2.5 flex-wrap pt-2 border-t border-brand-100/70">
+                <Sparkles size={14} className="text-brand-600 shrink-0" />
+                <span className="text-[11.5px] text-ink-600 flex-1 min-w-0">AI validation by Ask IRA · <span className="font-mono text-[10.5px] text-ink-400">{validatingWf ? 'checking the file…' : (step.validation ? 'done' : 'not run yet')}</span></span>
+                {step.validation?.result && !validatingWf && <span className={cn('inline-flex items-center gap-1 text-[11px] font-bold', step.validation.result === 'Pass' ? 'text-compliant-700' : 'text-risk-700')}><Tickmark result={step.validation.result} size={13} /> {step.validation.result}</span>}
+                {canEdit && (validatingWf
+                  ? <span className="text-[11.5px] font-semibold text-brand-600 inline-flex items-center gap-1.5"><Loader2 size={13} className="animate-spin" /> Validating…</span>
+                  : <button onClick={runAI} disabled={!step.inputFile} title={step.inputFile ? '' : 'Upload the required file first'} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[11.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer"><Sparkles size={12} /> {step.validation ? 'Re-run' : 'Run AI validation'}</button>)}
+                {step.validation && <button onClick={() => setShowQA(true)} className="text-[11.5px] font-semibold text-brand-700 underline underline-offset-2 hover:text-brand-800 inline-flex items-center gap-1 cursor-pointer"><ListChecks size={12} /> View results</button>}
+              </div>
+              {step.validation?.summary && !validatingWf && <p className="text-[11.5px] text-ink-600 leading-snug">{step.validation.summary}</p>}
+              {!step.inputFile && canEdit && <p className="text-[10.5px] text-mitigated-700 inline-flex items-center gap-1"><AlertTriangle size={10} /> Upload the file the AI should check before running validation.</p>}
             </div>
           ) : (
             step.workflowName ? (
@@ -317,17 +367,25 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
         </div>
 
         <div className="rounded-lg border border-canvas-border px-3 py-2.5">
-          <div className="flex items-center gap-2 text-[11px] font-bold text-ink-600"><Hand size={12} /> Self-attestation {att && <span className="font-normal text-ink-400">· {att.by}, {att.at}</span>}
+          <div className="flex items-center gap-2 text-[11px] font-bold text-ink-600"><Hand size={12} /> Self-attestation <span className="font-normal text-ink-400">· manual pass / fail</span>
             {canEdit && <span className="ml-auto"><Toggle on={attestOn} onChange={v => toggleStepAttest(control.id, step.id, v)} label="Toggle self-attestation" /></span>}
           </div>
           {attestOn && <>
-            {att?.note && <p className="text-[12px] text-ink-700 mt-2 italic">“{att.note}”</p>}
+            {att?.result && (
+              <div className="mt-2 flex items-center gap-2 flex-wrap text-[11px]">
+                <span className={cn('inline-flex items-center gap-1 font-bold', att.result === 'Pass' ? 'text-compliant-700' : 'text-risk-700')}><Tickmark result={att.result} size={13} /> Attested {att.result}</span>
+                <span className="text-ink-400">· by <b className="text-ink-600 font-semibold">{att.by}</b>, {att.at}</span>
+              </div>
+            )}
+            {att?.note && <p className="text-[12px] text-ink-700 mt-1.5 italic">“{att.note}”</p>}
             {att && att.evidence.length > 0 && <div className="flex flex-wrap gap-1.5 mt-2">{att.evidence.map(f => <span key={f.id} className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-ink-600 bg-paper-50 border border-canvas-border rounded-md px-1.5 h-[20px]"><Paperclip size={9} />{f.name}</span>)}</div>}
             {canEdit && (
               <div className="mt-2">
-                <textarea value={noteDraft} onChange={e => setNoteDraft(e.target.value)} rows={2} placeholder="Describe how this attribute is satisfied — recorded as your attestation." className="w-full text-[12px] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
-                <div className="flex items-center gap-2 mt-1.5">
-                  <button disabled={!noteDraft.trim()} onClick={() => attestStep(control.id, step.id, noteDraft.trim())} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[11.5px] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 cursor-pointer">Save attestation</button>
+                <textarea value={noteDraft} onChange={e => setNoteDraft(e.target.value)} rows={2} placeholder="Describe how this attribute is satisfied — recorded with your attestation." className="w-full text-[12px] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span className="text-[10.5px] font-semibold text-ink-400 uppercase tracking-wide">Attest</span>
+                  <button disabled={!noteDraft.trim()} onClick={() => attestStep(control.id, step.id, noteDraft.trim(), 'Pass')} className="h-7 px-2.5 rounded-md bg-compliant-600 text-white text-[11.5px] font-semibold disabled:opacity-40 enabled:hover:bg-compliant-700 inline-flex items-center gap-1 cursor-pointer"><CheckCircle2 size={12} /> Pass</button>
+                  <button disabled={!noteDraft.trim()} onClick={() => attestStep(control.id, step.id, noteDraft.trim(), 'Fail')} className="h-7 px-2.5 rounded-md border border-risk-300 text-risk-700 text-[11.5px] font-semibold disabled:opacity-40 enabled:hover:bg-risk-50 inline-flex items-center gap-1 cursor-pointer"><XCircle size={12} /> Fail</button>
                   <button onClick={() => addStepEvidence(control.id, step.id, `evidence-${step.code}.pdf`)} className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[11.5px] font-semibold hover:border-brand-300 hover:text-brand-700 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>
                 </div>
               </div>
@@ -339,10 +397,10 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
       {over && (step.override
         ? <div className="mt-2 flex justify-end"><button onClick={() => { overrideStep(control.id, step.id, null); setOver(false); }} className="h-7 px-3 text-[12px] font-semibold rounded-lg border border-canvas-border text-ink-600 hover:text-ink-900 inline-flex items-center gap-1.5 cursor-pointer"><RotateCcw size={12} /> Remove override</button></div>
         : <RationaleForm title="Override this result — record why" onCancel={() => setOver(false)} buttons={[
-            { label: 'Override · Pass', onClick: n => { overrideStep(control.id, step.id, { result: 'Pass', by: 'You · Auditor', at: 'just now', rationale: n }); setOver(false); } },
-            { label: 'Override · Fail', onClick: n => { overrideStep(control.id, step.id, { result: 'Fail', by: 'You · Auditor', at: 'just now', rationale: n }); setOver(false); } },
+            { label: 'Override · Pass', onClick: n => { overrideStep(control.id, step.id, { result: 'Pass', by: me, at: 'just now', rationale: n }); setOver(false); } },
+            { label: 'Override · Fail', onClick: n => { overrideStep(control.id, step.id, { result: 'Fail', by: me, at: 'just now', rationale: n }); setOver(false); } },
           ]} />)}
-      <AnimatePresence>{showQA && step.validation && <QAResultsModal title={step.description} qa={step.validation.qa} onClose={() => setShowQA(false)} />}</AnimatePresence>
+      <AnimatePresence>{showQA && step.validation && <QAResultsModal title={step.description} validation={step.validation} onClose={() => setShowQA(false)} />}</AnimatePresence>
     </div>
   );
 }
@@ -427,7 +485,7 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
 
 // ── operating section (TOE) — locked until design effective ───────────────────────
 function OperatingSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { setPopulation, setSampling, addAttribute, testAllAttributes } = useIcfr();
+  const { me, setPopulation, setSampling, addAttribute, testAllAttributes } = useIcfr();
   const o = control.operating; const prog = operatingProgress(control);
   const anyFail = o.steps.some(s => stepResult(s) === 'Fail');
   const allTested = o.steps.length > 0 && o.steps.every(s => stepResult(s) !== 'Not tested');
@@ -441,7 +499,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   const wfCount = o.steps.filter(s => s.workflowName).length;
   const attCount = o.steps.filter(s => s.attestEnabled || s.attestation).length;
 
-  const uploadPop = () => { setUploading(true); window.setTimeout(() => { setPopulation(control.id, { source: 'SAP — full-period extract', count: 2640, tieOut: 'Agreed to GL control account', evidence: [{ id: 'ev', name: 'population.xlsx', kind: 'XLSX', uploadedBy: 'You · Auditor', uploadedAt: 'just now' }] }); setUploading(false); }, 1800); };
+  const uploadPop = () => { setUploading(true); window.setTimeout(() => { setPopulation(control.id, { source: 'SAP — full-period extract', count: 2640, tieOut: 'Agreed to GL control account', evidence: [{ id: 'ev', name: 'population.xlsx', kind: 'XLSX', uploadedBy: me, uploadedAt: 'just now' }] }); setUploading(false); }, 1800); };
   const drawSample = () => { setDrawing(true); window.setTimeout(() => { const s: Sampling = { basis: `${sampleSize} items — judgment documented (handbook: no fixed minimum).`, method: 'Random', size: sampleSize, samples: Array.from({ length: sampleSize }, (_, i) => ({ id: `s${i}`, ref: `#${1000 + i}`, result: 'Not tested' })) }; setSampling(control.id, s); setDrawing(false); }, 3000); };
   const runAll = () => { setTesting(true); window.setTimeout(() => { testAllAttributes(control.id); setTesting(false); }, 2400); };
 
@@ -511,9 +569,10 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
 }
 
 // ── vertical stepper step ─────────────────────────────────────────────────────────
-function VStep({ n, title, subtitle, status, locked, right, children }: { n: number; title: string; subtitle: string; status: TrackConclusion; locked?: boolean; right?: React.ReactNode; children: React.ReactNode }) {
+function VStep({ n, title, subtitle, status, locked, right, children, defaultOpen = true }: { n: number; title: string; subtitle: string; status: TrackConclusion; locked?: boolean; right?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
   const nodeClass = locked ? 'locked' : status === 'Effective' ? 'done' : status === 'Ineffective' ? 'fail' : 'active';
   const concluded = status === 'Effective' || status === 'Ineffective';
+  const [open, setOpen] = useState(defaultOpen);
   const [flash, setFlash] = useState(false);
   const prev = useRef(status);
   useEffect(() => {
@@ -531,12 +590,24 @@ function VStep({ n, title, subtitle, status, locked, right, children }: { n: num
       <div className="vstep-rail" />
       <div className={cn('vstep-node', nodeClass)}>{locked ? <Lock size={15} /> : status === 'Effective' ? <Check size={17} strokeWidth={3} /> : status === 'Ineffective' ? <X size={16} strokeWidth={3} /> : n}</div>
       <div className={cn('panel relative', locked && 'panel-locked')}>
-        <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-canvas-border">
-          <div><h3 className="text-[15px] font-bold text-ink-900">{title}</h3><p className="text-[11.5px] text-ink-500 mt-0.5 max-w-[520px]">{subtitle}</p></div>
-          <div className="flex items-center gap-2 shrink-0">{right}{concluded ? <Stamp result={status as 'Effective' | 'Ineffective'} /> : <TrackPill c={status} />}</div>
-        </div>
-        {children}
-        <AnimatePresence>{flash && concluded && (
+        <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} title={open ? 'Collapse' : 'Expand'} className={cn('w-full flex items-start justify-between gap-3 px-5 pt-4 pb-3 text-left cursor-pointer transition-colors hover:bg-paper-50/40', open && 'border-b border-canvas-border')}>
+          <div className="flex items-start gap-2.5 min-w-0">
+            <ChevronDown size={16} className={cn('mt-0.5 text-ink-400 shrink-0 transition-transform', !open && '-rotate-90')} />
+            <div className="min-w-0">
+              <h3 className="text-[15px] font-bold text-ink-900">{title}</h3>
+              {open && <p className="text-[11.5px] text-ink-500 mt-0.5 max-w-[520px]">{subtitle}</p>}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">{right}{concluded ? <Stamp result={status as 'Effective' | 'Ineffective'} animate={false} /> : <TrackPill c={status} />}</div>
+        </button>
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div key="body" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: 'easeInOut' }} className="overflow-hidden">
+              {children}
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>{flash && concluded && open && (
           <motion.div className="stamp-flash" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <Stamp result={status as 'Effective' | 'Ineffective'} size="lg" />
           </motion.div>
@@ -550,16 +621,75 @@ function VStep({ n, title, subtitle, status, locked, right, children }: { n: num
 const ANCHORS: { id: DiscussionAnchor | 'all'; label: string }[] = [
   { id: 'all', label: 'All' }, { id: 'control', label: 'Control' }, { id: 'design', label: '① Design' }, { id: 'operating', label: '② Operating' },
 ];
-function DiscussionRail({ control }: { control: Control }) {
+// the two hands on the working paper — auditor (purple/gavel) and risk owner (amber/check)
+const EXEC_ROLE: Record<Role, { Icon: typeof Gavel; accent: string; chip: string; label: string }> = {
+  auditor: { Icon: Gavel, accent: 'var(--color-brand-400)', chip: 'bg-brand-50 text-brand-700', label: 'Auditor' },
+  'risk-owner': { Icon: UserCheck, accent: 'var(--color-mitigated-500)', chip: 'bg-mitigated-50 text-mitigated-700', label: 'Risk owner' },
+};
+const TRACK_FILTERS = [{ id: 'all', label: 'All' }, { id: 'design', label: '① Design' }, { id: 'operating', label: '② Operating' }] as const;
+
+function ExecResult({ result }: { result?: TestResult | TrackConclusion }) {
+  if (!result || result === 'Not tested') return null;
+  const pass = result === 'Pass' || result === 'Effective';
+  return <span className="inline-flex items-center gap-1"><Tickmark result={pass ? 'Pass' : 'Fail'} size={13} /><span className={cn('text-[10.5px] font-bold', pass ? 'text-compliant-700' : 'text-risk-700')}>{result}</span></span>;
+}
+
+// ── execution history — the shared sign-off trail (both personas, both tracks) ─────
+function ExecutionTrail({ control }: { control: Control }) {
+  const { eng } = useIcfr();
+  const [track, setTrack] = useState<'all' | 'design' | 'operating'>('all');
+  const events = useMemo(
+    () => eng.executions.filter(e => e.controlId === control.id && (track === 'all' || e.track === track)),
+    [eng.executions, control.id, track],
+  );
+  return (
+    <>
+      <div className="px-3 pb-2 flex items-center gap-1">
+        {TRACK_FILTERS.map(t => <button key={t.id} onClick={() => setTrack(t.id)} className={cn('h-7 px-2.5 rounded-md text-[11.5px] font-semibold transition-colors cursor-pointer', track === t.id ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}>{t.label}</button>)}
+      </div>
+      <div className="flex-1 overflow-y-auto p-3">
+        {events.length === 0 ? (
+          <div className="text-center text-[12px] text-ink-400 py-10 px-4">No runs yet{track !== 'all' ? ` on the ${track} test` : ''}.<br />Execute a test of design or operating effectiveness — it shows up here for the auditor and the risk owner alike.</div>
+        ) : (
+          <div className="exec-trail space-y-2">
+            {events.map(e => {
+              const rm = EXEC_ROLE[e.role];
+              const who = e.by.split(' · ')[0];
+              return (
+                <div key={e.id} className="flex gap-2.5">
+                  <span className="exec-node" style={{ color: rm.accent }}><rm.Icon size={13} /></span>
+                  <div className="exec-card flex-1 min-w-0" style={{ borderLeftColor: rm.accent }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[12px] text-ink-800 leading-snug"><b className="font-semibold">{who}</b> {e.verb}</span>
+                      <span className="text-[10.5px] text-ink-400 shrink-0 mt-0.5">{e.at}</span>
+                    </div>
+                    {(e.target || e.result) && (
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        {e.target && <span className="font-mono text-[10.5px] font-semibold text-ink-500 bg-paper-50 border border-canvas-border rounded px-1.5 h-[18px] inline-flex items-center max-w-full truncate">{e.target}</span>}
+                        <ExecResult result={e.result} />
+                      </div>
+                    )}
+                    <div className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400">{e.track === 'design' ? '① Design' : '② Operating'}<span className={cn('normal-case tracking-normal rounded px-1.5 h-[16px] inline-flex items-center', rm.chip)}>{rm.label}</span></div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function DiscussionPane({ control }: { control: Control }) {
   const { eng, role, addComment, resolveDiscussion } = useIcfr();
   const [tab, setTab] = useState<DiscussionAnchor | 'all'>('all');
   const [text, setText] = useState('');
   const threads = useMemo(() => discussionsFor(eng, control.id).filter(d => tab === 'all' || d.anchor === tab), [eng, control.id, tab]);
   const postAnchor: DiscussionAnchor = tab === 'all' ? 'control' : tab;
   return (
-    <aside className="panel sticky top-20 self-start max-h-[calc(100vh-7rem)] flex flex-col">
-      <div className="flex items-center gap-2 px-4 pt-4 pb-2.5"><MessageSquare size={15} className="text-brand-600" /><h3 className="text-[14px] font-bold text-ink-900">Discussion</h3></div>
-      <div className="px-3 flex items-center gap-1">
+    <>
+      <div className="px-3 pb-2 flex items-center gap-1">
         {ANCHORS.map(a => <button key={a.id} onClick={() => setTab(a.id)} className={cn('h-7 px-2.5 rounded-md text-[11.5px] font-semibold transition-colors cursor-pointer', tab === a.id ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}>{a.label}</button>)}
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
@@ -579,10 +709,28 @@ function DiscussionRail({ control }: { control: Control }) {
       <div className="p-3 border-t border-canvas-border">
         <div className="text-[10.5px] text-ink-400 mb-1.5">Posting to <b className="text-ink-600">{postAnchor === 'control' ? 'Control' : postAnchor === 'design' ? '① Design' : '② Operating'}</b> as <b className="text-ink-600 capitalize">{role}</b></div>
         <div className="flex items-end gap-2">
-          <textarea value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="Add a comment, ask the risk owner, flag for the reviewer…" className="flex-1 text-[12px] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+          <textarea value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="Add a comment or ask the risk owner…" className="flex-1 text-[12px] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
           <button disabled={!text.trim()} onClick={() => { addComment(control.id, postAnchor, text.trim()); setText(''); }} className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-lg bg-brand-600 text-white disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={15} /></button>
         </div>
       </div>
+    </>
+  );
+}
+
+// right rail — the collaboration surfaces: what was done (History) and what was said (Discussion)
+function ActivityRail({ control }: { control: Control }) {
+  const { eng } = useIcfr();
+  const [pane, setPane] = useState<'history' | 'discussion'>('history');
+  const execCount = eng.executions.filter(e => e.controlId === control.id).length;
+  const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
+  const tabCls = (on: boolean) => cn('flex-1 h-8 rounded-lg text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer', on ? 'bg-canvas-elevated text-brand-700 shadow-[0_1px_4px_-1px_rgba(15,8,30,0.18)] ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800');
+  return (
+    <aside className="panel sticky top-20 self-start max-h-[calc(100vh-7rem)] flex flex-col">
+      <div className="flex items-center gap-1 p-1 m-3 mb-2 rounded-xl bg-paper-50 border border-canvas-border">
+        <button onClick={() => setPane('history')} className={tabCls(pane === 'history')}><History size={13} /> History{execCount > 0 && <span className="text-[10px] tabular-nums opacity-70">{execCount}</span>}</button>
+        <button onClick={() => setPane('discussion')} className={tabCls(pane === 'discussion')}><MessageSquare size={13} /> Discussion{openDisc > 0 && <span className="text-[10px] tabular-nums opacity-70">{openDisc}</span>}</button>
+      </div>
+      {pane === 'history' ? <ExecutionTrail control={control} /> : <DiscussionPane control={control} />}
     </aside>
   );
 }
@@ -592,7 +740,8 @@ export default function ControlDossier() {
   const { eng, role, selectedControlId, back, setView } = useIcfr();
   const control = eng.controls.find(c => c.id === selectedControlId);
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Back to register</button></div>;
-  const canEdit = role === 'auditor';
+  // Both personas can now execute TOD and TOE; the shared trail records who did what.
+  const canEdit = role === 'auditor' || role === 'risk-owner';
   const concl = controlConclusion(control);
   const designResult = trackResult(control.design);
   const opResult = trackResult(control.operating);
@@ -600,7 +749,7 @@ export default function ControlDossier() {
 
   return (
     <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.03 } } }}>
-      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 mb-3 cursor-pointer transition-colors"><ArrowLeft size={15} /> Control register</button>
+      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 mb-3 cursor-pointer transition-colors"><ArrowLeft size={15} /> Back</button>
 
       {/* leadsheet header */}
       <motion.div className="leadsheet mb-5" variants={{ hidden: { opacity: 0, y: 14, scale: 0.99 }, show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] } } }}>
@@ -627,14 +776,15 @@ export default function ControlDossier() {
             </div>
           </div>
           <div className="flex items-center gap-3 mt-3.5 pt-3 border-t border-canvas-border flex-wrap">
-            <span className="text-[11.5px] font-semibold text-ink-400 uppercase tracking-wide">Conclusion</span>
-            <ConclusionPill c={concl} />
+            <span className="text-[11.5px] font-semibold text-ink-400 uppercase tracking-wide">Overall status</span>
+            {concl === 'Effective' || concl === 'Ineffective' ? <Stamp result={concl} animate={false} /> : <ConclusionPill c={concl} />}
+            <span className="w-px h-4 bg-canvas-border" />
             <span className="text-[11.5px] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={designResult === 'Effective' ? 'Pass' : designResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> Design {designResult}</span>
             <ChevronRight size={13} className="text-ink-300" />
             <span className="text-[11.5px] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> Operating {toeLocked ? 'locked' : opResult}</span>
             <div className="ml-auto flex items-center gap-2">
               <button onClick={() => downloadControlWorkingPaper(eng, control)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Download size={13} /> Working paper</button>
-              {!canEdit && <span className="text-[11px] text-ink-400 inline-flex items-center gap-1"><Lock size={12} /> {role} · read-only</span>}
+              <span className="text-[11px] text-ink-400 inline-flex items-center gap-1">Auditor &amp; risk owner both test · every run is logged in History</span>
             </div>
           </div>
         </div>
@@ -657,7 +807,7 @@ export default function ControlDossier() {
             </motion.div>
           )}
         </motion.div>
-        <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}><DiscussionRail control={control} /></motion.div>
+        <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}><ActivityRail control={control} /></motion.div>
       </div>
     </motion.div>
   );
