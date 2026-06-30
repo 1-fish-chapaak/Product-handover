@@ -1763,7 +1763,7 @@ export function ClassifyExceptionDrawer({
         {step === 0 && engagementMode && (
           <div className="mb-5 space-y-4">
             <div>
-              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Is this a valid exception? <span className="text-risk">*</span></label>
+              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Classification <span className="text-risk">*</span></label>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
