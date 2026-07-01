@@ -235,12 +235,35 @@ export async function extractPdfHeaderFooter(file: File): Promise<ExtractedHeade
   }
 }
 
+/** How sure we are a detected heading is really a section heading. An explicit
+ *  heading is set well above the body text; an inferred one only just clears the
+ *  body size, so it's flagged for the human to confirm in the review canvas. */
+export type DetectionEvidence = 'explicit' | 'inferred';
+
+/** What kind of block a detection is. Text = a normal section heading; the rest
+ *  are empty placeholders — a chart/figure, a KPI stat, or a table — whose numbers
+ *  are filled from trusted query data at generation, never scraped from the PDF. */
+export type DetectedKind = 'text' | 'kpi' | 'chart' | 'table';
+
+/** A block detected in a report body, with the evidence behind it. For text it's a
+ *  section heading with a snippet beneath (the review-canvas source preview); for
+ *  kpi/chart/table it's an empty placeholder, optionally with the label it carried. */
+export interface DetectedSection {
+  name: string;
+  evidence: DetectionEvidence;
+  kind: DetectedKind;
+  /** Up to a couple of body lines beneath the heading, for the source preview. */
+  body: string[];
+  /** For KPI/table placeholders — the label the block carried in the document. */
+  metric?: string;
+}
+
 /** A report's full importable structure: its letterhead plus the section
  *  headings detected in the body. Used by the template editor's "Import from a
  *  report" action to pre-fill the outline + header/footer in one pass. */
 export interface ReportStructure {
   headerFooter: ExtractedHeaderFooter | null;
-  sections: string[];
+  sections: DetectedSection[];
   /** Headings that had no body text beneath them — not auto-added (§4.5), but
    *  surfaced so the user can add them back if they're real sections. */
   skipped: string[];
@@ -249,7 +272,134 @@ export interface ReportStructure {
 // A body line is a section heading when it's set noticeably larger than the
 // body text, short, and not a sentence (no trailing punctuation).
 const HEADING_SIZE_RATIO = 1.18;
-const MAX_HEADINGS = 24;
+// Well above the body size → an explicit styled heading; only just above →
+// inferred (flagged for review). Grounds the review canvas' evidence badge.
+const EXPLICIT_SIZE_RATIO = 1.4;
+
+// Caption patterns — "Figure 1:", "Chart 2 –", "Table 3.". A numbered label
+// followed by punctuation is how real reports title a graph or table, so it's the
+// most reliable placeholder signal (and won't fire on prose like "Figure 1 shows…").
+const FIGURE_CAP_RE = /^(figure|fig\.?|chart|exhibit|graph|diagram)\s*\.?\s*[\divxlc]+\s*[:.\-–)]/i;
+const TABLE_CAP_RE = /^(table|tbl\.?)\s*\.?\s*[\divxlc]+\s*[:.\-–)]/i;
+// A KPI value: a bare number, optionally currency-prefixed and unit-suffixed
+// ("94%", "$2.3M", "42", "1,204", "3.5x").
+const KPI_VALUE_RE = /^[$£€]?\s?\d[\d,]*(\.\d+)?\s?(%|k|m|bn|x|pts?|days?|hrs?)?$/i;
+// A KPI value is set larger than body text; a table row has at least this many cells.
+const KPI_SIZE_RATIO = 1.25;
+const TABLE_MIN_COLS = 3;
+const TABLE_MIN_ROWS = 3;
+// Minimum image size (share of page height) to count as a figure — filters logos/icons.
+const MIN_FIGURE_FRAC = 0.06;
+const MAX_BLOCKS = 40;
+
+// 2D affine matrix product (both [a,b,c,d,e,f]) — used to track the CTM so image
+// draws can be placed on the page.
+function matMul(m1: number[], m2: number[]): number[] {
+  return [
+    m1[0] * m2[0] + m1[2] * m2[1],
+    m1[1] * m2[0] + m1[3] * m2[1],
+    m1[0] * m2[2] + m1[2] * m2[3],
+    m1[1] * m2[2] + m1[3] * m2[3],
+    m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+    m1[1] * m2[4] + m1[3] * m2[5] + m1[5],
+  ];
+}
+
+// Walk a page's operator list tracking the transform matrix, returning the vertical
+// centre (PDF bottom-up coords) of every non-trivial raster image drawn on it — the
+// "there's a figure here" signal. Best-effort: returns [] if the op list can't be read.
+async function pageFigureYs(page: { getOperatorList: () => Promise<{ fnArray: number[]; argsArray: unknown[] }> }, OPS: Record<string, number>, pageH: number): Promise<number[]> {
+  try {
+    const { fnArray, argsArray } = await page.getOperatorList();
+    const imageOps = new Set([OPS.paintImageXObject, OPS.paintJpegXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject]);
+    let ctm = [1, 0, 0, 1, 0, 0];
+    const stack: number[][] = [];
+    const ys: number[] = [];
+    for (let i = 0; i < fnArray.length; i++) {
+      const fn = fnArray[i];
+      if (fn === OPS.save) stack.push(ctm.slice());
+      else if (fn === OPS.restore) { const prev = stack.pop(); if (prev) ctm = prev; }
+      else if (fn === OPS.transform) ctm = matMul(ctm, argsArray[i] as number[]);
+      else if (imageOps.has(fn)) {
+        const w = Math.hypot(ctm[0], ctm[1]);
+        const h = Math.hypot(ctm[2], ctm[3]);
+        // An image is drawn in the unit square, so its height on the page is |ctm d|
+        // and its vertical centre is ctm[5] + h/2.
+        if (w >= pageH * MIN_FIGURE_FRAC && h >= pageH * MIN_FIGURE_FRAC) ys.push(ctm[5] + h / 2);
+      }
+    }
+    return ys;
+  } catch {
+    return [];
+  }
+}
+
+// Strip a caption down to its title: drop the "Figure 1:" label prefix, keep the
+// rest; fall back to the label itself when there's no title after it.
+function cleanCaption(text: string): string {
+  const stripped = text.replace(/^(figure|fig\.?|chart|exhibit|graph|diagram|table|tbl\.?)\s*\.?\s*[\divxlc]+\s*[:.\-–)]\s*/i, '').trim();
+  return stripped || text.trim();
+}
+
+// x-tolerance for treating two text-item start positions as the same column.
+const COL_TOL = 7;
+
+/** How many columns recur across a group of rows — an x start-position that shows
+ *  up (within COL_TOL) in at least 60% of the rows is a shared column. Tables have
+ *  several; prose has only the left margin. */
+function sharedColumns(rows: { xs: number[] }[]): number {
+  if (!rows.length) return 0;
+  const counts = new Map<number, number>();
+  for (const r of rows) {
+    const seenKeys = new Set<number>();
+    for (const x of r.xs) {
+      let key: number | null = null;
+      for (const k of counts.keys()) if (Math.abs(k - x) <= COL_TOL) { key = k; break; }
+      if (key === null) { key = x; counts.set(key, 0); }
+      if (!seenKeys.has(key)) { seenKeys.add(key); counts.set(key, (counts.get(key) ?? 0) + 1); }
+    }
+  }
+  const threshold = Math.max(2, Math.ceil(rows.length * 0.6));
+  let cols = 0;
+  for (const c of counts.values()) if (c >= threshold) cols++;
+  return cols;
+}
+
+/** Find table bands on a page from the raw text items: baselines are grouped into
+ *  rows, then maximal runs of multi-item rows that share ≥ TABLE_MIN_COLS aligned
+ *  columns become a table. Catches tightly-packed tables that cell-gap splitting
+ *  merges into one string — the common real-world failure. Returns [topY, bottomY]
+ *  ranges (PDF bottom-up coords, so topY ≥ bottomY). */
+function detectTableBands(items: { str: string; transform: number[] }[], pageH: number): [number, number][] {
+  const rows: { y: number; xs: number[] }[] = [];
+  for (const it of items) {
+    if (!it.str || !it.str.trim()) continue;
+    const y = it.transform[5];
+    if (y >= pageH * (1 - BAND) || y <= pageH * BAND) continue; // body band only
+    let row = rows.find(r => Math.abs(r.y - y) < 2);
+    if (!row) { row = { y, xs: [] }; rows.push(row); }
+    row.xs.push(it.transform[4]);
+  }
+  rows.sort((a, b) => b.y - a.y);          // top → bottom
+  rows.forEach(r => r.xs.sort((a, b) => a - b));
+
+  const bands: [number, number][] = [];
+  let i = 0;
+  while (i < rows.length) {
+    if (rows[i].xs.length < TABLE_MIN_COLS) { i++; continue; }
+    let j = i;
+    while (
+      j + 1 < rows.length &&
+      rows[j + 1].xs.length >= TABLE_MIN_COLS &&
+      sharedColumns(rows.slice(i, j + 2)) >= TABLE_MIN_COLS
+    ) j++;
+    if (j - i + 1 >= TABLE_MIN_ROWS && sharedColumns(rows.slice(i, j + 1)) >= TABLE_MIN_COLS) {
+      bands.push([rows[i].y, rows[j].y]);
+      i = j + 1;
+    } else i++;
+  }
+  return bands;
+}
 
 /**
  * Read a PDF once and return both its letterhead (running header/footer) and the
@@ -266,8 +416,10 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
 
     const headerByPage: Line[][] = [];
     const footerByPage: Line[][] = [];
-    const bodyLines: Line[] = []; // in reading order across pages
-    const bodySizes: number[] = [];
+    const bodySizes: number[] = []; // all body cell sizes → median (heading/KPI test)
+    const pageBody: Line[][] = [];   // per-page body lines, top→bottom
+    const pageImageYs: number[][] = []; // per-page figure vertical centres
+    const pageTableBands: [number, number][][] = []; // per-page column-aligned table y-ranges
     let totalTextItems = 0;
 
     for (let p = 1; p <= pageCount; p++) {
@@ -281,10 +433,17 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
       headerByPage.push(lines.filter(l => l.y >= H * (1 - BAND)));
       footerByPage.push(lines.filter(l => l.y <= H * BAND));
       // Body lines, top→bottom (PDF y is bottom-up, so sort descending).
-      lines
+      const body = lines
         .filter(l => l.y < H * (1 - BAND) && l.y > H * BAND)
-        .sort((a, b) => b.y - a.y)
-        .forEach(l => { bodyLines.push(l); bodySizes.push(l.size); });
+        .sort((a, b) => b.y - a.y);
+      body.forEach(l => bodySizes.push(l.size));
+      pageBody.push(body);
+      // Figures drawn on this page (raster images), kept to the body band.
+      const figs = (await pageFigureYs(page, pdfjs.OPS as Record<string, number>, H))
+        .filter(y => y < H * (1 - BAND) && y > H * BAND);
+      pageImageYs.push(figs);
+      // Column-aligned table bands on this page (catches tightly-packed tables).
+      pageTableBands.push(detectTableBands(items, H));
     }
 
     await doc.destroy();
@@ -304,41 +463,178 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
         }
       : null;
 
-    // Section headings: body lines set larger than the median body size.
+    // Median body size grounds the heading / KPI size tests.
     const sorted = bodySizes.slice().sort((a, b) => a - b);
     const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
     const runningSet = new Set([...header, ...footer].map(normalize));
-    const isHeadingLine = (l: Line): boolean => {
-      if (median > 0 && l.size < median * HEADING_SIZE_RATIO) return false;
-      const t = l.text.trim();
+    const isHeadingText = (t: string, size: number): boolean => {
+      if (median > 0 && size < median * HEADING_SIZE_RATIO) return false;
       if (t.length < 2 || t.length > 80) return false;
       if (/[.,:;]$/.test(t)) return false;   // headings don't end in sentence punctuation
       if (PAGE_NUM_RE.test(t)) return false;
       if (runningSet.has(normalize(t))) return false;
+      // Reject data-like rows: long digit runs (IDs, amounts) or digit-heavy text
+      // are table/figure data that leaked past cell-splitting, not section titles.
+      if (/\d{4,}/.test(t)) return false;
+      const digitCount = (t.match(/\d/g) ?? []).length;
+      if (digitCount / t.length > 0.25) return false;
+      // Several standalone short numbers / dashes = table columns that merged into
+      // one cell (a wide description bridging the number columns), not a heading.
+      if ((t.match(/(?:^|\s)(?:\d{1,3}|-)(?=\s|$)/g) ?? []).length >= 3) return false;
+      // Cells join without spaces, so a merged table row ends in jammed column
+      // values ("…form".155-65"). A heading never ends in a run of digits/dashes.
+      if (/\d[\d-]{2,}$/.test(t)) return false;
       return true;
     };
-    const seen = new Set<string>();
-    const seenSkip = new Set<string>();
-    const sections: string[] = [];
-    const skipped: string[] = [];
-    for (let i = 0; i < bodyLines.length; i++) {
-      const l = bodyLines[i];
-      if (!isHeadingLine(l)) continue;
-      const t = l.text.trim();
-      const key = normalize(t);
-      if (seen.has(key)) continue;
-      // "Has content" = at least one non-heading line before the next heading.
-      // An empty heading (nothing beneath it) isn't a confirmable section (§4.5).
-      let hasContent = false;
-      for (let j = i + 1; j < bodyLines.length; j++) {
-        if (isHeadingLine(bodyLines[j])) break;
-        if (bodyLines[j].text.trim()) { hasContent = true; break; }
+
+    // Group a page's body lines (already top→bottom) into rows — cells sharing a
+    // baseline become one row, so a table row is a row with several cells.
+    type Row = { y: number; cells: string[]; text: string; size: number };
+    const toRows = (body: Line[]): Row[] => {
+      const rows: Row[] = [];
+      for (const l of body) {
+        const last = rows[rows.length - 1];
+        if (last && Math.abs(last.y - l.y) < 2) last.cells.push(l.text);
+        else rows.push({ y: l.y, cells: [l.text], text: '', size: l.size });
+        rows[rows.length - 1].size = Math.max(rows[rows.length - 1].size, l.size);
       }
-      if (hasContent) {
-        if (sections.length < MAX_HEADINGS) { seen.add(key); sections.push(t); }
-      } else if (!seenSkip.has(key)) {
-        seenSkip.add(key);
-        skipped.push(t);
+      for (const r of rows) r.text = r.cells.join(' ').replace(/\s+/g, ' ').trim();
+      return rows;
+    };
+
+    // One ordered stream of body elements across all pages, in reading order:
+    // text rows interleaved with figure markers by vertical position. Rows inside a
+    // detected table band carry that band's id so the walk collapses them into one
+    // Table placeholder instead of misreading each data row as a heading.
+    type El = { kind: 'row'; row: Row; band: string } | { kind: 'image' };
+    const els: El[] = [];
+    for (let p = 0; p < pageBody.length; p++) {
+      const rows = toRows(pageBody[p]);
+      const bands = pageTableBands[p] ?? [];
+      const bandOf = (y: number): string => {
+        const idx = bands.findIndex(([top, bot]) => y <= top && y >= bot);
+        return idx < 0 ? '' : `p${p}-b${idx}`;
+      };
+      const imgs = pageImageYs[p] ?? [];
+      const merged: { y: number; el: El }[] = [
+        ...rows.map(r => ({ y: r.y, el: { kind: 'row', row: r, band: bandOf(r.y) } as El })),
+        ...imgs.map(y => ({ y, el: { kind: 'image' } as El })),
+      ].sort((a, b) => b.y - a.y); // top→bottom
+      merged.forEach(m => els.push(m.el));
+    }
+
+    const seen = new Set<string>();       // text-heading dedup
+    const seenSkip = new Set<string>();
+    const sections: DetectedSection[] = [];
+    const skipped: string[] = [];
+    const consumed = new Set<number>();   // caption rows absorbed by an adjacent image
+    const emittedBands = new Set<string>(); // table bands already turned into a placeholder
+    let figCount = 0, tableCount = 0;
+    const push = (s: DetectedSection) => { if (sections.length < MAX_BLOCKS) sections.push(s); };
+    const rowAt = (i: number): Row | null => (i >= 0 && i < els.length && els[i].kind === 'row' ? (els[i] as { row: Row }).row : null);
+
+    for (let i = 0; i < els.length; i++) {
+      const el = els[i];
+
+      // A figure (raster image). Name it from an adjacent figure caption if there is
+      // one — and mark that caption consumed so it isn't emitted twice.
+      if (el.kind === 'image') {
+        figCount++;
+        const above = rowAt(i - 1), below = rowAt(i + 1);
+        let name = '';
+        if (below && FIGURE_CAP_RE.test(below.text)) { name = cleanCaption(below.text); consumed.add(i + 1); }
+        else if (above && FIGURE_CAP_RE.test(above.text)) { name = cleanCaption(above.text); consumed.add(i - 1); }
+        push({ name: name || `Figure ${figCount}`, evidence: 'explicit', kind: 'chart', body: [] });
+        continue;
+      }
+
+      // Rows inside a table band collapse into one Table placeholder (emitted at
+      // the first row of the band); the rest of the band's rows are skipped, so
+      // data rows never leak out as bogus headings.
+      if (el.band) {
+        if (!emittedBands.has(el.band)) {
+          emittedBands.add(el.band);
+          tableCount++;
+          push({ name: `Table ${tableCount}`, evidence: 'inferred', kind: 'table', body: [] });
+        }
+        continue;
+      }
+
+      if (consumed.has(i)) continue;
+      const r = el.row;
+      const t = r.text;
+      if (!t) continue;
+
+      // Figure/chart caption with no adjacent image (e.g. a vector chart).
+      if (FIGURE_CAP_RE.test(t)) { figCount++; push({ name: cleanCaption(t), evidence: 'explicit', kind: 'chart', body: [] }); continue; }
+
+      // Table caption → a table placeholder. Absorb the body below it — gap-split
+      // rows and/or a column-aligned band — so the same table isn't emitted twice.
+      if (TABLE_CAP_RE.test(t)) {
+        tableCount++;
+        push({ name: cleanCaption(t), evidence: 'explicit', kind: 'table', body: [], metric: cleanCaption(t) });
+        let j = i + 1;
+        while (j < els.length) {
+          const e = els[j];
+          if (e.kind !== 'row') break;
+          if (e.band) { emittedBands.add(e.band); j++; continue; }
+          if (e.row.cells.length >= TABLE_MIN_COLS) { j++; continue; }
+          break;
+        }
+        // Tolerate a header row between the caption and the detected band.
+        for (let k = i + 1; k < Math.min(els.length, i + 8); k++) {
+          const e = els[k];
+          if (e.kind === 'row' && e.band) { emittedBands.add(e.band); break; }
+          if (e.kind === 'image') break;
+        }
+        i = Math.max(i, j - 1);
+        continue;
+      }
+
+      // KPI — a prominent numeric value, with the small line beneath as its label.
+      if (r.cells.length === 1 && median > 0 && r.size >= median * KPI_SIZE_RATIO && KPI_VALUE_RE.test(t)) {
+        const next = rowAt(i + 1);
+        let label = '';
+        if (next && next.cells.length === 1) {
+          const nt = next.text;
+          if (nt && nt.length <= 40 && !KPI_VALUE_RE.test(nt) && !FIGURE_CAP_RE.test(nt) && !TABLE_CAP_RE.test(nt)) { label = nt; i++; }
+        }
+        push({ name: label || t, evidence: 'explicit', kind: 'kpi', body: [], metric: label || t });
+        continue;
+      }
+
+      // Structural table — a run of consecutive multi-column rows with no caption.
+      if (r.cells.length >= TABLE_MIN_COLS) {
+        let j = i, run = 0;
+        while (rowAt(j) && rowAt(j)!.cells.length >= TABLE_MIN_COLS) { run++; j++; }
+        if (run >= TABLE_MIN_ROWS) {
+          tableCount++;
+          push({ name: `Table ${tableCount}`, evidence: 'inferred', kind: 'table', body: [] });
+          i = j - 1;
+          continue;
+        }
+      }
+
+      // Text section heading — a single-column run of text (multi-cell rows are
+      // table rows, not headings). Captures up to two body lines for the preview.
+      if (r.cells.length === 1 && isHeadingText(t, r.size)) {
+        const key = normalize(t);
+        if (seen.has(key)) continue;
+        const body: string[] = [];
+        for (let j = i + 1; j < els.length && body.length < 2; j++) {
+          const nr = rowAt(j);
+          if (!nr) break; // a figure ends the section's lead-in
+          if (isHeadingText(nr.text, nr.size) || FIGURE_CAP_RE.test(nr.text) || TABLE_CAP_RE.test(nr.text)) break;
+          if (nr.text) body.push(nr.text);
+        }
+        if (body.length > 0) {
+          seen.add(key);
+          const evidence: DetectionEvidence = median > 0 && r.size >= median * EXPLICIT_SIZE_RATIO ? 'explicit' : 'inferred';
+          push({ name: t, evidence, kind: 'text', body });
+        } else if (!seenSkip.has(key)) {
+          seenSkip.add(key);
+          skipped.push(t);
+        }
       }
     }
     // A heading that appears empty once but has content elsewhere is a real section.

@@ -271,42 +271,20 @@ export const DEFAULT_WATERMARK: WatermarkConfig = {
 /** A section's block type (§4.7). Text is prose; KPI and Chart are *placeholders*
  *  — they hold no numbers. Values come from trusted query data at generate time,
  *  never scraped from an uploaded report. */
-export type SectionKind = 'text' | 'kpi' | 'chart';
+export type SectionKind = 'text' | 'kpi' | 'chart' | 'table';
 
-/** One section in a template outline. `guidance` is an optional plain-English
- *  instruction that tells the AI *how* to write this section at generate time
- *  ("under 150 words, executive tone"; "list only High/Medium findings"). */
+/** One section in a template outline. */
 export type TemplateSection = {
   name: string;
   icon: string;
-  guidance?: string;
-  /** Block type (§4.7). Absent = text. */
+  /** Block type — text (a heading) or a kpi/chart/table placeholder. Absent = text.
+   *  Placeholders are set by import detection; their numbers fill from query data
+   *  at generate time, never scraped from an upload. */
   kind?: SectionKind;
-  /** For KPI/chart blocks — which metric the block shows (user-chosen). */
+  /** For KPI/chart/table placeholders — the label the block carried. */
   metric?: string;
   /** For chart blocks — the chart style. */
   chartType?: 'bar' | 'line';
-};
-
-/** Governance lifecycle (§8). Teams generate from Approved templates; Drafts and
- *  In-review are clearly marked so they aren't relied on prematurely. */
-export type TemplateStatus = 'draft' | 'in-review' | 'approved';
-
-export const TEMPLATE_STATUS_META: Record<TemplateStatus, { label: string; pill: string; dot: string }> = {
-  draft:       { label: 'Draft',     pill: 'bg-draft-50 text-ink-600 border-canvas-border', dot: 'bg-ink-400' },
-  'in-review': { label: 'In review', pill: 'bg-mitigated-50 text-mitigated-700 border-mitigated/40', dot: 'bg-mitigated-500' },
-  approved:    { label: 'Approved',  pill: 'bg-compliant-50 text-compliant-700 border-compliant/40', dot: 'bg-compliant-500' },
-};
-
-/** One entry in a template's version history — an immutable snapshot of the
- *  outline + status at save time, for diff/rollback and the audit trail (§8). */
-export type TemplateVersion = {
-  version: string;            // "v1", "v2", …
-  status: TemplateStatus;
-  at: string;                 // ISO timestamp
-  by: string;                 // author display name
-  note: string;               // "Created", "Edited", "Approved", "Restored v2"
-  sections: TemplateSection[]; // full outline snapshot (for diff + rollback)
 };
 
 /** A report template plus the optional branding the Customize editor sets.
@@ -321,42 +299,8 @@ export type EditableTemplate = Omit<typeof REPORT_TEMPLATES[number], 'sections'>
   logoDataUrl?: string;
   /** Diagonal page watermark (text or image). */
   watermark?: WatermarkConfig;
-  /** Governance lifecycle status (§8). Defaults to Draft when absent. */
-  status?: TemplateStatus;
-  /** Ordered version history (newest last), for diff / rollback / audit (§8). */
-  versions?: TemplateVersion[];
   /** Free-form tags for findability once the library grows (§9). */
   tags?: string[];
-  /** The "golden copy": section names of the reference sample this template is
-   *  validated against. Set when a Smart Upload is marked as the reference format;
-   *  drives the format-match verdict on later uploads (Template Studio §5).
-   *  (Field name kept as `approvedSections` for stored-data compatibility.) */
-  approvedSections?: string[];
-  referenceFileName?: string;
-};
-
-// A seeded custom template that already has a reference format, so the
-// format-match verdict (Template Studio §5) is demonstrable without first
-// uploading twice. Mirrors the Air India "Annual Safety Audit" example: its
-// reference format expects a "Corrective Actions" section, which the scripted
-// drifted upload is missing. App.tsx prepends it to the custom-templates list.
-export const SEED_APPROVED_TEMPLATE: EditableTemplate = {
-  id: 'ct-seed-safety-audit',
-  name: 'Annual Safety Audit Report',
-  desc: 'Built from Annual_Safety_Audit_2025.pdf — 7 sections, set as the reference format.',
-  category: 'Audit',
-  icon: 'shield',
-  sections: [
-    { name: 'Executive Summary', icon: 'file-text' },
-    { name: 'Scope & Objectives', icon: 'file-text' },
-    { name: 'Testing Methodology', icon: 'file-text' },
-    { name: 'Control Testing Results', icon: 'check-circle' },
-    { name: 'Detailed Findings', icon: 'alert-triangle' },
-    { name: 'Corrective Actions', icon: 'check-circle' },
-    { name: 'Appendix', icon: 'file-text' },
-  ],
-  approvedSections: ['Executive Summary', 'Scope & Objectives', 'Testing Methodology', 'Control Testing Results', 'Detailed Findings', 'Corrective Actions', 'Appendix'],
-  referenceFileName: 'Annual_Safety_Audit_2025.pdf',
 };
 
 export type QueryShape = { id: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; answer: string; chartData: number[] };

@@ -9,10 +9,10 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { motion, AnimatePresence, useDragControls } from 'motion/react';
 import {
-  Check, ChevronDown, ChevronRight, FileText, GripVertical, Image, Layout,
+  Check, ChevronRight, FileText, GripVertical, Image, Layout,
   Loader2, Palette, Plus, Trash2, Type, X,
-  Tag, ShieldCheck, BookOpen, Search, Upload, RotateCcw, Sparkles, History,
-  Library, BookmarkPlus, Hash, BarChart3, AlignLeft,
+  ShieldCheck, BookOpen, Search, Upload, RotateCcw,
+  Hash, BarChart3, Table2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -21,13 +21,13 @@ import { ReportBrandBanner } from './ReportDocumentChrome';
 import ConfirmDialog from './ConfirmDialog';
 import {
   ICON_MAP, CATEGORY_COLORS, SECTION_ICONS, TEMPLATE_THEME_GRADIENT,
-  REPORT_TYPES, typeSectionsFor, sectionCoverage, DEFAULT_WATERMARK, TEMPLATE_STATUS_META,
+  typeSectionsFor, sectionCoverage, DEFAULT_WATERMARK,
   type ReportTypeName, type EditableTemplate, type WatermarkConfig,
-  type TemplateStatus, type TemplateVersion, type TemplateSection, type SectionKind,
+  type TemplateSection,
 } from './reportShared';
-import { extractReportStructure } from './extractPdfHeaderFooter';
-import { loadSectionLibrary, addToSectionLibrary, type LibrarySection } from './sectionLibrary';
-import { useCurrentUser } from '../../context/CurrentUserContext';
+import { extractReportStructure, type ReportStructure } from './extractPdfHeaderFooter';
+import SectionReviewCanvas from './SectionReviewCanvas';
+import { type CanvasSection } from './sectionReviewShared';
 import { useAuditLog } from '../../context/AdminDataContext';
 
 // Soft length guide for letterhead header/footer text — past this the counter
@@ -276,29 +276,18 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
 // vertical rail); on release it snaps into the slot nearest the drop point, so
 // dragging left↔right works as well as up↕down. Reordering drives the same
 // `sections` state the document preview renders from.
-// Block-type registry (§4.7) — text / KPI / chart, with their row icon + label.
-const BLOCK_KINDS: { kind: SectionKind; label: string; icon: typeof FileText }[] = [
-  { kind: 'text', label: 'Text', icon: AlignLeft },
-  { kind: 'kpi', label: 'KPI', icon: Hash },
-  { kind: 'chart', label: 'Chart', icon: BarChart3 },
-];
 
-function LeftSectionRow({ section, index, onMove, listRef, onDelete, onPatch, onSaveToLibrary }: {
+function LeftSectionRow({ section, index, onMove, listRef, onDelete }: {
   section: TemplateSection;
   index: number;
   onMove: (from: number, to: number) => void;
   listRef: React.RefObject<HTMLDivElement | null>;
   onDelete: () => void;
-  onPatch: (patch: Partial<TemplateSection>) => void;
-  onSaveToLibrary: () => void;
 }) {
   const kind = section.kind ?? 'text';
-  // KPI/chart blocks use a type icon; text blocks use the section's own icon.
-  const SectionIcon = kind === 'kpi' ? Hash : kind === 'chart' ? BarChart3 : (SECTION_ICONS[section.icon] || FileText);
+  // KPI/chart/table blocks show a type icon + chip; text blocks use their own icon.
+  const SectionIcon = kind === 'kpi' ? Hash : kind === 'chart' ? BarChart3 : kind === 'table' ? Table2 : (SECTION_ICONS[section.icon] || FileText);
   const controls = useDragControls();
-  const hasGuidance = !!section.guidance?.trim();
-  const configured = hasGuidance || kind !== 'text';
-  const [open, setOpen] = useState(false);
   return (
     <motion.div
       layout
@@ -339,25 +328,13 @@ function LeftSectionRow({ section, index, onMove, listRef, onDelete, onPatch, on
           <SectionIcon size={13} />
         </span>
         <span className="flex-1 min-w-0 truncate text-[0.875rem] font-medium text-ink-800">{section.name}</span>
+        {/* Read-only type chip for placeholder blocks (set by import, not editable). */}
+        {kind !== 'text' && (
+          <span className="shrink-0 inline-flex items-center rounded-full bg-evidence-50 text-evidence-700 px-1.5 py-0.5 text-[0.5625rem] font-semibold uppercase tracking-wide">
+            {kind === 'kpi' ? 'KPI' : kind === 'table' ? 'Table' : 'Chart'}
+          </span>
+        )}
         <span className="shrink-0 text-[0.75rem] text-ink-400 tabular-nums">{index + 1}</span>
-        {/* Configure the section — block type (§4.7) + AI guidance (§7). Lit when set. */}
-        <button
-          onClick={() => setOpen(o => !o)}
-          aria-label={`Configure ${section.name}`}
-          title="Configure section — block type + AI guidance"
-          className={`no-focus-ring shrink-0 w-6 h-6 flex items-center justify-center rounded-[6px] transition-all cursor-pointer ${configured ? 'text-brand-600 bg-brand-50' : 'text-ink-400 hover:text-brand-600 hover:bg-brand-50 opacity-0 group-hover:opacity-100'}`}
-        >
-          <Sparkles size={12} />
-        </button>
-        {/* Save this section (with its guidance) to the reusable library (§6). */}
-        <button
-          onClick={onSaveToLibrary}
-          aria-label={`Save ${section.name} to the section library`}
-          title="Save to library"
-          className="no-focus-ring shrink-0 w-6 h-6 flex items-center justify-center rounded-[6px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 cursor-pointer opacity-0 group-hover:opacity-100 transition-all"
-        >
-          <BookmarkPlus size={12} />
-        </button>
         <button
           onClick={onDelete}
           aria-label={`Delete ${section.name}`}
@@ -366,80 +343,6 @@ function LeftSectionRow({ section, index, onMove, listRef, onDelete, onPatch, on
           <Trash2 size={12} />
         </button>
       </div>
-      <AnimatePresence initial={false}>
-        {(open || configured) && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden"
-          >
-            <div className="px-2.5 pb-2.5 pt-0.5 space-y-2.5">
-              {/* §4.7 — block type: text / KPI / chart (placeholder, no numbers). */}
-              <div>
-                <div className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-ink-400 mb-1">Block type</div>
-                <div className="inline-flex p-0.5 bg-canvas rounded-[7px] gap-0.5">
-                  {BLOCK_KINDS.map(b => {
-                    const on = kind === b.kind;
-                    return (
-                      <button
-                        key={b.kind}
-                        type="button"
-                        onClick={() => onPatch({ kind: b.kind })}
-                        className={`inline-flex items-center gap-1 h-6 px-2 rounded-[6px] text-[0.6875rem] font-semibold transition-colors cursor-pointer ${on ? 'bg-white border border-canvas-border text-brand-700 shadow-[0_1px_2px_rgba(15,8,30,0.08)]' : 'text-ink-500 hover:text-ink-800'}`}
-                      >
-                        <b.icon size={11} /> {b.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* KPI/chart blocks: which metric, and (charts) the style. Values are
-                  filled from query data at generate time — never from an upload. */}
-              {kind !== 'text' && (
-                <div className="space-y-2">
-                  <input
-                    value={section.metric ?? ''}
-                    onChange={e => onPatch({ metric: e.target.value })}
-                    placeholder={kind === 'kpi' ? 'Metric — e.g. Controls passed' : 'Metric — e.g. Exceptions by severity'}
-                    className="w-full px-2.5 py-1.5 rounded-[7px] border border-canvas-border bg-canvas/40 text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:bg-white focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
-                  />
-                  {kind === 'chart' && (
-                    <div className="inline-flex p-0.5 bg-canvas rounded-[7px] gap-0.5">
-                      {(['bar', 'line'] as const).map(ct => {
-                        const on = (section.chartType ?? 'bar') === ct;
-                        return (
-                          <button key={ct} type="button" onClick={() => onPatch({ chartType: ct })}
-                            className={`h-6 px-2.5 rounded-[6px] text-[0.6875rem] font-semibold capitalize transition-colors cursor-pointer ${on ? 'bg-white border border-canvas-border text-brand-700 shadow-[0_1px_2px_rgba(15,8,30,0.08)]' : 'text-ink-500 hover:text-ink-800'}`}>
-                            {ct}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <p className="text-[0.625rem] text-ink-400">Placeholder — the value fills from your query data at generation, not from any upload.</p>
-                </div>
-              )}
-
-              {/* AI guidance (§7) — how the section is written. */}
-              <div>
-                <div className="flex items-center gap-1.5 mb-1 text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-brand-600">
-                  <Sparkles size={10} /> AI guidance
-                </div>
-                <textarea
-                  value={section.guidance ?? ''}
-                  onChange={e => onPatch({ guidance: e.target.value })}
-                  rows={2}
-                  placeholder={kind === 'text' ? 'How should AI write this section? e.g. “Under 150 words, executive tone.”' : 'Optional — how to caption or frame this block.'}
-                  className="w-full px-2.5 py-1.5 rounded-[7px] border border-canvas-border bg-canvas/40 text-[0.8125rem] resize-none transition-colors hover:border-ink-300 focus:outline-none focus:bg-white focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
-                />
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </motion.div>
   );
 }
@@ -454,8 +357,7 @@ function TemplateSectionRow({
   index: number;
 }) {
   const kind = section.kind ?? 'text';
-  const SectionIcon = kind === 'kpi' ? Hash : kind === 'chart' ? BarChart3 : (SECTION_ICONS[section.icon] || FileText);
-  const guidance = section.guidance?.trim();
+  const SectionIcon = kind === 'kpi' ? Hash : kind === 'chart' ? BarChart3 : kind === 'table' ? Table2 : (SECTION_ICONS[section.icon] || FileText);
   const metric = section.metric?.trim();
   return (
     <motion.div
@@ -470,12 +372,7 @@ function TemplateSectionRow({
         <SectionIcon size={16} className="shrink-0 text-brand-600" />
         <h4 className="flex-1 min-w-0 truncate text-[0.875rem] font-bold text-ink-800 tracking-tight">{section.name}</h4>
         {kind !== 'text' && (
-          <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-evidence-50 text-evidence-700 px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide">{kind === 'kpi' ? 'KPI' : 'Chart'}</span>
-        )}
-        {guidance && (
-          <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 px-2 py-0.5 text-[0.625rem] font-semibold" title={guidance}>
-            <Sparkles size={10} /> Guided
-          </span>
+          <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-evidence-50 text-evidence-700 px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide">{kind === 'kpi' ? 'KPI' : kind === 'table' ? 'Table' : 'Chart'}</span>
         )}
         <span className="shrink-0 text-[0.75rem] text-ink-400 tabular-nums whitespace-nowrap">Section {index + 1}</span>
       </div>
@@ -496,10 +393,20 @@ function TemplateSectionRow({
           </div>
           <p className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-2">{metric || 'Metric'} · {(section.chartType ?? 'bar')} chart placeholder</p>
         </div>
-      ) : guidance ? (
-        <div className="border border-brand-200/70 rounded-[10px] bg-brand-50/40 px-4 py-3">
-          <div className="flex items-center gap-1.5 mb-1 text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-brand-600"><Sparkles size={10} /> AI guidance</div>
-          <p className="text-[0.75rem] text-ink-600 leading-relaxed">{guidance}</p>
+      ) : kind === 'table' ? (
+        <div className="border border-dashed border-canvas-border rounded-[10px] bg-canvas/40 px-4 py-3">
+          {/* A skeletal table grid — header row + a few empty body rows. */}
+          <div className="rounded-[6px] overflow-hidden border border-canvas-border/70">
+            <div className="grid grid-cols-4 bg-ink-900/[0.04]">
+              {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-4 border-r last:border-r-0 border-canvas-border/70" />)}
+            </div>
+            {Array.from({ length: 3 }).map((_, r) => (
+              <div key={r} className="grid grid-cols-4 border-t border-canvas-border/70">
+                {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-4 border-r last:border-r-0 border-canvas-border/70" />)}
+              </div>
+            ))}
+          </div>
+          <p className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-2">{metric || 'Table'} · table placeholder</p>
         </div>
       ) : (
         <div className="border border-dashed border-canvas-border rounded-[10px] bg-canvas/40 px-5 py-6 text-center">
@@ -510,75 +417,12 @@ function TemplateSectionRow({
   );
 }
 
-// The report types valid on the platform. 'Other' stays as the internal
-// "none selected" state (shown as a placeholder), so it isn't offered here.
-const VALID_REPORT_TYPES = ['Audit', 'SOX', 'ATR'] as const;
-const REPORT_TYPE_LABEL: Partial<Record<ReportTypeName, string>> = {
-  Audit: 'Internal Audit',
-  SOX: 'SOX',
-  ATR: 'ATR',
-};
-const reportTypeLabel = (t: ReportTypeName) => REPORT_TYPE_LABEL[t] ?? t;
+// Templates only produce the Internal Audit report; the report type is fixed, so
+// there's no picker — recommendations and coverage always use Internal Audit.
+const REPORT_TYPE: ReportTypeName = 'Audit';
+const REPORT_TYPE_LABEL = 'Internal Audit';
 
-// Styled report-type dropdown — replaces the native <select> (which falls back
-// to the OS-dark menu). Shows only the platform-valid types; an unset value
-// ('Other') renders as a placeholder.
-function ReportTypeSelect({ value, onChange }: { value: ReportTypeName; onChange: (t: ReportTypeName) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
-  const chosen = (VALID_REPORT_TYPES as readonly string[]).includes(value);
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className="no-focus-ring w-full flex items-center justify-between gap-2 px-3 py-2 rounded-[8px] border border-canvas-border bg-white text-[0.875rem] cursor-pointer hover:border-brand-300 focus:outline-none focus:border-brand-600/40 transition-colors"
-      >
-        <span className={chosen ? 'text-ink-800 font-medium' : 'text-ink-400'}>{chosen ? reportTypeLabel(value) : 'Select a report type'}</span>
-        <ChevronDown size={15} className={`shrink-0 text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.12 }}
-            role="listbox"
-            className="absolute z-30 left-0 right-0 mt-1.5 rounded-[10px] border border-canvas-border bg-white shadow-[0_10px_28px_rgba(15,8,30,0.14)] p-1"
-          >
-            {VALID_REPORT_TYPES.map(t => {
-              const active = t === value;
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  onClick={() => { onChange(t as ReportTypeName); setOpen(false); }}
-                  className={`no-focus-ring w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-[7px] text-left text-[0.875rem] cursor-pointer transition-colors ${active ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-ink-700 hover:bg-canvas'}`}
-                >
-                  {reportTypeLabel(t as ReportTypeName)}
-                  {active && <Check size={14} className="text-brand-600 shrink-0" />}
-                </button>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveEdit, existingTemplateNames = [], existingStructures = [], initialName, autoImport }: { template: EditableTemplate; onClose: () => void; onCancel?: () => void; onSaveNew?: (created: EditableTemplate) => void; onSaveEdit?: (updated: EditableTemplate) => void; existingTemplateNames?: string[]; existingStructures?: { name: string; sectionNames: string[] }[]; initialName?: string; autoImport?: boolean }) {
+export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveEdit, existingTemplateNames = [], existingStructures = [], initialName }: { template: EditableTemplate; onClose: () => void; onCancel?: () => void; onSaveNew?: (created: EditableTemplate) => void; onSaveEdit?: (updated: EditableTemplate) => void; existingTemplateNames?: string[]; existingStructures?: { name: string; sectionNames: string[] }[]; initialName?: string }) {
   const { addToast } = useToast();
   // Cancel / X / discard route through onCancel (which may return to the
   // originating modal, e.g. the Generate wizard); a completed save uses onClose.
@@ -595,7 +439,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   const [brand, setBrand] = useState(template.brand ?? 'Irame');
   const [theme, setTheme] = useState(template.theme ?? 'Purple & White');
   const [headerText, setHeaderText] = useState(template.headerText ?? 'Confidential — For Internal Use Only');
-  const [footerText, setFooterText] = useState(template.footerText ?? 'Generated by Auditify Copilot');
+  const [footerText, setFooterText] = useState(template.footerText ?? 'Generated by Irame');
   // Tags (§9) — free-form labels for findability once the library grows.
   const [tags, setTags] = useState<string[]>(template.tags ?? []);
   const [tagDraft, setTagDraft] = useState('');
@@ -605,13 +449,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     setTags(prev => prev.some(x => x.toLowerCase() === t.toLowerCase()) ? prev : [...prev, t]);
     setTagDraft('');
   };
-  // Governance (§8) — lifecycle status + version history + who's acting.
-  const [status, setStatus] = useState<TemplateStatus>(template.status ?? 'draft');
-  const [versions, setVersions] = useState<TemplateVersion[]>(template.versions ?? []);
-  const [showHistory, setShowHistory] = useState(false);
-  const { currentUser } = useCurrentUser();
   const logEvent = useAuditLog();
-  const authorName = currentUser?.name ?? 'You';
   // Brand logo (letterhead) + diagonal page watermark — the full-document branding.
   const [logoDataUrl, setLogoDataUrl] = useState<string | undefined>(template.logoDataUrl);
   const [watermark, setWatermark] = useState<WatermarkConfig>(template.watermark ?? DEFAULT_WATERMARK);
@@ -633,18 +471,13 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     ? template.sections
     : [];
   const [sections, setSections] = useState(seededSections);
-  // Report type drives the §4.6 smart defaults. Seed from the template's category
-  // when it's already one of the known types, else "Other".
-  const knownType = (REPORT_TYPES as readonly string[]).includes(template.category)
-    ? (template.category as ReportTypeName) : 'Other';
-  const [reportType, setReportType] = useState<ReportTypeName>(knownType);
+  // Templates only produce the Internal Audit report, so the type is fixed — it
+  // drives the §4.6 recommended sections + coverage, but there's no picker.
+  const reportType = REPORT_TYPE;
   // Left settings column is split into two segmented groups so the form reads as
   // a structured panel instead of a flat six-field stack.
   const [panel, setPanel] = useState<'identity' | 'branding'>('identity');
 
-  // Changing the type never auto-fills — it just re-derives the recommendations
-  // shown for that type, which the author adds when they want.
-  const onTypeChange = (next: ReportTypeName) => setReportType(next);
   const addSections = (list: { name: string; icon: string }[]) => {
     if (!list.length) return;
     setSections(prev => {
@@ -655,25 +488,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   };
   const coverage = sectionCoverage(reportType, sections.map(s => s.name));
 
-  // ── Section Library (§6) — reusable blocks that carry their own guidance ────
-  const [library, setLibrary] = useState<LibrarySection[]>(() => loadSectionLibrary());
-  const [showLibrary, setShowLibrary] = useState(false);
-  // Insert a library block into the outline, preserving its guidance (deduped).
-  const insertFromLibrary = (lib: LibrarySection) => {
-    setSections(prev => prev.some(s => s.name.toLowerCase() === lib.name.toLowerCase())
-      ? prev
-      : [...prev, { name: lib.name, icon: lib.icon, guidance: lib.guidance }]);
-  };
-  // Save a template section back to the library as a reusable block.
-  const saveToLibrary = (section: { name: string; icon: string; guidance?: string }) => {
-    const before = library.length;
-    const next = addToSectionLibrary(library, section);
-    setLibrary(next);
-    addToast(next.length > before
-      ? { type: 'success', message: `“${section.name}” saved to the section library.` }
-      : { type: 'info', message: `“${section.name}” is already in the library.` });
-  };
-
   // ── Import from a report ──────────────────────────────────────────────────
   // Reads an existing PDF report and pre-fills the outline + letterhead, so the
   // author starts from the real document instead of a blank page. This is the
@@ -682,6 +496,12 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   const [importing, setImporting] = useState(false);
   const [scanningName, setScanningName] = useState<string | null>(null);
   const [importedFrom, setImportedFrom] = useState<string | null>(null);
+  // After a successful extraction the detected sections land in the shared review
+  // canvas (§4) for curation — nothing is applied to the outline until the author
+  // confirms. This is the same detect-and-curate step the format-check modal uses,
+  // so "import" behaves identically to "upload".
+  const [pendingImport, setPendingImport] = useState<{ fileName: string; result: ReportStructure } | null>(null);
+  const [reviewSections, setReviewSections] = useState<CanvasSection[]>([]);
   const handleImportFile = async (file: File) => {
     if (!/\.pdf$/i.test(file.name)) {
       addToast({ type: 'error', message: 'Import reads PDF reports. Upload a .pdf file.' });
@@ -700,46 +520,73 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         addToast({ type: 'error', message: `Couldn't read "${file.name}". It may be scanned or image-only.` });
         return;
       }
-      const hf = result.headerFooter;
-      // Letterhead → header/footer + brand; only overwrite when we found something.
-      if (hf?.confidentiality || hf?.header.length) setHeaderText(hf.confidentiality || hf!.header.join('  ·  '));
-      if (hf?.footer.length) setFooterText(hf.footer.join('  ·  '));
-      if (hf?.fields.auditEntity) setBrand(hf.fields.auditEntity);
-      // Name: only fill if still the untouched default.
-      const base = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
-      if (copyName === defaultName) setCopyName(hf?.fields.auditTitle || base.replace(/\b\w/g, c => c.toUpperCase()));
-      // Structure → the detected section outline (replaces, since import defines it).
-      if (result.sections.length > 0) {
-        setSections(result.sections.map(name => ({ name, icon: 'file-text' })));
-      }
-      setImportedFrom(file.name);
-      const n = result.sections.length;
-      addToast({
-        type: 'success',
-        message: n > 0
-          ? `Imported ${n} section${n === 1 ? '' : 's'} and the letterhead from "${file.name}".`
-          : `Imported the letterhead from "${file.name}". No clear sections detected — add them below.`,
-      });
-      // §4.5 — headings with no content beneath aren't auto-added, but never
-      // silently dropped: tell the user and offer a one-tap add-back.
-      const skipped = result.sections.length ? result.skipped : [];
-      if (skipped.length > 0) {
-        addToast({
-          type: 'info',
-          message: `Skipped ${skipped.length} empty heading${skipped.length === 1 ? '' : 's'} (no content beneath): ${skipped.map(s => `"${s}"`).join(', ')}.`,
-          secondaryAction: {
-            label: `Add ${skipped.length === 1 ? 'it' : 'all'}`,
-            onClick: () => setSections(prev => {
-              const have = new Set(prev.map(s => s.name.toLowerCase()));
-              return [...prev, ...skipped.filter(s => !have.has(s.toLowerCase())).map(s => ({ name: s, icon: 'file-text' }))];
-            }),
-          },
-        });
-      }
+      // Seed the review canvas from the detected sections (evidence + source lines
+      // preserved), then open the curation step. Letterhead/name/brand are applied
+      // on confirm, so cancelling discards the whole import cleanly.
+      setReviewSections(result.sections.map((s, i) => ({
+        id: `imp-${i}-${s.name.toLowerCase().replace(/\s+/g, '-')}`,
+        name: s.name,
+        evidence: s.evidence,
+        kind: s.kind,
+        metric: s.metric,
+        // Only text sections carry a source preview; kpi/chart/table are empty
+        // placeholders, so they show on the right with a type chip, not the left.
+        source: s.kind === 'text' ? s.body : undefined,
+      })));
+      setPendingImport({ fileName: file.name, result });
     } finally {
       setImporting(false);
       setScanningName(null);
     }
+  };
+
+  const cancelImport = () => { setPendingImport(null); setReviewSections([]); };
+  // Confirm the review: apply the curated sections + captured letterhead to the
+  // editor. Empty-named rows are dropped; §4.5 skipped headings are offered back.
+  const applyImport = () => {
+    if (!pendingImport) return;
+    const { fileName, result } = pendingImport;
+    const hf = result.headerFooter;
+    if (hf?.confidentiality || hf?.header.length) setHeaderText(hf.confidentiality || hf.header.join('  ·  '));
+    if (hf?.footer.length) setFooterText(hf.footer.join('  ·  '));
+    if (hf?.fields.auditEntity) setBrand(hf.fields.auditEntity);
+    // Name: only fill if still the untouched default.
+    const base = fileName.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    if (copyName === defaultName) setCopyName(hf?.fields.auditTitle || base.replace(/\b\w/g, c => c.toUpperCase()));
+    // Curated sections → outline (named rows only, order preserved). Placeholder
+    // blocks (kpi/chart/table) keep their type + label so they land typed, not text.
+    const kept = reviewSections.filter(s => s.name.trim());
+    setSections(kept.map(s => ({
+      name: s.name.trim(),
+      icon: 'file-text',
+      ...(s.kind && s.kind !== 'text' ? { kind: s.kind } : {}),
+      ...(s.metric ? { metric: s.metric } : {}),
+    })));
+    setImportedFrom(fileName);
+    addToast({
+      type: 'success',
+      message: kept.length > 0
+        ? `Imported ${kept.length} section${kept.length === 1 ? '' : 's'} and the letterhead from "${fileName}".`
+        : `Imported the letterhead from "${fileName}". No sections kept — add them below.`,
+    });
+    // §4.5 — headings with no content beneath aren't auto-added, but never silently
+    // dropped: tell the user and offer a one-tap add-back.
+    const skipped = result.skipped;
+    if (skipped.length > 0) {
+      addToast({
+        type: 'info',
+        message: `Skipped ${skipped.length} empty heading${skipped.length === 1 ? '' : 's'} (no content beneath): ${skipped.map(s => `"${s}"`).join(', ')}.`,
+        secondaryAction: {
+          label: `Add ${skipped.length === 1 ? 'it' : 'all'}`,
+          onClick: () => setSections(prev => {
+            const have = new Set(prev.map(s => s.name.toLowerCase()));
+            return [...prev, ...skipped.filter(s => !have.has(s.toLowerCase())).map(s => ({ name: s, icon: 'file-text' }))];
+          }),
+        },
+      });
+    }
+    setPendingImport(null);
+    setReviewSections([]);
   };
 
   // Recommended sections for the chosen type that aren't in the outline yet.
@@ -759,10 +606,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     setSections(prev => [...prev, { name, icon: 'file-text' }]);
     setNewSectionName('');
   };
-  // Patch a section in place — used by per-section guidance (§7) and block-type /
-  // metric config (§4.7).
-  const patchSection = (index: number, patch: Partial<TemplateSection>) =>
-    setSections(prev => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
   // Move a section from one index to another (drag-drop reorder).
   const moveSection = (from: number, to: number) => {
     if (to < 0 || to >= sections.length || to === from) return;
@@ -771,6 +614,26 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       const [moved] = next.splice(from, 1);
       next.splice(to, 0, moved);
       return next;
+    });
+  };
+  // Remove a section — reversible, not a silent drop (matches the review canvas).
+  // Keyed by index so duplicate names can't delete the wrong row, and Undo
+  // restores it at its original position.
+  const removeSection = (index: number) => {
+    const removed = sections[index];
+    if (!removed) return;
+    setSections(prev => prev.filter((_, i) => i !== index));
+    addToast({
+      type: 'info',
+      message: `Removed “${removed.name || 'Untitled section'}”.`,
+      secondaryAction: {
+        label: 'Undo',
+        onClick: () => setSections(prev => {
+          const next = prev.slice();
+          next.splice(Math.min(index, next.length), 0, removed);
+          return next;
+        }),
+      },
     });
   };
   const [isSaving, setIsSaving] = useState(false);
@@ -809,11 +672,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     brand: template.brand ?? 'Irame',
     theme: template.theme ?? 'Purple & White',
     headerText: template.headerText ?? 'Confidential — For Internal Use Only',
-    footerText: template.footerText ?? 'Generated by Auditify Copilot',
+    footerText: template.footerText ?? 'Generated by Irame',
     sections: seededSections,
     logoDataUrl: template.logoDataUrl,
     watermark: template.watermark ?? DEFAULT_WATERMARK,
-    status: template.status ?? 'draft',
     tags: template.tags ?? [],
   }));
   const isDirty =
@@ -825,16 +687,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     sections !== initial.sections ||
     logoDataUrl !== initial.logoDataUrl ||
     watermark !== initial.watermark ||
-    status !== initial.status ||
     tags !== initial.tags;
-
-  // Restore an earlier version's outline + status into the working editor (§8).
-  const restoreVersion = (v: TemplateVersion) => {
-    setSections(v.sections.map(s => ({ ...s })));
-    setStatus(v.status);
-    setShowHistory(false);
-    addToast({ type: 'info', message: `Restored ${v.version} — review and save to keep it.` });
-  };
 
   // Inline duplicate-name check (#4) — warn before save, not only on submit. An
   // existing template's own name isn't "taken"; only a real collision is.
@@ -857,14 +710,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     const t = setTimeout(() => { const el = copyNameRef.current; if (el) { el.focus(); el.select(); } }, 80);
     return () => clearTimeout(t);
   }, []);
-
-  // "Upload my report" starting point (§3) opens the editor and immediately
-  // fires the import picker, so the one-door chooser flows straight into upload.
-  useEffect(() => {
-    if (!autoImport) return;
-    const t = setTimeout(() => importInputRef.current?.click(), 220);
-    return () => clearTimeout(t);
-  }, [autoImport]);
 
   const fieldRefs: Record<string, React.RefObject<HTMLElement | null>> = {
     copyName: copyNameRef,
@@ -908,15 +753,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     // Simulate an async save so the spinner is observable.
     window.setTimeout(() => {
       const finalName = copyName.trim() || (isNew ? 'Untitled Template' : template.name);
-      // §8 — snapshot this save as a new version, and log it to the audit trail.
-      const note = isNew ? 'Created'
-        : status !== initial.status ? (status === 'approved' ? 'Approved' : `Status → ${TEMPLATE_STATUS_META[status].label}`)
-        : 'Edited';
-      const nextVersions: TemplateVersion[] = [
-        ...versions,
-        { version: `v${versions.length + 1}`, status, at: new Date().toISOString(), by: authorName, note, sections: sections.map(s => ({ ...s })) },
-      ];
-      const governance = { status, versions: nextVersions, tags };
 
       if (isNew && onSaveNew) {
         if (existingTemplateNames.some(n => n.toLowerCase() === finalName.toLowerCase())) {
@@ -936,7 +772,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           footerText: footerText.trim(),
           logoDataUrl,
           watermark,
-          ...governance,
+          tags,
         });
         addToast({ type: 'success', message: 'Template saved to Custom Templates.' });
       } else {
@@ -964,14 +800,14 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             footerText: footerText.trim(),
             logoDataUrl,
             watermark,
-            ...governance,
+            tags,
           });
         }
         addToast({ type: 'success', message: 'Template saved.' });
       }
       logEvent({
         action: isNew ? 'Create' : 'Update',
-        description: `${isNew ? 'Created' : 'Saved'} template "${finalName}" — ${TEMPLATE_STATUS_META[status].label}, ${nextVersions[nextVersions.length - 1].version}`,
+        description: `${isNew ? 'Created' : 'Saved'} template "${finalName}"`,
         module: 'Reports',
         entity: 'Report Template',
       });
@@ -998,37 +834,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
             <div className="min-w-0">
               <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">{isNew ? 'Create template' : 'Edit template'}</h3>
-              <p className="text-[0.75rem] text-ink-500 leading-snug truncate">{isNew ? 'New custom template' : template.name}</p>
+              <p className="text-[0.75rem] text-ink-500 leading-snug truncate">{isNew ? 'A reusable layout for your reports' : template.name}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {/* §8 — lifecycle status. Teams generate from Approved templates. */}
-            <div role="group" aria-label="Template status" className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-canvas border border-canvas-border">
-              {(['draft', 'in-review', 'approved'] as TemplateStatus[]).map(s => {
-                const on = status === s;
-                const m = TEMPLATE_STATUS_META[s];
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setStatus(s)}
-                    aria-pressed={on}
-                    className={`inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${on ? `${m.pill} border` : 'border border-transparent text-ink-500 hover:text-ink-800'}`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${on ? m.dot : 'bg-ink-300'}`} />{m.label}
-                  </button>
-                );
-              })}
-            </div>
-            {versions.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowHistory(true)}
-                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[8px] border border-canvas-border bg-white text-[0.75rem] font-semibold text-ink-700 hover:bg-paper-50 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
-              >
-                <History size={13} /> {versions.length} version{versions.length === 1 ? '' : 's'}
-              </button>
-            )}
             <button onClick={attemptClose} aria-label="Close" className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"><X size={16} /></button>
           </div>
         </div>
@@ -1122,25 +931,16 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                 <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-3">
                   <div className="space-y-4">
                     <div>
-                      <FieldLabel icon={FileText} required>Template Name</FieldLabel>
+                      <FieldLabel icon={FileText} required>Template name</FieldLabel>
                       <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value)} aria-invalid={nameTaken}
-                        className={`w-full px-3 py-2 rounded-[8px] border text-[0.875rem] transition-colors focus:outline-none focus:ring-2 ${nameTaken ? 'border-mitigated/60 focus:border-mitigated focus:ring-mitigated/10' : 'border-canvas-border hover:border-ink-300 focus:border-brand-600/40 focus:ring-brand-600/10'}`} />
+                        placeholder="e.g. Internal Audit Report"
+                        className={`w-full px-3 py-2 rounded-[8px] border text-[0.875rem] transition-colors placeholder:text-ink-400 focus:outline-none focus:ring-2 ${nameTaken ? 'border-mitigated/60 focus:border-mitigated focus:ring-mitigated/10' : 'border-canvas-border hover:border-ink-300 focus:border-brand-600/40 focus:ring-brand-600/10'}`} />
                       {nameTaken && <p className="mt-1 text-[0.6875rem] text-mitigated-700">A template named “{copyName.trim()}” already exists — saving creates a copy.</p>}
                     </div>
                     <div>
-                      <FieldLabel icon={Tag} required>Report Type</FieldLabel>
-                      <ReportTypeSelect value={reportType} onChange={onTypeChange} />
-                      {/* Choosing a type surfaces its recommended sections in the
-                          preview; the report itself starts empty. */}
-                      <p className="text-[0.75rem] text-ink-400 mt-1.5">
-                        {reportType === 'Other'
-                          ? 'Required — choosing a type unlocks its recommended sections.'
-                          : `Suggested ${reportTypeLabel(reportType)} sections below.`}
-                      </p>
-                    </div>
-                    <div>
-                      <FieldLabel icon={Image}>Brand Name</FieldLabel>
-                      <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                      <FieldLabel icon={Image}>Brand name</FieldLabel>
+                      <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} placeholder="e.g. Irame" className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] transition-colors placeholder:text-ink-400 hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                      <p className="mt-1 text-[0.6875rem] text-ink-400">The organisation shown on the report cover and letterhead.</p>
                     </div>
                     <div>
                       <FieldLabel icon={Hash}>Tags</FieldLabel>
@@ -1163,7 +963,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                           className="flex-1 min-w-[90px] h-6 bg-transparent text-[0.8125rem] outline-none placeholder:text-ink-400"
                         />
                       </div>
-                      <p className="mt-1 text-[0.6875rem] text-ink-400">Press Enter or comma to add. Tags help you find templates later.</p>
+                      <p className="mt-1 text-[0.6875rem] text-ink-400">Press Enter or comma to add. Tags make this template easier to find.</p>
                     </div>
                   </div>
 
@@ -1177,7 +977,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       <FieldLabel
                         icon={Type}
                         right={<span className={`text-[0.6875rem] tabular-nums ${headerText.length > LETTERHEAD_SOFT_MAX ? 'text-risk-600 font-medium' : 'text-ink-400'}`}>{headerText.length}/{LETTERHEAD_SOFT_MAX}</span>}
-                      >Header Text</FieldLabel>
+                      >Header text</FieldLabel>
                       <input value={headerText} onChange={e => setHeaderText(e.target.value)} placeholder="Confidential — For Internal Use Only" className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
                       {headerText.length > LETTERHEAD_SOFT_MAX && <p className="mt-1 text-[0.6875rem] text-risk-600">Long header text may be truncated in the letterhead.</p>}
                     </div>
@@ -1185,8 +985,8 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       <FieldLabel
                         icon={Layout}
                         right={<span className={`text-[0.6875rem] tabular-nums ${footerText.length > LETTERHEAD_SOFT_MAX ? 'text-risk-600 font-medium' : 'text-ink-400'}`}>{footerText.length}/{LETTERHEAD_SOFT_MAX}</span>}
-                      >Footer Text</FieldLabel>
-                      <input value={footerText} onChange={e => setFooterText(e.target.value)} placeholder="Generated by Auditify Copilot" className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                      >Footer text</FieldLabel>
+                      <input value={footerText} onChange={e => setFooterText(e.target.value)} placeholder="Generated by Irame" className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
                       {footerText.length > LETTERHEAD_SOFT_MAX && <p className="mt-1 text-[0.6875rem] text-risk-600">Long footer text may be truncated in the letterhead.</p>}
                     </div>
                     </div>
@@ -1195,69 +995,17 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   {/* Report Sections — the draggable outline, clubbed into Details.
                       (Import from a report lives in the modal footer.) */}
                   <div className="mt-5 pt-4 border-t border-canvas-border flex items-center justify-between gap-2">
-                    <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800"><span className="w-6 h-6 rounded-[7px] bg-brand-50 text-brand-600 flex items-center justify-center shrink-0"><FileText size={13} /></span> Report Sections</label>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowLibrary(v => !v)}
-                        aria-pressed={showLibrary}
-                        className={`inline-flex items-center gap-1.5 h-6 pl-2 pr-2.5 rounded-full text-[0.6875rem] font-semibold border transition-colors cursor-pointer ${showLibrary ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-white text-ink-600 hover:border-brand-300 hover:text-brand-700'}`}
-                      >
-                        <Library size={12} /> Library
-                      </button>
-                      {sections.length > 0 && (
-                        <span className="inline-flex items-center h-5 px-2 rounded-full bg-canvas border border-canvas-border text-[0.75rem] font-medium text-ink-500 tabular-nums">{sections.length}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* §6 — reusable section blocks (with their guidance). Insert one
-                      and it brings its AI rules with it. */}
-                  <AnimatePresence initial={false}>
-                    {showLibrary && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                        className="overflow-hidden"
-                      >
-                        <div className="mt-2 rounded-[10px] border border-canvas-border bg-canvas/40 p-2">
-                          <p className="px-1 pt-0.5 pb-1.5 text-[0.6875rem] text-ink-400">Reusable blocks — insert one and it carries its AI guidance.</p>
-                          <div className="space-y-1">
-                            {library.map(lib => {
-                              const LibIcon = SECTION_ICONS[lib.icon] || FileText;
-                              const added = sections.some(s => s.name.toLowerCase() === lib.name.toLowerCase());
-                              return (
-                                <button
-                                  key={lib.id}
-                                  type="button"
-                                  onClick={() => insertFromLibrary(lib)}
-                                  disabled={added}
-                                  className={`no-focus-ring group/lib w-full flex items-center gap-2 rounded-[8px] border px-2 py-1.5 text-left transition-colors ${added ? 'border-transparent bg-transparent cursor-default' : 'border-canvas-border bg-white hover:border-brand-300 hover:bg-brand-50/40 cursor-pointer'}`}
-                                >
-                                  <span className={`shrink-0 w-6 h-6 rounded-[6px] flex items-center justify-center ${added ? 'bg-canvas text-ink-400' : 'bg-brand-50 text-brand-600'}`}><LibIcon size={12} /></span>
-                                  <span className="flex-1 min-w-0">
-                                    <span className={`block text-[0.8125rem] font-medium truncate ${added ? 'text-ink-400' : 'text-ink-800'}`}>{lib.name}</span>
-                                    {lib.guidance && <span className="block text-[0.625rem] text-ink-400 truncate">{lib.guidance}</span>}
-                                  </span>
-                                  {added
-                                    ? <Check size={13} className="shrink-0 text-compliant" />
-                                    : <Plus size={13} className="shrink-0 text-brand-500 group-hover/lib:text-brand-700 transition-colors" />}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </motion.div>
+                    <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800"><span className="w-6 h-6 rounded-[7px] bg-brand-50 text-brand-600 flex items-center justify-center shrink-0"><FileText size={13} /></span> Report sections</label>
+                    {sections.length > 0 && (
+                      <span className="inline-flex items-center h-5 px-2 rounded-full bg-canvas border border-canvas-border text-[0.75rem] font-medium text-ink-500 tabular-nums">{sections.length}</span>
                     )}
-                  </AnimatePresence>
+                  </div>
 
                   {/* Added sections — only render the list (and its drag hint)
                       once there's something in the outline. */}
                   {sections.length > 0 && (
                     <>
-                      <p className="pt-2 text-[0.75rem] text-ink-400">Drag to reorder · hover a row to remove · <Sparkles size={10} className="inline align-[-1px] text-brand-500" /> to guide the AI · <BookmarkPlus size={10} className="inline align-[-1px] text-brand-500" /> to save to library.</p>
+                      <p className="pt-2 text-[0.75rem] text-ink-400">Drag to reorder · hover a row to remove.</p>
                       <div ref={sectionsListRef} className="mt-2 space-y-1.5">
                         <AnimatePresence initial={false}>
                           {sections.map((section, i) => (
@@ -1267,9 +1015,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                               index={i}
                               listRef={sectionsListRef}
                               onMove={moveSection}
-                              onDelete={() => setSections(prev => prev.filter(s => s.name !== section.name))}
-                              onPatch={patch => patchSection(i, patch)}
-                              onSaveToLibrary={() => saveToLibrary(section)}
+                              onDelete={() => removeSection(i)}
                             />
                           ))}
                         </AnimatePresence>
@@ -1285,7 +1031,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <div className="flex items-center gap-1.5 min-w-0 text-[0.75rem] font-semibold text-ink-700">
                           <ShieldCheck size={13} className="text-brand-500 shrink-0" />
-                          <span className="truncate">Recommended for {reportTypeLabel(reportType)}</span>
+                          <span className="truncate">Recommended for {REPORT_TYPE_LABEL}</span>
                         </div>
                         <button
                           type="button"
@@ -1500,7 +1246,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     <div className="grid grid-cols-4 gap-6">
                       {[
                         { label: 'Brand', value: brand || 'Irame' },
-                        { label: 'Report Type', value: reportType === 'Other' ? '—' : reportTypeLabel(reportType) },
+                        { label: 'Report Type', value: REPORT_TYPE_LABEL },
                         { label: 'Generated On', value: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) },
                         { label: 'Sections', value: `${sections.length}` },
                       ].map(f => (
@@ -1542,9 +1288,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       </div>
                       <p className="text-[0.875rem] font-semibold text-ink-700">Your report is empty</p>
                       <p className="text-[0.75rem] text-ink-400 mt-1 max-w-[300px] mx-auto leading-relaxed">
-                        {reportType === 'Other'
-                          ? 'Choose a report type to see recommended sections, then add them from the left to build the outline.'
-                          : `Add ${reportTypeLabel(reportType)} sections from the left, and they'll preview here.`}
+                        Add {REPORT_TYPE_LABEL} sections from the left, and they'll preview here.
                       </p>
                     </div>
                   )}
@@ -1615,7 +1359,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[0.875rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             {isSaving && <Loader2 size={12} className="animate-spin" />}
-            {isSaving ? 'Saving…' : isNew ? 'Create template' : 'Save Template'}
+            {isSaving ? 'Saving…' : isNew ? 'Create template' : 'Save template'}
           </button>
           </div>
         </div>
@@ -1626,48 +1370,53 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           {importing && <ImportScanOverlay filename={scanningName ?? 'your report'} />}
         </AnimatePresence>
 
-        {/* §8 — version history sheet: every save is a snapshot; restore rolls the
-            outline + status back into the working editor. */}
+        {/* Import review step — the shared "AI proposes, the human curates" canvas.
+            Detected sections are curated here before anything touches the outline,
+            so importing behaves exactly like the format-check upload flow (§4). */}
         <AnimatePresence>
-          {showHistory && (
-            <>
+          {pendingImport && (() => {
+            const namedCount = reviewSections.filter(s => s.name.trim()).length;
+            const hasLetterhead = !!pendingImport.result.headerFooter;
+            return (
               <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                transition={{ duration: 0.16 }}
-                className="absolute inset-0 z-40 bg-ink-900/20" onClick={() => setShowHistory(false)}
-              />
-              <motion.div
-                initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-                transition={{ duration: 0.24, ease: [0.2, 0, 0, 1] }}
-                className="absolute top-0 right-0 bottom-0 z-40 w-[360px] max-w-[86vw] bg-canvas-elevated border-l border-canvas-border shadow-xl flex flex-col"
+                transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
+                className="absolute inset-0 z-40 bg-canvas-elevated flex flex-col"
               >
-                <div className="shrink-0 px-5 py-3 border-b border-canvas-border flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-2 text-[0.875rem] font-semibold text-ink-900"><History size={15} className="text-brand-600" /> Version history</span>
-                  <button onClick={() => setShowHistory(false)} aria-label="Close history" className="w-7 h-7 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer transition-colors"><X size={15} /></button>
+                <header className="shrink-0 px-6 pt-3 pb-3 border-b border-canvas-border flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
+                    <div className="min-w-0">
+                      <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">Review detected sections</h3>
+                      <p className="text-[0.75rem] text-ink-500 leading-snug truncate">From {pendingImport.fileName} — curate before adding to the outline.</p>
+                    </div>
+                  </div>
+                  <button onClick={cancelImport} aria-label="Cancel import" className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0"><X size={16} /></button>
+                </header>
+                <div className="flex-1 min-h-0 px-6 py-4 flex flex-col">
+                  <SectionReviewCanvas
+                    sections={reviewSections}
+                    onSectionsChange={setReviewSections}
+                    reportType={reportType}
+                    reportTypeLabel={REPORT_TYPE_LABEL}
+                  />
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
-                  {[...versions].reverse().map((v, idx) => {
-                    const isLatest = idx === 0;
-                    const m = TEMPLATE_STATUS_META[v.status];
-                    return (
-                      <div key={v.version} className={`rounded-[10px] border p-3 ${isLatest ? 'border-brand-300 bg-brand-50/20' : 'border-canvas-border bg-white'}`}>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[0.8125rem] font-bold text-ink-900 tabular-nums">{v.version}</span>
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.625rem] font-semibold border ${m.pill}`}><span className={`w-1.5 h-1.5 rounded-full ${m.dot}`} />{m.label}</span>
-                          {isLatest
-                            ? <span className="ml-auto text-[0.6875rem] font-medium text-ink-400">Current</span>
-                            : <button onClick={() => restoreVersion(v)} className="ml-auto inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"><RotateCcw size={11} /> Restore</button>}
-                        </div>
-                        <p className="mt-1.5 text-[0.75rem] text-ink-600">{v.note} · {v.by}</p>
-                        <p className="text-[0.6875rem] text-ink-400">{new Date(v.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} · {v.sections.length} section{v.sections.length === 1 ? '' : 's'}</p>
-                      </div>
-                    );
-                  })}
-                </div>
+                <footer className="shrink-0 px-6 py-3.5 border-t border-canvas-border flex items-center justify-between gap-3">
+                  <span className="text-[0.75rem] text-ink-500">
+                    {namedCount} section{namedCount === 1 ? '' : 's'} · {hasLetterhead ? 'letterhead captured' : 'no letterhead found'}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <button onClick={cancelImport} className="inline-flex items-center justify-center h-9 px-4 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 transition-colors cursor-pointer rounded-[8px]">Cancel</button>
+                    <button onClick={applyImport} disabled={namedCount === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-5 bg-brand-600 text-white text-[0.8125rem] font-semibold transition-colors rounded-[8px] enabled:hover:bg-brand-500 enabled:cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                      Use {namedCount} section{namedCount === 1 ? '' : 's'}
+                    </button>
+                  </div>
+                </footer>
               </motion.div>
-            </>
-          )}
+            );
+          })()}
         </AnimatePresence>
+
       </motion.div>
       <ConfirmDialog
         open={showAbandonConfirm}
@@ -1684,7 +1433,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         onConfirm={() => { setMissingConfirm(null); handleSave(true); }}
         title={`Save without ${missingConfirm && missingConfirm.length > 1 ? 'these sections' : 'this section'}?`}
         description={
-          <>A standard <span className="font-semibold">{reportType}</span> report usually includes {missingConfirm?.map(n => `“${n}”`).join(', ')}. You can save without {missingConfirm && missingConfirm.length > 1 ? 'them' : 'it'} and add {missingConfirm && missingConfirm.length > 1 ? 'them' : 'it'} later.</>
+          <>A standard <span className="font-semibold">{REPORT_TYPE_LABEL}</span> report usually includes {missingConfirm?.map(n => `“${n}”`).join(', ')}. You can save without {missingConfirm && missingConfirm.length > 1 ? 'them' : 'it'} and add {missingConfirm && missingConfirm.length > 1 ? 'them' : 'it'} later.</>
         }
         confirmLabel="Save anyway"
       />
