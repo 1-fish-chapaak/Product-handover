@@ -33,7 +33,38 @@ export const PEOPLE: Person[] = [
   { id: 'p-8', name: 'Vijay Reddy',   initials: 'VR', role: 'Reviewer',    capacity: 120 },
 ];
 
-export const CURRENT_USER: Person = PEOPLE[5]; // Priya Singh — risk owner persona for My Queue
+/** Fallback persona (Priya Singh — risk owner) used when no login is available.
+ *  Kept exported so existing imports keep compiling; new code should prefer
+ *  `personForUser(currentUser?.name)` so screens follow the real login. */
+export const CURRENT_USER: Person = PEOPLE[5];
+
+/** Resolve a signed-in display name to a PEOPLE entry. Unknown names (e.g. a
+ *  demo persona outside the engagement roster) get a synthesized Person so
+ *  their own name still shows on personal screens; no name → CURRENT_USER. */
+export function personForUser(name?: string | null): Person {
+  if (!name) return CURRENT_USER;
+  const match = PEOPLE.find(p => p.name === name);
+  if (match) return match;
+  const initials = name.split(/\s+/).map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase() || '?';
+  return { id: `p-auth-${name.toLowerCase().replace(/\s+/g, '-')}`, name, initials, role: 'Risk Owner', capacity: 160 };
+}
+
+/** Personal open-exception queue for a person. Demo bar: a flagship screen is
+ *  never empty — when the person has zero assigned items, deterministically
+ *  reassign the first few open mock exceptions to them. Shared by MyQueueView
+ *  and the sidebar badge so the count always matches the list. */
+export function myQueueFor<T extends { assignee: string; status: string }>(
+  exceptions: T[],
+  person: Person,
+  seedCount = 4,
+): T[] {
+  const mine = exceptions.filter(e => e.assignee === person.name && e.status !== 'Resolved');
+  if (mine.length > 0) return mine;
+  return exceptions
+    .filter(e => e.status !== 'Resolved')
+    .slice(0, seedCount)
+    .map(e => ({ ...e, assignee: person.name }));
+}
 
 export const OWNER_NAMES = PEOPLE.map(p => p.name);
 
