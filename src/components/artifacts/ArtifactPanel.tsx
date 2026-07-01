@@ -12,7 +12,7 @@ import type { ArtifactTab } from '../../hooks/useAppState';
 import Gated from '../shared/Gated';
 import { useToast } from '../shared/Toast';
 import { SEED as DATA_SOURCE_SEED, TYPE_META, formatDate, type DataSource } from '../data-sources/sources';
-import { type ComposerContext, editPlanContext, editCodeContext } from '../chat/composerContext';
+import { type ComposerContext, editCodeContext } from '../chat/composerContext';
 import { QueryExecutionPlanCard, AssumptionsCard, type PlanCardStep, type PlanAssumption } from '../shared/PlanCards';
 
 interface ArtifactPanelProps {
@@ -222,7 +222,6 @@ function PlanTab({
       ) : (
         <QueryExecutionPlanCard
           steps={steps}
-          onEdit={onCanvasAction ? () => onCanvasAction(editPlanContext(steps.length)) : undefined}
           onRegenerate={handleRegenerate}
           onStepEdit={(step) => onComposeInChat?.(`Refine this step — "${step.name}": ${step.description}\n\nWhat should change? `)}
         />

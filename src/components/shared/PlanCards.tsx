@@ -153,12 +153,12 @@ function StepFilesAndColumns({ sources }: { sources: PlanCardSource[] }) {
 // ─── Query Execution Plan card ───────────────────────────────────────────
 // Numbered steps + type badge + description + expandable source chips.
 
-export function QueryExecutionPlanCard({ steps, onEdit, onRegenerate, onStepEdit }: {
+export function QueryExecutionPlanCard({ steps, onRegenerate, onStepEdit }: {
   steps: PlanCardStep[];
-  onEdit?: () => void;
   onRegenerate?: () => void;
   onStepEdit?: (step: PlanCardStep) => void;
 }) {
+  const [open, setOpen] = useState(true);
   return (
     <div className="group relative rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden transition-[border-color,box-shadow] duration-300 hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.18)]">
       <div className="flex items-center px-4 py-3">
@@ -177,17 +177,33 @@ export function QueryExecutionPlanCard({ steps, onEdit, onRegenerate, onStepEdit
             Regenerate
           </button>
         )}
-        {onEdit && (
-          <button
-            type="button"
-            onClick={onEdit}
-            className="ml-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-2 py-1 rounded-md cursor-pointer transition-colors"
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          aria-label={open ? 'Collapse plan' : 'Expand plan'}
+          className="ml-1 inline-flex items-center justify-center size-6 text-ink-400 hover:text-ink-700 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded"
+        >
+          <motion.span
+            animate={{ rotate: open ? 0 : -90 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 26 }}
+            className="inline-flex"
+            aria-hidden
           >
-            Edit
-          </button>
-        )}
+            <ChevronDown size={15} />
+          </motion.span>
+        </button>
       </div>
-      <ul className="flex flex-col border-t border-canvas-border">
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.ul
+            key="plan-steps"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="flex flex-col border-t border-canvas-border overflow-hidden"
+          >
         {steps.map((step, idx) => {
           const badge = STEP_BADGE[step.type];
           const sources = step.sources ?? [];
@@ -232,7 +248,9 @@ export function QueryExecutionPlanCard({ steps, onEdit, onRegenerate, onStepEdit
             </li>
           );
         })}
-      </ul>
+          </motion.ul>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -243,17 +261,12 @@ export function QueryExecutionPlanCard({ steps, onEdit, onRegenerate, onStepEdit
 // Memory-provenance row shown beneath an assumption recalled from prior input.
 // This is the "fewer clarifications" payoff — instead of re-asking, IRA shows
 // what it assumed, where it learned it, and a one-tap way to correct it.
-function AssumptionMemoryRow({ memory, onCorrect }: {
+function AssumptionMemoryRow({ memory }: {
   memory: AssumptionMemory;
-  onCorrect?: () => void;
 }) {
   const pct = Math.round(memory.confidence * 100);
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.6875rem]">
-      <span className="inline-flex items-center gap-1 rounded-md bg-brand-50 ring-1 ring-inset ring-brand-100 px-1.5 py-0.5 font-semibold text-brand-700">
-        {memory.enterprise ? <ShieldCheck size={11} /> : <Brain size={11} />}
-        {memory.enterprise ? 'Enterprise memory' : 'From memory'}
-      </span>
       <span className="text-ink-500">
         You set this in <span className="font-medium text-ink-700">{memory.source}</span> · {memory.learnedOn}
       </span>
@@ -263,15 +276,6 @@ function AssumptionMemoryRow({ memory, onCorrect }: {
       >
         <Check size={10} strokeWidth={3} /> {pct}% still applies
       </span>
-      {onCorrect && (
-        <button
-          type="button"
-          onClick={onCorrect}
-          className="inline-flex items-center gap-1 text-ink-400 hover:text-brand-700 font-medium transition-colors cursor-pointer"
-        >
-          <Pencil size={10} /> Not right? Correct it
-        </button>
-      )}
     </div>
   );
 }
@@ -307,7 +311,7 @@ export function AssumptionsCard({ assumptions, onEdit, onCorrectAssumption, cont
             <p className="text-[0.75rem] text-ink-500 mt-px leading-tight">
               {assumptions.length} defaults applied to this {context}
               {recalledCount > 0 && (
-                <span className="text-brand-700 font-medium">
+                <span className="text-evidence-700 font-medium">
                   {' · '}saved you {recalledCount} clarification{recalledCount === 1 ? '' : 's'}
                 </span>
               )}
@@ -358,17 +362,33 @@ export function AssumptionsCard({ assumptions, onEdit, onCorrectAssumption, cont
               {assumptions.map((a) => (
                 <div
                   key={a.key}
-                  className={`grid grid-cols-[130px_minmax(0,1fr)] gap-4 px-2 py-2 rounded-md transition-colors ${a.memory ? 'bg-brand-50/30 hover:bg-brand-50/50' : 'hover:bg-paper-50/70'}`}
+                  className={`grid grid-cols-[130px_minmax(0,1fr)] gap-4 px-2 py-2 rounded-md transition-colors ${a.memory ? 'bg-evidence-50/40 hover:bg-evidence-50/60' : 'hover:bg-paper-50/70'}`}
                 >
-                  <dt className="text-[0.75rem] font-medium text-ink-500 leading-[1.45] self-start">{a.key}</dt>
-                  <dd className="text-[0.8125rem] text-ink-900 leading-[1.5]">
-                    {a.value}
+                  <dt className="flex flex-col items-start gap-1.5 text-[0.75rem] font-medium text-ink-500 leading-[1.45] self-start">
+                    <span>{a.key}</span>
                     {a.memory && (
-                      <AssumptionMemoryRow
-                        memory={a.memory}
-                        onCorrect={onCorrectAssumption ? () => onCorrectAssumption(a) : undefined}
-                      />
+                      <span className="inline-flex items-center gap-1 rounded-md bg-evidence-50 ring-1 ring-inset ring-evidence-100 px-1.5 py-0.5 text-[0.6875rem] font-semibold text-evidence-700">
+                        {a.memory.enterprise ? <ShieldCheck size={11} /> : <Brain size={11} />}
+                        {a.memory.enterprise ? 'Enterprise memory' : 'From memory'}
+                      </span>
                     )}
+                  </dt>
+                  <dd className="text-[0.8125rem] text-ink-900 leading-[1.5]">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0">{a.value}</span>
+                      {a.memory && onCorrectAssumption && (
+                        <button
+                          type="button"
+                          onClick={() => onCorrectAssumption(a)}
+                          title="Not right? Correct it"
+                          aria-label="Not right? Correct it"
+                          className="shrink-0 -mt-0.5 -mr-0.5 inline-flex size-6 items-center justify-center rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      )}
+                    </div>
+                    {a.memory && <AssumptionMemoryRow memory={a.memory} />}
                   </dd>
                 </div>
               ))}
