@@ -2794,16 +2794,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     </div>
                   </div>
 
-                  {/* What memory knows — cross-workflow correlation + output
-                      compare, shown beneath the output as supporting context.
-                      The source-drift conflict is resolved earlier on the
-                      confirm-mapping screen (before approve & run), so it's
-                      suppressed here rather than gating the output. */}
-                  <div className="mb-5">
-                    <WorkflowMemoryPanel showSourceDrift={false} />
-                  </div>
-
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2.5 mb-5">
                     <button className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[12.5px] font-semibold transition-colors cursor-pointer">
                       <Download size={13} />
                       Download CSV
@@ -2822,6 +2813,15 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     >
                       Run again
                     </button>
+                  </div>
+
+                  {/* What memory knows — cross-workflow correlation + output
+                      compare, shown beneath the output and its actions as
+                      supporting context. The source-drift conflict is resolved
+                      earlier on the confirm-mapping screen (before approve &
+                      run), so it's suppressed here rather than gating the output. */}
+                  <div className="mb-5">
+                    <WorkflowMemoryPanel showSourceDrift={false} />
                   </div>
 
                   {/* Follow-up — bridge from "here are results" to a chat
