@@ -47,16 +47,16 @@ export default function WorkspaceHeader({ engagement, onBack, onEditSetup, backL
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <h2 className="text-[0.9375rem] font-bold text-text truncate">{engagement.name}</h2>
-              <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold shrink-0 ${STATUS_CLS[engagement.status] || STATUS_CLS.DRAFT}`}>
+              <span className={`px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold shrink-0 ${STATUS_CLS[engagement.status] || STATUS_CLS.DRAFT}`}>
                 {engagement.status.replace(/_/g, ' ')}
               </span>
             </div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[0.5625rem] font-bold">{engagement.displayLabel}</span>
-              <span className="text-[0.625rem] text-gray-400">{patternLabel}</span>
-              {engagement.stage && <span className="text-[0.625rem] text-gray-400">· {engagement.stage}</span>}
+              <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[0.6875rem] font-bold">{engagement.displayLabel}</span>
+              <span className="text-[0.6875rem] text-gray-400">{patternLabel}</span>
+              {engagement.stage && <span className="text-[0.6875rem] text-gray-400">· {engagement.stage}</span>}
             </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.625rem] text-gray-500">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.6875rem] text-gray-500">
               <span><span className="text-gray-400">Owner:</span> {engagement.owner}</span>
               {engagement.reviewer && <span><span className="text-gray-400">Reviewer:</span> {engagement.reviewer}</span>}
               {engagement.businessProcess && <span><span className="text-gray-400">Process:</span> {engagement.businessProcess}</span>}

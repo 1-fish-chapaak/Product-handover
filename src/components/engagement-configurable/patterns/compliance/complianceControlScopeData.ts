@@ -27,7 +27,7 @@ export interface ScopeControl {
   automation: 'Manual' | 'Automated' | 'Hybrid';
   process: string;
   owner: string;
-  sourceStatus?: 'Active' | 'Needs Review' | 'Imported';
+  sourceStatus?: 'Active' | 'Needs Review' | 'Imported' | 'Manual';
   attributes: ScopeAttribute[];
   workflows: ScopeWorkflow[];
 }
@@ -116,6 +116,127 @@ export const MOCK_COMPLIANCE_CONTROLS: ScopeControl[] = [
     workflows: [],
   },
 ];
+
+// ─── Control Library (picker source for "Add Controls from Library") ──────
+
+export const LIBRARY_CONTROLS: ScopeControl[] = [
+  {
+    id: 'C005', name: 'Bank Reconciliation Review',
+    description: 'Monthly bank reconciliations are prepared, independently reviewed, and unreconciled items above threshold are investigated within 5 business days.',
+    importance: 'Key', nature: 'Detective', automation: 'Manual', process: 'R2R', owner: 'Sneha Desai',
+    attributes: [
+      { id: 'a12', code: 'A', name: 'Reconciliation prepared monthly', assertion: 'Completeness', required: true },
+      { id: 'a13', code: 'B', name: 'Independent reviewer sign-off', assertion: 'Authorization', required: true },
+    ],
+    workflows: [],
+  },
+  {
+    id: 'C006', name: 'Credit Limit Approval',
+    description: 'Customer credit limits above policy threshold require documented CFO approval before order release.',
+    importance: 'Key', nature: 'Preventive', automation: 'Hybrid', process: 'O2C', owner: 'Neha Joshi',
+    attributes: [
+      { id: 'a14', code: 'A', name: 'Credit check performed pre-release', assertion: 'Existence', required: true },
+      { id: 'a15', code: 'B', name: 'CFO approval above threshold', assertion: 'Authorization', required: true },
+    ],
+    workflows: [],
+  },
+  {
+    id: 'C007', name: 'User Access Review — ERP',
+    description: 'Quarterly review of ERP user access rights; terminated users and SoD conflicts are remediated within the quarter.',
+    importance: 'Key', nature: 'Detective', automation: 'Hybrid', process: 'ITGC', owner: 'Deepak Bansal',
+    attributes: [
+      { id: 'a16', code: 'A', name: 'Access review completed quarterly', assertion: 'Completeness', required: true },
+      { id: 'a17', code: 'B', name: 'Terminated users deactivated', assertion: 'Validity', required: true },
+      { id: 'a18', code: 'C', name: 'SoD conflicts remediated', assertion: 'Authorization', required: true },
+    ],
+    workflows: [],
+  },
+  {
+    id: 'C008', name: 'Fixed Asset Capitalization Review',
+    description: 'Additions above capitalization threshold are reviewed against policy and supported by invoices and approval forms.',
+    importance: 'Non-Key', nature: 'Detective', automation: 'Manual', process: 'R2R', owner: 'Karan Mehta',
+    attributes: [
+      { id: 'a19', code: 'A', name: 'Capitalization policy applied', assertion: 'Accuracy', required: true },
+    ],
+    workflows: [],
+  },
+  {
+    id: 'C009', name: 'Payroll Change Authorization',
+    description: 'All payroll master changes (rate, bank account, new hire) carry HR + Finance dual authorization before the pay run.',
+    importance: 'Key', nature: 'Preventive', automation: 'Manual', process: 'R2R', owner: 'Priya Singh',
+    attributes: [
+      { id: 'a20', code: 'A', name: 'HR authorization on change form', assertion: 'Authorization', required: true },
+      { id: 'a21', code: 'B', name: 'Finance counter-authorization', assertion: 'Authorization', required: true },
+    ],
+    workflows: [],
+  },
+  {
+    id: 'C010', name: 'Revenue Cutoff Testing',
+    description: 'Shipments within 3 days of period end are traced to the correct period; late postings are flagged and corrected.',
+    importance: 'Key', nature: 'Detective', automation: 'Automated', process: 'O2C', owner: 'Neha Joshi',
+    attributes: [
+      { id: 'a22', code: 'A', name: 'Cutoff exceptions identified', assertion: 'Cutoff', required: true },
+      { id: 'a23', code: 'B', name: 'Corrections posted in period', assertion: 'Accuracy', required: true },
+    ],
+    workflows: [],
+  },
+  {
+    id: 'C011', name: 'Contract Approval Matrix Compliance',
+    description: 'Contracts are approved per the delegation-of-authority matrix; legal review evidenced for non-standard clauses.',
+    importance: 'Non-Key', nature: 'Preventive', automation: 'Manual', process: 'S2C', owner: 'Rohan Patel',
+    attributes: [
+      { id: 'a24', code: 'A', name: 'DOA-compliant approval chain', assertion: 'Authorization', required: true },
+      { id: 'a25', code: 'B', name: 'Legal review for non-standard terms', assertion: 'Validity', required: false },
+    ],
+    workflows: [],
+  },
+  {
+    id: 'C012', name: 'Intercompany Balance Confirmation',
+    description: 'Intercompany balances are confirmed and differences above threshold resolved before consolidation close.',
+    importance: 'Non-Key', nature: 'Detective', automation: 'Hybrid', process: 'R2R', owner: 'Sneha Desai',
+    attributes: [
+      { id: 'a26', code: 'A', name: 'Balances confirmed with counterpart', assertion: 'Existence', required: true },
+    ],
+    workflows: [],
+  },
+];
+
+/** Deterministic "parsed" controls appended by the mock Import Control Sheet flow. */
+export function createImportedControls(): ScopeControl[] {
+  return [
+    {
+      id: 'C-IMP-01', name: 'GRN Timeliness Check',
+      description: 'Imported from control sheet — goods receipt notes are posted within 2 business days of physical receipt.',
+      importance: 'Non-Key', nature: 'Detective', automation: 'Manual', process: 'P2P', owner: 'Rajiv Sharma',
+      sourceStatus: 'Imported',
+      attributes: [
+        { id: 'imp-a1', code: 'A', name: 'GRN posted within 2 days', assertion: 'Cutoff', required: true },
+      ],
+      workflows: [],
+    },
+    {
+      id: 'C-IMP-02', name: 'PO Amendment Authorization',
+      description: 'Imported from control sheet — purchase order amendments above 10% of original value require re-approval.',
+      importance: 'Key', nature: 'Preventive', automation: 'Manual', process: 'P2P', owner: 'Rajiv Sharma',
+      sourceStatus: 'Imported',
+      attributes: [
+        { id: 'imp-a2', code: 'A', name: 'Amendment re-approved per DOA', assertion: 'Authorization', required: true },
+        { id: 'imp-a3', code: 'B', name: 'Amendment reason documented', assertion: 'Completeness', required: true },
+      ],
+      workflows: [],
+    },
+    {
+      id: 'C-IMP-03', name: 'Advance Payment Recovery Tracking',
+      description: 'Imported from control sheet — vendor advances are tracked and recovered against subsequent invoices within 90 days.',
+      importance: 'Non-Key', nature: 'Detective', automation: 'Manual', process: 'P2P', owner: 'Deepak Bansal',
+      sourceStatus: 'Imported',
+      attributes: [
+        { id: 'imp-a4', code: 'A', name: 'Advance recovered within 90 days', assertion: 'Valuation', required: true },
+      ],
+      workflows: [],
+    },
+  ];
+}
 
 export function deriveScopeSummary(controls: ScopeControl[]) {
   const total = controls.length;
