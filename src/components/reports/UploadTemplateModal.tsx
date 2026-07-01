@@ -11,10 +11,13 @@ import {
   Upload, FileText, CheckCircle2, AlertTriangle, XCircle,
   Plus, Trash2, CornerDownRight, ShieldCheck, GripVertical, Tag,
   ArrowUpToLine, ArrowDownToLine, ChevronLeft, ChevronRight, Check, X,
+  Loader2, Type, PanelBottom,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { Skeleton } from '../shared/Skeleton';
-import { REPORT_TYPES, sectionCoverage, typeSectionsFor, type ReportTypeName, type EditableTemplate, type TypeSection } from './reportShared';
+import { ReportBrandBanner } from './ReportDocumentChrome';
+import { extractPdfHeaderFooter, type ExtractedHeaderFooter } from './extractPdfHeaderFooter';
+import { sectionCoverage, typeSectionsFor, type ReportTypeName, type EditableTemplate, type TypeSection } from './reportShared';
 
 // We can't yet score a model "confidence", so the badge is grounded in the kind
 // of evidence the detector actually has: an explicit styled heading, a heading
@@ -111,7 +114,7 @@ const SOURCE_BODY: Record<string, string[]> = {
 // with an icon-titled header, a horizontal step progress row, a scrolling body
 // and a sticky footer. Keeping the chrome identical is what makes this read as
 // "from the platform" rather than a one-off modal.
-const WIZARD_STEPS = ['Report type', 'Match', 'Save'];
+const WIZARD_STEPS = ['Upload', 'Letterhead', 'Match', 'Save'];
 
 function WizardPanel({ subtitle, activeIdx, onClose, footer, children }: {
   subtitle: ReactNode;
@@ -199,9 +202,11 @@ export default function UploadTemplateModal({ onClose, onSave, reference, existi
 }) {
   const { addToast } = useToast();
   const validating = !!reference;
-  const [step, setStep] = useState<'setup' | 'analyzing' | 'match' | 'save'>('setup');
+  const [step, setStep] = useState<'setup' | 'analyzing' | 'match' | 'letterhead' | 'save'>('setup');
   const [templateName, setTemplateName] = useState(validating ? reference!.templateName : '');
-  const [reportType, setReportType] = useState<ReportTypeName>('Audit');
+  // Upload templates are Internal Audit only, so the type is fixed (no picker).
+  // It still drives the expected-sections map and coverage below.
+  const [reportType] = useState<ReportTypeName>('Audit');
   const [pickedFile, setPickedFile] = useState<{ name: string; size: string } | null>(null);
   const [sections, setSections] = useState<DetectedSection[]>(validating ? DETECTED_DRIFTED : DETECTED);
   const [refDropped, setRefDropped] = useState(false);
@@ -213,6 +218,14 @@ export default function UploadTemplateModal({ onClose, onSave, reference, existi
   const [flashId, setFlashId] = useState<string | null>(null);       // left (source) flash
   const [rightFlashId, setRightFlashId] = useState<string | null>(null); // right (detected) flash
   const [found, setFound] = useState(0); // # sections "discovered" during the scan
+  // Real PDF header/footer extraction — the document's letterhead + footer,
+  // captured on upload and carried onto the saved template (headerText/footerText).
+  const [headerFooter, setHeaderFooter] = useState<ExtractedHeaderFooter | null>(null);
+  const [extractingHF, setExtractingHF] = useState(false);
+  // Editable letterhead text on the dedicated Letterhead step — pre-filled from
+  // the extraction, then the user's edits are what save onto the template.
+  const [headerText, setHeaderText] = useState('');
+  const [footerText, setFooterText] = useState('');
 
   // Escape to close + lock the background scroll while open (the shell is bespoke
   // now, so it owns this the way the shared Modal used to).
@@ -238,6 +251,22 @@ export default function UploadTemplateModal({ onClose, onSave, reference, existi
     setPickedFile({ name: file.name, size: sizeMb });
     const base = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
     if (base) setTemplateName(base.replace(/\b\w/g, c => c.toUpperCase()));
+    // Read the document's running header/footer for real (PDF only). Runs while
+    // the scan animation plays, so the result is ready by the review step.
+    setHeaderFooter(null);
+    if (ext === 'pdf') {
+      setExtractingHF(true);
+      void extractPdfHeaderFooter(file)
+        .then(result => {
+          if (!result) return;
+          setHeaderFooter(result);
+          // Pre-fill the editable letterhead: confidentiality is the top stamp,
+          // the running footer text is the footer line.
+          setHeaderText(result.confidentiality || result.header.join('  ·  ') || '');
+          setFooterText(result.footer.join('  ·  ') || '');
+        })
+        .finally(() => setExtractingHF(false));
+    }
     setStep('analyzing');
   };
 
@@ -251,7 +280,7 @@ export default function UploadTemplateModal({ onClose, onSave, reference, existi
     const total = initialDetected.length;
     const per = 460;
     const timers = initialDetected.map((_, i) => setTimeout(() => setFound(i + 1), per * (i + 1)));
-    const done = setTimeout(() => setStep('match'), per * total + 750);
+    const done = setTimeout(() => setStep('letterhead'), per * total + 750);
     return () => { timers.forEach(clearTimeout); clearTimeout(done); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
@@ -373,6 +402,9 @@ export default function UploadTemplateModal({ onClose, onSave, reference, existi
         category: reportType,
         icon: 'file-text',
         sections: kept.map(s => ({ name: s.name.trim(), icon: 'file-text' })),
+        // The confirmed letterhead text from the Letterhead step.
+        ...(headerText.trim() ? { headerText: headerText.trim() } : {}),
+        ...(footerText.trim() ? { footerText: footerText.trim() } : {}),
         ...(isApproved ? { approvedSections: kept.map(s => s.name.trim()), referenceFileName: pickedFile?.name } : {}),
       } as EditableTemplate);
     } else {
@@ -385,11 +417,12 @@ export default function UploadTemplateModal({ onClose, onSave, reference, existi
   // Display label only — the underlying value stays 'Audit' so the section map
   // and coverage lookups keep working.
   const typeLabel = (t: ReportTypeName) => (t === 'Audit' ? 'Internal Audit' : t);
-  const flowIdx = step === 'setup' ? 0 : step === 'save' ? 2 : 1;
+  const flowIdx = step === 'setup' ? 0 : step === 'letterhead' ? 1 : step === 'match' ? 2 : step === 'save' ? 3 : 1;
 
   const subtitle: ReactNode =
-    step === 'setup' ? 'Pick the report type, then upload a document to turn into a template.'
+    step === 'setup' ? 'Upload an Internal Audit report to turn into a template.'
     : step === 'analyzing' ? 'Reading the document structure — headings only, no data values.'
+    : step === 'letterhead' ? 'Confirm the letterhead — header and footer carried onto every page.'
     : step === 'save' ? 'Review the final structure, name it, and save.'
     : validating
       ? <span>Comparing this upload to the <span className="font-medium text-ink-700">{reference!.templateName}</span> reference format.</span>
@@ -402,9 +435,14 @@ export default function UploadTemplateModal({ onClose, onSave, reference, existi
       <div className="flex justify-end">
         <button onClick={onClose} className={cancelBtnCls}>Cancel</button>
       </div>
-    ) : step === 'match' ? (
+    ) : step === 'letterhead' ? (
       <div className="flex items-center justify-between gap-3">
         <button onClick={() => setStep('setup')} className={backBtnCls}><ChevronLeft size={15} /> Back</button>
+        <button onClick={() => setStep('match')} className={primaryBtnCls}>Continue <ChevronRight size={15} /></button>
+      </div>
+    ) : step === 'match' ? (
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={() => setStep('letterhead')} className={backBtnCls}><ChevronLeft size={15} /> Back</button>
         <div className="flex items-center gap-3">
           <span className="text-[0.6875rem] text-high-700 font-medium">{hasEmptyName ? 'Name every section before continuing.' : ''}</span>
           <button onClick={() => setStep('save')} disabled={hasEmptyName} className={primaryBtnCls}>Continue <ChevronRight size={15} /></button>
@@ -422,26 +460,10 @@ export default function UploadTemplateModal({ onClose, onSave, reference, existi
 
   return (
     <WizardPanel subtitle={subtitle} activeIdx={flowIdx} onClose={onClose} footer={footer}>
-      {/* ── Step 1: report type + recommended sections + upload ──────────────── */}
+      {/* ── Step 1: upload + recommended sections (Internal Audit only) ──────── */}
       {step === 'setup' && (
         <>
-          <p className="shrink-0 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-400 mb-2">Report type</p>
-          <div className="shrink-0 flex flex-wrap gap-1.5">
-            {REPORT_TYPES.filter(t => ['Audit', 'SOX', 'ATR'].includes(t)).map(t => {
-              const on = reportType === t;
-              return (
-                <button
-                  key={t}
-                  onClick={() => setReportType(t)}
-                  className={`h-8 px-3 rounded-[8px] text-[0.8125rem] font-medium border transition-colors cursor-pointer ${on ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-canvas-border bg-white text-ink-600 hover:border-brand-300 hover:text-ink-800'}`}
-                >
-                  {typeLabel(t)}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex-1 min-h-0 mt-4 flex gap-4">
+          <div className="flex-1 min-h-0 flex gap-4">
             {/* Upload — one-third. */}
             <div className="flex-1 basis-0 min-w-0 flex flex-col">
               <input ref={fileInputRef} type="file" accept=".docx,.pdf" className="hidden"
@@ -496,7 +518,7 @@ export default function UploadTemplateModal({ onClose, onSave, reference, existi
           <div className="shrink-0 mb-3">
             <div className="flex items-center gap-2 text-[0.8125rem]">
               <span className="font-medium text-ink-800 truncate">Scanning {pickedFile?.name ?? 'your report'}</span>
-              <span className="ml-auto shrink-0 text-[0.75rem] tabular-nums text-ink-500">{found} of {initialDetected.length} sections found</span>
+              <span className="ml-auto shrink-0 text-[0.75rem] tabular-nums text-ink-500">{found === initialDetected.length ? `${found} sections found` : `${found} found…`}</span>
             </div>
             <div className="mt-2 h-1 w-full rounded-full bg-paper-100 overflow-hidden">
               <motion.div
@@ -703,7 +725,70 @@ export default function UploadTemplateModal({ onClose, onSave, reference, existi
         </>
       )}
 
-      {/* ── Step 3: name & save ──────────────────────────────────────────────── */}
+      {/* ── Step 3: letterhead (header / footer) ─────────────────────────────── */}
+      {step === 'letterhead' && (
+        <div className="flex-1 min-h-0 grid grid-cols-[290px_1fr] gap-5 overflow-hidden">
+          {/* Left — editable letterhead text, pre-filled from the document. */}
+          <div className="flex flex-col gap-4 overflow-y-auto pr-1 -mr-1">
+            <div>
+              <label className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-ink-800 mb-1.5"><Type size={14} className="text-ink-400" /> Header Text</label>
+              <input
+                value={headerText}
+                onChange={e => setHeaderText(e.target.value)}
+                placeholder="Confidential — For Internal Use Only"
+                className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+              />
+              <p className="mt-1 text-[0.6875rem] text-ink-400">Stamped top-right of every page.</p>
+            </div>
+            <div>
+              <label className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-ink-800 mb-1.5"><PanelBottom size={14} className="text-ink-400" /> Footer Text</label>
+              <input
+                value={footerText}
+                onChange={e => setFooterText(e.target.value)}
+                placeholder="Generated by Auditify Copilot"
+                className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+              />
+              <p className="mt-1 text-[0.6875rem] text-ink-400">Runs along the bottom of every page.</p>
+            </div>
+            {extractingHF ? (
+              <p className="mt-auto inline-flex items-center gap-1.5 text-[0.6875rem] text-brand-700">
+                <Loader2 size={12} className="animate-spin" /> Reading the document’s letterhead…
+              </p>
+            ) : headerFooter ? (
+              <p className="mt-auto inline-flex items-center gap-1.5 text-[0.6875rem] text-brand-700">
+                <FileText size={12} /> Pre-filled from {pickedFile?.name ?? 'the uploaded document'}.
+              </p>
+            ) : null}
+          </div>
+
+          {/* Right — live letterhead preview in the real report banner. */}
+          <div className="min-w-0 self-start rounded-[12px] border border-canvas-border overflow-hidden">
+            <ReportBrandBanner
+              title={trimmedName || headerFooter?.fields.auditTitle || 'Untitled Template'}
+              titleClassName="text-[1.375rem]"
+              eyebrow={headerFooter?.fields.reportId
+                ? <span className="font-mono text-[0.625rem] tracking-[0.04em] text-white/65">{headerFooter.fields.reportId.toUpperCase()}</span>
+                : undefined}
+              headerText={headerText.trim() || undefined}
+              footer={footerText.trim() ? (
+                <div className="flex items-center gap-2.5 border-t border-white/15 pt-3 text-[0.75rem]">
+                  <span className="text-[0.625rem] font-semibold uppercase tracking-wider text-white/50 shrink-0">Footer</span>
+                  <span className="text-white/80 truncate">{footerText}</span>
+                  {headerFooter?.pageNumberPattern && <span className="ml-auto shrink-0 text-white/55">{headerFooter.pageNumberPattern}</span>}
+                </div>
+              ) : undefined}
+            >
+              <p className="text-[0.875rem] text-white/75 truncate">{headerFooter?.fields.auditEntity || 'Custom template'}</p>
+            </ReportBrandBanner>
+            <div className="px-6 py-3.5 bg-white flex items-center gap-2 text-[0.75rem] text-ink-400">
+              <FileText size={13} className="text-brand-600" />
+              {sections.length} section{sections.length === 1 ? '' : 's'} · {typeLabel(reportType)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Step 4: name & save ──────────────────────────────────────────────── */}
       {step === 'save' && (
         <>
           <div className="flex-1 min-h-0 flex flex-col rounded-[12px] border border-canvas-border overflow-hidden">

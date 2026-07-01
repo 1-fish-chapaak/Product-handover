@@ -247,13 +247,86 @@ export type WorkflowResult = {
 // The bulk audit report detail page renders in a single editorial treatment.
 export type BulkAuditAestheticVariant = 'editorial';
 
+/** Page watermark config — a text or image mark laid diagonally across every
+ *  page, with opacity / rotation / size controls. */
+export type WatermarkConfig = {
+  enabled: boolean;
+  mode: 'text' | 'image';
+  text: string;
+  imageDataUrl?: string;
+  opacity: number;   // 0..1 (rendered fill)
+  rotation: number;  // degrees, -90..90
+  size: number;      // % of page width, 20..100
+};
+
+export const DEFAULT_WATERMARK: WatermarkConfig = {
+  enabled: false,
+  mode: 'text',
+  text: 'CONFIDENTIAL',
+  opacity: 0.08,
+  rotation: -35,
+  size: 60,
+};
+
+/** A section's block type (§4.7). Text is prose; KPI and Chart are *placeholders*
+ *  — they hold no numbers. Values come from trusted query data at generate time,
+ *  never scraped from an uploaded report. */
+export type SectionKind = 'text' | 'kpi' | 'chart';
+
+/** One section in a template outline. `guidance` is an optional plain-English
+ *  instruction that tells the AI *how* to write this section at generate time
+ *  ("under 150 words, executive tone"; "list only High/Medium findings"). */
+export type TemplateSection = {
+  name: string;
+  icon: string;
+  guidance?: string;
+  /** Block type (§4.7). Absent = text. */
+  kind?: SectionKind;
+  /** For KPI/chart blocks — which metric the block shows (user-chosen). */
+  metric?: string;
+  /** For chart blocks — the chart style. */
+  chartType?: 'bar' | 'line';
+};
+
+/** Governance lifecycle (§8). Teams generate from Approved templates; Drafts and
+ *  In-review are clearly marked so they aren't relied on prematurely. */
+export type TemplateStatus = 'draft' | 'in-review' | 'approved';
+
+export const TEMPLATE_STATUS_META: Record<TemplateStatus, { label: string; pill: string; dot: string }> = {
+  draft:       { label: 'Draft',     pill: 'bg-draft-50 text-ink-600 border-canvas-border', dot: 'bg-ink-400' },
+  'in-review': { label: 'In review', pill: 'bg-mitigated-50 text-mitigated-700 border-mitigated/40', dot: 'bg-mitigated-500' },
+  approved:    { label: 'Approved',  pill: 'bg-compliant-50 text-compliant-700 border-compliant/40', dot: 'bg-compliant-500' },
+};
+
+/** One entry in a template's version history — an immutable snapshot of the
+ *  outline + status at save time, for diff/rollback and the audit trail (§8). */
+export type TemplateVersion = {
+  version: string;            // "v1", "v2", …
+  status: TemplateStatus;
+  at: string;                 // ISO timestamp
+  by: string;                 // author display name
+  note: string;               // "Created", "Edited", "Approved", "Restored v2"
+  sections: TemplateSection[]; // full outline snapshot (for diff + rollback)
+};
+
 /** A report template plus the optional branding the Customize editor sets.
  *  Standard templates omit these; custom templates persist them. */
-export type EditableTemplate = typeof REPORT_TEMPLATES[number] & {
+export type EditableTemplate = Omit<typeof REPORT_TEMPLATES[number], 'sections'> & {
+  sections: TemplateSection[];
   brand?: string;
   theme?: string;
   headerText?: string;
   footerText?: string;
+  /** Brand logo (data URL) shown on the letterhead cover. */
+  logoDataUrl?: string;
+  /** Diagonal page watermark (text or image). */
+  watermark?: WatermarkConfig;
+  /** Governance lifecycle status (§8). Defaults to Draft when absent. */
+  status?: TemplateStatus;
+  /** Ordered version history (newest last), for diff / rollback / audit (§8). */
+  versions?: TemplateVersion[];
+  /** Free-form tags for findability once the library grows (§9). */
+  tags?: string[];
   /** The "golden copy": section names of the reference sample this template is
    *  validated against. Set when a Smart Upload is marked as the reference format;
    *  drives the format-match verdict on later uploads (Template Studio §5).

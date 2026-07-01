@@ -4,11 +4,11 @@ import FloatingLines from '../shared/FloatingLines';
 import ListToolbar, { ToolbarViewToggle } from '../shared/ListToolbar';
 import ColumnFilter from '../shared/ColumnFilter';
 import ReportCard from '../shared/ReportCard';
-import { BTN_CTA_PRIMARY, BTN_CTA_OUTLINE } from '../admin/adminTokens';
+import { BTN_CTA_PRIMARY } from '../admin/adminTokens';
 import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
-  X, Edit3, BookOpen, Upload, Trash2, Plus, Search, Layers, Check,
+  X, Edit3, BookOpen, Trash2, Plus, Search, Layers, Check, Activity,
   WifiOff, FileCheck2, FolderArchive, ShieldCheck, CloudUpload,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
@@ -27,8 +27,9 @@ import { type Tone } from '../shared/StatusBadge';
 import { ReportPill } from './ReportPill';
 import { reportDisplayName } from './reportName';
 import { TemplateEditor } from './TemplateEditor';
+import TemplateStartChooser from './TemplateStartChooser';
 import {
-  ICON_MAP, CATEGORY_COLORS, BLANK_TEMPLATE, mergeTemplateOptions,
+  ICON_MAP, CATEGORY_COLORS, BLANK_TEMPLATE, mergeTemplateOptions, TEMPLATE_STATUS_META,
   templateKind, reportKind, startReportDownload,
   type EditableTemplate, type GeneratedReport,
 } from './reportShared';
@@ -271,6 +272,11 @@ export default function ReportsView({
   // Drop any selection when the user leaves the current report list.
   useEffect(() => { setSelectedReportIds(new Set()); }, [reportType, activeTab, viewMode]);
   const [editingTemplate, setEditingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
+  // One-door "Create template" chooser (§3) — blank / from a standard / upload,
+  // all landing in the editor. `editorAutoImport` fires the import picker for the
+  // upload starting point.
+  const [showStartChooser, setShowStartChooser] = useState(false);
+  const [editorAutoImport, setEditorAutoImport] = useState(false);
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
   // Fallback store, used only when no customTemplates prop is supplied. In the
   // app, App.tsx owns the canonical list (and seeds SEED_APPROVED_TEMPLATE), so
@@ -1406,6 +1412,7 @@ export default function ReportsView({
             const sectionNames = rt.sections?.map(s => s.name) ?? [];
             const approvedSections = (rt as EditableTemplate).approvedSections;
             const hasApprovedFormat = isCustom && !!approvedSections?.length;
+            const cardStatus = isCustom ? ((rt as EditableTemplate).status ?? 'draft') : null;
             return (
               <motion.div
                 key={rt.id}
@@ -1440,8 +1447,21 @@ export default function ReportsView({
                 </div>
                 <h3 className="text-[0.9375rem] leading-[1.3] font-semibold tracking-tight text-ink-900 group-hover:text-brand-600 transition-colors mb-1.5">{rt.name}</h3>
                 <p className="text-[0.75rem] text-ink-500 leading-[1.55] line-clamp-2">{rt.desc}</p>
+                {isCustom && ((rt as EditableTemplate).tags?.length ?? 0) > 0 && (
+                  <div className="flex flex-wrap items-center gap-1 mt-2">
+                    {(rt as EditableTemplate).tags!.slice(0, 3).map(tag => (
+                      <span key={tag} className="inline-flex items-center h-5 px-1.5 rounded-full bg-brand-50 text-brand-700 text-[0.625rem] font-medium">{tag}</span>
+                    ))}
+                    {(rt as EditableTemplate).tags!.length > 3 && <span className="text-[0.625rem] text-ink-400">+{(rt as EditableTemplate).tags!.length - 3}</span>}
+                  </div>
+                )}
                 <div className="mt-auto pt-4 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
+                    {cardStatus && (
+                      <span className={`inline-flex items-center gap-1 h-6 px-2 rounded-full border text-[0.625rem] font-semibold whitespace-nowrap shrink-0 ${TEMPLATE_STATUS_META[cardStatus].pill}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${TEMPLATE_STATUS_META[cardStatus].dot}`} />{TEMPLATE_STATUS_META[cardStatus].label}
+                      </span>
+                    )}
                     {sectionNames.length > 0 ? (
                       <>
                         <span className="inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-600 tabular-nums whitespace-nowrap shrink-0">
@@ -1510,6 +1530,7 @@ export default function ReportsView({
             const sectionCount = rt.sections?.length ?? 0;
             const approvedSections = (rt as EditableTemplate).approvedSections;
             const hasApprovedFormat = isCustom && !!approvedSections?.length;
+            const cardStatus = isCustom ? ((rt as EditableTemplate).status ?? 'draft') : null;
             return (
               <motion.div
                 key={rt.id}
@@ -1539,6 +1560,11 @@ export default function ReportsView({
                 </div>
                 {/* Meta + actions — always visible (no hover fade). */}
                 <div className="shrink-0 flex items-center gap-3">
+                  {cardStatus && (
+                    <span className={`inline-flex items-center gap-1 h-6 px-2 rounded-full border text-[0.625rem] font-semibold whitespace-nowrap ${TEMPLATE_STATUS_META[cardStatus].pill}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${TEMPLATE_STATUS_META[cardStatus].dot}`} />{TEMPLATE_STATUS_META[cardStatus].label}
+                    </span>
+                  )}
                   <span className={`hidden md:inline w-[5.5rem] text-right text-[0.625rem] font-semibold uppercase tracking-[0.12em] ${eyebrowTone}`}>{rt.category}</span>
                   <span className="hidden sm:inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-600 tabular-nums whitespace-nowrap">
                     {sectionCount} {sectionCount === 1 ? 'section' : 'sections'}
@@ -1597,22 +1623,20 @@ export default function ReportsView({
 
           const q = templateSearch.trim().toLowerCase();
           const filteredCustom = q
-            ? customTemplates.filter(t => t.name.toLowerCase().includes(q) || (t.desc ?? '').toLowerCase().includes(q))
+            ? customTemplates.filter(t => t.name.toLowerCase().includes(q) || (t.desc ?? '').toLowerCase().includes(q) || ((t as EditableTemplate).tags ?? []).some(tag => tag.toLowerCase().includes(q)))
             : customTemplates;
           const filteredStandard = q
             ? REPORT_TEMPLATES.filter(t => t.name.toLowerCase().includes(q) || (t.desc ?? '').toLowerCase().includes(q))
             : REPORT_TEMPLATES;
 
-          // Shared toolbar actions — same Upload / New buttons on both sub-tabs.
+          // Single creation entry — "New template" opens the editor, which now
+          // hosts "Import from a report" (the former Upload-template flow, merged
+          // in). Format-checking an upload against a saved format still opens the
+          // upload modal via each template's "Check against this format" action.
           const templateToolbarActions = (
-            <>
-              <button type="button" className={BTN_CTA_OUTLINE} onClick={() => setShowUploadModal(true)}>
-                <Upload size={14} /> Upload template
-              </button>
-              <button type="button" className={BTN_CTA_PRIMARY} onClick={() => { setEditingTemplate(BLANK_TEMPLATE as typeof REPORT_TEMPLATES[number]); }}>
-                <Plus size={14} /> New template
-              </button>
-            </>
+            <button type="button" className={BTN_CTA_PRIMARY} onClick={() => setShowStartChooser(true)}>
+              <Plus size={14} /> New template
+            </button>
           );
 
           const noSearchMatch = (
@@ -1656,20 +1680,44 @@ export default function ReportsView({
               </div>
 
               <div className="space-y-5">
+              {/* §9 — template health: status across the custom library at a glance. */}
+              {customTemplates.length > 0 && (() => {
+                const counts: Record<'approved' | 'in-review' | 'draft', number> = { approved: 0, 'in-review': 0, draft: 0 };
+                customTemplates.forEach(t => { counts[((t as EditableTemplate).status ?? 'draft')] += 1; });
+                const stats = (['approved', 'in-review', 'draft'] as const).map(k => ({ key: k, ...TEMPLATE_STATUS_META[k], n: counts[k] }));
+                return (
+                  <section className="rounded-[12px] border border-canvas-border bg-canvas-elevated px-4 py-3">
+                    <div className="flex items-center gap-2 mb-2.5">
+                      <Activity size={14} className="text-brand-600" />
+                      <span className="text-[0.8125rem] font-semibold text-ink-800">Template health</span>
+                      <span className="text-[0.75rem] text-ink-400">· {customTemplates.length} custom template{customTemplates.length === 1 ? '' : 's'}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {stats.map(s => (
+                        <div key={s.key} className="inline-flex items-center gap-2 rounded-[9px] border border-canvas-border bg-white px-3 py-1.5">
+                          <span className={`w-2 h-2 rounded-full ${s.dot}`} />
+                          <span className="text-[0.9375rem] font-bold text-ink-900 tabular-nums leading-none">{s.n}</span>
+                          <span className="text-[0.75rem] text-ink-500">{s.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })()}
               {/* Standard gallery. */}
               <section>
-                {sectionLabel('Standard', REPORT_TEMPLATES.length)}
+                {sectionLabel('Standard', filteredStandard.length)}
                 {filteredStandard.length === 0 ? noSearchMatch : renderGallery(filteredStandard, false)}
               </section>
 
               {/* Custom gallery. */}
               <section>
-                {sectionLabel('Custom', customTemplates.length)}
+                {sectionLabel('Custom', filteredCustom.length)}
                 {customTemplates.length === 0 ? (
                   <EmptyState
-                    icon={Upload}
+                    icon={FileText}
                     title="No custom templates"
-                    body="Create a template from scratch or upload one to reuse it across reports."
+                    body="Create a template — start from scratch or import an existing report — to reuse it across reports."
                     size="compact"
                   />
                 ) : filteredCustom.length === 0 ? (
@@ -1731,14 +1779,29 @@ export default function ReportsView({
             initialName={editingTemplate.id === 'ct-blank' ? 'Untitled Template' : undefined}
             // Save dismisses everything (terminal); Cancel just closes the
             // editor so the still-mounted wizard reappears with its selections.
-            onClose={() => { setEditingTemplate(null); setWizardTemplate(null); }}
-            onCancel={() => setEditingTemplate(null)}
+            autoImport={editorAutoImport}
+            onClose={() => { setEditingTemplate(null); setWizardTemplate(null); setEditorAutoImport(false); }}
+            onCancel={() => { setEditingTemplate(null); setEditorAutoImport(false); }}
             onSaveNew={(created) => addCustomTemplate(created)}
             onSaveEdit={(updated) => updateCustomTemplate(updated)}
             existingTemplateNames={[...REPORT_TEMPLATES.map(t => t.name), ...customTemplates.map(t => t.name)]}
+            existingStructures={customTemplates
+              .filter(t => t.id !== editingTemplate!.id)
+              .map(t => ({ name: t.name, sectionNames: (t.sections ?? []).map(s => s.name) }))}
           />
         )}
       </AnimatePresence>
+
+      {/* One-door "Create template" starting-point chooser (§3). */}
+      {showStartChooser && (
+        <TemplateStartChooser
+          standards={REPORT_TEMPLATES.filter(t => t.category !== 'Custom')}
+          onClose={() => setShowStartChooser(false)}
+          onBlank={() => { setEditorAutoImport(false); setEditingTemplate(BLANK_TEMPLATE as typeof REPORT_TEMPLATES[number]); setShowStartChooser(false); }}
+          onStandard={(t) => { setEditorAutoImport(false); setEditingTemplate({ ...t, id: 'ct-blank' } as typeof REPORT_TEMPLATES[number]); setShowStartChooser(false); }}
+          onUpload={() => { setEditorAutoImport(true); setEditingTemplate(BLANK_TEMPLATE as typeof REPORT_TEMPLATES[number]); setShowStartChooser(false); }}
+        />
+      )}
 
       {/* Upload Template Modal */}
       <AnimatePresence>
