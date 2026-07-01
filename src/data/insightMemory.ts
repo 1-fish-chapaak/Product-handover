@@ -402,7 +402,7 @@ export const ENTITY_MEMORY: Record<string, EntityMemory> = {
     watchNote: 'On a standing high-risk watch (Enterprise Context · approved 11 Jun 2026).',
     alsoFlaggedIn: [
       { workflow: 'AP Ageing', detail: '90+ day bucket, 5 of last 6 runs', date: 'Jun 2026' },
-      { workflow: 'PO Leakage Analysis', detail: '₹4.1L billed over PO', date: '19 Jun 2026' },
+      { workflow: 'PO Leakage Analysis', detail: '₹4.1L billed over PO', date: 'Jun 2026' },
     ],
   },
   'Global Logistics Inc.': {
@@ -424,7 +424,18 @@ export interface OutputCompare {
   newFindings: { ref: string; detail: string }[];
   resolvedFindings: { ref: string; detail: string }[];
   carriedOver: number;
-  kpiDeltas: { label: string; current: string; previous: string; direction: 'up' | 'down' | 'flat' }[];
+  kpiDeltas: {
+    label: string;
+    current: string;
+    previous: string;
+    direction: 'up' | 'down' | 'flat';
+    /** Whether the movement is favourable. Drives the delta colour independent
+        of raw direction — more records processed is neutral, not a warning. */
+    sentiment: 'good' | 'bad' | 'neutral';
+    /** Pre-formatted magnitude of the change, sign implied by `direction`
+        (e.g. "1", "341", "₹2.5L"). Rendered as the coloured delta chip. */
+    delta: string;
+  }[];
 }
 
 export const RUN_OUTPUT_COMPARE: OutputCompare = {
@@ -439,9 +450,9 @@ export const RUN_OUTPUT_COMPARE: OutputCompare = {
     { ref: 'DG-011', detail: 'Northwind pair reconciled after vendor merge' },
   ],
   kpiDeltas: [
-    { label: 'Flags Raised', current: '8', previous: '9', direction: 'down' },
-    { label: 'Records Processed', current: '4,521', previous: '4,180', direction: 'up' },
-    { label: '$ at Risk', current: '₹49.6L', previous: '₹52.1L', direction: 'down' },
+    { label: 'Flags Raised', current: '8', previous: '9', direction: 'down', sentiment: 'good', delta: '1' },
+    { label: 'Records Processed', current: '4,521', previous: '4,180', direction: 'up', sentiment: 'neutral', delta: '341' },
+    { label: '$ at Risk', current: '₹49.6L', previous: '₹52.1L', direction: 'down', sentiment: 'good', delta: '₹2.5L' },
   ],
 };
 
