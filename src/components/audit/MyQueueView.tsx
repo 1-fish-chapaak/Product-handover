@@ -13,13 +13,14 @@ import {
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import Gated from '../shared/Gated';
+import { useCurrentUser } from '../../context/CurrentUserContext';
 import { ENGAGEMENTS, PROCESS_COLORS } from '../../data/engagements';
 import {
   ENGAGEMENT_EXCEPTIONS,
   type EngagementException,
   type Severity,
 } from '../../data/engagement-exceptions';
-import { CURRENT_USER, PEOPLE, slaStatus } from '../../data/grc-domain';
+import { CURRENT_USER, PEOPLE, myQueueFor, personForUser, slaStatus } from '../../data/grc-domain';
 
 interface Props {
   onOpenException: (engagementId: string, exceptionId: string) => void;
@@ -60,7 +61,8 @@ const TONE_BAR: Record<SlaTone, string> = {
 const SEVERITIES: Severity[] = ['Critical', 'High', 'Medium', 'Low'];
 const STATUSES: ExStatus[] = ['Open', 'Triaging'];
 
-/** Mock "closed this week" entries — demo richness only, behind the toggle. */
+/** Mock "closed this week" entries — demo richness only, behind the toggle.
+ *  Seeded against the fallback persona; re-assigned to the signed-in user at render. */
 const RESOLVED_THIS_WEEK: EngagementException[] = [
   { id: 'rx-9001', ref: 'EX-1180', engagementId: 'eng-3', workflowId: 'wf2',
     workflowName: 'Duplicate Invoice Detector',
@@ -94,6 +96,10 @@ const CLASSIFY_TEMPLATES: { id: string; label: string; tone: string; icon: typeo
 
 export default function MyQueueView({ onOpenException }: Props): JSX.Element {
   const { addToast } = useToast();
+  // The queue follows the real platform login: resolve the signed-in user to
+  // their engagement-roster person (fallback persona when signed out).
+  const { currentUser } = useCurrentUser();
+  const me = useMemo(() => personForUser(currentUser?.name), [currentUser?.name]);
 
   const [sevFilter, setSevFilter] = useState<Set<Severity>>(new Set());
   const [statusFilter, setStatusFilter] = useState<Set<ExStatus>>(new Set());
@@ -103,8 +109,13 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const myQueue = useMemo<EngagementException[]>(
-    () => ENGAGEMENT_EXCEPTIONS.filter(e => e.assignee === CURRENT_USER.name && e.status !== 'Resolved'),
-    [],
+    () => myQueueFor(ENGAGEMENT_EXCEPTIONS, me),
+    [me],
+  );
+
+  const resolvedThisWeek = useMemo<EngagementException[]>(
+    () => RESOLVED_THIS_WEEK.map(e => ({ ...e, assignee: me.name })),
+    [me.name],
   );
 
   const kpis = useMemo(() => {
@@ -122,7 +133,7 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
 
   const visible = useMemo(() => {
     const pool: EngagementException[] = showResolved
-      ? [...myQueue, ...RESOLVED_THIS_WEEK]
+      ? [...myQueue, ...resolvedThisWeek]
       : myQueue;
     const out = pool.filter(ex => {
       if (sevFilter.size > 0 && !sevFilter.has(ex.severity)) return false;
@@ -139,7 +150,7 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
         if (t !== 0) return t;
         return b.sla.pct - a.sla.pct;
       });
-  }, [myQueue, sevFilter, statusFilter, engFilter, showResolved]);
+  }, [myQueue, resolvedThisWeek, sevFilter, statusFilter, engFilter, showResolved]);
 
   const engagementOptions = useMemo(() => {
     const ids = new Set(myQueue.map(e => e.engagementId));
@@ -165,13 +176,14 @@ export default function MyQueueView({ onOpenException }: Props): JSX.Element {
               My Queue
             </div>
             <h1 className="text-[2rem] font-bold text-text leading-tight">
-              Welcome back, {CURRENT_USER.name}
+              My queue — {me.name}
             </h1>
             <p className="text-[0.8125rem] text-text-secondary mt-1.5 max-w-xl">
               Everything that&apos;s waiting on you across every engagement.
             </p>
           </div>
           <DelegationCard
+            meName={me.name}
             open={delegateOpen}
             onToggle={() => setDelegateOpen(v => !v)}
             onActivate={(d) => {
@@ -522,17 +534,16 @@ function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () 
 }
 
 function DelegationCard({
-  open, onToggle, onActivate,
+  meName, open, onToggle, onActivate,
 }: {
+  meName: string;
   open: boolean;
   onToggle: () => void;
   onActivate: (d: { from: string; until: string; to: string }) => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const inAWeek = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-  const [from, setFrom] = useState(today);
-  const [until, setUntil] = useState(inAWeek);
-  const [to, setTo] = useState(PEOPLE.find(p => p.name !== CURRENT_USER.name)?.name ?? PEOPLE[0].name);
+  const [from, setFrom] = useState(() => new Date().toISOString().slice(0, 10));
+  const [until, setUntil] = useState(() => new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
+  const [to, setTo] = useState(PEOPLE.find(p => p.name !== meName)?.name ?? PEOPLE[0].name);
 
   return (
     <div className="w-[300px] shrink-0 rounded-xl border border-border-light bg-white p-4 relative">
@@ -589,7 +600,7 @@ function DelegationCard({
                 <select value={to} onChange={e => setTo(e.target.value)}
                   className="w-full px-2 py-1.5 text-[0.6875rem] border border-border-light rounded-md bg-white text-text outline-none focus:border-primary/40 cursor-pointer"
                 >
-                  {PEOPLE.filter(p => p.name !== CURRENT_USER.name).map(p => (
+                  {PEOPLE.filter(p => p.name !== meName).map(p => (
                     <option key={p.id} value={p.name}>{p.name} — {p.role}</option>
                   ))}
                 </select>
