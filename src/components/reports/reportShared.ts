@@ -113,6 +113,39 @@ export function typeSectionsFor(type: ReportTypeName): TypeSection[] {
   return TYPE_SECTION_MAP[type] ?? [];
 }
 
+/** One-line "what belongs here" description per section. Shown as body copy in the
+ *  template preview and used as the starter text when a report is generated, so a
+ *  fresh section reads like a real report section. Keyword-matched so it fits
+ *  custom / imported section names, with a generic fallback. */
+const SECTION_BLURBS: { match: RegExp; blurb: string }[] = [
+  { match: /executive|summary/i, blurb: 'A high-level overview of the audit’s purpose, key findings, and overall opinion.' },
+  { match: /scope|objective/i, blurb: 'What the audit covered, the period reviewed, and the objectives it set out to test.' },
+  { match: /methodology/i, blurb: 'How the work was performed — approach, sampling, and the data sources used.' },
+  { match: /finding|observation|audit quer|issue/i, blurb: 'The issues identified during testing, each with evidence and a risk rating.' },
+  { match: /recommendation|management action|map\b/i, blurb: 'Actionable steps to address each finding and strengthen the control environment.' },
+  { match: /management response|response/i, blurb: 'Management’s agreed actions, owners, and target dates for each recommendation.' },
+  { match: /conclusion|opinion|assertion/i, blurb: 'The overall assessment and audit opinion based on the work performed.' },
+  { match: /sign-?off|approval/i, blurb: 'Approvals and signatures confirming the report is final.' },
+  { match: /control environment/i, blurb: 'An overview of the control environment relevant to the areas under review.' },
+  { match: /control testing|testing results/i, blurb: 'Results of control testing, showing design and operating effectiveness.' },
+  { match: /deficienc|exception|gap|non-?compliance/i, blurb: 'Control gaps and exceptions raised, with severity and the processes affected.' },
+  { match: /remediation|action plan/i, blurb: 'The plan to close each gap — owners, actions, and remediation timelines.' },
+  { match: /framework|regulat/i, blurb: 'The regulations and frameworks in scope for this assessment.' },
+  { match: /risk (finding|register)|register/i, blurb: 'The risks identified, captured as a register with context and ownership.' },
+  { match: /rating|significance|severity/i, blurb: 'How each item is rated for likelihood and impact, and why it matters.' },
+  { match: /heatmap/i, blurb: 'A visual summary of risks plotted by likelihood and impact.' },
+  { match: /mitigation|treatment/i, blurb: 'Planned mitigations or treatments for the significant risks.' },
+  { match: /action taken/i, blurb: 'The action taken against each original recommendation, with current status.' },
+  { match: /closure|classification|status/i, blurb: 'Closure status and classification for each item being tracked.' },
+  { match: /evidence/i, blurb: 'Supporting evidence and artefacts referenced by this report.' },
+  { match: /due date|timeline|due/i, blurb: 'Target and actual dates for the actions being tracked.' },
+  { match: /verification|auditor comment|management comment/i, blurb: 'Auditor verification notes and comments on the actions taken.' },
+];
+export function sectionBlurb(name: string): string {
+  const hit = SECTION_BLURBS.find(b => b.match.test(name));
+  return hit ? hit.blurb : 'Describe what this section will cover in the generated report.';
+}
+
 /** Coverage of a type's sections against the current/detected section names.
  *  `match` makes detection tolerant of naming variants. */
 export function sectionCoverage(type: ReportTypeName, sectionNames: string[]) {

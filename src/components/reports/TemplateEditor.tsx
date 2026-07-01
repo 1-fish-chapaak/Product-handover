@@ -1,7 +1,7 @@
 // Template authoring + apply surfaces, extracted from ReportsView:
 //   • TemplateEditor       — the brand/theme/header-footer/arrangement editor
 //   • ApplyTemplateDropdown — pick a template to apply to an open report
-//   • TemplateSectionRow / TemplateCarousel — internal helpers
+//   • ReportSectionBlock — internal draggable report-styled section
 // (mergeTemplateOptions lives in reportShared so this module exports only
 //  components, keeping React Fast Refresh intact.)
 // Depends only on the shared keystone, ReportDocumentChrome, and ConfirmDialog.
@@ -9,10 +9,9 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { motion, AnimatePresence, useDragControls } from 'motion/react';
 import {
-  Check, ChevronRight, FileText, GripVertical, Image, Layout,
-  Loader2, Palette, Plus, Trash2, Type, X,
+  Check, ChevronRight, FileText, GripVertical,
+  Loader2, Plus, Trash2, X, Pencil,
   ShieldCheck, BookOpen, Search, Upload, RotateCcw,
-  Hash, BarChart3, Table2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -34,15 +33,14 @@ import { useAuditLog } from '../../context/AdminDataContext';
 // turns amber and a hint warns about truncation, but saving is never blocked.
 const LETTERHEAD_SOFT_MAX = 60;
 
-// Consistent field label: a brand-tinted icon tile + label, with optional
-// right-aligned content (e.g. a character counter). Matches the editor's accent
-// tiles so the form reads as a designed panel, not a flat icon+text stack.
-function FieldLabel({ icon: Icon, children, right, required }: { icon: typeof FileText; children: ReactNode; right?: ReactNode; required?: boolean }) {
+// Plain field label — matches the platform's form convention (no per-field icon
+// tile, which over-spent the brand accent). Optional right-aligned content
+// (e.g. a character counter) and a required marker.
+function FieldLabel({ children, right, required }: { children: ReactNode; right?: ReactNode; required?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-2 mb-2">
-      <span className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800">
-        <span className="w-6 h-6 rounded-[7px] bg-brand-50 text-brand-600 flex items-center justify-center shrink-0"><Icon size={13} /></span>
-        {children}{required && <span className="text-risk-600" title="Required">*</span>}
+    <div className="flex items-center justify-between gap-2 mb-1.5">
+      <span className="text-[0.8125rem] font-semibold text-ink-800">
+        {children}{required && <span className="ml-0.5 text-risk-600" title="Required">*</span>}
       </span>
       {right}
     </div>
@@ -100,6 +98,22 @@ const IMPORT_SCAN_MESSAGES = [
   'Finalizing the import…',
 ];
 const IMPORT_MIN_MS = 2600;
+
+// Accepted source formats for "Import from a report". PDF is read for real —
+// its structure (section headings) and letterhead are detected and land in the
+// review canvas. Word and PowerPoint are accepted so the author can start from
+// the real deliverable, but layout auto-detection is PDF-only today, so those
+// seed the review canvas with the report type's recommended outline instead.
+// Honest by design (mirrors the upload modal's "Excel & CSV read for real").
+const IMPORT_ACCEPT = '.pdf,.doc,.docx,.ppt,.pptx';
+type ImportKind = 'pdf' | 'word' | 'ppt';
+const IMPORT_KIND_LABEL: Record<ImportKind, string> = { pdf: 'PDF', word: 'Word', ppt: 'PowerPoint' };
+function classifyImport(name: string): ImportKind | null {
+  if (/\.pdf$/i.test(name)) return 'pdf';
+  if (/\.docx?$/i.test(name)) return 'word';
+  if (/\.pptx?$/i.test(name)) return 'ppt';
+  return null;
+}
 
 // Full-bleed scan overlay shown over the editor while a report is being imported.
 // Reuses the upload flow's sweep-beam language so the wait feels transparent.
@@ -175,7 +189,6 @@ function ImportScanOverlay({ filename }: { filename: string }) {
     </motion.div>
   );
 }
-
 
 // ─── Apply Template Dropdown ───
 export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, onSelect, onClose, onSaveAsTemplate }: { templates?: typeof REPORT_TEMPLATES[number][]; activeId?: string | null; onSelect: (template: typeof REPORT_TEMPLATES[0]) => void; onClose: () => void; onSaveAsTemplate?: () => void }) {
@@ -271,39 +284,52 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
 
 // ─── Template Editor Modal ───
 
-// Compact, freely-draggable section row for the left-hand outline editor. The
-// row can be picked up by its grip and moved in ANY direction (not locked to a
-// vertical rail); on release it snaps into the slot nearest the drop point, so
-// dragging left↔right works as well as up↕down. Reordering drives the same
-// `sections` state the document preview renders from.
+// A section rendered as it prints in the report — an editorial numbered heading
+// (zero-padded brand index + title + a short brand tick, matching the report
+// reader) over a body placeholder shaped to the section's kind. It stays fully
+// editable: a grip in the left margin drags to reorder (freely, in any
+// direction — on release it snaps to the slot nearest the drop point), and a
+// hover control removes it. Reordering drives the same `sections` state.
 
-function LeftSectionRow({ section, index, onMove, listRef, onDelete }: {
+function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRename }: {
   section: TemplateSection;
   index: number;
   onMove: (from: number, to: number) => void;
   listRef: React.RefObject<HTMLDivElement | null>;
   onDelete: () => void;
+  onRename: (name: string) => void;
 }) {
   const kind = section.kind ?? 'text';
-  // KPI/chart/table blocks show a type icon + chip; text blocks use their own icon.
-  const SectionIcon = kind === 'kpi' ? Hash : kind === 'chart' ? BarChart3 : kind === 'table' ? Table2 : (SECTION_ICONS[section.icon] || FileText);
+  const metric = section.metric?.trim();
+  const typeLabel = kind === 'kpi' ? 'KPI' : kind === 'table' ? 'Table' : kind === 'chart' ? 'Chart' : null;
   const controls = useDragControls();
+  // Inline rename — a local draft keeps the field stable while typing (the parent
+  // only hears the new name on commit), then Enter/blur saves and Escape reverts.
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(section.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const startEdit = () => { setDraft(section.name); setEditing(true); requestAnimationFrame(() => inputRef.current?.select()); };
+  const commitEdit = () => {
+    const name = draft.trim();
+    setEditing(false);
+    if (name && name !== section.name) onRename(name);
+  };
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 4 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
-      transition={{ layout: { type: 'spring', stiffness: 420, damping: 36 }, duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ layout: { type: 'spring', stiffness: 420, damping: 36 }, duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
       drag
       dragSnapToOrigin
       dragElastic={0.2}
       dragControls={controls}
       dragListener={false}
-      whileDrag={{ scale: 1.03, zIndex: 50, boxShadow: '0 10px 26px rgba(15,8,30,0.18)' }}
+      whileDrag={{ scale: 1.01, zIndex: 50, boxShadow: '0 12px 30px rgba(15,8,30,0.16)' }}
       onDragEnd={(_, info) => {
-        // Reorder by where the row was dropped: count how many *other* rows sit
-        // above the drop point → that's the new insertion index.
+        // Reorder by where the block was dropped: count how many *other* blocks
+        // sit above the drop point → that's the new insertion index.
         const rows = listRef.current ? (Array.from(listRef.current.children) as HTMLElement[]) : [];
         const y = info.point.y;
         let target = 0;
@@ -314,105 +340,98 @@ function LeftSectionRow({ section, index, onMove, listRef, onDelete }: {
         });
         onMove(index, target);
       }}
-      className="group rounded-[9px] border border-canvas-border bg-white transition-colors hover:border-brand-600/40"
+      className="group relative border-x border-canvas-border bg-white px-9 py-6 transition-colors hover:bg-canvas/20"
     >
-      <div className="flex items-center gap-2 pl-1.5 pr-2 py-1.5">
+      {/* Drag grip — sits in the left margin, revealed on hover. */}
+      <button
+        onPointerDown={(e) => controls.start(e)}
+        aria-label={`Drag ${section.name} to reorder`}
+        className="no-focus-ring absolute left-2.5 top-6 text-ink-300 hover:text-brand-600 cursor-grab active:cursor-grabbing touch-none opacity-0 group-hover:opacity-100 transition-all"
+      >
+        <GripVertical size={15} />
+      </button>
+      {/* Edit + remove — revealed on hover, top-right. */}
+      <div className="absolute right-4 top-5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
         <button
-          onPointerDown={(e) => controls.start(e)}
-          aria-label={`Drag ${section.name} to reorder`}
-          className="no-focus-ring shrink-0 text-ink-300 hover:text-brand-600 cursor-grab active:cursor-grabbing touch-none transition-colors"
+          onClick={startEdit}
+          aria-label={`Rename ${section.name}`}
+          className="no-focus-ring w-7 h-7 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors"
         >
-          <GripVertical size={14} />
+          <Pencil size={14} />
         </button>
-        <span className="shrink-0 w-6 h-6 rounded-[6px] bg-brand-50 text-brand-600 flex items-center justify-center">
-          <SectionIcon size={13} />
-        </span>
-        <span className="flex-1 min-w-0 truncate text-[0.875rem] font-medium text-ink-800">{section.name}</span>
-        {/* Read-only type chip for placeholder blocks (set by import, not editable). */}
-        {kind !== 'text' && (
-          <span className="shrink-0 inline-flex items-center rounded-full bg-evidence-50 text-evidence-700 px-1.5 py-0.5 text-[0.5625rem] font-semibold uppercase tracking-wide">
-            {kind === 'kpi' ? 'KPI' : kind === 'table' ? 'Table' : 'Chart'}
-          </span>
-        )}
-        <span className="shrink-0 text-[0.75rem] text-ink-400 tabular-nums">{index + 1}</span>
         <button
           onClick={onDelete}
           aria-label={`Delete ${section.name}`}
-          className="no-focus-ring shrink-0 w-6 h-6 flex items-center justify-center rounded-[6px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer opacity-0 group-hover:opacity-100 transition-all"
+          className="no-focus-ring w-7 h-7 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer transition-colors"
         >
-          <Trash2 size={12} />
+          <Trash2 size={14} />
         </button>
       </div>
-    </motion.div>
-  );
-}
 
-// Document-preview section block. Reordering / deleting now lives in the left
-// outline, so the right pane renders these read-only as the report would print.
-function TemplateSectionRow({
-  section,
-  index,
-}: {
-  section: TemplateSection;
-  index: number;
-}) {
-  const kind = section.kind ?? 'text';
-  const SectionIcon = kind === 'kpi' ? Hash : kind === 'chart' ? BarChart3 : kind === 'table' ? Table2 : (SECTION_ICONS[section.icon] || FileText);
-  const metric = section.metric?.trim();
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      transition={{ layout: { type: 'spring', stiffness: 420, damping: 36 }, duration: 0.32, ease: [0.16, 1, 0.3, 1], delay: Math.min(index, 8) * 0.035 }}
-      className="relative rounded-[12px] border border-canvas-border bg-white px-5 py-4"
-    >
-      <div className="flex items-center gap-2.5 mb-3">
-        <SectionIcon size={16} className="shrink-0 text-brand-600" />
-        <h4 className="flex-1 min-w-0 truncate text-[0.875rem] font-bold text-ink-800 tracking-tight">{section.name}</h4>
-        {kind !== 'text' && (
-          <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-evidence-50 text-evidence-700 px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide">{kind === 'kpi' ? 'KPI' : kind === 'table' ? 'Table' : 'Chart'}</span>
+      {/* Editorial numbered heading — matches the report reader. Double-click or the
+          hover pencil turns it into an inline rename field. */}
+      <div className="flex items-start justify-between gap-4 pr-16">
+        <div className="flex items-baseline gap-3.5 min-w-0 flex-1">
+          <span className="shrink-0 text-[0.8125rem] font-semibold tabular-nums tracking-[0.16em] text-brand-700 leading-none">{String(index + 1).padStart(2, '0')}</span>
+          {editing ? (
+            <input
+              ref={inputRef}
+              value={draft}
+              autoFocus
+              onChange={e => setDraft(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
+                else if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
+              }}
+              onPointerDown={e => e.stopPropagation()}
+              aria-label="Section name"
+              className="min-w-0 flex-1 -my-0.5 px-1.5 py-0.5 rounded-[6px] bg-white border border-brand-400 text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15] focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+            />
+          ) : (
+            <h2 onDoubleClick={startEdit} title="Double-click to rename" className="min-w-0 truncate text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15] cursor-text">{section.name}</h2>
+          )}
+        </div>
+        {typeLabel && (
+          <span className="shrink-0 inline-flex items-center rounded-full bg-evidence-50 text-evidence-700 px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide">{typeLabel}</span>
         )}
-        <span className="shrink-0 text-[0.75rem] text-ink-400 tabular-nums whitespace-nowrap">Section {index + 1}</span>
       </div>
-      {kind === 'kpi' ? (
-        <div className="border border-dashed border-canvas-border rounded-[10px] bg-canvas/40 px-4 py-4 flex items-center gap-4">
-          <div className="shrink-0">
-            <div className="text-[1.75rem] font-bold text-ink-300 leading-none tabular-nums">—</div>
-            <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-1.5">{metric || 'Metric'}</div>
+      <span className="mt-3 block h-[2px] w-8 rounded-full bg-brand-500/80" aria-hidden="true" />
+
+      {/* Body placeholder — the shape of the content this section will hold. */}
+      <div className="mt-4 pl-[1.9rem]">
+        {kind === 'kpi' ? (
+          <div className="flex items-center gap-4">
+            <div className="shrink-0">
+              <div className="text-[1.75rem] font-bold text-ink-300 leading-none tabular-nums">—</div>
+              <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-1.5">{metric || 'Metric'}</div>
+            </div>
+            <p className="text-[0.75rem] text-ink-400 leading-relaxed">KPI filled from query data at generation.</p>
           </div>
-          <p className="text-[0.6875rem] text-ink-400/80 leading-relaxed">KPI placeholder — filled from query data at generation.</p>
-        </div>
-      ) : kind === 'chart' ? (
-        <div className="border border-dashed border-canvas-border rounded-[10px] bg-canvas/40 px-4 py-3">
-          <div className="flex items-end gap-1.5 h-14">
-            {(section.chartType ?? 'bar') === 'bar'
-              ? [40, 68, 30, 82, 54, 72].map((h, k) => <div key={k} className="flex-1 rounded-t-[3px] bg-ink-900/10" style={{ height: `${h}%` }} />)
-              : <svg viewBox="0 0 120 40" className="w-full h-full" preserveAspectRatio="none"><polyline points="0,32 24,20 48,26 72,10 96,16 120,6" fill="none" stroke="rgb(15 8 30 / 0.15)" strokeWidth="2" /></svg>}
+        ) : kind === 'chart' ? (
+          <div className="max-w-[75%]">
+            <div className="flex items-end gap-1.5 h-14">
+              {(section.chartType ?? 'bar') === 'bar'
+                ? [40, 68, 30, 82, 54, 72].map((h, k) => <div key={k} className="flex-1 rounded-t-[3px] bg-canvas-border" style={{ height: `${h}%` }} />)
+                : <svg viewBox="0 0 120 40" className="w-full h-full text-canvas-border" preserveAspectRatio="none"><polyline points="0,32 24,20 48,26 72,10 96,16 120,6" fill="none" stroke="currentColor" strokeWidth="2" /></svg>}
+            </div>
+            <p className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-2">{metric || 'Metric'} · {(section.chartType ?? 'bar')} chart</p>
           </div>
-          <p className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-2">{metric || 'Metric'} · {(section.chartType ?? 'bar')} chart placeholder</p>
-        </div>
-      ) : kind === 'table' ? (
-        <div className="border border-dashed border-canvas-border rounded-[10px] bg-canvas/40 px-4 py-3">
-          {/* A skeletal table grid — header row + a few empty body rows. */}
-          <div className="rounded-[6px] overflow-hidden border border-canvas-border/70">
-            <div className="grid grid-cols-4 bg-ink-900/[0.04]">
-              {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-4 border-r last:border-r-0 border-canvas-border/70" />)}
+        ) : kind === 'table' ? (
+          <div className="max-w-[90%] rounded-[6px] overflow-hidden border border-canvas-border">
+            <div className="grid grid-cols-4 bg-canvas">
+              {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-4 border-r last:border-r-0 border-canvas-border" />)}
             </div>
             {Array.from({ length: 3 }).map((_, r) => (
-              <div key={r} className="grid grid-cols-4 border-t border-canvas-border/70">
-                {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-4 border-r last:border-r-0 border-canvas-border/70" />)}
+              <div key={r} className="grid grid-cols-4 border-t border-canvas-border">
+                {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-4 border-r last:border-r-0 border-canvas-border" />)}
               </div>
             ))}
           </div>
-          <p className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mt-2">{metric || 'Table'} · table placeholder</p>
-        </div>
-      ) : (
-        <div className="border border-dashed border-canvas-border rounded-[10px] bg-canvas/40 px-5 py-6 text-center">
-          <p className="text-[0.75rem] text-ink-400/80">Section content generated from report data</p>
-        </div>
-      )}
+        ) : (
+          <p className="max-w-[80ch] text-[0.875rem] text-ink-500 leading-relaxed">{sectionBlurb(section.name)}</p>
+        )}
+      </div>
     </motion.div>
   );
 }
@@ -450,13 +469,11 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     setTagDraft('');
   };
   const logEvent = useAuditLog();
-  // Brand logo (letterhead) + diagonal page watermark — the full-document branding.
-  const [logoDataUrl, setLogoDataUrl] = useState<string | undefined>(template.logoDataUrl);
+  // Diagonal page watermark — the full-document branding.
   const [watermark, setWatermark] = useState<WatermarkConfig>(template.watermark ?? DEFAULT_WATERMARK);
-  const logoInputRef = useRef<HTMLInputElement>(null);
   const watermarkImgInputRef = useRef<HTMLInputElement>(null);
   const setWm = (patch: Partial<WatermarkConfig>) => setWatermark(w => ({ ...w, ...patch }));
-  // Read an uploaded image as a data URL (logo / watermark image). 2 MB cap.
+  // Read an uploaded image as a data URL (watermark image). 2 MB cap.
   const readImageFile = (file: File, onDone: (url: string) => void) => {
     if (!file.type.startsWith('image/')) { addToast({ type: 'error', message: 'Upload an image (PNG, JPG or SVG).' }); return; }
     if (file.size > 2 * 1024 * 1024) { addToast({ type: 'error', message: 'Image is too large — 2 MB max.' }); return; }
@@ -474,6 +491,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // Templates only produce the Internal Audit report, so the type is fixed — it
   // drives the §4.6 recommended sections + coverage, but there's no picker.
   const reportType = REPORT_TYPE;
+  const reportTypeLabel = REPORT_TYPE_LABEL;
   // Left settings column is split into two segmented groups so the form reads as
   // a structured panel instead of a flat six-field stack.
   const [panel, setPanel] = useState<'identity' | 'branding'>('identity');
@@ -496,15 +514,35 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   const [importing, setImporting] = useState(false);
   const [scanningName, setScanningName] = useState<string | null>(null);
   const [importedFrom, setImportedFrom] = useState<string | null>(null);
+  // Drag-and-drop: drop a report anywhere on the editor to import it. A depth
+  // counter avoids the flicker that dragenter/dragleave cause over child nodes.
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepth = useRef(0);
   // After a successful extraction the detected sections land in the shared review
   // canvas (§4) for curation — nothing is applied to the outline until the author
   // confirms. This is the same detect-and-curate step the format-check modal uses,
   // so "import" behaves identically to "upload".
-  const [pendingImport, setPendingImport] = useState<{ fileName: string; result: ReportStructure } | null>(null);
+  const [pendingImport, setPendingImport] = useState<{ fileName: string; kind: ImportKind; result: ReportStructure | null } | null>(null);
   const [reviewSections, setReviewSections] = useState<CanvasSection[]>([]);
   const handleImportFile = async (file: File) => {
-    if (!/\.pdf$/i.test(file.name)) {
-      addToast({ type: 'error', message: 'Import reads PDF reports. Upload a .pdf file.' });
+    const kind = classifyImport(file.name);
+    if (!kind) {
+      addToast({ type: 'error', message: 'Import reads PDF, Word or PowerPoint files. Choose a .pdf, .doc, .docx, .ppt or .pptx.' });
+      return;
+    }
+    // Word / PowerPoint: layout detection isn't available for these yet, so we
+    // don't run the scan theatre (nothing is being read). Instead seed the review
+    // canvas with the type's recommended outline — an honest head start from the
+    // real file — and let the author curate it exactly like a detected outline.
+    if (kind !== 'pdf') {
+      const recs = typeSectionsFor(reportType);
+      setReviewSections(recs.map((r, i) => ({
+        id: `imp-${i}-${r.name.toLowerCase().replace(/\s+/g, '-')}`,
+        name: r.name,
+        evidence: 'added',
+        kind: 'text',
+      })));
+      setPendingImport({ fileName: file.name, kind, result: null });
       return;
     }
     setImporting(true);
@@ -533,7 +571,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         // placeholders, so they show on the right with a type chip, not the left.
         source: s.kind === 'text' ? s.body : undefined,
       })));
-      setPendingImport({ fileName: file.name, result });
+      setPendingImport({ fileName: file.name, kind, result });
     } finally {
       setImporting(false);
       setScanningName(null);
@@ -546,7 +584,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   const applyImport = () => {
     if (!pendingImport) return;
     const { fileName, result } = pendingImport;
-    const hf = result.headerFooter;
+    const hf = result?.headerFooter;
     if (hf?.confidentiality || hf?.header.length) setHeaderText(hf.confidentiality || hf.header.join('  ·  '));
     if (hf?.footer.length) setFooterText(hf.footer.join('  ·  '));
     if (hf?.fields.auditEntity) setBrand(hf.fields.auditEntity);
@@ -563,15 +601,18 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       ...(s.metric ? { metric: s.metric } : {}),
     })));
     setImportedFrom(fileName);
+    const gotLetterhead = !!hf;
     addToast({
       type: 'success',
       message: kept.length > 0
-        ? `Imported ${kept.length} section${kept.length === 1 ? '' : 's'} and the letterhead from "${fileName}".`
-        : `Imported the letterhead from "${fileName}". No sections kept — add them below.`,
+        ? `Imported ${kept.length} section${kept.length === 1 ? '' : 's'}${gotLetterhead ? ' and the letterhead' : ''} from "${fileName}".`
+        : gotLetterhead
+          ? `Imported the letterhead from "${fileName}". No sections kept — add them below.`
+          : `Started from "${fileName}". No sections kept — add them below.`,
     });
     // §4.5 — headings with no content beneath aren't auto-added, but never silently
     // dropped: tell the user and offer a one-tap add-back.
-    const skipped = result.skipped;
+    const skipped = result?.skipped ?? [];
     if (skipped.length > 0) {
       addToast({
         type: 'info',
@@ -605,6 +646,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     }
     setSections(prev => [...prev, { name, icon: 'file-text' }]);
     setNewSectionName('');
+  };
+  // Rename a section in place — keyed by index so duplicate names stay distinct.
+  const renameSection = (index: number, name: string) => {
+    setSections(prev => prev.map((s, i) => (i === index ? { ...s, name } : s)));
   };
   // Move a section from one index to another (drag-drop reorder).
   const moveSection = (from: number, to: number) => {
@@ -674,7 +719,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     headerText: template.headerText ?? 'Confidential — For Internal Use Only',
     footerText: template.footerText ?? 'Generated by Irame',
     sections: seededSections,
-    logoDataUrl: template.logoDataUrl,
     watermark: template.watermark ?? DEFAULT_WATERMARK,
     tags: template.tags ?? [],
   }));
@@ -685,7 +729,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     headerText !== initial.headerText ||
     footerText !== initial.footerText ||
     sections !== initial.sections ||
-    logoDataUrl !== initial.logoDataUrl ||
     watermark !== initial.watermark ||
     tags !== initial.tags;
 
@@ -770,7 +813,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           theme,
           headerText: headerText.trim(),
           footerText: footerText.trim(),
-          logoDataUrl,
           watermark,
           tags,
         });
@@ -798,7 +840,6 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             theme,
             headerText: headerText.trim(),
             footerText: footerText.trim(),
-            logoDataUrl,
             watermark,
             tags,
           });
@@ -828,6 +869,27 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         role="dialog" aria-modal="true" aria-label="Edit Template"
         className="relative bg-canvas-elevated rounded-[16px] border border-canvas-border shadow-xl w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
+        onDragEnter={e => {
+          // Only react to file drags, and not while a scan/review is already up.
+          if (importing || pendingImport || !Array.from(e.dataTransfer.types).includes('Files')) return;
+          e.preventDefault();
+          dragDepth.current += 1;
+          setDragActive(true);
+        }}
+        onDragOver={e => { if (dragActive) e.preventDefault(); }}
+        onDragLeave={() => {
+          if (!dragActive) return;
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (dragDepth.current === 0) setDragActive(false);
+        }}
+        onDrop={e => {
+          if (!dragActive) return;
+          e.preventDefault();
+          dragDepth.current = 0;
+          setDragActive(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) void handleImportFile(f);
+        }}
       >
         <div className="px-7 py-2.5 border-b border-canvas-border flex items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -924,190 +986,78 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             </div>
 
             {panel === 'identity' ? (
-              <motion.div key="panel-identity" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }} className="flex-1 min-h-0 flex flex-col">
-                {/* One scroll region for the fields + outline, so the section list
-                    gets the full column height. Tabs (above) and the Add bar
-                    (below) stay pinned. */}
-                <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-3">
+              <motion.div key="panel-identity" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }} className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
+                {/* Details holds only the template's properties — name, brand, tags
+                    and letterhead. Section-building lives in the roomy right pane
+                    (next to its preview), so this column stays short and calm. */}
+                <div className="space-y-4">
+                  <div>
+                    <FieldLabel required>Template name</FieldLabel>
+                    <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value)} aria-invalid={nameTaken}
+                      placeholder="e.g. Internal Audit Report"
+                      className={`w-full h-10 px-3 rounded-lg border text-[0.8125rem] transition-colors placeholder:text-ink-400 focus:outline-none focus:ring-2 ${nameTaken ? 'border-mitigated/60 focus:border-mitigated focus:ring-mitigated/10' : 'border-canvas-border hover:border-ink-300 focus:border-brand-600/40 focus:ring-brand-600/10'}`} />
+                    {nameTaken && <p className="mt-1 text-[0.6875rem] text-mitigated-700">A template named “{copyName.trim()}” already exists — saving creates a copy.</p>}
+                  </div>
+                  <div>
+                    <FieldLabel>Brand name</FieldLabel>
+                    <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} placeholder="e.g. Irame" className="w-full h-10 px-3 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors placeholder:text-ink-400 hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                    <p className="mt-1 text-[0.6875rem] text-ink-400">The organisation shown on the report cover and letterhead.</p>
+                  </div>
+                  <div>
+                    <FieldLabel>Tags</FieldLabel>
+                    <div className="w-full flex flex-wrap items-center gap-1.5 px-2 py-1.5 rounded-lg border border-canvas-border bg-white transition-colors focus-within:border-brand-600/40 focus-within:ring-2 focus-within:ring-brand-600/10">
+                      {tags.map(t => (
+                        <span key={t} className="inline-flex items-center gap-1 h-6 pl-2 pr-1 rounded-full bg-brand-50 text-brand-700 text-[0.75rem] font-medium">
+                          {t}
+                          <button type="button" onClick={() => setTags(prev => prev.filter(x => x !== t))} aria-label={`Remove tag ${t}`} className="w-4 h-4 inline-flex items-center justify-center rounded-full text-brand-500 hover:text-brand-800 hover:bg-brand-100 transition-colors cursor-pointer"><X size={11} /></button>
+                        </span>
+                      ))}
+                      <input
+                        value={tagDraft}
+                        onChange={e => setTagDraft(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagDraft); }
+                          else if (e.key === 'Backspace' && !tagDraft && tags.length) setTags(prev => prev.slice(0, -1));
+                        }}
+                        onBlur={() => addTag(tagDraft)}
+                        placeholder={tags.length ? 'Add…' : 'e.g. quarterly, ISO 27001, EMEA'}
+                        className="flex-1 min-w-[90px] h-6 bg-transparent text-[0.8125rem] outline-none placeholder:text-ink-400"
+                      />
+                    </div>
+                    <p className="mt-1 text-[0.6875rem] text-ink-400">Press Enter or comma to add. Tags make this template easier to find.</p>
+                  </div>
+                </div>
+
+                {/* Letterhead — header & footer shown on every printed page. */}
+                <div className="mt-5 pt-4 border-t border-canvas-border">
+                  <GroupEyebrow hint="shown on every page">Letterhead</GroupEyebrow>
                   <div className="space-y-4">
                     <div>
-                      <FieldLabel icon={FileText} required>Template name</FieldLabel>
-                      <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value)} aria-invalid={nameTaken}
-                        placeholder="e.g. Internal Audit Report"
-                        className={`w-full px-3 py-2 rounded-[8px] border text-[0.875rem] transition-colors placeholder:text-ink-400 focus:outline-none focus:ring-2 ${nameTaken ? 'border-mitigated/60 focus:border-mitigated focus:ring-mitigated/10' : 'border-canvas-border hover:border-ink-300 focus:border-brand-600/40 focus:ring-brand-600/10'}`} />
-                      {nameTaken && <p className="mt-1 text-[0.6875rem] text-mitigated-700">A template named “{copyName.trim()}” already exists — saving creates a copy.</p>}
-                    </div>
-                    <div>
-                      <FieldLabel icon={Image}>Brand name</FieldLabel>
-                      <input ref={brandRef} value={brand} onChange={e => setBrand(e.target.value)} placeholder="e.g. Irame" className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] transition-colors placeholder:text-ink-400 hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
-                      <p className="mt-1 text-[0.6875rem] text-ink-400">The organisation shown on the report cover and letterhead.</p>
-                    </div>
-                    <div>
-                      <FieldLabel icon={Hash}>Tags</FieldLabel>
-                      <div className="w-full flex flex-wrap items-center gap-1.5 px-2 py-1.5 rounded-[8px] border border-canvas-border bg-white transition-colors focus-within:border-brand-600/40 focus-within:ring-2 focus-within:ring-brand-600/10">
-                        {tags.map(t => (
-                          <span key={t} className="inline-flex items-center gap-1 h-6 pl-2 pr-1 rounded-full bg-brand-50 text-brand-700 text-[0.75rem] font-medium">
-                            {t}
-                            <button type="button" onClick={() => setTags(prev => prev.filter(x => x !== t))} aria-label={`Remove tag ${t}`} className="w-4 h-4 inline-flex items-center justify-center rounded-full text-brand-500 hover:text-brand-800 hover:bg-brand-100 transition-colors cursor-pointer"><X size={11} /></button>
-                          </span>
-                        ))}
-                        <input
-                          value={tagDraft}
-                          onChange={e => setTagDraft(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagDraft); }
-                            else if (e.key === 'Backspace' && !tagDraft && tags.length) setTags(prev => prev.slice(0, -1));
-                          }}
-                          onBlur={() => addTag(tagDraft)}
-                          placeholder={tags.length ? 'Add…' : 'e.g. quarterly, ISO 27001, EMEA'}
-                          className="flex-1 min-w-[90px] h-6 bg-transparent text-[0.8125rem] outline-none placeholder:text-ink-400"
-                        />
-                      </div>
-                      <p className="mt-1 text-[0.6875rem] text-ink-400">Press Enter or comma to add. Tags make this template easier to find.</p>
-                    </div>
-                  </div>
-
-                  {/* Letterhead — header & footer sit before the sections, in their
-                      own labelled group (the Details rhythm: identity →
-                      letterhead → sections). */}
-                  <div className="mt-5 pt-4 border-t border-canvas-border">
-                    <GroupEyebrow hint="shown on every page">Letterhead</GroupEyebrow>
-                    <div className="space-y-4">
-                    <div>
                       <FieldLabel
-                        icon={Type}
                         right={<span className={`text-[0.6875rem] tabular-nums ${headerText.length > LETTERHEAD_SOFT_MAX ? 'text-risk-600 font-medium' : 'text-ink-400'}`}>{headerText.length}/{LETTERHEAD_SOFT_MAX}</span>}
                       >Header text</FieldLabel>
-                      <input value={headerText} onChange={e => setHeaderText(e.target.value)} placeholder="Confidential — For Internal Use Only" className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                      <input value={headerText} onChange={e => setHeaderText(e.target.value)} placeholder="Confidential — For Internal Use Only" className="w-full h-10 px-3 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
                       {headerText.length > LETTERHEAD_SOFT_MAX && <p className="mt-1 text-[0.6875rem] text-risk-600">Long header text may be truncated in the letterhead.</p>}
                     </div>
                     <div>
                       <FieldLabel
-                        icon={Layout}
                         right={<span className={`text-[0.6875rem] tabular-nums ${footerText.length > LETTERHEAD_SOFT_MAX ? 'text-risk-600 font-medium' : 'text-ink-400'}`}>{footerText.length}/{LETTERHEAD_SOFT_MAX}</span>}
                       >Footer text</FieldLabel>
-                      <input value={footerText} onChange={e => setFooterText(e.target.value)} placeholder="Generated by Irame" className="w-full px-3 py-2 rounded-[8px] border border-canvas-border text-[0.875rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
+                      <input value={footerText} onChange={e => setFooterText(e.target.value)} placeholder="Generated by Irame" className="w-full h-10 px-3 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10" />
                       {footerText.length > LETTERHEAD_SOFT_MAX && <p className="mt-1 text-[0.6875rem] text-risk-600">Long footer text may be truncated in the letterhead.</p>}
                     </div>
-                    </div>
                   </div>
-
-                  {/* Report Sections — the draggable outline, clubbed into Details.
-                      (Import from a report lives in the modal footer.) */}
-                  <div className="mt-5 pt-4 border-t border-canvas-border flex items-center justify-between gap-2">
-                    <label className="flex items-center gap-2 text-[0.75rem] font-semibold text-ink-800"><span className="w-6 h-6 rounded-[7px] bg-brand-50 text-brand-600 flex items-center justify-center shrink-0"><FileText size={13} /></span> Report sections</label>
-                    {sections.length > 0 && (
-                      <span className="inline-flex items-center h-5 px-2 rounded-full bg-canvas border border-canvas-border text-[0.75rem] font-medium text-ink-500 tabular-nums">{sections.length}</span>
-                    )}
-                  </div>
-
-                  {/* Added sections — only render the list (and its drag hint)
-                      once there's something in the outline. */}
-                  {sections.length > 0 && (
-                    <>
-                      <p className="pt-2 text-[0.75rem] text-ink-400">Drag to reorder · hover a row to remove.</p>
-                      <div ref={sectionsListRef} className="mt-2 space-y-1.5">
-                        <AnimatePresence initial={false}>
-                          {sections.map((section, i) => (
-                            <LeftSectionRow
-                              key={section.name}
-                              section={section}
-                              index={i}
-                              listRef={sectionsListRef}
-                              onMove={moveSection}
-                              onDelete={() => removeSection(i)}
-                            />
-                          ))}
-                        </AnimatePresence>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Recommendations — the primary way to build the outline. When
-                      it's empty these sit right under the header (no buried empty
-                      box) so the options are immediately obvious. */}
-                  {recommendations.length > 0 ? (
-                    <div className={sections.length > 0 ? 'mt-4 pt-4 border-t border-canvas-border' : 'mt-3'}>
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <div className="flex items-center gap-1.5 min-w-0 text-[0.75rem] font-semibold text-ink-700">
-                          <ShieldCheck size={13} className="text-brand-500 shrink-0" />
-                          <span className="truncate">Recommended for {REPORT_TYPE_LABEL}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => addSections(recommendations)}
-                          className="no-focus-ring shrink-0 text-[0.75rem] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer"
-                        >
-                          Add all
-                        </button>
-                      </div>
-                      <p className="text-[0.75rem] text-ink-400 mb-2.5">Tap a section to add it to your report.</p>
-                      <div className="space-y-1.5">
-                        <AnimatePresence initial={false}>
-                          {recommendations.map((rec, ri) => {
-                            const RecIcon = SECTION_ICONS[rec.icon] || FileText;
-                            return (
-                              <motion.button
-                                key={rec.name}
-                                type="button"
-                                layout
-                                initial={{ opacity: 0, y: 6 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.96 }}
-                                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: ri * 0.03 }}
-                                whileHover={{ y: -2 }}
-                          whileTap={{ scale: 0.98 }}
-                                onClick={() => addSections([rec])}
-                                className="no-focus-ring group/rec w-full flex items-center gap-2 rounded-[9px] border border-dashed border-canvas-border bg-canvas/30 pl-1.5 pr-2 py-1.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50/40 cursor-pointer"
-                              >
-                                <span className="shrink-0 w-6 h-6 rounded-[6px] bg-brand-50 text-brand-600 flex items-center justify-center"><RecIcon size={13} /></span>
-                                <span className="flex-1 min-w-0 truncate text-[0.875rem] font-medium text-ink-700">{rec.name}</span>
-                                <span className="shrink-0 w-5 h-5 rounded-full bg-brand-50 text-brand-500 flex items-center justify-center group-hover/rec:bg-brand-600 group-hover/rec:text-white transition-colors"><Plus size={12} /></span>
-                              </motion.button>
-                            );
-                          })}
-                        </AnimatePresence>
-                      </div>
-                    </div>
-                  ) : sections.length === 0 ? (
-                    <div className="mt-3 rounded-[10px] border border-dashed border-canvas-border bg-canvas/30 px-4 py-7 text-center">
-                      <FileText size={20} className="mx-auto text-ink-300 mb-2" />
-                      <p className="text-[0.875rem] font-semibold text-ink-800">No sections yet</p>
-                      <p className="text-[0.75rem] text-ink-400 mt-0.5">Pick a report type above to see recommendations, or type your own below.</p>
-                    </div>
-                  ) : null}
-                </div>
-                <div className="px-6 shrink-0 h-[58px] border-t border-canvas-border flex items-center gap-2">
-                  <input
-                    value={newSectionName}
-                    onChange={e => setNewSectionName(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSection(); } }}
-                    placeholder="Add a section, then press ↵"
-                    title="Type a section name and press Enter to add"
-                    className="flex-1 h-9 px-3 rounded-[8px] border border-canvas-border text-[0.875rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
-                  />
-                  <button
-                    onClick={addSection}
-                    disabled={!newSectionName.trim()}
-                    className={`no-focus-ring inline-flex items-center gap-1 h-9 px-3 text-[0.875rem] font-semibold rounded-[8px] transition-colors ${
-                      newSectionName.trim()
-                        ? 'text-white bg-brand-600 hover:bg-brand-500 cursor-pointer'
-                        : 'text-ink-400 bg-paper-100 border border-canvas-border cursor-not-allowed'
-                    }`}
-                  >
-                    <Plus size={14} /> Add
-                  </button>
                 </div>
               </motion.div>
             ) : (
-              <motion.div key="panel-branding" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }} className="flex-1 min-h-0 overflow-y-auto px-6 pt-1 pb-6">
-                <GroupEyebrow hint="applied to the report cover">Appearance</GroupEyebrow>
+              <motion.div key="panel-branding" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }} className="flex-1 min-h-0 overflow-y-auto px-6 pt-3 pb-6">
                 <div>
-                  <FieldLabel icon={Palette}>Color Theme</FieldLabel>
-                  {/* Theme cards — each shows its full colour palette (a dark →
-                      accent → light ramp) as a clean swatch bar, so the combination
-                      reads at a glance. No hex codes, just the colours. */}
-                  <div className="grid grid-cols-2 gap-2.5">
+                  {/* One eyebrow heads the group — no separate "Color Theme" label
+                      stacked under an "Appearance" eyebrow. */}
+                  <GroupEyebrow hint="applied to the report cover">Color Theme</GroupEyebrow>
+                  {/* Theme cards — the actual cover gradient as a swatch, so the
+                      combination reads at a glance. */}
+                  <div className="grid grid-cols-2 gap-2">
                     {[
                       { name: 'Purple & White', palette: ['#2e0a52', '#6a12cd', '#a855f7', '#ede9fe'] },
                       { name: 'Navy & Gold', palette: ['#0f1830', '#1a2744', '#c5a55a', '#ece1c5'] },
@@ -1131,10 +1081,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                           {/* The actual cover gradient (not flat swatches) so the
                               preview matches what this theme produces (#8). */}
                           <div
-                            className="h-11 rounded-[8px] ring-1 ring-inset ring-black/[0.06]"
+                            className="h-9 rounded-[8px] ring-1 ring-inset ring-black/[0.06]"
                             style={{ backgroundImage: `linear-gradient(125deg, ${TEMPLATE_THEME_GRADIENT[t.name][0]} 0%, ${TEMPLATE_THEME_GRADIENT[t.name][1]} 62%, ${TEMPLATE_THEME_GRADIENT[t.name][1]} 100%)` }}
                           />
-                          <div className="flex items-center justify-between gap-1 px-1 pt-2 pb-0.5">
+                          <div className="flex items-center justify-between gap-1 px-1 pt-1.5 pb-0.5">
                             <span className={`text-[0.75rem] font-medium truncate ${active ? 'text-brand-700' : 'text-ink-700'}`}>{t.name}</span>
                             {active && (
                               <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 22 }} className="shrink-0 w-4 h-4 rounded-full bg-brand-600 text-white flex items-center justify-center">
@@ -1146,33 +1096,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       );
                     })}
                   </div>
-                  <p className="mt-2.5 text-[0.75rem] text-ink-400">Sets the letterhead gradient shown in the preview.</p>
-                </div>
-
-                {/* Brand Logo — an image shown on the letterhead cover. */}
-                <div className="mt-5 pt-4 border-t border-canvas-border">
-                  <GroupEyebrow hint="shown on the letterhead">Brand Logo</GroupEyebrow>
-                  <input ref={logoInputRef} type="file" accept="image/*" className="hidden"
-                    onChange={e => { const f = e.target.files?.[0]; if (f) readImageFile(f, url => setLogoDataUrl(url)); if (logoInputRef.current) logoInputRef.current.value = ''; }} />
-                  {logoDataUrl ? (
-                    <div className="flex items-center gap-3 rounded-[10px] border border-canvas-border bg-canvas p-2.5">
-                      <div className="h-11 w-16 rounded-[6px] bg-white border border-canvas-border flex items-center justify-center overflow-hidden shrink-0">
-                        <img src={logoDataUrl} alt="Brand logo" className="max-h-9 max-w-[56px] object-contain" />
-                      </div>
-                      <button type="button" onClick={() => logoInputRef.current?.click()} className="text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer">Replace</button>
-                      <button type="button" onClick={() => setLogoDataUrl(undefined)} className="ml-auto text-[0.75rem] font-medium text-ink-400 hover:text-risk-600 transition-colors cursor-pointer">Remove</button>
-                    </div>
-                  ) : (
-                    <button type="button" onClick={() => logoInputRef.current?.click()}
-                      className="w-full flex items-center justify-center gap-2 rounded-[10px] border border-dashed border-canvas-border bg-canvas/40 px-3 py-3 text-[0.8125rem] font-medium text-ink-500 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/30 transition-colors cursor-pointer">
-                      <Upload size={15} /> Upload a logo
-                    </button>
-                  )}
-                  <p className="mt-1.5 text-[0.6875rem] text-ink-400">PNG, JPG or SVG · up to 2 MB.</p>
                 </div>
 
                 {/* Watermark — a diagonal text or image mark across every page. */}
-                <div className="mt-5 pt-4 border-t border-canvas-border">
+                <div className="mt-4 pt-3.5 border-t border-canvas-border">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Watermark <span className="font-normal normal-case tracking-normal text-ink-400">· diagonal mark on every page</span></span>
                     <Toggle checked={watermark.enabled} onChange={v => setWm({ enabled: v })} label="Enable watermark" />
@@ -1223,30 +1150,29 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             )}
           </div>
 
-          {/* Right pane — the template document itself, readable and edited in
-              place. The report cover, metadata, and section outline all live on
-              one full-size page; sections are added / reordered / deleted right
-              where they appear, so there's no separate detached editor card. */}
-          <div className="relative flex-1 min-w-0 flex flex-col bg-white min-h-0">
-            {/* Non-editable preview marker (#6). */}
-            <span className="pointer-events-none absolute top-3 left-4 z-30 inline-flex items-center rounded-full bg-white/15 border border-white/25 px-2.5 py-1 text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-white/90 backdrop-blur-sm">
-              Preview
-            </span>
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              <div className="relative">
+          {/* Right pane — a working preview of the report on a desk. A thin
+              builder toolbar (add + recommended) sits on top; below it the
+              template renders as the report page it will produce: gradient
+              letterhead cover, editorial numbered sections, footer strip. */}
+          <div className="relative flex-1 min-w-0 flex flex-col bg-canvas min-h-0">
+            {/* The report page — a white sheet on the canvas desk. Sections and the
+                composer that adds them both live INSIDE the page, the way the
+                finished report reads; there's no separate toolbar on top. */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
+              <div className="relative mx-auto w-full max-w-3xl rounded-[12px] shadow-[0_10px_34px_-14px_rgba(15,8,30,0.22)]">
                 <ReportBrandBanner
                   title={copyName || 'Untitled Template'}
                   titleClassName="text-[1.5rem]"
+                  className="rounded-t-[12px]"
                   gradient={TEMPLATE_THEME_GRADIENT[theme]}
                   headerText={headerText}
-                  actions={logoDataUrl ? <img src={logoDataUrl} alt="Brand logo" className="h-10 max-w-[128px] object-contain rounded-[4px] bg-white/95 px-1.5 py-1" /> : undefined}
                   footer={
                     /* All report facts live in the letterhead as one full-width
                        strip — no duplicated meta panel below. */
                     <div className="grid grid-cols-4 gap-6">
                       {[
                         { label: 'Brand', value: brand || 'Irame' },
-                        { label: 'Report Type', value: REPORT_TYPE_LABEL },
+                        { label: 'Report Type', value: reportTypeLabel },
                         { label: 'Generated On', value: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) },
                         { label: 'Sections', value: `${sections.length}` },
                       ].map(f => (
@@ -1261,42 +1187,103 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   <p className="text-[0.875rem] text-white/75">{template.desc || 'Custom report template'}</p>
                 </ReportBrandBanner>
 
-                {/* Section outline — read-only preview; editing lives in the left panel. */}
-                <div ref={sectionsRef} tabIndex={-1} className="px-9 pt-7 pb-7">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h3 className="flex items-center gap-2 text-[0.875rem] font-semibold text-ink-900"><FileText size={15} className="text-brand-600" /> Report Sections</h3>
-                    {sections.length > 0 && (
-                      <span className="inline-flex items-center h-6 px-2.5 rounded-full bg-canvas text-[0.75rem] font-medium text-ink-400 tabular-nums">{sections.length} {sections.length === 1 ? 'section' : 'sections'}</span>
-                    )}
+                {/* Sections — each drag-reorderable and removable on hover. */}
+                {sections.length > 0 && (
+                  <div ref={sectionsListRef}>
+                    <AnimatePresence initial={false}>
+                      {sections.map((section, i) => (
+                        <ReportSectionBlock
+                          key={section.name}
+                          section={section}
+                          index={i}
+                          listRef={sectionsListRef}
+                          onMove={moveSection}
+                          onDelete={() => removeSection(i)}
+                          onRename={name => renameSection(i, name)}
+                        />
+                      ))}
+                    </AnimatePresence>
                   </div>
+                )}
 
-                  {/* The live report preview. Recommendations live only in the left
-                      panel now, so the preview stays a clean document (no suggestion
-                      widget to scroll past below the sections). */}
-                  {sections.length > 0 ? (
-                    <div className="space-y-3.5">
-                      <AnimatePresence initial={false}>
-                        {sections.map((section, i) => (
-                          <TemplateSectionRow key={section.name} section={section} index={i} />
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  ) : (
-                    <div className="py-12 text-center">
-                      <div className="mx-auto w-12 h-12 rounded-full bg-brand-50 flex items-center justify-center mb-3.5">
-                        <FileText size={20} className="text-brand-300" />
+                {/* Composer — add a section, in the flow of the document (not a
+                    detached toolbar). Recommended sections sit right beneath it. */}
+                <div ref={sectionsRef} tabIndex={-1} className="border-x border-canvas-border bg-white px-9 pt-5 pb-7">
+                  {sections.length === 0 && (
+                    <p className="mb-3 text-[0.8125rem] text-ink-400">This report has no sections yet — add one below, or tap a recommended section.</p>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={newSectionName}
+                      onChange={e => setNewSectionName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSection(); } }}
+                      placeholder="Add a section, then press ↵"
+                      title="Type a section name and press Enter to add"
+                      className="flex-1 h-10 px-3 rounded-lg border border-dashed border-canvas-border bg-canvas/30 text-[0.8125rem] transition-colors hover:border-brand-300 focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10"
+                    />
+                    <button
+                      onClick={addSection}
+                      disabled={!newSectionName.trim()}
+                      className={`no-focus-ring inline-flex items-center gap-1 h-10 px-4 text-[0.8125rem] font-semibold rounded-lg transition-colors ${
+                        newSectionName.trim()
+                          ? 'text-white bg-brand-600 hover:bg-brand-500 cursor-pointer'
+                          : 'text-text-muted bg-canvas-border cursor-not-allowed'
+                      }`}
+                    >
+                      <Plus size={14} /> Add
+                    </button>
+                  </div>
+                  {recommendations.length > 0 && (
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-1.5 min-w-0 text-[0.75rem] font-semibold text-ink-600">
+                          <ShieldCheck size={13} className="text-brand-500 shrink-0" />
+                          <span className="truncate">Recommended for {reportTypeLabel}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => addSections(recommendations)}
+                          className="no-focus-ring shrink-0 text-[0.75rem] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer"
+                        >
+                          Add all
+                        </button>
                       </div>
-                      <p className="text-[0.875rem] font-semibold text-ink-700">Your report is empty</p>
-                      <p className="text-[0.75rem] text-ink-400 mt-1 max-w-[300px] mx-auto leading-relaxed">
-                        Add {REPORT_TYPE_LABEL} sections from the left, and they'll preview here.
-                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        <AnimatePresence initial={false}>
+                          {recommendations.map((rec, ri) => {
+                            const RecIcon = SECTION_ICONS[rec.icon] || FileText;
+                            return (
+                              <motion.button
+                                key={rec.name}
+                                type="button"
+                                layout
+                                initial={{ opacity: 0, scale: 0.96 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.94 }}
+                                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1], delay: ri * 0.02 }}
+                                whileTap={{ scale: 0.97 }}
+                                onClick={() => addSections([rec])}
+                                className="no-focus-ring group/rec inline-flex items-center gap-1.5 h-8 pl-1.5 pr-3 rounded-full border border-dashed border-canvas-border bg-canvas/40 text-[0.8125rem] font-medium text-ink-700 transition-colors hover:border-brand-300 hover:bg-brand-50/50 hover:text-brand-700 cursor-pointer"
+                              >
+                                <span className="shrink-0 w-5 h-5 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center group-hover/rec:bg-brand-600 group-hover/rec:text-white transition-colors"><RecIcon size={11} /></span>
+                                {rec.name}
+                              </motion.button>
+                            );
+                          })}
+                        </AnimatePresence>
+                      </div>
                     </div>
                   )}
                 </div>
 
+                {/* Footer strip — closes the page. */}
+                <div className="border-x border-b border-canvas-border bg-canvas/60 rounded-b-[12px] px-9 py-3 flex items-center justify-center">
+                  <span className="text-[0.6875rem] text-ink-400 tracking-wide">{footerText || 'Generated by Irame'}</span>
+                </div>
+
                 {/* Watermark — a diagonal text/image mark stamped across the page. */}
                 {watermark.enabled && (watermark.mode === 'text' ? watermark.text.trim() : watermark.imageDataUrl) && (
-                  <div className="pointer-events-none absolute inset-0 z-[6] flex items-center justify-center overflow-hidden">
+                  <div className="pointer-events-none absolute inset-0 z-[6] flex items-center justify-center overflow-hidden rounded-[12px]">
                     {watermark.mode === 'text' ? (
                       <span
                         className="font-extrabold uppercase tracking-[0.15em] whitespace-nowrap text-ink-900 select-none leading-none"
@@ -1316,25 +1303,21 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                 )}
               </div>
             </div>
-            {footerText && (
-              <div className="shrink-0 px-9 h-[58px] flex items-center border-t border-canvas-border">
-                <p className="text-[0.75rem] text-ink-400">{footerText}</p>
-              </div>
-            )}
           </div>
         </div>
 
         <div className="px-7 py-2.5 border-t border-canvas-border flex items-center justify-between gap-2 shrink-0">
           {/* Left — import from a report (the merged "Upload template" path). Reads
-              a PDF and pre-fills the outline + letterhead. */}
-          <div className="min-w-0">
-            <input ref={importInputRef} type="file" accept=".pdf" className="hidden"
+              a PDF for its outline + letterhead; Word/PPT start from the recommended
+              outline. Drop a file anywhere on the editor, or click to browse. */}
+          <div className="min-w-0 flex items-center gap-2.5">
+            <input ref={importInputRef} type="file" accept={IMPORT_ACCEPT} className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) void handleImportFile(f); if (importInputRef.current) importInputRef.current.value = ''; }} />
             <button
               type="button"
               onClick={() => importInputRef.current?.click()}
               disabled={isSaving || importing}
-              title="Pull the section outline + header/footer from an existing PDF report"
+              title="Start from an existing report — PDF (outline + letterhead detected), Word or PowerPoint"
               className="inline-flex items-center gap-1.5 h-9 px-4 rounded-[8px] border border-canvas-border bg-white text-brand-700 text-[0.8125rem] font-semibold transition-colors hover:bg-brand-50 hover:border-brand-300 cursor-pointer disabled:opacity-60 disabled:cursor-wait max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
             >
               {importing
@@ -1343,6 +1326,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   ? <><FileText size={15} className="shrink-0" /> <span className="truncate">Imported · {importedFrom}</span> <RotateCcw size={13} className="shrink-0 opacity-70" /></>
                   : <><Upload size={15} className="shrink-0" /> Import from a report</>}
             </button>
+            {!importing && !importedFrom && (
+              <span className="hidden sm:inline text-[0.6875rem] text-ink-400 whitespace-nowrap">or drop a PDF, Word or PowerPoint file</span>
+            )}
           </div>
           {/* Right — primary actions. */}
           <div className="flex items-center gap-2 shrink-0">
@@ -1364,6 +1350,31 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           </div>
         </div>
 
+        {/* Drop-to-import affordance — shown whenever a file is dragged over the
+            editor. The whole modal is the drop target, so there's nothing to aim at. */}
+        <AnimatePresence>
+          {dragActive && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.14 }}
+              className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-brand-950/40 backdrop-blur-[2px] pointer-events-none"
+            >
+              <div className="w-full h-full rounded-[14px] border-2 border-dashed border-brand-300 bg-canvas-elevated/95 flex flex-col items-center justify-center gap-3 text-center px-8">
+                <motion.span
+                  initial={{ scale: 0.9 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 320, damping: 20 }}
+                  className="w-14 h-14 rounded-[14px] bg-brand-50 text-brand-600 flex items-center justify-center"
+                >
+                  <Upload size={24} />
+                </motion.span>
+                <div>
+                  <div className="text-[0.9375rem] font-semibold text-ink-900">Drop to import from a report</div>
+                  <div className="mt-1 text-[0.8125rem] text-ink-500">PDF, Word or PowerPoint · we detect the outline from PDFs</div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Import-from-a-report extraction theatre — covers the editor while the
             PDF is read, then dismisses as the fields populate. */}
         <AnimatePresence>
@@ -1376,7 +1387,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         <AnimatePresence>
           {pendingImport && (() => {
             const namedCount = reviewSections.filter(s => s.name.trim()).length;
-            const hasLetterhead = !!pendingImport.result.headerFooter;
+            const isPdf = pendingImport.kind === 'pdf';
+            const hasLetterhead = !!pendingImport.result?.headerFooter;
+            const kindLabel = IMPORT_KIND_LABEL[pendingImport.kind];
             return (
               <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -1387,8 +1400,15 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><FileText size={16} /></div>
                     <div className="min-w-0">
-                      <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">Review detected sections</h3>
-                      <p className="text-[0.75rem] text-ink-500 leading-snug truncate">From {pendingImport.fileName} — curate before adding to the outline.</p>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">{isPdf ? 'Review detected sections' : 'Review the recommended outline'}</h3>
+                        <span className="shrink-0 inline-flex items-center rounded-full bg-paper-100 text-ink-500 text-[0.625rem] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5">{kindLabel}</span>
+                      </div>
+                      <p className="text-[0.75rem] text-ink-500 leading-snug truncate">
+                        {isPdf
+                          ? <>From {pendingImport.fileName} — curate before adding to the outline.</>
+                          : <>Layout detection isn't available for {kindLabel} yet — start from the recommended {reportTypeLabel} outline, then adjust.</>}
+                      </p>
                     </div>
                   </div>
                   <button onClick={cancelImport} aria-label="Cancel import" className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0"><X size={16} /></button>
@@ -1398,12 +1418,12 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     sections={reviewSections}
                     onSectionsChange={setReviewSections}
                     reportType={reportType}
-                    reportTypeLabel={REPORT_TYPE_LABEL}
+                    reportTypeLabel={reportTypeLabel}
                   />
                 </div>
                 <footer className="shrink-0 px-6 py-3.5 border-t border-canvas-border flex items-center justify-between gap-3">
                   <span className="text-[0.75rem] text-ink-500">
-                    {namedCount} section{namedCount === 1 ? '' : 's'} · {hasLetterhead ? 'letterhead captured' : 'no letterhead found'}
+                    {namedCount} section{namedCount === 1 ? '' : 's'} · {isPdf ? (hasLetterhead ? 'letterhead captured' : 'no letterhead found') : `recommended ${reportTypeLabel} outline`}
                   </span>
                   <div className="flex items-center gap-3">
                     <button onClick={cancelImport} className="inline-flex items-center justify-center h-9 px-4 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-paper-50 transition-colors cursor-pointer rounded-[8px]">Cancel</button>
@@ -1433,7 +1453,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         onConfirm={() => { setMissingConfirm(null); handleSave(true); }}
         title={`Save without ${missingConfirm && missingConfirm.length > 1 ? 'these sections' : 'this section'}?`}
         description={
-          <>A standard <span className="font-semibold">{REPORT_TYPE_LABEL}</span> report usually includes {missingConfirm?.map(n => `“${n}”`).join(', ')}. You can save without {missingConfirm && missingConfirm.length > 1 ? 'them' : 'it'} and add {missingConfirm && missingConfirm.length > 1 ? 'them' : 'it'} later.</>
+          <>A standard <span className="font-semibold">{reportTypeLabel}</span> report usually includes {missingConfirm?.map(n => `“${n}”`).join(', ')}. You can save without {missingConfirm && missingConfirm.length > 1 ? 'them' : 'it'} and add {missingConfirm && missingConfirm.length > 1 ? 'them' : 'it'} later.</>
         }
         confirmLabel="Save anyway"
       />

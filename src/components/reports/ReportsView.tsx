@@ -8,7 +8,7 @@ import { BTN_CTA_PRIMARY } from '../admin/adminTokens';
 import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
-  X, Edit3, BookOpen, Trash2, Plus, Search, Layers, Check,
+  X, Edit3, BookOpen, Trash2, Plus, Search, Layers, Check, Pencil,
   WifiOff, FileCheck2, FolderArchive, CloudUpload,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
@@ -299,6 +299,22 @@ export default function ReportsView({
     else setCustomTemplatesLocal(prev => prev.map(x => x.id === t.id ? t : x));
   };
   const [templateToDelete, setTemplateToDelete] = useState<{ id: string; name: string } | null>(null);
+  // Inline rename from the template list — no need to open the full editor just to
+  // change a name. `renamingId` marks the row in edit mode; the draft commits on
+  // Enter/blur, reverts on Escape, and is guarded against blank / duplicate names.
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const startRename = (rt: { id: string; name: string }) => { setRenamingId(rt.id); setRenameDraft(rt.name); };
+  const commitRename = (rt: EditableTemplate) => {
+    const name = renameDraft.trim();
+    setRenamingId(null);
+    if (!name || name === rt.name) return;
+    const clash = [...REPORT_TEMPLATES.map(x => x.name), ...customTemplates.filter(x => x.id !== rt.id).map(x => x.name)]
+      .some(n => n.toLowerCase() === name.toLowerCase());
+    if (clash) { addToast({ type: 'error', message: `A template named "${name}" already exists.` }); return; }
+    updateCustomTemplate({ ...rt, name });
+    addToast({ type: 'success', message: `Renamed to "${name}".` });
+  };
   // Templates tab: Standard and Custom galleries render together on one page.
   // Grid/list is the section-wide `viewMode` (shared with My Reports / Shared),
   // so the view preference and its `list` default stay consistent across tabs.
@@ -1423,7 +1439,24 @@ export default function ReportsView({
                     </span>
                   </div>
                 </div>
-                <h3 className="text-[0.9375rem] leading-[1.3] font-semibold tracking-tight text-ink-900 group-hover:text-brand-600 transition-colors mb-1.5">{rt.name}</h3>
+                {isCustom && renamingId === rt.id ? (
+                  <input
+                    autoFocus
+                    value={renameDraft}
+                    onClick={e => e.stopPropagation()}
+                    onChange={e => setRenameDraft(e.target.value)}
+                    onBlur={() => commitRename(rt as EditableTemplate)}
+                    onKeyDown={e => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') { e.preventDefault(); commitRename(rt as EditableTemplate); }
+                      else if (e.key === 'Escape') { e.preventDefault(); setRenamingId(null); }
+                    }}
+                    aria-label="Template name"
+                    className="w-full mb-1.5 px-1.5 py-0.5 -ml-1.5 rounded-[6px] bg-white border border-brand-400 text-[0.9375rem] leading-[1.3] font-semibold tracking-tight text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+                  />
+                ) : (
+                  <h3 onDoubleClick={isCustom ? (e) => { e.stopPropagation(); startRename(rt); } : undefined} className="text-[0.9375rem] leading-[1.3] font-semibold tracking-tight text-ink-900 group-hover:text-brand-600 transition-colors mb-1.5">{rt.name}</h3>
+                )}
                 <p className="text-[0.75rem] text-ink-500 leading-[1.55] line-clamp-2">{rt.desc}</p>
                 {isCustom && ((rt as EditableTemplate).tags?.length ?? 0) > 0 && (
                   <div className="flex flex-wrap items-center gap-1 mt-2">
@@ -1449,6 +1482,17 @@ export default function ReportsView({
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    {isCustom && (
+                      <ActionTooltip label="Rename">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); startRename(rt); }}
+                          aria-label={`Rename template ${rt.name}`}
+                          className="w-7 h-7 flex items-center justify-center rounded-full text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] transition-colors duration-200 cursor-pointer"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      </ActionTooltip>
+                    )}
                     {isCustom && (
                       <ActionTooltip label="Edit">
                         <button
@@ -1502,7 +1546,24 @@ export default function ReportsView({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-[0.8125rem] font-semibold text-ink-900 truncate group-hover:text-brand-700 transition-colors">{rt.name}</span>
+                    {isCustom && renamingId === rt.id ? (
+                      <input
+                        autoFocus
+                        value={renameDraft}
+                        onClick={e => e.stopPropagation()}
+                        onChange={e => setRenameDraft(e.target.value)}
+                        onBlur={() => commitRename(rt as EditableTemplate)}
+                        onKeyDown={e => {
+                          e.stopPropagation();
+                          if (e.key === 'Enter') { e.preventDefault(); commitRename(rt as EditableTemplate); }
+                          else if (e.key === 'Escape') { e.preventDefault(); setRenamingId(null); }
+                        }}
+                        aria-label="Template name"
+                        className="w-full max-w-xs px-1.5 py-0.5 -ml-1.5 rounded-[6px] bg-white border border-brand-400 text-[0.8125rem] font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+                      />
+                    ) : (
+                      <span onDoubleClick={isCustom ? (e) => { e.stopPropagation(); startRename(rt); } : undefined} className="text-[0.8125rem] font-semibold text-ink-900 truncate group-hover:text-brand-700 transition-colors">{rt.name}</span>
+                    )}
                   </div>
                   <p className="text-[0.75rem] text-ink-400 truncate leading-snug">{rt.desc}</p>
                 </div>
@@ -1513,6 +1574,17 @@ export default function ReportsView({
                     {sectionCount} {sectionCount === 1 ? 'section' : 'sections'}
                   </span>
                   <div className="flex items-center gap-0.5 pl-1">
+                    {isCustom && (
+                      <ActionTooltip label="Rename">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); startRename(rt); }}
+                          aria-label={`Rename template ${rt.name}`}
+                          className="w-7 h-7 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] transition-colors cursor-pointer"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      </ActionTooltip>
+                    )}
                     {isCustom && (
                       <ActionTooltip label="Edit">
                         <button

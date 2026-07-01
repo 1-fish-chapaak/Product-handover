@@ -48,6 +48,23 @@ const PAGE_NUM_RE = /^(page\s*)?\d+(\s*(of|\/)\s*\d+)?$/i;
 const PAGE_NUM_TOKEN_RE = /\b(page\s*\d+(\s*of\s*\d+)?|\d+\s*\/\s*\d+)\b/i;
 const CONFIDENTIALITY_RE = /\b(strictly confidential|confidential|internal use only|for internal use|restricted|private and confidential|draft)\b/i;
 
+// ─── Size-independent heading signals ───
+// A heading is often NOT larger than the body — it's bold, ALL-CAPS, or numbered.
+// Relying on font size alone misses every such heading, so a fresh export (Word /
+// Google Docs / letters) can detect zero sections. These text-shape signals catch
+// headings the size test can't, so detection works on real documents, not just
+// ones with an oversized heading font.
+
+// A numbered section heading: "1 Introduction", "2.1 Scope", "3.2.4 Findings",
+// optionally prefixed with a structural word. The trailing \p{L} requires a word
+// after the number, so a bare "3" or a figure of "1,204" never qualifies.
+const HEADING_NUM_RE = /^(?:section|part|chapter|step|phase)?\s*\d+(?:\.\d+)*[.):]?\s+\p{L}[\p{L} ]/iu;
+// A lettered appendix / annexure heading: "Appendix A", "Annexure II — Evidence".
+const HEADING_ALPHA_RE = /^(?:appendix|annex(?:ure)?|schedule|exhibit)\s+[A-Z0-9]{1,3}\b/i;
+// ALL-CAPS heading: at least two capital letters, no lowercase, reasonably short.
+// "EXECUTIVE SUMMARY", "BACKGROUND & SCOPE". A body line is rarely fully upper-case.
+const isAllCapsHeading = (t: string) => /[A-Z]{2}/.test(t) && !/\p{Ll}/u.test(t) && t.length <= 64;
+
 interface Line { y: number; text: string; size: number }
 
 /** Normalize a line for the repetition test: lowercase, collapse whitespace, and
@@ -88,7 +105,28 @@ function itemsToLines(items: { str: string; transform: number[]; width?: number;
     let cell: typeof parts = [];
     const flush = () => {
       if (cell.length === 0) return;
-      const text = cell.map(p => p.str).join('').replace(/\s+/g, ' ').trim();
+      // Join the runs within a cell, inserting a space where there's a visible
+      // horizontal gap between two runs and neither side already carries one.
+      // pdf.js often splits a label and its value ("Report period" | "FY2026"),
+      // or adjacent words / table sub-cells, into separate runs with no explicit
+      // space glyph — a bare join() jams them into "Report periodFY2026". A gap
+      // wider than a fraction of the em is the boundary a space would occupy.
+      let text = '';
+      cell.forEach((p, i) => {
+        if (i > 0) {
+          const prev = cell[i - 1];
+          const em = p.size || prev.size || 4;
+          // Estimate a run's advance when pdf.js reports no width (~half an em per
+          // char), so a zero-width run doesn't defeat the gap test and jam its
+          // neighbour ("Total48"). Insert a space when the gap is space-sized and
+          // there isn't already a boundary space on either side.
+          const prevW = prev.w > 0 ? prev.w : prev.str.length * em * 0.5;
+          const g = p.x - (prev.x + prevW);
+          if (g > em * 0.2 && !/\s$/.test(text) && !/^\s/.test(p.str)) text += ' ';
+        }
+        text += p.str;
+      });
+      text = text.replace(/\s+/g, ' ').trim();
       if (text) lines.push({ y: r.y, text, size: Math.max(...cell.map(p => p.size)) });
       cell = [];
     };
@@ -467,25 +505,40 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
     const sorted = bodySizes.slice().sort((a, b) => a - b);
     const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
     const runningSet = new Set([...header, ...footer].map(normalize));
-    const isHeadingText = (t: string, size: number): boolean => {
-      if (median > 0 && size < median * HEADING_SIZE_RATIO) return false;
-      if (t.length < 2 || t.length > 80) return false;
-      if (/[.,:;]$/.test(t)) return false;   // headings don't end in sentence punctuation
-      if (PAGE_NUM_RE.test(t)) return false;
-      if (runningSet.has(normalize(t))) return false;
+    // Score a single-column line as a section heading. Returns null when it isn't
+    // one; otherwise `strong` marks a confident, size-independent signal (numbered,
+    // appendix, ALL-CAPS, or clearly oversized) that can stand as a section even
+    // with no lead paragraph beneath it. A line that only just clears the size
+    // ratio is weak — kept only when it leads into body text (guards against noise).
+    const headingSignal = (t: string, size: number): { strong: boolean; evidence: DetectionEvidence } | null => {
+      if (t.length < 2 || t.length > 90) return null;
+      if (/[.,:;]$/.test(t)) return null;    // headings don't end in sentence punctuation
+      if (PAGE_NUM_RE.test(t)) return null;
+      if (runningSet.has(normalize(t))) return null;
       // Reject data-like rows: long digit runs (IDs, amounts) or digit-heavy text
       // are table/figure data that leaked past cell-splitting, not section titles.
-      if (/\d{4,}/.test(t)) return false;
+      // (0.35 tolerance so "2.1.3 Scope"-style numbered headings still qualify.)
+      if (/\d{4,}/.test(t)) return null;
       const digitCount = (t.match(/\d/g) ?? []).length;
-      if (digitCount / t.length > 0.25) return false;
+      if (digitCount / t.length > 0.35) return null;
       // Several standalone short numbers / dashes = table columns that merged into
       // one cell (a wide description bridging the number columns), not a heading.
-      if ((t.match(/(?:^|\s)(?:\d{1,3}|-)(?=\s|$)/g) ?? []).length >= 3) return false;
+      if ((t.match(/(?:^|\s)(?:\d{1,3}|-)(?=\s|$)/g) ?? []).length >= 3) return null;
       // Cells join without spaces, so a merged table row ends in jammed column
       // values ("…form".155-65"). A heading never ends in a run of digits/dashes.
-      if (/\d[\d-]{2,}$/.test(t)) return false;
-      return true;
+      if (/\d[\d-]{2,}$/.test(t)) return null;
+      // Signals — any one qualifies the line as a heading. Size is only one of them,
+      // so a bold/caps/numbered heading at body size is no longer invisible.
+      const explicitBig = median > 0 && size >= median * EXPLICIT_SIZE_RATIO;
+      const big = median > 0 && size >= median * HEADING_SIZE_RATIO;
+      const numbered = HEADING_NUM_RE.test(t);
+      const alpha = HEADING_ALPHA_RE.test(t);
+      const caps = isAllCapsHeading(t);
+      if (!big && !numbered && !alpha && !caps) return null;
+      const strong = numbered || alpha || caps || explicitBig;
+      return { strong, evidence: strong ? 'explicit' : 'inferred' };
     };
+    const isHeadingText = (t: string, size: number): boolean => headingSignal(t, size) !== null;
 
     // Group a page's body lines (already top→bottom) into rows — cells sharing a
     // baseline become one row, so a table row is a row with several cells.
@@ -617,7 +670,8 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
 
       // Text section heading — a single-column run of text (multi-cell rows are
       // table rows, not headings). Captures up to two body lines for the preview.
-      if (r.cells.length === 1 && isHeadingText(t, r.size)) {
+      const sig = r.cells.length === 1 ? headingSignal(t, r.size) : null;
+      if (sig) {
         const key = normalize(t);
         if (seen.has(key)) continue;
         const body: string[] = [];
@@ -627,10 +681,13 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
           if (isHeadingText(nr.text, nr.size) || FIGURE_CAP_RE.test(nr.text) || TABLE_CAP_RE.test(nr.text)) break;
           if (nr.text) body.push(nr.text);
         }
-        if (body.length > 0) {
+        // Keep it when it leads into body text, OR when the signal is strong on its
+        // own (numbered / appendix / ALL-CAPS / clearly oversized) — a strong heading
+        // whose next line is another heading is a real section (nested outline), not
+        // a stray line. Weak size-only headings still need body to avoid noise.
+        if (body.length > 0 || sig.strong) {
           seen.add(key);
-          const evidence: DetectionEvidence = median > 0 && r.size >= median * EXPLICIT_SIZE_RATIO ? 'explicit' : 'inferred';
-          push({ name: t, evidence, kind: 'text', body });
+          push({ name: t, evidence: sig.evidence, kind: 'text', body });
         } else if (!seenSkip.has(key)) {
           seenSkip.add(key);
           skipped.push(t);

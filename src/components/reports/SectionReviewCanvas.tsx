@@ -9,8 +9,8 @@
 import { useMemo, useRef, useState } from 'react';
 import { Reorder, useDragControls } from 'motion/react';
 import {
-  AlertTriangle, Plus, Trash2, CornerDownRight,
-  GripVertical, Tag, ArrowUpToLine, ArrowDownToLine,
+  Plus, Trash2, CornerDownRight,
+  GripVertical, Tag, ArrowUpToLine, ArrowDownToLine, Pencil,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { sectionCoverage, type ReportTypeName, type TypeSection } from './reportShared';
@@ -34,6 +34,48 @@ function CoverageMeter({ label, present, total, required = false }: { label: str
       </span>
       <span className={`text-[0.6875rem] font-semibold tabular-nums ${complete ? 'text-compliant-700' : required ? 'text-high-700' : 'text-ink-500'}`}>{present}/{total}</span>
     </span>
+  );
+}
+
+// A labelled sample for a detected KPI / chart / table block. A report's charts
+// and stat figures are images in the PDF, so their real values can't be pulled —
+// instead we show WHERE each renders in the finished report, as a clear sample.
+function PlaceholderSample({ kind, metric }: { kind: 'kpi' | 'chart' | 'table'; metric?: string }) {
+  if (kind === 'kpi') {
+    return (
+      <div className="flex items-center gap-3 rounded-[8px] border border-dashed border-canvas-border bg-canvas/40 px-3 py-2">
+        <div className="shrink-0">
+          <div className="text-[1.25rem] font-bold text-ink-300 leading-none tabular-nums">—</div>
+          <div className="text-[0.5625rem] font-semibold uppercase tracking-wider text-ink-400 mt-1">{metric || 'Metric'}</div>
+        </div>
+        <p className="text-[0.625rem] text-ink-400 leading-relaxed">KPI — a metric renders here in the report (filled at generation).</p>
+      </div>
+    );
+  }
+  if (kind === 'chart') {
+    return (
+      <div className="rounded-[8px] border border-dashed border-canvas-border bg-canvas/40 px-3 py-2">
+        <div className="flex items-end gap-1 h-8">
+          {[40, 66, 32, 80, 52, 70].map((h, k) => <div key={k} className="flex-1 rounded-t-[2px] bg-canvas-border" style={{ height: `${h}%` }} />)}
+        </div>
+        <p className="text-[0.625rem] text-ink-400 mt-1.5">Chart — {metric ? `“${metric}” ` : ''}a graph renders here in the report.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-[8px] border border-dashed border-canvas-border bg-canvas/40 px-3 py-2">
+      <div className="rounded-[4px] overflow-hidden border border-canvas-border">
+        <div className="grid grid-cols-4 bg-canvas">
+          {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-3 border-r last:border-r-0 border-canvas-border" />)}
+        </div>
+        {Array.from({ length: 2 }).map((_, r) => (
+          <div key={r} className="grid grid-cols-4 border-t border-canvas-border">
+            {Array.from({ length: 4 }).map((_, c) => <div key={c} className="h-3 border-r last:border-r-0 border-canvas-border" />)}
+          </div>
+        ))}
+      </div>
+      <p className="text-[0.625rem] text-ink-400 mt-1.5">Table — {metric ? `“${metric}” ` : ''}a table renders here in the report.</p>
+    </div>
   );
 }
 
@@ -92,21 +134,30 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
           value={section.name}
           onChange={e => onRename(e.target.value)}
           placeholder="Name this section"
-          className="flex-1 min-w-0 bg-transparent text-[0.8125rem] font-semibold text-ink-900 focus:outline-none placeholder:font-medium placeholder:text-high-400"
+          title="Click to rename this section"
+          className="flex-1 min-w-0 -ml-1 rounded-[6px] border border-transparent bg-transparent px-1.5 py-0.5 text-[0.8125rem] font-semibold text-ink-900 transition-colors cursor-text hover:border-canvas-border hover:bg-white focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10 placeholder:font-medium placeholder:text-high-400"
         />
+        {/* Pencil hint — makes it obvious the name is editable after upload. */}
+        <Pencil size={12} className="shrink-0 text-ink-300 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
+        {/* Jump to the source — a hover action on the row, not a persistent second
+            line, so the list stays a compact one-row-per-section scan. */}
+        {isDetected && (
+          <button
+            onClick={onJump}
+            title="Show in document"
+            aria-label="Show in document"
+            className="shrink-0 p-1 rounded-[6px] text-ink-300 hover:text-brand-600 hover:bg-brand-50 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+          >
+            <CornerDownRight size={12} />
+          </button>
+        )}
         {/* Placeholder blocks (chart/KPI/table detected in the document) wear a
-            type chip — an empty block, no numbers, filled at generation. The chip
-            IS the status, so these rows drop the text-oriented evidence label. */}
-        {isPlaceholder ? (
+            type chip — an empty block, no numbers, filled at generation. Text
+            sections carry no evidence label; the row tint + index-chip colour
+            already flag any row that needs a look. */}
+        {isPlaceholder && (
           <span className="shrink-0 inline-flex items-center rounded-full bg-evidence-50 text-evidence-700 px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide">
             {section.kind === 'kpi' ? 'KPI' : section.kind === 'table' ? 'Table' : 'Chart'}
-          </span>
-        ) : (
-          /* Tiered status — clean rows stay a quiet grey label; only the rows that
-             need a look pick up the evidence colour + warning glyph. */
-          <span className={`inline-flex items-center gap-1.5 text-[0.625rem] font-medium shrink-0 ${meta.flag ? meta.text : 'text-ink-400'}`}>
-            {meta.flag ? <AlertTriangle size={10} /> : <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />}
-            {meta.label}
           </span>
         )}
         <button
@@ -117,13 +168,15 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
           <Trash2 size={14} />
         </button>
       </div>
-      {(isDetected || canMerge || empty) && (
+      {/* KPI / chart / table blocks — a labelled sample of what renders here, since
+          the document's real figures can't be extracted from the PDF. */}
+      {isPlaceholder && (
+        <div className="mt-2 pl-[2.25rem] pr-1">
+          <PlaceholderSample kind={section.kind as 'kpi' | 'chart' | 'table'} metric={section.metric} />
+        </div>
+      )}
+      {(canMerge || empty) && (
         <div className="flex items-center gap-2 mt-1 pl-[2.25rem]">
-          {isDetected && (
-            <button onClick={onJump} className="inline-flex items-center gap-1 text-[0.625rem] font-medium text-ink-400 hover:text-brand-600 transition-colors cursor-pointer">
-              <CornerDownRight size={10} /> Show in document
-            </button>
-          )}
           {/* A fragment is usually one section split in two — let the user fold it
               into the neighbour, the fix the red badge otherwise lacks (§4.7.1). */}
           {canMerge && (
@@ -228,8 +281,10 @@ export default function SectionReviewCanvas({
       }) },
     });
   };
-  const addSection = () =>
-    set(prev => [...prev, { id: `new-${Date.now()}`, name: '', evidence: 'explicit' }]);
+  // Add a section the detector missed — a plain text section, or a KPI / chart /
+  // table block the extractor couldn't pull from the PDF (charts are images).
+  const addSection = (kind?: 'kpi' | 'chart' | 'table') =>
+    set(prev => [...prev, { id: `new-${Date.now()}`, name: '', evidence: 'added', ...(kind ? { kind } : {}) }]);
 
   // Coverage of the detected sections against the chosen type's required /
   // recommended set.
@@ -241,6 +296,51 @@ export default function SectionReviewCanvas({
         .filter(spec => !prev.some(p => spec.match.test(p.name)))
         .map(spec => ({ id: `type-${Date.now()}-${spec.name}`, name: spec.name, evidence: 'added' as Evidence })),
     ]);
+
+  // The curated outline — the draggable section rows plus the add-a-section /
+  // add-a-block controls.
+  const outlineBody = (
+    <>
+      <Reorder.Group axis="y" values={sections} onReorder={set} className="space-y-0.5">
+        {sections.map((s, i) => (
+          <SectionRow
+            key={s.id}
+            section={s}
+            index={i}
+            total={sections.length}
+            flashed={rightFlashId === s.id}
+            registerRef={el => { rightRefs.current[s.id] = el; }}
+            onRename={name => renameSection(s.id, name)}
+            onDelete={() => deleteSection(s.id)}
+            onJump={() => jumpToSource(s.id)}
+            onMerge={dir => mergeSection(s.id, dir)}
+          />
+        ))}
+      </Reorder.Group>
+      <div className="mt-1.5 space-y-1.5">
+        <button
+          onClick={() => addSection()}
+          className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-[10px] text-[0.75rem] font-medium text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.04] transition-colors cursor-pointer"
+        >
+          <Plus size={13} /> Add a section the detector missed
+        </button>
+        {/* Add a block the extractor couldn't pull (un-captioned charts/KPIs
+            are images in the PDF) — name it, and its sample shows above. */}
+        <div className="flex items-center justify-center gap-1.5">
+          <span className="text-[0.625rem] text-ink-400">or add a block:</span>
+          {([['kpi', 'KPI'], ['chart', 'Chart'], ['table', 'Table']] as const).map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => addSection(k)}
+              className="inline-flex items-center gap-1 pl-1.5 pr-2 py-0.5 rounded-full border border-canvas-border bg-white text-[0.625rem] font-semibold text-ink-600 hover:border-brand-600/40 hover:text-brand-700 transition-colors cursor-pointer"
+            >
+              <Plus size={10} className="opacity-60" /> {label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  );
 
   return (
     <>
@@ -284,30 +384,37 @@ export default function SectionReviewCanvas({
       <div className="grid grid-cols-[1fr_1px_1fr] flex-1 min-h-0">
         {/* Left — the source document */}
         <section className="flex flex-col min-h-0 pr-6">
-          <header className="shrink-0 flex items-baseline gap-2 mb-3">
-            <h3 className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-400">Source document</h3>
-          </header>
-          <div className="flex-1 overflow-y-auto -mx-2 px-2 space-y-1">
+          <div className="flex-1 overflow-y-auto -mx-2 px-2 pb-2">
             {detected.length === 0 ? (
-              <p className="px-3 py-6 text-[0.75rem] text-ink-400 leading-relaxed">No section headings were detected in the document. Add the sections it should have on the right.</p>
-            ) : detected.map(d => (
-              <button
-                key={d.id}
-                type="button"
-                ref={el => { sourceRefs.current[d.id] = el as unknown as HTMLDivElement; }}
-                onClick={() => jumpToSection(d.id)}
-                title="Show this section in the detected list"
-                className={`group/src block w-full text-left rounded-[10px] px-3 py-2.5 transition-colors duration-300 cursor-pointer hover:bg-canvas ${flashId === d.id ? 'bg-brand-600/[0.07] ring-1 ring-brand-600/25' : ''}`}
-              >
-                <h4 className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-ink-900 mb-0.5">
-                  <span className="truncate">{d.name}</span>
-                  <CornerDownRight size={11} className="shrink-0 text-brand-600 opacity-0 group-hover/src:opacity-100 transition-opacity" />
-                </h4>
-                {(d.source ?? []).map((line, i) => (
-                  <p key={i} className="text-[0.6875rem] leading-relaxed text-ink-400">{line}</p>
+              <div className="rounded-[12px] border border-dashed border-canvas-border bg-white px-6 py-12 text-center text-[0.75rem] text-ink-400 leading-relaxed">
+                No section headings were detected in the document. Add the sections it should have on the right.
+              </div>
+            ) : (
+              /* The source rendered as the page it came from — a white sheet with a
+                 letterhead-style title block and document body, so it reads as the
+                 real report, not a list of snippets. Each block stays click-to-jump. */
+              <article className="rounded-[12px] border border-canvas-border bg-white shadow-[0_1px_1px_rgba(15,8,30,0.03),0_8px_16px_-8px_rgba(15,8,30,0.06),0_28px_56px_-28px_rgba(15,8,30,0.10)] px-8 py-7">
+                {detected.map((d, idx) => (
+                  <div
+                    key={d.id}
+                    ref={el => { sourceRefs.current[d.id] = el; }}
+                    onClick={() => jumpToSection(d.id)}
+                    title="Show this section in the detected list"
+                    className={`group/src relative -mx-4 px-4 rounded-[8px] cursor-pointer transition-colors duration-300 hover:bg-canvas/60 ${
+                      idx === 0 ? 'pb-4 mb-5 border-b border-canvas-border pt-1' : 'py-3'
+                    } ${flashId === d.id ? 'bg-brand-600/[0.06] ring-1 ring-brand-600/20' : ''}`}
+                  >
+                    <h4 className={`flex items-center gap-1.5 text-ink-900 ${idx === 0 ? 'text-[1.0625rem] font-bold tracking-tight' : 'text-[0.9375rem] font-semibold'}`}>
+                      <span className="min-w-0 truncate">{d.name}</span>
+                      <CornerDownRight size={12} className="shrink-0 text-brand-600 opacity-0 group-hover/src:opacity-100 transition-opacity" />
+                    </h4>
+                    {(d.source ?? []).map((line, i) => (
+                      <p key={i} className={`leading-relaxed text-ink-600 ${idx === 0 ? 'text-[0.8125rem] mt-1 text-ink-500' : 'text-[0.8125rem] mt-1.5'}`}>{line}</p>
+                    ))}
+                  </div>
                 ))}
-              </button>
-            ))}
+              </article>
+            )}
           </div>
         </section>
 
@@ -316,42 +423,8 @@ export default function SectionReviewCanvas({
 
         {/* Right — detected sections to curate */}
         <section className="flex flex-col min-h-0 pl-6">
-          <header className="shrink-0 mb-3">
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-400">Detected sections</h3>
-              <span className="ml-auto inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-ink-900/[0.05] text-[0.625rem] font-semibold tabular-nums text-ink-500">{sections.length}</span>
-            </div>
-            {/* Evidence legend — decodes the index-chip colours at a glance. */}
-            <div className="flex items-center gap-3 mt-2 text-[0.625rem] font-medium text-ink-400">
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-compliant-500" /> Explicit</span>
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-mitigated-500" /> Review</span>
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-high-500" /> Fragment</span>
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-brand-500" /> Added</span>
-            </div>
-          </header>
           <div className="flex-1 overflow-y-auto -mx-2 px-2">
-            <Reorder.Group axis="y" values={sections} onReorder={set} className="space-y-0.5">
-              {sections.map((s, i) => (
-                <SectionRow
-                  key={s.id}
-                  section={s}
-                  index={i}
-                  total={sections.length}
-                  flashed={rightFlashId === s.id}
-                  registerRef={el => { rightRefs.current[s.id] = el; }}
-                  onRename={name => renameSection(s.id, name)}
-                  onDelete={() => deleteSection(s.id)}
-                  onJump={() => jumpToSource(s.id)}
-                  onMerge={dir => mergeSection(s.id, dir)}
-                />
-              ))}
-            </Reorder.Group>
-            <button
-              onClick={addSection}
-              className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-[10px] text-[0.75rem] font-medium text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.04] transition-colors cursor-pointer"
-            >
-              <Plus size={13} /> Add a section the detector missed
-            </button>
+            {outlineBody}
           </div>
         </section>
       </div>
