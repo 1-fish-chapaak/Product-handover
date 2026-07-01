@@ -22,6 +22,8 @@ export interface CanvasSection {
   kind?: SectionKind;
   /** For KPI/table placeholders — the label the block carried in the document. */
   metric?: string;
+  /** Author-editable one-line description. Absent = fall back to the auto blurb. */
+  description?: string;
 }
 
 export const EVIDENCE_META: Record<Evidence, { label: string; dot: string; tint: string; text: string; flag: boolean }> = {

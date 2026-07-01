@@ -1,7 +1,7 @@
 // Shared "AI proposes, the human curates" review canvas (Template Studio §4).
 // The uploaded document on the left, the AI-detected sections on the right with an
 // evidence-grounded signal, inline rename / delete-with-undo / merge / drag-reorder
-// / add, two-way jump-to-source, and a per-type coverage meter.
+// / add, and two-way jump-to-source.
 //
 // Reached from the editor's "Import from a report" step: the author curates what
 // the detector proposed before it lands in the outline.
@@ -9,33 +9,17 @@
 import { useMemo, useRef, useState } from 'react';
 import { Reorder, useDragControls } from 'motion/react';
 import {
-  Plus, Trash2, CornerDownRight,
-  GripVertical, Tag, ArrowUpToLine, ArrowDownToLine, Pencil,
+  Plus, CornerDownRight,
+  GripVertical, ArrowUpToLine, ArrowDownToLine, Pencil,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
-import { sectionCoverage, type ReportTypeName, type TypeSection } from './reportShared';
+import { RowDeleteButton } from './RowDeleteButton';
+import { ReportBrandBanner } from './ReportDocumentChrome';
+import { sectionBlurb } from './reportShared';
 import {
   EVIDENCE_META,
-  type Evidence, type CanvasSection,
+  type CanvasSection,
 } from './sectionReviewShared';
-
-// Segmented coverage meter — one pip per required/recommended section, filled as
-// the document covers it. Pips read the gap at a glance without parsing "1/3".
-function CoverageMeter({ label, present, total, required = false }: { label: string; present: number; total: number; required?: boolean }) {
-  const complete = present >= total;
-  const fill = required ? 'bg-compliant-500' : 'bg-brand-400';
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="text-[0.6875rem] font-medium text-ink-500">{label}</span>
-      <span className="flex items-center gap-1" aria-hidden="true">
-        {Array.from({ length: total }).map((_, i) => (
-          <span key={i} className={`h-1.5 w-3.5 rounded-full transition-colors ${i < present ? fill : 'bg-ink-900/[0.08]'}`} />
-        ))}
-      </span>
-      <span className={`text-[0.6875rem] font-semibold tabular-nums ${complete ? 'text-compliant-700' : required ? 'text-high-700' : 'text-ink-500'}`}>{present}/{total}</span>
-    </span>
-  );
-}
 
 // A labelled sample for a detected KPI / chart / table block. A report's charts
 // and stat figures are images in the PDF, so their real values can't be pulled —
@@ -81,13 +65,14 @@ function PlaceholderSample({ kind, metric }: { kind: 'kpi' | 'chart' | 'table'; 
 
 // One draggable detected-section row. Owns its own drag controls so the handle
 // (not the text input) starts the drag.
-function SectionRow({ section, index, total, flashed, registerRef, onRename, onDelete, onJump, onMerge }: {
+function SectionRow({ section, index, total, flashed, registerRef, onRename, onDescribe, onDelete, onJump, onMerge }: {
   section: CanvasSection;
   index: number;
   total: number;
   flashed: boolean;
   registerRef: (el: HTMLElement | null) => void;
   onRename: (name: string) => void;
+  onDescribe: (description: string) => void;
   onDelete: () => void;
   onJump: () => void;
   onMerge: (direction: 'up' | 'down') => void;
@@ -110,7 +95,10 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
       : meta.flag
         ? 'bg-mitigated-50/40'
         : 'hover:bg-canvas';
-  const numTint = empty ? 'bg-high-50 text-high-700' : meta.tint;
+  // Brand-purple index to match the report letterhead — the outline reads as the
+  // report's own numbered sections, not an evidence-coloured status list. A missing
+  // name still flags amber (a validation state); the row tint carries any review flag.
+  const numTint = empty ? 'bg-high-50 text-high-700' : 'bg-brand-50 text-brand-700';
   return (
     <Reorder.Item
       value={section}
@@ -128,8 +116,10 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
         >
           <GripVertical size={14} />
         </button>
-        {/* The index chip carries the evidence colour — status without a rail. */}
-        <span className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[0.6875rem] font-bold tabular-nums ${numTint}`}>{index + 1}</span>
+        {/* Brand-purple numbered index — the report's own outline mark. Two-digit
+            like the editor preview (01, 02…) so the badge reads the same across
+            the import → review → outline flow. */}
+        <span className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[0.6875rem] font-bold tabular-nums ${numTint}`}>{String(index + 1).padStart(2, '0')}</span>
         <input
           value={section.name}
           onChange={e => onRename(e.target.value)}
@@ -160,14 +150,25 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
             {section.kind === 'kpi' ? 'KPI' : section.kind === 'table' ? 'Table' : 'Chart'}
           </span>
         )}
-        <button
-          onClick={onDelete}
-          aria-label="Remove section"
-          className="p-1 rounded-[6px] text-ink-300 hover:text-high-700 hover:bg-high-50 transition-all cursor-pointer shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-        >
-          <Trash2 size={14} />
-        </button>
+        <RowDeleteButton
+          onConfirm={onDelete}
+          ariaLabel="Remove section"
+          triggerClassName="p-1 rounded-[6px] text-ink-300 hover:text-high-700 hover:bg-high-50 transition-all cursor-pointer shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+        />
       </div>
+      {/* One-line description — editable. Seeded from the auto blurb; the author can
+          overwrite it. Text sections only; placeholder blocks carry their own sample. */}
+      {!isPlaceholder && !empty && (
+        <div className="mt-0.5 pl-[2.25rem] pr-1">
+          <input
+            value={section.description ?? sectionBlurb(section.name)}
+            onChange={e => onDescribe(e.target.value)}
+            placeholder="Add a one-line description…"
+            title="Click to edit this section's description"
+            className="w-full -ml-1 rounded-[6px] border border-transparent bg-transparent px-1.5 py-0.5 text-[0.75rem] text-ink-400 leading-relaxed transition-colors cursor-text hover:border-canvas-border hover:bg-white focus:outline-none focus:border-brand-600/40 focus:bg-white focus:ring-2 focus:ring-brand-600/10 placeholder:text-ink-300"
+          />
+        </div>
+      )}
       {/* KPI / chart / table blocks — a labelled sample of what renders here, since
           the document's real figures can't be extracted from the PDF. */}
       {isPlaceholder && (
@@ -202,19 +203,26 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
 
 /**
  * The two-panel curation body. Owns the review interactions (rename / delete-with-
- * undo / merge / add / reorder / jump); the parent owns the `sections` state and
- * the report-type context (for the coverage meter).
+ * undo / merge / add / reorder / jump); the parent owns the `sections` state.
  */
 export default function SectionReviewCanvas({
   sections,
   onSectionsChange,
-  reportType,
-  reportTypeLabel,
+  reportChrome,
 }: {
   sections: CanvasSection[];
   onSectionsChange: (next: CanvasSection[] | ((prev: CanvasSection[]) => CanvasSection[])) => void;
-  reportType: ReportTypeName;
-  reportTypeLabel: string;
+  /** When provided, the curated outline renders inside the report's own chrome —
+   *  the same purple letterhead + white sheet + footer the editor preview uses —
+   *  so the right column reads as "the report being assembled", not a bare list. */
+  reportChrome?: {
+    title: string;
+    desc?: string;
+    brand: string;
+    headerText?: string;
+    footerText?: string;
+    gradient?: [string, string];
+  };
 }) {
   const { addToast } = useToast();
   const sourceRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -244,6 +252,8 @@ export default function SectionReviewCanvas({
 
   const renameSection = (id: string, name: string) =>
     set(prev => prev.map(s => (s.id === id ? { ...s, name } : s)));
+  const describeSection = (id: string, description: string) =>
+    set(prev => prev.map(s => (s.id === id ? { ...s, description } : s)));
   // Delete is reversible — a misclick shouldn't silently drop a section.
   const deleteSection = (id: string) => {
     const idx = sections.findIndex(s => s.id === id);
@@ -252,6 +262,8 @@ export default function SectionReviewCanvas({
     set(prev => prev.filter(s => s.id !== id));
     addToast({
       type: 'info',
+      // Persistent — the Undo stays until acted on or dismissed (#4).
+      persist: true,
       message: `Removed “${removed.name || 'Untitled section'}”.`,
       secondaryAction: { label: 'Undo', onClick: () => set(prev => {
         if (prev.some(s => s.id === removed.id)) return prev;
@@ -272,6 +284,7 @@ export default function SectionReviewCanvas({
     set(prev => prev.filter(s => s.id !== id));
     addToast({
       type: 'info',
+      persist: true,
       message: `Merged “${fragment.name || 'fragment'}” into “${target.name || 'the section ' + direction}”.`,
       secondaryAction: { label: 'Undo', onClick: () => set(prev => {
         if (prev.some(s => s.id === fragment.id)) return prev;
@@ -286,19 +299,8 @@ export default function SectionReviewCanvas({
   const addSection = (kind?: 'kpi' | 'chart' | 'table') =>
     set(prev => [...prev, { id: `new-${Date.now()}`, name: '', evidence: 'added', ...(kind ? { kind } : {}) }]);
 
-  // Coverage of the detected sections against the chosen type's required /
-  // recommended set.
-  const typeCoverage = sectionCoverage(reportType, sections.map(s => s.name));
-  const addTypeSections = (list: TypeSection[]) =>
-    set(prev => [
-      ...prev,
-      ...list
-        .filter(spec => !prev.some(p => spec.match.test(p.name)))
-        .map(spec => ({ id: `type-${Date.now()}-${spec.name}`, name: spec.name, evidence: 'added' as Evidence })),
-    ]);
-
   // The curated outline — the draggable section rows plus the add-a-section /
-  // add-a-block controls.
+  // add-a-block controls. Rendered bare, or inside the report chrome (below).
   const outlineBody = (
     <>
       <Reorder.Group axis="y" values={sections} onReorder={set} className="space-y-0.5">
@@ -311,6 +313,7 @@ export default function SectionReviewCanvas({
             flashed={rightFlashId === s.id}
             registerRef={el => { rightRefs.current[s.id] = el; }}
             onRename={name => renameSection(s.id, name)}
+            onDescribe={description => describeSection(s.id, description)}
             onDelete={() => deleteSection(s.id)}
             onJump={() => jumpToSource(s.id)}
             onMerge={dir => mergeSection(s.id, dir)}
@@ -344,46 +347,9 @@ export default function SectionReviewCanvas({
 
   return (
     <>
-      {typeCoverage.spec.length > 0 && (
-        <div className="shrink-0 mb-3 flex flex-col gap-2.5">
-          <div className="flex items-center gap-x-5 gap-y-2 flex-wrap">
-            <span className="inline-flex items-center gap-2 shrink-0">
-              <Tag size={14} className="text-ink-400" />
-              <span className="text-[0.8125rem] font-semibold text-ink-800">{reportTypeLabel} coverage</span>
-            </span>
-            <CoverageMeter label="Required" present={typeCoverage.requiredPresent} total={typeCoverage.requiredTotal} required />
-            <CoverageMeter label="Recommended" present={typeCoverage.recommendedPresent} total={typeCoverage.recommendedTotal} />
-            {typeCoverage.allMissing.length > 0 && (
-              <button onClick={() => addTypeSections(typeCoverage.allMissing)} className="ml-auto inline-flex items-center gap-1 h-7 px-3 rounded-full bg-brand-600 text-white text-[0.6875rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer shrink-0">
-                <Plus size={12} /> Add {typeCoverage.allMissing.length} missing
-              </button>
-            )}
-          </div>
-          {typeCoverage.allMissing.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[0.6875rem] font-medium text-ink-400 mr-0.5">Missing</span>
-              {typeCoverage.allMissing.map(spec => {
-                const req = spec.tier === 'required';
-                return (
-                  <button
-                    key={spec.name}
-                    onClick={() => addTypeSections([spec])}
-                    title={`Add "${spec.name}"`}
-                    className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full border text-[0.6875rem] font-medium cursor-pointer transition-colors ${req ? 'border-high/40 bg-high-50 text-high-700 hover:bg-high-100' : 'border-canvas-border bg-white text-ink-600 hover:border-brand-600/40 hover:text-brand-700'}`}
-                  >
-                    <Plus size={11} className="shrink-0 opacity-60" />
-                    {spec.name}
-                    {req && <span className="w-1 h-1 rounded-full bg-high-600 shrink-0" aria-hidden="true" />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-      <div className="grid grid-cols-[1fr_1px_1fr] flex-1 min-h-0">
+      <div className="grid grid-cols-[2fr_3fr] gap-6 flex-1 min-h-0">
         {/* Left — the source document */}
-        <section className="flex flex-col min-h-0 pr-6">
+        <section className="flex flex-col min-h-0">
           <div className="flex-1 overflow-y-auto -mx-2 px-2 pb-2">
             {detected.length === 0 ? (
               <div className="rounded-[12px] border border-dashed border-canvas-border bg-white px-6 py-12 text-center text-[0.75rem] text-ink-400 leading-relaxed">
@@ -393,7 +359,7 @@ export default function SectionReviewCanvas({
               /* The source rendered as the page it came from — a white sheet with a
                  letterhead-style title block and document body, so it reads as the
                  real report, not a list of snippets. Each block stays click-to-jump. */
-              <article className="rounded-[12px] border border-canvas-border bg-white shadow-[0_1px_1px_rgba(15,8,30,0.03),0_8px_16px_-8px_rgba(15,8,30,0.06),0_28px_56px_-28px_rgba(15,8,30,0.10)] px-8 py-7">
+              <article className="rounded-[12px] border border-canvas-border bg-white shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)] px-8 py-7">
                 {detected.map((d, idx) => (
                   <div
                     key={d.id}
@@ -418,13 +384,48 @@ export default function SectionReviewCanvas({
           </div>
         </section>
 
-        {/* Hairline divider — one line instead of two facing card borders. */}
-        <div className="bg-canvas-border" aria-hidden="true" />
 
-        {/* Right — detected sections to curate */}
-        <section className="flex flex-col min-h-0 pl-6">
-          <div className="flex-1 overflow-y-auto -mx-2 px-2">
-            {outlineBody}
+        {/* Right — the curated outline. With `reportChrome` it renders inside the
+            report's own letterhead + sheet + footer (mirrors the editor preview),
+            so it reads as the report being assembled, not a detached list. */}
+        <section className="flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-auto -mx-2 px-2 pb-2">
+            {reportChrome ? (
+              <div className="rounded-[12px] shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)]">
+                <ReportBrandBanner
+                  title={reportChrome.title || 'Untitled Template'}
+                  titleClassName="text-[1.375rem]"
+                  className="rounded-t-[12px]"
+                  gradient={reportChrome.gradient}
+                  footer={
+                    /* Narrow half-width card — only the facts that matter while
+                       assembling a template. "Generated on" is dropped (a template
+                       isn't generated) so the two columns stay roomy, no truncation. */
+                    <div className="grid grid-cols-2 gap-4">
+                      {[
+                        { label: 'Brand', value: reportChrome.brand || 'Irame' },
+                        { label: 'Sections', value: `${sections.length}` },
+                      ].map(f => (
+                        <div key={f.label} className="min-w-0">
+                          <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-white/50 whitespace-nowrap">{f.label}</div>
+                          <div className="text-[0.8125rem] font-medium text-white/90 mt-1 truncate">{f.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  }
+                >
+                  <p className="text-[0.8125rem] text-white/75">{reportChrome.desc || 'Custom report template'}</p>
+                </ReportBrandBanner>
+                <div className="border-x border-canvas-border bg-white px-5 py-4">
+                  {outlineBody}
+                </div>
+                <div className="border-x border-b border-canvas-border bg-canvas/60 rounded-b-[12px] px-5 py-3 flex items-center justify-center">
+                  <span className="text-[0.6875rem] text-ink-400 tracking-wide">{reportChrome.footerText || 'Generated by Irame'}</span>
+                </div>
+              </div>
+            ) : (
+              outlineBody
+            )}
           </div>
         </section>
       </div>
