@@ -2738,15 +2738,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     ))}
                   </div>
 
-                  {/* What memory knows — cross-workflow correlation + output
-                      compare. The source-drift conflict is resolved earlier on
-                      the confirm-mapping screen (before approve & run), so it's
-                      suppressed here rather than gating the output. */}
-                  <div className="mb-5">
-                    <WorkflowMemoryPanel showSourceDrift={false} />
-                  </div>
-
-                  <div className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden mb-4">
+                  <div className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden mb-5">
                     <div className="flex items-start justify-between gap-3 px-5 py-3.5 border-b border-canvas-border">
                       <div className="min-w-0">
                         <h3 className="text-[13px] font-bold text-ink-800 flex items-center gap-2">
@@ -2800,6 +2792,15 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                         </motion.div>
                       ))}
                     </div>
+                  </div>
+
+                  {/* What memory knows — cross-workflow correlation + output
+                      compare, shown beneath the output as supporting context.
+                      The source-drift conflict is resolved earlier on the
+                      confirm-mapping screen (before approve & run), so it's
+                      suppressed here rather than gating the output. */}
+                  <div className="mb-5">
+                    <WorkflowMemoryPanel showSourceDrift={false} />
                   </div>
 
                   <div className="flex items-center gap-2.5">
