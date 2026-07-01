@@ -33,6 +33,7 @@ export type View =
   // Engagements
   | 'engagements'
   | 'sox-icfr'
+  | 'compliance-engagement'
   | 'engagement-overview'
   | 'engagement-case-management'
   | 'my-queue'
@@ -377,7 +378,12 @@ export function useAppState() {
 
   const openEngagement = useCallback((engagementId: string) => {
     const eng = findEngagement(engagementId);
-    const view: View = eng?.type === 'SOX / ICFR' ? 'sox-icfr' : 'engagement-overview';
+    // Type routing: SOX gets the ICFR workspace; Compliance gets the promoted
+    // pattern workspace (scope → PBC → testing → review → conclusion); the rest
+    // keep the classic overview.
+    const view: View = eng?.type === 'SOX / ICFR' ? 'sox-icfr'
+      : eng?.type === 'Compliance' ? 'compliance-engagement'
+      : 'engagement-overview';
     setState(prev => ({ ...prev, view, selectedEngagementId: engagementId }));
   }, []);
 
