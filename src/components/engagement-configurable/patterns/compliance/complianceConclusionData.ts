@@ -4,6 +4,7 @@ import { MOCK_COMPLIANCE_CONTROLS } from './complianceControlScopeData';
 import { deriveComplianceSampleResult, type AttributeTestResult } from './complianceAttributeTestingData';
 import { type ControlReviewState } from './complianceReviewData';
 import type { TestItem } from './complianceSamplesEvidenceData';
+import type { SeverityClassification } from './complianceSeverityData';
 
 export type ConclusionValue = 'EFFECTIVE' | 'PARTIALLY_EFFECTIVE' | 'INEFFECTIVE' | 'NOT_APPLICABLE';
 export type ConclusionStatus = 'LOCKED' | 'READY' | 'FINALIZED';
@@ -29,6 +30,8 @@ export interface ControlConclusionState {
   finalizedAt: string | null;
   finalizedBy: string;
   history: ConclusionHistoryItem[];
+  /** Deficiency severity classification — set for controls concluded with failures. */
+  severity?: SeverityClassification | null;
 }
 
 export interface ComplianceConclusionState {
@@ -38,7 +41,7 @@ export interface ComplianceConclusionState {
 export function getOrCreateControlConclusion(state: ComplianceConclusionState, controlId: string): ControlConclusionState {
   return state.conclusions.find(c => c.controlId === controlId) || {
     controlId, status: 'LOCKED', recommendedConclusion: null, finalConclusion: null,
-    reason: '', remarks: '', generatedAt: null, finalizedAt: null, finalizedBy: '', history: [],
+    reason: '', remarks: '', generatedAt: null, finalizedAt: null, finalizedBy: '', history: [], severity: null,
   };
 }
 
@@ -150,6 +153,18 @@ export function finalizeConclusion(
     finalizedBy: actor,
     history: [...existing.history, { id: `ch-${Date.now()}`, action: isUpdate ? 'UPDATED' : 'FINALIZED', actor, timestamp: now(), comments: remarks, value }],
   };
+  const exists = state.conclusions.some(c => c.controlId === controlId);
+  return { conclusions: exists ? state.conclusions.map(c => c.controlId === controlId ? updated : c) : [...state.conclusions, updated] };
+}
+
+/** Persist a deficiency severity classification against a control's conclusion. */
+export function classifySeverity(
+  state: ComplianceConclusionState,
+  controlId: string,
+  severity: SeverityClassification,
+): ComplianceConclusionState {
+  const existing = getOrCreateControlConclusion(state, controlId);
+  const updated: ControlConclusionState = { ...existing, severity };
   const exists = state.conclusions.some(c => c.controlId === controlId);
   return { conclusions: exists ? state.conclusions.map(c => c.controlId === controlId ? updated : c) : [...state.conclusions, updated] };
 }

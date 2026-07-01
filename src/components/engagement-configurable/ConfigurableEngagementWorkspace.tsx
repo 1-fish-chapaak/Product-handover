@@ -8,7 +8,8 @@ import { EngagementPatternType } from './configurableEngagementTypes';
 import { getWorkspaceTabsForPattern } from './configurableEngagementState';
 import { WorkspaceHeader, WorkspaceTabs } from './components';
 import PatternWorkspaceRenderer from './PatternWorkspaceRenderer';
-import { MOCK_PBC_REQUESTS, type PBCRequest, type PBCRequestStatus, type ComplianceWorkspaceState } from './patterns/compliance/complianceRequestsData';
+import { MOCK_PBC_REQUESTS, type PBCRequest, type ComplianceWorkspaceState } from './patterns/compliance/complianceRequestsData';
+import { MOCK_COMPLIANCE_CONTROLS, type ScopeControl } from './patterns/compliance/complianceControlScopeData';
 import type { SampleBatch, EvidenceItem } from './patterns/compliance/complianceSamplesEvidenceData';
 import type { AttributeTestingState } from './patterns/compliance/complianceAttributeTestingData';
 import type { ComplianceReviewState } from './patterns/compliance/complianceReviewData';
@@ -34,9 +35,11 @@ interface Props {
   onBack?: () => void;
   onEditSetup?: () => void;
   backLabel?: string;
+  /** Optional pre-seeded compliance state (e.g. the flagship demo seed). */
+  initialComplianceState?: ComplianceWorkspaceState;
 }
 
-export default function ConfigurableEngagementWorkspace({ engagement, onBack, onEditSetup, backLabel }: Props) {
+export default function ConfigurableEngagementWorkspace({ engagement, onBack, onEditSetup, backLabel, initialComplianceState }: Props) {
   const allTabs = getWorkspaceTabsForPattern(engagement.patternType);
 
   // Static hidden tabs (automation review)
@@ -54,7 +57,8 @@ export default function ConfigurableEngagementWorkspace({ engagement, onBack, on
   const [activeTabId, setActiveTabId] = useState(allTabs.filter(t => !staticHiddenTabIds.includes(t.id))[0]?.id || 'overview');
 
   // ── Compliance workspace state (lifted from tab components) ──
-  const [complianceState, setComplianceState] = useState<ComplianceWorkspaceState>(() => ({
+  const [complianceState, setComplianceState] = useState<ComplianceWorkspaceState>(() => initialComplianceState ?? ({
+    scopeControls: MOCK_COMPLIANCE_CONTROLS,
     requests: MOCK_PBC_REQUESTS,
     samplesEvidence: { batches: [], evidence: [] },
     attributeTesting: { results: [], testingStarted: false },
@@ -66,11 +70,15 @@ export default function ConfigurableEngagementWorkspace({ engagement, onBack, on
     setComplianceState(prev => ({ ...prev, requests: [req, ...prev.requests] }));
   }, []);
 
-  const handleUpdateRequestStatus = useCallback((id: string, status: PBCRequestStatus) => {
+  const handleUpdateRequest = useCallback((id: string, patch: Partial<PBCRequest>) => {
     setComplianceState(prev => ({
       ...prev,
-      requests: prev.requests.map(r => r.id === id ? { ...r, status } : r),
+      requests: prev.requests.map(r => r.id === id ? { ...r, ...patch } : r),
     }));
+  }, []);
+
+  const handleUpdateScopeControls = useCallback((controls: ScopeControl[]) => {
+    setComplianceState(prev => ({ ...prev, scopeControls: controls }));
   }, []);
 
   const handleAddBatch = useCallback((batch: SampleBatch) => {
@@ -216,7 +224,8 @@ export default function ConfigurableEngagementWorkspace({ engagement, onBack, on
         activeTabLabel={activeTab?.label || 'Overview'}
         complianceState={complianceState}
         onCreateRequest={handleCreateRequest}
-        onUpdateRequestStatus={handleUpdateRequestStatus}
+        onUpdateRequest={handleUpdateRequest}
+        onUpdateScopeControls={handleUpdateScopeControls}
         onAddBatch={handleAddBatch}
         onAddEvidence={handleAddEvidence}
         onUpdateAttributeTesting={handleUpdateAttributeTesting}
