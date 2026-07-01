@@ -18,8 +18,8 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Brain, Zap, ShieldAlert, Network, ArrowRight, Check, RefreshCw,
-  Database, GitCompareArrows, TrendingUp, TrendingDown, Minus,
-  ChevronDown, Eye, Sparkles, Plus,
+  GitCompareArrows, TrendingUp, TrendingDown, Minus,
+  ChevronDown, Eye, Plus,
 } from 'lucide-react';
 import {
   ENTITY_MEMORY, RUN_OUTPUT_COMPARE, RUN_GOLDEN_RECORD,
@@ -365,32 +365,44 @@ export function MemoryConflictStrip({
 // ─── 3. Cross-workflow correlation ────────────────────────────────────────
 
 function EntityMemoryRow({ mem }: { mem: EntityMemory }) {
+  const flags = mem.alsoFlaggedIn;
   return (
     <div className="py-3.5 first:pt-1">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[12.5px] font-bold text-ink-800">{mem.entity}</span>
+        <span className="text-[13px] font-bold text-ink-900">{mem.entity}</span>
         <span className="text-[11px] font-mono text-ink-400">{mem.vendorId}</span>
         {mem.onWatch && (
           <span className="inline-flex items-center gap-1 rounded-full bg-risk-50 text-risk px-2 py-0.5 text-[10px] font-bold border border-risk/25">
             <Eye size={10} /> On watch
           </span>
         )}
-        <span className="ml-auto inline-flex items-center rounded-full bg-canvas text-ink-500 px-2 py-0.5 text-[10.5px] font-bold tabular-nums shrink-0">
-          {mem.alsoFlaggedIn.length}
+        <span className="ml-auto inline-flex items-center rounded-full bg-canvas border border-canvas-border text-ink-500 px-2 py-0.5 text-[10.5px] font-bold tabular-nums shrink-0">
+          {flags.length}
         </span>
       </div>
       {mem.watchNote && <p className="text-[11px] text-ink-500 mt-1">{mem.watchNote}</p>}
-      <div className="flex flex-col gap-1.5 mt-2">
-        {mem.alsoFlaggedIn.map((f, i) => (
-          <div key={i} className="flex items-center gap-2 text-[11.5px]">
-            <ArrowRight size={11} className="text-brand-400 shrink-0" />
-            <span className="inline-flex items-center rounded-md bg-brand-50 text-brand-700 px-1.5 py-0.5 text-[10.5px] font-semibold shrink-0">
-              {f.workflow}
-            </span>
-            <span className="text-ink-600 truncate">{f.detail}</span>
-            <span className="text-ink-400 ml-auto shrink-0 tabular-nums">{f.date}</span>
-          </div>
-        ))}
+      {/* Prior flags as a connected timeline: a hairline rail through small
+          nodes reads as one vendor's history across workflows — a ledger, not a
+          loose list of arrowed lines. */}
+      <div className="relative mt-2.5 ml-1">
+        {flags.length > 1 && (
+          <span aria-hidden="true" className="absolute left-[3px] top-2.5 bottom-2.5 w-px bg-brand-200" />
+        )}
+        <div className="flex flex-col gap-1">
+          {flags.map((f, i) => (
+            <div key={i} className="relative flex items-center gap-3 text-[11.5px] py-0.5">
+              <span
+                aria-hidden="true"
+                className="relative z-10 size-[7px] rounded-full bg-brand-400 ring-2 ring-canvas-elevated shrink-0"
+              />
+              <span className="inline-flex items-center rounded-md bg-brand-50 text-brand-700 px-1.5 py-0.5 text-[10.5px] font-semibold shrink-0">
+                {f.workflow}
+              </span>
+              <span className="text-ink-600 truncate">{f.detail}</span>
+              <span className="text-ink-400 ml-auto shrink-0 tabular-nums">{f.date}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -398,10 +410,20 @@ function EntityMemoryRow({ mem }: { mem: EntityMemory }) {
 
 // ─── 4. Output compare ────────────────────────────────────────────────────
 
-function DeltaIcon({ direction }: { direction: 'up' | 'down' | 'flat' }) {
-  if (direction === 'up') return <TrendingUp size={12} className="text-mitigated-700" />;
-  if (direction === 'down') return <TrendingDown size={12} className="text-compliant-700" />;
-  return <Minus size={12} className="text-ink-400" />;
+// The delta chip is a tinted pill: its wash tracks whether the move is
+// favourable (compliant = good, mitigated = bad, neutral bordered = no
+// judgement — more records processed isn't a warning), its glyph tracks raw
+// direction, and it carries the magnitude — so the reader takes in size,
+// direction, and sentiment in one badge.
+function deltaPill(sentiment: 'good' | 'bad' | 'neutral') {
+  return sentiment === 'good' ? 'bg-compliant-50 text-compliant-700'
+    : sentiment === 'bad' ? 'bg-mitigated-50 text-mitigated-700'
+    : 'bg-canvas text-ink-500 border border-canvas-border';
+}
+function DeltaGlyph({ direction }: { direction: 'up' | 'down' | 'flat' }) {
+  if (direction === 'up') return <TrendingUp size={11} />;
+  if (direction === 'down') return <TrendingDown size={11} />;
+  return <Minus size={11} />;
 }
 
 function OutputComparePanel({ cmp }: { cmp: OutputCompare }) {
@@ -410,13 +432,15 @@ function OutputComparePanel({ cmp }: { cmp: OutputCompare }) {
       {/* KPI deltas as a borderless stat row split by hairlines — not tiles. */}
       <div className="grid grid-cols-3 divide-x divide-canvas-border/60">
         {cmp.kpiDeltas.map((k) => (
-          <div key={k.label} className="px-4 first:pl-0 last:pr-0">
-            <div className="text-[10px] text-ink-400 uppercase tracking-wider mb-1">{k.label}</div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[17px] font-bold font-mono text-ink-800 leading-none">{k.current}</span>
-              <DeltaIcon direction={k.direction} />
+          <div key={k.label} className="px-5 first:pl-0 last:pr-0">
+            <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide mb-2">{k.label}</div>
+            <div className="flex items-center gap-2">
+              <span className="text-[21px] font-bold font-mono text-ink-900 leading-none">{k.current}</span>
+              <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums leading-none ${deltaPill(k.sentiment)}`}>
+                <DeltaGlyph direction={k.direction} />{k.delta}
+              </span>
             </div>
-            <div className="text-[10.5px] text-ink-400 mt-1 font-mono">was {k.previous}</div>
+            <div className="text-[11px] text-ink-400 mt-2 font-mono">was {k.previous}</div>
           </div>
         ))}
       </div>
@@ -488,8 +512,8 @@ export default function WorkflowMemoryPanel({
         icon={<Brain size={14} />}
         title="What memory knows about this run"
         right={
-          <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 px-2 py-0.5 text-[10px] font-bold border border-brand-100 shrink-0">
-            <Sparkles size={10} /> Insight Memory Engine
+          <span className="inline-flex items-center rounded-full bg-brand-50 text-brand-700 px-2.5 py-0.5 text-[10px] font-bold border border-brand-100 shrink-0">
+            Insight Memory Engine
           </span>
         }
       >
@@ -502,7 +526,7 @@ export default function WorkflowMemoryPanel({
         {/* Lens 1 — cross-workflow correlation */}
         <div className="pt-3">
           <div className="flex items-start gap-2.5">
-            <span className="size-6 rounded-md bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+            <span className="size-6 rounded-md bg-canvas border border-canvas-border text-ink-400 flex items-center justify-center shrink-0">
               <Network size={13} />
             </span>
             <div className="min-w-0 flex-1">
@@ -523,7 +547,7 @@ export default function WorkflowMemoryPanel({
         {/* Lens 2 — compare with the previous run */}
         <div>
           <div className="flex items-start gap-2.5">
-            <span className="size-6 rounded-md bg-compliant-50 text-compliant-700 flex items-center justify-center shrink-0">
+            <span className="size-6 rounded-md bg-canvas border border-canvas-border text-ink-400 flex items-center justify-center shrink-0">
               <GitCompareArrows size={13} />
             </span>
             <div className="min-w-0 flex-1">
