@@ -16,11 +16,11 @@
 // resizable Plan panel. Calm by default (hairline ink edges); brand colour and
 // the arrowheads only light up on interaction — the Auditor's Pen stays rare.
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ListChecks, ChevronDown, FileText, Workflow, List, CornerDownRight, Table2, ArrowRight, Maximize2,
+  ListChecks, ChevronDown, FileText, Workflow, List, CornerDownRight, Table2, ArrowRight, ArrowDown, Maximize2,
 } from 'lucide-react';
 import {
   typeColor, StepFilesAndColumns,
@@ -174,25 +174,6 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result' }: {
     } ${dim ? 'opacity-40' : 'opacity-100'} ${extra}`;
   };
 
-  // Spine-edge tags: the short `output` each step hands to the next, placed at
-  // the midpoint of the vertical connector so you can read what flows down.
-  const spineLabels = useMemo(() => {
-    const arr: { id: string; text: string; x: number; y: number }[] = [];
-    steps.forEach((s, i) => {
-      if (!s.output) return;
-      const from = rects[`step:${s.id}`];
-      const to = rects[i < steps.length - 1 ? `step:${steps[i + 1].id}` : 'out'];
-      if (!from || !to) return;
-      arr.push({
-        id: `lbl:${s.id}`,
-        text: s.output,
-        x: (from.x + from.w / 2 + to.x + to.w / 2) / 2,
-        y: (from.y + from.h + to.y) / 2,
-      });
-    });
-    return arr;
-  }, [steps, rects]);
-
   // Row count the pipeline lands on — shown as a meta chip on the output node.
   const finalRows = useMemo(() => {
     for (let i = steps.length - 1; i >= 0; i--) if (steps[i].rowsOut != null) return steps[i].rowsOut!;
@@ -245,27 +226,16 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result' }: {
           })}
         </svg>
 
-        {/* Flow captions — a plain description of the data each step hands down,
-            sitting on the wire (masking it), NOT a pill/tag. */}
-        {spineLabels.map((l) => (
-          <span
-            key={l.id}
-            style={{ left: l.x, top: l.y }}
-            className="absolute z-[5] -translate-x-1/2 -translate-y-1/2 pointer-events-none bg-canvas-elevated px-2 py-0.5 text-[10.5px] font-medium text-ink-500 whitespace-nowrap"
-          >
-            {l.text}
-          </span>
-        ))}
-
-        {/* Single top-to-bottom pipeline — steps + output. Each step names the
-            data it reads inline, so there's no separate input lane. */}
-        <div className="relative z-10 flex flex-col gap-7">
+        {/* Single top-to-bottom pipeline — steps, each followed by a descriptive
+            hand-off box on the connector, ending in the output. Each step names
+            the data it reads inline, so there's no separate input lane. */}
+        <div className="relative z-10 flex flex-col gap-5">
             {steps.map((s, idx) => {
               const tables = s.sources ?? [];
               const hasFunnel = s.rowsIn != null && s.rowsOut != null;
               return (
+                <Fragment key={s.id}>
                 <button
-                  key={s.id}
                   type="button"
                   ref={registerNode(`step:${s.id}`)}
                   {...nodeHandlers(`step:${s.id}`)}
@@ -304,6 +274,22 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result' }: {
                     </span>
                   )}
                 </button>
+
+                {/* Hand-off box — a descriptive, boxed summary of what this step
+                    passes to the next. Sits on the connector (its opaque fill
+                    masks the wire), styled lighter than the step nodes so the
+                    steps stay primary. */}
+                {s.output && (
+                  <div className="flex justify-center">
+                    <div className="relative inline-flex items-start gap-2 rounded-lg border border-canvas-border bg-canvas px-3 py-2 max-w-[34rem]">
+                      <span className="shrink-0 mt-px inline-flex size-[18px] items-center justify-center rounded-full bg-brand-50" aria-hidden>
+                        <ArrowDown size={11} className="text-brand-500" />
+                      </span>
+                      <span className="text-[11.5px] font-medium text-ink-600 leading-snug">{s.output}</span>
+                    </div>
+                  </div>
+                )}
+                </Fragment>
               );
             })}
 

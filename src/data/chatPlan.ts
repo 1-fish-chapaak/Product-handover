@@ -7,9 +7,10 @@
 //
 // Copy is written for a NON-TECHNICAL audit/finance reader: plain English, no
 // SQL, no "tables/columns/joins" jargon. `description` is the plain narrative,
-// `operation` a short concrete specific, `output` the plain payload each step
-// hands to the next (drawn on the flow's connecting arrow), and `sources` the
-// real datasets it read.
+// `operation` a short concrete specific, `output` a DESCRIPTIVE plain-English
+// summary of what this step hands to the next (drawn as a hand-off box on the
+// flow's connector — so it's written as a full phrase, not a terse tag), and
+// `sources` the real datasets it read.
 
 import type { PlanCardStep, PlanCardSource } from '../components/shared/PlanCards';
 
@@ -27,21 +28,21 @@ export const CHAT_PLAN_STEPS: PlanCardStep[] = [
     id: 'parse', name: 'Understand your question', type: 'extract',
     description: 'Read your question and worked out exactly what you are asking for.',
     operation: 'Goal: find risky payments in Purchase-to-Pay',
-    output: 'Understood: find risky P2P payments',
+    output: 'A clear goal to work toward — find the risky payments across the Purchase-to-Pay process.',
   },
   {
     id: 'sources', name: 'Find the right data', type: 'extract',
     description: 'Picked the datasets that hold the answer and opened their fields.',
     sources: [SRC_SAP_AP, SRC_VENDOR_MASTER],
     operation: 'Opened 12 data fields',
-    output: 'Opened SAP AP + Vendor Master datasets',
+    output: 'The payment records and vendor details, opened up and ready to be checked.',
   },
   {
     id: 'plan', name: 'Plan the checks', type: 'analyze',
     description: 'Worked out how to combine the two datasets and which payments to focus on.',
     sources: [SRC_SAP_AP, SRC_VENDOR_MASTER],
     operation: 'Match each invoice to its vendor, focus on medium-or-higher risk',
-    output: 'Plan: match to vendors, keep medium+ risk',
+    output: 'A step-by-step plan — match each payment to its vendor, then focus on the medium-or-higher risk ones.',
   },
   {
     id: 'execute', name: 'Run the checks', type: 'validate',
@@ -50,12 +51,12 @@ export const CHAT_PLAN_STEPS: PlanCardStep[] = [
     operation: 'Checked against 4 controls',
     rowsIn: 1_200_000,
     rowsOut: 9,
-    output: 'Found 9 risky payments',
+    output: 'The 9 payments that broke a control, filtered down from 1.2 million checked.',
   },
   {
     id: 'format', name: 'Prepare the results', type: 'summarize',
     description: 'Turned the 9 findings into a clear table you can act on.',
     operation: 'Added a risk level and the control each one relates to',
-    output: 'Turned into a risk table',
+    output: 'A clear, ready-to-use risk table you can review and act on.',
   },
 ];
