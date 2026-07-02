@@ -6,7 +6,7 @@
 // Reached from the editor's "Import from a report" step: the author curates what
 // the detector proposed before it lands in the outline.
 
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Reorder, useDragControls } from 'motion/react';
 import {
   Plus, CornerDownRight,
@@ -98,7 +98,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
   // Brand-purple index to match the report letterhead — the outline reads as the
   // report's own numbered sections, not an evidence-coloured status list. A missing
   // name still flags amber (a validation state); the row tint carries any review flag.
-  const numTint = empty ? 'bg-high-50 text-high-700' : 'bg-brand-50 text-brand-700';
+  const numTint = empty ? 'bg-high-50 text-high-700' : '';
   return (
     <Reorder.Item
       value={section}
@@ -119,7 +119,7 @@ function SectionRow({ section, index, total, flashed, registerRef, onRename, onD
         {/* Brand-purple numbered index — the report's own outline mark. Two-digit
             like the editor preview (01, 02…) so the badge reads the same across
             the import → review → outline flow. */}
-        <span className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[0.6875rem] font-bold tabular-nums ${numTint}`}>{String(index + 1).padStart(2, '0')}</span>
+        <span className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[0.6875rem] font-bold tabular-nums ${numTint}`} style={empty ? undefined : { color: 'var(--rep-accent, #550fa5)', backgroundColor: 'color-mix(in srgb, var(--rep-accent, #6a12cd) 12%, transparent)' }}>{String(index + 1).padStart(2, '0')}</span>
         <input
           value={section.name}
           onChange={e => onRename(e.target.value)}
@@ -222,6 +222,7 @@ export default function SectionReviewCanvas({
     headerText?: string;
     footerText?: string;
     gradient?: [string, string];
+    accent?: string;
   };
 }) {
   const { addToast } = useToast();
@@ -348,8 +349,12 @@ export default function SectionReviewCanvas({
   return (
     <>
       <div className="grid grid-cols-[2fr_3fr] gap-6 flex-1 min-h-0">
-        {/* Left — the source document */}
+        {/* Left — the source document (the report as uploaded: the "as-is" state) */}
         <section className="flex flex-col min-h-0">
+          <div className="shrink-0 pb-2.5 flex items-baseline gap-1.5">
+            <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-ink-500">As-is state</span>
+            <span className="text-[0.6875rem] text-ink-400">the report you uploaded</span>
+          </div>
           <div className="flex-1 overflow-y-auto -mx-2 px-2 pb-2">
             {detected.length === 0 ? (
               <div className="rounded-[12px] border border-dashed border-canvas-border bg-white px-6 py-12 text-center text-[0.75rem] text-ink-400 leading-relaxed">
@@ -389,9 +394,13 @@ export default function SectionReviewCanvas({
             report's own letterhead + sheet + footer (mirrors the editor preview),
             so it reads as the report being assembled, not a detached list. */}
         <section className="flex flex-col min-h-0">
+          <div className="shrink-0 pb-2.5 flex items-baseline gap-1.5">
+            <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.09em] text-brand-600">To-be state</span>
+            <span className="text-[0.6875rem] text-ink-400">your template</span>
+          </div>
           <div className="flex-1 overflow-y-auto -mx-2 px-2 pb-2">
             {reportChrome ? (
-              <div className="rounded-[12px] shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)]">
+              <div className="rounded-[12px] shadow-[0_1px_2px_rgba(15,8,30,0.04),0_8px_24px_-12px_rgba(15,8,30,0.10)]" style={reportChrome.accent ? ({ '--rep-accent': reportChrome.accent } as CSSProperties) : undefined}>
                 <ReportBrandBanner
                   title={reportChrome.title || 'Untitled Template'}
                   titleClassName="text-[1.375rem]"

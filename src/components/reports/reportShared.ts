@@ -118,6 +118,92 @@ export const TEMPLATE_THEME_SWATCH: Record<string, [string, string]> = {
   'Bronze & Sand': ['#9a3412', '#e4c7a1'],
 };
 
+/** Theme name → content accent (section numbers, underline ticks, outline-rail
+ *  index) so a themed report's body accents match its cover instead of clashing
+ *  with brand purple. Each is readable on white. Falls back to brand-700 when a
+ *  report has no theme. */
+export const TEMPLATE_THEME_ACCENT: Record<string, string> = {
+  'Purple & White': '#550fa5',
+  'Indigo & Sky': '#4f46e5',
+  'Navy & Gold': '#26436e',
+  'Ocean & Cyan': '#0e7490',
+  'Teal & Light': '#0d9488',
+  'Forest & Sage': '#15803d',
+  'Slate & Blue': '#3f5f86',
+  'Charcoal & Graphite': '#3f3f46',
+  'Burgundy & Wine': '#9f1239',
+  'Bronze & Sand': '#9a3412',
+};
+
+// ─── Brand colour → report palette ──────────────────────────────────────────
+// A single custom brand colour drives the report cover gradient + body accent,
+// so changing it re-skins the whole report. Named themes above remain quick
+// presets; a set brandColour overrides them.
+const DEFAULT_BRAND = '#6a12cd';
+/** Accept #rgb / #rrggbb (with or without #); returns null for anything else so
+ *  callers can fall back rather than render a broken colour. */
+function parseHexColor(hex?: string): { r: number; g: number; b: number } | null {
+  if (!hex) return null;
+  let h = hex.trim().replace(/^#/, '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+  return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+}
+export function isValidHexColor(hex?: string): boolean {
+  return parseHexColor(hex) !== null;
+}
+const clamp255 = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
+const toHex = (r: number, g: number, b: number) =>
+  '#' + [r, g, b].map(n => clamp255(n).toString(16).padStart(2, '0')).join('');
+/** Mix a colour toward a target ([0..1] amount toward target). */
+function mixColor(c: { r: number; g: number; b: number }, target: { r: number; g: number; b: number }, amount: number) {
+  return { r: c.r + (target.r - c.r) * amount, g: c.g + (target.g - c.g) * amount, b: c.b + (target.b - c.b) * amount };
+}
+const BLACK = { r: 0, g: 0, b: 0 };
+// Relative luminance (WCAG) for readability decisions.
+function luminance(c: { r: number; g: number; b: number }): number {
+  const f = (v: number) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+}
+
+/** Report cover gradient [deep, mid] derived from a brand colour — deep is the
+ *  colour darkened, mid is the colour (matches the preset deep→mid look). A light
+ *  brand colour is darkened first so white title text stays legible on the
+ *  banner. Invalid/absent colour falls back to the brand purple gradient. */
+export function brandGradient(hex?: string): [string, string] {
+  const c = parseHexColor(hex);
+  if (!c) return ['#3b0b72', DEFAULT_BRAND];
+  let mid = c;
+  let guard = 0;
+  while (luminance(mid) > 0.42 && guard < 14) { mid = mixColor(mid, BLACK, 0.16); guard += 1; }
+  const deep = mixColor(mid, BLACK, 0.42);
+  return [toHex(deep.r, deep.g, deep.b), toHex(mid.r, mid.g, mid.b)];
+}
+
+/** Body accent (section numbers / ticks) from a brand colour — darkened enough
+ *  to stay readable on white. Very light brand colours darken more. */
+export function brandAccent(hex?: string): string {
+  const c = parseHexColor(hex);
+  if (!c) return '#550fa5';
+  let out = c;
+  // Darken toward black until luminance is low enough to read on white.
+  let guard = 0;
+  while (luminance(out) > 0.28 && guard < 12) { out = mixColor(out, BLACK, 0.18); guard += 1; }
+  return toHex(out.r, out.g, out.b);
+}
+
+/** The report cover gradient: a valid custom brandColor wins, else the named
+ *  theme, else undefined (callers default to brand purple). */
+export function reportGradient(theme?: string, brandColor?: string): [string, string] | undefined {
+  if (isValidHexColor(brandColor)) return brandGradient(brandColor);
+  return theme ? TEMPLATE_THEME_GRADIENT[theme] : undefined;
+}
+/** The report body accent (numbers/ticks): custom brandColor wins, else theme. */
+export function reportAccent(theme?: string, brandColor?: string): string {
+  if (isValidHexColor(brandColor)) return brandAccent(brandColor);
+  return (theme && TEMPLATE_THEME_ACCENT[theme]) || '#550fa5';
+}
+
 // Blank base for the create-from-scratch flow — the TemplateEditor opens on
 // this with an empty section list and a name the user is expected to replace.
 export const BLANK_TEMPLATE = {
@@ -215,6 +301,8 @@ export type BulkAuditAestheticVariant = 'editorial';
 
 /** Page watermark config — a text or image mark laid diagonally across every
  *  page, with opacity / rotation / size controls. */
+export type WatermarkPosition = 'center' | 'top' | 'bottom' | 'left' | 'right';
+
 export type WatermarkConfig = {
   enabled: boolean;
   mode: 'text' | 'image';
@@ -223,6 +311,8 @@ export type WatermarkConfig = {
   opacity: number;   // 0..1 (rendered fill)
   rotation: number;  // degrees, -90..90
   size: number;      // % of page width, 20..100
+  /** Where the mark sits on the page. Absent = center (back-compat). */
+  position?: WatermarkPosition;
 };
 
 export const DEFAULT_WATERMARK: WatermarkConfig = {
@@ -232,6 +322,7 @@ export const DEFAULT_WATERMARK: WatermarkConfig = {
   opacity: 0.08,
   rotation: -35,
   size: 60,
+  position: 'center',
 };
 
 /** A section's block type (§4.7). Text is prose; KPI and Chart are *placeholders*
@@ -262,12 +353,22 @@ export type EditableTemplate = Omit<typeof REPORT_TEMPLATES[number], 'sections'>
   sections: TemplateSection[];
   brand?: string;
   theme?: string;
+  /** Custom brand colour (hex). When set, drives the report cover gradient +
+   *  body accent, overriding the named `theme`. */
+  brandColor?: string;
   headerText?: string;
   footerText?: string;
   /** Brand logo (data URL) shown on the letterhead cover. */
   logoDataUrl?: string;
   /** Diagonal page watermark (text or image). */
   watermark?: WatermarkConfig;
+  /** Page numbers on the printed / exported report. Absent = on (reports
+   *  paginate by default; the toggle removes them). */
+  pageNumbers?: boolean;
+  /** Sign-off block on the report. When enabled, `signatories` define the roles
+   *  (Prepared by, Approved by…) each report gets a manual sign / sign-off for. */
+  signoffEnabled?: boolean;
+  signatories?: SignatorySlot[];
   /** Free-form tags for findability once the library grows (§9). */
   tags?: string[];
 };
@@ -336,9 +437,31 @@ export type GeneratedReport = typeof GENERATED_REPORTS[number] & {
    *  template's Customize fields) — applied to the cover banner / footer. */
   brand?: string;
   theme?: string;
+  /** Custom brand colour (hex) carried from the template — drives cover + accent. */
+  brandColor?: string;
   headerText?: string;
   footerText?: string;
+  /** Page numbers on the exported report (carried from the template). Absent = on. */
+  pageNumbers?: boolean;
+  /** Sign-off block config carried from the template. */
+  signoffEnabled?: boolean;
+  signatories?: SignatorySlot[];
+  /** Runtime sign state, keyed by signatory-slot id — set when a report is
+   *  manually signed, cleared on sign-off. */
+  signoffs?: Record<string, Signoff>;
 };
+
+/** A sign-off slot on the report: a role (Prepared by / Approved by…) and an
+ *  optional pre-assigned name. */
+export type SignatorySlot = { id: string; role: string; name?: string };
+/** The manual sign record for a slot. */
+export type Signoff = { signedBy: string; signedAt: string };
+/** Default rows seeded when the sign-off block is first enabled. */
+export const DEFAULT_SIGNATORIES: SignatorySlot[] = [
+  { id: 'sig-prepared', role: 'Prepared by' },
+  { id: 'sig-reviewed', role: 'Reviewed by' },
+  { id: 'sig-approved', role: 'Approved by' },
+];
 
 // Simulated report download — shows a 'loading' toast that resolves to a
 // 'success' toast after a short "preparing" delay. No real file is produced

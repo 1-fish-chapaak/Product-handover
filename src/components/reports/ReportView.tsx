@@ -30,17 +30,18 @@ import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { reportDisplayName } from './reportName';
 import { ApplyTemplateDropdown } from './TemplateEditor';
 import {
-  SECTION_ICONS, TEMPLATE_THEME_GRADIENT, mergeTemplateOptions,
+  SECTION_ICONS, reportGradient, reportAccent, mergeTemplateOptions,
   computeQueryKpis, reportKind,
   type WorkflowResult,
   CUSTOM_TEMPLATES,
   type QueryShape, type QueryComment, type GeneratedReport,
+  type SignatorySlot, type Signoff,
 } from './reportShared';
 import QueryWidgetModal from './QueryWidgetModal';
 import { useToast } from '../shared/Toast';
-import { useCan } from '../../context/CurrentUserContext';
+import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
 import { KpiCountUp } from '../shared/KpiTile';
-import { ReportBrandBanner, ReportNumberedHeading, ReportKpiTiles } from './ReportDocumentChrome';
+import { ReportBrandBanner, ReportNumberedHeading, ReportKpiTiles, ReportSignoffBlock } from './ReportDocumentChrome';
 import { statTone } from './reportTones';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import { composeExecSummary, composeSectionContent, workflowToQueryDef } from './templateQueryPool';
@@ -1078,7 +1079,7 @@ function ContentsRow({
       >
         <GripVertical size={13} />
       </button>
-      <span className={`shrink-0 w-5 text-[0.6875rem] font-semibold font-mono tabular-nums text-right ${active ? 'text-brand-700' : 'text-brand-500'}`}>{String(index).padStart(2, '0')}</span>
+      <span className="shrink-0 w-5 text-[0.6875rem] font-semibold font-mono tabular-nums text-right" style={{ color: 'var(--rep-accent, #550fa5)', opacity: active ? 1 : 0.65 }}>{String(index).padStart(2, '0')}</span>
       {isEditing ? (
         <input
           value={draftValue}
@@ -1806,7 +1807,7 @@ function DraggableQuerySection({
 // ─── Attached Query Card — compact pending card for queries the user just attached ───
 
 // ─── Report View (with multiple queries) ───
-export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onSaveAsTemplate, onSaveAtrVersion }: {
+export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onUpdateSignoffs, onSaveAsTemplate, onSaveAtrVersion }: {
   report: GeneratedReport;
   onBack: () => void;
   onShare?: () => void;
@@ -1815,11 +1816,30 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   initialTemplate?: typeof REPORT_TEMPLATES[0] | null;
   customTemplates?: typeof REPORT_TEMPLATES[number][];
   onUpdateDescription?: (reportId: string, description: string) => void;
+  /** Persist manual sign / sign-off state on the report. */
+  onUpdateSignoffs?: (reportId: string, signoffs: Record<string, Signoff>) => void;
   onSaveAsTemplate?: (t: typeof REPORT_TEMPLATES[number]) => void;
   /** Save the Live ATR as a brand-new card in the ATR tab. */
   onSaveAtrVersion?: (label: string, data: AtrReportData) => void;
 }) {
   const { addToast } = useToast();
+  const { currentUser } = useCurrentUser();
+  // Manual sign-on / sign-off on the report's approval slots. Signing records
+  // the slot's assigned name (or the current user) + today's date; signing off
+  // clears it. Persisted via onUpdateSignoffs (no-op if the report is read-only).
+  const canSignoff = !!onUpdateSignoffs && !report.isReadOnly;
+  const handleSign = (slot: SignatorySlot) => {
+    const signer = slot.name?.trim() || currentUser?.name || 'You';
+    const signedAt = new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+    onUpdateSignoffs?.(report.id, { ...(report.signoffs ?? {}), [slot.id]: { signedBy: signer, signedAt } });
+    addToast({ type: 'success', message: `Signed as ${signer}.` });
+  };
+  const handleSignOff = (slot: SignatorySlot) => {
+    const next = { ...(report.signoffs ?? {}) };
+    delete next[slot.id];
+    onUpdateSignoffs?.(report.id, next);
+    addToast({ type: 'info', message: 'Sign-off removed.' });
+  };
   const { can } = useCan();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   // One-time skeleton "stream-in" on open: query sections resolve from a
@@ -2786,7 +2806,12 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           centered document column. The rail tracks scroll position and jumps
           between sections; the document keeps a comfortable reading measure
           instead of spanning the full page. */}
-      <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10">
+      <div
+        className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10"
+        // A custom brand colour (or named theme) colours the body accents (section
+        // numbers, ticks, outline rail) to match the cover.
+        style={{ '--rep-accent': reportAccent(report.theme, report.brandColor) } as React.CSSProperties}
+      >
         <aside className="hidden xl:block w-[252px] shrink-0 sticky top-[72px] self-start max-h-[calc(100vh-96px)] overflow-y-auto pr-1 -mr-1 print:hidden">
           <OutlineRail />
         </aside>
@@ -2798,7 +2823,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             <div className="rounded-[12px] overflow-hidden mb-5 border border-canvas-border bg-white">
               <ReportBrandBanner
                 title={reportDisplayName(report.name)}
-                gradient={report.theme ? TEMPLATE_THEME_GRADIENT[report.theme] : undefined}
+                gradient={reportGradient(report.theme, report.brandColor)}
                 actions={
                   <>
                     {canGenerateAtr && (
@@ -2903,6 +2928,19 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 ))}
               </div>
             )}
+
+            {/* Approvals & Sign-Off — from the template's signature block. Each
+                slot is manually signable (and revocable) here in the reader. */}
+            {report.signoffEnabled && (report.signatories?.length ?? 0) > 0 && (
+              <div className="mt-6 bg-white rounded-[12px] border border-canvas-border p-6">
+                <ReportSignoffBlock
+                  signatories={report.signatories!}
+                  signoffs={report.signoffs}
+                  onSign={canSignoff ? handleSign : undefined}
+                  onSignOff={canSignoff ? handleSignOff : undefined}
+                />
+              </div>
+            )}
           </>
         ) : (
           <div className="w-full">
@@ -2942,7 +2980,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                         <ReportBrandBanner
                           title={reportDisplayName(report.name)}
                                     className="rounded-t-[12px]"
-                          gradient={report.theme ? TEMPLATE_THEME_GRADIENT[report.theme] : undefined}
+                          gradient={reportGradient(report.theme, report.brandColor)}
                           eyebrow={report.id && (
                             <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{report.id.toUpperCase()}</span>
                           )}
@@ -3166,6 +3204,10 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             templateName={reportTemplate?.name}
             generatedBy={report.generatedBy}
             generatedAt={report.generatedAt}
+            pageNumbers={report.pageNumbers}
+            brandColor={report.brandColor}
+            signatories={report.signoffEnabled ? report.signatories : undefined}
+            signoffs={report.signoffs}
             sections={sections.map((s): DownloadPreviewSection => {
               if (s.kind === 'query') {
                 const q = s.query;
