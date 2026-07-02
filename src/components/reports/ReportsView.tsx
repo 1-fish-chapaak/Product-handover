@@ -8,7 +8,7 @@ import { BTN_CTA_PRIMARY } from '../admin/adminTokens';
 import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
-  X, Edit3, BookOpen, Trash2, Plus, Search, Layers, Check, Pencil,
+  X, Edit3, BookOpen, Trash2, Plus, Search, Layers, Check,
   WifiOff, FileCheck2, FolderArchive, CloudUpload,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
@@ -437,6 +437,8 @@ export default function ReportsView({
     name: string;
     /** Bulk Audit engagement style — the meaningful "type" axis within a framework. */
     bulk: boolean;
+    /** 'custom' when generated from a user's custom template (ct-*), else 'system'. */
+    source: 'system' | 'custom';
     description: string;
     pills: string[];
     status: 'draft' | 'final';
@@ -470,6 +472,7 @@ export default function ReportsView({
       if (k !== 'sox' && k !== 'ia') return;
       rows.push({
         id: r.id, kind: k, name: r.name, bulk: r.tag === 'Bulk Audit',
+        source: r.templateId?.startsWith('ct-') ? 'custom' : 'system',
         description: reportDesc(r), pills: reportPills(r),
         status: r.status === 'final' ? 'final' : 'draft',
         date: r.generatedAt, sortDate: ts(r.generatedAt),
@@ -482,7 +485,7 @@ export default function ReportsView({
     // ATRs.
     allAtrs.forEach(a => {
       rows.push({
-        id: a.id, kind: 'atr', name: a.name, bulk: false,
+        id: a.id, kind: 'atr', name: a.name, bulk: false, source: 'system',
         description: atrDesc(a), pills: atrPills(a),
         status: a.status === 'final' ? 'final' : 'draft',
         date: a.generatedAt, sortDate: ts(a.generatedAt),
@@ -498,7 +501,7 @@ export default function ReportsView({
     EVIDENCE_LIBRARY.forEach(ev => {
       const openFile = () => addToast({ type: 'success', message: `Opening “${ev.name}”…` });
       rows.push({
-        id: ev.id, kind: 'evidence', name: ev.name, bulk: false,
+        id: ev.id, kind: 'evidence', name: ev.name, bulk: false, source: 'system',
         description: `${ev.area} · linked to ${ev.atrName}`,
         pills: [ev.type, ev.size],
         status: 'final',
@@ -915,7 +918,7 @@ export default function ReportsView({
   // so columns line up tab to tab. The Report (name) column has no fixed width,
   // so under SmartTable `fixedLayout` it absorbs the slack — the detail columns
   // and actions stay packed together on the right with no empty gap.
-  const COL_W = { type: '180px', status: '128px', queries: '112px', sharedBy: '200px', generated: '150px', actions: '120px' };
+  const COL_W = { type: '180px', status: '128px', queries: '112px', sharedBy: '200px', generated: '150px', actions: '120px', source: '110px' };
   // Muted placeholder for the Type column when a row has no special type.
 
 
@@ -1219,6 +1222,11 @@ export default function ReportsView({
                   </div>
                 );
               }},
+              { key: 'source', label: 'Source', width: COL_W.source, render: (item) => (
+                <span className="inline-flex items-center h-5 px-2 rounded-full bg-paper-100 text-[0.6875rem] font-medium text-ink-500 whitespace-nowrap">
+                  {(item as unknown as UnifiedRow).source === 'custom' ? 'Custom' : 'System'}
+                </span>
+              )},
               { key: 'date', label: 'Generated', width: COL_W.generated, render: (item) => (
                 <span className="text-[0.75rem] tabular-nums text-ink-500 whitespace-nowrap">{String(item.date)}</span>
               )},              { key: 'actions', label: '', width: COL_W.actions, sortable: false, align: 'right', render: (item) => {
@@ -1307,6 +1315,11 @@ export default function ReportsView({
                 const k = (item.kind as UnifiedKind) ?? 'ia';
                 return TYPE_PILL(KIND_FULL_LABEL[k], KIND_TONE[k]);
               }},
+              { key: 'source', label: 'Source', width: COL_W.source, render: (item) => (
+                <span className="inline-flex items-center h-5 px-2 rounded-full bg-paper-100 text-[0.6875rem] font-medium text-ink-500 whitespace-nowrap">
+                  {item.source === 'custom' ? 'Custom' : 'System'}
+                </span>
+              )},
               { key: 'sharedBy', label: 'Shared by', width: COL_W.sharedBy, render: (item) => (
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 rounded-full bg-brand-600/10 text-brand-600 text-[0.5625rem] font-semibold flex items-center justify-center shrink-0">
@@ -1486,17 +1499,8 @@ export default function ReportsView({
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {isCustom && (
-                      <ActionTooltip label="Rename">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); startRename(rt); }}
-                          aria-label={`Rename template ${rt.name}`}
-                          className="w-7 h-7 flex items-center justify-center rounded-full text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] transition-colors duration-200 cursor-pointer"
-                        >
-                          <Pencil size={13} />
-                        </button>
-                      </ActionTooltip>
-                    )}
-                    {isCustom && (
+                      // Single Edit action — renames inline in the editor (or double-
+                      // click the title). Do NOT add a separate Rename pencil back.
                       <ActionTooltip label="Edit">
                         <button
                           onClick={(e) => { e.stopPropagation(); editCustomTemplate(rt); }}
@@ -1578,17 +1582,8 @@ export default function ReportsView({
                   </span>
                   <div className="flex items-center gap-0.5 pl-1">
                     {isCustom && (
-                      <ActionTooltip label="Rename">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); startRename(rt); }}
-                          aria-label={`Rename template ${rt.name}`}
-                          className="w-7 h-7 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] transition-colors cursor-pointer"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                      </ActionTooltip>
-                    )}
-                    {isCustom && (
+                      // Single Edit action — renames inline in the editor (or double-
+                      // click the title). Do NOT add a separate Rename pencil back.
                       <ActionTooltip label="Edit">
                         <button
                           onClick={(e) => { e.stopPropagation(); editCustomTemplate(rt); }}

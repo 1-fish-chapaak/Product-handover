@@ -265,7 +265,9 @@ function AppInner() {
     setView('racm-full-editor');
   };
   type CustomTemplate = typeof CUSTOM_TEMPLATES[number];
-  const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
+  // v2 — resets the Custom list to a clean slate (the v1 blob had accumulated
+  // dozens of test copies); new templates persist here going forward.
+  const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v2';
   // The old demo seeds — filtered out of any previously persisted blob so the
   // Custom section only ever shows templates the user actually created.
   const DEMO_TEMPLATE_IDS = new Set(['ct-custom-01', 'ct-custom-02', 'ct-003', 'ct-004', 'ct-005', 'ct-006']);
