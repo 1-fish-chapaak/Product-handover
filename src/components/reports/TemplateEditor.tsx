@@ -6,24 +6,24 @@
 //  components, keeping React Fast Refresh intact.)
 // Depends only on the shared keystone, ReportDocumentChrome, and ConfirmDialog.
 
-import { useState, useRef, useEffect, type ReactNode } from 'react';
+import { useState, useRef, useEffect, type ReactNode, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useDragControls } from 'motion/react';
 import {
   Check, ChevronRight, FileText, GripVertical,
-  Loader2, Plus, X, Pencil, ShieldCheck,
+  Loader2, Plus, X, Pencil, ShieldCheck, Trash2,
   BookOpen, Search, Upload, Info, Maximize2, Minimize2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { REPORT_TEMPLATES } from '../../data/mockData';
-import { ReportBrandBanner } from './ReportDocumentChrome';
+import { ReportBrandBanner, ReportSignoffBlock } from './ReportDocumentChrome';
 import ConfirmDialog from './ConfirmDialog';
 import {
-  ICON_MAP, CATEGORY_COLORS, SECTION_ICONS, TEMPLATE_THEME_GRADIENT, TEMPLATE_THEME_SWATCH,
-  sectionBlurb, DEFAULT_WATERMARK,
+  ICON_MAP, CATEGORY_COLORS, SECTION_ICONS, TEMPLATE_THEME_GRADIENT, TEMPLATE_THEME_SWATCH, TEMPLATE_THEME_ACCENT,
+  sectionBlurb, DEFAULT_WATERMARK, reportGradient, reportAccent, DEFAULT_SIGNATORIES,
   type EditableTemplate, type WatermarkConfig,
-  type TemplateSection,
+  type TemplateSection, type SignatorySlot,
 } from './reportShared';
 import { extractReportStructure, type ReportStructure } from './extractPdfHeaderFooter';
 import SectionReviewCanvas from './SectionReviewCanvas';
@@ -34,6 +34,16 @@ import { useAuditLog } from '../../context/AdminDataContext';
 // Soft length guide for letterhead header/footer text — past this the counter
 // turns amber and a hint warns about truncation, but saving is never blocked.
 const LETTERHEAD_SOFT_MAX = 60;
+
+// Watermark placement → the flex alignment (+ edge padding) that pins the mark to
+// that side of the page. Center is the default diagonal stamp.
+const WATERMARK_POS: Record<'center' | 'top' | 'bottom' | 'left' | 'right', string> = {
+  center: 'items-center justify-center',
+  top: 'items-start justify-center pt-8',
+  bottom: 'items-end justify-center pb-8',
+  left: 'items-center justify-start pl-8',
+  right: 'items-center justify-end pr-8',
+};
 
 // Plain field label — matches the platform's form convention (no per-field icon
 // tile, which over-spent the brand accent). Optional right-aligned content
@@ -196,7 +206,7 @@ function ExtractionCard({
         </div>
       )}
       <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="text-[0.6875rem] text-ink-400">{done ? 'Your report is ready.' : 'Running in the background — keep working.'}</span>
+        <span className="text-[0.6875rem] text-ink-400">{done ? 'Your report is ready.' : 'Running in the background. Keep working.'}</span>
         {onOpen ? (
           <button onClick={onOpen} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[8px] text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 cursor-pointer transition-colors">
             <Maximize2 size={13} /> Open
@@ -353,6 +363,15 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
     if (next && next !== fallbackDesc) onDescribe(next);
     else if (!next || next === fallbackDesc) onDescribe('');
   };
+  // The pencil edits BOTH at once: open the heading (focused) and the description
+  // together. The description opens WITHOUT taking focus — otherwise moving focus
+  // onto the heading blurs the textarea, fires commitDesc, and closes it (leaving
+  // only the heading editable). Double-click still edits each field on its own.
+  const startEditBoth = () => {
+    setDescDraft(section.description ?? fallbackDesc);
+    setEditingDesc(true);
+    startEdit();
+  };
   return (
     <motion.div
       layout
@@ -392,8 +411,9 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
       {/* Edit + remove — revealed on hover, top-right. */}
       <div className="absolute right-4 top-5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
         <button
-          onClick={startEdit}
-          aria-label={`Rename ${section.name}`}
+          onClick={startEditBoth}
+          aria-label={`Edit ${section.name}`}
+          title="Edit heading and description"
           className="no-focus-ring w-7 h-7 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors"
         >
           <Pencil size={14} />
@@ -409,7 +429,7 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
           hover pencil turns it into an inline rename field. */}
       <div className="flex items-start justify-between gap-4 pr-16">
         <div className="flex items-baseline gap-3.5 min-w-0 flex-1">
-          <span className="shrink-0 text-[0.8125rem] font-semibold tabular-nums tracking-[0.16em] text-brand-700 leading-none">{String(index + 1).padStart(2, '0')}</span>
+          <span className="shrink-0 text-[0.8125rem] font-semibold tabular-nums tracking-[0.16em] leading-none" style={{ color: 'var(--rep-accent, #550fa5)' }}>{String(index + 1).padStart(2, '0')}</span>
           {editing ? (
             <input
               ref={inputRef}
@@ -433,7 +453,7 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
           <span className="shrink-0 inline-flex items-center rounded-full bg-evidence-50 text-evidence-700 px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide">{typeLabel}</span>
         )}
       </div>
-      <span className="mt-3 block h-[2px] w-8 rounded-full bg-brand-500/80" aria-hidden="true" />
+      <span className="mt-3 block h-[2px] w-8 rounded-full" style={{ backgroundColor: 'var(--rep-accent, rgba(136,56,222,0.8))' }} aria-hidden="true" />
 
       {/* Body placeholder — the shape of the content this section will hold. */}
       <div className="mt-4 pl-[1.9rem]">
@@ -469,7 +489,6 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
           <textarea
             ref={descRef}
             value={descDraft}
-            autoFocus
             rows={2}
             onChange={e => setDescDraft(e.target.value)}
             onBlur={commitDesc}
@@ -525,6 +544,11 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   const [copyName, setCopyName] = useState(defaultName);
   const [brand, setBrand] = useState(template.brand ?? 'Irame');
   const [theme, setTheme] = useState(template.theme ?? 'Purple & White');
+  // Custom brand colour (hex). Empty = use the named theme. When set (and valid)
+  // it drives the cover gradient + body accent everywhere the report renders.
+  // Cover gradient + accent for the live preview, driven by the named theme.
+  const coverGradient = reportGradient(theme, '') ?? TEMPLATE_THEME_GRADIENT['Purple & White'];
+  const coverAccent = reportAccent(theme, '');
   const [headerText, setHeaderText] = useState(template.headerText ?? 'Confidential — For Internal Use Only');
   // Footer auto-tracks the brand ("Generated by <brand>") until the author edits it
   // directly; an existing saved footer or an imported one counts as customised.
@@ -533,6 +557,22 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   useEffect(() => {
     if (!footerCustom) setFooterText(`Generated by ${brand.trim() || 'Irame'}`);
   }, [brand, footerCustom]);
+  // Page numbers on the exported report — on by default (undefined = on).
+  const [pageNumbers, setPageNumbers] = useState(template.pageNumbers ?? true);
+  // Sign-off block — off by default. Enabling seeds default signatory rows.
+  const [signoffEnabled, setSignoffEnabled] = useState(template.signoffEnabled ?? false);
+  const [signatories, setSignatories] = useState<SignatorySlot[]>(template.signatories ?? []);
+  const toggleSignoff = (on: boolean) => {
+    setSignoffEnabled(on);
+    if (on && signatories.length === 0) setSignatories(DEFAULT_SIGNATORIES.map(s => ({ ...s })));
+  };
+  const addSignatory = () => setSignatories(prev => [...prev, { id: `sig-${Date.now()}`, role: '' }]);
+  const updateSignatory = (id: string, patch: Partial<SignatorySlot>) => setSignatories(prev => prev.map(s => (s.id === id ? { ...s, ...patch } : s)));
+  const removeSignatory = (id: string) => setSignatories(prev => prev.filter(s => s.id !== id));
+  // Persisted signatory list: drop empty rows, trim, keep only real content.
+  const cleanSignatories: SignatorySlot[] = signatories
+    .filter(s => s.role.trim() || (s.name ?? '').trim())
+    .map(s => ({ id: s.id, role: s.role.trim() || 'Signatory', ...(s.name?.trim() ? { name: s.name.trim() } : {}) }));
   const logEvent = useAuditLog();
   // Diagonal page watermark — the full-document branding.
   const [watermark, setWatermark] = useState<WatermarkConfig>(template.watermark ?? DEFAULT_WATERMARK);
@@ -685,7 +725,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       preImportRef.current = { sections, headerText, footerText, brand, copyName, importedFrom };
       const { count } = applyToOutline(seeded, null, file.name);
       setImportBanner({ fileName: file.name, kind, result: null, detected: seeded, count, gotLetterhead: false });
-      addToast({ type: 'info', message: `${IMPORT_KIND_LABEL[kind]} layout can’t be read yet — started you with a suggested outline. Refine it below.` });
+      addToast({ type: 'info', message: `${IMPORT_KIND_LABEL[kind]} layout can’t be read yet, so we started you with a suggested outline. Refine it below.` });
       return;
     }
 
@@ -872,6 +912,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     footerText: template.footerText ?? `Generated by ${template.brand ?? 'Irame'}`,
     sections: seededSections,
     watermark: template.watermark ?? DEFAULT_WATERMARK,
+    pageNumbers: template.pageNumbers ?? true,
+    signoffEnabled: template.signoffEnabled ?? false,
+    signatories: template.signatories ?? [],
   }));
   const isDirty =
     copyName !== initial.copyName ||
@@ -880,7 +923,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     headerText !== initial.headerText ||
     footerText !== initial.footerText ||
     sections !== initial.sections ||
-    watermark !== initial.watermark;
+    watermark !== initial.watermark ||
+    pageNumbers !== initial.pageNumbers ||
+    signoffEnabled !== initial.signoffEnabled ||
+    signatories !== initial.signatories;
 
   // Inline duplicate-name check (#4) — warn before save, not only on submit. An
   // existing template's own name isn't "taken"; only a real collision is.
@@ -973,6 +1019,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           headerText: headerText.trim(),
           footerText: footerText.trim(),
           watermark,
+          pageNumbers,
+          signoffEnabled,
+          signatories: cleanSignatories,
         });
         addToast({ type: 'success', message: 'Template saved to Custom Templates.' });
       } else {
@@ -995,9 +1044,12 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             sections,
             brand: brand.trim(),
             theme,
-            headerText: headerText.trim(),
+              headerText: headerText.trim(),
             footerText: footerText.trim(),
             watermark,
+            pageNumbers,
+            signoffEnabled,
+            signatories: cleanSignatories,
           });
         }
         addToast({ type: 'success', message: 'Template saved.' });
@@ -1240,6 +1292,51 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   </div>
                 </div>
 
+
+                {/* Page numbers — shown on every page of the exported report. */}
+                <div className="mt-4 pt-3.5 border-t border-canvas-border">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Page numbers <span className="font-normal normal-case tracking-normal text-ink-400">· numbered footer on every page</span></span>
+                    <Toggle checked={pageNumbers} onChange={setPageNumbers} label="Show page numbers" />
+                  </div>
+                </div>
+
+                {/* Sign-off block — an Approvals & Sign-Off section on the report;
+                    each signatory gets a manual Sign / Sign-off in the reader. */}
+                <div className="mt-4 pt-3.5 border-t border-canvas-border">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[0.625rem] font-semibold uppercase tracking-[0.13em] text-ink-400">Signature block <span className="font-normal normal-case tracking-normal text-ink-400">· sign-off section on the report</span></span>
+                    <Toggle checked={signoffEnabled} onChange={toggleSignoff} label="Enable signature block" />
+                  </div>
+                  {signoffEnabled && (
+                    <div className="mt-3 space-y-2">
+                      {signatories.length === 0 && (
+                        <p className="text-[0.6875rem] text-ink-400">Add the roles that sign this report (e.g. Prepared by, Approved by).</p>
+                      )}
+                      {signatories.map(s => (
+                        <div key={s.id} className="flex items-center gap-2">
+                          <input
+                            value={s.role}
+                            onChange={e => updateSignatory(s.id, { role: e.target.value })}
+                            placeholder="Role — e.g. Approved by"
+                            aria-label="Signatory role"
+                            className="w-[42%] h-9 px-2.5 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                          />
+                          <input
+                            value={s.name ?? ''}
+                            onChange={e => updateSignatory(s.id, { name: e.target.value })}
+                            placeholder="Name (optional)"
+                            aria-label="Signatory name"
+                            className="flex-1 min-w-0 h-9 px-2.5 rounded-lg border border-canvas-border text-[0.8125rem] transition-colors hover:border-ink-300 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                          />
+                          <button type="button" onClick={() => removeSignatory(s.id)} aria-label={`Remove ${s.role || 'signatory'}`} className="w-8 h-8 shrink-0 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"><Trash2 size={14} /></button>
+                        </div>
+                      ))}
+                      <button type="button" onClick={addSignatory} className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 transition-colors cursor-pointer"><Plus size={13} /> Add signatory</button>
+                    </div>
+                  )}
+                </div>
+
                 {/* Watermark — a diagonal text or image mark across every page. */}
                 <div className="mt-4 pt-3.5 border-t border-canvas-border">
                   <div className="flex items-center justify-between mb-3">
@@ -1285,6 +1382,28 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       <Slider label="Opacity" min={2} max={40} value={Math.round(watermark.opacity * 100)} suffix="%" onChange={v => setWm({ opacity: v / 100 })} />
                       <Slider label="Rotation" min={-90} max={90} value={watermark.rotation} suffix="°" onChange={v => setWm({ rotation: v })} />
                       <Slider label="Size" min={20} max={100} value={watermark.size} suffix="%" onChange={v => setWm({ size: v })} />
+
+                      {/* Placement — pin the mark to the centre (default) or a side of
+                          the page. Live-previews on the sheet beside this panel. */}
+                      <div>
+                        <span className="block text-[0.75rem] font-medium text-ink-600 mb-1.5">Placement</span>
+                        <div className="grid grid-cols-5 gap-1">
+                          {(['center', 'top', 'bottom', 'left', 'right'] as const).map(p => {
+                            const active = (watermark.position ?? 'center') === p;
+                            return (
+                              <button
+                                key={p}
+                                type="button"
+                                onClick={() => setWm({ position: p })}
+                                aria-pressed={active}
+                                className={`h-7 rounded-[6px] text-[0.6875rem] font-semibold capitalize transition-colors cursor-pointer ${active ? 'bg-brand-50 text-brand-700 border border-brand-300' : 'bg-canvas border border-canvas-border text-ink-500 hover:text-ink-800 hover:border-ink-300'}`}
+                              >
+                                {p}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1338,12 +1457,12 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                 composer that adds them both live INSIDE the page, the way the
                 finished report reads; there's no separate toolbar on top. */}
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
-              <div className="relative mx-auto w-full max-w-3xl rounded-[12px] shadow-[0_10px_34px_-14px_rgba(15,8,30,0.22)]">
+              <div className="relative mx-auto w-full max-w-3xl rounded-[12px] shadow-[0_10px_34px_-14px_rgba(15,8,30,0.22)]" style={{ '--rep-accent': coverAccent } as CSSProperties}>
                 <ReportBrandBanner
                   title={copyName || 'Untitled Template'}
                   titleClassName="text-[1.5rem]"
                   className="rounded-t-[12px]"
-                  gradient={TEMPLATE_THEME_GRADIENT[theme]}
+                  gradient={coverGradient}
                   headerText={headerText}
                   footer={
                     /* All report facts live in the letterhead as one full-width
@@ -1462,14 +1581,25 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   )}
                 </div>
 
-                {/* Footer strip — closes the page. */}
-                <div className="border-x border-b border-canvas-border bg-canvas/60 rounded-b-[12px] px-9 py-3 flex items-center justify-center">
+                {/* Sign-off block — the Approvals section on the finished report.
+                    Static here (no Sign action); the reader makes it signable. */}
+                {signoffEnabled && cleanSignatories.length > 0 && (
+                  <div className="border-x border-canvas-border bg-white px-9 pt-3 pb-8">
+                    <ReportSignoffBlock signatories={cleanSignatories} />
+                  </div>
+                )}
+
+                {/* Footer strip — closes the page. With page numbers on, the
+                    footer text sits left and a page number sits right, mirroring
+                    the numbered footer the export produces. */}
+                <div className={`border-x border-b border-canvas-border bg-canvas/60 rounded-b-[12px] px-9 py-3 flex items-center ${pageNumbers ? 'justify-between' : 'justify-center'}`}>
                   <span className="text-[0.6875rem] text-ink-400 tracking-wide">{footerText || `Generated by ${brand.trim() || 'Irame'}`}</span>
+                  {pageNumbers && <span className="text-[0.6875rem] text-ink-400 tabular-nums tracking-wide">Page 1</span>}
                 </div>
 
                 {/* Watermark — a diagonal text/image mark stamped across the page. */}
                 {watermark.enabled && (watermark.mode === 'text' ? watermark.text.trim() : watermark.imageDataUrl) && (
-                  <div className="pointer-events-none absolute inset-0 z-[6] flex items-center justify-center overflow-hidden rounded-[12px]">
+                  <div className={`pointer-events-none absolute inset-0 z-[6] flex overflow-hidden rounded-[12px] ${WATERMARK_POS[watermark.position ?? 'center']}`}>
                     {watermark.mode === 'text' ? (
                       <span
                         className="font-extrabold uppercase tracking-[0.15em] whitespace-nowrap text-ink-900 select-none leading-none"
@@ -1515,7 +1645,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   : <><Upload size={15} className="shrink-0" /> Import from a report</>}
             </motion.button>
             {!importing && !importedFrom && (
-              <span className="hidden sm:inline text-[0.6875rem] text-ink-400 whitespace-nowrap">or drop a PDF — Word &amp; PowerPoint seed an outline</span>
+              <span className="hidden sm:inline text-[0.6875rem] text-ink-400 whitespace-nowrap">or drop a PDF. Word &amp; PowerPoint seed an outline.</span>
             )}
           </div>
           {/* Right — primary actions. */}
@@ -1545,7 +1675,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                 className="inline-flex items-center gap-1.5"
               >
                 {isSaving && <Loader2 size={12} className="animate-spin" />}
-                {isSaving ? 'Saving…' : isNew ? 'Create template' : 'Save template'}
+                {isSaving ? 'Saving…' : isNew ? 'Create template' : 'Save changes'}
               </motion.span>
             </AnimatePresence>
           </motion.button>
@@ -1623,6 +1753,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                       headerText,
                       footerText,
                       gradient: TEMPLATE_THEME_GRADIENT[theme],
+                      accent: TEMPLATE_THEME_ACCENT[theme],
                     }}
                   />
                 </div>

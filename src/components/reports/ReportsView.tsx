@@ -743,6 +743,11 @@ export default function ReportsView({
       prev && prev.id === reportId ? { ...prev, description } : prev
     );
   };
+  // Persist a report's manual sign-off state (sign / sign-off actions).
+  const updateReportSignoffs = (reportId: string, signoffs: Record<string, import('./reportShared').Signoff>) => {
+    setGeneratedReports(prev => prev.map(r => (r.id === reportId ? { ...r, signoffs } : r)));
+    setViewingReport(prev => (prev && prev.id === reportId ? { ...prev, signoffs } : prev));
+  };
 
   // Generate-from-template wizard — non-ATR templates pick queries here.
   const [wizardTemplate, setWizardTemplate] = useState<EditableTemplate | null>(null);
@@ -821,8 +826,12 @@ export default function ReportsView({
       // Carry the template's Customize branding onto the report chrome.
       brand: rt.brand,
       theme: rt.theme,
+      brandColor: (rt as EditableTemplate).brandColor,
       headerText: rt.headerText,
       footerText: rt.footerText,
+      pageNumbers: (rt as EditableTemplate).pageNumbers,
+      signoffEnabled: (rt as EditableTemplate).signoffEnabled,
+      signatories: (rt as EditableTemplate).signatories,
     };
     setGeneratedReports(prev => [newReport, ...prev]);
     setWizardTemplate(null);
@@ -963,6 +972,7 @@ export default function ReportsView({
         onOpenQuery={onOpenQuery}
         customTemplates={customTemplates}
         onUpdateDescription={updateReportDescription}
+        onUpdateSignoffs={updateReportSignoffs}
         onSaveAsTemplate={addCustomTemplateUnique}
         onSaveAtrVersion={saveAtrVersion}
       />
@@ -1694,7 +1704,7 @@ export default function ReportsView({
                   <EmptyState
                     icon={FileText}
                     title="No custom templates"
-                    body="Create a template — start from scratch or import an existing report — to reuse it across reports."
+                    body="Build one from scratch or from an existing report, then reuse it across all your reports."
                     size="compact"
                   />
                 ) : filteredCustom.length === 0 ? (

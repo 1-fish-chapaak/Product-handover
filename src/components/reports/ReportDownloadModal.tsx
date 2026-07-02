@@ -56,6 +56,14 @@ interface Props {
   templateName?: string;
   generatedBy: string;
   generatedAt: string;
+  /** Page numbers on the exported document — carried from the report's template.
+   *  Absent = on (reports paginate by default). */
+  pageNumbers?: boolean;
+  /** Custom brand colour (hex) — recolours the exported cover + accents. */
+  brandColor?: string;
+  /** Sign-off block — signatory slots + their sign state (rendered in exports). */
+  signatories?: import('./reportShared').SignatorySlot[];
+  signoffs?: Record<string, import('./reportShared').Signoff>;
   sections: DownloadPreviewSection[];
   /** Optional spreadsheet export. When provided, an "Excel" tab is shown and the
    *  Download action delegates to this callback (the report owns the .xlsx
@@ -88,6 +96,10 @@ export default function ReportDownloadModal({
   templateName,
   generatedBy,
   generatedAt,
+  pageNumbers,
+  brandColor,
+  signatories,
+  signoffs,
   sections,
   onExcelExport,
   onClose,
@@ -131,7 +143,7 @@ export default function ReportDownloadModal({
     // Brief preparing window so the in-place spinner registers visually
     // before the export fires and the modal closes.
     window.setTimeout(() => {
-      const ctx = { reportName, reportTag, reportId, templateName, generatedBy, generatedAt, sections };
+      const ctx = { reportName, reportTag, reportId, templateName, generatedBy, generatedAt, sections, pageNumbers: pageNumbers ?? true, brandColor, signatories, signoffs };
       if (format === 'xlsx') {
         onExcelExport?.();
         addToast({ type: 'success', message: `${reportName}.xlsx downloaded.` });
@@ -241,6 +253,7 @@ export default function ReportDownloadModal({
                     reportTag={reportTag}
                     generatedBy={generatedBy}
                     generatedAt={generatedAt}
+                    showPageNo={pageNumbers ?? true}
                     sections={bodySections}
                   />
                 )}
@@ -250,6 +263,7 @@ export default function ReportDownloadModal({
                     reportTag={reportTag}
                     generatedBy={generatedBy}
                     generatedAt={generatedAt}
+                    showPageNo={pageNumbers ?? true}
                     sections={bodySections}
                   />
                 )}
@@ -259,6 +273,7 @@ export default function ReportDownloadModal({
                     reportTag={reportTag}
                     generatedBy={generatedBy}
                     generatedAt={generatedAt}
+                    showPageNo={pageNumbers ?? true}
                     sections={bodySections}
                   />
                 )}
@@ -294,12 +309,13 @@ export default function ReportDownloadModal({
 // printed-document feel.
 
 function PdfPreview({
-  reportName, reportTag, generatedBy, generatedAt, sections,
+  reportName, reportTag, generatedBy, generatedAt, sections, showPageNo = true,
 }: {
   reportName: string;
   reportTag?: string;
   generatedBy: string;
   generatedAt: string;
+  showPageNo?: boolean;
   sections: DownloadPreviewSection[];
 }) {
   // Group sections into page blocks. The Executive Summary shares its page
@@ -333,13 +349,13 @@ function PdfPreview({
       </PdfPage>
 
       {/* Contents page */}
-      <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag}>
+      <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag} showPageNo={showPageNo}>
         <PdfContents sections={sections} />
       </PdfPage>
 
       {/* Content pages — one PdfPage per block */}
       {blocks.map((block, i) => (
-        <PdfPage key={block.map(b => b.id).join('-')} pageNo={i + 3} totalPages={totalPages} reportName={reportName} reportTag={reportTag}>
+        <PdfPage key={block.map(b => b.id).join('-')} pageNo={i + 3} totalPages={totalPages} reportName={reportName} reportTag={reportTag} showPageNo={showPageNo}>
           <PageBlockBody block={block} typeface="serif" />
         </PdfPage>
       ))}
@@ -395,7 +411,7 @@ function PdfContents({ sections }: { sections: DownloadPreviewSection[] }) {
               </span>
               <span className="text-ink-900 truncate">{label}</span>
               <span className="flex-1 border-b border-dotted border-ink-900/20 translate-y-[-3px]" />
-              <span className="font-mono tabular-nums text-ink-400">{pageNo}</span>
+              {showPageNo && <span className="font-mono tabular-nums text-ink-400">{pageNo}</span>}
             </li>
           );
         })}
@@ -476,12 +492,13 @@ function FooterChevronBand() {
   );
 }
 
-function PdfPage({ pageNo, totalPages, variant = 'interior', reportName, children }: {
+function PdfPage({ pageNo, totalPages, variant = 'interior', reportName, showPageNo = true, children }: {
   pageNo: number;
   totalPages: number;
   variant?: 'cover' | 'interior';
   reportName: string;
   reportTag?: string;
+  showPageNo?: boolean;
   children: React.ReactNode;
 }) {
   if (variant === 'cover') {
@@ -523,7 +540,7 @@ function PdfPage({ pageNo, totalPages, variant = 'interior', reportName, childre
         <div className="flex items-center gap-3">
           <span className="text-[0.6875rem] font-semibold text-brand-700">{reportName}</span>
           <div className="flex-1 h-px bg-ink-900/25" />
-          <span className="text-[0.625rem] font-mono tabular-nums text-ink-400">{pageNo} / {totalPages}</span>
+          {showPageNo && <span className="text-[0.625rem] font-mono tabular-nums text-ink-400">{pageNo} / {totalPages}</span>}
         </div>
       </div>
       <FooterChevronBand />
@@ -536,19 +553,20 @@ function PdfPage({ pageNo, totalPages, variant = 'interior', reportName, childre
 // number bottom right. Primary-colored title bar.
 
 function PptPreview({
-  reportName, generatedBy, generatedAt, sections,
+  reportName, generatedBy, generatedAt, sections, showPageNo = true,
 }: {
   reportName: string;
   reportTag?: string;
   generatedBy: string;
   generatedAt: string;
+  showPageNo?: boolean;
   sections: DownloadPreviewSection[];
 }) {
   const total = sections.length + 2;
   return (
     <div className="flex flex-col items-center gap-5">
       {/* Title slide */}
-      <PptSlide slideNo={1} total={total} reportName={reportName}>
+      <PptSlide slideNo={1} total={total} reportName={reportName} showPageNo={showPageNo}>
         <div className="h-full flex flex-col justify-center">
           <h1 className="text-[2.125rem] leading-[1.1] font-semibold text-ink-900 tracking-tight mb-3">
             {reportName}
@@ -563,14 +581,14 @@ function PptPreview({
       </PptSlide>
 
       {/* Contents slide */}
-      <PptSlide slideNo={2} total={total} reportName={reportName}>
+      <PptSlide slideNo={2} total={total} reportName={reportName} showPageNo={showPageNo}>
         <PdfContents sections={sections} />
       </PptSlide>
 
       {/* Content slides — one section per slide, widgets included.
           Query slides use a 2-column split (chart left, meta/KPIs/findings right). */}
       {sections.map((s, i) => (
-        <PptSlide key={s.id} slideNo={i + 3} total={total} reportName={reportName}>
+        <PptSlide key={s.id} slideNo={i + 3} total={total} reportName={reportName} showPageNo={showPageNo}>
           <div className="h-full flex flex-col overflow-hidden">
             {s.kind === 'query'
               ? <PptQuerySlideBody section={s} />
@@ -582,10 +600,11 @@ function PptPreview({
   );
 }
 
-function PptSlide({ slideNo, total, reportName, children }: {
+function PptSlide({ slideNo, total, reportName, showPageNo = true, children }: {
   slideNo: number;
   total: number;
   reportName: string;
+  showPageNo?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -606,7 +625,7 @@ function PptSlide({ slideNo, total, reportName, children }: {
         <div className="flex items-center gap-3">
           <span className="text-[0.6875rem] font-semibold text-brand-700">{reportName}</span>
           <div className="flex-1 h-px bg-ink-900/25" />
-          <span className="text-[0.625rem] font-mono tabular-nums text-ink-400">{slideNo} / {total}</span>
+          {showPageNo && <span className="text-[0.625rem] font-mono tabular-nums text-ink-400">{slideNo} / {total}</span>}
         </div>
       </div>
       <FooterChevronBand />
@@ -701,12 +720,13 @@ function PptQuerySlideBody({ section }: { section: Extract<DownloadPreviewSectio
 // No page breaks visible — flows like a Word doc.
 
 function DocxPreview({
-  reportName, reportTag, generatedBy, generatedAt, sections,
+  reportName, reportTag, generatedBy, generatedAt, sections, showPageNo = true,
 }: {
   reportName: string;
   reportTag?: string;
   generatedBy: string;
   generatedAt: string;
+  showPageNo?: boolean;
   sections: DownloadPreviewSection[];
 }) {
   // Same pagination model as PDF: cover, contents, then summary pairs with
@@ -729,13 +749,13 @@ function DocxPreview({
       </PdfPage>
 
       {/* Contents page */}
-      <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag}>
+      <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag} showPageNo={showPageNo}>
         <PdfContents sections={sections} />
       </PdfPage>
 
       {/* Content pages */}
       {blocks.map((block, i) => (
-        <PdfPage key={block.map(b => b.id).join('-')} pageNo={i + 3} totalPages={totalPages} reportName={reportName} reportTag={reportTag}>
+        <PdfPage key={block.map(b => b.id).join('-')} pageNo={i + 3} totalPages={totalPages} reportName={reportName} reportTag={reportTag} showPageNo={showPageNo}>
           <PageBlockBody block={block} typeface="serif" />
         </PdfPage>
       ))}

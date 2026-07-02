@@ -32,7 +32,7 @@ export function RowDeleteButton({ onConfirm, ariaLabel, triggerClassName = '' }:
           type="button"
           onClick={(e) => { e.stopPropagation(); disarm(); onConfirm(); }}
           aria-label={`Confirm — ${ariaLabel}`}
-          className="inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-full bg-high-600 text-white text-[0.625rem] font-semibold hover:bg-high-700 transition-colors cursor-pointer whitespace-nowrap"
+          className="inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-full bg-risk text-white text-[0.625rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer whitespace-nowrap"
         >
           <Check size={11} strokeWidth={2.5} /> Remove
         </button>
