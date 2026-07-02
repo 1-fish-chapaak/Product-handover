@@ -13,6 +13,8 @@ export interface SopDocumentModalProps {
   sopId?: string;
   /** Modal header — the document's name. */
   sopName: string;
+  /** Optional owning sub-process, shown in the meta line (e.g. RACM source view). */
+  subProcess?: string;
   /** e.g. "v2.1". */
   version?: string;
   uploadedBy?: string;
@@ -51,6 +53,7 @@ export default function SopDocumentModal({
   open,
   sopId,
   sopName,
+  subProcess,
   version,
   uploadedBy,
   uploadedAgo,
@@ -83,6 +86,7 @@ export default function SopDocumentModal({
 
   // Meta line: only the present parts, joined with " · ".
   const metaParts = [
+    subProcess,
     version,
     uploadedAgo ? `uploaded ${uploadedAgo}` : undefined,
     uploadedBy,

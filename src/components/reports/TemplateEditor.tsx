@@ -560,6 +560,19 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // Apply a section list + captured letterhead to the editor. Shared by the
   // initial optimistic import and the on-demand Review confirm. Empty-named rows
   // are dropped; placeholder blocks (kpi/chart/table) keep their type + label.
+  // Returns a template name unique against existing names (case-insensitive),
+  // ignoring the template being edited. Suffixes " (2)", " (3)"… on collision.
+  const uniqueTemplateName = (name: string): string => {
+    const own = isNew ? null : template.name.toLowerCase();
+    const taken = new Set(existingTemplateNames.map(n => n.toLowerCase()).filter(n => n !== own));
+    if (!taken.has(name.toLowerCase())) return name;
+    for (let i = 2; i < 100; i++) {
+      const cand = `${name} (${i})`;
+      if (!taken.has(cand.toLowerCase())) return cand;
+    }
+    return name;
+  };
+
   const applyToOutline = (
     secs: CanvasSection[], result: ReportStructure | null, fileName: string,
   ): { count: number; gotLetterhead: boolean } => {
@@ -569,9 +582,14 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     // (set below from the detected audit entity), so we don't overwrite it with the
     // PDF's own footer line.
     if (hf?.fields.auditEntity) setBrand(hf.fields.auditEntity);
-    // Name: only fill if still the untouched default.
+    // Name: only fill if still the untouched default, and never fill a name that
+    // already exists — a fresh import landing on an instant "already exists" error
+    // reads as a failure. Suffix "(2)", "(3)"… until unique.
     const base = fileName.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
-    if (copyName === defaultName) setCopyName(hf?.fields.auditTitle || base.replace(/\b\w/g, c => c.toUpperCase()));
+    if (copyName === defaultName) {
+      const candidate = hf?.fields.auditTitle || base.replace(/\b\w/g, c => c.toUpperCase());
+      setCopyName(uniqueTemplateName(candidate));
+    }
     const kept = secs.filter(s => s.name.trim());
     setSections(kept.map(s => ({
       name: s.name.trim(),
@@ -1401,7 +1419,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                   : <><Upload size={15} className="shrink-0" /> Import from a report</>}
             </motion.button>
             {!importing && !importedFrom && (
-              <span className="hidden sm:inline text-[0.6875rem] text-ink-400 whitespace-nowrap">or drop a PDF, Word or PowerPoint file</span>
+              <span className="hidden sm:inline text-[0.6875rem] text-ink-400 whitespace-nowrap">or drop a PDF — Word &amp; PowerPoint seed an outline</span>
             )}
           </div>
           {/* Right — primary actions. */}
@@ -1417,7 +1435,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
               in place (overwrite). */}
           <motion.button
             onClick={() => handleSave()}
-            disabled={isSaving || nameTaken}
+            disabled={isSaving || nameTaken || !copyName.trim()}
             whileTap={{ scale: 0.97 }}
             transition={{ type: 'spring', stiffness: 500, damping: 30 }}
             title={nameTaken ? 'A template with this name already exists — choose a different name' : undefined}
@@ -1479,7 +1497,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
             const kindLabel = IMPORT_KIND_LABEL[pendingImport.kind];
             return (
               <motion.div
-                initial={{ opacity: 0, scale: 0.985, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.985, y: 10 }}
+                initial={{ opacity: 1, scale: 0.99 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.99 }}
                 transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
                 className="absolute inset-0 z-40 bg-canvas-elevated flex flex-col"
               >
