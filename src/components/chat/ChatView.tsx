@@ -24,6 +24,8 @@ import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
 import { KpiTile } from '../shared/KpiTile';
 import AuditResultBody from './AuditResultBody';
+import PlanFlowDiagram from '../shared/PlanFlowDiagram';
+import { CHAT_PLAN_STEPS } from '../../data/chatPlan';
 import type { WorkflowTypeId } from '../../data/mockData';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { TextShimmer } from '../shared/TextShimmer';
@@ -6444,6 +6446,12 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       </div>
                     ) : msg.richType === 'audit-result' ? (
                       <div className="space-y-4 w-full">
+                        {/* Provenance flow — how this output was built from the
+                            input files. Sits between the reasoning trail and the
+                            result so the "how did Ira get here" answer is a glance,
+                            not the text-heavy plan in the right workspace. Full
+                            chat-column width, matching the result body below. */}
+                        <PlanFlowDiagram steps={CHAT_PLAN_STEPS} outputLabel="Risk results" />
                         {/* Streamed composite output — prose typewriter, KPI
                             count-up, chart draw-in and a row-streamed table all
                             brew in parallel with staggered onsets. Render-prop

@@ -5,7 +5,7 @@
 // Self-contained: owns its own badge map, source-type icon/colour helpers and
 // the expandable file/column rows, so neither host has to thread internals in.
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ListChecks, ChevronDown, AlertTriangle, RefreshCw, Pencil,
@@ -33,6 +33,15 @@ export interface PlanCardStep {
   description: string;
   /** Data files this step reads — rendered as expandable source chips. */
   sources?: PlanCardSource[];
+  /** One-line technical detail of the actual operation — SQL join, filter,
+   *  transform. Rendered as a mono artifact in the flow view. */
+  operation?: string;
+  /** Records read in / emitted out. When both are set the flow view draws a
+   *  row-count funnel (e.g. 1,200,000 → 9) inside the node. */
+  rowsIn?: number;
+  rowsOut?: number;
+  /** Short label for what this step hands to the next — the flow-edge tag. */
+  output?: string;
 }
 
 export interface PlanAssumption {
@@ -45,7 +54,7 @@ export interface PlanAssumption {
 
 // ─── Internal helpers ────────────────────────────────────────────────────
 
-const STEP_BADGE: Record<PlanStepType, { label: string; bg: string; text: string }> = {
+export const STEP_BADGE: Record<PlanStepType, { label: string; bg: string; text: string }> = {
   extract:   { label: 'INGESTION',   bg: 'bg-brand-50',      text: 'text-brand-700' },
   analyze:   { label: 'ANALYSIS',    bg: 'bg-brand-600',     text: 'text-white' },
   compare:   { label: 'COMPARISON',  bg: 'bg-compliant-50',  text: 'text-compliant-700' },
@@ -55,14 +64,14 @@ const STEP_BADGE: Record<PlanStepType, { label: string; bg: string; text: string
   calculate: { label: 'CALCULATION', bg: 'bg-mitigated-50',  text: 'text-mitigated-700' },
 };
 
-function typeColor(type: string): string {
+export function typeColor(type: string): string {
   if (type === 'csv' || type === 'excel') return 'text-compliant-700 bg-compliant-50';
   if (type === 'pdf') return 'text-high-700 bg-high-50';
   if (type === 'sql') return 'text-evidence-700 bg-evidence-50';
   return 'text-ink-500 bg-canvas';
 }
 
-function StepFilesAndColumns({ sources }: { sources: PlanCardSource[] }) {
+export function StepFilesAndColumns({ sources }: { sources: PlanCardSource[] }) {
   // One file open at a time — clicking a pill reveals that file's columns in a
   // full-width strip below the pill row; clicking it again (or another pill)
   // collapses / switches.
@@ -153,10 +162,12 @@ function StepFilesAndColumns({ sources }: { sources: PlanCardSource[] }) {
 // ─── Query Execution Plan card ───────────────────────────────────────────
 // Numbered steps + type badge + description + expandable source chips.
 
-export function QueryExecutionPlanCard({ steps, onRegenerate, onStepEdit }: {
+export function QueryExecutionPlanCard({ steps, onRegenerate, onStepEdit, headerAccessory }: {
   steps: PlanCardStep[];
   onRegenerate?: () => void;
   onStepEdit?: (step: PlanCardStep) => void;
+  /** Optional control rendered in the header (e.g. a Flow/Steps view toggle). */
+  headerAccessory?: ReactNode;
 }) {
   const [open, setOpen] = useState(true);
   return (
@@ -166,6 +177,7 @@ export function QueryExecutionPlanCard({ steps, onRegenerate, onStepEdit }: {
           <ListChecks size={14} className="text-primary shrink-0" />
           <span className="flex-1 text-left">Query Execution Plan</span>
         </div>
+        {headerAccessory}
         {onRegenerate && (
           <button
             type="button"
