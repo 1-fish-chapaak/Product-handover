@@ -47,6 +47,8 @@ const PAGE_NUM_RE = /^(page\s*)?\d+(\s*(of|\/)\s*\d+)?$/i;
 // A page-number token embedded in a wider line (e.g. "Confidential   Page 3 of 12").
 const PAGE_NUM_TOKEN_RE = /\b(page\s*\d+(\s*of\s*\d+)?|\d+\s*\/\s*\d+)\b/i;
 const CONFIDENTIALITY_RE = /\b(strictly confidential|confidential|internal use only|for internal use|restricted|private and confidential|draft)\b/i;
+// An organisation name — used to pull the audited entity out of the letterhead.
+const ENTITY_RE = /\b(ltd|limited|llp|inc\.?|pvt|private|corp(oration)?|gmbh|plc|& co)\b/i;
 
 // ─── Size-independent heading signals ───
 // A heading is often NOT larger than the body — it's bold, ALL-CAPS, or numbered.
@@ -188,7 +190,7 @@ function deriveFields(header: string[], footer: string[]): ExtractedHeaderFooter
   const all = [...header, ...footer];
   const fields: ExtractedHeaderFooter['fields'] = {};
 
-  const entity = header.find(l => /\b(ltd|limited|llp|inc\.?|pvt|private|corp(oration)?|gmbh|plc|& co)\b/i.test(l));
+  const entity = header.find(l => ENTITY_RE.test(l));
   if (entity) fields.auditEntity = entity;
 
   const periodLine = all.find(l =>
@@ -487,19 +489,11 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
     await doc.destroy();
     if (totalTextItems === 0) return null;
 
-    // Letterhead (same logic as extractPdfHeaderFooter).
+    // Running header / footer (repeats across pages). The merged headerFooter is
+    // assembled after the cover-block pass below, so the cover letterhead (which
+    // lives on page 1 and never repeats) can feed the header/title/entity too.
     const header = runningLines(headerByPage);
     const footer = runningLines(footerByPage);
-    const confidentiality = [...header, ...footer].map(l => l.match(CONFIDENTIALITY_RE)?.[0]).find(Boolean);
-    const headerFooter: ExtractedHeaderFooter | null = (header.length || footer.length)
-      ? {
-          header,
-          footer,
-          pageNumberPattern: detectPageNumberPattern([...headerByPage, ...footerByPage]),
-          confidentiality: confidentiality || undefined,
-          fields: deriveFields(header, footer),
-        }
-      : null;
 
     // Median body size grounds the heading / KPI size tests.
     const sorted = bodySizes.slice().sort((a, b) => a - b);
@@ -554,6 +548,38 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
       for (const r of rows) r.text = r.cells.join(' ').replace(/\s+/g, ' ').trim();
       return rows;
     };
+
+    // ── Cover-page letterhead block ──────────────────────────────────────────
+    // A report's cover carries its title, entity and confidentiality line in the
+    // BODY band (below the top-margin header band), so the section walk would emit
+    // them as bogus sections while the running-header pass (which skips page 1)
+    // never captures them. Pull that leading block off page 1 and treat it as
+    // letterhead: title → name, entity → brand, confidentiality → header. Its
+    // lines are added to coverSet so the walk skips them (no phantom sections).
+    const coverSet = new Set<string>();
+    const coverLines: { text: string; size: number }[] = [];
+    if (pageBody.length > 0) {
+      for (const r of toRows(pageBody[0])) {
+        if (r.cells.length !== 1) break;                 // a columned row → block ended
+        const t = r.text;
+        if (!t || PAGE_NUM_RE.test(t)) continue;
+        if (t.length > 90 || /[.,:;]$/.test(t)) break;   // sentence-like → body prose begins
+        // First genuine section heading (numbered / appendix / ALL-CAPS that isn't
+        // the confidentiality line) ends the letterhead block.
+        if (HEADING_NUM_RE.test(t) || HEADING_ALPHA_RE.test(t) || (isAllCapsHeading(t) && !CONFIDENTIALITY_RE.test(t))) break;
+        coverLines.push({ text: t, size: r.size });
+        coverSet.add(normalize(t));
+        if (coverLines.length >= 8) break;               // a letterhead block is short
+      }
+    }
+    // Only trust it as a letterhead when it actually reads like one — an oversized
+    // title line, an entity, a confidentiality tag, or a reporting-period line.
+    // Otherwise it's just short body lines: leave them to the section walk.
+    const coverMedian = bodySizes.length ? median : 0;
+    const looksLikeLetterhead = coverLines.some(l =>
+      (coverMedian > 0 && l.size >= coverMedian * HEADING_SIZE_RATIO) ||
+      ENTITY_RE.test(l.text) || CONFIDENTIALITY_RE.test(l.text));
+    if (!looksLikeLetterhead) { coverSet.clear(); coverLines.length = 0; }
 
     // One ordered stream of body elements across all pages, in reading order:
     // text rows interleaved with figure markers by vertical position. Rows inside a
@@ -617,6 +643,8 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
       const r = el.row;
       const t = r.text;
       if (!t) continue;
+      // Cover-page letterhead (title / entity / confidentiality) → not a section.
+      if (coverSet.has(normalize(t))) continue;
 
       // Figure/chart caption with no adjacent image (e.g. a vector chart).
       if (FIGURE_CAP_RE.test(t)) { figCount++; push({ name: cleanCaption(t), evidence: 'explicit', kind: 'chart', body: [] }); continue; }
@@ -696,6 +724,33 @@ export async function extractReportStructure(file: File): Promise<ReportStructur
     }
     // A heading that appears empty once but has content elsewhere is a real section.
     const finalSkipped = skipped.filter(s => !seen.has(normalize(s)));
+
+    // Assemble the letterhead from the running header/footer AND the cover block.
+    // Field derivation sees the cover lines too, so a cover-only title/entity is
+    // captured (title → name, entity → brand) instead of leaking in as a section.
+    const coverTexts = coverLines.map(l => l.text);
+    const confidentiality = [...header, ...footer, ...coverTexts]
+      .map(l => l.match(CONFIDENTIALITY_RE)?.[0]).find(Boolean);
+    const fields = deriveFields([...header, ...coverTexts], footer);
+    // Prefer the cover's most prominent line as the title when the running header
+    // didn't yield one (deriveFields ranks by length; the cover ranks by font size).
+    if (!fields.auditTitle) {
+      const coverTitle = [...coverLines]
+        .filter(l => !CONFIDENTIALITY_RE.test(l.text) && !ENTITY_RE.test(l.text) && !PAGE_NUM_RE.test(l.text) && l.text.length >= 4)
+        .sort((a, b) => b.size - a.size)[0]?.text;
+      if (coverTitle) fields.auditTitle = coverTitle;
+    }
+    // The header field is the letterhead strip — the confidentiality line if present,
+    // otherwise the running header lines (cover title/entity go to name/brand, not here).
+    const headerFooter: ExtractedHeaderFooter | null = (header.length || footer.length || coverLines.length)
+      ? {
+          header,
+          footer,
+          pageNumberPattern: detectPageNumberPattern([...headerByPage, ...footerByPage]),
+          confidentiality: confidentiality || undefined,
+          fields,
+        }
+      : null;
 
     return { headerFooter, sections, skipped: finalSkipped };
   } catch {

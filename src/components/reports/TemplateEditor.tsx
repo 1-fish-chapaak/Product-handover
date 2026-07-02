@@ -7,11 +7,12 @@
 // Depends only on the shared keystone, ReportDocumentChrome, and ConfirmDialog.
 
 import { useState, useRef, useEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useDragControls } from 'motion/react';
 import {
   Check, ChevronRight, FileText, GripVertical,
   Loader2, Plus, X, Pencil, ShieldCheck,
-  BookOpen, Search, Upload,
+  BookOpen, Search, Upload, Info, Maximize2, Minimize2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -126,78 +127,88 @@ function stripLeadingEnumerator(name: string): string {
   return name.replace(/^\s*(?:\d+(?:[.)]\d+)*[.)]?|[A-Za-z][.)]|[IVXLCM]+[.)])\s+/, '').trim() || name.trim();
 }
 
-// Full-bleed scan overlay shown over the editor while a report is being imported.
-// Reuses the upload flow's sweep-beam language so the wait feels transparent.
-function ImportScanOverlay({ filename, messages = IMPORT_SCAN_MESSAGES }: { filename: string; messages?: string[] }) {
+// Non-blocking extraction progress card — a compact toast pinned to the VIEWPORT
+// bottom-right (portaled to <body>, not inside the editor modal). It's the whole
+// UI while the editor is minimized, so extraction keeps running with the app
+// fully usable behind it. Shows an extracting state (with Minimize while the
+// modal is open, or Open while minimized) and a done state (Open to review).
+function ExtractionCard({
+  filename, messages = IMPORT_SCAN_MESSAGES, done = false, sectionCount,
+  onMinimize, onOpen, onClose,
+}: {
+  filename: string;
+  messages?: string[];
+  done?: boolean;
+  sectionCount?: number;
+  onMinimize?: () => void;
+  onOpen?: () => void;
+  onClose?: () => void;
+}) {
   const [msgIdx, setMsgIdx] = useState(0);
+  const [progress, setProgress] = useState(8);
   useEffect(() => {
-    const step = Math.floor(IMPORT_MIN_MS / messages.length);
+    if (done) return;
+    const step = Math.max(300, Math.floor(IMPORT_MIN_MS / messages.length));
     const t = setInterval(() => setMsgIdx(i => Math.min(i + 1, messages.length - 1)), step);
     return () => clearInterval(t);
-  }, [messages]);
-  return (
+  }, [messages, done]);
+  useEffect(() => {
+    if (done) return;
+    // Ease toward ~95% while extraction runs; real completion flips to done.
+    const t = setInterval(() => setProgress(p => (p < 95 ? p + Math.max(1, Math.round((95 - p) / 10)) : p)), 240);
+    return () => clearInterval(t);
+  }, [done]);
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-      className="absolute inset-0 z-30 bg-canvas-elevated/96 backdrop-blur-[2px] flex items-center justify-center px-8"
+      role="status"
+      aria-label={done ? 'Extraction complete' : `Extracting ${filename}`}
+      initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 14 }}
+      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+      className="fixed bottom-5 right-5 z-[80] w-[360px] max-w-[calc(100vw-2.5rem)] rounded-[14px] border border-canvas-border bg-white shadow-[0_16px_40px_-12px_rgba(15,8,30,0.28)] p-4"
     >
-      <div className="w-[440px] max-w-full">
-        <div className="flex items-center gap-2 text-[0.875rem]">
-          <span className="w-7 h-7 rounded-[8px] bg-brand-50 text-brand-600 flex items-center justify-center shrink-0"><Loader2 size={15} className="animate-spin" /></span>
-          <span className="font-semibold text-ink-900 truncate">Reading {filename}</span>
-        </div>
-        {/* progress bar — eases toward full over the minimum scan time */}
-        <div className="mt-3 h-1 w-full rounded-full bg-paper-100 overflow-hidden">
-          <motion.div className="h-full rounded-full bg-brand-500" initial={{ width: '6%' }} animate={{ width: '94%' }} transition={{ duration: IMPORT_MIN_MS / 1000, ease: [0.2, 0, 0, 1] }} />
-        </div>
-        {/* A real report page being scanned — purple letterhead, section headings,
-            body text and a footer, with a brand scan-line sweeping top→bottom. */}
-        <div className="relative mt-4 h-[224px] rounded-[12px] border border-canvas-border bg-paper-50 overflow-hidden flex justify-center pt-3.5">
-          <div className="relative w-[208px] rounded-[7px] bg-white shadow-[0_8px_24px_-8px_rgba(15,8,30,0.28)] overflow-hidden">
-            {/* letterhead */}
-            <div className="px-3 py-2.5" style={{ backgroundImage: 'linear-gradient(125deg, #3b0b72, #6a12cd)' }}>
-              <div className="h-1.5 w-2/3 rounded-full bg-white/45" />
-              <div className="h-1 w-2/5 rounded-full bg-white/25 mt-1.5" />
-            </div>
-            {/* body — section headings (darker) + paragraph lines */}
-            <div className="px-3 py-2.5 space-y-1.5">
-              <div className="h-1.5 w-2/5 rounded-full bg-ink-900/30" />
-              <div className="h-1 w-full rounded-full bg-ink-900/10" />
-              <div className="h-1 w-11/12 rounded-full bg-ink-900/10" />
-              <div className="h-1.5 w-1/3 rounded-full bg-ink-900/30 mt-2.5" />
-              <div className="h-1 w-full rounded-full bg-ink-900/10" />
-              <div className="h-1 w-3/4 rounded-full bg-ink-900/10" />
-            </div>
-            {/* footer */}
-            <div className="px-3 py-1.5 border-t border-canvas-border flex items-center justify-between">
-              <div className="h-1 w-1/3 rounded-full bg-ink-900/15" />
-              <div className="h-1 w-5 rounded-full bg-ink-900/10" />
-            </div>
-            {/* scan line sweeping the page */}
-            <motion.div
-              className="pointer-events-none absolute inset-x-0 h-10"
-              initial={{ top: '-2.5rem' }} animate={{ top: ['-2.5rem', '100%'] }}
-              transition={{ duration: 1.7, repeat: Infinity, ease: 'easeInOut' }}
-            >
-              <div className="h-10 w-full bg-gradient-to-b from-brand-500/20 to-transparent" />
-              <div className="h-[2px] w-full -mt-px bg-gradient-to-r from-transparent via-brand-400 to-transparent shadow-[0_0_14px_3px_rgba(106,18,205,0.45)]" />
-            </motion.div>
+      <div className="flex items-start gap-3">
+        <span className={`w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 ${done ? 'bg-compliant-50 text-compliant-600' : 'bg-brand-50 text-brand-600'}`}>
+          {done ? <Check size={16} strokeWidth={2.5} /> : <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[0.8125rem] font-semibold text-ink-900 leading-tight">{done ? 'Extraction complete' : 'Extracting your report'}</div>
+          <div className="text-[0.75rem] text-ink-500 truncate mt-0.5">
+            {done
+              ? (sectionCount != null ? `${sectionCount} section${sectionCount === 1 ? '' : 's'} ready to review` : 'Ready to review')
+              : (
+                <AnimatePresence mode="wait">
+                  <motion.span key={msgIdx} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                    {messages[msgIdx]}
+                  </motion.span>
+                </AnimatePresence>
+              )}
           </div>
         </div>
-        {/* cycling status line */}
-        <div className="mt-3.5 flex items-center gap-2 text-[0.8125rem] text-ink-600">
-          <AnimatePresence mode="wait">
-            <motion.span
-              key={msgIdx}
-              initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.2 }}
-            >
-              {messages[msgIdx]}
-            </motion.span>
-          </AnimatePresence>
-        </div>
+        {!done && <span className="text-[0.8125rem] font-bold tabular-nums text-brand-700 shrink-0">{Math.round(progress)}%</span>}
+        {onClose && (
+          <button onClick={onClose} aria-label="Dismiss" className="w-7 h-7 -mr-1 -mt-0.5 rounded-full text-ink-400 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0"><X size={14} /></button>
+        )}
       </div>
-    </motion.div>
+      {!done && (
+        <div className="mt-3 h-1.5 rounded-full bg-brand-50 overflow-hidden">
+          <div className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-500 transition-[width] duration-200" style={{ width: `${progress}%` }} />
+        </div>
+      )}
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="text-[0.6875rem] text-ink-400">{done ? 'Your report is ready.' : 'Running in the background — keep working.'}</span>
+        {onOpen ? (
+          <button onClick={onOpen} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[8px] text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 cursor-pointer transition-colors">
+            <Maximize2 size={13} /> Open
+          </button>
+        ) : onMinimize ? (
+          <button onClick={onMinimize} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[8px] text-[0.75rem] font-semibold text-ink-700 border border-canvas-border bg-white hover:bg-paper-50 cursor-pointer transition-colors">
+            <Minimize2 size={13} /> Minimize
+          </button>
+        ) : null}
+      </div>
+    </motion.div>,
+    document.body,
   );
 }
 
@@ -302,13 +313,14 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
 // direction — on release it snaps to the slot nearest the drop point), and a
 // hover control removes it. Reordering drives the same `sections` state.
 
-function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRename }: {
+function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRename, onDescribe }: {
   section: TemplateSection;
   index: number;
   onMove: (from: number, to: number) => void;
   listRef: React.RefObject<HTMLDivElement | null>;
   onDelete: () => void;
   onRename: (name: string) => void;
+  onDescribe: (description: string) => void;
 }) {
   const kind = section.kind ?? 'text';
   const metric = section.metric?.trim();
@@ -324,6 +336,22 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
     const name = draft.trim();
     setEditing(false);
     if (name && name !== section.name) onRename(name);
+  };
+  // The description (body blurb) is editable too: it falls back to the auto blurb
+  // until the author types their own, then persists on the section. Same inline
+  // draft-then-commit pattern as the name.
+  const fallbackDesc = sectionBlurb(section.name);
+  const shownDesc = section.description ?? fallbackDesc;
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descDraft, setDescDraft] = useState(shownDesc);
+  const descRef = useRef<HTMLTextAreaElement>(null);
+  const startDescEdit = () => { setDescDraft(section.description ?? fallbackDesc); setEditingDesc(true); requestAnimationFrame(() => descRef.current?.select()); };
+  const commitDesc = () => {
+    const next = descDraft.trim();
+    setEditingDesc(false);
+    // Store only a real override; clearing back to the auto blurb drops it.
+    if (next && next !== fallbackDesc) onDescribe(next);
+    else if (!next || next === fallbackDesc) onDescribe('');
   };
   return (
     <motion.div
@@ -437,8 +465,30 @@ function ReportSectionBlock({ section, index, onMove, listRef, onDelete, onRenam
               </div>
             ))}
           </div>
+        ) : editingDesc ? (
+          <textarea
+            ref={descRef}
+            value={descDraft}
+            autoFocus
+            rows={2}
+            onChange={e => setDescDraft(e.target.value)}
+            onBlur={commitDesc}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitDesc(); }
+              else if (e.key === 'Escape') { e.preventDefault(); setEditingDesc(false); }
+            }}
+            onPointerDown={e => e.stopPropagation()}
+            aria-label="Section description"
+            className="w-full max-w-[80ch] resize-none rounded-[6px] bg-white border border-brand-400 px-2 py-1.5 text-[0.875rem] text-ink-700 leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+          />
         ) : (
-          <p className="max-w-[80ch] text-[0.875rem] text-ink-500 leading-relaxed">{sectionBlurb(section.name)}</p>
+          <p
+            onDoubleClick={startDescEdit}
+            title="Double-click to edit this description"
+            className={`max-w-[80ch] text-[0.875rem] leading-relaxed cursor-text rounded-[4px] -mx-1 px-1 hover:bg-canvas/60 transition-colors ${section.description ? 'text-ink-600' : 'text-ink-500'}`}
+          >
+            {shownDesc}
+          </p>
         )}
       </div>
     </motion.div>
@@ -532,6 +582,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // Whether the in-progress scan is a Word/PowerPoint seed (vs a real PDF parse) —
   // drives the honest overlay copy.
   const [scanSeed, setScanSeed] = useState(false);
+  // Minimize-and-continue: when true the editor collapses to the bottom-right
+  // extraction card and the full modal isn't rendered, so extraction keeps
+  // running (this component stays mounted) with the app fully usable behind it.
+  const [minimized, setMinimized] = useState(false);
   const [importedFrom, setImportedFrom] = useState<string | null>(null);
   // Drag-and-drop: drop a report anywhere on the editor to import it. A depth
   // counter avoids the flicker that dragenter/dragleave cause over child nodes.
@@ -578,9 +632,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   ): { count: number; gotLetterhead: boolean } => {
     const hf = result?.headerFooter;
     if (hf?.confidentiality || hf?.header.length) setHeaderText(hf.confidentiality || hf.header.join('  ·  '));
-    // The footer stays the "Generated by <brand>" attribution — it tracks the brand
-    // (set below from the detected audit entity), so we don't overwrite it with the
-    // PDF's own footer line.
+    // Apply the PDF's own footer when it has one, and mark it customised so the
+    // "footer follows brand" effect doesn't immediately overwrite it back to
+    // "Generated by <brand>".
+    if (hf?.footer.length) { setFooterText(hf.footer.join('  ·  ')); setFooterCustom(true); }
     if (hf?.fields.auditEntity) setBrand(hf.fields.auditEntity);
     // Name: only fill if still the untouched default, and never fill a name that
     // already exists — a fresh import landing on an instant "already exists" error
@@ -594,6 +649,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     setSections(kept.map(s => ({
       name: s.name.trim(),
       icon: 'file-text',
+      ...(s.description ? { description: s.description } : {}),
       ...(s.kind && s.kind !== 'text' ? { kind: s.kind } : {}),
       ...(s.metric ? { metric: s.metric } : {}),
     })));
@@ -645,6 +701,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       setScanningName(null);
     });
     if (!result) {
+      // Restore the editor if it was minimized, so the failure isn't hidden
+      // behind a card that would otherwise read as "complete".
+      setMinimized(false);
       addToast({ type: 'error', message: `Couldn't read "${file.name}". It may be scanned or image-only.` });
       return;
     }
@@ -733,6 +792,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   const renameSection = (index: number, name: string) => {
     setSections(prev => prev.map((s, i) => (i === index ? { ...s, name } : s)));
   };
+  // Set (or clear, with '') the section's custom description.
+  const describeSection = (index: number, description: string) => {
+    setSections(prev => prev.map((s, i) => (i === index ? { ...s, description: description || undefined } : s)));
+  };
   // Move a section from one index to another (drag-drop reorder).
   const moveSection = (from: number, to: number) => {
     if (to < 0 || to >= sections.length || to === from) return;
@@ -775,6 +838,10 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // Near-duplicate structure warning (§9) — the section overlap with the closest
   // existing template, surfaced at save to kill "Copy of…" sprawl.
   const [dupConfirm, setDupConfirm] = useState<{ name: string; shared: number; total: number } | null>(null);
+  // Soft advisory at save (non-blocking): the suggested sections not yet added.
+  // A template built without them tends to generate incomplete, so we surface the
+  // gap on "Create" but always let the author proceed.
+  const [suggestedConfirm, setSuggestedConfirm] = useState<string[] | null>(null);
   const nearDuplicate = (): { name: string; shared: number; total: number } | null => {
     const mine = sections.map(s => s.name.toLowerCase());
     if (mine.length < 3) return null;
@@ -828,7 +895,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       cancel();
     }
   };
-  useFocusTrap(containerRef, true, attemptClose);
+  useFocusTrap(containerRef, !minimized, attemptClose);
 
   // Only surface a validation chip while its condition still holds. Adding a
   // section (or typing a name/brand) clears its banner immediately, instead of
@@ -853,7 +920,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     sections: sectionsRef,
   };
 
-  const handleSave = (skipDup = false) => {
+  const handleSave = (skipDup = false, skipSuggested = false) => {
     // Required-field validation: name + brand are required; sections non-empty.
     const next: { field: 'copyName' | 'brand' | 'sections'; label: string }[] = [];
     if (!copyName.trim()) next.push({ field: 'copyName', label: 'Template Name' });
@@ -870,6 +937,12 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         first?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
         first?.focus?.();
       });
+      return;
+    }
+    // Missing suggested sections (non-blocking): warn once, then proceed on confirm.
+    // New templates only, and only when some suggested sections are still absent.
+    if (isNew && !skipSuggested && recommendations.length > 0) {
+      setSuggestedConfirm(recommendations.map(r => r.name));
       return;
     }
     // Near-duplicate structure warning (§9) — new templates only.
@@ -939,6 +1012,21 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       onClose();
     }, 320);
   };
+
+  // Minimized — the full modal is not rendered, so the app behind is usable while
+  // extraction runs (or after it finishes). Only the corner card shows; Open
+  // restores the editor with the imported outline in place.
+  if (minimized) {
+    return (
+      <ExtractionCard
+        filename={scanningName ?? importedFrom ?? 'your report'}
+        messages={scanSeed ? SEED_SCAN_MESSAGES : IMPORT_SCAN_MESSAGES}
+        done={!importing}
+        sectionCount={!importing ? importBanner?.count : undefined}
+        onOpen={() => setMinimized(false)}
+      />
+    );
+  }
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.14, ease: [0.2, 0, 0, 1] }} className="fixed inset-0 z-[60] flex items-center justify-center" onClick={attemptClose}>
@@ -1290,6 +1378,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                           onMove={moveSection}
                           onDelete={() => removeSection(i)}
                           onRename={name => renameSection(i, name)}
+                          onDescribe={description => describeSection(i, description)}
                         />
                       ))}
                     </AnimatePresence>
@@ -1338,6 +1427,13 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                           Add all
                         </button>
                       </div>
+                      {/* Non-blocking advisory: these aren't required, but a report
+                          built without them tends to generate incomplete. Placed above
+                          the chips so the trade-off is clear before the author skips them. */}
+                      <p className="mb-2.5 flex items-start gap-1.5 text-[0.6875rem] leading-relaxed text-ink-400">
+                        <Info size={12} className="mt-[1.5px] shrink-0 text-brand-400" />
+                        <span>Recommended, not required. Skipping these may leave parts of the generated report incomplete.</span>
+                      </p>
                       <div className="flex flex-wrap gap-1.5">
                         <AnimatePresence initial={false}>
                           {recommendations.map((rec, ri) => {
@@ -1484,7 +1580,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         {/* Import-from-a-report extraction theatre — covers the editor while the
             PDF is read, then dismisses as the fields populate. */}
         <AnimatePresence>
-          {importing && <ImportScanOverlay filename={scanningName ?? 'your report'} messages={scanSeed ? SEED_SCAN_MESSAGES : IMPORT_SCAN_MESSAGES} />}
+          {importing && <ExtractionCard filename={scanningName ?? 'your report'} messages={scanSeed ? SEED_SCAN_MESSAGES : IMPORT_SCAN_MESSAGES} onMinimize={() => setMinimized(true)} />}
         </AnimatePresence>
 
         {/* Import review step — the shared "AI proposes, the human curates" canvas.
@@ -1557,14 +1653,28 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
         destructive
       />
       <ConfirmDialog
-        open={dupConfirm !== null}
-        onClose={() => setDupConfirm(null)}
-        onConfirm={() => { setDupConfirm(null); handleSave(true); }}
-        title="Nearly identical template?"
+        open={suggestedConfirm !== null}
+        onClose={() => setSuggestedConfirm(null)}
+        onConfirm={() => { setSuggestedConfirm(null); handleSave(false, true); }}
+        title="Create without the suggested sections?"
         description={
-          <>This shares {dupConfirm?.shared} of {dupConfirm?.total} sections with <span className="font-semibold">“{dupConfirm?.name}”</span>. Create it as a separate template anyway, or Cancel to edit the existing one instead.</>
+          <>Your template is missing {suggestedConfirm?.length} suggested section{suggestedConfirm?.length === 1 ? '' : 's'} ({suggestedConfirm?.join(', ')}). A report built without {suggestedConfirm?.length === 1 ? 'it' : 'them'} may come out incomplete. You can go back and add {suggestedConfirm?.length === 1 ? 'it' : 'them'}, or create the template as is.</>
         }
         confirmLabel="Create anyway"
+        cancelLabel="Go back and add"
+      />
+      <ConfirmDialog
+        open={dupConfirm !== null}
+        onClose={() => setDupConfirm(null)}
+        onConfirm={() => { setDupConfirm(null); handleSave(true, true); }}
+        title={dupConfirm && dupConfirm.shared === dupConfirm.total ? 'You already have this template' : 'This looks like a duplicate'}
+        description={
+          dupConfirm && dupConfirm.shared === dupConfirm.total
+            ? <>It has the same sections as your <span className="font-semibold">“{dupConfirm.name}”</span> template — all {dupConfirm.total}. Creating it just makes a second copy of the same thing.</>
+            : <>{dupConfirm?.shared} of its {dupConfirm?.total} sections are the same as your <span className="font-semibold">“{dupConfirm?.name}”</span> template, so this would be nearly a copy.</>
+        }
+        confirmLabel={dupConfirm && dupConfirm.shared === dupConfirm.total ? 'Create a copy anyway' : 'Create anyway'}
+        cancelLabel="Go back"
       />
       <ConfirmDialog
         open={confirmRemoveImport}

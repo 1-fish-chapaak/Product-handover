@@ -243,6 +243,9 @@ export type SectionKind = 'text' | 'kpi' | 'chart' | 'table';
 export type TemplateSection = {
   name: string;
   icon: string;
+  /** Author-editable one-line description of what the section covers. Absent =
+   *  fall back to the auto blurb (sectionBlurb). Editable inline in the editor. */
+  description?: string;
   /** Block type — text (a heading) or a kpi/chart/table placeholder. Absent = text.
    *  Placeholders are set by import detection; their numbers fill from query data
    *  at generate time, never scraped from an upload. */

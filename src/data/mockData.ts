@@ -321,10 +321,10 @@ export const GENERATED_REPORTS = [
 ];
 
 export const SHARED_REPORTS = [
-  { id: "sr-001", name: "FY26 Internal Audit Summary", kind: "ia", sharedBy: "Neha Joshi", sharedAt: "Apr 10, 2026", status: "final", pages: 18, sharedWith: "Audit Team", queries: 5 },
-  { id: "sr-002", name: "O2C Controls Review — Q1 2026", kind: "sox", sharedBy: "Deepak Bansal", sharedAt: "Apr 5, 2026", status: "final", pages: 14, sharedWith: "Finance", queries: 4 },
-  { id: "sr-003", name: "Vendor Risk Exposure Report", kind: "ia", sharedBy: "Karan Mehta", sharedAt: "Mar 28, 2026", status: "draft", pages: 9, sharedWith: "Risk Committee", queries: 2 },
-  { id: "sr-004", name: "GL Reconciliation — Feb 2026", kind: "sox", sharedBy: "Sneha Desai", sharedAt: "Mar 15, 2026", status: "final", pages: 22, sharedWith: "CFO Office", queries: 7 },
+  { id: "sr-001", name: "FY26 Internal Audit Summary", kind: "ia", source: "system", sharedBy: "Neha Joshi", sharedAt: "Apr 10, 2026", status: "final", pages: 18, sharedWith: "Audit Team", queries: 5 },
+  { id: "sr-002", name: "O2C Controls Review — Q1 2026", kind: "sox", source: "custom", sharedBy: "Deepak Bansal", sharedAt: "Apr 5, 2026", status: "final", pages: 14, sharedWith: "Finance", queries: 4 },
+  { id: "sr-003", name: "Vendor Risk Exposure Report", kind: "ia", source: "system", sharedBy: "Karan Mehta", sharedAt: "Mar 28, 2026", status: "draft", pages: 9, sharedWith: "Risk Committee", queries: 2 },
+  { id: "sr-004", name: "GL Reconciliation — Feb 2026", kind: "sox", source: "custom", sharedBy: "Sneha Desai", sharedAt: "Mar 15, 2026", status: "final", pages: 22, sharedWith: "CFO Office", queries: 7 },
 ];
 
 // ─── Data Sources ───
