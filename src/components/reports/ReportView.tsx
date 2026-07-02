@@ -2929,18 +2929,6 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
               </div>
             )}
 
-            {/* Approvals & Sign-Off — from the template's signature block. Each
-                slot is manually signable (and revocable) here in the reader. */}
-            {report.signoffEnabled && (report.signatories?.length ?? 0) > 0 && (
-              <div className="mt-6 bg-white rounded-[12px] border border-canvas-border p-6">
-                <ReportSignoffBlock
-                  signatories={report.signatories!}
-                  signoffs={report.signoffs}
-                  onSign={canSignoff ? handleSign : undefined}
-                  onSignOff={canSignoff ? handleSignOff : undefined}
-                />
-              </div>
-            )}
           </>
         ) : (
           <div className="w-full">
@@ -3177,6 +3165,20 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 </div>
               )}
             </main>
+          </div>
+        )}
+
+        {/* Approvals & Sign-Off — from the template's signature block, rendered
+            for both report layouts. Each slot is manually signable / revocable
+            here in the reader (persisted); static otherwise. */}
+        {report.signoffEnabled && (report.signatories?.length ?? 0) > 0 && (
+          <div className="mt-6 bg-white rounded-[12px] border border-canvas-border p-6">
+            <ReportSignoffBlock
+              signatories={report.signatories!}
+              signoffs={report.signoffs}
+              onSign={canSignoff ? handleSign : undefined}
+              onSignOff={canSignoff ? handleSignOff : undefined}
+            />
           </div>
         )}
         </div>
