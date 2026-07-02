@@ -24,7 +24,7 @@ import RiskRegister from './components/audit/RiskRegister';
 import AuditExecution from './components/audit/AuditExecution';
 import DashboardView from './components/dashboard/DashboardView';
 import DashboardListPage from './components/dashboard/DashboardListPage';
-import ReportsView, { CUSTOM_TEMPLATES, SEED_APPROVED_TEMPLATE } from './components/reports/ReportsView';
+import ReportsView, { CUSTOM_TEMPLATES } from './components/reports/ReportsView';
 import { REPORT_TEMPLATES } from './data/mockData';
 import HomeView from './components/home/HomeView';
 import RecentsView from './components/recents/RecentsView';
@@ -266,27 +266,23 @@ function AppInner() {
     setView('racm-full-editor');
   };
   type CustomTemplate = typeof CUSTOM_TEMPLATES[number];
-  const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
+  // v2 — resets the Custom list to a clean slate (the v1 blob had accumulated
+  // dozens of test copies); new templates persist here going forward.
+  const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v2';
   // The old demo seeds — filtered out of any previously persisted blob so the
   // Custom section only ever shows templates the user actually created.
   const DEMO_TEMPLATE_IDS = new Set(['ct-custom-01', 'ct-custom-02', 'ct-003', 'ct-004', 'ct-005', 'ct-006']);
-  // A seeded approved-format template so the §5 format-match verdict is clickable
-  // without first uploading twice. Prepended if absent (a manual delete sticks
-  // for the session; it returns on a fresh load — it's a demo fixture).
-  const seed = SEED_APPROVED_TEMPLATE as unknown as CustomTemplate;
-  const withSeed = (list: CustomTemplate[]) =>
-    list.some(t => t.id === seed.id) ? list : [seed, ...list];
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>(() => {
     try {
       const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          return withSeed((parsed as CustomTemplate[]).filter(t => !DEMO_TEMPLATE_IDS.has(t.id)));
+          return (parsed as CustomTemplate[]).filter(t => !DEMO_TEMPLATE_IDS.has(t.id));
         }
       }
     } catch { /* ignore */ }
-    return withSeed([]);
+    return [];
   });
   useEffect(() => {
     try { localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(customTemplates)); } catch { /* ignore */ }
