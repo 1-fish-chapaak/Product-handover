@@ -350,7 +350,7 @@ function PdfPreview({
 
       {/* Contents page */}
       <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag} showPageNo={showPageNo}>
-        <PdfContents sections={sections} />
+        <PdfContents sections={sections} showPageNo={showPageNo} />
       </PdfPage>
 
       {/* Content pages — one PdfPage per block */}
@@ -393,7 +393,7 @@ function PageBlockBody({ block, typeface }: { block: DownloadPreviewSection[]; t
   );
 }
 
-function PdfContents({ sections }: { sections: DownloadPreviewSection[] }) {
+function PdfContents({ sections, showPageNo = true }: { sections: DownloadPreviewSection[]; showPageNo?: boolean }) {
   return (
     <div>
       <h2 className="text-[1.25rem] leading-[1.2] font-semibold text-ink-900 tracking-tight mb-1">
@@ -582,7 +582,7 @@ function PptPreview({
 
       {/* Contents slide */}
       <PptSlide slideNo={2} total={total} reportName={reportName} showPageNo={showPageNo}>
-        <PdfContents sections={sections} />
+        <PdfContents sections={sections} showPageNo={showPageNo} />
       </PptSlide>
 
       {/* Content slides — one section per slide, widgets included.
@@ -750,7 +750,7 @@ function DocxPreview({
 
       {/* Contents page */}
       <PdfPage pageNo={2} totalPages={totalPages} reportName={reportName} reportTag={reportTag} showPageNo={showPageNo}>
-        <PdfContents sections={sections} />
+        <PdfContents sections={sections} showPageNo={showPageNo} />
       </PdfPage>
 
       {/* Content pages */}
