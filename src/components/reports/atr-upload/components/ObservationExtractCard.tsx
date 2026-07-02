@@ -54,8 +54,9 @@ export default function ObservationExtractCard({
   };
 
   return (
-    <div className="bg-canvas-elevated">
-      {/* Selection is shown only by the checkbox — no row tint or accent bar. */}
+    <div className={`rounded-[12px] border overflow-hidden transition-colors ${obs.selected ? 'border-brand-300 ring-1 ring-brand-200 bg-brand-50/20' : 'border-canvas-border bg-canvas-elevated hover:border-brand-200'}`}>
+      {/* Selected observations are highlighted (brand tint + ring) so it's clear
+          which ones flow into the ATR. */}
       {/* Header row */}
       <div className="flex items-start gap-3.5 px-5 py-3.5">
         <div className="pt-0.5"><Checkbox checked={obs.selected} onChange={onToggleSelect} ariaLabel={`Select observation ${obs.number}`} /></div>

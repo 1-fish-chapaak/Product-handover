@@ -4989,7 +4989,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
     return () => clearTimeout(t);
   }, [bp.id]);
 
-  const VALID_SECTIONS: SectionKey[] = ['sop', 'racm', 'risks', 'controls', 'workflows'];
+  const VALID_SECTIONS: SectionKey[] = ['sop', 'racm', 'risks', 'controls', 'workflows', 'ai-insights'];
   const readSectionFromUrl = (): SectionKey | null => {
     if (typeof window === 'undefined') return null;
     const raw = new URLSearchParams(window.location.search).get('section');

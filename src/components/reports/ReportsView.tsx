@@ -214,6 +214,9 @@ export default function ReportsView({
   // cross-cutting Bulk Audit engagement style.
   const [allTypeFilter, setAllTypeFilter] = useState<string[]>([]);
   const [atrUploadOpen, setAtrUploadOpen] = useState(false);
+  // When the wizard minimizes during extraction, present it as a small floating
+  // toast (no backdrop) so the rest of the app stays usable.
+  const [atrMinimized, setAtrMinimized] = useState(false);
   // True while the wizard's close-confirm is up — hides this host backdrop so the
   // confirm's own full-screen scrim is the only dim (no double-dim / vignette).
   const [atrConfirmOpen, setAtrConfirmOpen] = useState(false);
@@ -1718,17 +1721,22 @@ export default function ReportsView({
         {atrUploadOpen && (
           <>
             {/* Backdrop is inert — the wizard owns its own close so an outside
-                click can't discard in-progress work without confirmation. */}
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: atrConfirmOpen ? 0 : 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-              className="fixed inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px] z-50" />
+                click can't discard in-progress work without confirmation. Hidden
+                while minimized, so the app behind stays interactive. */}
+            {!atrMinimized && (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: atrConfirmOpen ? 0 : 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+                className="fixed inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px] z-50" />
+            )}
             <motion.div
               initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
               transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[680px] max-h-[92vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col overflow-hidden"
-              role="dialog" aria-modal="true" aria-label="Generate ATR by Upload"
+              className={atrMinimized
+                ? 'fixed bottom-4 right-4 w-[400px] max-w-[92vw] bg-canvas-elevated rounded-[14px] shadow-xl border border-canvas-border z-[60] overflow-hidden'
+                : 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[680px] max-h-[92vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col overflow-hidden'}
+              role="dialog" aria-modal={!atrMinimized} aria-label="Generate ATR by Upload"
             >
-              <AtrUploadTab onClose={() => { setAtrUploadOpen(false); setAtrConfirmOpen(false); clearAtrDraft(); }} onManageExceptions={onManageExceptions} onSaveAtr={saveUploadedAtr} onConfirmOpenChange={setAtrConfirmOpen} />
+              <AtrUploadTab onClose={() => { setAtrUploadOpen(false); setAtrConfirmOpen(false); setAtrMinimized(false); clearAtrDraft(); }} onManageExceptions={onManageExceptions} onSaveAtr={saveUploadedAtr} onConfirmOpenChange={setAtrConfirmOpen} onMinimizedChange={setAtrMinimized} />
             </motion.div>
           </>
         )}

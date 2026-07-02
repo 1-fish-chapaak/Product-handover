@@ -164,8 +164,15 @@
 /* discussion rail */
 .disc-bubble { border: 1px solid var(--paper-rule); border-radius: 11px; padding: 10px 12px; background: var(--color-canvas-elevated); }
 .disc-bubble.auditor { border-left: 3px solid var(--color-info-400, var(--color-brand-400)); }
-.disc-bubble.reviewer { border-left: 3px solid var(--color-evidence-500); }
 .disc-bubble.risk-owner { border-left: 3px solid var(--color-mitigated-500); }
+
+/* ── Execution history — the shared sign-off trail ─────────────────────────────── */
+/* A working-paper margin: a hairline rail down the left, each run initialed by the
+   hand that ran it (auditor = purple / gavel, risk owner = amber / check). */
+.exec-trail { position: relative; }
+.exec-trail::before { content: ''; position: absolute; left: 11px; top: 8px; bottom: 8px; width: 1.5px; background: var(--paper-rule); }
+.exec-node { position: relative; z-index: 1; width: 23px; height: 23px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--color-canvas-border); background: var(--color-canvas-elevated); box-shadow: 0 1px 3px -1px rgba(15, 8, 30, .12); }
+.exec-card { border: 1px solid var(--paper-rule); border-left-width: 3px; border-radius: 10px; padding: 8px 10px; background: var(--color-canvas-elevated); }
 
 /* ── Vertical stepper (TOD → TOE) ───────────────────────────────────────────────── */
 .vstepper { position: relative; }

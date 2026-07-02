@@ -110,6 +110,7 @@ const CLASSIFICATION_STYLE: Record<GrcExceptionClassification, string> = {
   'Design Deficiency':         'bg-high-50 text-high-700',
   'System Deficiency':         'bg-risk-50 text-risk-700',
   'Procedural Non-Compliance': 'bg-brand-50 text-brand-700',
+  'Others':                    'bg-mitigated-50 text-mitigated-700',
   'Business as Usual':         'bg-compliant-50 text-compliant-700',
   'False Positive':            'bg-[#EEEEF1] text-ink-600',
 };
@@ -241,7 +242,7 @@ interface ColumnDef {
 }
 
 const ALL_CLASSIFICATIONS: GrcExceptionClassification[] = [
-  'Unclassified', 'Design Deficiency', 'System Deficiency', 'Procedural Non-Compliance', 'Business as Usual', 'False Positive',
+  'Unclassified', 'Design Deficiency', 'System Deficiency', 'Procedural Non-Compliance', 'Others', 'Business as Usual', 'False Positive',
 ];
 const ALL_COMBINED_REVIEW_LABELS: string[] = [
   'Under Review',
@@ -306,7 +307,10 @@ function buildColumnDefs(
     { key: 'actionableId',   label: 'Actionable ID',  draggable: true, filterable: true, filterMode: 'text', accessor: (e) => e.bulkId ?? '', minWidth: 110 },
     { key: 'lastUpdated',    label: 'Last Updated',   draggable: true, filterable: false, accessor: (e) => e.lastUpdated },
     { key: 'assignedTo',     label: 'Assigned To',    draggable: true, filterable: true,  filterMode: 'text', accessor: (e) => (e.assignees ?? (e.assignedTo ? [e.assignedTo] : [])).map(a => a.name).join(', '), minWidth: 160 },
-    { key: 'approval',       label: 'Approval',       draggable: true, filterable: false, minWidth: 180 },
+    // Approval is split into two columns: the flow(s) assigned (RO / Auditor route)
+    // and the live status (who's working on it / who the approval is pending with).
+    { key: 'approvalRoute',  label: 'Approval Flow',  draggable: true, filterable: false, minWidth: 150 },
+    { key: 'approvalStatus', label: 'Approval Status', draggable: true, filterable: false, minWidth: 180 },
   ];
   // Risk Owner gets the Classify CTA; Auditor only sees the Action CTA.
   if (!isAuditor) {
@@ -740,52 +744,48 @@ function renderCell(
       );
     case 'lastUpdated':
       return <span className="text-ink-500 text-[11.5px] tabular-nums whitespace-nowrap">{ex.lastUpdated}</span>;
-    case 'approval': {
-      // Status only — never an action surface. The work / review is done from the
-      // Classify and Action columns. Below the status, badges show which routes are
-      // assigned and by whom — Risk Owner route (lifecycle) and Auditor route
-      // (separate; runs in the Auditor phase) — kept clearly segregated.
-      const meta = approvalCellMeta(assignment, currentUserId ?? '');
+    case 'approvalRoute': {
+      // Which approval flow(s) the case is on — Risk Owner route (lifecycle) and/or
+      // Auditor route (separate; runs in the Auditor phase). Kept segregated.
       const roRouteName = assignment?.workflowName;
-      // Route badges — one per route, colour-coded by who assigned it: Risk Owner
-      // route (brand) and Auditor route (evidence). A leading dot keeps them
-      // scannable; both share the same flat, soft-tinted treatment.
-      const routeChips = (roRouteName || auditorRouteName) ? (
-        <div className="flex flex-wrap items-center gap-1">
+      if (!roRouteName && !auditorRouteName) {
+        return (
+          <span title="This case has not been assigned to an approval flow." className="inline-flex items-center gap-1.5 h-6 pl-2 pr-2.5 text-[11px] font-medium rounded-full bg-[#F4F2F7] text-ink-500 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-ink-300" /> No flow
+          </span>
+        );
+      }
+      return (
+        <div className="flex flex-col items-start gap-1">
           {roRouteName && (
-            <span title={`Assigned by the Risk Owner · ${roRouteName}`} className="inline-flex items-center gap-1 h-[18px] pl-1.5 pr-2 text-[9px] font-semibold uppercase tracking-[0.04em] rounded-full bg-brand-50 text-brand-700">
+            <span title={`Risk Owner flow · ${roRouteName}`} className="inline-flex items-center gap-1 h-[18px] pl-1.5 pr-2 text-[9px] font-semibold uppercase tracking-[0.04em] rounded-full bg-brand-50 text-brand-700">
               <span className="w-1.5 h-1.5 rounded-full bg-brand-500" /> RO route
             </span>
           )}
           {auditorRouteName && (
-            <span title={`Assigned by the Auditor · ${auditorRouteName} (runs in the Auditor phase)`} className="inline-flex items-center gap-1 h-[18px] pl-1.5 pr-2 text-[9px] font-semibold uppercase tracking-[0.04em] rounded-full bg-evidence-50 text-evidence-700">
+            <span title={`Auditor flow · ${auditorRouteName} (runs in the Auditor phase)`} className="inline-flex items-center gap-1 h-[18px] pl-1.5 pr-2 text-[9px] font-semibold uppercase tracking-[0.04em] rounded-full bg-evidence-50 text-evidence-700">
               <span className="w-1.5 h-1.5 rounded-full bg-evidence" /> Auditor route
             </span>
           )}
         </div>
-      ) : null;
-      if (!meta) return (
-        <div className="flex flex-col items-start gap-1.5">
-          <span title="This case has not been assigned to a Risk Owner approval route." className="inline-flex items-center gap-1.5 h-6 pl-2 pr-2.5 text-[11px] font-medium rounded-full bg-[#F4F2F7] text-ink-500 whitespace-nowrap">
-            <span className="w-1.5 h-1.5 rounded-full bg-ink-300" /> Not on a route
-          </span>
-          {routeChips}
-        </div>
       );
+    }
+    case 'approvalStatus': {
+      // Who's currently working on it / who the approval is pending with. Never an
+      // action surface — the work is done from the Classify / Action columns.
+      const meta = approvalCellMeta(assignment, currentUserId ?? '');
+      if (!meta) return <span className="text-ink-400 text-[12px]">—</span>;
       return (
-        <div className="flex flex-col items-start gap-1.5 min-w-0">
-          <span
-            title={`${meta.label}${meta.yourTurn ? ' · your turn — act from the Classify / Action column' : ''}`}
-            className="inline-flex items-center gap-1.5 max-w-full min-w-0"
-          >
-            <span className={`inline-flex items-center gap-1.5 h-6 pl-2 pr-2.5 text-[11px] font-semibold rounded-full max-w-[170px] ${meta.cls}`}>
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot}`} />
-              <span className="truncate">{meta.label}</span>
-            </span>
-            {meta.yourTurn && <span className="inline-flex items-center h-5 px-1.5 text-[9px] font-bold uppercase tracking-wide bg-brand-600 text-white rounded-full shrink-0 shadow-[0_1px_2px_rgba(106,18,205,0.3)]">You</span>}
+        <span
+          title={`${meta.label}${meta.yourTurn ? ' · your turn — act from the Classify / Action column' : ''}`}
+          className="inline-flex items-center gap-1.5 max-w-full min-w-0"
+        >
+          <span className={`inline-flex items-center gap-1.5 h-6 pl-2 pr-2.5 text-[11px] font-semibold rounded-full max-w-[180px] ${meta.cls}`}>
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot}`} />
+            <span className="truncate">{meta.label}</span>
           </span>
-          {routeChips}
-        </div>
+          {meta.yourTurn && <span className="inline-flex items-center h-5 px-1.5 text-[9px] font-bold uppercase tracking-wide bg-brand-600 text-white rounded-full shrink-0 shadow-[0_1px_2px_rgba(106,18,205,0.3)]">You</span>}
+        </span>
       );
     }
     case 'assignedTo': {

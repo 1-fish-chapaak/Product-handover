@@ -1,7 +1,7 @@
 import type { Persona } from './workflowTypes';
 import WorkflowConfigurator from './WorkflowConfigurator';
 
-/** Approval Routes — set up the reusable approval chains. The day-to-day work
+/** Approval Flow — set up the reusable approval chains. The day-to-day work
  *  (My Work / Awaiting My Approval) lives under "Your tasks" on the Exceptions
  *  and Action Hub tabs, so users don't hop between separate places. */
 export default function WorkflowModule({ role }: { role: Persona }) {

@@ -206,6 +206,7 @@ const CLASS_HEX: Record<string, string> = {
   'Design Deficiency':         '#C2410C',
   'System Deficiency':         '#DC2626',
   'Procedural Non-Compliance': '#A366F0',
+  'Others':                    '#B45309',
   'Business as Usual':         '#22C55E',
   'False Positive':            '#C2B9CB',
 };
@@ -300,7 +301,7 @@ export default function ActionHubView({ exceptions = [], role, onAction }: {
     const total = exceptions.length;
     const count = (f: (ex: GrcException) => boolean) => exceptions.filter(f).length;
     const classRows: { label: string; count: number }[] = (
-      ['Design Deficiency', 'System Deficiency', 'Procedural Non-Compliance', 'Business as Usual', 'False Positive'] as GrcExceptionClassification[]
+      ['Design Deficiency', 'System Deficiency', 'Procedural Non-Compliance', 'Others', 'Business as Usual', 'False Positive'] as GrcExceptionClassification[]
     ).map(label => ({ label, count: count(ex => ex.classification === label) }));
     return {
       total,

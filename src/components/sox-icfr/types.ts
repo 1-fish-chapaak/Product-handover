@@ -5,8 +5,8 @@
 // steps, manual override, and conclusion. The control conclusion rolls up from
 // both. Discussions are role-tagged threads anchored to a control or a track.
 
-export type Role = 'auditor' | 'reviewer' | 'risk-owner';
-export const ROLE_LABEL: Record<Role, string> = { auditor: 'Auditor', reviewer: 'Reviewer', 'risk-owner': 'Risk Owner' };
+export type Role = 'auditor' | 'risk-owner';
+export const ROLE_LABEL: Record<Role, string> = { auditor: 'Auditor', 'risk-owner': 'Risk Owner' };
 
 export type Assertion =
   | 'Completeness' | 'Accuracy' | 'Existence / Occurrence'
@@ -22,7 +22,7 @@ export type TrackConclusion = 'Effective' | 'Ineffective' | 'Not tested';
 export type TrackStatus = 'Not started' | 'In progress' | 'Concluded';
 export type Conclusion = 'Effective' | 'Ineffective' | 'In progress' | 'Not started';
 
-export type Court = 'auditor' | 'risk-owner' | 'reviewer' | 'none';
+export type Court = 'auditor' | 'risk-owner' | 'none';
 export type Likelihood = 'Remote' | 'Reasonably possible' | 'Probable';
 export type Severity = 'Deficiency' | 'Significant Deficiency' | 'Material Weakness';
 
@@ -56,7 +56,16 @@ export interface DesignDoc {
 }
 /** The Q&A a validation workflow produced — reviewable after it runs. */
 export interface ValidationQA { q: string; a: string; pass: boolean; }
-export interface ValidationResult { qa: ValidationQA[]; at: string; }
+/** An optional evidence table the AI returns (e.g. per-item check results). */
+export interface ValidationTable { columns: string[]; rows: string[][]; }
+export interface ValidationResult {
+  qa: ValidationQA[];
+  result?: TestResult;       // Pass / Fail the AI concluded against the uploaded file
+  summary?: string;          // plain-language summary of what the AI found
+  table?: ValidationTable;   // optional supporting table
+  fileName?: string;         // the required file the validation ran against
+  at: string;
+}
 
 /** A design consideration — validated by its own workflow, with manual override. */
 export interface DesignPoint {
@@ -83,8 +92,10 @@ export interface DesignTrack {
 export type OperatingMethod = 'Automated' | 'Manual';
 /** How one attribute is evidenced — choose one per attribute. */
 export type EvidenceMode = 'ai' | 'workflow' | 'attest';
-/** A first-line self-attestation against one attribute: text + uploaded evidence. */
+/** A manual self-attestation against one attribute: an explicit Pass/Fail
+ *  conclusion, supporting text, uploaded evidence, and who attested it. */
 export interface Attestation {
+  result?: 'Pass' | 'Fail';   // manual conclusion the attester recorded
   note: string;
   evidence: EvidenceFile[];
   by: string;
@@ -105,6 +116,7 @@ export interface OperatingStep {
   workflowName?: string;
   workflowRunRef?: string;
   aiValidation?: boolean;
+  inputFile?: EvidenceFile;      // the required file AI validation runs against
   validation?: ValidationResult;
   attestEnabled?: boolean;
   attestation?: Attestation;
@@ -231,6 +243,25 @@ export interface MaterialityRules {
   mwIndicators: string[];        // MW indicators in force for this engagement (from the catalogue)
 }
 
+// ─── Execution history (shared audit trail) ──────────────────────────────────────
+// Every test-of-design / test-of-operating action either persona takes is logged here,
+// so the auditor and the risk owner each see what the other ran on a control, and when.
+export type ExecKind =
+  | 'validate' | 'test-all' | 'pull-run' | 'attest' | 'conclude'
+  | 'override' | 'request-docs' | 'receive-doc' | 'population' | 'sample';
+export interface ExecutionEvent {
+  id: string;
+  controlId: string;
+  track: 'design' | 'operating';
+  kind: ExecKind;
+  verb: string;                               // active-voice phrase, e.g. 'validated', 'concluded effective'
+  target?: string;                            // attribute code / consideration / document the action touched
+  result?: TestResult | TrackConclusion;      // outcome, when the action produced one
+  by: string;                                 // actor display name
+  role: Role;                                 // actor role — drives the trail's glyph + tint
+  at: string;
+}
+
 export interface IcfrEngagement {
   id: string; code: string; name: string; entity: string; framework: string;
   periodStart: string; periodEnd: string; period: 'Interim' | 'Year-end';
@@ -241,6 +272,7 @@ export interface IcfrEngagement {
   deficiencies: Deficiency[];
   tasks: HandoffTask[];
   discussions: Discussion[];
+  executions: ExecutionEvent[];
 }
 
 export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'Policy / SOP'];

@@ -16,7 +16,7 @@ import { PlanSection, type ExecutorParameters } from '../concierge-workflow-buil
 import ExecutorColumnMapping from './ExecutorColumnMapping';
 import SlotFunctionTag from './SlotFunctionTag';
 import ArtifactPanel from '../artifacts/ArtifactPanel';
-import WorkflowMemoryPanel, { RowMemoryMarker, GoldenRecordPlanCard } from './WorkflowMemoryPanel';
+import WorkflowMemoryPanel, { RowMemoryMarker, GoldenRecordPlanCard, SourceDriftBanner } from './WorkflowMemoryPanel';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { seedAlignments } from '../concierge-workflow-builder/mockApi';
 import type {
@@ -816,6 +816,7 @@ function StructuredFileCard({
   onRemoveSource,
   onTogglePopover,
   onClosePopover,
+  flat = false,
 }: {
   input: InputSpec;
   sources: MappedSource[];
@@ -827,6 +828,8 @@ function StructuredFileCard({
   onRemoveSource: (name: string) => void;
   onTogglePopover: () => void;
   onClosePopover: () => void;
+  /** Flat variant — no card border/tint, for use inside a grouped container. */
+  flat?: boolean;
 }) {
   const hasSources = sources.length > 0;
   const conf = match?.confidence ?? null;
@@ -845,10 +848,14 @@ function StructuredFileCard({
 
   return (
     <div
-      className={[
-        'rounded-xl border p-4 transition-colors',
-        !hasSources ? 'border-risk/30 bg-risk-50/20' : `${tier!.cardBorder} ${tier!.cardBg}`,
-      ].join(' ')}
+      className={
+        flat
+          ? 'py-4'
+          : [
+              'rounded-xl border p-4 transition-colors',
+              !hasSources ? 'border-risk/30 bg-risk-50/20' : `${tier!.cardBorder} ${tier!.cardBg}`,
+            ].join(' ')
+      }
     >
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -1024,6 +1031,11 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
   const [columnMapPending, setColumnMapPending] = useState(false);
   const [alignments, setAlignments] = useState<JourneyAlignments>(() => seedAlignments(workflow));
 
+  // Insufficient-data gate — a required input has too little data, so the whole
+  // flow (clarification → mapping) is held back until the user uploads a
+  // complete file. Seeded per run in startExecution.
+  const [insufficientData, setInsufficientData] = useState(false);
+
   // Which Required Files card has its "Expected columns" popover open (input id).
   const [columnsViewFor, setColumnsViewFor] = useState<string | null>(null);
 
@@ -1153,6 +1165,11 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
   );
 
   const totalFiles = Object.values(files).reduce((n, arr) => n + arr.length, 0);
+  // On the completed view the standalone "Upload data files" card is folded
+  // into the results header, so we surface the same summary (which inputs got
+  // files, and how many required) alongside the output instead.
+  const satisfiedInputs = workflow.inputs.filter((i) => (files[i.id] ?? []).length > 0);
+  const requiredInputCount = workflow.inputs.filter((i) => i.required).length;
 
   const allAdded = useMemo(
     () =>
@@ -1316,25 +1333,33 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
   const handleAddFilesConfirm = useCallback((selections: AttachmentSelection[]) => {
     setDataPickerOpen(false);
     if (selections.length === 0) return;
-    let added = 0;
+    // Compute the de-duped additions up front (NOT inside the setFiles updater),
+    // so the post-add effects — the toast and clearing the insufficient-data
+    // gate — fire reliably instead of racing React's async state updater.
+    const seen = new Set(Object.values(files).flat().map((f) => f.name));
+    const toAdd: UploadedFile[] = [];
+    for (const sel of selections) {
+      let file: UploadedFile | null = null;
+      if (sel.kind === 'source') file = { name: sel.name, size: 0, linkedSource: true };
+      else if (sel.kind === 'upload') file = { name: sel.name, size: sel.sizeBytes };
+      // 'connect-db' isn't reachable in chat mode — the Connect tab is kh-add only.
+      if (!file || seen.has(file.name)) continue;
+      seen.add(file.name);
+      toAdd.push(file);
+    }
+    if (toAdd.length === 0) return;
     setFiles((prev) => {
       const next = { ...prev };
-      const seen = new Set(Object.values(next).flat().map((f) => f.name));
-      for (const sel of selections) {
-        let file: UploadedFile | null = null;
-        if (sel.kind === 'source') file = { name: sel.name, size: 0, linkedSource: true };
-        else if (sel.kind === 'upload') file = { name: sel.name, size: sel.sizeBytes };
-        // 'connect-db' isn't reachable in chat mode — the Connect tab is kh-add only.
-        if (!file || seen.has(file.name)) continue;
-        seen.add(file.name);
+      for (const file of toAdd) {
         const target = pickTargetInputId(next);
         next[target] = [...(next[target] ?? []), file];
-        added++;
       }
       return next;
     });
-    if (added > 0) addToast({ type: 'success', message: `Added ${added} ${added === 1 ? 'item' : 'items'} to this workflow.` });
-  }, [pickTargetInputId, addToast]);
+    addToast({ type: 'success', message: `Added ${toAdd.length} ${toAdd.length === 1 ? 'item' : 'items'} to this workflow.` });
+    // A fresh upload resolves the insufficient-data gate, unblocking the flow.
+    setInsufficientData(false);
+  }, [files, pickTargetInputId, addToast]);
 
   const advance = useCallback(() => {
     const totalDuration = EXECUTION_STEPS.reduce((a, s) => a + s.duration, 0);
@@ -1376,8 +1401,10 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     setFileMappings([]);
     setUnstructuredMappings([]);
     setColumnMapPending(false);
+    // Structured executors demo the insufficient-data gate; PDF flows don't.
+    setInsufficientData(!isPdfExecutor);
     advance();
-  }, [hasRequired, advance]);
+  }, [hasRequired, advance, isPdfExecutor]);
 
   const stopExecution = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -1388,6 +1415,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     setFileMapPending(false);
     setUnstructuredMappings([]);
     setColumnMapPending(false);
+    setInsufficientData(false);
   }, []);
 
   const resolveClarification = useCallback(() => {
@@ -1984,8 +2012,11 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
               </>
             )}
 
-            {/* Collapsed upload summary shown during/after execution */}
-            {phase !== 'idle' && (
+            {/* Collapsed upload summary shown during the run and its paused
+                steps — omitted on the column-mapping step to keep that card
+                focused on the mapping itself. On the completed view it's folded
+                into the results header instead. */}
+            {phase === 'running' && !columnMapPending && (
               <section className="rounded-xl border border-canvas-border bg-canvas-elevated px-5 py-3.5 mb-4">
                 <div className="flex items-center gap-3">
                   <UploadCloud size={14} className="text-brand-600 shrink-0" />
@@ -2042,29 +2073,41 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     />
                   </div>
 
-                  {/* Dummy insufficient-data warning — calls out the affected required input */}
-                  <div className="flex items-start gap-2.5 rounded-lg border border-mitigated-200 bg-mitigated-50 px-3 py-2.5 mb-4">
-                    <AlertCircle size={14} className="text-mitigated-700 shrink-0 mt-0.5" />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[12px] font-semibold text-mitigated-700">
-                          Insufficient data detected
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold rounded-md bg-canvas-elevated border border-mitigated-200 text-mitigated-700 px-1.5 py-0.5">
-                          <FileIcon size={10} />
-                          GL Trial Balance
-                          <span className="text-[9.5px] font-bold uppercase tracking-wider text-risk">
-                            Required
+                  {/* Insufficient-data gate — blocks the flow (clarification &
+                      mapping) until the user uploads a complete file for the
+                      affected required input. */}
+                  {insufficientData && (
+                    <div className="flex items-start gap-2.5 rounded-lg border border-mitigated-200 bg-mitigated-50 px-3 py-2.5 mb-4">
+                      <AlertCircle size={14} className="text-mitigated-700 shrink-0 mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[12px] font-semibold text-mitigated-700">
+                            Insufficient data detected
                           </span>
-                        </span>
-                      </div>
-                      <div className="text-[11.5px] text-ink-600 mt-1 leading-relaxed">
-                        The file mapped to this required input has only <span className="font-mono font-semibold">2,340</span> rows
-                        (expected ~<span className="font-mono font-semibold">5,000</span> for this period).
-                        Execution will continue but results may be incomplete.
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold rounded-md bg-canvas-elevated border border-mitigated-200 text-mitigated-700 px-1.5 py-0.5">
+                            <FileIcon size={10} />
+                            GL Trial Balance
+                            <span className="text-[9.5px] font-bold uppercase tracking-wider text-risk">
+                              Required
+                            </span>
+                          </span>
+                        </div>
+                        <div className="text-[11.5px] text-ink-600 mt-1 leading-relaxed">
+                          The file mapped to this required input has only <span className="font-mono font-semibold">2,340</span> rows
+                          (expected ~<span className="font-mono font-semibold">5,000</span> for this period).
+                          Upload a complete file to continue — the run stays paused until the data is sufficient.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setDataPickerOpen(true)}
+                          className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold px-3 py-1.5 transition-colors cursor-pointer"
+                        >
+                          <UploadCloud size={13} />
+                          Upload file
+                        </button>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="space-y-2">
                     {EXECUTION_STEPS.map((step, i) => {
@@ -2110,9 +2153,10 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
               )}
             </AnimatePresence>
 
-            {/* Clarification question (pauses execution) */}
+            {/* Clarification question (pauses execution) — held back until the
+                insufficient-data gate is cleared; data comes first. */}
             <AnimatePresence>
-              {phase === 'running' && clarificationPending && (
+              {phase === 'running' && clarificationPending && !insufficientData && (
                 <motion.section
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -2222,9 +2266,10 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
               )}
             </AnimatePresence>
 
-            {/* Step 1: File mapping (pauses execution after clarification) */}
+            {/* Step 1: File mapping (pauses execution after clarification) —
+                also held back until the insufficient-data gate is cleared. */}
             <AnimatePresence>
-              {phase === 'running' && fileMapPending && (
+              {phase === 'running' && fileMapPending && !insufficientData && (
                 <motion.section
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -2337,7 +2382,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     const green = items.filter((x) => x.match && x.match.confidence >= 90);
                     const yellow = items.filter((x) => !x.match || x.match.confidence < 90);
 
-                    const renderCard = (x: (typeof items)[number]) => (
+                    const renderCard = (x: (typeof items)[number], flat = false) => (
                       <StructuredFileCard
                         key={x.input.id}
                         input={x.input}
@@ -2350,44 +2395,22 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                         onRemoveSource={(name) => removeSource(x.input.id, name)}
                         onTogglePopover={() => setFileMatchFor((v) => (v === x.input.id ? null : x.input.id))}
                         onClosePopover={() => setFileMatchFor(null)}
+                        flat={flat}
                       />
                     );
 
                     return (
                       <>
-                        {/* Auto-mapped (≥90% match) — green, no review needed */}
+                        {/* No section labels — the card colour (green = auto-mapped,
+                            amber = needs review) carries the tier on its own. */}
                         {green.length > 0 && (
-                          <>
-                            <div className="flex items-center gap-2 mt-4 mb-2">
-                              <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-500">
-                                Structured files
-                              </span>
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-compliant-50 text-compliant-700 text-[10px] font-semibold border border-compliant/20">
-                                Auto-mapped
-                              </span>
-                              <div className="flex-1 h-px bg-canvas-border" />
-                            </div>
-                            <div className="flex flex-col gap-2.5">{green.map(renderCard)}</div>
-                          </>
+                          <div className="flex flex-col gap-2.5 mt-4">{green.map((x) => renderCard(x))}</div>
                         )}
 
-                        {/* Needs review (&lt;90% match) — yellow section. 70–89
-                            stays auto-mapped; &lt;70 needs manual mapping. */}
                         {yellow.length > 0 && (
-                          <>
-                            <div className="flex items-center gap-2 mt-5 mb-2">
-                              <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-500">
-                                Needs review
-                              </span>
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-mitigated-50 text-mitigated-700 text-[10px] font-semibold border border-mitigated-200">
-                                Match &lt; 90%
-                              </span>
-                              <div className="flex-1 h-px bg-canvas-border" />
-                            </div>
-                            <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/15 p-2.5 flex flex-col gap-2.5">
-                              {yellow.map(renderCard)}
-                            </div>
-                          </>
+                          <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/15 px-4 flex flex-col divide-y divide-mitigated-200/70 mt-3">
+                            {yellow.map((x) => renderCard(x, true))}
+                          </div>
                         )}
                       </>
                     );
@@ -2615,9 +2638,11 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
               )}
             </AnimatePresence>
 
-            {/* Step 2: Column alignment (after file mapping is confirmed) */}
+            {/* Step 2: Column alignment (after file mapping is confirmed) —
+                held back while data is insufficient; the user must upload a
+                complete file (via the gate above) before mapping appears. */}
             <AnimatePresence>
-              {phase === 'running' && columnMapPending && (
+              {phase === 'running' && columnMapPending && !insufficientData && (
                 <motion.section
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -2640,6 +2665,11 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       {isPdfExecutor ? 'Step 1 of 1' : 'Step 2 of 2'}
                     </span>
                   </div>
+
+                  {/* Source-drift warning — a pre-run gate on the confirm
+                      screen. It owns its own amber alert chrome and collapses to
+                      a one-line confirmed strip once the auditor decides. */}
+                  {!isPdfExecutor && <SourceDriftBanner />}
 
                   <ExecutorColumnMapping
                     workflow={workflow}
@@ -2708,13 +2738,32 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     ))}
                   </div>
 
-                  <div className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden mb-4">
-                    <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border">
-                      <h3 className="text-[13px] font-bold text-ink-800 flex items-center gap-2">
-                        <TrendingUp size={14} className="text-brand-600" />
-                        Duplicate Invoice Matches
-                      </h3>
-                      <span className="text-[12px] text-ink-400 font-mono">{RESULTS_DATA.length} records</span>
+                  <div className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden mb-5">
+                    <div className="flex items-start justify-between gap-3 px-5 py-3.5 border-b border-canvas-border">
+                      <div className="min-w-0">
+                        <h3 className="text-[13px] font-bold text-ink-800 flex items-center gap-2">
+                          <TrendingUp size={14} className="text-brand-600" />
+                          Duplicate Invoice Matches
+                        </h3>
+                        {/* Upload summary folded in from the (now removed)
+                            standalone card: how many files fed the run and
+                            which inputs they satisfied — provenance beside the
+                            output. */}
+                        <div className="flex items-center gap-1.5 mt-1 pl-[22px] text-[11.5px] text-ink-400 min-w-0">
+                          <UploadCloud size={11} className="text-ink-300 shrink-0" />
+                          <span className="truncate">
+                            {totalFiles} file{totalFiles === 1 ? '' : 's'} added · {satisfiedInputs.length}/{requiredInputCount} inputs
+                            {satisfiedInputs.length > 0 && (
+                              <>
+                                {' · '}
+                                {satisfiedInputs.slice(0, 2).map((i) => i.name).join(' · ')}
+                                {satisfiedInputs.length > 2 ? ` · +${satisfiedInputs.length - 2}` : ''}
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[12px] text-ink-400 font-mono shrink-0 mt-0.5">{RESULTS_DATA.length} records</span>
                     </div>
                     <div className="overflow-x-auto">
                       <div className="grid grid-cols-[140px_1fr_120px_110px_90px] gap-3 px-5 py-2.5 bg-canvas border-b border-canvas-border min-w-[640px]">
@@ -2745,7 +2794,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2.5 mb-5">
                     <button className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[12.5px] font-semibold transition-colors cursor-pointer">
                       <Download size={13} />
                       Download CSV
@@ -2766,9 +2815,14 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     </button>
                   </div>
 
-                  {/* Memory surfaces — golden-record bypass, source-drift
-                      re-ask, cross-workflow correlation, output compare. */}
-                  <WorkflowMemoryPanel />
+                  {/* What memory knows — cross-workflow correlation + output
+                      compare, shown beneath the output and its actions as
+                      supporting context. The source-drift conflict is resolved
+                      earlier on the confirm-mapping screen (before approve &
+                      run), so it's suppressed here rather than gating the output. */}
+                  <div className="mb-5">
+                    <WorkflowMemoryPanel showSourceDrift={false} />
+                  </div>
 
                   {/* Follow-up — bridge from "here are results" to a chat
                       thread that already carries the run as context. */}

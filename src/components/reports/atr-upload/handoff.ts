@@ -18,7 +18,7 @@ export const ATR_HANDOFF_ID = 'ATR-UPLOAD';
  *  observation — this powers the per-observation "Manage Exceptions" CTA on the
  *  generated ATR, so each observation's cases stay segregated. Omit it to hand
  *  off every linked annexure at once. */
-export function handoffToManageExceptions(session: ExtractionSession, observationId?: string): number {
+export function handoffToManageExceptions(session: ExtractionSession, observationId?: string, opts?: { newTab?: boolean }): number {
   const linked = session.annexures.filter(a =>
     a.observationId && (observationId ? a.observationId === observationId : true),
   );
@@ -58,7 +58,12 @@ export function handoffToManageExceptions(session: ExtractionSession, observatio
     // to My Reports → ATR with the upload wizard re-opened — it resumes its
     // persisted ATR Preview stage, so they land back exactly where they left.
     url.searchParams.set('tab', 'atr-upload');
-    window.history.replaceState({}, '', url);
+    if (opts?.newTab) {
+      // Open Manage Exceptions in a new tab, leaving the ATR preview in place.
+      window.open(url.toString(), '_blank');
+    } else {
+      window.history.replaceState({}, '', url);
+    }
   } catch { /* ignore */ }
 
   return rows.length;

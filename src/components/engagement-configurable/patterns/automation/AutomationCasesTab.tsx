@@ -203,6 +203,8 @@ export default function AutomationCasesTab({ engagement, runsState, casesState, 
           onExceptionsChange={handleExceptionsChange}
           contextLabel={engagement.name}
           onBulkAssign={handleBulkAssign}
+          showApprovalFlowAssign
+          engagementMode
         />
       </div>
 
