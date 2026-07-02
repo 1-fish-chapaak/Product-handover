@@ -37,6 +37,7 @@ import ReportBuilder from './components/reports/ReportBuilder';
 import AuditPlanningPage from './components/audit/AuditPlanningPage';
 import EngagementsView from './components/audit/EngagementsView';
 import SoxIcfrApp from './components/sox-icfr/SoxIcfrApp';
+import ComplianceEngagementApp from './components/engagement-configurable/ComplianceEngagementApp';
 import EngagementOverviewView from './components/audit/EngagementOverviewView';
 import ClosedCaseSamplingView from './components/audit/ClosedCaseSamplingView';
 import MyQueueView from './components/audit/MyQueueView';
@@ -887,6 +888,9 @@ function AppInner() {
 
       case 'sox-icfr':
         return <SoxIcfrApp engagementId={state.selectedEngagementId ?? undefined} onBack={() => setView('engagements')} />;
+
+      case 'compliance-engagement':
+        return <ComplianceEngagementApp engagementId={state.selectedEngagementId ?? undefined} onBack={() => setView('engagements')} />;
 
       case 'engagements':
         return (

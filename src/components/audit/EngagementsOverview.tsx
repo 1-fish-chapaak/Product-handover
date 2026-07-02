@@ -133,6 +133,42 @@ function urgencyTone(hours: number): { dot: string; text: string } {
   return { dot: 'bg-brand-400', text: 'text-text-secondary' };
 }
 
+/** Demo clock — aligned with engagement-activity's fixed "today" so relative
+ *  seed copy ("in 12d") and dated milestones rank coherently. */
+const DEMO_NOW = new Date('2026-05-15T00:00:00Z');
+
+/** One entry for the Upcoming milestones feed. */
+interface UpcomingEntry {
+  label: string;
+  /** Concrete milestone date, or null for legacy free-text deadlines. */
+  date: Date | null;
+  /** Hours from the demo clock — the sort key + urgency tone input. */
+  hours: number;
+}
+
+/**
+ * Next milestone for an engagement, from the real data model. Prefers the
+ * earliest `milestones` entry on/after the demo clock; falls back to the old
+ * free-text `nextScheduled` parse only when an engagement has no milestones.
+ */
+function nextMilestone(e: Engagement): UpcomingEntry | null {
+  if (e.milestones && e.milestones.length > 0) {
+    const upcoming = e.milestones
+      .filter(m => m.date && m.label)
+      .map(m => ({ label: m.label, date: new Date(m.date + 'T00:00:00Z') }))
+      .filter(m => !Number.isNaN(m.date.getTime()) && m.date.getTime() >= DEMO_NOW.getTime())
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+    if (upcoming.length === 0) return null; // everything dated is behind us
+    const first = upcoming[0];
+    return { label: first.label, date: first.date, hours: (first.date.getTime() - DEMO_NOW.getTime()) / 3_600_000 };
+  }
+  const hours = deadlineHours(e.nextScheduled);
+  return hours === null ? null : { label: e.nextScheduled, date: null, hours };
+}
+
+const fmtMilestoneDate = (d: Date) =>
+  d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
 export default function EngagementsOverview({ engagements, onOpenEngagement, onGoToList }: Props) {
   const attentionRef = useRef<HTMLDivElement>(null);
   const scrollToAttention = () => attentionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -177,9 +213,9 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
       .slice(0, 5);
 
     const upcoming = engagements
-      .map(e => ({ eng: e, hours: deadlineHours(e.nextScheduled) }))
-      .filter((x): x is { eng: Engagement; hours: number } => x.hours !== null)
-      .sort((a, b) => a.hours - b.hours)
+      .map(e => ({ eng: e, next: nextMilestone(e) }))
+      .filter((x): x is { eng: Engagement; next: UpcomingEntry } => x.next !== null)
+      .sort((a, b) => a.next.hours - b.next.hours)
       .slice(0, 5);
 
     const recent = Object.values(ENGAGEMENT_ACTIVITY)
@@ -339,8 +375,8 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
             <EmptyRow text="No scheduled milestones." />
           ) : (
             <div className="space-y-1">
-              {stats.upcoming.map(({ eng, hours }, i) => {
-                const tone = urgencyTone(hours);
+              {stats.upcoming.map(({ eng, next }, i) => {
+                const tone = urgencyTone(next.hours);
                 return (
                   <Row key={eng.id} index={i} onClick={() => onOpenEngagement(eng.id)}>
                     <div className="min-w-0 flex-1">
@@ -350,8 +386,13 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${tone.text}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} aria-hidden="true" />
-                        {eng.nextScheduled}
+                        {next.label}
                       </span>
+                      {next.date && (
+                        <span className="inline-flex items-center px-2 h-5 rounded-md text-[11px] font-semibold tabular-nums bg-surface-2 text-text-secondary border border-border-light">
+                          {fmtMilestoneDate(next.date)}
+                        </span>
+                      )}
                       <ChevronRight size={14} className="text-text-muted group-hover:text-primary transition-colors" />
                     </div>
                   </Row>

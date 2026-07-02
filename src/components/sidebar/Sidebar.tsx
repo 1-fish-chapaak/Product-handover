@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   MessageSquare, Workflow, Database, LayoutDashboard,
@@ -6,11 +6,13 @@ import {
   AlertTriangle, Sparkles, Building2, Home, Calendar,
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
-  ClipboardCheck, Layers, Bell,
+  ClipboardCheck, Layers, Bell, Inbox,
 } from 'lucide-react';
 import type { View } from '../../hooks/useAppState';
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import type { PermissionKey } from '../../data/rbac';
+import { ENGAGEMENT_EXCEPTIONS } from '../../data/engagement-exceptions';
+import { myQueueFor, personForUser } from '../../data/grc-domain';
 import { WORKSPACES } from '../../data/workspaces';
 
 interface SidebarProps {
@@ -166,6 +168,13 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
   ];
   const adminVisible = adminTabPerms.some(t => can(t.perm));
   const firstAdminView: View = (adminTabPerms.find(t => can(t.perm))?.view) ?? 'admin-users';
+
+  // Open items waiting on the signed-in user across every engagement — uses
+  // the same derivation as MyQueueView so the badge always matches the list.
+  const myQueueCount = useMemo(
+    () => myQueueFor(ENGAGEMENT_EXCEPTIONS, personForUser(currentUser?.name)).length,
+    [currentUser?.name],
+  );
 
   const handleMouseEnter = () => {
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
@@ -354,6 +363,10 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
 
           {can('plan_view') && <NavItem icon={Calendar} label="Audit Planning" active={view === 'audit-planning'} expanded={isExpanded} onClick={() => setView('audit-planning')} />}
           {can('eng_view') && <NavItem icon={ClipboardCheck} label="Engagements" active={view === 'engagements' || view === 'engagement-overview' || view === 'engagement-case-management' || view === 'sox-icfr'} expanded={isExpanded} onClick={() => setView('engagements')} />}
+          {/* Personal cross-engagement queue — same eng_view gate as the
+              routed 'my-queue' view (rbac VIEW_PERMISSIONS); risk owners hold
+              it via VIEW_ALL, so their home screen is always reachable. */}
+          {can('eng_view') && <NavItem icon={Inbox} label="My Queue" active={view === 'my-queue'} expanded={isExpanded} badge={myQueueCount > 0 ? String(myQueueCount) : undefined} onClick={() => setView('my-queue')} />}
           {can('bp_view') && <NavItem icon={Layers} label="Process Hub" active={view === 'programs' || view === 'business-processes' || view === 'bp-detail'} expanded={isExpanded} onClick={() => setView('programs')} />}
 
           {/* ── GLOBAL ── */}

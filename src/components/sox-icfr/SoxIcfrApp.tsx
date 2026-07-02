@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, ShieldCheck, RefreshCw } from 'lucide-react';
 import './register.css';
+import { useCurrentUser } from '../../context/CurrentUserContext';
 import { findEngagement } from '../../data/engagements';
 import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { IcfrProvider, useIcfr, type SoxTab } from './store';
@@ -34,7 +35,12 @@ function Inner({ onBack }: { onBack?: () => void }) {
             <button onClick={togglePeriod} title="Switch period — Interim ⇄ Year-end (roll-forward)" className="text-[11px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 px-2 h-5 inline-flex items-center gap-1 rounded-full cursor-pointer transition-colors">{eng.period}<RefreshCw size={10} /></button>
           </span>
         </div>
-        <RoleSwitcher role={role} onChange={setRole} />
+        {/* The switcher is a demo affordance — it previews the other persona
+            without changing who is signed in, hence the "Viewing as" prefix. */}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Viewing as</span>
+          <RoleSwitcher role={role} onChange={setRole} />
+        </div>
       </div>
     </div>
   );
@@ -79,10 +85,15 @@ function Inner({ onBack }: { onBack?: () => void }) {
 }
 
 export default function SoxIcfrApp({ engagementId, onBack }: { engagementId?: string; onBack?: () => void }) {
+  // The SOX persona follows the platform login: risk owners land in the
+  // Risk Owner view; everyone else — including signed-out — defaults to
+  // Auditor. The keyed provider re-seeds the persona if the login changes.
+  const { currentUser } = useCurrentUser();
+  const initialRole = currentUser?.roleId === 'role-risk' ? 'risk-owner' : 'auditor';
   const eng = engagementId ? findEngagement(engagementId) : undefined;
   const seedMeta = eng ? { id: eng.id, code: eng.code, name: eng.name, process: eng.process, periodStart: eng.periodStart, periodEnd: eng.periodEnd, owner: eng.owner, materiality: eng.soxConfig?.overallMateriality, performanceMateriality: eng.soxConfig?.performanceMateriality, clearlyTrivial: eng.soxConfig?.clearlyTrivial, sdBandPct: eng.soxConfig?.sdBandPct } : undefined;
   return (
-    <IcfrProvider initialRole="auditor" seedMeta={seedMeta}>
+    <IcfrProvider key={currentUser?.id ?? 'signed-out'} initialRole={initialRole} seedMeta={seedMeta}>
       <Inner onBack={onBack} />
     </IcfrProvider>
   );

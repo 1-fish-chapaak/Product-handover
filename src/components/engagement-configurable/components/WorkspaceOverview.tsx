@@ -92,38 +92,38 @@ function StandardOverview({ engagement }: { engagement: ConfigurableEngagement }
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-border-light p-4">
-        <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Objective</h5>
+        <h5 className="text-[0.6875rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Objective</h5>
         <p className="text-[0.75rem] text-text leading-relaxed">{engagement.description}</p>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="rounded-lg border border-border-light p-4">
-          <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Configuration</h5>
+          <h5 className="text-[0.6875rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Configuration</h5>
           <div className="space-y-1.5">{configSummary.map((e, i) => (
             <div key={i} className="flex items-baseline gap-2 text-[0.6875rem]"><span className="text-gray-400 w-28 shrink-0">{e.label}</span><span className="text-text font-medium">{e.value}</span></div>
           ))}</div>
         </div>
         <div className="rounded-lg border border-border-light p-4">
           <div className="flex items-center justify-between mb-2">
-            <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider">Readiness</h5>
-            <span className={`text-[0.625rem] font-semibold ${missingCount === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>{readyCount}/{checks.length} ready</span>
+            <h5 className="text-[0.6875rem] font-bold text-gray-400 uppercase tracking-wider">Readiness</h5>
+            <span className={`text-[0.6875rem] font-semibold ${missingCount === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>{readyCount}/{checks.length} ready</span>
           </div>
           <div className="space-y-1">{checks.map((c, i) => {
             const { icon: Icon, cls } = STATUS_ICON[c.status];
-            return (<div key={i} className="flex items-center gap-2 text-[0.625rem]"><Icon size={11} className={cls} /><span className={c.status === 'missing' ? 'text-text' : 'text-gray-500'}>{c.label}</span>{c.status === 'optional' && <span className="text-[0.5rem] text-gray-300 ml-auto">Optional</span>}</div>);
+            return (<div key={i} className="flex items-center gap-2 text-[0.6875rem]"><Icon size={11} className={cls} /><span className={c.status === 'missing' ? 'text-text' : 'text-gray-500'}>{c.label}</span>{c.status === 'optional' && <span className="text-[0.6875rem] text-gray-300 ml-auto">Optional</span>}</div>);
           })}</div>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="rounded-lg border border-border-light p-4">
-          <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Workspace Flow</h5>
+          <h5 className="text-[0.6875rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Workspace Flow</h5>
           <div className="flex flex-wrap gap-1.5">{pattern.workspaceTabs.map((tab, i) => (
-            <span key={tab.id} className="flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-[0.5625rem] font-semibold"><span className="text-[0.5rem] text-primary/50">{i + 1}</span>{tab.label}</span>
+            <span key={tab.id} className="flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-[0.6875rem] font-semibold"><span className="text-[0.6875rem] text-primary/50">{i + 1}</span>{tab.label}</span>
           ))}</div>
         </div>
         <div className="rounded-lg border border-border-light p-4">
-          <h5 className="text-[0.625rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Required Outputs</h5>
+          <h5 className="text-[0.6875rem] font-bold text-gray-400 uppercase tracking-wider mb-2">Required Outputs</h5>
           <div className="space-y-1">{pattern.requiredOutputs.map(o => (
-            <div key={o} className="flex items-center gap-2 text-[0.625rem] text-text"><CheckCircle2 size={10} className="text-gray-300" />{o}</div>
+            <div key={o} className="flex items-center gap-2 text-[0.6875rem] text-text"><CheckCircle2 size={10} className="text-gray-300" />{o}</div>
           ))}</div>
         </div>
       </div>
@@ -233,7 +233,7 @@ function ContinuousMonitoringDashboard({ engagement, state, onNavigateTab }: {
             <p className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide mb-2">{kpi.title}</p>
             <p className="text-[1.625rem] font-bold text-ink-900 leading-none">{kpi.value}</p>
             {kpi.change && (
-              <p className={`text-[0.625rem] font-semibold mt-2 flex items-center gap-1 ${kpi.trend === 'up' && kpi.title !== 'Open Exceptions' && kpi.title !== 'Case Candidates' ? 'text-compliant' : kpi.trend === 'down' && (kpi.title === 'Open Exceptions') ? 'text-compliant' : 'text-ink-400'}`}>
+              <p className={`text-[0.6875rem] font-semibold mt-2 flex items-center gap-1 ${kpi.trend === 'up' && kpi.title !== 'Open Exceptions' && kpi.title !== 'Case Candidates' ? 'text-compliant' : kpi.trend === 'down' && (kpi.title === 'Open Exceptions') ? 'text-compliant' : 'text-ink-400'}`}>
                 {kpi.change}
               </p>
             )}
@@ -361,7 +361,7 @@ function DashboardHeader({ engagement, schedule }: { engagement: ConfigurableEng
           {schedule.frequency && <span className="text-[0.6875rem] text-ink-400 font-medium">{schedule.frequency}</span>}
         </div>
       </div>
-      <p className="text-[0.625rem] text-ink-300 mt-2">Dashboard is populated from workflow runs and scheduled executions.</p>
+      <p className="text-[0.6875rem] text-ink-300 mt-2">Dashboard is populated from workflow runs and scheduled executions.</p>
     </div>
   );
 }
@@ -369,10 +369,10 @@ function DashboardHeader({ engagement, schedule }: { engagement: ConfigurableEng
 function MonitoringStatusBar({ schedule, lastRun, nextRun, wfCount }: { schedule: AutomationScheduleState; lastRun: any; nextRun: string | null; wfCount: number }) {
   return (
     <div className="glass-card rounded-xl p-4 grid grid-cols-4 gap-4 text-[0.6875rem]">
-      <div><span className="text-ink-400 block text-[0.625rem]">Last Run</span><span className="text-ink-900 font-medium">{lastRun?.completedAt || '—'}</span></div>
-      <div><span className="text-ink-400 block text-[0.625rem]">Next Run</span><span className="text-ink-900 font-medium">{nextRun || '—'}</span></div>
-      <div><span className="text-ink-400 block text-[0.625rem]">Frequency</span><span className="text-ink-900 font-medium">{schedule.frequency || '—'}</span></div>
-      <div><span className="text-ink-400 block text-[0.625rem]">Workflows</span><span className="text-ink-900 font-medium">{wfCount}</span></div>
+      <div><span className="text-ink-400 block text-[0.6875rem]">Last Run</span><span className="text-ink-900 font-medium">{lastRun?.completedAt || '—'}</span></div>
+      <div><span className="text-ink-400 block text-[0.6875rem]">Next Run</span><span className="text-ink-900 font-medium">{nextRun || '—'}</span></div>
+      <div><span className="text-ink-400 block text-[0.6875rem]">Frequency</span><span className="text-ink-900 font-medium">{schedule.frequency || '—'}</span></div>
+      <div><span className="text-ink-400 block text-[0.6875rem]">Workflows</span><span className="text-ink-900 font-medium">{wfCount}</span></div>
     </div>
   );
 }
@@ -496,7 +496,7 @@ function WorkflowHealthTable({ state, completedRuns, onNavigateTab }: {
         <button onClick={() => onNavigateTab?.('workflows')} className="text-[0.6875rem] font-semibold text-primary hover:underline cursor-pointer">View All</button>
       </div>
       <table className="w-full text-[0.75rem]">
-        <thead><tr className="border-b border-border-light bg-canvas-elevated/50 text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider">
+        <thead><tr className="border-b border-border-light bg-canvas-elevated/50 text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wider">
           <th className="px-5 py-2.5 text-left">Workflow</th>
           <th className="px-4 py-2.5 text-center">Status</th>
           <th className="px-4 py-2.5 text-center">Outputs</th>
@@ -509,7 +509,7 @@ function WorkflowHealthTable({ state, completedRuns, onNavigateTab }: {
         <tbody>{workflows.map(wf => (
           <tr key={wf.name} className="border-b border-border-light/60 hover:bg-primary/[0.015] transition-colors">
             <td className="px-5 py-3 font-medium text-ink-900">{wf.name}</td>
-            <td className="px-4 py-3 text-center"><span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-bold ${wf.lastStatus === 'COMPLETED' ? 'text-compliant-700 bg-compliant-50' : 'text-risk-700 bg-risk-50'}`}>{wf.lastStatus === 'COMPLETED' ? 'Healthy' : 'Failed'}</span></td>
+            <td className="px-4 py-3 text-center"><span className={`px-2 py-0.5 rounded-full text-[0.6875rem] font-bold ${wf.lastStatus === 'COMPLETED' ? 'text-compliant-700 bg-compliant-50' : 'text-risk-700 bg-risk-50'}`}>{wf.lastStatus === 'COMPLETED' ? 'Healthy' : 'Failed'}</span></td>
             <td className="px-4 py-3 text-center tabular-nums text-ink-500">{wf.outputs}</td>
             <td className="px-4 py-3 text-center"><span className={`tabular-nums ${wf.approved > 0 ? 'text-compliant font-semibold' : 'text-ink-400'}`}>{wf.approved}</span></td>
             <td className="px-4 py-3 text-center"><span className={`tabular-nums ${wf.exceptions > 0 ? 'text-high-700 font-semibold' : 'text-ink-400'}`}>{wf.exceptions}</span></td>
@@ -583,7 +583,7 @@ export default function WorkspaceOverview({ engagement, automationState, onNavig
               <span>Run or schedule workflows to populate the monitoring dashboard.</span>
             </div>
             {onNavigateTab && (
-              <button onClick={() => onNavigateTab('workflows')} className="px-3 py-1 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.625rem] font-semibold cursor-pointer transition-colors shrink-0">Go to Workflows</button>
+              <button onClick={() => onNavigateTab('workflows')} className="px-3 py-1 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors shrink-0">Go to Workflows</button>
             )}
           </div>
         </div>
@@ -593,7 +593,7 @@ export default function WorkspaceOverview({ engagement, automationState, onNavig
       return (
         <div className="space-y-4">
           <StandardOverview engagement={engagement} />
-          <div className="flex items-start gap-2 px-4 py-3 rounded-lg bg-gray-50 border border-border-light text-[0.625rem] text-gray-500">
+          <div className="flex items-start gap-2 px-4 py-3 rounded-lg bg-gray-50 border border-border-light text-[0.6875rem] text-gray-500">
             <Activity size={11} className="shrink-0 mt-0.5" />
             <span>Dashboard output was not selected for this project.</span>
           </div>
