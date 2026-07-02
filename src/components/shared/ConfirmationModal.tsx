@@ -48,7 +48,17 @@ export default function ConfirmationModal({
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+          role="dialog" aria-modal="true" aria-labelledby={titleId}
+          // Stop clicks (and mousedown) from bubbling to DOM ancestors — when this
+          // modal is rendered inside another click-to-close overlay (e.g. the
+          // template editor's backdrop), a Cancel click would otherwise reach that
+          // ancestor's handler and immediately re-trigger the very dialog it closed.
+          // Bubble phase (not capture) so the backdrop/button handlers still run.
+          onClick={e => e.stopPropagation()}
+          onMouseDown={e => e.stopPropagation()}
+        >
           <motion.div
             key="backdrop"
             initial={{ opacity: 0 }}

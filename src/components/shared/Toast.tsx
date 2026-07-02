@@ -12,6 +12,9 @@ interface Toast {
   action?: { label: string; onClick: () => void };
   /** Secondary action (e.g. Undo) shown to the left of the primary action */
   secondaryAction?: { label: string; onClick: () => void };
+  /** Never auto-dismiss — stays until the user acts or closes it. Used for
+   *  destructive actions (e.g. a section delete) so the Undo is always there. */
+  persist?: boolean;
 }
 
 interface ToastContextType {
@@ -92,10 +95,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
   useEffect(() => {
     const ms = DISMISS_MS[toast.type];
-    if (ms === null) return;
+    if (ms === null || toast.persist) return;
     const timer = setTimeout(() => onRemove(toast.id), ms);
     return () => clearTimeout(timer);
-  }, [toast.id, toast.type, onRemove]);
+  }, [toast.id, toast.type, toast.persist, onRemove]);
 
   const icons = {
     loading: <Loader2 size={16} className="text-brand-600 animate-spin" />,

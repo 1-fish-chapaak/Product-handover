@@ -1,5 +1,15 @@
 import { test, expect } from './_helpers';
 
+// Template Studio redesign ("one-door creation"):
+//  • Standard template cards no longer "customize into a copy" — the whole card
+//    is the primary action and generates a report (ATR upload / SOX engagement /
+//    Generate wizard). There is no standard→editor copy flow anymore.
+//  • Custom templates edit in place via the card's Edit action ("Edit template"
+//    header, "Save template" CTA). The separate "Save as copy" fork was removed.
+//  • New templates are created from scratch via the "New template" button
+//    ("Create template" header).
+// This spec asserts those current flows.
+
 async function seedCustom(page: import('./_helpers').Page) {
   await page.addInitScript(() => {
     const t = [{
@@ -21,33 +31,32 @@ async function seedCustom(page: import('./_helpers').Page) {
   });
 }
 
-test('standard Customize opens the editor on a copy', async ({ page }) => {
+test('New template opens the create-from-scratch editor', async ({ page }) => {
   await page.goto('/?view=reports&tab=templates');
   await page.waitForTimeout(500);
-  // Customize the first standard card (Internal Audit Report).
-  await page.getByRole('button', { name: 'Customize template Internal Audit Report' }).click({ force: true });
-  // Copy mode header.
-  await expect(page.getByText('Customize template', { exact: true })).toBeVisible();
-  await expect(page.getByText(/Based on Internal Audit Report/)).toBeVisible();
+  await page.getByRole('button', { name: /New template/ }).click();
+  await expect(page.getByRole('heading', { name: 'Create template' })).toBeVisible();
+  await expect(page.getByText('A reusable layout for your reports')).toBeVisible();
+  // Create is gated on a name (required).
+  await expect(page.getByRole('button', { name: /Create template/ })).toBeDisabled();
 });
 
-test('custom Customize edits in place and persists', async ({ page }) => {
+test('custom Edit edits in place and persists (no duplicate)', async ({ page }) => {
   await seedCustom(page);
   await page.goto('/?view=reports&tab=templates');
   await page.waitForTimeout(500);
-  await page.getByRole('button', { name: /Custom/ }).first().click();
-  await page.waitForTimeout(300);
+  await expect(page.getByText('My Custom Pack', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Customize template My Custom Pack' }).click({ force: true });
-  // Edit mode header (not copy).
-  await expect(page.getByText('Edit template', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit template My Custom Pack' }).click({ force: true });
+  // Edit mode header (not create).
+  await expect(page.getByRole('heading', { name: 'Edit template' })).toBeVisible();
 
   // Save in place.
-  await page.getByRole('button', { name: /Save Template/ }).click();
+  await page.getByRole('button', { name: /Save template/ }).click();
   await page.waitForTimeout(600);
 
-  // Editor closed, still one custom (no duplicate created).
-  await expect(page.getByText('Edit template', { exact: true })).toBeHidden();
+  // Editor closed, still exactly one custom (no duplicate created).
+  await expect(page.getByRole('heading', { name: 'Edit template' })).toBeHidden();
   await expect(page.getByText('My Custom Pack', { exact: true })).toBeVisible();
   const count = await page.evaluate(() => {
     try { return JSON.parse(localStorage.getItem('irame.reports.customTemplates.v1') || '[]').length; } catch { return -1; }
@@ -55,24 +64,11 @@ test('custom Customize edits in place and persists', async ({ page }) => {
   expect(count).toBe(1);
 });
 
-test('custom Save as copy forks a new custom template', async ({ page }) => {
+test('custom card exposes rename / edit / delete actions', async ({ page }) => {
   await seedCustom(page);
   await page.goto('/?view=reports&tab=templates');
   await page.waitForTimeout(500);
-  await page.getByRole('button', { name: /Custom/ }).first().click();
-  await page.waitForTimeout(300);
-
-  await page.getByRole('button', { name: 'Customize template My Custom Pack' }).click({ force: true });
-  await expect(page.getByText('Edit template', { exact: true })).toBeVisible();
-
-  // Fork instead of overwrite.
-  await page.getByRole('button', { name: /Save as copy/ }).click();
-  await page.waitForTimeout(600);
-
-  const names = await page.evaluate(() => {
-    try { return JSON.parse(localStorage.getItem('irame.reports.customTemplates.v1') || '[]').map((t: { name: string }) => t.name); } catch { return []; }
-  });
-  expect(names).toContain('My Custom Pack');
-  expect(names).toContain('Copy of My Custom Pack');
-  expect(names.length).toBe(2);
+  await expect(page.getByRole('button', { name: 'Rename template My Custom Pack' })).toBeAttached();
+  await expect(page.getByRole('button', { name: 'Edit template My Custom Pack' })).toBeAttached();
+  await expect(page.getByRole('button', { name: 'Delete template My Custom Pack' })).toBeAttached();
 });

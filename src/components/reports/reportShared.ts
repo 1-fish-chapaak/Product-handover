@@ -41,95 +41,37 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Other: 'text-ink-500 bg-paper-50',
 };
 
-/** Controlled vocabulary for a template's report type. Fixed for now (a clean
- *  taxonomy keeps filtering/reporting useful); "Other" is the escape hatch. */
-export const REPORT_TYPES = ['Audit', 'Compliance', 'SOX', 'ATR', 'Risk', 'Other'] as const;
-export type ReportTypeName = typeof REPORT_TYPES[number];
-
-// ── Report type → required / recommended sections (PRD §4.6) ─────────────────
-// Each type carries a curated set, split into `required` (the must-haves that
-// define the type) and `recommended` (the usual rest). Picking a type pre-fills
-// these in the editor, and on upload shows the user what their document is
-// missing for the chosen type. `match` keeps presence-detection tolerant of
-// naming variants (a detected "Detailed Findings" satisfies the Audit
-// "Findings / Observations"). First-pass set, to confirm with auditors.
-export type SectionTier = 'required' | 'recommended';
-export type TypeSection = { name: string; icon: string; tier: SectionTier; match: RegExp };
-
-export const TYPE_SECTION_MAP: Record<ReportTypeName, TypeSection[]> = {
-  Audit: [
-    { name: 'Executive Summary',          icon: 'file-text',      tier: 'recommended', match: /executive|summary/i },
-    { name: 'Scope & Objectives',         icon: 'file-text',      tier: 'recommended', match: /scope|objective/i },
-    { name: 'Testing Methodology',        icon: 'file-text',      tier: 'recommended', match: /methodology/i },
-    { name: 'Findings / Observations',    icon: 'check-circle',   tier: 'required',    match: /finding|observation|audit quer/i },
-    { name: 'Recommendations',            icon: 'trending-up',    tier: 'required',    match: /recommendation/i },
-    { name: 'Management Response',         icon: 'book-open',      tier: 'recommended', match: /management response|response/i },
-    { name: 'Conclusion / Audit Opinion', icon: 'shield',         tier: 'required',    match: /conclusion|opinion/i },
-    { name: 'Sign-off',                   icon: 'shield',         tier: 'recommended', match: /sign-?off|approval/i },
-  ],
-  SOX: [
-    { name: 'Executive Summary',                 icon: 'file-text',      tier: 'recommended', match: /executive|summary/i },
-    { name: 'Scope & Methodology',               icon: 'file-text',      tier: 'recommended', match: /scope|methodology/i },
-    { name: 'Control Environment Overview',      icon: 'file-text',      tier: 'recommended', match: /control environment/i },
-    { name: 'Control Testing Results',           icon: 'check-circle',   tier: 'required',    match: /control testing|testing results/i },
-    { name: 'Deficiencies / Exceptions',         icon: 'alert-triangle', tier: 'required',    match: /deficienc|exception/i },
-    { name: 'Remediation Plan',                  icon: 'check-circle',   tier: 'recommended', match: /remediation/i },
-    { name: 'Conclusion / Management Assertion', icon: 'shield',         tier: 'required',    match: /conclusion|assertion/i },
-    { name: 'Sign-off',                          icon: 'shield',         tier: 'recommended', match: /sign-?off|approval/i },
-  ],
-  Compliance: [
-    { name: 'Executive Summary',            icon: 'file-text',      tier: 'recommended', match: /executive|summary/i },
-    { name: 'Regulatory Scope & Framework', icon: 'file-text',      tier: 'recommended', match: /scope|framework|regulat/i },
-    { name: 'Compliance Assessment',        icon: 'check-circle',   tier: 'required',    match: /compliance assessment|assessment|testing/i },
-    { name: 'Gaps / Non-compliance',        icon: 'alert-triangle', tier: 'required',    match: /gap|non-?compliance/i },
-    { name: 'Remediation / Action Plan',    icon: 'check-circle',   tier: 'recommended', match: /remediation|action plan/i },
-    { name: 'Conclusion',                   icon: 'shield',         tier: 'required',    match: /conclusion/i },
-    { name: 'Sign-off',                     icon: 'shield',         tier: 'recommended', match: /sign-?off|approval/i },
-  ],
-  Risk: [
-    { name: 'Executive Summary',           icon: 'file-text',      tier: 'recommended', match: /executive|summary/i },
-    { name: 'Risk Methodology',            icon: 'file-text',      tier: 'recommended', match: /methodology/i },
-    { name: 'Risk Findings / Register',    icon: 'check-circle',   tier: 'required',    match: /risk (finding|register)|register|finding/i },
-    { name: 'Risk Rating / Significance',  icon: 'alert-triangle', tier: 'required',    match: /rating|significance/i },
-    { name: 'Risk Heatmap / Summary',      icon: 'bar-chart',      tier: 'recommended', match: /heatmap/i },
-    { name: 'Mitigation / Treatment Plan', icon: 'check-circle',   tier: 'required',    match: /mitigation|treatment/i },
-    { name: 'Conclusion',                  icon: 'shield',         tier: 'recommended', match: /conclusion/i },
-  ],
-  ATR: [
-    { name: 'Observation / Finding',           icon: 'check-circle',   tier: 'required',    match: /observation|finding/i },
-    { name: 'Action Taken',                    icon: 'check-circle',   tier: 'required',    match: /action taken|action/i },
-    { name: 'Closure / Classification Status', icon: 'bar-chart',      tier: 'required',    match: /closure|classification|status/i },
-    { name: 'Original Recommendation (MAP)',   icon: 'trending-up',    tier: 'recommended', match: /recommendation|management action|map/i },
-    { name: 'Risk Significance',               icon: 'alert-triangle', tier: 'recommended', match: /risk significance|significance|severity/i },
-    { name: 'Due Date',                        icon: 'file-text',      tier: 'recommended', match: /due date|timeline|due/i },
-    { name: 'Auditor Verification / Comments', icon: 'book-open',      tier: 'recommended', match: /verification|auditor comment|management comment/i },
-    { name: 'Supporting Evidence',             icon: 'file-text',      tier: 'recommended', match: /evidence/i },
-  ],
-  Other: [],
-};
-
-/** The curated section set for a type (required + recommended). Empty for Other. */
-export function typeSectionsFor(type: ReportTypeName): TypeSection[] {
-  return TYPE_SECTION_MAP[type] ?? [];
-}
-
-/** Coverage of a type's sections against the current/detected section names.
- *  `match` makes detection tolerant of naming variants. */
-export function sectionCoverage(type: ReportTypeName, sectionNames: string[]) {
-  const spec = typeSectionsFor(type);
-  const present = (e: TypeSection) => sectionNames.some(n => e.match.test(n));
-  const required = spec.filter(s => s.tier === 'required');
-  const recommended = spec.filter(s => s.tier === 'recommended');
-  return {
-    spec,
-    requiredTotal: required.length,
-    requiredPresent: required.filter(present).length,
-    recommendedTotal: recommended.length,
-    recommendedPresent: recommended.filter(present).length,
-    missingRequired: required.filter(s => !present(s)),
-    missingRecommended: recommended.filter(s => !present(s)),
-    allMissing: spec.filter(s => !present(s)),
-  };
+/** One-line "what belongs here" description per section. Shown as body copy in the
+ *  template preview and used as the starter text when a report is generated, so a
+ *  fresh section reads like a real report section. Keyword-matched so it fits
+ *  custom / imported section names, with a generic fallback. */
+const SECTION_BLURBS: { match: RegExp; blurb: string }[] = [
+  { match: /executive|summary/i, blurb: 'A high-level overview of the audit’s purpose, key findings, and overall opinion.' },
+  { match: /scope|objective/i, blurb: 'What the audit covered, the period reviewed, and the objectives it set out to test.' },
+  { match: /methodology/i, blurb: 'How the work was performed — approach, sampling, and the data sources used.' },
+  { match: /finding|observation|audit quer|issue/i, blurb: 'The issues identified during testing, each with evidence and a risk rating.' },
+  { match: /recommendation|management action|map\b/i, blurb: 'Actionable steps to address each finding and strengthen the control environment.' },
+  { match: /management response|response/i, blurb: 'Management’s agreed actions, owners, and target dates for each recommendation.' },
+  { match: /conclusion|opinion|assertion/i, blurb: 'The overall assessment and audit opinion based on the work performed.' },
+  { match: /sign-?off|approval/i, blurb: 'Approvals and signatures confirming the report is final.' },
+  { match: /control environment/i, blurb: 'An overview of the control environment relevant to the areas under review.' },
+  { match: /control testing|testing results/i, blurb: 'Results of control testing, showing design and operating effectiveness.' },
+  { match: /deficienc|exception|gap|non-?compliance/i, blurb: 'Control gaps and exceptions raised, with severity and the processes affected.' },
+  { match: /remediation|action plan/i, blurb: 'The plan to close each gap — owners, actions, and remediation timelines.' },
+  { match: /framework|regulat/i, blurb: 'The regulations and frameworks in scope for this assessment.' },
+  { match: /risk (finding|register)|register/i, blurb: 'The risks identified, captured as a register with context and ownership.' },
+  { match: /rating|significance|severity/i, blurb: 'How each item is rated for likelihood and impact, and why it matters.' },
+  { match: /heatmap/i, blurb: 'A visual summary of risks plotted by likelihood and impact.' },
+  { match: /mitigation|treatment/i, blurb: 'Planned mitigations or treatments for the significant risks.' },
+  { match: /action taken/i, blurb: 'The action taken against each original recommendation, with current status.' },
+  { match: /closure|classification|status/i, blurb: 'Closure status and classification for each item being tracked.' },
+  { match: /evidence/i, blurb: 'Supporting evidence and artefacts referenced by this report.' },
+  { match: /due date|timeline|due/i, blurb: 'Target and actual dates for the actions being tracked.' },
+  { match: /verification|auditor comment|management comment/i, blurb: 'Auditor verification notes and comments on the actions taken.' },
+];
+export function sectionBlurb(name: string): string {
+  const hit = SECTION_BLURBS.find(b => b.match.test(name));
+  return hit ? hit.blurb : 'Describe what this section will cover in the generated report.';
 }
 
 export const SECTION_ICONS: Record<string, ElementType> = {
@@ -144,12 +86,36 @@ export const SECTION_ICONS: Record<string, ElementType> = {
   'book-open': BookOpen,
 };
 
-/** Theme name → cover-banner gradient (deep → mid). Mirrors the editor swatches. */
+/** Theme name → cover-banner gradient (deep → mid). Single source of truth for
+ *  the editor swatch picker (it iterates these keys) and the report cover banner.
+ *  Add a combination here (and to TEMPLATE_THEME_SWATCH below) to expose it. */
 export const TEMPLATE_THEME_GRADIENT: Record<string, [string, string]> = {
   'Purple & White': ['#5b0fb0', '#6a12cd'],
+  'Indigo & Sky': ['#1e1b4b', '#4f46e5'],
   'Navy & Gold': ['#1a2744', '#2b3c5e'],
+  'Ocean & Cyan': ['#083344', '#0891b2'],
   'Teal & Light': ['#0a7268', '#0d9488'],
+  'Forest & Sage': ['#14432a', '#15803d'],
   'Slate & Blue': ['#1e293b', '#3b5573'],
+  'Charcoal & Graphite': ['#18181b', '#3f3f46'],
+  'Burgundy & Wine': ['#4c0519', '#9f1239'],
+  'Bronze & Sand': ['#431407', '#9a3412'],
+};
+
+/** Theme name → the two named colours, shown as a pair of dots in the picker so
+ *  the combination reads literally (purple + white, navy + gold…). Keep the keys
+ *  in sync with TEMPLATE_THEME_GRADIENT. */
+export const TEMPLATE_THEME_SWATCH: Record<string, [string, string]> = {
+  'Purple & White': ['#6a12cd', '#f7f7fb'],
+  'Indigo & Sky': ['#4f46e5', '#7dd3fc'],
+  'Navy & Gold': ['#1a2744', '#c9a24b'],
+  'Ocean & Cyan': ['#0e4b5e', '#06b6d4'],
+  'Teal & Light': ['#0d9488', '#d7f7f1'],
+  'Forest & Sage': ['#15803d', '#a7d3ac'],
+  'Slate & Blue': ['#334155', '#3b82f6'],
+  'Charcoal & Graphite': ['#1c1c1f', '#71717a'],
+  'Burgundy & Wine': ['#9f1239', '#5a0b22'],
+  'Bronze & Sand': ['#9a3412', '#e4c7a1'],
 };
 
 // Blank base for the create-from-scratch flow — the TemplateEditor opens on
@@ -247,43 +213,60 @@ export type WorkflowResult = {
 // The bulk audit report detail page renders in a single editorial treatment.
 export type BulkAuditAestheticVariant = 'editorial';
 
+/** Page watermark config — a text or image mark laid diagonally across every
+ *  page, with opacity / rotation / size controls. */
+export type WatermarkConfig = {
+  enabled: boolean;
+  mode: 'text' | 'image';
+  text: string;
+  imageDataUrl?: string;
+  opacity: number;   // 0..1 (rendered fill)
+  rotation: number;  // degrees, -90..90
+  size: number;      // % of page width, 20..100
+};
+
+export const DEFAULT_WATERMARK: WatermarkConfig = {
+  enabled: false,
+  mode: 'text',
+  text: 'CONFIDENTIAL',
+  opacity: 0.08,
+  rotation: -35,
+  size: 60,
+};
+
+/** A section's block type (§4.7). Text is prose; KPI and Chart are *placeholders*
+ *  — they hold no numbers. Values come from trusted query data at generate time,
+ *  never scraped from an uploaded report. */
+export type SectionKind = 'text' | 'kpi' | 'chart' | 'table';
+
+/** One section in a template outline. */
+export type TemplateSection = {
+  name: string;
+  icon: string;
+  /** Block type — text (a heading) or a kpi/chart/table placeholder. Absent = text.
+   *  Placeholders are set by import detection; their numbers fill from query data
+   *  at generate time, never scraped from an upload. */
+  kind?: SectionKind;
+  /** For KPI/chart/table placeholders — the label the block carried. */
+  metric?: string;
+  /** For chart blocks — the chart style. */
+  chartType?: 'bar' | 'line';
+};
+
 /** A report template plus the optional branding the Customize editor sets.
  *  Standard templates omit these; custom templates persist them. */
-export type EditableTemplate = typeof REPORT_TEMPLATES[number] & {
+export type EditableTemplate = Omit<typeof REPORT_TEMPLATES[number], 'sections'> & {
+  sections: TemplateSection[];
   brand?: string;
   theme?: string;
   headerText?: string;
   footerText?: string;
-  /** The "golden copy": section names of the reference sample this template is
-   *  validated against. Set when a Smart Upload is marked as the reference format;
-   *  drives the format-match verdict on later uploads (Template Studio §5).
-   *  (Field name kept as `approvedSections` for stored-data compatibility.) */
-  approvedSections?: string[];
-  referenceFileName?: string;
-};
-
-// A seeded custom template that already has a reference format, so the
-// format-match verdict (Template Studio §5) is demonstrable without first
-// uploading twice. Mirrors the Air India "Annual Safety Audit" example: its
-// reference format expects a "Corrective Actions" section, which the scripted
-// drifted upload is missing. App.tsx prepends it to the custom-templates list.
-export const SEED_APPROVED_TEMPLATE: EditableTemplate = {
-  id: 'ct-seed-safety-audit',
-  name: 'Annual Safety Audit Report',
-  desc: 'Built from Annual_Safety_Audit_2025.pdf — 7 sections, set as the reference format.',
-  category: 'Audit',
-  icon: 'shield',
-  sections: [
-    { name: 'Executive Summary', icon: 'file-text' },
-    { name: 'Scope & Objectives', icon: 'file-text' },
-    { name: 'Testing Methodology', icon: 'file-text' },
-    { name: 'Control Testing Results', icon: 'check-circle' },
-    { name: 'Detailed Findings', icon: 'alert-triangle' },
-    { name: 'Corrective Actions', icon: 'check-circle' },
-    { name: 'Appendix', icon: 'file-text' },
-  ],
-  approvedSections: ['Executive Summary', 'Scope & Objectives', 'Testing Methodology', 'Control Testing Results', 'Detailed Findings', 'Corrective Actions', 'Appendix'],
-  referenceFileName: 'Annual_Safety_Audit_2025.pdf',
+  /** Brand logo (data URL) shown on the letterhead cover. */
+  logoDataUrl?: string;
+  /** Diagonal page watermark (text or image). */
+  watermark?: WatermarkConfig;
+  /** Free-form tags for findability once the library grows (§9). */
+  tags?: string[];
 };
 
 export type QueryShape = { id: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; answer: string; chartData: number[] };

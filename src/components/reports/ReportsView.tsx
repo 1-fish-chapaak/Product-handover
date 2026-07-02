@@ -4,17 +4,16 @@ import FloatingLines from '../shared/FloatingLines';
 import ListToolbar, { ToolbarViewToggle } from '../shared/ListToolbar';
 import ColumnFilter from '../shared/ColumnFilter';
 import ReportCard from '../shared/ReportCard';
-import { BTN_CTA_PRIMARY, BTN_CTA_OUTLINE } from '../admin/adminTokens';
+import { BTN_CTA_PRIMARY } from '../admin/adminTokens';
 import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
-  X, Edit3, BookOpen, Upload, Trash2, Plus, Search, Layers, Check,
-  WifiOff, FileCheck2, FolderArchive, ShieldCheck, CloudUpload,
+  X, Edit3, BookOpen, Trash2, Plus, Search, Layers, Check, Pencil,
+  WifiOff, FileCheck2, FolderArchive, CloudUpload,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
 import { SkeletonRow } from '../shared/Skeleton';
 import UploadReportModal from './UploadReportModal';
-import UploadTemplateModal from './UploadTemplateModal';
 import ConfirmDialog from './ConfirmDialog';
 import AtrReportView from './AtrReportView';
 import AtrUploadTab from './atr-upload/AtrUploadTab';
@@ -42,7 +41,7 @@ import { defForKey, DEMO_REPORT_QUERY_KEYS, type GeneratedQueryDef, type Pickabl
 import ReportView from './ReportView';
 // CUSTOM_TEMPLATES now lives in the shared keystone; re-exported so existing
 // importers (App.tsx) keep working.
-export { CUSTOM_TEMPLATES, SEED_APPROVED_TEMPLATE } from './reportShared';
+export { CUSTOM_TEMPLATES } from './reportShared';
 
 
 
@@ -79,10 +78,6 @@ interface ReportsViewProps {
 
 // ─── Query Card Component ───
 
-
-
-// SEED_APPROVED_TEMPLATE lives in the shared keystone (re-exported above) so this
-// component file exports only components — keeping React Fast Refresh intact.
 
 // Branded placeholder shown for a beat while a clicked report "opens". Mirrors
 // the reader layout (top bar · outline rail · gradient banner · KPI row ·
@@ -276,8 +271,8 @@ export default function ReportsView({
   const [editingTemplate, setEditingTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(null);
   const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v1';
   // Fallback store, used only when no customTemplates prop is supplied. In the
-  // app, App.tsx owns the canonical list (and seeds SEED_APPROVED_TEMPLATE), so
-  // this branch stays seedless to avoid two sources of truth.
+  // app, App.tsx owns the canonical list, so this branch stays empty to avoid
+  // two sources of truth.
   const [customTemplatesLocal, setCustomTemplatesLocal] = useState<EditableTemplate[]>(() => {
     try {
       const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
@@ -307,6 +302,22 @@ export default function ReportsView({
     else setCustomTemplatesLocal(prev => prev.map(x => x.id === t.id ? t : x));
   };
   const [templateToDelete, setTemplateToDelete] = useState<{ id: string; name: string } | null>(null);
+  // Inline rename from the template list — no need to open the full editor just to
+  // change a name. `renamingId` marks the row in edit mode; the draft commits on
+  // Enter/blur, reverts on Escape, and is guarded against blank / duplicate names.
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const startRename = (rt: { id: string; name: string }) => { setRenamingId(rt.id); setRenameDraft(rt.name); };
+  const commitRename = (rt: EditableTemplate) => {
+    const name = renameDraft.trim();
+    setRenamingId(null);
+    if (!name || name === rt.name) return;
+    const clash = [...REPORT_TEMPLATES.map(x => x.name), ...customTemplates.filter(x => x.id !== rt.id).map(x => x.name)]
+      .some(n => n.toLowerCase() === name.toLowerCase());
+    if (clash) { addToast({ type: 'error', message: `A template named "${name}" already exists.` }); return; }
+    updateCustomTemplate({ ...rt, name });
+    addToast({ type: 'success', message: `Renamed to "${name}".` });
+  };
   // Templates tab: Standard and Custom galleries render together on one page.
   // Grid/list is the section-wide `viewMode` (shared with My Reports / Shared),
   // so the view preference and its `list` default stay consistent across tabs.
@@ -821,14 +832,6 @@ export default function ReportsView({
       type: 'success',
       message: `Report generated from ${parts.join(' and ')}.`,
     });
-  };
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  // When set, the upload modal runs in format-check mode against this approved
-  // reference instead of creating a fresh template (Template Studio §5).
-  const [uploadReference, setUploadReference] = useState<{ templateName: string; sections: string[] } | null>(null);
-  const checkFileAgainst = (t: EditableTemplate) => {
-    setUploadReference({ templateName: t.name, sections: (t.approvedSections ?? t.sections?.map(s => s.name)) ?? [] });
-    setShowUploadModal(true);
   };
   const filteredReports = (() => {
     const q = gridSearch.trim().toLowerCase();
@@ -1407,8 +1410,6 @@ export default function ReportsView({
             const eyebrowTone = color.split(' ')[0];
             const tintBg = color.split(' ')[1] ?? 'bg-paper-50';
             const sectionNames = rt.sections?.map(s => s.name) ?? [];
-            const approvedSections = (rt as EditableTemplate).approvedSections;
-            const hasApprovedFormat = isCustom && !!approvedSections?.length;
             return (
               <motion.div
                 key={rt.id}
@@ -1441,8 +1442,33 @@ export default function ReportsView({
                     </span>
                   </div>
                 </div>
-                <h3 className="text-[0.9375rem] leading-[1.3] font-semibold tracking-tight text-ink-900 group-hover:text-brand-600 transition-colors mb-1.5">{rt.name}</h3>
+                {isCustom && renamingId === rt.id ? (
+                  <input
+                    autoFocus
+                    value={renameDraft}
+                    onClick={e => e.stopPropagation()}
+                    onChange={e => setRenameDraft(e.target.value)}
+                    onBlur={() => commitRename(rt as EditableTemplate)}
+                    onKeyDown={e => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') { e.preventDefault(); commitRename(rt as EditableTemplate); }
+                      else if (e.key === 'Escape') { e.preventDefault(); setRenamingId(null); }
+                    }}
+                    aria-label="Template name"
+                    className="w-full mb-1.5 px-1.5 py-0.5 -ml-1.5 rounded-[6px] bg-white border border-brand-400 text-[0.9375rem] leading-[1.3] font-semibold tracking-tight text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+                  />
+                ) : (
+                  <h3 onDoubleClick={isCustom ? (e) => { e.stopPropagation(); startRename(rt); } : undefined} className="text-[0.9375rem] leading-[1.3] font-semibold tracking-tight text-ink-900 group-hover:text-brand-600 transition-colors mb-1.5">{rt.name}</h3>
+                )}
                 <p className="text-[0.75rem] text-ink-500 leading-[1.55] line-clamp-2">{rt.desc}</p>
+                {isCustom && ((rt as EditableTemplate).tags?.length ?? 0) > 0 && (
+                  <div className="flex flex-wrap items-center gap-1 mt-2">
+                    {(rt as EditableTemplate).tags!.slice(0, 3).map(tag => (
+                      <span key={tag} className="inline-flex items-center h-5 px-1.5 rounded-full bg-brand-50 text-brand-700 text-[0.625rem] font-medium">{tag}</span>
+                    ))}
+                    {(rt as EditableTemplate).tags!.length > 3 && <span className="text-[0.625rem] text-ink-400">+{(rt as EditableTemplate).tags!.length - 3}</span>}
+                  </div>
+                )}
                 <div className="mt-auto pt-4 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
                     {sectionNames.length > 0 ? (
@@ -1450,13 +1476,7 @@ export default function ReportsView({
                         <span className="inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-600 tabular-nums whitespace-nowrap shrink-0">
                           {sectionNames.length} {sectionNames.length === 1 ? 'section' : 'sections'}
                         </span>
-                        {hasApprovedFormat ? (
-                          <span className="inline-flex items-center gap-1 h-6 px-2 rounded-full border border-compliant/40 bg-compliant-50 text-[0.625rem] font-semibold text-compliant-700 whitespace-nowrap shrink-0">
-                            <ShieldCheck size={11} /> Reference format
-                          </span>
-                        ) : (
-                          <span className="text-[0.6875rem] text-ink-400 leading-none truncate">{sectionNames.slice(0, 2).join(' · ')}</span>
-                        )}
+                        <span className="text-[0.6875rem] text-ink-400 leading-none truncate">{sectionNames.slice(0, 2).join(' · ')}</span>
                       </>
                     ) : (
                       <span className="inline-flex items-center h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-medium text-ink-400 whitespace-nowrap shrink-0">
@@ -1465,14 +1485,14 @@ export default function ReportsView({
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    {hasApprovedFormat && (
-                      <ActionTooltip label="Check a file against this format">
+                    {isCustom && (
+                      <ActionTooltip label="Rename">
                         <button
-                          onClick={(e) => { e.stopPropagation(); checkFileAgainst(rt as EditableTemplate); }}
-                          aria-label={`Check a file against the ${rt.name} reference format`}
-                          className="w-7 h-7 flex items-center justify-center rounded-full text-ink-400 hover:text-compliant-700 hover:bg-compliant-50 transition-colors duration-200 cursor-pointer"
+                          onClick={(e) => { e.stopPropagation(); startRename(rt); }}
+                          aria-label={`Rename template ${rt.name}`}
+                          className="w-7 h-7 flex items-center justify-center rounded-full text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] transition-colors duration-200 cursor-pointer"
                         >
-                          <ShieldCheck size={13} />
+                          <Pencil size={13} />
                         </button>
                       </ActionTooltip>
                     )}
@@ -1511,8 +1531,6 @@ export default function ReportsView({
             const eyebrowTone = color.split(' ')[0];
             const tintBg = color.split(' ')[1] ?? 'bg-paper-50';
             const sectionCount = rt.sections?.length ?? 0;
-            const approvedSections = (rt as EditableTemplate).approvedSections;
-            const hasApprovedFormat = isCustom && !!approvedSections?.length;
             return (
               <motion.div
                 key={rt.id}
@@ -1531,11 +1549,23 @@ export default function ReportsView({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-[0.8125rem] font-semibold text-ink-900 truncate group-hover:text-brand-700 transition-colors">{rt.name}</span>
-                    {hasApprovedFormat && (
-                      <span className="shrink-0 inline-flex items-center gap-1 h-[1.125rem] px-1.5 rounded-full border border-compliant/40 bg-compliant-50 text-[0.625rem] font-semibold text-compliant-700">
-                        <ShieldCheck size={10} /> Approved
-                      </span>
+                    {isCustom && renamingId === rt.id ? (
+                      <input
+                        autoFocus
+                        value={renameDraft}
+                        onClick={e => e.stopPropagation()}
+                        onChange={e => setRenameDraft(e.target.value)}
+                        onBlur={() => commitRename(rt as EditableTemplate)}
+                        onKeyDown={e => {
+                          e.stopPropagation();
+                          if (e.key === 'Enter') { e.preventDefault(); commitRename(rt as EditableTemplate); }
+                          else if (e.key === 'Escape') { e.preventDefault(); setRenamingId(null); }
+                        }}
+                        aria-label="Template name"
+                        className="w-full max-w-xs px-1.5 py-0.5 -ml-1.5 rounded-[6px] bg-white border border-brand-400 text-[0.8125rem] font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+                      />
+                    ) : (
+                      <span onDoubleClick={isCustom ? (e) => { e.stopPropagation(); startRename(rt); } : undefined} className="text-[0.8125rem] font-semibold text-ink-900 truncate group-hover:text-brand-700 transition-colors">{rt.name}</span>
                     )}
                   </div>
                   <p className="text-[0.75rem] text-ink-400 truncate leading-snug">{rt.desc}</p>
@@ -1547,14 +1577,14 @@ export default function ReportsView({
                     {sectionCount} {sectionCount === 1 ? 'section' : 'sections'}
                   </span>
                   <div className="flex items-center gap-0.5 pl-1">
-                    {hasApprovedFormat && (
-                      <ActionTooltip label="Check a file against this format">
+                    {isCustom && (
+                      <ActionTooltip label="Rename">
                         <button
-                          onClick={(e) => { e.stopPropagation(); checkFileAgainst(rt as EditableTemplate); }}
-                          aria-label={`Check a file against the ${rt.name} reference format`}
-                          className="w-7 h-7 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-compliant-700 hover:bg-compliant-50 transition-colors cursor-pointer"
+                          onClick={(e) => { e.stopPropagation(); startRename(rt); }}
+                          aria-label={`Rename template ${rt.name}`}
+                          className="w-7 h-7 flex items-center justify-center rounded-[7px] text-ink-400 hover:text-brand-600 hover:bg-brand-600/[0.07] transition-colors cursor-pointer"
                         >
-                          <ShieldCheck size={14} />
+                          <Pencil size={14} />
                         </button>
                       </ActionTooltip>
                     )}
@@ -1600,22 +1630,19 @@ export default function ReportsView({
 
           const q = templateSearch.trim().toLowerCase();
           const filteredCustom = q
-            ? customTemplates.filter(t => t.name.toLowerCase().includes(q) || (t.desc ?? '').toLowerCase().includes(q))
+            ? customTemplates.filter(t => t.name.toLowerCase().includes(q) || (t.desc ?? '').toLowerCase().includes(q) || ((t as EditableTemplate).tags ?? []).some(tag => tag.toLowerCase().includes(q)))
             : customTemplates;
           const filteredStandard = q
             ? REPORT_TEMPLATES.filter(t => t.name.toLowerCase().includes(q) || (t.desc ?? '').toLowerCase().includes(q))
             : REPORT_TEMPLATES;
 
-          // Shared toolbar actions — same Upload / New buttons on both sub-tabs.
+          // Single creation entry — "New template" opens the editor directly. The
+          // editor already hosts "Import from a report" and one-tap recommended
+          // Internal Audit sections, so no separate start-chooser step is needed.
           const templateToolbarActions = (
-            <>
-              <button type="button" className={BTN_CTA_OUTLINE} onClick={() => setShowUploadModal(true)}>
-                <Upload size={14} /> Upload template
-              </button>
-              <button type="button" className={BTN_CTA_PRIMARY} onClick={() => { setEditingTemplate(BLANK_TEMPLATE as typeof REPORT_TEMPLATES[number]); }}>
-                <Plus size={14} /> New template
-              </button>
-            </>
+            <button type="button" className={BTN_CTA_PRIMARY} onClick={() => setEditingTemplate(BLANK_TEMPLATE as typeof REPORT_TEMPLATES[number])}>
+              <Plus size={14} /> New template
+            </button>
           );
 
           const noSearchMatch = (
@@ -1661,18 +1688,18 @@ export default function ReportsView({
               <div className="space-y-5">
               {/* Standard gallery. */}
               <section>
-                {sectionLabel('Standard', REPORT_TEMPLATES.length)}
+                {sectionLabel('Standard', filteredStandard.length)}
                 {filteredStandard.length === 0 ? noSearchMatch : renderGallery(filteredStandard, false)}
               </section>
 
               {/* Custom gallery. */}
               <section>
-                {sectionLabel('Custom', customTemplates.length)}
+                {sectionLabel('Custom', filteredCustom.length)}
                 {customTemplates.length === 0 ? (
                   <EmptyState
-                    icon={Upload}
+                    icon={FileText}
                     title="No custom templates"
-                    body="Create a template from scratch or upload one to reuse it across reports."
+                    body="Create a template — start from scratch or import an existing report — to reuse it across reports."
                     size="compact"
                   />
                 ) : filteredCustom.length === 0 ? (
@@ -1736,29 +1763,24 @@ export default function ReportsView({
             // template's seeded state.
             key={editingTemplate.id}
             template={editingTemplate}
-            initialName={editingTemplate.id === 'ct-blank' ? 'Untitled Template' : undefined}
+            // New templates open with an empty name field so the author must name
+            // it — a shared "Untitled Template" default collided for everyone.
+            initialName={editingTemplate.id === 'ct-blank' ? '' : undefined}
             // Save dismisses everything (terminal); Cancel just closes the
             // editor so the still-mounted wizard reappears with its selections.
             onClose={() => { setEditingTemplate(null); setWizardTemplate(null); }}
-            onCancel={() => setEditingTemplate(null)}
+            onCancel={() => { setEditingTemplate(null); }}
             onSaveNew={(created) => addCustomTemplate(created)}
             onSaveEdit={(updated) => updateCustomTemplate(updated)}
             existingTemplateNames={[...REPORT_TEMPLATES.map(t => t.name), ...customTemplates.map(t => t.name)]}
+            existingStructures={customTemplates
+              .filter(t => t.id !== editingTemplate!.id)
+              .map(t => ({ name: t.name, sectionNames: (t.sections ?? []).map(s => s.name) }))}
           />
         )}
       </AnimatePresence>
 
-      {/* Upload Template Modal */}
-      <AnimatePresence>
-        {showUploadModal && (
-          <UploadTemplateModal
-            onClose={() => { setShowUploadModal(false); setUploadReference(null); }}
-            onSave={addCustomTemplateUnique}
-            reference={uploadReference ?? undefined}
-            existingNames={[...REPORT_TEMPLATES.map(t => t.name), ...customTemplates.map(t => t.name)]}
-          />
-        )}
-      </AnimatePresence>
+
 
       {/* Generate ATR from Observations — opened by the ATR template "Generate".
           The review step's "Add to Report" saves the ATR into My Reports. */}
