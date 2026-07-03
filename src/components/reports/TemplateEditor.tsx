@@ -115,6 +115,8 @@ const SEED_SCAN_MESSAGES = [
   'Preparing a suggested outline…',
 ];
 const IMPORT_MIN_MS = 850;
+// Fail a PDF parse that hasn't settled by here, so the progress card can't hang.
+const EXTRACT_TIMEOUT_MS = 30000;
 
 // Accepted source formats for "Import from a report". A PDF's structure (section
 // headings) and letterhead are read for real and land in the review canvas. Word
@@ -733,18 +735,31 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     setScanSeed(false);
     setImporting(true);
     setScanningName(file.name);
-    const result: ReportStructure | null = await Promise.all([
-      extractReportStructure(file),
-      new Promise(resolve => setTimeout(resolve, IMPORT_MIN_MS)),
-    ]).then(([res]) => res).finally(() => {
+    // Guard the parse with a timeout so a hung read (e.g. the pdf.js worker
+    // failing to load) can't leave the progress card stuck forever — after
+    // EXTRACT_TIMEOUT_MS it falls through to the error path below.
+    let result: ReportStructure | null = null;
+    try {
+      const [res] = await Promise.all([
+        Promise.race([
+          extractReportStructure(file),
+          new Promise<ReportStructure | null>((_, reject) =>
+            setTimeout(() => reject(new Error('extract-timeout')), EXTRACT_TIMEOUT_MS)),
+        ]),
+        new Promise(resolve => setTimeout(resolve, IMPORT_MIN_MS)),
+      ]);
+      result = res;
+    } catch {
+      result = null;
+    } finally {
       setImporting(false);
       setScanningName(null);
-    });
+    }
     if (!result) {
       // Restore the editor if it was minimized, so the failure isn't hidden
       // behind a card that would otherwise read as "complete".
       setMinimized(false);
-      addToast({ type: 'error', message: `Couldn't read "${file.name}". It may be scanned or image-only.` });
+      addToast({ type: 'error', message: `Couldn't read "${file.name}". It may be scanned, image-only, or too large.` });
       return;
     }
     const detected: CanvasSection[] = result.sections.map((s, i) => ({
