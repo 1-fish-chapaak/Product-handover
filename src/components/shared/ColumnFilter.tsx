@@ -25,9 +25,12 @@ interface Props {
   /** Show the sliders icon in the `button` variant, matching ToolbarFilterMenu's
       Filters button. Off by default; opted into in the Reports toolbar only. */
   icon?: boolean;
+  /** Trigger height for the `button` variant. `md` (default, h-10) matches the
+      Reports toolbar; `sm` (h-8) lines up with 32px search inputs / tab groups. */
+  size?: 'sm' | 'md';
 }
 
-export default function ColumnFilter({ label, options, value, onChange, align = 'start', variant = 'icon', renderOption, selectIndicator = 'check', searchable, icon = false }: Props) {
+export default function ColumnFilter({ label, options, value, onChange, align = 'start', variant = 'icon', renderOption, selectIndicator = 'check', searchable, icon = false, size = 'md' }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   // Snapshot of what was selected when the menu opened — used to float those
@@ -81,7 +84,9 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
-          className={`no-focus-ring inline-flex items-center gap-2 h-10 px-3 rounded-[10px] border text-[12.5px] font-medium cursor-pointer transition-colors ${
+          className={`no-focus-ring inline-flex items-center gap-2 border font-medium cursor-pointer transition-colors ${
+            size === 'sm' ? 'h-8 px-2.5 rounded-[8px] text-[0.75rem]' : 'h-10 px-3 rounded-[10px] text-[12.5px]'
+          } ${
             hasFilter
               ? 'bg-brand-50 border-brand-200 text-brand-700'
               : open
@@ -91,7 +96,7 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
           aria-haspopup="true"
           aria-expanded={open}
         >
-          {icon && <SlidersHorizontal size={15} className={hasFilter || open ? 'text-brand-600' : 'text-ink-400'} />}
+          {icon && <SlidersHorizontal size={size === 'sm' ? 13 : 15} className={hasFilter || open ? 'text-brand-600' : 'text-ink-400'} />}
           <span>{label}</span>
           {hasFilter && (
             <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-brand-600 text-white text-[10px] font-bold tabular-nums">
