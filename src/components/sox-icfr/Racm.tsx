@@ -116,10 +116,19 @@ export default function Racm() {
           </div>
           <p className="text-[13px] text-ink-500 mt-0.5">{eng.entity} · one RACM for this engagement · {risks} risks · {eng.controls.length} controls · {processes.length - 1} processes</p>
         </div>
-        <button onClick={() => openRacmEditor({ name: `${eng.entity} — Engagement RACM` })}
-          className="h-9 px-3.5 shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
-          <FileSpreadsheet size={15} /> Open spreadsheet editor
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {isAuditor && (
+            <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
+              title={sel.size ? `Bulk test the ${sel.size} selected rows` : 'Bulk test all rows in view'}
+              className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
+              <FlaskConical size={14} /> Bulk test{sel.size > 0 && <span className="tabular-nums text-brand-700">({sel.size})</span>}
+            </button>
+          )}
+          <button onClick={() => openRacmEditor({ name: `${eng.entity} — Engagement RACM` })}
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+            <FileSpreadsheet size={15} /> Open spreadsheet editor
+          </button>
+        </div>
       </div>
 
       {/* auditor-review summary — the approval state of the matrix at a glance */}

@@ -136,7 +136,7 @@ export function requiredDatasetsFor(c: Control): RequiredDataset[] {
   const cat = PROCESS_DATASETS[c.process] ?? PROCESS_DATASETS['Record to Report']!;
   let h = 0; for (let i = 0; i < c.id.length; i++) h = (h * 31 + c.id.charCodeAt(i)) >>> 0;
   const first = cat[h % cat.length]!;
-  const second = cat[(h >> 3) % cat.length]!;
+  const second = cat[(h >>> 3) % cat.length]!;
   return first.name === second.name ? [first] : [first, second];
 }
 
