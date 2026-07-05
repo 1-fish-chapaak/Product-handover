@@ -14,13 +14,13 @@ type ExecDraft = { controlId: string; track: 'design' | 'operating'; kind: ExecK
 const short = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 import { ROLE_LABEL } from './types';
 
-// The three primary tabs — mirrors how other engagements are laid out.
-export type SoxTab = 'overview' | 'racm' | 'controls';
-// 'overview' | 'racm' | 'register'(=Control Library) are the tab roots; the rest are drill-ins.
-type View = 'overview' | 'racm' | 'racm-editor' | 'register' | 'dossier' | 'deficiencies' | 'scope' | 'setup';
+// The four primary tabs — mirrors how other engagements are laid out.
+export type SoxTab = 'overview' | 'racm' | 'risks' | 'controls';
+// 'overview' | 'racm' | 'risks' | 'register'(=Control Library) are the tab roots; the rest are drill-ins.
+type View = 'overview' | 'racm' | 'racm-editor' | 'risks' | 'register' | 'dossier' | 'deficiencies' | 'scope' | 'setup';
 export interface RacmEditorMeta { name: string; process?: string }
 
-const TAB_ROOT: Record<SoxTab, View> = { overview: 'overview', racm: 'racm', controls: 'register' };
+const TAB_ROOT: Record<SoxTab, View> = { overview: 'overview', racm: 'racm', risks: 'risks', controls: 'register' };
 
 interface IcfrCtx {
   eng: IcfrEngagement;

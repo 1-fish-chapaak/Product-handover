@@ -8,6 +8,7 @@ import { IcfrProvider, useIcfr, type SoxTab } from './store';
 import { RoleSwitcher } from './parts';
 import Overview from './Overview';
 import Racm from './Racm';
+import RiskLibrary from './RiskLibrary';
 import ControlRegister from './ControlRegister';
 import ControlDossier from './ControlDossier';
 import { DeficienciesView, ScopeView } from './extraViews';
@@ -17,6 +18,7 @@ import RacmFullPageEditor from '../audit/RacmFullPageEditor';
 const SOX_TABS: TabDef[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'racm', label: 'RACM' },
+  { id: 'risks', label: 'Risk Library' },
   { id: 'controls', label: 'Control Library' },
 ];
 
@@ -57,14 +59,15 @@ function Inner({ onBack }: { onBack?: () => void }) {
     );
   }
 
-  // The three tabs are the primary nav; everything else is a drill-in reached from them.
-  const isRoot = view === 'overview' || view === 'racm' || view === 'register';
+  // The four tabs are the primary nav; everything else is a drill-in reached from them.
+  const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register';
   const body = view === 'dossier' ? <ControlDossier />
     : view === 'deficiencies' ? <DeficienciesView />
     : view === 'scope' ? <ScopeView />
     : view === 'setup' ? <SetupWizard />
     : tab === 'overview' ? <Overview />
     : tab === 'racm' ? <Racm />
+    : tab === 'risks' ? <RiskLibrary />
     : <ControlRegister />;
 
   return (
