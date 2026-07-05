@@ -23,13 +23,23 @@ test('Air India engagement RACM shows single matrix with approvals + bulk test',
   await expect(page.getByText('one RACM for this engagement')).toBeVisible();
   await expect(page.getByText('Auditor review').first()).toBeVisible();
 
-  // select two rows and bulk test
+  // select two rows and bulk test — the knitted flow:
+  // scope → compile required files → attach unique datasets → execute
   const checks = page.locator('tbody input[type=checkbox]');
   await checks.nth(0).click();
   await checks.nth(1).click();
   await expect(page.getByText('2 selected')).toBeVisible();
   await page.getByRole('button', { name: 'Test controls' }).click();
-  await page.waitForTimeout(600);
+  await expect(page.getByText('Bulk test of controls')).toBeVisible();
+  await page.getByRole('button', { name: /Compile required files/ }).click();
+  await expect(page.getByText(/unique dataset/)).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: /Pull all from SAP ECC/ }).click();
+  await expect(page.getByRole('button', { name: /Review & execute/ })).toBeEnabled({ timeout: 10_000 });
+  await page.getByRole('button', { name: /Review & execute/ }).click();
+  await expect(page.getByText('Checks to run')).toBeVisible();
+  await page.getByRole('button', { name: /Test 2 controls/ }).click();
+  await expect(page.getByRole('button', { name: 'Done' })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Done' }).click();
 
   // approve a pending row via the row action
   await page.locator('button[aria-label^="Approve "]').first().click();

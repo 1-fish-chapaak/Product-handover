@@ -7,6 +7,7 @@ import { useIcfr } from './store';
 import { controlConclusion, trackResult } from './helpers';
 import { Pill } from '../shared/StatusBadge';
 import { NatureChip, Tickmark } from './parts';
+import BulkTestModal from './BulkTestModal';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
 
@@ -41,13 +42,14 @@ function ReviewCell({ c }: { c: Control }) {
  * spreadsheet editor remains one click away for cell-by-cell editing.
  */
 export default function Racm() {
-  const { eng, role, openRacmEditor, openControl, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls } = useIcfr();
+  const { eng, role, openRacmEditor, openControl, approveRacmRows, remarkRacmRow, clearRacmReview } = useIcfr();
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
   const [review, setReview] = useState<ReviewFilter>('All');
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [remarkFor, setRemarkFor] = useState<Control | null>(null);
   const [remarkText, setRemarkText] = useState('');
+  const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
 
   const isAuditor = role === 'auditor';
   const processes = useMemo(() => ['All', ...Array.from(new Set(eng.controls.map(c => c.process)))], [eng.controls]);
@@ -226,11 +228,14 @@ export default function Racm() {
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
           <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
-          <button onClick={() => { bulkTestControls(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>
+          <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>
           <button onClick={() => { approveRacmRows(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve rows</button>
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
       )}
+
+      {/* bulk test — compile files → attach unique datasets → execute */}
+      {bulkTestIds && <BulkTestModal controlIds={bulkTestIds} onClose={() => setBulkTestIds(null)} />}
 
       {/* remark modal */}
       {remarkFor && (

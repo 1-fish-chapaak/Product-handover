@@ -85,6 +85,61 @@ export function sampleRefs(process: string, n: number): string[] {
   return Array.from({ length: n }, (_, i) => `#${1000 + i}`);
 }
 
+// ── required datasets per process — compiled + deduped by the bulk-test flow ─────
+export interface RequiredDataset { name: string; format: 'CSV' | 'XLSX' | 'PDF'; description: string; }
+export const PROCESS_DATASETS: Record<string, RequiredDataset[]> = {
+  'Procure to Pay': [
+    { name: 'PO release log (ME2N)', format: 'CSV', description: 'FY26 purchase orders with approver, DoA tier and release timestamps.' },
+    { name: 'Invoice register (MIRO)', format: 'CSV', description: 'Posted vendor invoices — number, vendor, amount, GL account, entered-by.' },
+    { name: 'Vendor master snapshot', format: 'XLSX', description: 'Active vendors with bank details and the immutable change log.' },
+    { name: 'GRN register (MIGO)', format: 'CSV', description: 'Goods receipts with dates and quantities for the three-way match.' },
+  ],
+  'Order to Cash': [
+    { name: 'Sales invoice register (VF05)', format: 'CSV', description: 'Billed invoices with price, customer and dispatch reference.' },
+    { name: 'Approved price master', format: 'XLSX', description: 'Current price list with effective dates and approval trail.' },
+    { name: 'AR ageing extract', format: 'CSV', description: 'Open receivables aged by bucket with provision flags.' },
+  ],
+  'Record to Report': [
+    { name: 'GL trial balance', format: 'CSV', description: 'Period-end trial balance tying postings to FS line items.' },
+    { name: 'Manual journal register (FB50)', format: 'CSV', description: 'Manual journals with preparer, approver and posting timestamps.' },
+    { name: 'Reconciliation tracker', format: 'XLSX', description: 'Balance-sheet reconciliations with reviewer sign-off status.' },
+  ],
+  'Inventory': [
+    { name: 'Stock ledger extract (MB52)', format: 'CSV', description: 'Quantities and values by material and plant at period end.' },
+    { name: 'Cycle count results', format: 'XLSX', description: 'Count sheets with variances and investigation notes.' },
+  ],
+  'Treasury': [
+    { name: 'Payment run log (F110)', format: 'CSV', description: 'Payment proposals and releases with both authoriser IDs.' },
+    { name: 'Bank statements (MT940)', format: 'CSV', description: 'Full-period bank statements for reconciliation tie-out.' },
+  ],
+  'Payroll': [
+    { name: 'Payroll register', format: 'XLSX', description: 'Gross-to-net by employee with cost-centre mapping.' },
+    { name: 'Joiner / leaver report', format: 'CSV', description: 'HR movements with effective dates and approvals.' },
+  ],
+  'Tax': [
+    { name: 'GST returns workpapers', format: 'XLSX', description: 'GSTR filings reconciled to the revenue and ITC ledgers.' },
+    { name: 'TDS deduction register', format: 'CSV', description: 'Section-wise TDS with challan references and remittance dates.' },
+  ],
+  'IT General Controls': [
+    { name: 'User access dump (SUIM)', format: 'CSV', description: 'Users, roles and privileged flags across in-scope systems.' },
+    { name: 'Change tickets export', format: 'CSV', description: 'Transports with test evidence and approver per change.' },
+    { name: 'Batch job run log', format: 'CSV', description: 'Scheduled job outcomes with failure resolution notes.' },
+  ],
+};
+
+/** Which datasets a control needs for bulk testing — deterministic, deduped across
+ *  a selection by dataset name. Attestation-only manual controls need no files. */
+export function requiredDatasetsFor(c: Control): RequiredDataset[] {
+  const needsData = c.nature !== 'Manual'
+    || c.operating.steps.some(s => s.evidenceMode === 'workflow' || s.evidenceMode === 'ai' || !!s.workflowName || !!s.aiValidation);
+  if (!needsData) return [];
+  const cat = PROCESS_DATASETS[c.process] ?? PROCESS_DATASETS['Record to Report']!;
+  let h = 0; for (let i = 0; i < c.id.length; i++) h = (h * 31 + c.id.charCodeAt(i)) >>> 0;
+  const first = cat[h % cat.length]!;
+  const second = cat[(h >> 3) % cat.length]!;
+  return first.name === second.name ? [first] : [first, second];
+}
+
 // ── RACM row review seeds — the audit manager's approval / remark per row ────────
 const REVIEWER = 'J. Fernandes · Audit Manager';
 const approved = (at = '15 Apr'): RacmReview => ({ status: 'Approved', by: REVIEWER, at });
