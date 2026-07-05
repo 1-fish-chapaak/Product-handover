@@ -19,6 +19,7 @@ import { Sparkles } from 'lucide-react';
 import { downloadControlWorkingPaper } from './icfrWorkingPaper';
 import { cn } from '../../lib/cn';
 import { DESIGN_DOC_KINDS } from './types';
+import { sampleRefs } from './mockData';
 import type {
   Control, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, EvidenceMode, OperatingStep,
   Role, Sampling, TestResult, TrackConclusion, ValidationResult,
@@ -499,8 +500,8 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   const wfCount = o.steps.filter(s => s.workflowName).length;
   const attCount = o.steps.filter(s => s.attestEnabled || s.attestation).length;
 
-  const uploadPop = () => { setUploading(true); window.setTimeout(() => { setPopulation(control.id, { source: 'SAP — full-period extract', count: 2640, tieOut: 'Agreed to GL control account', evidence: [{ id: 'ev', name: 'population.xlsx', kind: 'XLSX', uploadedBy: me, uploadedAt: 'just now' }] }); setUploading(false); }, 1800); };
-  const drawSample = () => { setDrawing(true); window.setTimeout(() => { const s: Sampling = { basis: `${sampleSize} items — judgment documented (handbook: no fixed minimum).`, method: 'Random', size: sampleSize, samples: Array.from({ length: sampleSize }, (_, i) => ({ id: `s${i}`, ref: `#${1000 + i}`, result: 'Not tested' })) }; setSampling(control.id, s); setDrawing(false); }, 3000); };
+  const uploadPop = () => { setUploading(true); window.setTimeout(() => { setPopulation(control.id, { source: control.process === 'Procure to Pay' ? 'SAP ECC — ME2N PO release log, FY26 YTD' : 'SAP — full-period extract', count: 2640, tieOut: 'Agreed to GL control account', evidence: [{ id: 'ev', name: 'population.xlsx', kind: 'XLSX', uploadedBy: me, uploadedAt: 'just now' }] }); setUploading(false); }, 1800); };
+  const drawSample = () => { setDrawing(true); window.setTimeout(() => { const s: Sampling = { basis: `${sampleSize} items — judgment documented (handbook: no fixed minimum).`, method: 'Random', size: sampleSize, samples: sampleRefs(control.process, sampleSize).map((ref, i) => ({ id: `s${i}`, ref, result: 'Not tested' })) }; setSampling(control.id, s); setDrawing(false); }, 3000); };
   const runAll = () => { setTesting(true); window.setTimeout(() => { testAllAttributes(control.id); setTesting(false); }, 2400); };
 
   if (locked) {

@@ -63,14 +63,14 @@ export function validationSummary(text: string, fail: boolean): string {
     ? `The uploaded file does not fully support “${text}”. 1 of 3 sampled items breaks the control — the required approval/threshold could not be evidenced for that item, so the attribute is concluded Fail. Item-level results are in the table below.`
     : `The uploaded file supports “${text}”. All 3 sampled items met the control — the required approval and threshold were present and within policy on each. No exceptions found, so the attribute is concluded Pass.`;
 }
-/** A small per-item evidence table to accompany the summary. */
+/** A small per-item evidence table to accompany the summary — real procurement documents. */
 export function validationTable(fail: boolean): ValidationTable {
   return {
-    columns: ['Item', 'Approval', 'Tolerance', 'Result'],
+    columns: ['Document', 'Vendor', 'Approval', 'Result'],
     rows: [
-      ['#1001', 'Approved', 'Within tolerance', 'Pass'],
-      ['#1002', 'Approved', 'Within tolerance', 'Pass'],
-      ['#1003', fail ? 'No approver found' : 'Approved', fail ? 'Breach not cleared' : 'Within tolerance', fail ? 'Fail' : 'Pass'],
+      ['PO 4500012847', 'Indian Oil Skytanking', 'Approved — Tier 3 (S. Iyer)', 'Pass'],
+      ['PO 4500012861', 'TajSATS Air Catering', 'Approved — Tier 2 (S. Iyer)', 'Pass'],
+      ['PO 4500012898', 'Boeing Distribution Services', fail ? 'No approver at required tier' : 'Approved — Tier 4 (Supply Chain Director)', fail ? 'Fail' : 'Pass'],
     ],
   };
 }

@@ -147,6 +147,16 @@ export interface OperatingTrack {
   testedAt: string | null;
 }
 
+// ─── RACM row review — the auditor's approval / remark on one matrix row ─────────
+// Absent = the row is still pending the auditor's review.
+export type RacmRowStatus = 'Approved' | 'Remark';
+export interface RacmReview {
+  status: RacmRowStatus;
+  remark?: string;          // required when status is 'Remark'
+  by: string;
+  at: string;
+}
+
 // ─── Control ─────────────────────────────────────────────────────────────────────
 
 export interface Control {
@@ -164,6 +174,7 @@ export interface Control {
   riskId: string;
   riskDescription: string;
   assertions: Assertion[];
+  racmReview?: RacmReview;
   design: DesignTrack;
   operating: OperatingTrack;
 }
