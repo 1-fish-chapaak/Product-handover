@@ -2,7 +2,7 @@ import { validationQA } from './helpers';
 import type {
   Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, Deficiency, Discussion, DocStatus,
   EvidenceFile, ExecKind, ExecutionEvent, HandoffTask, IcfrEngagement, Nature, OperatingStep, OperatingTrack,
-  Role, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
+  RacmReview, Role, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -26,9 +26,9 @@ const attest = (note: string, by: string, files: string[]): Partial<OperatingSte
 const designTrack = (conclusion: TrackConclusion, documents: DesignDoc[], points: DesignPoint[], testedBy: string | null = null): DesignTrack =>
   ({ documents, points, conclusion, testedBy: conclusion !== 'Not tested' ? (testedBy ?? 'A. Mehta · Auditor') : null, testedAt: conclusion !== 'Not tested' ? '14 Apr' : null });
 
-const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampling?: Sampling, popCount = 0): OperatingTrack => ({
+const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampling?: Sampling, popCount = 0, popSource = 'SAP — full-period extract'): OperatingTrack => ({
   method: 'Manual',
-  population: popCount ? { source: 'SAP — full-period extract', count: popCount, tieOut: 'Agreed to GL control account', evidence: [{ id: 'ev1', name: 'population.xlsx', kind: 'XLSX', uploadedBy: 'Risk Owner', uploadedAt: '12 Apr' }] } : undefined,
+  population: popCount ? { source: popSource, count: popCount, tieOut: 'Agreed to GL control account', evidence: [{ id: 'ev1', name: 'population.xlsx', kind: 'XLSX', uploadedBy: 'Risk Owner', uploadedAt: '12 Apr' }] } : undefined,
   sampling,
   steps,
   conclusion,
@@ -42,10 +42,108 @@ const autoTrack = (conclusion: TrackConclusion, steps: OperatingStep[]): Operati
   testedAt: conclusion !== 'Not tested' ? '16 Apr' : null,
 });
 
-const sampling = (size: number, basis: string, method: Sampling['method'], fails = 0): Sampling => ({
+const sampling = (size: number, basis: string, method: Sampling['method'], fails = 0, refs?: string[]): Sampling => ({
   basis, method, size,
-  samples: Array.from({ length: size }, (_, i) => ({ id: `sm${i}`, ref: `#${1000 + i}`, result: i < fails ? 'Fail' : 'Pass' })),
+  samples: Array.from({ length: size }, (_, i) => ({ id: `sm${i}`, ref: refs?.[i % (refs.length || 1)] ?? `#${1000 + i}`, result: i < fails ? 'Fail' : 'Pass' })),
 });
+
+// ── real procurement seed — the vendor & document population behind P2P testing ──
+export interface ProcurementVendor { code: string; name: string; category: string; }
+export const PROCUREMENT_VENDORS: ProcurementVendor[] = [
+  { code: 'V-100214', name: 'Indian Oil Skytanking', category: 'Aviation fuel — into-plane' },
+  { code: 'V-100377', name: 'Shell MRPL Aviation Fuels', category: 'Aviation fuel' },
+  { code: 'V-100482', name: 'CFM International', category: 'Engine spares (LEAP-1B)' },
+  { code: 'V-100518', name: 'Boeing Distribution Services', category: 'Airframe spares & consumables' },
+  { code: 'V-100629', name: 'Lufthansa Technik', category: 'Component MRO' },
+  { code: 'V-100655', name: 'AI Airport Services', category: 'Ground handling' },
+  { code: 'V-100701', name: 'TajSATS Air Catering', category: 'Inflight catering' },
+  { code: 'V-100746', name: 'Menzies Aviation', category: 'Ground handling — international' },
+  { code: 'V-100802', name: 'Amadeus IT Group', category: 'PSS / distribution' },
+  { code: 'V-100815', name: 'Collins Aerospace', category: 'Avionics spares' },
+  { code: 'V-100863', name: 'Dnata Catering', category: 'Inflight catering — international' },
+  { code: 'V-100907', name: 'Jeppesen (Boeing)', category: 'Nav charts & flight planning' },
+];
+
+export interface ProcurementPO { po: string; vendor: ProcurementVendor; date: string; amountINR: number; grn: string; invoice: string; }
+/** FY26 PO population extract — deterministic so the demo reads the same every run. */
+export const PROCUREMENT_POS: ProcurementPO[] = Array.from({ length: 25 }, (_, i) => {
+  const vendor = PROCUREMENT_VENDORS[i % PROCUREMENT_VENDORS.length]!;
+  return {
+    po: `45000${12840 + i * 7}`,
+    vendor,
+    date: `${String(((i * 3) % 28) + 1).padStart(2, '0')} ${i < 13 ? 'Apr' : 'May'} 2025`,
+    amountINR: (((i * 137) % 60) + 8) * 100_000,
+    grn: `50002${3110 + i * 3}`,
+    invoice: `${vendor.code.replace('V-', 'INV/')}/${2600 + i}`,
+  };
+});
+const PO_SAMPLE_REFS = PROCUREMENT_POS.map(p => `PO ${p.po} · ${p.vendor.name}`);
+
+/** Realistic sample references per process — real POs for P2P, ledger refs elsewhere. */
+export function sampleRefs(process: string, n: number): string[] {
+  if (process === 'Procure to Pay') return Array.from({ length: n }, (_, i) => PO_SAMPLE_REFS[i % PO_SAMPLE_REFS.length]!);
+  return Array.from({ length: n }, (_, i) => `#${1000 + i}`);
+}
+
+// ── required datasets per process — compiled + deduped by the bulk-test flow ─────
+export interface RequiredDataset { name: string; format: 'CSV' | 'XLSX' | 'PDF'; description: string; }
+export const PROCESS_DATASETS: Record<string, RequiredDataset[]> = {
+  'Procure to Pay': [
+    { name: 'PO release log (ME2N)', format: 'CSV', description: 'FY26 purchase orders with approver, DoA tier and release timestamps.' },
+    { name: 'Invoice register (MIRO)', format: 'CSV', description: 'Posted vendor invoices — number, vendor, amount, GL account, entered-by.' },
+    { name: 'Vendor master snapshot', format: 'XLSX', description: 'Active vendors with bank details and the immutable change log.' },
+    { name: 'GRN register (MIGO)', format: 'CSV', description: 'Goods receipts with dates and quantities for the three-way match.' },
+  ],
+  'Order to Cash': [
+    { name: 'Sales invoice register (VF05)', format: 'CSV', description: 'Billed invoices with price, customer and dispatch reference.' },
+    { name: 'Approved price master', format: 'XLSX', description: 'Current price list with effective dates and approval trail.' },
+    { name: 'AR ageing extract', format: 'CSV', description: 'Open receivables aged by bucket with provision flags.' },
+  ],
+  'Record to Report': [
+    { name: 'GL trial balance', format: 'CSV', description: 'Period-end trial balance tying postings to FS line items.' },
+    { name: 'Manual journal register (FB50)', format: 'CSV', description: 'Manual journals with preparer, approver and posting timestamps.' },
+    { name: 'Reconciliation tracker', format: 'XLSX', description: 'Balance-sheet reconciliations with reviewer sign-off status.' },
+  ],
+  'Inventory': [
+    { name: 'Stock ledger extract (MB52)', format: 'CSV', description: 'Quantities and values by material and plant at period end.' },
+    { name: 'Cycle count results', format: 'XLSX', description: 'Count sheets with variances and investigation notes.' },
+  ],
+  'Treasury': [
+    { name: 'Payment run log (F110)', format: 'CSV', description: 'Payment proposals and releases with both authoriser IDs.' },
+    { name: 'Bank statements (MT940)', format: 'CSV', description: 'Full-period bank statements for reconciliation tie-out.' },
+  ],
+  'Payroll': [
+    { name: 'Payroll register', format: 'XLSX', description: 'Gross-to-net by employee with cost-centre mapping.' },
+    { name: 'Joiner / leaver report', format: 'CSV', description: 'HR movements with effective dates and approvals.' },
+  ],
+  'Tax': [
+    { name: 'GST returns workpapers', format: 'XLSX', description: 'GSTR filings reconciled to the revenue and ITC ledgers.' },
+    { name: 'TDS deduction register', format: 'CSV', description: 'Section-wise TDS with challan references and remittance dates.' },
+  ],
+  'IT General Controls': [
+    { name: 'User access dump (SUIM)', format: 'CSV', description: 'Users, roles and privileged flags across in-scope systems.' },
+    { name: 'Change tickets export', format: 'CSV', description: 'Transports with test evidence and approver per change.' },
+    { name: 'Batch job run log', format: 'CSV', description: 'Scheduled job outcomes with failure resolution notes.' },
+  ],
+};
+
+/** Which datasets a control needs for bulk testing — deterministic, deduped across
+ *  a selection by dataset name. Attestation-only manual controls need no files. */
+export function requiredDatasetsFor(c: Control): RequiredDataset[] {
+  const needsData = c.nature !== 'Manual'
+    || c.operating.steps.some(s => s.evidenceMode === 'workflow' || s.evidenceMode === 'ai' || !!s.workflowName || !!s.aiValidation);
+  if (!needsData) return [];
+  const cat = PROCESS_DATASETS[c.process] ?? PROCESS_DATASETS['Record to Report']!;
+  let h = 0; for (let i = 0; i < c.id.length; i++) h = (h * 31 + c.id.charCodeAt(i)) >>> 0;
+  const first = cat[h % cat.length]!;
+  const second = cat[(h >>> 3) % cat.length]!;
+  return first.name === second.name ? [first] : [first, second];
+}
+
+// ── RACM row review seeds — the audit manager's approval / remark per row ────────
+const REVIEWER = 'J. Fernandes · Audit Manager';
+const approved = (at = '15 Apr'): RacmReview => ({ status: 'Approved', by: REVIEWER, at });
+const remark = (text: string, at = '15 Apr'): RacmReview => ({ status: 'Remark', remark: text, by: REVIEWER, at });
 
 // ── the richly-detailed P2P controls (drive the dossier) ─────────────────────────
 const DETAILED: Control[] = [
@@ -55,6 +153,7 @@ const DETAILED: Control[] = [
     precision: 'Any change to a vendor bank account is blocked until a second authoriser approves in SAP.',
     owner: 'R. Khanna · Master Data', riskId: 'R-12', riskDescription: 'Fraudulent or erroneous payments to fictitious or altered vendor bank accounts.',
     assertions: ['Existence / Occurrence', 'Rights & Obligations'],
+    racmReview: approved(),
     design: designTrack('Effective', [
       doc('Process narrative', 'P2P vendor-master narrative v3.pdf', 'Received'),
       doc('Flowchart', 'Vendor onboarding flowchart.pdf', 'Received'),
@@ -76,6 +175,7 @@ const DETAILED: Control[] = [
     precision: 'POs above ₹5L route to the next authority tier; release is blocked without approval at the correct tier.',
     owner: 'S. Iyer · Procurement', riskId: 'R-08', riskDescription: 'Unauthorised commitments / purchases outside delegated authority.',
     assertions: ['Existence / Occurrence', 'Accuracy'],
+    racmReview: approved(),
     design: designTrack('Effective', [
       doc('Process narrative', 'Purchasing narrative v2.pdf', 'Received'),
       doc('Flowchart', 'PO approval flowchart.pdf', 'Received'),
@@ -89,7 +189,7 @@ const DETAILED: Control[] = [
       step('B1', 'PO approved at the tier matching its value per the DoA matrix.', 'Existence / Occurrence', 'Per PO', ['Inspection', 'Reperformance'], 'Pass', attest('Approval screenshots for all 25 sampled POs attached; each shows the correct tier per the DoA matrix.', 'S. Iyer · Procurement', ['PO-approvals-sample.pdf', 'DoA-matrix-FY26.xlsx'])),
       step('B2', 'Approver held the delegated authority on the approval date.', 'Existence / Occurrence', 'Per PO', ['Inspection'], 'Pass', attest('Delegation register extract confirms authority held on each approval date.', 'S. Iyer · Procurement', ['delegation-register.pdf'])),
       step('B3', 'No release before approval timestamp.', 'Accuracy', 'Per PO', ['Reperformance'], 'Not tested', wf('wf-po-release-timing', 'PO release-timing check', undefined)),
-    ], sampling(25, '25 items — daily manual control, moderate reliance (handbook — no fixed minimum, judgment documented).', 'Random'), 2640),
+    ], sampling(25, '25 POs — daily manual control, moderate reliance (handbook — no fixed minimum, judgment documented).', 'Random', 0, PO_SAMPLE_REFS), 2640, 'SAP ECC — ME2N PO release log, FY26 YTD (POs 4500012840–4500013008)'),
   },
   {
     id: 'P2P-C-03', wpRef: 'P-03', description: 'Invoices are matched three-way (PO, GRN, invoice) before payment; exceptions route to buyer.',
@@ -97,6 +197,7 @@ const DETAILED: Control[] = [
     precision: 'Quantity/price tolerance breaches are held and cannot pay until cleared by the buyer.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-05', riskDescription: 'Payment for goods not received or at incorrect price.',
     assertions: ['Accuracy', 'Existence / Occurrence'],
+    racmReview: remark('Tolerance configuration evidence is still outstanding — approve this row once the MM config export is on file.'),
     design: designTrack('Effective', [
       doc('Process narrative', 'AP three-way match narrative.pdf', 'Received'),
       doc('Flowchart', '3-way match flowchart.pdf', 'Received'),
@@ -117,6 +218,7 @@ const DETAILED: Control[] = [
     precision: 'SAP blocks postings where vendor + invoice number + amount match an existing document.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-06', riskDescription: 'Duplicate payments to vendors.',
     assertions: ['Existence / Occurrence', 'Accuracy'],
+    racmReview: approved(),
     design: designTrack('Effective', [
       doc('Process narrative', 'Duplicate-block narrative.pdf', 'Received'),
       doc('Control description', 'SAP duplicate-check config.pdf', 'Received'),
@@ -136,6 +238,7 @@ const DETAILED: Control[] = [
     precision: 'All manual AP journals are reviewed before posting; review evidenced by sign-off.',
     owner: 'D. Rao · Controller', riskId: 'R-19', riskDescription: 'Unauthorised or erroneous manual adjustments to AP.',
     assertions: ['Accuracy', 'Completeness'],
+    racmReview: remark('Design gap stands — the review happens after posting. Redesign the control to a pre-posting hold before this row is approved (see DEF-002).'),
     design: designTrack('Ineffective', [
       doc('Process narrative', 'Manual-journal narrative.pdf', 'Received'),
       doc('Walkthrough', 'Walkthrough — 12 Apr.pdf', 'Received'),
@@ -173,6 +276,7 @@ const DETAILED: Control[] = [
     precision: 'GR/IR entries open beyond 60 days are investigated and resolved.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-24', riskDescription: 'Unreconciled goods-received/invoice-received balances misstate liabilities.',
     assertions: ['Completeness', 'Accuracy'],
+    racmReview: remark('Row is incomplete — no design documents or test attributes defined yet. Complete the RACM row, then resubmit for approval.'),
     design: designTrack('Not tested', [], []),
     operating: manualTrack('Not tested', [], undefined, 0),
   },
@@ -241,6 +345,8 @@ function generate(): Control[] {
         isKey: i % 4 !== 0, precision: `${title} — operates to prevent or detect the risk at transaction level.`,
         owner: sp.owner, riskId: `R-${40 + n}`, riskDescription: `Risk addressed by: ${title.toLowerCase()}.`,
         assertions: ['Accuracy', 'Existence / Occurrence'],
+        // review spread: fully-tested rows approved, one recurring remark pattern, rest pending
+        racmReview: pat <= 1 ? approved('18 Apr') : pat === 3 ? remark('Precision statement is generic — state the threshold, the reviewer and the evidence retained.', '18 Apr') : undefined,
         design: designTrack(design, docs, points),
         operating: op,
       });

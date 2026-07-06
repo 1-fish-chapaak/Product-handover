@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   Search, Plus, FileSpreadsheet, Layers, Rows3, MessageSquare,
-  Star, RefreshCw, ListFilter, FileText, X, Send, LayoutGrid, Table2,
+  Star, RefreshCw, ListFilter, FileText, X, Send, LayoutGrid, Table2, FlaskConical,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import {
@@ -9,6 +9,7 @@ import {
   operatingProgress, operatingStarted, trackResult,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
+import BulkTestModal from './BulkTestModal';
 import { downloadIcfrWorkingPaper } from './icfrWorkingPaper';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
@@ -81,6 +82,7 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
 
 export default function ControlRegister() {
   const { eng, role, openControl, setView, rollForward, requestDesignDocs } = useIcfr();
+  const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
@@ -119,7 +121,7 @@ export default function ControlRegister() {
   const allVisible = filtered.map(c => c.id);
   const allSelected = allVisible.length > 0 && allVisible.every(id => sel.has(id));
   const toggleAll = () => setSel(allSelected ? new Set() : new Set(allVisible));
-  const toggle = (id: string) => setSel(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggle = (id: string) => setSel(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const colSpan = 8;
 
@@ -134,6 +136,13 @@ export default function ControlRegister() {
         <div className="flex items-center gap-1.5">
           <button onClick={() => downloadIcfrWorkingPaper(eng)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>
           {role === 'auditor' && <button onClick={rollForward} title="Roll forward to year-end" aria-label="Roll forward to year-end" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RefreshCw size={15} /></button>}
+          {role === 'auditor' && (
+            <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
+              title={sel.size ? `Bulk test the ${sel.size} selected controls` : 'Bulk test all controls in view'}
+              className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
+              <FlaskConical size={14} /> Bulk test{sel.size > 0 && <span className="tabular-nums text-brand-700">({sel.size})</span>}
+            </button>
+          )}
           {role === 'auditor' && <button onClick={() => setView('setup')} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New</button>}
         </div>
       </div>
@@ -229,7 +238,7 @@ export default function ControlRegister() {
                   const discN = openDiscussionCount(eng, c.id);
                   return (
                     <tr key={c.id} className={cn('reg-row', sel.has(c.id) && 'sel')} onClick={() => openControl(c.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') openControl(c.id); }} role="button" aria-label={`Open ${c.id} — ${c.description}`}>
-                      <td onClick={e => { e.stopPropagation(); toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>
+                      <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>
                       <td><span className="wp-ref">{c.wpRef}</span></td>
                       <td className="tight">
                         <div className="flex items-center gap-1.5">
@@ -263,11 +272,15 @@ export default function ControlRegister() {
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
           <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
+          {role === 'auditor' && <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>}
           {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
           <button onClick={() => { openControl(Array.from(sel)[0]); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><Send size={14} /> Open first</button>
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
       )}
+
+      {/* bulk test — compile files → attach unique datasets → execute */}
+      {bulkTestIds && <BulkTestModal controlIds={bulkTestIds} onClose={() => setBulkTestIds(null)} />}
     </div>
   );
 }

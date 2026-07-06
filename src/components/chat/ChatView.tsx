@@ -24,6 +24,11 @@ import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
 import { KpiTile } from '../shared/KpiTile';
 import AuditResultBody from './AuditResultBody';
+import PlanFlowDiagram from '../shared/PlanFlowDiagram';
+import {
+  DEFAULT_SEVERITY_THRESHOLD, SEVERITY_THRESHOLD_OPTIONS,
+  buildChatPlanSteps, buildChatPlanRatings, severityThresholdFromAnswer, severityRuleNote, isHighByAmount,
+} from '../../data/chatPlan';
 import type { WorkflowTypeId } from '../../data/mockData';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { TextShimmer } from '../shared/TextShimmer';
@@ -861,12 +866,18 @@ export interface ChatViewProps {
 // Step labels for the subtle inline audit loader. The artifact panel renders
 // the full Plan / Code / Sources detail; here we only narrate progress as a
 // single shimmering line and sync the active artifact tab.
-const LOADING_STEPS: { label: string; tab: ArtifactTab | null }[] = [
-  { label: 'Generating execution plan…',  tab: 'plan' },
-  { label: 'Writing SQL query…',          tab: 'code' },
-  { label: 'Connecting data sources…',    tab: 'sources' },
-  { label: 'Processing 1.2M records…',    tab: null },
+// The plan the checklist ticks through as it runs — one entry per CHAT_PLAN_STEPS
+// stage, in present tense. `doneLabel` is the result the step hands on (shown as
+// a subtle addendum once it's checked off). The run PAUSES after `gateId` (the
+// risk step) so Ira can ask the user's severity rule before rating the findings.
+const PLAN_RUN_STEPS: { id: string; label: string; doneLabel?: string; tab: ArtifactTab | null }[] = [
+  { id: 'parse',   label: 'Understanding your question', tab: 'plan' },
+  { id: 'sources', label: 'Finding the right data',      tab: 'sources' },
+  { id: 'plan',    label: 'Planning the checks',         tab: 'code' },
+  { id: 'execute', label: 'Running the checks',          doneLabel: 'found 9 risky payments', tab: 'code' },
+  { id: 'format',  label: 'Preparing your results',      tab: null },
 ];
+const PLAN_RUN_GATE_ID = 'execute'; // pause here to ask for the severity rule
 
 // Streaming v2 — opt-in via ?stream=v2. When on, the audit answer streams from
 // the event spine (text.delta + smoothing + collapsed wait) instead of the
@@ -1440,6 +1451,7 @@ const PREVIEW_ROW_COUNT = 9;
 
 function ResultsTable({
   columns, rows, totalRows, onDownload, title = 'Flagged duplicate pairs', animateRows = false,
+  caption, levelForRow,
 }: {
   columns: string[];
   rows: string[][];
@@ -1455,6 +1467,13 @@ function ResultsTable({
    *  mounts — used by the streaming result so rows visibly arrive instead of
    *  popping. Off by default; legacy callers are unchanged. */
   animateRows?: boolean;
+  /** Optional legend under the header — e.g. the active severity rule, so the
+   *  table states the rule that produced its Risk column. */
+  caption?: ReactNode;
+  /** Opt-in: when provided, a leading "Risk" column is prepended and each row's
+   *  level is computed from it (High/Medium chip). Drives "the rule updates the
+   *  table". Off by default; other callers keep their exact column set. */
+  levelForRow?: (row: string[]) => 'High' | 'Medium' | null;
 }) {
   const [fullscreen, setFullscreen] = useState(false);
   const prefersReducedMotion = useReducedMotion();
@@ -1608,10 +1627,20 @@ function ResultsTable({
             the 10-column table; vertical overflow is clipped (no scrollbar).
             Only the first PREVIEW_ROW_COUNT rows render — any additional
             rows live in the fullscreen modal / new tab. */}
-        <div className="overflow-x-auto overflow-y-hidden" style={{ height: 390 }}>
+        {/* Rule legend — states the severity rule the Risk column applies, so
+            the table itself carries the "why" behind each level. */}
+        {caption && (
+          <div className="px-5 py-2 border-b border-canvas-border/70 bg-brand-50/25 text-[0.6875rem] text-ink-600 leading-snug">
+            {caption}
+          </div>
+        )}
+        <div className="overflow-x-auto overflow-y-hidden" style={{ height: caption ? 358 : 390 }}>
           <table className="w-full text-[0.8125rem]">
             <thead>
               <tr className="border-b border-canvas-border/70 bg-paper-50/40">
+                {levelForRow && (
+                  <th className="text-left px-5 py-2.5 font-medium text-ink-500 uppercase tracking-[0.06em] text-[0.65625rem] whitespace-nowrap">Risk</th>
+                )}
                 {columns.map(c => (
                   <th key={c} className="text-left px-5 py-2.5 font-medium text-ink-500 uppercase tracking-[0.06em] text-[0.65625rem] whitespace-nowrap">{c}</th>
                 ))}
@@ -1619,9 +1648,19 @@ function ResultsTable({
             </thead>
             <tbody>
               {rows.slice(0, PREVIEW_ROW_COUNT).map((row, i) => {
+                const level = levelForRow?.(row) ?? null;
                 const cells = row.map((cell, j) => (
                   <td key={j} className={`px-5 py-2.5 text-ink-700 whitespace-nowrap ${j >= 3 ? 'tabular-nums' : ''}`}>{cell}</td>
                 ));
+                // Prepend the computed Risk chip (High/Medium) when rating is on.
+                const allCells = levelForRow ? [
+                  <td key="risk" className="px-5 py-2.5 whitespace-nowrap">
+                    {level && (
+                      <span className={`inline-flex rounded px-1.5 py-0.5 text-[0.625rem] font-bold uppercase tracking-wide ${level === 'High' ? 'bg-high-50 text-high-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{level}</span>
+                    )}
+                  </td>,
+                  ...cells,
+                ] : cells;
                 const rowCls = 'border-b border-canvas-border/40 last:border-b-0 hover:bg-brand-50/40 transition-colors';
                 // Each newly-mounted row slides + fades up (streaming reveal),
                 // lightly staggered within a batch. Mounted rows never replay.
@@ -1633,10 +1672,10 @@ function ResultsTable({
                     transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1], delay: (i % 3) * 0.04 }}
                     className={rowCls}
                   >
-                    {cells}
+                    {allCells}
                   </motion.tr>
                 ) : (
-                  <tr key={i} className={rowCls}>{cells}</tr>
+                  <tr key={i} className={rowCls}>{allCells}</tr>
                 );
               })}
             </tbody>
@@ -1958,47 +1997,79 @@ function WorkflowOutputPreviewCard({
   );
 }
 
-// ─── Subtle inline audit loader ───────────────────────────────────────────────
-// Single shimmering line that cycles through LOADING_STEPS, syncs the active
+// ─── Inline plan checklist ────────────────────────────────────────────────────
+// Ticks through PLAN_RUN_STEPS one at a time, syncs the active
 // artifact tab as it advances, and fires onComplete when done. The artifact
 // panel carries the heavy detail (Plan / Code / Sources); inline stays quiet.
-function InlineAuditLoader({
+// Live plan checklist — ticks through the plan one step at a time, syncing the
+// artifact tab as it advances. When it reaches `gateAfterId` (the risk step) it
+// PAUSES: fires onReachGate once and holds until `gateOpen` flips true (i.e. the
+// user has answered the severity question), then finishes the remaining steps
+// and fires onComplete. The tuned scroll-pinning from the old single-line loader
+// is preserved so the active row stays in view.
+function InlinePlanChecklist({
   steps,
-  onTabSwitch,
+  gateAfterId,
+  gateOpen = true,
+  onReachGate,
   onComplete,
-  stepDurationMs = 1700,
+  onTabSwitch,
+  stepDurationMs = 1150,
 }: {
-  steps: { label: string; tab: ArtifactTab | null }[];
-  onTabSwitch?: (tab: ArtifactTab) => void;
+  steps: { id: string; label: string; doneLabel?: string; tab: ArtifactTab | null }[];
+  /** Step id after which to pause until `gateOpen` (omit for a straight run). */
+  gateAfterId?: string;
+  /** Parent flips this true to release the gate and finish the run. */
+  gateOpen?: boolean;
+  /** Fired once, when the gated step completes and the run parks at the gate. */
+  onReachGate?: () => void;
   onComplete: () => void;
+  onTabSwitch?: (tab: ArtifactTab) => void;
   stepDurationMs?: number;
 }) {
-  const [stepIdx, setStepIdx] = useState(0);
+  const [doneCount, setDoneCount] = useState(0); // steps fully checked off
   const completedRef = useRef(false);
+  const gateFiredRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
+  const onReachGateRef = useRef(onReachGate);
   const onTabSwitchRef = useRef(onTabSwitch);
   const rootRef = useRef<HTMLDivElement | null>(null);
   onCompleteRef.current = onComplete;
+  onReachGateRef.current = onReachGate;
   onTabSwitchRef.current = onTabSwitch;
+
+  const gateIndex = gateAfterId ? steps.findIndex(s => s.id === gateAfterId) : -1;
+  // Parked at the gate: the gated step is checked off but the rule isn't in yet.
+  const atGate = gateIndex >= 0 && doneCount === gateIndex + 1 && !gateOpen;
 
   useEffect(() => {
     if (completedRef.current) return;
-    if (stepIdx >= steps.length) {
+    if (doneCount >= steps.length) {
       completedRef.current = true;
       onCompleteRef.current();
       return;
     }
-    const tab = steps[stepIdx].tab;
+    // Hold at the risk step until the severity rule arrives.
+    if (gateIndex >= 0 && doneCount === gateIndex + 1 && !gateOpen) {
+      if (!gateFiredRef.current) {
+        gateFiredRef.current = true;
+        onReachGateRef.current?.();
+      }
+      return;
+    }
+    // Otherwise the active step is steps[doneCount] — switch its tab, then check
+    // it off after the dwell.
+    const tab = steps[doneCount].tab;
     if (tab) onTabSwitchRef.current?.(tab);
-    const t = setTimeout(() => setStepIdx(i => i + 1), stepDurationMs);
+    const t = setTimeout(() => setDoneCount(c => c + 1), stepDurationMs);
     return () => clearTimeout(t);
-  }, [stepIdx, steps, stepDurationMs]);
+  }, [doneCount, gateOpen, gateIndex, steps, stepDurationMs]);
 
-  // Pin the loader near the top of the chat viewport on every step change.
-  // The loader bubble has a tall `paddingBottom: 50vh` buffer (see render
-  // site), so scrolling the container to scrollHeight puts the buffer at
-  // the bottom of the viewport and the loader text well above it. Parent
-  // ResizeObserver is gated on showProgressiveLoader so it won't override.
+  // Pin the checklist near the top of the chat viewport as it grows / advances.
+  // The loader bubble has a tall `paddingBottom: 50vh` buffer (see render site),
+  // so scrolling the container to scrollHeight puts the buffer at the bottom of
+  // the viewport and the active row well above it. Parent ResizeObserver is
+  // gated on showProgressiveLoader so it won't override.
   useEffect(() => {
     const el = rootRef.current;
     if (!el) return;
@@ -2022,22 +2093,43 @@ function InlineAuditLoader({
       });
     });
     return () => cancelAnimationFrame(r1);
-  }, [stepIdx]);
+  }, [doneCount, atGate]);
 
-  const active = steps[Math.min(stepIdx, steps.length - 1)];
   return (
-    <div
-      ref={rootRef}
-      style={{ scrollMarginBottom: 24 }}
-      className="flex items-center gap-2 text-[0.8125rem] text-ink-600"
-    >
-      <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
-        <span className="absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-60 motion-safe:animate-ping" />
-        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" />
-      </span>
-      <TextShimmer as="span" duration={2} spread={1.5}>
-        {active.label}
-      </TextShimmer>
+    <div ref={rootRef} style={{ scrollMarginBottom: 24 }} className="flex flex-col gap-2">
+      {steps.map((s, i) => {
+        const done = i < doneCount;
+        const active = i === doneCount && !atGate; // the one currently running
+        return (
+          <motion.div
+            key={s.id}
+            initial={{ opacity: 0, y: 3 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, delay: i * 0.04 }}
+            className="flex items-center gap-2.5 text-[0.8125rem]"
+          >
+            {done ? (
+              <span className="shrink-0 inline-flex size-4 items-center justify-center rounded-full bg-brand-600 text-white" aria-hidden>
+                <Check size={11} strokeWidth={3} />
+              </span>
+            ) : active ? (
+              <Loader2 size={15} className="shrink-0 text-brand-600 motion-safe:animate-spin" aria-hidden />
+            ) : (
+              <span className="shrink-0 inline-flex size-4 items-center justify-center rounded-full border border-canvas-border" aria-hidden>
+                <span className="size-1 rounded-full bg-ink-300" />
+              </span>
+            )}
+            {active ? (
+              <TextShimmer as="span" duration={2} spread={1.5}>{s.label}</TextShimmer>
+            ) : (
+              <span className={done ? 'text-ink-700' : 'text-ink-400'}>
+                {s.label}
+                {done && s.doneLabel && <span className="text-ink-400"> · {s.doneLabel}</span>}
+              </span>
+            )}
+          </motion.div>
+        );
+      })}
     </div>
   );
 }
@@ -3382,6 +3474,16 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
   // New flow state
   const [showClarificationCard, setShowClarificationCard] = useState(false);
+  // The user's materiality rule — "findings of ₹X or more are High" — captured
+  // by the MID-RUN severity question when the plan reaches the risk step (never
+  // assumed). Feeds the flow diagram's output list, the results-table Risk
+  // column, and the table caption; the categorical lenses (certainty / control)
+  // are post-run re-rates inside the output box.
+  const [severityThreshold, setSeverityThreshold] = useState<number>(DEFAULT_SEVERITY_THRESHOLD);
+  // Released (→ true) once the severity rule is answered. The plan checklist
+  // parks at the risk step until this flips, then finishes and renders the
+  // result. Reset to false at the start of every run (and on stop/reset).
+  const [severityGateOpen, setSeverityGateOpen] = useState(false);
   const [clarificationQuestions, setClarificationQuestions] = useState<Array<{ question: string; options: string[] }>>([]);
   // Answers for the legacy phase-based workflow clarification, now rendered
   // through the shared QueryClarificationCard. Keyed by question index; each
@@ -3390,7 +3492,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   const [showProgressiveLoader, setShowProgressiveLoader] = useState(false);
   // Ref mirror of showProgressiveLoader — read inside the ResizeObserver
   // closure (which would otherwise capture stale state) to gate the auto-
-  // snap-to-bottom while the InlineAuditLoader is in charge of positioning.
+  // snap-to-bottom while the InlinePlanChecklist is in charge of positioning.
   const progressiveLoaderRef = useRef(false);
   useEffect(() => { progressiveLoaderRef.current = showProgressiveLoader; }, [showProgressiveLoader]);
 
@@ -3655,7 +3757,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     let rafId: number | null = null;
     const followIfAtBottom = () => {
       if (isUserScrolledUp.current) return;
-      // Stand down while the InlineAuditLoader is running — it owns the
+      // Stand down while the InlinePlanChecklist is running — it owns the
       // scroll position during loading (it pins the active step in view
       // using a tall bottom buffer on the loader bubble). Snapping to
       // scrollHeight here would yank the loader text down behind the
@@ -3859,6 +3961,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setThinkingSteps([]);
     setShowProgressiveLoader(false);
     setStreamingActive(false);
+    setSeverityGateOpen(false);
     const haltedId = auditRunMsgIdRef.current;
     auditRunMsgIdRef.current = null;
     activeQueryFlowRef.current = null;
@@ -3892,6 +3995,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setInput('');
     setShowClarificationCard(false);
     setShowProgressiveLoader(false);
+    setSeverityGateOpen(false);
     setWorkflowBuildPhase(0);
     setCurrentWorkflowType(null);
     setLockedAsWorkflow(false);
@@ -4004,10 +4108,13 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     activeQueryFlowRef.current = 'audit-query';
     const msgId = `msg-audit-run-${Date.now()}`;
     auditRunMsgIdRef.current = msgId;
+    // Fresh run parks at the risk step again until severity is (re)answered.
+    setSeverityGateOpen(false);
 
     if (STREAM_V2) {
-      // v2: create the result message directly and let AuditResultBody stream it
-      // from the spine — no fixed 8.4s loader. Follow-ups are attached on done.
+      // v2: no checklist / gate — stream straight through with whatever severity
+      // rule is currently set (default on a first run). The mid-run severity
+      // question is a property of the default checklist path only.
       setMessages(prev => [...prev, {
         id: msgId,
         role: 'assistant',
@@ -4060,17 +4167,18 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setMessages(prev => prev.filter(m => m.id !== msgId));
   };
 
-  // ─── Submit the clarification — freeze it, drop a single user msg, start the run ───
+  // ─── Submit the clarification — freeze it, drop a single user msg, then run /
+  //     save / (mid-run) apply the severity rule, depending on the card's purpose ───
   const submitClarification = (msgId: string, fromSkip = false) => {
+    // Read the purpose synchronously from current state — the setMessages
+    // updater below runs later, so branching can't depend on it.
+    const target = messages.find(m => m.id === msgId);
+    const purpose = (target?.richData as unknown as QueryClarificationData | undefined)?.purpose ?? 'audit-query';
+
     let consolidated: { question: string; answer: string }[] = [];
-    // Holder object — TS narrows bare `let` initialized to a literal, but
-    // assignments inside the setMessages callback aren't visible to its flow
-    // analysis. Wrapping in an object property defeats that narrowing.
-    const flow: { purpose: 'audit-query' | 'save-workflow' } = { purpose: 'audit-query' };
     setMessages(prev => prev.map(m => {
       if (m.id !== msgId || m.richType !== 'clarification') return m;
       const data = m.richData as unknown as QueryClarificationData;
-      flow.purpose = data.purpose ?? 'audit-query';
       consolidated = data.questions
         .map((q, qi) => ({ question: q.question, answer: (data.answers[qi] ?? []).join(', ') }))
         .filter(p => !!p.answer);
@@ -4081,6 +4189,18 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }));
 
     schedule(() => {
+      // Mid-run severity is a special case: the single answer IS the materiality
+      // threshold. Capture it, but DON'T drop a Q/A transcript pill — the rule is
+      // recorded in the plan ("Prepare the results" step + output node) and the
+      // results-table caption, so a pill would just be redundant clutter landing
+      // after the result. (The severity card itself is removed once the gate
+      // opens, below.) Read inside this scheduled callback so the setMessages
+      // updater that fills `consolidated` has flushed; free-typed amounts parse.
+      if (purpose === 'severity') {
+        const sevAnswer = consolidated[0]?.answer;
+        if (sevAnswer) setSeverityThreshold(severityThresholdFromAnswer(sevAnswer));
+        return;
+      }
       // Claude-style Q/A transcript: each clarification pair on its own
       // pair of lines so the user pill (and the edit textarea) reads as
       // a structured transcript, not a bare bullet list.
@@ -4095,7 +4215,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       }]);
     }, 80);
 
-    if (flow.purpose === 'save-workflow') {
+    if (purpose === 'save-workflow') {
       // Stash the four clarification answers (objective & exception rule, input
       // source, same-schema handling, population/period) so the modal can seed
       // its name / description / Configuration section from them.
@@ -4107,12 +4227,48 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       return;
     }
 
-    // Clarification submitted — run the audit query directly. The legacy
-    // workflow-mode qna-plan gate ("Approve & run / Revise") is dropped:
-    // workflow builds now have their own Approve & Run on the Output
-    // Preview card, so a separate plan gate after a follow-up query is
-    // redundant.
+    if (purpose === 'severity') {
+      // Mid-run: the rule is captured above; release the plan gate so the
+      // checklist finishes the risk step and renders the rated results. Held
+      // slightly after the threshold set so the result reads the new value.
+      // Also drop the severity card itself — the rule now lives in the plan +
+      // table, so the Q/A shouldn't linger at the end of the thread.
+      schedule(() => {
+        setSeverityGateOpen(true);
+        setMessages(prev => prev.filter(m => m.id !== msgId));
+      }, 260);
+      return;
+    }
+
+    // Upfront audit-query clarification → run the plan. It pauses at the risk
+    // step to ask for severity (see showSeverityClarification) before finishing.
     schedule(() => startAuditQueryRun(), 240);
+  };
+
+  // ─── Mid-run severity question — shown when the plan reaches the risk step ───
+  // A single-question clarification (reusing QueryClarificationCard via purpose
+  // 'severity'). Answering it sets the threshold and releases the plan gate; the
+  // frozen checklist above stays visible so the run reads as one continuous flow.
+  const showSeverityClarification = () => {
+    const data: QueryClarificationData = {
+      intro: '',
+      questions: [{
+        question: 'Found 9 risky payments. Before I rate them — findings of what amount should I treat as High risk? Everything below that I’ll mark Medium.',
+        options: SEVERITY_THRESHOLD_OPTIONS.map(o => o.option),
+      }],
+      answers: {},
+      status: 'open',
+      purpose: 'severity',
+    };
+    setMessages(prev => [...prev, {
+      id: `msg-severity-${Date.now()}`,
+      role: 'assistant',
+      text: '',
+      thinking: ['Ran the checks — 9 payments broke a control', 'Need your risk threshold to rate them'],
+      timestamp: new Date(),
+      richType: 'clarification',
+      richData: data as unknown as Record<string, unknown>,
+    }]);
   };
 
   // ─── Workflow Clarification Complete Handler ───
@@ -6435,8 +6591,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       // without floating the loader off the top.
                       <div className="w-full" style={{ paddingBottom: 40 }}>
                         {showProgressiveLoader && msg.id === auditRunMsgIdRef.current && (
-                          <InlineAuditLoader
-                            steps={LOADING_STEPS}
+                          <InlinePlanChecklist
+                            steps={PLAN_RUN_STEPS}
+                            gateAfterId={PLAN_RUN_GATE_ID}
+                            gateOpen={severityGateOpen}
+                            onReachGate={showSeverityClarification}
                             onTabSwitch={setActiveArtifactTab}
                             onComplete={handleProgressiveLoadingComplete}
                           />
@@ -6444,6 +6603,16 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       </div>
                     ) : msg.richType === 'audit-result' ? (
                       <div className="space-y-4 w-full">
+                        {/* Provenance flow — how this output was built from the
+                            input files. Sits between the reasoning trail and the
+                            result so the "how did Ira get here" answer is a glance,
+                            not the text-heavy plan in the right workspace. Full
+                            chat-column width, matching the result body below. */}
+                        <PlanFlowDiagram
+                          steps={buildChatPlanSteps(severityThreshold)}
+                          outputLabel="Risk results"
+                          outputRatings={buildChatPlanRatings(severityThreshold)}
+                        />
                         {/* Streamed composite output — prose typewriter, KPI
                             count-up, chart draw-in and a row-streamed table all
                             brew in parallel with staggered onsets. Render-prop
@@ -6483,6 +6652,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                               totalRows={AUDIT_RESULT.table.totalRows}
                               onDownload={() => addToast({ type: 'success', message: 'CSV download started.' })}
                               animateRows={STREAM_V2}
+                              // The rule the user set mid-run stamps the table:
+                              // a caption states it, and each row's Risk is
+                              // computed from its Amount against the threshold.
+                              caption={`Risk column · ${severityRuleNote(severityThreshold)}`}
+                              levelForRow={(row) => {
+                                const amount = parseInt(String(row[3]).replace(/[^\d]/g, ''), 10);
+                                return Number.isFinite(amount) && isHighByAmount(amount, severityThreshold) ? 'High' : 'Medium';
+                              }}
                             />
                           )}
                         />

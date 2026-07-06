@@ -14,6 +14,7 @@ import { useToast } from '../shared/Toast';
 import { SEED as DATA_SOURCE_SEED, TYPE_META, formatDate, type DataSource } from '../data-sources/sources';
 import { type ComposerContext, editCodeContext } from '../chat/composerContext';
 import { QueryExecutionPlanCard, AssumptionsCard, type PlanCardStep, type PlanAssumption } from '../shared/PlanCards';
+import { CHAT_PLAN_STEPS } from '../../data/chatPlan';
 
 interface ArtifactPanelProps {
   activeTab: ArtifactTab;
@@ -118,37 +119,10 @@ const PLAN_ASSUMPTIONS: PlanAssumption[] = [
   { key: 'Excluded',         value: 'Voided and reversed invoices' },
 ];
 
-// Chat/QnA execution-plan steps, in the shared PlanCard shape so they render
-// through the same QueryExecutionPlanCard the workflow builder uses (numbered
-// steps + type badge + expandable source chips).
-const CHAT_PLAN_STEPS: PlanCardStep[] = [
-  {
-    id: 'parse', name: 'Parse user query', type: 'extract',
-    description: 'Identified intent: risk analysis query for the P2P process.',
-  },
-  {
-    id: 'sources', name: 'Identify data sources', type: 'extract',
-    description: 'Selected SAP ERP AP Module and Vendor Master Data.',
-    sources: [
-      { id: 'sap-ap', name: 'SAP ERP AP Module', type: 'sql',
-        columns: ['Vendor', 'Invoice No', 'Amount', 'PO Ref', 'GL Account', 'Posting Date', 'Currency'] },
-      { id: 'vendor-master', name: 'Vendor Master Data', type: 'sql',
-        columns: ['Vendor ID', 'Vendor', 'Bank Account', 'Status', 'Risk Flag'] },
-    ],
-  },
-  {
-    id: 'plan', name: 'Generate query plan', type: 'analyze',
-    description: 'Built SQL joins across 3 tables with a risk-severity filter.',
-  },
-  {
-    id: 'execute', name: 'Execute query', type: 'validate',
-    description: 'Processed 1.2M records, filtered to 9 matching risks.',
-  },
-  {
-    id: 'format', name: 'Format results', type: 'summarize',
-    description: 'Generated the table view with severity indicators and control mapping.',
-  },
-];
+// Chat/QnA plan steps now live in ../../data/chatPlan (shared with the inline
+// PlanFlowDiagram rendered in the chat thread). The Plan tab shows the text
+// step list; the flow diagram lives inline between the reasoning trail and the
+// result in ChatView.
 
 // Flat shimmer placeholder shown while the plan "regenerates" — matches the
 // QueryExecutionPlanCard chrome (rounded-xl border, header + step rows) so the
@@ -216,7 +190,8 @@ function PlanTab({
 
   return (
     <div className="space-y-4 pt-4">
-      {/* Query Execution Plan — shared with the workflow-builder canvas. */}
+      {/* Query Execution Plan — the text step list. The flow (DAG) view of the
+          same steps is rendered inline in the chat thread (ChatView). */}
       {regenerating ? (
         <PlanRegenerateSkeleton />
       ) : (
