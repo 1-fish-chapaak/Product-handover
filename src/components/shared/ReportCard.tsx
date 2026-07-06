@@ -17,6 +17,8 @@ export interface ReportCardProps {
   iconClass?: string;
   /** Short uppercase category label (type, status, file type…). */
   eyebrow?: string;
+  /** Lead chip in the footer row, before the pills (e.g. the source chip). */
+  badge?: ReactNode;
   title: string;
   /** Secondary line under the title — the row's meta (e.g. "7 queries · SOX"). */
   subtitle?: ReactNode;
@@ -41,7 +43,7 @@ export interface ReportCardProps {
 }
 
 export default function ReportCard({
-  icon: Icon, iconClass = 'bg-brand-50 text-brand-700', eyebrow,
+  icon: Icon, iconClass = 'bg-brand-50 text-brand-700', eyebrow, badge,
   title, subtitle, description, pills = [], maxPills = 3, footerRight, actions, accent, onClick, index = 0,
   selectable, selected, isSelecting, onToggleSelect,
 }: ReportCardProps) {
@@ -111,6 +113,7 @@ export default function ReportCard({
 
       <div className="mt-auto pt-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+          {badge}
           {shown.map(p => (
             p === 'Bulk Audit' ? (
               // Indigo bordered chip — the distinct engagement-type tag,
