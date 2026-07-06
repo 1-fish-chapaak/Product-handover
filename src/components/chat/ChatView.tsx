@@ -25,7 +25,10 @@ import { Button } from '../shared/Button';
 import { KpiTile } from '../shared/KpiTile';
 import AuditResultBody from './AuditResultBody';
 import PlanFlowDiagram from '../shared/PlanFlowDiagram';
-import { CHAT_PLAN_STEPS } from '../../data/chatPlan';
+import {
+  CHAT_PLAN_STEPS, DEFAULT_SEVERITY_THRESHOLD,
+  buildChatPlanRatings, severityThresholdFromAnswer,
+} from '../../data/chatPlan';
 import type { WorkflowTypeId } from '../../data/mockData';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { TextShimmer } from '../shared/TextShimmer';
@@ -3384,6 +3387,11 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
   // New flow state
   const [showClarificationCard, setShowClarificationCard] = useState(false);
+  // The user's pre-run materiality rule — "findings of ₹X or more are High" —
+  // from the severity clarification question. Feeds the flow diagram's output
+  // list as the default rating; the categorical lenses (certainty / control)
+  // are post-run re-rates inside the output box. User-defined, never assumed.
+  const [severityThreshold, setSeverityThreshold] = useState<number>(DEFAULT_SEVERITY_THRESHOLD);
   const [clarificationQuestions, setClarificationQuestions] = useState<Array<{ question: string; options: string[] }>>([]);
   // Answers for the legacy phase-based workflow clarification, now rendered
   // through the shared QueryClarificationCard. Keyed by question index; each
@@ -4089,6 +4097,13 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       const userText = consolidated.length
         ? consolidated.map(c => `Q: ${c.question}\nA: ${c.answer}`).join('\n\n')
         : (fromSkip ? 'Skip: use sensible defaults.' : 'Run with the inputs above.');
+      // The severity question's answer is the user's materiality threshold —
+      // "findings of ₹X or more are High". Read here (inside the scheduled
+      // callback) so the setMessages updater that fills `consolidated` has
+      // flushed. Free-typed amounts ("2 lakh", "₹75,000") parse too; else the
+      // default threshold.
+      const sevAnswer = consolidated.find(p => /high risk/i.test(p.question))?.answer;
+      if (sevAnswer) setSeverityThreshold(severityThresholdFromAnswer(sevAnswer));
       setMessages(prev => [...prev, {
         id: `msg-user-clarify-${Date.now()}`,
         role: 'user',
@@ -4192,7 +4207,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
         text: '',
         thinking: [
           'Parsed intent: invoice duplicate detection',
-          'Identified 4 underspecified parameters',
+          'Identified 5 underspecified parameters',
           'Selected highest-impact prompts for clarification',
         ],
         timestamp: new Date(),
@@ -6451,7 +6466,11 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             result so the "how did Ira get here" answer is a glance,
                             not the text-heavy plan in the right workspace. Full
                             chat-column width, matching the result body below. */}
-                        <PlanFlowDiagram steps={CHAT_PLAN_STEPS} outputLabel="Risk results" />
+                        <PlanFlowDiagram
+                          steps={CHAT_PLAN_STEPS}
+                          outputLabel="Risk results"
+                          outputRatings={buildChatPlanRatings(severityThreshold)}
+                        />
                         {/* Streamed composite output — prose typewriter, KPI
                             count-up, chart draw-in and a row-streamed table all
                             brew in parallel with staggered onsets. Render-prop

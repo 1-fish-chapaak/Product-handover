@@ -33,6 +33,35 @@ const fmt = (n: number) => n.toLocaleString('en-US');
 const FLOW_TITLE = 'How Ira built this answer';
 const FLOW_HINT = 'Each step from your files to the result, in plain English.';
 
+/** One finding the pipeline landed on — listed in the output node's click
+ *  detail so "9 risks" is inspectable, not just a count. Plain English. */
+export interface PlanOutputItem {
+  id: string;
+  /** What broke, in plain words — includes the vendor/party. */
+  title: string;
+  /** Risk level — drives the chip tone (severity token families). */
+  level: 'High' | 'Medium';
+  /** The control this finding relates to. */
+  control: string;
+}
+
+const LEVEL_TONE: Record<PlanOutputItem['level'], string> = {
+  High:   'bg-high-50 text-high-700',
+  Medium: 'bg-mitigated-50 text-mitigated-700',
+};
+
+/** One way of rating the findings — a "Rate by" view of the same list. The
+ *  first entry is the default (the user's pre-run materiality rule); the rest
+ *  are post-run lenses, offered only once the findings are visible. */
+export interface PlanOutputRating {
+  id: string;
+  /** Chip label, e.g. "Amount (₹1L+)" or "How certain". */
+  label: string;
+  /** One-line explanation of the rule, echoed above the list. */
+  note?: string;
+  items: PlanOutputItem[];
+}
+
 // ─── View toggle (Flow / Steps) ──────────────────────────────────────────
 
 export type PlanView = 'flow' | 'steps';
@@ -101,12 +130,27 @@ function edgePath(a: Rect, b: Rect, kind: Edge['kind']): string {
 // the detail strip. Owns all hover/select/measurement state so it works the
 // same dropped into the inline card or the modal.
 
-export function PlanFlowGraph({ steps, outputLabel = 'Result' }: {
+export function PlanFlowGraph({ steps, outputLabel = 'Result', outputItems, outputNote, outputRatings }: {
   steps: PlanCardStep[];
   outputLabel?: string;
+  /** The findings behind the output count — listed when the output node is clicked. */
+  outputItems?: PlanOutputItem[];
+  /** One-line provenance for the levels (e.g. the user's own High/Medium rule). */
+  outputNote?: string;
+  /** Multiple "Rate by" views of the findings — renders a switch above the
+   *  list; the first entry is the default. Supersedes outputItems/outputNote. */
+  outputRatings?: PlanOutputRating[];
 }) {
   const [hover, setHover] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
+
+  // Which "Rate by" view is selected (null → the first/default rating).
+  const [ratingId, setRatingId] = useState<string | null>(null);
+  const ratings = outputRatings?.length ? outputRatings : null;
+  const rating = ratings ? (ratings.find(rt => rt.id === ratingId) ?? ratings[0]) : null;
+  const outList = rating ? rating.items : outputItems;
+  const outNote = rating ? rating.note : outputNote;
+  const hasOutList = (outList?.length ?? 0) > 0;
 
   // Distinct input files, in first-seen order.
   const inputs = useMemo(() => {
@@ -293,32 +337,114 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result' }: {
               );
             })}
 
-            {/* Output node */}
-            <button
-              type="button"
+            {/* Output node — clicking the header expands the purple box in
+                place with the findings behind the count. A div shell (not a
+                button) so the expanded area can host the interactive "Rate by"
+                switch — nested buttons are invalid HTML. */}
+            <div
               ref={registerNode('out')}
-              {...nodeHandlers('out')}
-              className={nodeClass('out', 'flex items-center gap-2 px-3 py-2 !bg-brand-50/50')}
+              onMouseEnter={() => setHover('out')}
+              onMouseLeave={() => setHover(null)}
+              className={nodeClass('out', '!bg-brand-50/50')}
             >
-              <span className="shrink-0 size-5 rounded-full bg-brand-600 text-white flex items-center justify-center" aria-hidden>
-                <Table2 size={11} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[9.5px] font-bold uppercase tracking-wider text-brand-700/80 leading-none">Output</span>
-                <span className="block text-[12px] font-semibold text-ink-900 leading-tight truncate mt-0.5">{outputLabel}</span>
-              </span>
-              {finalRows != null && (
-                <span className="shrink-0 inline-flex items-center rounded-md border border-brand-100 bg-canvas-elevated px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 tabular-nums">
-                  {fmt(finalRows)} risks
+              <button
+                type="button"
+                onClick={() => setActive((a) => (a === 'out' ? null : 'out'))}
+                onFocus={() => setHover('out')}
+                onBlur={() => setHover(null)}
+                aria-expanded={hasOutList ? active === 'out' : undefined}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left rounded-lg cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                <span className="shrink-0 size-5 rounded-full bg-brand-600 text-white flex items-center justify-center" aria-hidden>
+                  <Table2 size={11} />
                 </span>
-              )}
-            </button>
+                <span className="min-w-0 flex-1 text-left">
+                  <span className="block text-[9.5px] font-bold uppercase tracking-wider text-brand-700/80 leading-none">Output</span>
+                  <span className="block text-[12px] font-semibold text-ink-900 leading-tight truncate mt-0.5">{outputLabel}</span>
+                </span>
+                {finalRows != null && (
+                  <span className="shrink-0 inline-flex items-center rounded-md border border-brand-100 bg-canvas-elevated px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 tabular-nums">
+                    {fmt(finalRows)} risks
+                  </span>
+                )}
+                {hasOutList && (
+                  <motion.span
+                    animate={{ rotate: active === 'out' ? 180 : 0 }}
+                    transition={{ type: 'spring', stiffness: 360, damping: 26 }}
+                    className="shrink-0 inline-flex text-brand-700/60"
+                    aria-hidden
+                  >
+                    <ChevronDown size={14} />
+                  </motion.span>
+                )}
+              </button>
+
+              {/* Expanded state — the findings, inside the same purple box. */}
+              <AnimatePresence initial={false}>
+                {active === 'out' && hasOutList && (
+                  <motion.div
+                    key="out-risks"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mx-3 mb-3 border-t border-brand-100 pt-2.5">
+                      {/* "Rate by" — re-slice severity now that the findings
+                          are visible. The first view is the user's own pre-run
+                          materiality rule; the categorical lenses only make
+                          sense post-run. */}
+                      {ratings && ratings.length > 1 && (
+                        <span className="flex items-center gap-1.5 pb-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">Rate by</span>
+                          <span className="inline-flex items-center gap-0.5 rounded-lg border border-brand-100 bg-brand-50/60 p-0.5" role="group" aria-label="Rate findings by">
+                            {ratings.map((rt) => {
+                              const on = rt.id === (rating?.id ?? ratings[0].id);
+                              return (
+                                <button
+                                  key={rt.id}
+                                  type="button"
+                                  onClick={() => setRatingId(rt.id)}
+                                  aria-pressed={on}
+                                  className={`rounded-md px-2 py-0.5 text-[10.5px] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                                    on ? 'bg-canvas-elevated text-ink-900 shadow-[0_1px_2px_rgba(15,8,30,0.06)]' : 'text-ink-500 hover:text-ink-800'
+                                  }`}
+                                >
+                                  {rt.label}
+                                </button>
+                              );
+                            })}
+                          </span>
+                        </span>
+                      )}
+                      {outNote && (
+                        <p className="text-left text-[10.5px] text-ink-500 leading-snug pb-1.5">{outNote}</p>
+                      )}
+                      <ul className="space-y-1.5">
+                        {outList!.map((r, i) => (
+                          <li key={r.id} className="flex items-baseline gap-2">
+                            <span className="shrink-0 w-4 text-right text-[10.5px] tabular-nums text-ink-400" aria-hidden>{i + 1}.</span>
+                            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide ${LEVEL_TONE[r.level]}`}>{r.level}</span>
+                            <span className="text-[11.5px] text-ink-800 leading-snug text-left">
+                              {r.title}
+                              <span className="text-ink-400"> · {r.control}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
 
-      {/* Detail strip for the selected node. */}
+      {/* Detail strip for the selected node. The output node expands in place
+          (list inside the purple box), so it skips the strip when it has items. */}
       <AnimatePresence initial={false}>
-        {active && (
+        {active && !(active === 'out' && hasOutList) && (
           <motion.div
             key={active}
             initial={{ opacity: 0, y: -4 }}
@@ -340,11 +466,20 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result' }: {
 export default function PlanFlowDiagram({
   steps,
   outputLabel = 'Result',
+  outputItems,
+  outputNote,
+  outputRatings,
   headerAccessory,
   defaultOpen = true,
 }: {
   steps: PlanCardStep[];
   outputLabel?: string;
+  /** The findings behind the output count — listed when the output node is clicked. */
+  outputItems?: PlanOutputItem[];
+  /** One-line provenance for the levels (e.g. the user's own High/Medium rule). */
+  outputNote?: string;
+  /** Multiple "Rate by" views of the findings — see PlanFlowGraph. */
+  outputRatings?: PlanOutputRating[];
   headerAccessory?: ReactNode;
   defaultOpen?: boolean;
 }) {
@@ -394,7 +529,7 @@ export default function PlanFlowDiagram({
           >
             <div className="px-4 pt-3 pb-4">
               <p className="text-[11.5px] text-ink-500 leading-snug mb-3">{FLOW_HINT}</p>
-              <PlanFlowGraph steps={steps} outputLabel={outputLabel} />
+              <PlanFlowGraph steps={steps} outputLabel={outputLabel} outputItems={outputItems} outputNote={outputNote} outputRatings={outputRatings} />
             </div>
           </motion.div>
         )}
@@ -413,7 +548,7 @@ export default function PlanFlowDiagram({
               onClose={() => setExpanded(false)}
               ariaLabel="How Ira built this answer"
             >
-              <PlanFlowGraph steps={steps} outputLabel={outputLabel} />
+              <PlanFlowGraph steps={steps} outputLabel={outputLabel} outputItems={outputItems} outputNote={outputNote} outputRatings={outputRatings} />
             </Modal>
           )}
         </AnimatePresence>,
@@ -431,6 +566,8 @@ function NodeDetail({ active, steps, inputs, outputLabel }: {
   inputs: PlanCardSource[];
   outputLabel: string;
 }) {
+  // The output node expands in place when it has items, so this strip only
+  // sees 'out' in the item-less generic case.
   if (active === 'out') {
     return (
       <div className="flex items-start gap-2">
