@@ -1341,7 +1341,7 @@ export default function ReportsView({
                 return TYPE_PILL(KIND_FULL_LABEL[k], KIND_TONE[k]);
               }},
               { key: 'source', label: 'Source', width: COL_W.source, render: (item) => (
-                <SourceChip source={item.source} />
+                <SourceChip source={String(item.source)} />
               )},
               { key: 'sharedBy', label: 'Shared by', width: COL_W.sharedBy, render: (item) => (
                 <div className="flex items-center gap-2">
