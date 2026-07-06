@@ -111,6 +111,15 @@ const inrFull = (n: number) => `₹${n.toLocaleString('en-IN')}`;
 const inrShort = (n: number) =>
   n >= 100_000 ? `₹${(n / 100_000).toLocaleString('en-US')}L` : `₹${Math.round(n / 1_000)}k`;
 
+/** The user's materiality rule in one line — shared by the flow diagram's
+ *  amount view and the results-table caption so both state it identically. */
+export const severityRuleNote = (threshold: number) =>
+  `Your rule: ${inrFull(threshold)} or more = High, below that = Medium.`;
+
+/** True when a finding's amount clears the user's High-risk threshold — used to
+ *  rate each results-table row so the table updates with the chosen rule. */
+export const isHighByAmount = (amount: number, threshold: number) => amount >= threshold;
+
 // ── Pre-run: the materiality threshold (clarification Q5) ──
 
 /** The Q5 choices — pure policy amounts, no result knowledge needed. */
@@ -152,7 +161,7 @@ export function buildChatPlanRatings(threshold: number) {
     {
       id: 'amount',
       label: `Amount (${inrShort(threshold)}+)`,
-      note: `Your rule: ${inrFull(threshold)} or more = High, below that = Medium.`,
+      note: severityRuleNote(threshold),
       items: rateRisks('amount', threshold),
     },
     {

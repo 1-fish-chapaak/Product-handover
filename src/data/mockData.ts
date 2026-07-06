@@ -1,5 +1,4 @@
 import type { WorkflowResult } from "../components/reports/reportShared";
-import { SEVERITY_THRESHOLD_OPTIONS } from "./chatPlan";
 
 // ─── Business Processes ───
 export const BUSINESS_PROCESSES = [
@@ -742,22 +741,16 @@ export const CLARIFICATION_STEPS = [
     category: 'Logic',
   },
   {
+    // Severity is NOT asked here. It is user-defined, but the only rule a user
+    // could state up front is a materiality amount — and even that reads better
+    // once the findings exist. So severity is asked MID-RUN, when the plan
+    // reaches the risk step (see ChatView → showSeverityClarification), then
+    // re-sliced post-run in the flow diagram's output list and stamped on the
+    // results table (chatPlan.ts → buildChatPlanRatings / severityRuleNote).
     stage: 4,
     question: 'What matching logic should I use to detect duplicates between candidate invoice pairs in your data?',
     options: ['Invoice number + amount', 'Fuzzy match all fields', 'AI-powered pattern detection'],
     multi: true, // matching logic can legitimately combine several methods
-    fillPercent: 80,
-    category: 'Logic',
-  },
-  {
-    // Severity is user-defined, not assumed — and BEFORE the run the only
-    // rule a user can meaningfully state is a materiality amount (categorical
-    // rules like "confirmed breaks" would presuppose results that don't exist
-    // yet). Categorical re-rating lives post-run in the flow diagram's output
-    // list (see chatPlan.ts → buildChatPlanRatings).
-    stage: 5,
-    question: 'Last one — findings of what amount should I treat as High risk? Everything below that I will mark Medium.',
-    options: SEVERITY_THRESHOLD_OPTIONS.map(o => o.option),
     fillPercent: 100,
     category: 'Ready',
   },
