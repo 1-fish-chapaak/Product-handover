@@ -62,6 +62,24 @@ export const CHAT_PLAN_STEPS: PlanCardStep[] = [
   },
 ];
 
+/** CHAT_PLAN_STEPS with the user's severity rule woven into the "Prepare the
+ *  results" step — so the plan itself records the threshold the findings were
+ *  rated by, always visible (unlike the output node's collapsible Rate-by note,
+ *  which only shows the rule in its Amount view). Falls back to the plain steps
+ *  when no rule is in play. */
+export function buildChatPlanSteps(threshold?: number): PlanCardStep[] {
+  if (threshold == null) return CHAT_PLAN_STEPS;
+  return CHAT_PLAN_STEPS.map((s) =>
+    s.id === 'format'
+      ? {
+          ...s,
+          description: 'Turned the 9 findings into a clear risk table — rated High or Medium by your rule, then tagged the control each one relates to.',
+          operation: `Your rule: ${inrFull(threshold)} or more = High`,
+        }
+      : s,
+  );
+}
+
 // ─── The 9 risky payments + user-defined severity ─────────────────────────
 //
 // Severity is NOT hardcoded, and it is defined in two logically distinct

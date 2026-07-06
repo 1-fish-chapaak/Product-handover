@@ -26,8 +26,8 @@ import { KpiTile } from '../shared/KpiTile';
 import AuditResultBody from './AuditResultBody';
 import PlanFlowDiagram from '../shared/PlanFlowDiagram';
 import {
-  CHAT_PLAN_STEPS, DEFAULT_SEVERITY_THRESHOLD, SEVERITY_THRESHOLD_OPTIONS,
-  buildChatPlanRatings, severityThresholdFromAnswer, severityRuleNote, isHighByAmount,
+  DEFAULT_SEVERITY_THRESHOLD, SEVERITY_THRESHOLD_OPTIONS,
+  buildChatPlanSteps, buildChatPlanRatings, severityThresholdFromAnswer, severityRuleNote, isHighByAmount,
 } from '../../data/chatPlan';
 import type { WorkflowTypeId } from '../../data/mockData';
 import type { ArtifactTab } from '../../hooks/useAppState';
@@ -4189,20 +4189,24 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }));
 
     schedule(() => {
+      // Mid-run severity is a special case: the single answer IS the materiality
+      // threshold. Capture it, but DON'T drop a Q/A transcript pill — the rule is
+      // recorded in the plan ("Prepare the results" step + output node) and the
+      // results-table caption, so a pill would just be redundant clutter landing
+      // after the result. (The severity card itself is removed once the gate
+      // opens, below.) Read inside this scheduled callback so the setMessages
+      // updater that fills `consolidated` has flushed; free-typed amounts parse.
+      if (purpose === 'severity') {
+        const sevAnswer = consolidated[0]?.answer;
+        if (sevAnswer) setSeverityThreshold(severityThresholdFromAnswer(sevAnswer));
+        return;
+      }
       // Claude-style Q/A transcript: each clarification pair on its own
       // pair of lines so the user pill (and the edit textarea) reads as
       // a structured transcript, not a bare bullet list.
       const userText = consolidated.length
         ? consolidated.map(c => `Q: ${c.question}\nA: ${c.answer}`).join('\n\n')
         : (fromSkip ? 'Skip: use sensible defaults.' : 'Run with the inputs above.');
-      // For the mid-run severity card, the single answer IS the materiality
-      // threshold — "findings of ₹X or more are High". Read here (inside the
-      // scheduled callback) so the setMessages updater that fills `consolidated`
-      // has flushed. Free-typed amounts ("2 lakh", "₹75,000") parse too.
-      if (purpose === 'severity') {
-        const sevAnswer = consolidated[0]?.answer;
-        if (sevAnswer) setSeverityThreshold(severityThresholdFromAnswer(sevAnswer));
-      }
       setMessages(prev => [...prev, {
         id: `msg-user-clarify-${Date.now()}`,
         role: 'user',
@@ -4227,7 +4231,12 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       // Mid-run: the rule is captured above; release the plan gate so the
       // checklist finishes the risk step and renders the rated results. Held
       // slightly after the threshold set so the result reads the new value.
-      schedule(() => setSeverityGateOpen(true), 260);
+      // Also drop the severity card itself — the rule now lives in the plan +
+      // table, so the Q/A shouldn't linger at the end of the thread.
+      schedule(() => {
+        setSeverityGateOpen(true);
+        setMessages(prev => prev.filter(m => m.id !== msgId));
+      }, 260);
       return;
     }
 
@@ -6600,7 +6609,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             not the text-heavy plan in the right workspace. Full
                             chat-column width, matching the result body below. */}
                         <PlanFlowDiagram
-                          steps={CHAT_PLAN_STEPS}
+                          steps={buildChatPlanSteps(severityThreshold)}
                           outputLabel="Risk results"
                           outputRatings={buildChatPlanRatings(severityThreshold)}
                         />
