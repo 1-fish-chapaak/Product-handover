@@ -3,11 +3,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Share2, Download, List, Pencil, Check, X, History, ShieldAlert } from 'lucide-react';
 import AtrDocument from './AtrDocument';
 import type { AtrReportData, AtrMeta, AtrObservation } from './atrTypes';
+import type { AtrSectionKey } from './atrSections';
 import { computeExecSummary, exportAtrExcel } from './atrTemplate';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import ReportDiscardDialog from './ReportDiscardDialog';
+import ConfirmationModal from '../shared/ConfirmationModal';
 import AtrReviewDrawer from './AtrReviewDrawer';
-import { loadVersions, appendVersion, nowStamp } from './atrReview';
+import { loadVersions, appendVersion, currentVersion, nowStamp } from './atrReview';
 
 // Summarize an edit into a version label by diffing the saved report against the
 // working draft — so the version trail reads from what actually changed rather
@@ -108,6 +110,8 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
   // discard guard so leaving (or cancelling) only prompts when edits are unsaved.
   const editable = !!onSave;
   const [editing, setEditing] = useState(false);
+  // Save runs only after the user confirms.
+  const [confirmingSave, setConfirmingSave] = useState(false);
   // The view remounts per report (navigating away passes through the list), so
   // the initializer is enough — no prop→state resync effect needed.
   const [draft, setDraft] = useState<AtrReportData>(report.atrData);
@@ -145,14 +149,30 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
 
   const { meta, observations, insights } = draft;
 
-  // The ATR document's sections are fixed; the rail mirrors them in order.
+  // Current version number for the banner byline — reads the same trail the
+  // review drawer shows. Re-reads each render, so it updates after a save.
+  const atrVersion = currentVersion(report.id, {
+    status: report.status === 'final' ? 'final' : 'draft',
+    by: report.generatedBy ?? meta.preparedBy ?? 'You',
+    at: report.generatedAt ?? meta.generatedOn ?? '',
+    reviewedBy: meta.reviewedBy,
+    observations: observations.map(o => o.title),
+  });
+
+  // Sections removed during editing — persisted on meta so the rail + document
+  // stay in sync and the choice survives save.
+  const hiddenSections = (meta.hiddenSections ?? []) as AtrSectionKey[];
+  const deleteSection = (key: AtrSectionKey) =>
+    setDraft(d => ({ ...d, meta: { ...d.meta, hiddenSections: [...(d.meta.hiddenSections ?? []), key] } }));
+
+  // The rail mirrors the visible sections in order (hidden ones drop out).
   const outlineEntries = [
-    { id: 'atr-exec', title: 'Executive Summary' },
-    { id: 'atr-obs-summary', title: 'Observation Wise Summary' },
-    { id: 'atr-obs-details', title: 'Observation Details' },
-    ...(insights.length > 0 ? [{ id: 'atr-insights', title: 'Key Insights & Recommendations' }] : []),
-    { id: 'atr-signoff', title: 'Approvals & Sign-Off' },
-  ];
+    { key: 'summary' as AtrSectionKey, id: 'atr-exec', title: 'Executive Summary' },
+    { key: 'process' as AtrSectionKey, id: 'atr-obs-summary', title: 'Observation Wise Summary' },
+    { key: 'details' as AtrSectionKey, id: 'atr-obs-details', title: 'Observation Details' },
+    ...(insights.length > 0 ? [{ key: 'insights' as AtrSectionKey, id: 'atr-insights', title: 'Key Insights & Recommendations' }] : []),
+    { key: 'signoff' as AtrSectionKey, id: 'atr-signoff', title: 'Approvals & Sign-Off' },
+  ].filter(e => !hiddenSections.includes(e.key));
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
@@ -250,7 +270,7 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
                 <X size={14} /> Cancel
               </button>
               <button
-                onClick={saveEdits}
+                onClick={() => setConfirmingSave(true)}
                 disabled={!dirty}
                 className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-[8px] hover:bg-brand-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -333,6 +353,9 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
             meta={meta}
             observations={observations}
             insights={insights}
+            version={atrVersion}
+            hiddenSections={hiddenSections}
+            onDeleteSection={deleteSection}
             maxWidthClass="max-w-none"
             editable={editing}
             onMetaChange={m => setDraft(d => ({ ...d, meta: m }))}
@@ -390,6 +413,18 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
         cancelLabel="Keep editing"
         onConfirm={confirmDiscard}
         onCancel={() => setPendingDiscard(null)}
+      />
+
+      {/* Save guard — confirm before persisting edits (captures a new version). */}
+      <ConfirmationModal
+        open={confirmingSave}
+        title="Save changes?"
+        description="Your edits will be saved to this ATR and captured as a new version."
+        confirmLabel="Save changes"
+        cancelLabel="Keep editing"
+        tone="primary"
+        onConfirm={() => { setConfirmingSave(false); saveEdits(); }}
+        onClose={() => setConfirmingSave(false)}
       />
     </motion.div>
   );

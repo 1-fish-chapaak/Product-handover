@@ -22,6 +22,7 @@ import type { AtrMeta, AtrObservation, AtrInsight, AtrReportData } from './atrTy
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS, GENERATED_REPORTS_KEY } from '../../data/mockData';
 import { ATR_LIBRARY, EVIDENCE_LIBRARY, type AtrLibraryReport } from '../../data/atrLibrary';
 import { exportAtrWord } from './atrTemplate';
+import { currentVersion } from './atrReview';
 import { type Tone } from '../shared/StatusBadge';
 import { ReportPill } from './ReportPill';
 import { reportDisplayName } from './reportName';
@@ -472,10 +473,20 @@ export default function ReportsView({
   const atrDesc = (a: AtrLibraryReport) => `${a.atrData.meta.auditEntity} — ${a.atrData.meta.auditPeriod}`;
   const atrPills = (a: AtrLibraryReport) => {
     const plans = a.atrData.observations.reduce((n, o) => n + o.actionPlans.length, 0);
-    return [a.status === 'final' ? 'Final' : 'Draft', `${a.atrData.observations.length} observations`, `${plans} action plans`];
+    const version = currentVersion(a.id, {
+      status: a.status === 'final' ? 'final' : 'draft',
+      by: a.generatedBy ?? a.atrData.meta.preparedBy ?? 'You',
+      at: a.generatedAt ?? a.atrData.meta.generatedOn ?? '',
+      reviewedBy: a.atrData.meta.reviewedBy,
+      observations: a.atrData.observations.map(o => o.title),
+    });
+    return [`v${version}`, `${a.atrData.observations.length} observations`, `${plans} action plans`];
   };
   const allReportsUnified = useMemo<UnifiedRow[]>(() => {
     const ts = (d?: string) => { const t = d ? Date.parse(d) : NaN; return Number.isNaN(t) ? 0 : t; };
+    // A report reads as "Custom" only when it was generated from a template that
+    // still exists in the user's custom list — not merely a `ct-` prefix.
+    const customTemplateIds = new Set(customTemplates.map(t => t.id));
     const rows: UnifiedRow[] = [];
     // IA + SOX live reports (ATR-kind reports are surfaced via allAtrs below).
     generatedReports.forEach(r => {
@@ -484,7 +495,7 @@ export default function ReportsView({
       if (k !== 'sox' && k !== 'ia') return;
       rows.push({
         id: r.id, kind: k, name: r.name, bulk: r.tag === 'Bulk Audit',
-        source: r.templateId?.startsWith('ct-') ? 'custom' : 'system',
+        source: r.templateId && customTemplateIds.has(r.templateId) ? 'custom' : 'system',
         description: reportDesc(r), pills: reportPills(r),
         status: r.status === 'final' ? 'final' : 'draft',
         date: r.generatedAt, sortDate: ts(r.generatedAt),
@@ -525,7 +536,7 @@ export default function ReportsView({
     });
     return rows.sort((a, b) => b.sortDate - a.sortDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generatedReports, allAtrs, addToast, updateToast, openAtr, openAtrById]);
+  }, [generatedReports, allAtrs, customTemplates, addToast, updateToast, openAtr, openAtrById]);
   const KIND_FULL_LABEL: Record<UnifiedKind, string> = {
     ia: 'Internal Audit',
     sox: 'SOX Compliance',
