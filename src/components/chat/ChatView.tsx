@@ -28,6 +28,7 @@ import PlanFlowDiagram from '../shared/PlanFlowDiagram';
 import {
   DEFAULT_SEVERITY_THRESHOLD, SEVERITY_THRESHOLD_OPTIONS,
   buildChatPlanSteps, buildChatPlanRiskItems, severityThresholdFromAnswer, severityRuleNote, isHighByAmount,
+  CHAT_RISK_TABLE_COLUMNS, buildChatPlanRiskRows, CHAT_RISK_SUMMARY,
 } from '../../data/chatPlan';
 import type { WorkflowTypeId } from '../../data/mockData';
 import type { ArtifactTab } from '../../hooks/useAppState';
@@ -101,7 +102,7 @@ export interface ChatMessage {
   artifactType?: 'workflow' | 'query' | 'report';
   followUps?: string[];
   // Categorised follow-ups for data results. `depth` drills into the OUTPUT
-  // the run just produced (e.g. the flagged pairs); `breadth` explores
+  // the run just produced (e.g. the risky payments); `breadth` explores
   // adjacent dimensions of the INPUT sources the run hasn't touched yet. When
   // present, the "What next?" block renders the two tracks (output / input) as
   // labelled cards instead of a flat card grid. Falls back to `followUps` for
@@ -167,137 +168,86 @@ interface ClarificationData {
 // KPIs render in the dashboard's widget pattern: 4 across on lg, 2 on mobile,
 // with a hard cap of 8 (two full rows on lg). Values stay neutral ink-900 —
 // magnitude + label carries the story, the chart + table fill in the rest.
+// ₹ in lakhs for KPI tiles: ₹11.7L / ₹3.6L (whole number when exact).
+const fmtLakh = (n: number) => `₹${(n / 100_000).toFixed(n % 100_000 === 0 ? 0 : 1)}L`;
+
+// The chat audit result. The table, KPIs, and charts all describe the SAME 9
+// risky payments the DAG output lists — table rows and the roll-up KPIs come
+// straight from RISK_FACTS (via chatPlan), so the count/amounts/vendors line up
+// across the prose, the flow diagram, and this result.
 const AUDIT_RESULT = {
   kpis: [
-    { label: 'Records scanned',  value: '1.2M',   color: 'text-ink-900' },
-    { label: 'Duplicates found', value: '8',      color: 'text-ink-900' },
-    { label: 'Total amount',     value: '₹6.16L', color: 'text-ink-900' },
-    { label: 'Highest match',    value: '96%',    color: 'text-ink-900' },
-    { label: 'Vendors flagged',  value: '4',      color: 'text-ink-900' },
-    { label: 'Days covered',     value: '90',     color: 'text-ink-900' },
-    { label: 'Avg confidence',   value: '91%',    color: 'text-ink-900' },
-    { label: 'Cross-checks',     value: '24',     color: 'text-ink-900' },
+    { label: 'Payments checked', value: '1.2M',                                 color: 'text-ink-900' },
+    { label: 'Risks found',      value: String(CHAT_RISK_SUMMARY.count),        color: 'text-ink-900' },
+    { label: 'Total exposure',   value: fmtLakh(CHAT_RISK_SUMMARY.totalExposure), color: 'text-ink-900' },
+    { label: 'Largest single',   value: fmtLakh(CHAT_RISK_SUMMARY.largest),     color: 'text-ink-900' },
+    { label: 'Vendors flagged',  value: String(CHAT_RISK_SUMMARY.vendors),      color: 'text-ink-900' },
+    { label: 'Controls tripped', value: String(CHAT_RISK_SUMMARY.controls),     color: 'text-ink-900' },
+    { label: 'Days covered',     value: '90',                                   color: 'text-ink-900' },
+    { label: 'Data sources',     value: '2',                                    color: 'text-ink-900' },
   ],
   charts: [
     {
-      id: 'confidence',
-      label: 'Findings by Confidence',
-      // Single-hue (brand) ramp — opacity falls with the bucket. The eye
-      // reads rank without learning a 4-color legend.
+      id: 'control',
+      label: 'Findings by Control',
+      // Single-hue (brand) ramp — opacity falls with the bucket. Counts sum to 9.
       data: [
-        { bucket: '90–100%', count: 5, tone: 'bg-ink-800' },
-        { bucket: '80–89%', count: 2, tone: 'bg-ink-800/70' },
-        { bucket: '70–79%', count: 1, tone: 'bg-ink-800/50' },
-        { bucket: '60–69%', count: 0, tone: 'bg-ink-800/30' },
+        { bucket: 'Duplicate payment',    count: 3, tone: 'bg-ink-800'    },
+        { bucket: 'Vendor detail change', count: 2, tone: 'bg-ink-800/70' },
+        { bucket: 'Invoice-vs-PO match',  count: 2, tone: 'bg-ink-800/60' },
+        { bucket: 'Approval rules',       count: 2, tone: 'bg-ink-800/50' },
       ],
     },
     {
       id: 'vendor',
       label: 'Findings by Vendor',
       data: [
-        { bucket: 'Acme Corp', count: 4, tone: 'bg-ink-800' },
-        { bucket: 'Global Supplies', count: 2, tone: 'bg-ink-800/70' },
-        { bucket: 'TechParts Ltd', count: 1, tone: 'bg-ink-800/50' },
-        { bucket: 'FastShip Logistics', count: 1, tone: 'bg-ink-800/50' },
-      ],
-    },
-    // High-data stress test: 12 monthly buckets with thousands-scale values
-    // and long category labels. Confirms y-axis formatting + x-axis label
-    // overflow handling under realistic enterprise data sizes.
-    {
-      id: 'monthly-high',
-      label: 'Findings by Month',
-      data: [
-        { bucket: 'Jan 2026', count: 11_842, tone: 'bg-ink-800/70' },
-        { bucket: 'Feb 2026', count: 9_405, tone: 'bg-ink-800/60' },
-        { bucket: 'Mar 2026', count: 14_207, tone: 'bg-ink-800/80' },
-        { bucket: 'Apr 2026', count: 12_661, tone: 'bg-ink-800/75' },
-        { bucket: 'May 2026', count: 15_904, tone: 'bg-ink-800/85' },
-        { bucket: 'Jun 2026', count: 17_532, tone: 'bg-ink-800/90' },
-        { bucket: 'Jul 2026', count: 13_088, tone: 'bg-ink-800/75' },
-        { bucket: 'Aug 2026', count: 8_270, tone: 'bg-ink-800/55' },
-        { bucket: 'Sep 2026', count: 10_410, tone: 'bg-ink-800/65' },
-        { bucket: 'Oct 2026', count: 16_741, tone: 'bg-ink-800/85' },
-        { bucket: 'Nov 2026', count: 18_220, tone: 'bg-ink-800' },
-        { bucket: 'Dec 2026', count: 21_350, tone: 'bg-ink-800' },
-      ],
-    },
-    // Additional cuts of the same flagged-pair population. Together with the
-    // first three this brings the chart count to 7, which trips the picker
-    // from segmented control to dropdown (CHART_TAB_LIMIT = 4).
-    {
-      id: 'region',
-      label: 'Findings by Region',
-      data: [
-        { bucket: 'India',  count: 6, tone: 'bg-ink-800'    },
-        { bucket: 'UAE',    count: 4, tone: 'bg-ink-800/75' },
-        { bucket: 'EMEA',   count: 3, tone: 'bg-ink-800/60' },
-        { bucket: 'APAC',   count: 2, tone: 'bg-ink-800/45' },
-      ],
-    },
-    {
-      id: 'match-method',
-      label: 'Findings by Match Method',
-      data: [
-        { bucket: 'Exact + ±2d',  count: 5, tone: 'bg-ink-800'    },
-        { bucket: 'Fuzzy name',   count: 4, tone: 'bg-ink-800/75' },
-        { bucket: 'Exact amount', count: 4, tone: 'bg-ink-800/70' },
-        { bucket: 'Fuzzy + ±2d',  count: 2, tone: 'bg-ink-800/55' },
-      ],
-    },
-    {
-      id: 'status',
-      label: 'Status Distribution',
-      data: [
-        { bucket: 'Open',      count: 10, tone: 'bg-ink-800'    },
-        { bucket: 'In review', count: 3,  tone: 'bg-ink-800/65' },
-        { bucket: 'Resolved',  count: 2,  tone: 'bg-ink-800/45' },
+        { bucket: 'Acme Corp',          count: 2, tone: 'bg-ink-800'    },
+        { bucket: 'Global Supplies',    count: 2, tone: 'bg-ink-800/80' },
+        { bucket: 'TechParts Ltd',      count: 2, tone: 'bg-ink-800/70' },
+        { bucket: 'FastShip Logistics', count: 2, tone: 'bg-ink-800/60' },
+        { bucket: 'Bluepeak Logistics', count: 1, tone: 'bg-ink-800/45' },
       ],
     },
     {
       id: 'amount-band',
       label: 'Findings by Amount Band',
       data: [
-        { bucket: '< ₹50K',       count: 3, tone: 'bg-ink-800/50' },
-        { bucket: '₹50K – ₹1L',   count: 5, tone: 'bg-ink-800/70' },
-        { bucket: '₹1L – ₹2L',    count: 5, tone: 'bg-ink-800/85' },
-        { bucket: '> ₹2L',         count: 2, tone: 'bg-ink-800'    },
+        { bucket: '< ₹50K',      count: 2, tone: 'bg-ink-800/50' },
+        { bucket: '₹50K – ₹1L',  count: 3, tone: 'bg-ink-800/70' },
+        { bucket: '₹1L – ₹2L',   count: 2, tone: 'bg-ink-800/85' },
+        { bucket: '> ₹2L',        count: 2, tone: 'bg-ink-800'    },
+      ],
+    },
+    {
+      id: 'status',
+      label: 'Findings by Status',
+      data: [
+        { bucket: 'Open',      count: 6, tone: 'bg-ink-800'    },
+        { bucket: 'In review', count: 2, tone: 'bg-ink-800/65' },
+        { bucket: 'Resolved',  count: 1, tone: 'bg-ink-800/45' },
       ],
     },
   ],
   table: {
-    columns: ['Invoice A', 'Invoice B', 'Vendor', 'Amount', 'Date A', 'Date B', 'PO Ref', 'Match Method', 'Match %', 'Status'],
-    rows: [
-      ['INV-2024-8821', 'INV-2024-8847', 'Acme Corp',          '₹1,42,500', '2026-01-12', '2026-01-18', 'PO-AC-44102', 'Exact + ±2d',    '96%', 'Open'],
-      ['INV-2024-8910', 'INV-2024-9001', 'Acme Corp',          '₹89,200',   '2026-02-03', '2026-02-09', 'PO-AC-44210', 'Fuzzy name',     '94%', 'Open'],
-      ['INV-2024-9112', 'INV-2024-9183', 'Global Supplies',    '₹2,18,400', '2026-02-15', '2026-02-22', 'PO-GS-12044', 'Exact amount',   '92%', 'Open'],
-      ['INV-2024-9245', 'INV-2024-9301', 'Acme Corp',          '₹54,000',   '2026-03-02', '2026-03-08', 'PO-AC-44318', 'Fuzzy + ±2d',    '91%', 'In review'],
-      ['INV-2024-9377', 'INV-2024-9420', 'Global Supplies',    '₹76,800',   '2026-03-11', '2026-03-15', 'PO-GS-12099', 'Exact + ±2d',    '90%', 'Open'],
-      ['INV-2024-9501', 'INV-2024-9544', 'TechParts Ltd',      '₹38,200',   '2026-03-22', '2026-03-29', 'PO-TP-08815', 'Fuzzy name',     '89%', 'Open'],
-      ['INV-2024-9612', 'INV-2024-9655', 'FastShip Logistics', '₹1,02,400', '2026-04-01', '2026-04-07', 'PO-FS-22041', 'Exact amount',   '88%', 'In review'],
-      ['INV-2024-9728', 'INV-2024-9760', 'Acme Corp',          '₹47,950',   '2026-04-09', '2026-04-14', 'PO-AC-44502', 'Fuzzy + ±2d',    '87%', 'Open'],
-      ['INV-2024-9841', 'INV-2024-9879', 'Global Supplies',    '₹1,68,300', '2026-04-15', '2026-04-21', 'PO-GS-12188', 'Exact + ±5d',    '86%', 'Open'],
-      ['INV-2024-9955', 'INV-2024-9998', 'TechParts Ltd',      '₹62,150',   '2026-04-22', '2026-04-28', 'PO-TP-08920', 'Fuzzy name',     '85%', 'In review'],
-      ['INV-2025-0042', 'INV-2025-0089', 'Acme Corp',          '₹1,21,400', '2026-05-04', '2026-05-09', 'PO-AC-44612', 'Exact amount',   '84%', 'Open'],
-      ['INV-2025-0155', 'INV-2025-0202', 'FastShip Logistics', '₹58,700',   '2026-05-12', '2026-05-18', 'PO-FS-22158', 'Fuzzy + ±2d',    '83%', 'Open'],
-      ['INV-2025-0287', 'INV-2025-0334', 'Global Supplies',    '₹2,04,800', '2026-05-21', '2026-05-26', 'PO-GS-12257', 'Exact + ±2d',    '82%', 'Resolved'],
-      ['INV-2025-0411', 'INV-2025-0456', 'Acme Corp',          '₹73,250',   '2026-06-02', '2026-06-07', 'PO-AC-44720', 'Fuzzy name',     '81%', 'Open'],
-      ['INV-2025-0533', 'INV-2025-0579', 'TechParts Ltd',      '₹49,800',   '2026-06-10', '2026-06-16', 'PO-TP-09042', 'Exact + ±5d',    '80%', 'Resolved'],
-    ],
-    totalRows: 15,
+    // Same 9 findings as the DAG output list — from RISK_FACTS. The inline table
+    // prepends a dynamic Risk (High/Medium) column computed from the user's rule.
+    columns: CHAT_RISK_TABLE_COLUMNS,
+    rows: buildChatPlanRiskRows(),
+    totalRows: CHAT_RISK_SUMMARY.count,
   },
 };
 
 // Two-track follow-ups for the audit result. DEPTH questions interrogate the
-// OUTPUT the run just surfaced (the 8 flagged pairs); BREADTH questions point
+// OUTPUT the run just surfaced (the 9 risky payments); BREADTH questions point
 // outward at adjacent dimensions of the INPUT sources (POs, vendor master,
 // credit notes) the run never looked at. Keeping them as separate lists lets
 // the "What next?" UI tag them as the output track / input track.
 const AUDIT_FOLLOWUP_TRACKS: { depth: string[]; breadth: string[] } = {
   depth: [
-    'Drill into Acme Corp’s 4 flagged pairs',
-    'Rank all 8 pairs by exposure amount',
-    'Which pairs cleared the same approval limit?',
+    'Rank the 9 risky payments by exposure amount',
+    'Show only the duplicate-payment findings',
+    'Which vendor has the most flags?',
   ],
   breadth: [
     'Check the same vendors for split purchase orders',
@@ -888,21 +838,20 @@ const STREAM_V2 = typeof window !== 'undefined'
 
 // The audit answer prose — shared by the legacy completion path and the v2
 // stream so both render the exact same content.
-const AUDIT_PROSE = `## Duplicate invoice detection — Q1 FY26
+const AUDIT_PROSE = `## Risky payments — Purchase-to-Pay, Q1 FY26
 
-Scanned **1.2M invoice records** across the last **90 days** and surfaced **8 high-confidence duplicates** totalling **₹6.16L** in exposure. The strongest pair sits at a **96% match** on **Acme Corp**, which alone accounts for *half of the flags*.
+Scanned **1.2M payment records** across the last **90 days** and flagged **9 risky payments** totalling **₹11.7L** in exposure — spanning **4 controls** and **5 vendors**. The largest single exposure is a **₹3,60,000** TechParts Ltd payment made two days after its bank account changed.
 
 > Sample-data preview: this run used the connected sandbox source. Re-run against your production SAP AP module before promoting any flag to a finding.
 
 ### Where to look first
 
-- **Acme Corp** — 4 of 8 flags. Two invoices were posted **3 days apart** for identical amounts under near-identical PO references.
-  - One pair was approved by the same AP clerk; check whether the duplicate-payment control failed open.
-  - The other pair crossed an approval-limit boundary; payment may have already cleared.
-- **Bluepeak Logistics** — 2 flags, both at month-end, both **₹84,000** exactly. Confirm whether one is a credit-note reversal.
-- **Two tail vendors** — single flags each, lower priority but worth a glance before sign-off.
+- **Duplicate payments** — Acme Corp billed the same **₹54,000** twice, 3 days apart; Bluepeak Logistics sent two month-end invoices for **₹84,000** each.
+- **Missing / mismatched POs** — Global Supplies was paid **₹2,18,400** with no matching purchase order.
+- **Approval gaps** — a **₹1,45,000** Acme Corp invoice was approved by the person who raised it; a FastShip payment was split into two **₹95,000** parts to stay under the approval limit.
+- **Vendor-master risks** — TechParts changed its bank account just before a **₹3,60,000** payment; FastShip was paid **₹58,700** while marked inactive.
 
-The full plan, SQL, and sources are in the Workspace on the right. Promote any pair to a formal finding from the \`Flagged pairs\` table, or open the [duplicate-payment SOP](https://docs.auditify.example/sops/duplicate-payment) for the standard remediation path.`;
+The full plan, SQL, and sources are in the Workspace on the right. Promote any row to a formal finding from the \`Risky payments\` table, or open the relevant control's SOP for the standard remediation path.`;
 
 // The v2 stream's content — same numbers/prose/rows as the legacy result, fed
 // to the mock emitter so the answer materializes from events.
@@ -910,7 +859,7 @@ const AUDIT_STREAM_DATA: MockAuditData = {
   reasoning: ['Generating execution plan', 'Writing SQL query', 'Connecting to data sources'],
   answer: AUDIT_PROSE,
   kpis: AUDIT_RESULT.kpis,
-  chart: { id: 'confidence' },
+  chart: { id: 'control' },
   columns: AUDIT_RESULT.table.columns,
   rows: AUDIT_RESULT.table.rows,
 };
@@ -1450,7 +1399,7 @@ function FullscreenChartModal({
 const PREVIEW_ROW_COUNT = 9;
 
 function ResultsTable({
-  columns, rows, totalRows, onDownload, title = 'Flagged duplicate pairs', animateRows = false,
+  columns, rows, totalRows, onDownload, title = 'Results', animateRows = false,
   caption, levelForRow,
 }: {
   columns: string[];
@@ -1459,9 +1408,9 @@ function ResultsTable({
   /** Caller can fire side-effects (toast) when a download starts. The
    *  fullscreen / expand path is handled locally. */
   onDownload: () => void;
-  /** Card / fullscreen / new-tab heading. Defaults to the audit fixture's
-   *  "Flagged duplicate pairs"; the workflow-run recap passes the run's own
-   *  result title (e.g. "Duplicate Invoice Matches"). */
+  /** Card / fullscreen / new-tab heading. The chat audit result passes
+   *  "Risky payments"; the workflow-run recap passes the run's own result
+   *  title. Defaults to a neutral "Results". */
   title?: string;
   /** Opt-in: each row animates in (fade + slide-up, lightly staggered) as it
    *  mounts — used by the streaming result so rows visibly arrive instead of
@@ -1506,7 +1455,7 @@ function ResultsTable({
     onDownload();
   };
 
-  // Real .xlsx workbook with a single "Flagged duplicates" sheet, built
+  // Real .xlsx workbook with a single sheet (named from the table title), built
   // via SheetJS. Lazy-loaded so the ~400KB lib only ships when a user
   // actually clicks Excel. Replaces the HTML-as-Excel hack that modern
   // Excel and Google Sheets refused to open as a real workbook.
@@ -1518,7 +1467,9 @@ function ResultsTable({
       const sheetRows: (string | number)[][] = [columns, ...rows];
       const sheet = XLSX.utils.aoa_to_sheet(sheetRows);
       sheet['!cols'] = columns.map(() => ({ wch: 16 }));
-      XLSX.utils.book_append_sheet(wb, sheet, 'Flagged duplicates');
+      // Excel sheet names can't contain : \ / ? * [ ] and cap at 31 chars.
+      const sheetName = title.replace(/[:\\/?*[\]]/g, '').slice(0, 31) || 'Results';
+      XLSX.utils.book_append_sheet(wb, sheet, sheetName);
       // Build the blob ourselves — see handleExcel for why writeFile is avoided.
       const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
       triggerDownload(
@@ -2984,7 +2935,7 @@ function InlineEditBubble({
 //   - PDF  → fires the browser's native print-preview over a hidden iframe;
 //            user picks "Save as PDF" in the native dialog.
 //   - XLSX → builds a real .xlsx workbook via SheetJS with three sheets:
-//            Summary (KPIs), Flagged pairs (full table), Transcript (chat thread).
+//            Summary (KPIs), Risky payments (full table), Transcript (chat thread).
 // Single source of truth for "the full result", separate from per-artifact
 // downloads.
 
@@ -3166,8 +3117,8 @@ function ExportReportButton({
       return `<div class="chart"><div class="chart-title">${escHtml(c.label)}</div>${svg}</div>`;
     }).join('');
 
-    const tableHtml = !includeRichResult ? '' : `<div class="data-table"><div class="data-table-title">Flagged duplicate pairs · ${AUDIT_RESULT.table.totalRows}</div><table><thead><tr>${AUDIT_RESULT.table.columns.map(c => `<th>${escHtml(c)}</th>`).join('')}</tr></thead><tbody>${AUDIT_RESULT.table.rows.map(r =>
-      `<tr>${r.map((c, j) => `<td class="${j === 3 || j === 8 ? 'num' : ''}">${escHtml(c)}</td>`).join('')}</tr>`
+    const tableHtml = !includeRichResult ? '' : `<div class="data-table"><div class="data-table-title">Risky payments · ${AUDIT_RESULT.table.totalRows}</div><table><thead><tr>${AUDIT_RESULT.table.columns.map(c => `<th>${escHtml(c)}</th>`).join('')}</tr></thead><tbody>${AUDIT_RESULT.table.rows.map(r =>
+      `<tr>${r.map((c, j) => `<td class="${j === 1 ? 'num' : ''}">${escHtml(c)}</td>`).join('')}</tr>`
     ).join('')}</tbody></table></div>`;
 
     const renderMsg = (m: ChatMessage) => {
@@ -3302,7 +3253,7 @@ ${transcriptHtml}
     document.body.appendChild(iframe);
   };
 
-  // Real .xlsx workbook with three sheets (Summary / Flagged pairs /
+  // Real .xlsx workbook with three sheets (Summary / Risky payments /
   // Transcript), built via SheetJS. Lazy-loaded so the lib (~400KB
   // minified) only ships to users who actually export. Replaces the prior
   // HTML-as-Excel hack that modern Excel + Google Sheets opened as raw
@@ -3326,14 +3277,14 @@ ${transcriptHtml}
       summarySheet['!cols'] = [{ wch: 28 }, { wch: 18 }];
       XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
 
-      // Sheet 2 — Flagged pairs (full table — header + rows).
+      // Sheet 2 — Risky payments (full table — header + rows).
       const tableRows: (string | number)[][] = [
         AUDIT_RESULT.table.columns,
         ...AUDIT_RESULT.table.rows,
       ];
       const tableSheet = XLSX.utils.aoa_to_sheet(tableRows);
       tableSheet['!cols'] = AUDIT_RESULT.table.columns.map(() => ({ wch: 16 }));
-      XLSX.utils.book_append_sheet(wb, tableSheet, 'Flagged pairs');
+      XLSX.utils.book_append_sheet(wb, tableSheet, 'Risky payments');
 
       // Sheet 3 — Transcript (chat thread up to this assistant message).
       const transcriptRows: (string | number)[][] = transcript.length === 0
@@ -4368,21 +4319,8 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       if (m.id !== targetId) return m;
       return {
         ...m,
-        text: `## Duplicate invoice detection — Q1 FY26
-
-Scanned **1.2M invoice records** across the last **90 days** and surfaced **8 high-confidence duplicates** totalling **₹6.16L** in exposure. The strongest pair sits at a **96% match** on **Acme Corp**, which alone accounts for *half of the flags*.
-
-> Sample-data preview: this run used the connected sandbox source. Re-run against your production SAP AP module before promoting any flag to a finding.
-
-### Where to look first
-
-- **Acme Corp** — 4 of 8 flags. Two invoices were posted **3 days apart** for identical amounts under near-identical PO references.
-  - One pair was approved by the same AP clerk; check whether the duplicate-payment control failed open.
-  - The other pair crossed an approval-limit boundary; payment may have already cleared.
-- **Bluepeak Logistics** — 2 flags, both at month-end, both **₹84,000** exactly. Confirm whether one is a credit-note reversal.
-- **Two tail vendors** — single flags each, lower priority but worth a glance before sign-off.
-
-The full plan, SQL, and sources are in the Workspace on the right. Promote any pair to a formal finding from the \`Flagged pairs\` table, or open the [duplicate-payment SOP](https://docs.auditify.example/sops/duplicate-payment) for the standard remediation path.`,
+        // Same prose as the v2 stream path — one source so they never diverge.
+        text: AUDIT_PROSE,
         followUpTracks: AUDIT_FOLLOWUP_TRACKS,
         richType: 'audit-result',
         richData: AUDIT_RESULT,
@@ -6648,6 +6586,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           )}
                           renderTable={(revealedRows) => (
                             <ResultsTable
+                              title="Risky payments"
                               columns={AUDIT_RESULT.table.columns}
                               rows={AUDIT_RESULT.table.rows.slice(0, revealedRows)}
                               totalRows={AUDIT_RESULT.table.totalRows}
@@ -6655,10 +6594,10 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                               animateRows={STREAM_V2}
                               // The rule the user set mid-run stamps the table:
                               // a caption states it, and each row's Risk is
-                              // computed from its Amount against the threshold.
+                              // computed from its Amount (column 1) against the threshold.
                               caption={`Risk column · ${severityRuleNote(severityThreshold)}`}
                               levelForRow={(row) => {
-                                const amount = parseInt(String(row[3]).replace(/[^\d]/g, ''), 10);
+                                const amount = parseInt(String(row[1]).replace(/[^\d]/g, ''), 10);
                                 return Number.isFinite(amount) && isHighByAmount(amount, severityThreshold) ? 'High' : 'Medium';
                               }}
                             />

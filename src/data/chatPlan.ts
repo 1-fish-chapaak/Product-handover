@@ -90,24 +90,32 @@ export function buildChatPlanSteps(threshold?: number): PlanCardStep[] {
 
 interface ChatPlanRiskFact {
   id: string;
-  /** What broke, in plain words — includes the vendor and the amount. */
-  title: string;
+  /** The vendor the finding is against. */
+  vendor: string;
   /** Money involved, in INR — compared against the user's threshold. */
   amount: number;
   /** The control this finding relates to. */
   control: string;
+  /** Full plain-English finding — the DAG output list line. */
+  title: string;
+  /** Short issue label — the results-table row (what broke, in ~4 words). */
+  issue: string;
+  /** Where the finding sits in the review workflow — the table Status cell. */
+  status: 'Open' | 'In review' | 'Resolved';
 }
 
+// Single source of truth for BOTH the DAG output list and the results table, so
+// the two can never disagree (count, amounts, vendors, levels all match).
 const RISK_FACTS: ChatPlanRiskFact[] = [
-  { id: 'r1', amount: 54_000,   control: 'Duplicate payment check',    title: 'Acme Corp billed the same amount twice, 3 days apart (₹54,000 each)' },
-  { id: 'r2', amount: 145_000,  control: 'Approval rules check',       title: 'A ₹1,45,000 Acme Corp invoice was approved by the same person who raised it' },
-  { id: 'r3', amount: 218_400,  control: 'Invoice-vs-PO match check',  title: 'Global Supplies was paid ₹2,18,400 with no matching purchase order' },
-  { id: 'r4', amount: 84_000,   control: 'Duplicate payment check',    title: 'Bluepeak Logistics sent two month-end invoices for exactly ₹84,000 each' },
-  { id: 'r5', amount: 360_000,  control: 'Vendor detail change check', title: 'TechParts Ltd changed its bank account 2 days before a ₹3,60,000 payment' },
-  { id: 'r6', amount: 190_000,  control: 'Approval rules check',       title: 'A FastShip Logistics payment was split into two parts of ₹95,000, just under the approval limit' },
-  { id: 'r7', amount: 12_600,   control: 'Invoice-vs-PO match check',  title: 'A Global Supplies invoice came in ₹12,600 higher than its purchase order' },
-  { id: 'r8', amount: 49_800,   control: 'Duplicate payment check',    title: 'TechParts Ltd used near-identical invoice numbers twice in the same week (₹49,800)' },
-  { id: 'r9', amount: 58_700,   control: 'Vendor detail change check', title: 'FastShip Logistics was paid ₹58,700 while marked inactive in the vendor list' },
+  { id: 'r1', vendor: 'Acme Corp',          amount: 54_000,  control: 'Duplicate payment check',    status: 'Open',      issue: 'Billed twice, 3 days apart',       title: 'Acme Corp billed the same amount twice, 3 days apart (₹54,000 each)' },
+  { id: 'r2', vendor: 'Acme Corp',          amount: 145_000, control: 'Approval rules check',       status: 'In review', issue: 'Approved by the raiser',           title: 'A ₹1,45,000 Acme Corp invoice was approved by the same person who raised it' },
+  { id: 'r3', vendor: 'Global Supplies',    amount: 218_400, control: 'Invoice-vs-PO match check',  status: 'Open',      issue: 'No matching purchase order',       title: 'Global Supplies was paid ₹2,18,400 with no matching purchase order' },
+  { id: 'r4', vendor: 'Bluepeak Logistics', amount: 84_000,  control: 'Duplicate payment check',    status: 'Open',      issue: 'Two identical month-end invoices', title: 'Bluepeak Logistics sent two month-end invoices for exactly ₹84,000 each' },
+  { id: 'r5', vendor: 'TechParts Ltd',      amount: 360_000, control: 'Vendor detail change check', status: 'In review', issue: 'Bank account changed pre-payment',  title: 'TechParts Ltd changed its bank account 2 days before a ₹3,60,000 payment' },
+  { id: 'r6', vendor: 'FastShip Logistics', amount: 190_000, control: 'Approval rules check',       status: 'Open',      issue: 'Split under the approval limit',   title: 'A FastShip Logistics payment was split into two parts of ₹95,000, just under the approval limit' },
+  { id: 'r7', vendor: 'Global Supplies',    amount: 12_600,  control: 'Invoice-vs-PO match check',  status: 'Open',      issue: 'Invoice over PO by ₹12,600',       title: 'A Global Supplies invoice came in ₹12,600 higher than its purchase order' },
+  { id: 'r8', vendor: 'TechParts Ltd',      amount: 49_800,  control: 'Duplicate payment check',    status: 'Resolved',  issue: 'Near-identical invoice numbers',   title: 'TechParts Ltd used near-identical invoice numbers twice in the same week (₹49,800)' },
+  { id: 'r9', vendor: 'FastShip Logistics', amount: 58_700,  control: 'Vendor detail change check', status: 'Open',      issue: 'Paid while marked inactive',       title: 'FastShip Logistics was paid ₹58,700 while marked inactive in the vendor list' },
 ];
 
 // Indian number format: ₹1,00,000 (full) — for the rule note.
@@ -152,3 +160,28 @@ export function buildChatPlanRiskItems(threshold: number): PlanOutputItem[] {
     }))
     .sort((a, b) => (a.level === b.level ? 0 : a.level === 'High' ? -1 : 1));
 }
+
+// ── The same 9 findings as a results table ──
+// Both the DAG output list (above) and the chat results table read from
+// RISK_FACTS, so they always show the same findings, amounts, and count. The
+// Risk (High/Medium) column is added by the table at render time (it depends on
+// the user's threshold), so it is NOT baked into these static rows.
+
+/** Results-table columns for the 9 risky payments. Amount is index 1 — the
+ *  table's dynamic Risk column is computed from it. */
+export const CHAT_RISK_TABLE_COLUMNS = ['Vendor', 'Amount', 'Issue', 'Control', 'Status'];
+
+/** The 9 findings as table rows, in the CHAT_RISK_TABLE_COLUMNS order. */
+export function buildChatPlanRiskRows(): string[][] {
+  return RISK_FACTS.map((r) => [r.vendor, inrFull(r.amount), r.issue, r.control, r.status]);
+}
+
+/** Roll-ups over the same 9 findings, so the KPIs / prose can't drift from the
+ *  table: count, total exposure, largest single, distinct vendors & controls. */
+export const CHAT_RISK_SUMMARY = {
+  count: RISK_FACTS.length,
+  totalExposure: RISK_FACTS.reduce((sum, r) => sum + r.amount, 0),
+  largest: Math.max(...RISK_FACTS.map((r) => r.amount)),
+  vendors: new Set(RISK_FACTS.map((r) => r.vendor)).size,
+  controls: new Set(RISK_FACTS.map((r) => r.control)).size,
+};
