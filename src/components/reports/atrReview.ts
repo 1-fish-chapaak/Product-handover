@@ -97,6 +97,14 @@ export function loadVersions(id: string, seed: VersionSeed): AtrVersion[] {
   write(VKEY(id), trail);
   return trail;
 }
+// Current (latest) version number for list surfaces — reads the stored trail if
+// present, else computes the seeded trail WITHOUT persisting (no render-time
+// side effects), so it matches what the review drawer shows.
+export function currentVersion(id: string, seed: VersionSeed): number {
+  const existing = read<AtrVersion[]>(VKEY(id));
+  const list = existing && existing.length ? existing : seedTrail(seed);
+  return list[list.length - 1]?.version ?? 1;
+}
 export function saveVersions(id: string, list: AtrVersion[]) {
   write(VKEY(id), list);
 }
