@@ -50,18 +50,6 @@ const LEVEL_TONE: Record<PlanOutputItem['level'], string> = {
   Medium: 'bg-mitigated-50 text-mitigated-700',
 };
 
-/** One way of rating the findings — a "Rate by" view of the same list. The
- *  first entry is the default (the user's pre-run materiality rule); the rest
- *  are post-run lenses, offered only once the findings are visible. */
-export interface PlanOutputRating {
-  id: string;
-  /** Chip label, e.g. "Amount (₹1L+)" or "How certain". */
-  label: string;
-  /** One-line explanation of the rule, echoed above the list. */
-  note?: string;
-  items: PlanOutputItem[];
-}
-
 // ─── View toggle (Flow / Steps) ──────────────────────────────────────────
 
 export type PlanView = 'flow' | 'steps';
@@ -130,26 +118,19 @@ function edgePath(a: Rect, b: Rect, kind: Edge['kind']): string {
 // the detail strip. Owns all hover/select/measurement state so it works the
 // same dropped into the inline card or the modal.
 
-export function PlanFlowGraph({ steps, outputLabel = 'Result', outputItems, outputNote, outputRatings }: {
+export function PlanFlowGraph({ steps, outputLabel = 'Result', outputItems, outputNote }: {
   steps: PlanCardStep[];
   outputLabel?: string;
   /** The findings behind the output count — listed when the output node is clicked. */
   outputItems?: PlanOutputItem[];
   /** One-line provenance for the levels (e.g. the user's own High/Medium rule). */
   outputNote?: string;
-  /** Multiple "Rate by" views of the findings — renders a switch above the
-   *  list; the first entry is the default. Supersedes outputItems/outputNote. */
-  outputRatings?: PlanOutputRating[];
 }) {
   const [hover, setHover] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
 
-  // Which "Rate by" view is selected (null → the first/default rating).
-  const [ratingId, setRatingId] = useState<string | null>(null);
-  const ratings = outputRatings?.length ? outputRatings : null;
-  const rating = ratings ? (ratings.find(rt => rt.id === ratingId) ?? ratings[0]) : null;
-  const outList = rating ? rating.items : outputItems;
-  const outNote = rating ? rating.note : outputNote;
+  const outList = outputItems;
+  const outNote = outputNote;
   const hasOutList = (outList?.length ?? 0) > 0;
 
   // Distinct input files, in first-seen order.
@@ -338,9 +319,8 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result', outputItems, outp
             })}
 
             {/* Output node — clicking the header expands the purple box in
-                place with the findings behind the count. A div shell (not a
-                button) so the expanded area can host the interactive "Rate by"
-                switch — nested buttons are invalid HTML. */}
+                place with the findings behind the count. A div shell wraps the
+                header button so the expanded list sits inside the same box. */}
             <div
               ref={registerNode('out')}
               onMouseEnter={() => setHover('out')}
@@ -391,33 +371,9 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result', outputItems, outp
                     className="overflow-hidden"
                   >
                     <div className="mx-3 mb-3 border-t border-brand-100 pt-2.5">
-                      {/* "Rate by" — re-slice severity now that the findings
-                          are visible. The first view is the user's own pre-run
-                          materiality rule; the categorical lenses only make
-                          sense post-run. */}
-                      {ratings && ratings.length > 1 && (
-                        <span className="flex items-center gap-1.5 pb-2">
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">Rate by</span>
-                          <span className="inline-flex items-center gap-0.5 rounded-lg border border-brand-100 bg-brand-50/60 p-0.5" role="group" aria-label="Rate findings by">
-                            {ratings.map((rt) => {
-                              const on = rt.id === (rating?.id ?? ratings[0].id);
-                              return (
-                                <button
-                                  key={rt.id}
-                                  type="button"
-                                  onClick={() => setRatingId(rt.id)}
-                                  aria-pressed={on}
-                                  className={`rounded-md px-2 py-0.5 text-[10.5px] font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                                    on ? 'bg-canvas-elevated text-ink-900 shadow-[0_1px_2px_rgba(15,8,30,0.06)]' : 'text-ink-500 hover:text-ink-800'
-                                  }`}
-                                >
-                                  {rt.label}
-                                </button>
-                              );
-                            })}
-                          </span>
-                        </span>
-                      )}
+                      {/* The user's own rule, echoed above the findings it
+                          produced. There is no "re-rate by another basis"
+                          switch — the user already answered which rule to use. */}
                       {outNote && (
                         <p className="text-left text-[10.5px] text-ink-500 leading-snug pb-1.5">{outNote}</p>
                       )}
@@ -468,7 +424,6 @@ export default function PlanFlowDiagram({
   outputLabel = 'Result',
   outputItems,
   outputNote,
-  outputRatings,
   headerAccessory,
   defaultOpen = true,
 }: {
@@ -478,8 +433,6 @@ export default function PlanFlowDiagram({
   outputItems?: PlanOutputItem[];
   /** One-line provenance for the levels (e.g. the user's own High/Medium rule). */
   outputNote?: string;
-  /** Multiple "Rate by" views of the findings — see PlanFlowGraph. */
-  outputRatings?: PlanOutputRating[];
   headerAccessory?: ReactNode;
   defaultOpen?: boolean;
 }) {
@@ -529,7 +482,7 @@ export default function PlanFlowDiagram({
           >
             <div className="px-4 pt-3 pb-4">
               <p className="text-[11.5px] text-ink-500 leading-snug mb-3">{FLOW_HINT}</p>
-              <PlanFlowGraph steps={steps} outputLabel={outputLabel} outputItems={outputItems} outputNote={outputNote} outputRatings={outputRatings} />
+              <PlanFlowGraph steps={steps} outputLabel={outputLabel} outputItems={outputItems} outputNote={outputNote} />
             </div>
           </motion.div>
         )}
@@ -548,7 +501,7 @@ export default function PlanFlowDiagram({
               onClose={() => setExpanded(false)}
               ariaLabel="How Ira built this answer"
             >
-              <PlanFlowGraph steps={steps} outputLabel={outputLabel} outputItems={outputItems} outputNote={outputNote} outputRatings={outputRatings} />
+              <PlanFlowGraph steps={steps} outputLabel={outputLabel} outputItems={outputItems} outputNote={outputNote} />
             </Modal>
           )}
         </AnimatePresence>,

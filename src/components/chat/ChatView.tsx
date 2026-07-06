@@ -27,7 +27,7 @@ import AuditResultBody from './AuditResultBody';
 import PlanFlowDiagram from '../shared/PlanFlowDiagram';
 import {
   DEFAULT_SEVERITY_THRESHOLD, SEVERITY_THRESHOLD_OPTIONS,
-  buildChatPlanSteps, buildChatPlanRatings, severityThresholdFromAnswer, severityRuleNote, isHighByAmount,
+  buildChatPlanSteps, buildChatPlanRiskItems, severityThresholdFromAnswer, severityRuleNote, isHighByAmount,
 } from '../../data/chatPlan';
 import type { WorkflowTypeId } from '../../data/mockData';
 import type { ArtifactTab } from '../../hooks/useAppState';
@@ -6611,7 +6611,8 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         <PlanFlowDiagram
                           steps={buildChatPlanSteps(severityThreshold)}
                           outputLabel="Risk results"
-                          outputRatings={buildChatPlanRatings(severityThreshold)}
+                          outputItems={buildChatPlanRiskItems(severityThreshold)}
+                          outputNote={severityRuleNote(severityThreshold)}
                         />
                         {/* Streamed composite output — prose typewriter, KPI
                             count-up, chart draw-in and a row-streamed table all

@@ -80,73 +80,57 @@ export function buildChatPlanSteps(threshold?: number): PlanCardStep[] {
   );
 }
 
-// ─── The 9 risky payments + user-defined severity ─────────────────────────
+// ─── The 9 risky payments + the user's severity rule ──────────────────────
 //
-// Severity is NOT hardcoded, and it is defined in two logically distinct
-// moments (user decision, 2026-07-06):
-//   BEFORE the run (clarification Q5) the user can only state a POLICY that
-//   needs no knowledge of the results — a materiality amount ("findings of
-//   ₹X or more are High"). Categorical rules (confirmed-vs-suspected, which
-//   control) would be circular before anything is found.
-//   AFTER the run, with the findings visible, the output list offers a
-//   "Rate by" switch (amount / certainty / control) to re-slice severity —
-//   those categories now exist in front of the user.
-// Each risk carries the underlying facts (amount, confirmed?, control) so
-// every basis can rate it.
-
-/** A way of rating the findings High/Medium — the post-run "Rate by" bases. */
-export type SeverityBasisId = 'amount' | 'certainty' | 'control';
+// Severity is user-defined: the mid-run clarification asks for a materiality
+// amount ("findings of ₹X or more are High"). The output list rates each
+// finding by THAT rule and nothing else — there is no "re-rate by another
+// basis" switch, because the user has already answered which basis to use
+// (user decision, 2026-07-06). Each risk carries its amount + control.
 
 interface ChatPlanRiskFact {
   id: string;
   /** What broke, in plain words — includes the vendor and the amount. */
   title: string;
-  /** Money involved, in INR. */
+  /** Money involved, in INR — compared against the user's threshold. */
   amount: number;
-  /** true = the control break is confirmed; false = suspicious pattern only. */
-  confirmed: boolean;
   /** The control this finding relates to. */
   control: string;
 }
 
 const RISK_FACTS: ChatPlanRiskFact[] = [
-  { id: 'r1', amount: 54_000,   confirmed: true,  control: 'Duplicate payment check',    title: 'Acme Corp billed the same amount twice, 3 days apart (₹54,000 each)' },
-  { id: 'r2', amount: 145_000,  confirmed: true,  control: 'Approval rules check',       title: 'A ₹1,45,000 Acme Corp invoice was approved by the same person who raised it' },
-  { id: 'r3', amount: 218_400,  confirmed: true,  control: 'Invoice-vs-PO match check',  title: 'Global Supplies was paid ₹2,18,400 with no matching purchase order' },
-  { id: 'r4', amount: 84_000,   confirmed: true,  control: 'Duplicate payment check',    title: 'Bluepeak Logistics sent two month-end invoices for exactly ₹84,000 each' },
-  { id: 'r5', amount: 360_000,  confirmed: false, control: 'Vendor detail change check', title: 'TechParts Ltd changed its bank account 2 days before a ₹3,60,000 payment' },
-  { id: 'r6', amount: 190_000,  confirmed: false, control: 'Approval rules check',       title: 'A FastShip Logistics payment was split into two parts of ₹95,000, just under the approval limit' },
-  { id: 'r7', amount: 12_600,   confirmed: false, control: 'Invoice-vs-PO match check',  title: 'A Global Supplies invoice came in ₹12,600 higher than its purchase order' },
-  { id: 'r8', amount: 49_800,   confirmed: false, control: 'Duplicate payment check',    title: 'TechParts Ltd used near-identical invoice numbers twice in the same week (₹49,800)' },
-  { id: 'r9', amount: 58_700,   confirmed: false, control: 'Vendor detail change check', title: 'FastShip Logistics was paid ₹58,700 while marked inactive in the vendor list' },
+  { id: 'r1', amount: 54_000,   control: 'Duplicate payment check',    title: 'Acme Corp billed the same amount twice, 3 days apart (₹54,000 each)' },
+  { id: 'r2', amount: 145_000,  control: 'Approval rules check',       title: 'A ₹1,45,000 Acme Corp invoice was approved by the same person who raised it' },
+  { id: 'r3', amount: 218_400,  control: 'Invoice-vs-PO match check',  title: 'Global Supplies was paid ₹2,18,400 with no matching purchase order' },
+  { id: 'r4', amount: 84_000,   control: 'Duplicate payment check',    title: 'Bluepeak Logistics sent two month-end invoices for exactly ₹84,000 each' },
+  { id: 'r5', amount: 360_000,  control: 'Vendor detail change check', title: 'TechParts Ltd changed its bank account 2 days before a ₹3,60,000 payment' },
+  { id: 'r6', amount: 190_000,  control: 'Approval rules check',       title: 'A FastShip Logistics payment was split into two parts of ₹95,000, just under the approval limit' },
+  { id: 'r7', amount: 12_600,   control: 'Invoice-vs-PO match check',  title: 'A Global Supplies invoice came in ₹12,600 higher than its purchase order' },
+  { id: 'r8', amount: 49_800,   control: 'Duplicate payment check',    title: 'TechParts Ltd used near-identical invoice numbers twice in the same week (₹49,800)' },
+  { id: 'r9', amount: 58_700,   control: 'Vendor detail change check', title: 'FastShip Logistics was paid ₹58,700 while marked inactive in the vendor list' },
 ];
 
-const HIGH_CONTROLS = ['Duplicate payment check', 'Invoice-vs-PO match check'];
-
-// Indian-format helpers: ₹1,00,000 (full, for notes) and ₹1L / ₹50k (short,
-// for the compact "Rate by" chip label).
+// Indian number format: ₹1,00,000 (full) — for the rule note.
 const inrFull = (n: number) => `₹${n.toLocaleString('en-IN')}`;
-const inrShort = (n: number) =>
-  n >= 100_000 ? `₹${(n / 100_000).toLocaleString('en-US')}L` : `₹${Math.round(n / 1_000)}k`;
 
 /** The user's materiality rule in one line — shared by the flow diagram's
- *  amount view and the results-table caption so both state it identically. */
+ *  output note and the results-table caption so both state it identically. */
 export const severityRuleNote = (threshold: number) =>
   `Your rule: ${inrFull(threshold)} or more = High, below that = Medium.`;
 
-/** True when a finding's amount clears the user's High-risk threshold — used to
- *  rate each results-table row so the table updates with the chosen rule. */
+/** True when a finding's amount clears the user's High-risk threshold — rates
+ *  each results-table row (and the plan output list) by the chosen rule. */
 export const isHighByAmount = (amount: number, threshold: number) => amount >= threshold;
 
-// ── Pre-run: the materiality threshold (clarification Q5) ──
+// ── The materiality threshold (mid-run severity question) ──
 
-/** The Q5 choices — pure policy amounts, no result knowledge needed. */
+/** The severity choices — materiality amounts. */
 export const SEVERITY_THRESHOLD_OPTIONS: { amount: number; option: string }[] =
   [50_000, 100_000, 200_000].map((amount) => ({ amount, option: `${inrFull(amount)} or more` }));
 
 export const DEFAULT_SEVERITY_THRESHOLD = 100_000;
 
-/** Map the Q5 answer to a rupee threshold: exact option match first, then any
+/** Map the answer to a rupee threshold: exact option match first, then any
  *  number typed free-form ("2 lakh", "₹75,000", "150000"); else the default. */
 export function severityThresholdFromAnswer(answer: string): number {
   const exact = SEVERITY_THRESHOLD_OPTIONS.find(o => answer.includes(o.option));
@@ -158,41 +142,13 @@ export function severityThresholdFromAnswer(answer: string): number {
   return DEFAULT_SEVERITY_THRESHOLD;
 }
 
-// ── Post-run: rate / re-rate the findings ──
-
-function rateRisks(basis: SeverityBasisId, threshold: number): PlanOutputItem[] {
-  const isHigh = (r: ChatPlanRiskFact): boolean =>
-    basis === 'amount'  ? r.amount >= threshold :
-    basis === 'control' ? HIGH_CONTROLS.includes(r.control) :
-    r.confirmed;
+/** The findings rated High/Medium by the user's amount rule, High first — the
+ *  plan output list. One basis only (the user's answer); no re-rate switch. */
+export function buildChatPlanRiskItems(threshold: number): PlanOutputItem[] {
   return RISK_FACTS
-    .map((r): PlanOutputItem => ({ id: r.id, title: r.title, control: r.control, level: isHigh(r) ? 'High' : 'Medium' }))
+    .map((r): PlanOutputItem => ({
+      id: r.id, title: r.title, control: r.control,
+      level: isHighByAmount(r.amount, threshold) ? 'High' : 'Medium',
+    }))
     .sort((a, b) => (a.level === b.level ? 0 : a.level === 'High' ? -1 : 1));
-}
-
-/** The three "Rate by" views for the output list. Amount comes first and uses
- *  the user's own pre-run threshold (its chip carries that number); certainty
- *  and control are the post-run lenses — offered only once the findings are
- *  visible. Shape matches PlanFlowDiagram's `outputRatings` prop. */
-export function buildChatPlanRatings(threshold: number) {
-  return [
-    {
-      id: 'amount',
-      label: `Amount (${inrShort(threshold)}+)`,
-      note: severityRuleNote(threshold),
-      items: rateRisks('amount', threshold),
-    },
-    {
-      id: 'certainty',
-      label: 'How certain',
-      note: 'Re-rated by certainty: confirmed control breaks = High, suspicious patterns = Medium.',
-      items: rateRisks('certainty', threshold),
-    },
-    {
-      id: 'control',
-      label: 'Which control',
-      note: 'Re-rated by control: duplicate & missing-PO payments = High, other checks = Medium.',
-      items: rateRisks('control', threshold),
-    },
-  ];
 }
