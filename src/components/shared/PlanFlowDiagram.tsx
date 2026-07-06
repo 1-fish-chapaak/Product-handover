@@ -16,7 +16,7 @@
 // resizable Plan panel. Calm by default (hairline ink edges); brand colour and
 // the arrowheads only light up on interaction — the Auditor's Pen stays rare.
 
-import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -118,13 +118,29 @@ function edgePath(a: Rect, b: Rect, kind: Edge['kind']): string {
 // the detail strip. Owns all hover/select/measurement state so it works the
 // same dropped into the inline card or the modal.
 
-export function PlanFlowGraph({ steps, outputLabel = 'Result', outputItems, outputNote }: {
+export function PlanFlowGraph({
+  steps, outputLabel = 'Result', outputItems, outputNote,
+  building = false, gateAfterId, gateOpen = true, onReachGate, onBuildComplete, buildStepMs = 950,
+}: {
   steps: PlanCardStep[];
   outputLabel?: string;
   /** The findings behind the output count — listed when the output node is clicked. */
   outputItems?: PlanOutputItem[];
   /** One-line provenance for the levels (e.g. the user's own High/Medium rule). */
   outputNote?: string;
+  /** When true, the graph BUILDS: nodes reveal one at a time (parse → … →
+   *  output) instead of all at once. Doubles as the response loader. */
+  building?: boolean;
+  /** Step id after which the build pauses until `gateOpen` (the risk step). */
+  gateAfterId?: string;
+  /** Parent flips this true (e.g. after the severity answer) to resume the build. */
+  gateOpen?: boolean;
+  /** Fired once, when the build parks at the gate. */
+  onReachGate?: () => void;
+  /** Fired once, when every node (incl. output) has been revealed. */
+  onBuildComplete?: () => void;
+  /** Dwell between node reveals while building. */
+  buildStepMs?: number;
 }) {
   const [hover, setHover] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
@@ -132,6 +148,38 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result', outputItems, outp
   const outList = outputItems;
   const outNote = outputNote;
   const hasOutList = (outList?.length ?? 0) > 0;
+
+  // ── Progressive build (nodes = the steps + the output node) ──
+  const totalNodes = steps.length + 1;
+  const gateIndex = gateAfterId ? steps.findIndex((s) => s.id === gateAfterId) : -1;
+  // Nodes currently revealed. Not building → everything at once.
+  const [revealCount, setRevealCount] = useState(building ? 1 : totalNodes);
+  const buildDoneRef = useRef(!building);
+  const gateFiredRef = useRef(false);
+  const onReachGateRef = useRef(onReachGate);
+  const onBuildCompleteRef = useRef(onBuildComplete);
+  onReachGateRef.current = onReachGate;
+  onBuildCompleteRef.current = onBuildComplete;
+  // Parked at the gate: the gate step is revealed but the rule isn't in yet.
+  const atGate = building && gateIndex >= 0 && revealCount === gateIndex + 1 && !gateOpen;
+  const stepsShown = building ? Math.min(revealCount, steps.length) : steps.length;
+  const outputShown = building ? revealCount >= totalNodes : true;
+
+  useEffect(() => {
+    if (!building || buildDoneRef.current) return;
+    // Every node (incl. output) shown → hold one beat, then complete.
+    if (revealCount >= totalNodes) {
+      const t = setTimeout(() => { buildDoneRef.current = true; onBuildCompleteRef.current?.(); }, buildStepMs);
+      return () => clearTimeout(t);
+    }
+    // Hold at the risk step until the rule arrives.
+    if (gateIndex >= 0 && revealCount === gateIndex + 1 && !gateOpen) {
+      if (!gateFiredRef.current) { gateFiredRef.current = true; onReachGateRef.current?.(); }
+      return;
+    }
+    const t = setTimeout(() => setRevealCount((c) => c + 1), buildStepMs);
+    return () => clearTimeout(t);
+  }, [building, revealCount, gateOpen, gateIndex, totalNodes, buildStepMs]);
 
   // Distinct input files, in first-seen order.
   const inputs = useMemo(() => {
@@ -189,7 +237,8 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result', outputItems, outp
     const ro = new ResizeObserver(measure);
     if (wrapRef.current) ro.observe(wrapRef.current);
     return () => ro.disconnect();
-  }, [steps, inputs.length]);
+    // revealCount: re-measure as nodes reveal during the build so edges track.
+  }, [steps, inputs.length, revealCount]);
 
   const nodeClass = (id: string, extra = '') => {
     const dim = lit && !lit.has(id);
@@ -255,7 +304,7 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result', outputItems, outp
             hand-off box on the connector, ending in the output. Each step names
             the data it reads inline, so there's no separate input lane. */}
         <div className="relative z-10 flex flex-col gap-5">
-            {steps.map((s, idx) => {
+            {steps.slice(0, stepsShown).map((s, idx) => {
               const tables = s.sources ?? [];
               const hasFunnel = s.rowsIn != null && s.rowsOut != null;
               return (
@@ -320,7 +369,9 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result', outputItems, outp
 
             {/* Output node — clicking the header expands the purple box in
                 place with the findings behind the count. A div shell wraps the
-                header button so the expanded list sits inside the same box. */}
+                header button so the expanded list sits inside the same box.
+                While building, it reveals only after the last step. */}
+            {outputShown && (
             <div
               ref={registerNode('out')}
               onMouseEnter={() => setHover('out')}
@@ -394,6 +445,7 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result', outputItems, outp
                 )}
               </AnimatePresence>
             </div>
+            )}
           </div>
         </div>
 
@@ -426,6 +478,11 @@ export default function PlanFlowDiagram({
   outputNote,
   headerAccessory,
   defaultOpen = true,
+  building = false,
+  gateAfterId,
+  gateOpen = true,
+  onReachGate,
+  onBuildComplete,
 }: {
   steps: PlanCardStep[];
   outputLabel?: string;
@@ -435,6 +492,12 @@ export default function PlanFlowDiagram({
   outputNote?: string;
   headerAccessory?: ReactNode;
   defaultOpen?: boolean;
+  /** Build the graph node-by-node (doubles as the response loader). See PlanFlowGraph. */
+  building?: boolean;
+  gateAfterId?: string;
+  gateOpen?: boolean;
+  onReachGate?: () => void;
+  onBuildComplete?: () => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [expanded, setExpanded] = useState(false);
@@ -482,7 +545,11 @@ export default function PlanFlowDiagram({
           >
             <div className="px-4 pt-3 pb-4">
               <p className="text-[11.5px] text-ink-500 leading-snug mb-3">{FLOW_HINT}</p>
-              <PlanFlowGraph steps={steps} outputLabel={outputLabel} outputItems={outputItems} outputNote={outputNote} />
+              <PlanFlowGraph
+                steps={steps} outputLabel={outputLabel} outputItems={outputItems} outputNote={outputNote}
+                building={building} gateAfterId={gateAfterId} gateOpen={gateOpen}
+                onReachGate={onReachGate} onBuildComplete={onBuildComplete}
+              />
             </div>
           </motion.div>
         )}

@@ -813,21 +813,11 @@ export interface ChatViewProps {
   onMessagesChange?: (messages: ChatMessage[]) => void;
 }
 
-// Step labels for the subtle inline audit loader. The artifact panel renders
-// the full Plan / Code / Sources detail; here we only narrate progress as a
-// single shimmering line and sync the active artifact tab.
-// The plan the checklist ticks through as it runs — one entry per CHAT_PLAN_STEPS
-// stage, in present tense. `doneLabel` is the result the step hands on (shown as
-// a subtle addendum once it's checked off). The run PAUSES after `gateId` (the
-// risk step) so Ira can ask the user's severity rule before rating the findings.
-const PLAN_RUN_STEPS: { id: string; label: string; doneLabel?: string; tab: ArtifactTab | null }[] = [
-  { id: 'parse',   label: 'Understanding your question', tab: 'plan' },
-  { id: 'sources', label: 'Finding the right data',      tab: 'sources' },
-  { id: 'plan',    label: 'Planning the checks',         tab: 'code' },
-  { id: 'execute', label: 'Running the checks',          doneLabel: 'found 9 risky payments', tab: 'code' },
-  { id: 'format',  label: 'Preparing your results',      tab: null },
-];
-const PLAN_RUN_GATE_ID = 'execute'; // pause here to ask for the severity rule
+// The response loader is the flow chart building itself (PlanFlowDiagram in
+// `building` mode). It reveals the CHAT_PLAN_STEPS nodes one at a time and
+// PAUSES after this step (the risk step) so Ira can ask the user's severity
+// rule before rating the findings.
+const PLAN_RUN_GATE_ID = 'execute';
 
 // Streaming v2 — opt-in via ?stream=v2. When on, the audit answer streams from
 // the event spine (text.delta + smoothing + collapsed wait) instead of the
@@ -1944,143 +1934,6 @@ function WorkflowOutputPreviewCard({
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ─── Inline plan checklist ────────────────────────────────────────────────────
-// Ticks through PLAN_RUN_STEPS one at a time, syncs the active
-// artifact tab as it advances, and fires onComplete when done. The artifact
-// panel carries the heavy detail (Plan / Code / Sources); inline stays quiet.
-// Live plan checklist — ticks through the plan one step at a time, syncing the
-// artifact tab as it advances. When it reaches `gateAfterId` (the risk step) it
-// PAUSES: fires onReachGate once and holds until `gateOpen` flips true (i.e. the
-// user has answered the severity question), then finishes the remaining steps
-// and fires onComplete. The tuned scroll-pinning from the old single-line loader
-// is preserved so the active row stays in view.
-function InlinePlanChecklist({
-  steps,
-  gateAfterId,
-  gateOpen = true,
-  onReachGate,
-  onComplete,
-  onTabSwitch,
-  stepDurationMs = 1150,
-}: {
-  steps: { id: string; label: string; doneLabel?: string; tab: ArtifactTab | null }[];
-  /** Step id after which to pause until `gateOpen` (omit for a straight run). */
-  gateAfterId?: string;
-  /** Parent flips this true to release the gate and finish the run. */
-  gateOpen?: boolean;
-  /** Fired once, when the gated step completes and the run parks at the gate. */
-  onReachGate?: () => void;
-  onComplete: () => void;
-  onTabSwitch?: (tab: ArtifactTab) => void;
-  stepDurationMs?: number;
-}) {
-  const [doneCount, setDoneCount] = useState(0); // steps fully checked off
-  const completedRef = useRef(false);
-  const gateFiredRef = useRef(false);
-  const onCompleteRef = useRef(onComplete);
-  const onReachGateRef = useRef(onReachGate);
-  const onTabSwitchRef = useRef(onTabSwitch);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  onCompleteRef.current = onComplete;
-  onReachGateRef.current = onReachGate;
-  onTabSwitchRef.current = onTabSwitch;
-
-  const gateIndex = gateAfterId ? steps.findIndex(s => s.id === gateAfterId) : -1;
-  // Parked at the gate: the gated step is checked off but the rule isn't in yet.
-  const atGate = gateIndex >= 0 && doneCount === gateIndex + 1 && !gateOpen;
-
-  useEffect(() => {
-    if (completedRef.current) return;
-    if (doneCount >= steps.length) {
-      completedRef.current = true;
-      onCompleteRef.current();
-      return;
-    }
-    // Hold at the risk step until the severity rule arrives.
-    if (gateIndex >= 0 && doneCount === gateIndex + 1 && !gateOpen) {
-      if (!gateFiredRef.current) {
-        gateFiredRef.current = true;
-        onReachGateRef.current?.();
-      }
-      return;
-    }
-    // Otherwise the active step is steps[doneCount] — switch its tab, then check
-    // it off after the dwell.
-    const tab = steps[doneCount].tab;
-    if (tab) onTabSwitchRef.current?.(tab);
-    const t = setTimeout(() => setDoneCount(c => c + 1), stepDurationMs);
-    return () => clearTimeout(t);
-  }, [doneCount, gateOpen, gateIndex, steps, stepDurationMs]);
-
-  // Pin the checklist near the top of the chat viewport as it grows / advances.
-  // The loader bubble has a tall `paddingBottom: 50vh` buffer (see render site),
-  // so scrolling the container to scrollHeight puts the buffer at the bottom of
-  // the viewport and the active row well above it. Parent ResizeObserver is
-  // gated on showProgressiveLoader so it won't override.
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    const findScrollParent = (node: HTMLElement | null): HTMLElement | null => {
-      let p = node?.parentElement ?? null;
-      while (p) {
-        const oy = window.getComputedStyle(p).overflowY;
-        if (oy === 'auto' || oy === 'scroll') return p;
-        p = p.parentElement;
-      }
-      return null;
-    };
-    const scrollable = findScrollParent(el);
-    const r1 = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (scrollable) {
-          scrollable.scrollTo({ top: scrollable.scrollHeight, behavior: 'smooth' });
-        } else {
-          el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-        }
-      });
-    });
-    return () => cancelAnimationFrame(r1);
-  }, [doneCount, atGate]);
-
-  return (
-    <div ref={rootRef} style={{ scrollMarginBottom: 24 }} className="flex flex-col gap-2">
-      {steps.map((s, i) => {
-        const done = i < doneCount;
-        const active = i === doneCount && !atGate; // the one currently running
-        return (
-          <motion.div
-            key={s.id}
-            initial={{ opacity: 0, y: 3 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, delay: i * 0.04 }}
-            className="flex items-center gap-2.5 text-[0.8125rem]"
-          >
-            {done ? (
-              <span className="shrink-0 inline-flex size-4 items-center justify-center rounded-full bg-brand-600 text-white" aria-hidden>
-                <Check size={11} strokeWidth={3} />
-              </span>
-            ) : active ? (
-              <Loader2 size={15} className="shrink-0 text-brand-600 motion-safe:animate-spin" aria-hidden />
-            ) : (
-              <span className="shrink-0 inline-flex size-4 items-center justify-center rounded-full border border-canvas-border" aria-hidden>
-                <span className="size-1 rounded-full bg-ink-300" />
-              </span>
-            )}
-            {active ? (
-              <TextShimmer as="span" duration={2} spread={1.5}>{s.label}</TextShimmer>
-            ) : (
-              <span className={done ? 'text-ink-700' : 'text-ink-400'}>
-                {s.label}
-                {done && s.doneLabel && <span className="text-ink-400"> · {s.doneLabel}</span>}
-              </span>
-            )}
-          </motion.div>
-        );
-      })}
     </div>
   );
 }
@@ -3441,11 +3294,6 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // value is a string[] (single-select → length 1). Reset on submit/cancel.
   const [wfPhaseAnswers, setWfPhaseAnswers] = useState<Record<number, string[]>>({});
   const [showProgressiveLoader, setShowProgressiveLoader] = useState(false);
-  // Ref mirror of showProgressiveLoader — read inside the ResizeObserver
-  // closure (which would otherwise capture stale state) to gate the auto-
-  // snap-to-bottom while the InlinePlanChecklist is in charge of positioning.
-  const progressiveLoaderRef = useRef(false);
-  useEffect(() => { progressiveLoaderRef.current = showProgressiveLoader; }, [showProgressiveLoader]);
 
   // Workflow build flow state
   const [workflowBuildPhase, setWorkflowBuildPhase] = useState(0); // 0=idle, 1=asking-files, 2=asking-logic, 3=confirming, 4=input-config, 5=freeze-confirm, 6=output-config, 7=save
@@ -3708,12 +3556,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     let rafId: number | null = null;
     const followIfAtBottom = () => {
       if (isUserScrolledUp.current) return;
-      // Stand down while the InlinePlanChecklist is running — it owns the
-      // scroll position during loading (it pins the active step in view
-      // using a tall bottom buffer on the loader bubble). Snapping to
-      // scrollHeight here would yank the loader text down behind the
-      // composer.
-      if (progressiveLoaderRef.current) return;
+      // NB: we deliberately DO follow during loading now — the flow chart builds
+      // node-by-node as the loader, so snapping to the growing bottom keeps each
+      // freshly-revealed step (and the severity card) in view. (The old text
+      // loader pinned itself and needed a stand-down here; the chart doesn't.)
       // Stand down while a smooth scroll is animating — otherwise our
       // instant snap would cancel the animation and the user sees a jump.
       if (smoothScrollTimerRef.current !== null) return;
@@ -6522,20 +6368,22 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                         )}
                       </div>
                     ) : msg.richType === 'audit-loading' ? (
-                      // ~40px of breathing room directly below the loader.
-                      // Combined with the parent's pb-10 (40px), the active
-                      // shimmering line lands ~80px above the composer when
-                      // auto-scroll snaps to scrollHeight — comfortable
-                      // without floating the loader off the top.
+                      // The loader IS the flow chart building itself: it reveals
+                      // node-by-node, pauses at the risk step for the severity
+                      // rule, then finishes — the same diagram then carries into
+                      // the result below, so there's no swap-flicker.
                       <div className="w-full" style={{ paddingBottom: 40 }}>
                         {showProgressiveLoader && msg.id === auditRunMsgIdRef.current && (
-                          <InlinePlanChecklist
-                            steps={PLAN_RUN_STEPS}
+                          <PlanFlowDiagram
+                            building
+                            steps={buildChatPlanSteps(severityThreshold)}
+                            outputLabel="Risk results"
+                            outputItems={buildChatPlanRiskItems(severityThreshold)}
+                            outputNote={severityRuleNote(severityThreshold)}
                             gateAfterId={PLAN_RUN_GATE_ID}
                             gateOpen={severityGateOpen}
                             onReachGate={showSeverityClarification}
-                            onTabSwitch={setActiveArtifactTab}
-                            onComplete={handleProgressiveLoadingComplete}
+                            onBuildComplete={handleProgressiveLoadingComplete}
                           />
                         )}
                       </div>
