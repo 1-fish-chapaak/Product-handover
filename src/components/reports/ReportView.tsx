@@ -13,7 +13,7 @@ import {
   Layout, X, Edit3, Loader2, Trash2,
   List, LayoutGrid, GripVertical, Plus,
   MoreVertical, Eye, EyeOff, SquareArrowOutUpRight,
-  MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
+  MessageSquare, Paperclip, Send, History,
   Layers, Check, RefreshCw, Lock, Sparkles,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
@@ -539,13 +539,20 @@ function CommentDrawer({
 
   // Show only comments belonging to the query the user clicked from.
   const queryComments = comments.filter(c => c.queryId === query.id);
-  const grouped = queryComments.reduce<Record<string, { queryId: string; queryTitle: string; items: QueryComment[] }>>((acc, c) => {
-    if (!acc[c.queryId]) acc[c.queryId] = { queryId: c.queryId, queryTitle: c.queryTitle, items: [] };
-    acc[c.queryId].items.push(c);
-    return acc;
-  }, {});
-  const queryGroups = Object.values(grouped);
   const totalComments = queryComments.length;
+
+  // Coarse date buckets from the relative timestamp string, mirroring the
+  // Report Activity Log so both comment surfaces read the same.
+  const bucketOf = (ts: string): 'Today' | 'Yesterday' | 'Earlier' => {
+    const t = ts.toLowerCase();
+    if (/just now|second|minute|hour|today/.test(t)) return 'Today';
+    if (/^1\s*day|yesterday/.test(t)) return 'Yesterday';
+    return 'Earlier';
+  };
+  const sortedComments = [...queryComments].reverse();
+  const dateGroups = (['Today', 'Yesterday', 'Earlier'] as const)
+    .map(label => ({ label, items: sortedComments.filter(c => bucketOf(c.timestamp) === label) }))
+    .filter(g => g.items.length > 0);
 
   const handlePost = () => {
     const body = text.trim();
@@ -581,45 +588,53 @@ function CommentDrawer({
         aria-modal="true"
         aria-label="Comments"
       >
-        {/* Header strip + close */}
-        <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-4 border-b border-canvas-border bg-white">
-          <div className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-brand-600">
-            <MessageSquare size={14} className="shrink-0" />
-            Comments
-            <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 text-[0.625rem] font-semibold rounded-full tabular-nums bg-brand-600/10 text-brand-600">
-              {totalComments}
-            </span>
+        {/* Header — icon tile + title + count, matching the Report Activity Log */}
+        <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-[8px] bg-brand-600/10 text-brand-600 flex items-center justify-center shrink-0">
+              <MessageSquare size={20} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-[1rem] font-semibold text-ink-800 leading-tight">Comments</h2>
+                {totalComments > 0 && (
+                  <motion.span
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.15, type: 'spring', stiffness: 520, damping: 24 }}
+                    className="inline-flex items-center h-[18px] px-1.5 rounded-full bg-brand-50 text-brand-700 text-[0.625rem] font-semibold tabular-nums"
+                  >
+                    {totalComments}
+                  </motion.span>
+                )}
+              </div>
+              <p className="text-[0.75rem] text-ink-400 mt-0.5 leading-snug truncate">
+                On <span className="font-mono font-semibold text-brand-600">{query.id}</span> — {query.title}
+              </p>
+            </div>
           </div>
-          <button
+          <motion.button
             onClick={onClose}
+            whileTap={{ scale: 0.88 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 22 }}
             className="w-8 h-8 rounded-full text-ink-400 hover:text-ink-800 hover:bg-brand-50 flex items-center justify-center cursor-pointer shrink-0"
             aria-label="Close"
           >
             <X size={16} />
-          </button>
-        </div>
-
-        {/* Header (title + sub-text) */}
-        <header className="shrink-0 px-6 py-5 border-b border-canvas-border">
-          <h2 className="text-[1rem] font-semibold text-ink-800 leading-tight">
-            Comments
-          </h2>
-          <p className="text-[0.75rem] text-ink-400 mt-0.5 leading-snug">
-            Commenting on{' '}
-            <span className="font-mono font-semibold text-brand-600">{query.id}</span> — {query.title}
-          </p>
+          </motion.button>
         </header>
 
         <>
-            {/* Comment input */}
-            <section className="shrink-0 px-6 py-4 border-b border-canvas-border">
-              <div className="relative">
+            {/* Composer — bordered card with inner toolbar, matching the activity log */}
+            <section className="shrink-0 px-6 py-4 border-b border-canvas-border bg-canvas">
+              <div className="bg-white border border-canvas-border rounded-[10px] focus-within:border-brand-600/40 focus-within:ring-2 focus-within:ring-brand-600/15 transition-all overflow-hidden">
                 <textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
+                  onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handlePost(); } }}
                   placeholder={`Leave a comment on ${query.id}…`}
                   rows={3}
-                  className="w-full resize-none p-3 pr-[72px] bg-white border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                  className="w-full resize-none bg-transparent border-0 px-3 pt-3 pb-1.5 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-0"
                 />
                 <input
                   ref={fileInputRef}
@@ -630,52 +645,59 @@ function CommentDrawer({
                     if (f) setAttachment(f.name);
                   }}
                 />
-                <div className="absolute bottom-2 right-2 flex items-center gap-1">
-                  <button
+                <AnimatePresence>
+                  {attachment && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-3 pb-2">
+                        <span className="inline-flex items-center gap-1.5 h-6 pl-2 pr-1.5 bg-brand-50 text-brand-700 text-[0.6875rem] font-medium rounded-full">
+                          <Paperclip size={12} />
+                          <span className="truncate max-w-[200px]">{attachment}</span>
+                          <button onClick={() => setAttachment(null)} className="ml-0.5 text-brand-700/60 hover:text-brand-700 cursor-pointer" aria-label="Remove attachment">
+                            <X size={12} />
+                          </button>
+                        </span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <div className="flex items-center justify-between px-2 py-2 border-t border-canvas-border/60">
+                  <motion.button
                     type="button"
+                    whileTap={{ scale: 0.9 }}
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-brand-600 cursor-pointer"
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                     aria-label="Attach file"
                     title="Attach file"
                   >
-                    <Paperclip size={14} />
-                  </button>
-                  <button
-                    type="button"
+                    <Paperclip size={15} />
+                  </motion.button>
+                  <motion.button
                     onClick={handlePost}
                     disabled={!text.trim() || isPosting}
-                    className={`w-7 h-7 flex items-center justify-center rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                    whileTap={text.trim() && !isPosting ? { scale: 0.96 } : undefined}
+                    title="Post comment (⌘↵)"
+                    className={`inline-flex items-center gap-1.5 h-8 px-4 text-[0.75rem] font-semibold rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
                       text.trim() && !isPosting
                         ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
-                        : 'text-ink-400/50 cursor-not-allowed'
+                        : 'bg-brand-600/40 text-white/80 cursor-not-allowed'
                     }`}
-                    aria-label="Post comment"
-                    title="Post comment"
                   >
-                    {isPosting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                  </button>
+                    {isPosting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                    {isPosting ? 'Posting…' : 'Post'}
+                  </motion.button>
                 </div>
               </div>
-              {attachment && (
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/10 text-brand-600 text-[0.6875rem] font-medium rounded-full">
-                    <Paperclip size={12} />
-                    {attachment}
-                  </span>
-                  <button onClick={() => setAttachment(null)} className="text-[0.6875rem] text-ink-400 hover:text-risk-700 cursor-pointer">remove</button>
-                </div>
-              )}
             </section>
 
-            {/* Shared activity log */}
-            <div className="flex-1 overflow-y-auto px-6 py-4" aria-live="polite">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-400">Activity log</h3>
-                <span className="text-[0.6875rem] text-ink-400 tabular-nums">
-                  {totalComments} {totalComments === 1 ? 'comment' : 'comments'} across {queryGroups.length} {queryGroups.length === 1 ? 'query' : 'queries'}
-                </span>
-              </div>
-              {queryGroups.length === 0 ? (
+            {/* Feed — date-bucketed spine timeline, matching the Report Activity Log */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 bg-white" aria-live="polite">
+              {totalComments === 0 ? (
                 <EmptyState
                   icon={MessageSquare}
                   title="No comments yet"
@@ -683,38 +705,34 @@ function CommentDrawer({
                   size="compact"
                 />
               ) : (
-                <div className="space-y-4">
-                  {queryGroups.map(group => (
-                    <section key={group.queryId} className="border border-canvas-border rounded-[12px] overflow-hidden">
-                      <header className={`px-3 py-2 bg-canvas border-b border-canvas-border flex items-center justify-between ${group.queryId === query.id ? 'bg-brand-600/5' : ''}`}>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-[0.6875rem] font-bold text-brand-600 shrink-0">{group.queryId}</span>
-                          <span className="text-[0.6875rem] text-ink-400 truncate">{group.queryTitle}</span>
+                <div className="relative">
+                  <span aria-hidden className="absolute left-[15px] top-1 bottom-1 w-px bg-canvas-border" />
+                  <div className="space-y-6">
+                    {dateGroups.map(group => (
+                      <section key={group.label}>
+                        <div className="flex items-center gap-2.5 mb-3 pl-[46px]">
+                          <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-400">{group.label}</h3>
+                          <div className="flex-1 h-px bg-canvas-border/70" />
+                          <span className="text-[0.625rem] tabular-nums text-ink-300">
+                            {group.items.length} {group.items.length === 1 ? 'entry' : 'entries'}
+                          </span>
                         </div>
-                        <span className="text-[0.625rem] text-ink-400 tabular-nums shrink-0">
-                          {group.items.length} {group.items.length === 1 ? 'comment' : 'comments'}
-                        </span>
-                      </header>
-                      <ol className="divide-y divide-border-light">
-                        {group.items.slice().reverse().map(c => {
-                          const isLong = c.text.length > 1000;
-                          const isExpanded = expandedComments.has(c.id);
-                          const displayText = isLong && !isExpanded ? c.text.slice(0, 1000) + '…' : c.text;
-                          return (
-                            <li key={c.id} className="px-3 py-3">
-                              <div className="flex items-start gap-2.5">
-                                <span className="shrink-0 w-7 h-7 rounded-full bg-brand-600/10 text-brand-600 flex items-center justify-center text-[0.625rem] font-bold tracking-wider">
+                        <ol className="space-y-5">
+                          {group.items.map(c => {
+                            const isLong = c.text.length > 1000;
+                            const isExpanded = expandedComments.has(c.id);
+                            const displayText = isLong && !isExpanded ? c.text.slice(0, 1000) + '…' : c.text;
+                            return (
+                              <li key={c.id} className="relative flex gap-3.5">
+                                <div className="relative z-[1] shrink-0 w-8 h-8 rounded-full bg-brand-600/10 text-brand-700 ring-[3px] ring-white flex items-center justify-center text-[0.625rem] font-semibold tracking-tight">
                                   {c.initials}
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between gap-2 mb-0.5">
-                                    <span className="text-[0.75rem] font-semibold text-ink-800">{c.author}</span>
-                                    <span className="inline-flex items-center gap-1 text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap">
-                                      <ClockIcon size={12} />
-                                      {c.timestamp}
-                                    </span>
+                                </div>
+                                <div className="flex-1 min-w-0 pb-0.5">
+                                  <div className="flex items-baseline gap-2">
+                                    <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{c.author}</span>
+                                    <span className="ml-auto text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap">{c.timestamp}</span>
                                   </div>
-                                  <p className="text-[0.75rem] text-ink-800 leading-relaxed whitespace-pre-wrap break-words">{displayText}</p>
+                                  <p className="mt-1.5 text-[0.8125rem] text-ink-700 leading-relaxed whitespace-pre-wrap break-words">{displayText}</p>
                                   {isLong && (
                                     <button
                                       type="button"
@@ -729,19 +747,19 @@ function CommentDrawer({
                                     </button>
                                   )}
                                   {c.attachment && (
-                                    <span className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/10 text-brand-600 text-[0.6875rem] font-medium rounded-full">
-                                      <Paperclip size={12} />
-                                      {c.attachment}
-                                    </span>
+                                    <button className="mt-2.5 inline-flex items-center gap-1.5 max-w-full h-7 px-2.5 bg-canvas border border-canvas-border text-ink-700 text-[0.6875rem] font-medium rounded-[7px] hover:border-brand-600/30 hover:text-brand-700 transition-colors cursor-pointer">
+                                      <Paperclip size={12} className="text-ink-400 shrink-0" />
+                                      <span className="truncate">{c.attachment}</span>
+                                    </button>
                                   )}
                                 </div>
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ol>
-                    </section>
-                  ))}
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      </section>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -863,7 +881,6 @@ function ReportActivityLogDrawer({
           <motion.button
             onClick={onClose}
             whileTap={{ scale: 0.88 }}
-            whileHover={{ rotate: 90 }}
             transition={{ type: 'spring', stiffness: 400, damping: 22 }}
             className="w-8 h-8 rounded-full text-ink-400 hover:text-ink-800 hover:bg-brand-50 flex items-center justify-center cursor-pointer shrink-0"
             aria-label="Close"

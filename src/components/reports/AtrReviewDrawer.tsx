@@ -77,7 +77,6 @@ export default function AtrReviewDrawer({ reportId, reportName, tab, onClose, on
             <motion.button
               onClick={onClose}
               whileTap={{ scale: 0.88 }}
-              whileHover={{ rotate: 90 }}
               transition={{ type: 'spring', stiffness: 400, damping: 22 }}
               className="w-8 h-8 rounded-full text-ink-400 hover:text-ink-800 hover:bg-brand-50 flex items-center justify-center cursor-pointer shrink-0"
               aria-label="Close"
