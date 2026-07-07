@@ -76,8 +76,8 @@ export type PermissionKey =
   | 'plan_view' | 'plan_edit'
   // AI Concierge (new) — Ask IRA chat is free for everyone, so it has no key
   | 'concierge_use'
-  // Admin (existing 2 + new 4)
-  | 'ad_logs' | 'ad_logs_export' | 'ad_users_manage' | 'ad_roles_manage';
+  // Admin (existing 2 + new 4 + usage)
+  | 'ad_logs' | 'ad_logs_export' | 'ad_users_manage' | 'ad_roles_manage' | 'ad_usage';
 
 export const PERMISSION_GROUPS: PermissionGroup[] = [
   { group: 'Business Process', module: 'business_process', perms: [
@@ -172,6 +172,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     { key: 'ad_logs_export',  name: 'Export Logs',      desc: 'Export audit logs as CSV' },
     { key: 'ad_users_manage', name: 'Manage Users',     desc: 'Manage users and teams' },
     { key: 'ad_roles_manage', name: 'Manage Roles',     desc: 'Manage roles and permissions' },
+    { key: 'ad_usage',        name: 'Platform Usage',   desc: 'View platform usage and adoption metrics' },
   ]},
 ];
 
@@ -347,5 +348,6 @@ export const VIEW_PERMISSIONS: Partial<Record<View, PermissionKey>> = {
   'admin-users': 'ad_users_manage',
   'admin-roles': 'ad_roles_manage',
   'admin-logs': 'ad_logs',
+  'platform-usage': 'ad_usage',
   // home, recents, dev routes intentionally ungated (open to all)
 };
