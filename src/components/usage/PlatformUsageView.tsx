@@ -1,30 +1,38 @@
 /**
- * Platform Usage — adoption analytics for admins.
+ * Platform Usage — adoption analytics for admins. (PRD-PLATFORM-USAGE.md)
  *
- * Renders the seeded 90-day usage series (src/data/platform-usage.ts) with
- * today's live audit-log events folded in: KPI band → usage-over-time chart +
- * module breakdown → AI usage → per-user activity table. Same page skeleton
- * as Administration (header strip → KPI band → toolbar → SmartTable).
+ * Read-only diagnostic surface over the seeded usage series
+ * (src/data/platform-usage.ts) with today's live audit-log events folded in:
+ * KPI band with prior-period deltas → usage chart + module breakdown →
+ * AI usage + seats & lifecycle → Users|Teams table with drill-down drawer and
+ * CSV export. People-management stays in Administration; this view only
+ * links there.
  */
 
 import { useMemo, useState } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
-import { Users, Activity, Sparkles, FileBarChart, BarChart3 } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import { Users, User, Activity, Sparkles, FileBarChart, BarChart3, Download } from 'lucide-react';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
-import { useAdminData } from '../../context/AdminDataContext';
+import { useAdminData, useAuditLog, type AdminUser } from '../../context/AdminDataContext';
+import { useCurrentUser } from '../../context/CurrentUserContext';
 import { getRole } from '../../data/rbac';
+import type { View } from '../../hooks/useAppState';
 import {
   USAGE_MODULES, usageDaysWithLive, userUsageRows, usageDayLabel,
-  type UsageModule,
+  usageWindowTotals, usageDeltaPct, seatBuckets, lastLoginOffsetDays,
+  type UsageModule, type UserUsageRow,
 } from '../../data/platform-usage';
 import SmartTable, { type Column } from '../shared/SmartTable';
 import ColumnFilter from '../shared/ColumnFilter';
 import FloatingLines from '../shared/FloatingLines';
 import EmptyState from '../shared/EmptyState';
-import { InitialsAvatar, MemberSearch, AdminKpiRow } from '../admin/AdminPrimitives';
-import { presetChip, type Stat } from '../admin/adminTokens';
+import { useToast } from '../shared/Toast';
+import { InitialsAvatar, MemberSearch } from '../admin/AdminPrimitives';
+import { presetChip } from '../admin/adminTokens';
+import UsageKpiRow, { type UsageStat } from './UsageKpiRow';
+import UserUsageDrawer from './UserUsageDrawer';
 
 type RangeDays = 7 | 30 | 90;
 const RANGES: { days: RangeDays; label: string }[] = [
@@ -33,9 +41,11 @@ const RANGES: { days: RangeDays; label: string }[] = [
   { days: 90, label: 'Last 90 days' },
 ];
 
+type Lens = 'users' | 'teams';
+
 const fmt = (n: number) => n.toLocaleString('en-US');
 
-/* ── Per-user table row (flattened so SmartTable sorting works on raw keys) ── */
+/* ── Flattened table rows (SmartTable sorts on raw keys) ── */
 interface UsageRow extends Record<string, unknown> {
   name: string;
   email: string;
@@ -46,6 +56,17 @@ interface UsageRow extends Record<string, unknown> {
   aiQueries: number;
   topModule: UsageModule;
 }
+
+interface TeamUsageRow extends Record<string, unknown> {
+  team: string;
+  members: number;
+  actions: number;
+  aiQueries: number;
+  topModule: string;
+  lastActive: string;
+}
+
+const MODULE_CHIP = 'inline-flex items-center px-2 h-6 rounded-full border border-canvas-border bg-canvas text-[0.6875rem] font-medium text-ink-600 whitespace-nowrap';
 
 const userColumns: Column<UsageRow>[] = [
   {
@@ -78,32 +99,136 @@ const userColumns: Column<UsageRow>[] = [
     key: 'topModule', label: 'Top Module', sortable: true, width: '13%',
     render: (r) => r.actions === 0
       ? <span className="text-[0.75rem] text-ink-400">—</span>
-      : <span className="inline-flex items-center px-2 h-6 rounded-full border border-canvas-border bg-canvas text-[0.6875rem] font-medium text-ink-600 whitespace-nowrap">{r.topModule}</span>,
+      : <span className={MODULE_CHIP}>{r.topModule}</span>,
+  },
+];
+
+const teamColumns: Column<TeamUsageRow>[] = [
+  {
+    key: 'team', label: 'Team', sortable: true, truncate: true,
+    render: (r) => (
+      <div className="min-w-0">
+        <div className="text-[0.8125rem] font-semibold text-ink-900 truncate">{r.team}</div>
+        <div className="text-[0.6875rem] text-ink-400">{r.members} member{r.members !== 1 ? 's' : ''}</div>
+      </div>
+    ),
+  },
+  {
+    key: 'actions', label: 'Actions', sortable: true, width: '13%', align: 'right',
+    render: (r) => <span className="text-[0.8125rem] font-semibold text-ink-900 tabular-nums">{fmt(r.actions)}</span>,
+  },
+  {
+    key: 'aiQueries', label: 'AI Queries', sortable: true, width: '13%', align: 'right',
+    render: (r) => <span className="text-[0.8125rem] text-ink-700 tabular-nums">{fmt(r.aiQueries)}</span>,
+  },
+  {
+    key: 'topModule', label: 'Top Module', sortable: true, width: '16%',
+    render: (r) => r.actions === 0
+      ? <span className="text-[0.75rem] text-ink-400">—</span>
+      : <span className={MODULE_CHIP}>{r.topModule}</span>,
+  },
+  {
+    key: 'lastActive', label: 'Last Active', sortable: true, width: '14%',
+    render: (r) => <span className="text-[0.75rem] font-mono tabular-nums text-ink-700">{r.lastActive}</span>,
   },
 ];
 
 const CARD = 'rounded-xl border border-canvas-border bg-canvas-elevated';
 
-export default function PlatformUsageView() {
+/* ── Users | Teams lens toggle — the platform's sliding-pill segmented
+      switch (mirrors Admin's MembersSwitch, own layoutId). ── */
+function UsageLensSwitch({ lens, onSelect }: { lens: Lens; onSelect: (l: Lens) => void }) {
+  const prefersReduced = useReducedMotion();
+  const tabs: { id: Lens; label: string; icon: React.ElementType }[] = [
+    { id: 'users', label: 'Users', icon: User },
+    { id: 'teams', label: 'Teams', icon: Users },
+  ];
+  return (
+    <div className="inline-flex items-center gap-1 p-1 rounded-lg border border-canvas-border/60 bg-canvas-elevated/40">
+      {tabs.map(t => {
+        const active = lens === t.id;
+        const Icon = t.icon;
+        return (
+          <motion.button
+            key={t.id}
+            onClick={() => onSelect(t.id)}
+            whileTap={prefersReduced ? undefined : { scale: 0.97 }}
+            aria-pressed={active}
+            className={`relative inline-flex items-center gap-2 px-3.5 h-8 rounded-md text-[0.8125rem] font-medium transition-colors cursor-pointer ${
+              active ? 'text-brand-700' : 'text-ink-500 hover:text-ink-800'
+            }`}
+          >
+            {active && (
+              <motion.span
+                layoutId="usage-lens-active"
+                transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
+                className="absolute inset-0 rounded-md bg-canvas-elevated border border-canvas-border shadow-[0_1px_2px_rgba(15,8,30,0.06)]"
+              />
+            )}
+            <Icon size={14} className="relative z-10" />
+            <span className="relative z-10">{t.label}</span>
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Seats & lifecycle bucket row: label + count + avatar stack ── */
+function SeatRow({ label, people }: { label: string; people: AdminUser[] }) {
+  const shown = people.slice(0, 4);
+  const extra = people.length - shown.length;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[0.75rem] font-medium text-ink-700 flex-1 min-w-0 truncate">{label}</span>
+      <div className="flex items-center">
+        {shown.map((p, i) => (
+          <div key={p.email} className={i > 0 ? '-ml-1.5' : ''} title={p.name}>
+            <InitialsAvatar name={p.name} size={22} />
+          </div>
+        ))}
+        {extra > 0 && (
+          <span className="-ml-1.5 inline-flex items-center justify-center w-[22px] h-[22px] rounded-full bg-canvas border border-canvas-border text-[0.5625rem] font-semibold text-ink-500">
+            +{extra}
+          </span>
+        )}
+      </div>
+      <span className="text-[0.8125rem] font-semibold text-ink-900 tabular-nums w-6 text-right">{people.length}</span>
+    </div>
+  );
+}
+
+export default function PlatformUsageView({ setView }: { setView: (v: View) => void }) {
   const prefersReduced = useReducedMotion();
   const { logs, users } = useAdminData();
+  const { can } = useCurrentUser();
+  const logEvent = useAuditLog();
+  const { addToast } = useToast();
+
   const [range, setRange] = useState<RangeDays>(30);
+  const [lens, setLensState] = useState<Lens>('users');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string[]>([]);
+  const [drawerEmail, setDrawerEmail] = useState<string | null>(null);
 
-  // Full series (live events folded into today), then the visible slice.
+  // Switching lens resets the toolbar so filters never apply invisibly.
+  const setLens = (l: Lens) => {
+    setLensState(l);
+    setSearchQuery(''); setRoleFilter([]); setTeamFilter([]);
+  };
+
+  // Full 180-day series (live events folded into today), then the slices.
   const allDays = useMemo(() => usageDaysWithLive(logs), [logs]);
   const days = useMemo(() => allDays.slice(-range), [allDays, range]);
+  const priorDays = useMemo(() => allDays.slice(-2 * range, -range), [allDays, range]);
 
-  const totals = useMemo(() => ({
-    actions: days.reduce((s, d) => s + d.actions, 0),
-    aiQueries: days.reduce((s, d) => s + d.aiQueries, 0),
-    reports: days.reduce((s, d) => s + d.reports, 0),
-  }), [days]);
+  const totals = useMemo(() => usageWindowTotals(days, users, 0), [days, users]);
+  const priorTotals = useMemo(() => usageWindowTotals(priorDays, users, range), [priorDays, users, range]);
 
+  const rawRows = useMemo(() => userUsageRows(users, days, logs), [users, days, logs]);
   const rows = useMemo<UsageRow[]>(() =>
-    userUsageRows(users, days, logs).map(r => ({
+    rawRows.map(r => ({
       name: r.user.name,
       email: r.user.email,
       roleName: getRole(r.user.roleId)?.name ?? '—',
@@ -112,15 +237,13 @@ export default function PlatformUsageView() {
       actions: r.actions,
       aiQueries: r.aiQueries,
       topModule: r.topModule,
-    })), [users, days, logs]);
+    })), [rawRows]);
 
-  const activeUserCount = rows.filter(r => r.actions > 0).length;
-
-  const stats: Stat[] = [
-    { key: 'active', label: 'Active users', value: activeUserCount, icon: Users },
-    { key: 'actions', label: 'Actions', value: fmt(totals.actions), icon: Activity },
-    { key: 'ai', label: 'AI queries', value: fmt(totals.aiQueries), icon: Sparkles },
-    { key: 'reports', label: 'Reports generated', value: fmt(totals.reports), icon: FileBarChart },
+  const stats: UsageStat[] = [
+    { key: 'active', label: 'Active users', value: totals.activeUsers, icon: Users, deltaPct: usageDeltaPct(totals.activeUsers, priorTotals.activeUsers) },
+    { key: 'actions', label: 'Actions', value: fmt(totals.actions), icon: Activity, deltaPct: usageDeltaPct(totals.actions, priorTotals.actions) },
+    { key: 'ai', label: 'AI queries', value: fmt(totals.aiQueries), icon: Sparkles, deltaPct: usageDeltaPct(totals.aiQueries, priorTotals.aiQueries) },
+    { key: 'reports', label: 'Reports', value: fmt(totals.reports), icon: FileBarChart, deltaPct: usageDeltaPct(totals.reports, priorTotals.reports) },
   ];
 
   // Chart data — oldest → today; thin the axis labels so long ranges stay legible.
@@ -142,7 +265,37 @@ export default function PlatformUsageView() {
 
   const topAiUsers = [...rows].sort((a, b) => b.aiQueries - a.aiQueries).slice(0, 3).filter(r => r.aiQueries > 0);
 
-  // Table filtering
+  const seats = useMemo(() => seatBuckets(users, range), [users, range]);
+
+  // Teams lens: aggregate the user rows by team.
+  const teamRows = useMemo<TeamUsageRow[]>(() => {
+    const byTeam = new Map<string, UserUsageRow[]>();
+    rawRows.forEach(r => {
+      const name = r.user.team === '—' ? 'Unassigned' : r.user.team;
+      const arr = byTeam.get(name) ?? [];
+      arr.push(r);
+      byTeam.set(name, arr);
+    });
+    return [...byTeam.entries()].map(([team, members]) => {
+      const actions = members.reduce((s, m) => s + m.actions, 0);
+      // Top module = each member's top module weighted by their action count.
+      const tally = new Map<string, number>();
+      members.forEach(m => tally.set(m.topModule, (tally.get(m.topModule) ?? 0) + m.actions));
+      const topModule = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
+      const freshest = members.reduce((best, m) =>
+        lastLoginOffsetDays(m.user.lastLogin) < lastLoginOffsetDays(best.user.lastLogin) ? m : best, members[0]);
+      return {
+        team,
+        members: members.length,
+        actions,
+        aiQueries: members.reduce((s, m) => s + m.aiQueries, 0),
+        topModule: actions === 0 ? '—' : topModule,
+        lastActive: freshest.user.lastLogin,
+      };
+    }).sort((a, b) => b.actions - a.actions);
+  }, [rawRows]);
+
+  // Toolbar filtering
   const uniqueRoles = [...new Set(rows.map(r => r.roleName))];
   const uniqueTeams = [...new Set(rows.map(r => r.team))].filter(t => t !== '—');
   const hasAnyFilter = searchQuery.length > 0 || roleFilter.length > 0 || teamFilter.length > 0;
@@ -157,6 +310,77 @@ export default function PlatformUsageView() {
     }
     return true;
   });
+
+  const filteredTeamRows = teamRows.filter(r =>
+    !searchQuery.trim() || r.team.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  const drawerRow = drawerEmail ? rawRows.find(r => r.user.email === drawerEmail) ?? null : null;
+
+  // Export exactly what's on screen (the filtered set for the active lens).
+  const exportCsv = () => {
+    const esc = (v: unknown) => {
+      let s = String(v);
+      if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+    const headers = lens === 'users'
+      ? ['Member', 'Email', 'Role', 'Team', 'Last Active', 'Actions', 'AI Queries', 'Top Module']
+      : ['Team', 'Members', 'Actions', 'AI Queries', 'Top Module', 'Last Active'];
+    const body = lens === 'users'
+      ? filteredRows.map(r => [r.name, r.email, r.roleName, r.team, r.lastLogin, r.actions, r.aiQueries, r.actions === 0 ? '—' : r.topModule])
+      : filteredTeamRows.map(r => [r.team, r.members, r.actions, r.aiQueries, r.topModule, r.lastActive]);
+    const csv = [headers.map(esc).join(','), ...body.map(row => row.map(esc).join(','))].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `platform-usage-${lens}-${range}d-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    const n = lens === 'users' ? filteredRows.length : filteredTeamRows.length;
+    logEvent({ action: 'Export', description: `Exported platform usage as CSV (${n} ${lens === 'teams' ? 'teams' : 'members'}, last ${range} days)`, module: 'Admin', entity: 'Platform Usage' });
+    addToast({ message: `Exported ${n} ${lens === 'teams' ? 'team' : 'member'}${n !== 1 ? 's' : ''} as CSV`, type: 'success' });
+  };
+
+  const exportCount = lens === 'users' ? filteredRows.length : filteredTeamRows.length;
+
+  const toolbar = (
+    <div className="flex flex-wrap items-center gap-2 w-full">
+      <MemberSearch
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder={lens === 'users' ? 'Search members...' : 'Search teams...'}
+        className="w-full sm:w-[240px]"
+      />
+      <div className="ml-auto flex items-center gap-2">
+        {hasAnyFilter && (
+          <button type="button" onClick={clearAll} className="text-[0.8125rem] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer">Clear all</button>
+        )}
+        {lens === 'users' && (
+          <>
+            <ColumnFilter variant="button" label="Role" options={uniqueRoles} value={roleFilter} onChange={setRoleFilter} align="end" selectIndicator="checkbox" />
+            <ColumnFilter variant="button" label="Team" options={uniqueTeams} value={teamFilter} onChange={setTeamFilter} align="end" selectIndicator="checkbox" />
+          </>
+        )}
+        {can('ad_usage_export') && (
+          <>
+            <span className="w-px h-5 bg-canvas-border" />
+            <button
+              onClick={exportCsv}
+              disabled={exportCount === 0}
+              title={exportCount === 0 ? 'Nothing to export' : hasAnyFilter ? `Export ${exportCount} filtered rows` : 'Export all rows'}
+              className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-canvas-border bg-canvas-elevated text-ink-700 text-[12px] font-medium hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 active:scale-[0.97] transition-[background-color,border-color,color,transform] duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-canvas-elevated disabled:hover:border-canvas-border disabled:hover:text-ink-700"
+            >
+              <Download size={13} className="transition-transform duration-200 group-hover:translate-y-0.5 group-active:translate-y-1" />
+              Export CSV
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-canvas">
@@ -201,7 +425,7 @@ export default function PlatformUsageView() {
             ))}
           </div>
 
-          <AdminKpiRow stats={stats} />
+          <UsageKpiRow stats={stats} rangeDays={range} />
 
           {/* Usage over time + module breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
@@ -263,91 +487,147 @@ export default function PlatformUsageView() {
             </div>
           </div>
 
-          {/* AI usage */}
-          <div className={`${CARD} p-5 mb-3`}>
-            <div className="flex flex-wrap items-start gap-6">
-              <div className="min-w-[200px]">
-                <div className="text-[0.875rem] font-semibold text-ink-900">AI usage</div>
-                <div className="text-[0.75rem] text-ink-500 mt-0.5 mb-4">Ask IRA and Concierge activity in this range.</div>
-                <div className="flex items-center gap-6">
-                  <div>
-                    <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(totals.aiQueries)}</div>
-                    <div className="text-[0.6875rem] text-ink-500 mt-1">AI queries</div>
-                  </div>
-                  <div>
-                    <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(Math.round(totals.aiQueries * 0.42))}</div>
-                    <div className="text-[0.6875rem] text-ink-500 mt-1">Chats started</div>
-                  </div>
-                  <div>
-                    <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(Math.round(totals.reports * 0.6))}</div>
-                    <div className="text-[0.6875rem] text-ink-500 mt-1">AI-assisted reports</div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex-1 min-w-[220px] self-end">
-                <ResponsiveContainer width="100%" height={96}>
-                  <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="usageAiSpark" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#A366F0" stopOpacity={0.25} />
-                        <stop offset="100%" stopColor="#A366F0" stopOpacity={0.03} />
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="aiQueries" stroke="#A366F0" strokeWidth={1.5} fill="url(#usageAiSpark)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-              {topAiUsers.length > 0 && (
-                <div className="min-w-[180px]">
-                  <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2.5">Top AI users</div>
-                  <div className="space-y-2">
-                    {topAiUsers.map(u => (
-                      <div key={u.email} className="flex items-center gap-2">
-                        <InitialsAvatar name={u.name} size={22} />
-                        <span className="text-[0.75rem] font-medium text-ink-800 truncate">{u.name}</span>
-                        <span className="ml-auto text-[0.75rem] text-ink-500 tabular-nums">{fmt(u.aiQueries)}</span>
-                      </div>
-                    ))}
+          {/* AI usage + Seats & lifecycle */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
+            <div className={`${CARD} lg:col-span-2 p-5`}>
+              <div className="flex flex-wrap items-start gap-6">
+                <div className="min-w-[200px]">
+                  <div className="text-[0.875rem] font-semibold text-ink-900">AI usage</div>
+                  <div className="text-[0.75rem] text-ink-500 mt-0.5 mb-4">Ask IRA and Concierge activity in this range.</div>
+                  <div className="flex items-center gap-6">
+                    <div>
+                      <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(totals.aiQueries)}</div>
+                      <div className="text-[0.6875rem] text-ink-500 mt-1">AI queries</div>
+                    </div>
+                    <div>
+                      <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(Math.round(totals.aiQueries * 0.42))}</div>
+                      <div className="text-[0.6875rem] text-ink-500 mt-1">Chats started</div>
+                    </div>
+                    <div>
+                      <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(Math.round(totals.reports * 0.6))}</div>
+                      <div className="text-[0.6875rem] text-ink-500 mt-1">AI-assisted reports</div>
+                    </div>
                   </div>
                 </div>
-              )}
+                <div className="flex-1 min-w-[180px] self-end">
+                  <ResponsiveContainer width="100%" height={96}>
+                    <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="usageAiSpark" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#A366F0" stopOpacity={0.25} />
+                          <stop offset="100%" stopColor="#A366F0" stopOpacity={0.03} />
+                        </linearGradient>
+                      </defs>
+                      <Area type="monotone" dataKey="aiQueries" stroke="#A366F0" strokeWidth={1.5} fill="url(#usageAiSpark)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                {topAiUsers.length > 0 && (
+                  <div className="min-w-[170px]">
+                    <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2.5">Top AI users</div>
+                    <div className="space-y-2">
+                      {topAiUsers.map(u => (
+                        <div key={u.email} className="flex items-center gap-2">
+                          <InitialsAvatar name={u.name} size={22} />
+                          <span className="text-[0.75rem] font-medium text-ink-800 truncate">{u.name}</span>
+                          <span className="ml-auto text-[0.75rem] text-ink-500 tabular-nums">{fmt(u.aiQueries)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className={`${CARD} p-5 flex flex-col`}>
+              <div className="mb-4">
+                <div className="text-[0.875rem] font-semibold text-ink-900">Seats & lifecycle</div>
+                <div className="text-[0.75rem] text-ink-500 mt-0.5">{seats.total} seats. Read-only; manage members in Administration.</div>
+              </div>
+              <div className="space-y-3 flex-1">
+                <SeatRow label={`Active in range`} people={seats.activeInRange} />
+                <SeatRow label="Dormant 30d+" people={seats.dormant} />
+                <SeatRow label="Invited, pending" people={seats.invited} />
+                <SeatRow label="Suspended or inactive" people={seats.suspendedOrInactive} />
+              </div>
+              <button
+                onClick={() => setView('admin-users')}
+                className="mt-4 self-start text-[0.75rem] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
+              >
+                Manage in Admin →
+              </button>
             </div>
           </div>
 
-          {/* Per-user activity */}
-          <SmartTable
-            columns={userColumns}
-            data={filteredRows}
-            keyField="email"
-            searchable={false}
-            paginated
-            pageSize={10}
-            hideResultCount
-            animateRows={false}
-            noRowHover
-            headerExtra={
-              <div className="flex flex-wrap items-center gap-2 w-full">
-                <MemberSearch value={searchQuery} onChange={setSearchQuery} placeholder="Search members..." className="w-full sm:w-[240px]" />
-                <div className="ml-auto flex items-center gap-2">
-                  {hasAnyFilter && (
-                    <button type="button" onClick={clearAll} className="text-[0.8125rem] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer">Clear all</button>
-                  )}
-                  <ColumnFilter variant="button" label="Role" options={uniqueRoles} value={roleFilter} onChange={setRoleFilter} align="end" selectIndicator="checkbox" />
-                  <ColumnFilter variant="button" label="Team" options={uniqueTeams} value={teamFilter} onChange={setTeamFilter} align="end" selectIndicator="checkbox" />
-                </div>
-              </div>
-            }
-            emptyContent={
-              <EmptyState
-                icon={BarChart3}
-                size="compact"
-                title="No members match your filters"
-                body="Try a different search, or clear the active filters."
-              />
-            }
-          />
+          {/* Lens switch + table */}
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <UsageLensSwitch lens={lens} onSelect={setLens} />
+            {lens === 'users' && (
+              <span className="text-[0.75rem] text-ink-400">Click a member for their detail.</span>
+            )}
+          </div>
+
+          {lens === 'users' ? (
+            <SmartTable
+              key="users"
+              columns={userColumns}
+              data={filteredRows}
+              keyField="email"
+              searchable={false}
+              paginated
+              pageSize={10}
+              hideResultCount
+              animateRows={false}
+              onRowClick={(r) => setDrawerEmail(r.email as string)}
+              headerExtra={toolbar}
+              emptyContent={
+                <EmptyState
+                  icon={BarChart3}
+                  size="compact"
+                  title="No members match your filters"
+                  body="Try a different search, or clear the active filters."
+                />
+              }
+            />
+          ) : (
+            <SmartTable
+              key="teams"
+              columns={teamColumns}
+              data={filteredTeamRows}
+              keyField="team"
+              searchable={false}
+              paginated
+              pageSize={10}
+              hideResultCount
+              animateRows={false}
+              noRowHover
+              headerExtra={toolbar}
+              emptyContent={
+                <EmptyState
+                  icon={BarChart3}
+                  size="compact"
+                  title="No teams match your search"
+                  body="Try a different team name, or clear the search."
+                />
+              }
+            />
+          )}
         </motion.div>
       </div>
+
+      <AnimatePresence>
+        {drawerRow && (
+          <UserUsageDrawer
+            key={drawerRow.user.email}
+            row={drawerRow}
+            days={days}
+            logs={logs}
+            rangeDays={range}
+            onManage={() => setView('admin-users')}
+            onClose={() => setDrawerEmail(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

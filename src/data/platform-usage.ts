@@ -85,7 +85,11 @@ function hashStr(s: string): number {
   return h >>> 0;
 }
 
+/** Longest visible range (the 90-day chip). */
 export const USAGE_RANGE_DAYS = 90;
+/** Seed length — twice the longest range, so every visible window has a full
+ *  equal-length prior window for period-over-period deltas. */
+export const USAGE_SEED_DAYS = 180;
 
 /** The seeded daily series, oldest → today. Built once at module init. */
 export const USAGE_DAYS: UsageDay[] = (() => {
@@ -93,11 +97,11 @@ export const USAGE_DAYS: UsageDay[] = (() => {
   const days: UsageDay[] = [];
   // Today's real weekday anchors the weekday/weekend rhythm.
   const todayDow = new Date().getDay();
-  for (let offset = USAGE_RANGE_DAYS - 1; offset >= 0; offset--) {
+  for (let offset = USAGE_SEED_DAYS - 1; offset >= 0; offset--) {
     const dow = ((todayDow - (offset % 7)) + 7) % 7;
     const weekend = dow === 0 || dow === 6;
     // Gentle adoption ramp: older days run at ~60% of current volume.
-    const ramp = 0.6 + 0.4 * ((USAGE_RANGE_DAYS - offset) / USAGE_RANGE_DAYS);
+    const ramp = 0.6 + 0.4 * ((USAGE_SEED_DAYS - offset) / USAGE_SEED_DAYS);
     const base = weekend ? 14 + rnd() * 14 : 70 + rnd() * 70;
     const actions = Math.round(base * ramp);
     const activeUsers = weekend
@@ -214,6 +218,44 @@ export function lastLoginOffsetDays(lastLogin: string): number {
   return Math.floor((Date.now() - d.getTime()) / 86400000);
 }
 
+/** The one activity-window predicate: a member counts as active in a window
+ *  when their last login falls inside it (Invited users have never signed in).
+ *  Shared by the KPI totals, the per-user rows, and the seat buckets so the
+ *  three surfaces can never disagree. */
+function activeInWindow(user: Pick<AdminUser, 'lastLogin' | 'status'>, windowStartOffset: number, windowLen: number): boolean {
+  if (user.status === 'Invited') return false;
+  return lastLoginOffsetDays(user.lastLogin) <= windowStartOffset + windowLen;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Window totals + period-over-period delta
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface UsageTotals {
+  activeUsers: number;
+  actions: number;
+  aiQueries: number;
+  reports: number;
+}
+
+/** Totals for one window of the series. `windowStartOffset` is how many days
+ *  ago the window ends (0 = a window ending today; `rangeDays` = the window
+ *  immediately before it). */
+export function usageWindowTotals(days: UsageDay[], users: AdminUser[], windowStartOffset: number): UsageTotals {
+  return {
+    activeUsers: users.filter(u => activeInWindow(u, windowStartOffset, days.length)).length,
+    actions: days.reduce((s, d) => s + d.actions, 0),
+    aiQueries: days.reduce((s, d) => s + d.aiQueries, 0),
+    reports: days.reduce((s, d) => s + d.reports, 0),
+  };
+}
+
+/** Percent change vs the prior window; null when there is no prior baseline. */
+export function usageDeltaPct(current: number, prior: number): number | null {
+  if (prior <= 0) return null;
+  return Math.round(((current - prior) / prior) * 100);
+}
+
 /** Per-user rows for a range: each person's share of the range total, plus
  *  their live events from this session counted one-for-one. */
 export function userUsageRows(users: AdminUser[], days: UsageDay[], logs: AuditLog[]): UserUsageRow[] {
@@ -229,8 +271,9 @@ export function userUsageRows(users: AdminUser[], days: UsageDay[], logs: AuditL
   });
   const rangeDays = days.length;
   return profiles.map(({ u, p }) => {
-    // Someone whose last login predates the whole range did nothing in it.
-    const inRange = lastLoginOffsetDays(u.lastLogin) <= rangeDays;
+    // Someone whose last login predates the whole range did nothing in it —
+    // same predicate as usageWindowTotals, so the KPI and the table agree.
+    const inRange = activeInWindow(u, 0, rangeDays);
     const seeded = inRange ? Math.round(totalActions * (p.share / shareSum)) : 0;
     const mine = liveByUser.get(u.name) ?? [];
     return {
@@ -240,4 +283,82 @@ export function userUsageRows(users: AdminUser[], days: UsageDay[], logs: AuditL
       topModule: p.topModule,
     };
   });
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Drill-down series — deterministic per member, reconciled to their row
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface UserDayPoint {
+  dayOffset: number;
+  actions: number;
+  aiQueries: number;
+}
+
+/** A member's daily activity across the visible window. Jittered per person
+ *  but normalized (largest-remainder rounding) so the series sums exactly to
+ *  the row's action count — the drawer always reconciles with the table. */
+export function userDailySeries(row: UserUsageRow, days: UsageDay[]): UserDayPoint[] {
+  const total = row.actions;
+  if (total <= 0) return days.map(d => ({ dayOffset: d.dayOffset, actions: 0, aiQueries: 0 }));
+  const rnd = mulberry32(hashStr(row.user.email.toLowerCase() + ':daily'));
+  const weights = days.map(d => Math.max(0.05, d.actions) * (0.6 + rnd() * 0.8));
+  const wSum = weights.reduce((s, w) => s + w, 0) || 1;
+  const raw = weights.map(w => (w / wSum) * total);
+  const floors = raw.map(v => Math.floor(v));
+  let remainder = total - floors.reduce((s, f) => s + f, 0);
+  const byFraction = raw
+    .map((v, i) => ({ i, frac: v - floors[i] }))
+    .sort((a, b) => b.frac - a.frac);
+  for (const { i } of byFraction) {
+    if (remainder <= 0) break;
+    floors[i] += 1;
+    remainder -= 1;
+  }
+  const aiRatio = row.aiQueries / total;
+  return days.map((d, i) => ({
+    dayOffset: d.dayOffset,
+    actions: floors[i],
+    aiQueries: Math.round(floors[i] * aiRatio),
+  }));
+}
+
+/** A member's activity split by module, scaled to their row total. Their
+ *  table `topModule` is forced to rank first for consistency. Top 4. */
+export function userModuleMix(row: UserUsageRow): { module: UsageModule; count: number }[] {
+  if (row.actions <= 0) return [];
+  const rnd = mulberry32(hashStr(row.user.email.toLowerCase() + ':mix'));
+  const weights = USAGE_MODULES.map(m => ({ module: m, w: 0.2 + rnd() * 0.8 }));
+  const maxW = Math.max(...weights.map(x => x.w));
+  weights.forEach(x => { if (x.module === row.topModule) x.w = maxW * 1.3; });
+  const wSum = weights.reduce((s, x) => s + x.w, 0);
+  return weights
+    .map(x => ({ module: x.module, count: Math.round((x.w / wSum) * row.actions) }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 4);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Seats & lifecycle
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface SeatBuckets {
+  total: number;
+  activeInRange: AdminUser[];
+  /** Active status but no login for 30+ days. */
+  dormant: AdminUser[];
+  invited: AdminUser[];
+  suspendedOrInactive: AdminUser[];
+}
+
+/** Seat-lifecycle buckets, derived with the same lastLogin parser as the
+ *  table's Last Active column so the lists always agree. */
+export function seatBuckets(users: AdminUser[], rangeDays: number): SeatBuckets {
+  return {
+    total: users.length,
+    activeInRange: users.filter(u => activeInWindow(u, 0, rangeDays)),
+    dormant: users.filter(u => u.status === 'Active' && lastLoginOffsetDays(u.lastLogin) > 30),
+    invited: users.filter(u => u.status === 'Invited'),
+    suspendedOrInactive: users.filter(u => u.status === 'Suspended' || u.status === 'Locked' || u.status === 'Inactive'),
+  };
 }

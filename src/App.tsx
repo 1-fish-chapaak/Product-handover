@@ -1074,7 +1074,7 @@ function AppInner() {
         return <AdminView activeTab="logs" />;
 
       case 'platform-usage':
-        return <PlatformUsageView />;
+        return <PlatformUsageView setView={setView} />;
 
       // V3 Configurable Engagement — dev-only preview route
       case 'dev-configurable-engagement-v3':

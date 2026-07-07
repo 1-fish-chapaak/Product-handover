@@ -77,7 +77,7 @@ export type PermissionKey =
   // AI Concierge (new) — Ask IRA chat is free for everyone, so it has no key
   | 'concierge_use'
   // Admin (existing 2 + new 4 + usage)
-  | 'ad_logs' | 'ad_logs_export' | 'ad_users_manage' | 'ad_roles_manage' | 'ad_usage';
+  | 'ad_logs' | 'ad_logs_export' | 'ad_users_manage' | 'ad_roles_manage' | 'ad_usage' | 'ad_usage_export';
 
 export const PERMISSION_GROUPS: PermissionGroup[] = [
   { group: 'Business Process', module: 'business_process', perms: [
@@ -173,6 +173,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     { key: 'ad_users_manage', name: 'Manage Users',     desc: 'Manage users and teams' },
     { key: 'ad_roles_manage', name: 'Manage Roles',     desc: 'Manage roles and permissions' },
     { key: 'ad_usage',        name: 'Platform Usage',   desc: 'View platform usage and adoption metrics' },
+    { key: 'ad_usage_export', name: 'Export Usage',     desc: 'Export platform usage as CSV' },
   ]},
 ];
 

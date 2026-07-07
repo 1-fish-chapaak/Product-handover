@@ -1,78 +1,133 @@
 /**
- * Platform Usage — feature verification.
- * Admin sees the nav item + full page (KPIs, chart, breakdown, AI card,
- * per-user table); range switch changes totals; live audit events land in
- * today's numbers; non-admin roles don't get the nav item.
+ * Platform Usage — feature verification (v2).
+ * Admin sees the full page (delta KPIs, chart, breakdown, AI card, seats,
+ * per-user table); range switch changes totals; member drawer reconciles
+ * with the table; teams lens aggregates; CSV export downloads + audit-logs;
+ * live audit events land in today's numbers.
  */
 import { test, expect } from './_helpers';
 
 const SHOTS = '/private/tmp/claude-501/-Users-nileshanand-Desktop-Product-handover/7f78790a-345e-41ac-a869-f53f64067555/scratchpad/usage';
 
-test('admin sees Platform Usage and it renders end to end', async ({ page }) => {
-  test.setTimeout(120000);
+async function openUsage(page: import('@playwright/test').Page) {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/');
   await page.waitForTimeout(1200);
-
   await page.locator('button[aria-label="Pin sidebar open"]').click().catch(() => {});
-  await page.waitForTimeout(500);
-
-  const nav = page.locator('nav button', { hasText: 'Platform Usage' });
-  await expect(nav).toBeVisible();
-  await nav.click();
+  await page.waitForTimeout(400);
+  await page.locator('nav button', { hasText: 'Platform Usage' }).click();
   await page.waitForTimeout(1800);
+}
+
+test('page renders end to end with delta KPIs on every range', async ({ page }) => {
+  test.setTimeout(120000);
+  await openUsage(page);
 
   // Header + KPI band
   await expect(page.getByRole('heading', { name: 'Platform Usage' })).toBeVisible();
   await expect(page.getByText('Active users')).toBeVisible();
-  await expect(page.getByText('AI queries').first()).toBeVisible();
+
+  // Delta chips + footnote (30d default)
+  await expect(page.getByText(/^[+\-]\d+%$/).first()).toBeVisible();
+  await expect(page.getByText('Change compared with the previous 30 days.')).toBeVisible();
 
   // Cards
   await expect(page.getByText('Usage over time')).toBeVisible();
   await expect(page.getByText('Module breakdown')).toBeVisible();
+  await expect(page.getByText('Seats & lifecycle')).toBeVisible();
   await expect(page.getByText('Top AI users')).toBeVisible();
 
-  // Per-user table renders seeded members
-  await expect(page.getByText('Abhinav Sharma')).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/usage-30d.png`, fullPage: false });
-
-  // Range switch changes the Actions KPI
+  // Range switch changes the Actions KPI and keeps deltas (proves 180d seed)
   const actionsKpi = page.locator('[aria-label*="Actions"]').first();
   const before = await actionsKpi.getAttribute('aria-label');
-  await page.getByRole('button', { name: 'Last 7 days' }).click();
+  await page.getByRole('button', { name: 'Last 90 days' }).click();
   await page.waitForTimeout(900);
   const after = await actionsKpi.getAttribute('aria-label');
   expect(after).not.toBe(before);
-  await page.screenshot({ path: `${SHOTS}/usage-7d.png` });
+  await expect(page.getByText(/^[+\-]\d+%$/).first()).toBeVisible();
+  await expect(page.getByText('Change compared with the previous 90 days.')).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/v2-90d.png` });
 
-  await page.getByRole('button', { name: 'Last 90 days' }).click();
+  await page.getByRole('button', { name: 'Last 7 days' }).click();
   await page.waitForTimeout(900);
-  await page.screenshot({ path: `${SHOTS}/usage-90d.png` });
+  await expect(page.getByText(/^[+\-]\d+%$/).first()).toBeVisible();
+
+  // Seats: seeded Invited users are Ajay 14110008 + Priya Singh
+  await expect(page.getByText('Invited, pending')).toBeVisible();
 
   // Table search filters rows
+  await page.getByRole('button', { name: 'Last 30 days' }).click();
+  await page.waitForTimeout(600);
   await page.getByPlaceholder('Search members...').fill('ayushi');
   await page.waitForTimeout(400);
   await expect(page.getByText('Ayushi Narang')).toBeVisible();
   await expect(page.getByText('Abhinav Sharma')).not.toBeVisible();
   await page.getByRole('button', { name: 'Clear all' }).click();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${SHOTS}/v2-30d.png` });
+});
 
-  // Scroll the table into view for a second shot
-  await page.getByPlaceholder('Search members...').scrollIntoViewIfNeeded();
+test('member drawer reconciles with the table row and links to Admin', async ({ page }) => {
+  test.setTimeout(120000);
+  await openUsage(page);
+
+  // Read Abhinav's Actions cell, then open his drawer
+  const row = page.locator('tr', { hasText: 'Abhinav Sharma' }).first();
+  await row.scrollIntoViewIfNeeded();
+  const cellText = await row.locator('td').nth(4).innerText(); // Actions column
+  await row.click();
+  await page.waitForTimeout(600);
+
+  const drawer = page.getByRole('dialog', { name: 'Abhinav Sharma' });
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByText('Module mix')).toBeVisible();
+  await expect(drawer.getByText('This session', { exact: true })).toBeVisible();
+  // Consistency: drawer Actions stat equals the table cell
+  await expect(drawer.getByText(cellText.trim(), { exact: true }).first()).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/v2-drawer.png` });
+
+  // Esc closes
+  await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
-  await page.screenshot({ path: `${SHOTS}/usage-table.png` });
+  await expect(drawer).not.toBeVisible();
+
+  // Manage in Admin lands on Administration
+  await row.click();
+  await page.waitForTimeout(500);
+  await drawer.getByRole('button', { name: 'Manage in Admin', exact: true }).click();
+  await page.waitForTimeout(1200);
+  await expect(page.getByRole('heading', { name: 'Administration' })).toBeVisible();
+});
+
+test('teams lens aggregates and hides user-only filters', async ({ page }) => {
+  test.setTimeout(120000);
+  await openUsage(page);
+
+  await page.getByRole('button', { name: 'Teams' }).click();
+  await page.waitForTimeout(600);
+  await expect(page.getByText('SOX Audit').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Role' })).not.toBeVisible();
+  await page.getByPlaceholder('Search teams...').fill('IFC');
+  await page.waitForTimeout(400);
+  await expect(page.getByText('IFC Team')).toBeVisible();
+  await expect(page.getByText('SOX Audit')).not.toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/v2-teams.png` });
+});
+
+test('CSV export downloads the filtered set and shows a toast', async ({ page }) => {
+  test.setTimeout(120000);
+  await openUsage(page);
+
+  const dl = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export CSV' }).click();
+  const download = await dl;
+  expect(download.suggestedFilename()).toMatch(/^platform-usage-users-\d+d-/);
+  await expect(page.getByText(/Exported \d+ members as CSV/)).toBeVisible();
 });
 
 test('live audit events raise today\'s totals', async ({ page }) => {
   test.setTimeout(120000);
-  await page.setViewportSize({ width: 1600, height: 1000 });
-  await page.goto('/');
-  await page.waitForTimeout(1200);
-  await page.locator('button[aria-label="Pin sidebar open"]').click().catch(() => {});
-  await page.waitForTimeout(400);
-
-  // Read the 90d Actions total first
-  await page.locator('nav button', { hasText: 'Platform Usage' }).click();
-  await page.waitForTimeout(1500);
+  await openUsage(page);
   await page.getByRole('button', { name: 'Last 90 days' }).click();
   await page.waitForTimeout(800);
   const kpi = page.locator('[aria-label*="Actions"]').first();
