@@ -68,7 +68,7 @@ export const ENGAGEMENT_EXCEPTIONS: EngagementException[] = [
     title: 'Deferred revenue not recognized at delivery',
     severity: 'Medium', status: 'Triaging', opened: '3h ago', assignee: 'Neha Joshi' },
 
-  // ─── Automation — Vendor Reconciliation Air India (eng-9) ──────────────────
+  // ─── Automation — Vendor Reconciliation Airline Group (eng-9) ──────────────────
   { id: 'ex-2410', ref: 'EX-2410', engagementId: 'eng-9', workflowId: 'wf1', workflowName: 'Three-Way Match (PO · GRN · Invoice)',
     title: 'Invoice/GRN amount mismatch — vendor V-7711', detail: 'Invoiced amount exceeds GRN by ₹1.2L. PO indicates correct unit price.',
     severity: 'High', status: 'Resolved', opened: '3d ago', assignee: 'Rohan Patel', classification: 'Process Gap', amount: '₹1.2L diff' },

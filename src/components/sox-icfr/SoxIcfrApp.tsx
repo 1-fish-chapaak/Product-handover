@@ -6,6 +6,7 @@ import { findEngagement } from '../../data/engagements';
 import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { IcfrProvider, useIcfr, type SoxTab } from './store';
 import { RoleSwitcher } from './parts';
+import NotificationsBell from './NotificationsBell';
 import Overview from './Overview';
 import Racm from './Racm';
 import RiskLibrary from './RiskLibrary';
@@ -39,7 +40,8 @@ function Inner({ onBack }: { onBack?: () => void }) {
         </div>
         {/* The switcher is a demo affordance — it previews the other persona
             without changing who is signed in, hence the "Viewing as" prefix. */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
+          <NotificationsBell />
           <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Viewing as</span>
           <RoleSwitcher role={role} onChange={setRole} />
         </div>

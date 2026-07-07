@@ -55,7 +55,7 @@ export const PROCUREMENT_VENDORS: ProcurementVendor[] = [
   { code: 'V-100482', name: 'CFM International', category: 'Engine spares (LEAP-1B)' },
   { code: 'V-100518', name: 'Boeing Distribution Services', category: 'Airframe spares & consumables' },
   { code: 'V-100629', name: 'Lufthansa Technik', category: 'Component MRO' },
-  { code: 'V-100655', name: 'AI Airport Services', category: 'Ground handling' },
+  { code: 'V-100655', name: 'Skyport Ground Services', category: 'Ground handling' },
   { code: 'V-100701', name: 'TajSATS Air Catering', category: 'Inflight catering' },
   { code: 'V-100746', name: 'Menzies Aviation', category: 'Ground handling — international' },
   { code: 'V-100802', name: 'Amadeus IT Group', category: 'PSS / distribution' },
@@ -411,7 +411,7 @@ const EXECUTIONS: ExecutionEvent[] = [
 ];
 
 const ENGAGEMENT: IcfrEngagement = {
-  id: 'eng-1', code: 'ICFR-26', name: 'FY26 ICFR — Air India Express', entity: 'Air India Express Ltd', framework: 'COSO 2013 / SOX 404',
+  id: 'eng-1', code: 'ICFR-26', name: 'FY26 ICFR — Airline P2P & O2C', entity: 'Airline Group Ltd', framework: 'COSO 2013 / SOX 404',
   periodStart: '01 Apr 2025', periodEnd: '31 Mar 2026', period: 'Interim',
   materiality: 5_000_000, performanceMateriality: 3_750_000, preparer: 'A. Mehta · Auditor', reviewer: 'J. Fernandes · Audit Manager',
   rules: { clearlyTrivial: 250_000, sdBandPct: 20, aggregate: true, autoRoute: true, mwIndicators: [] },

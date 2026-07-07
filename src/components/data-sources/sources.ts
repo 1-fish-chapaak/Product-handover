@@ -53,11 +53,11 @@ export const SEED: DataSource[] = [
     columns: ['Vendor', 'Invoice ID', 'Invoice Date', 'Amount', 'Status', 'Description'] },
   { id: 'f-06', name: 'Import Remittance — Bank Demo',         type: 'file', subtype: 'CSV · 1.4 MB',   createdAt: dayOffset(3) },
   { id: 'f-08', name: 'Demo Invoice Data 1604',                type: 'file', subtype: 'CSV · 3.3 MB',   createdAt: dayOffset(7) },
-  { id: 'f-11', name: 'Air India HR KPI — Dummy Employees',    type: 'file', subtype: 'CSV · 2.9 MB',   createdAt: dayOffset(8) },
+  { id: 'f-11', name: 'Airline Group HR KPI — Dummy Employees',    type: 'file', subtype: 'CSV · 2.9 MB',   createdAt: dayOffset(8) },
   { id: 'f-12', name: 'NSE Agreement Sample',                  type: 'file', subtype: 'PDF · 4.4 MB',   createdAt: dayOffset(9) },
   { id: 'f-14', name: 'NSE Position Limits Monitoring',        type: 'file', subtype: 'CSV · 1.8 MB',   createdAt: dayOffset(11) },
   { id: 'f-15', name: 'NSE Penalty on Shortfall Margin',       type: 'file', subtype: 'XLSX · 3.5 MB',  createdAt: dayOffset(11) },
-  { id: 'f-16', name: 'Air India HR KPI — Bills vs Reimbursement', type: 'file', subtype: 'XLSX · 6.0 MB', createdAt: dayOffset(13) },
+  { id: 'f-16', name: 'Airline Group HR KPI — Bills vs Reimbursement', type: 'file', subtype: 'XLSX · 6.0 MB', createdAt: dayOffset(13) },
 
   // ── Multi-file uploads (folder aggregates — one folder per card) ──
   { id: 'f-01', name: 'AI_Fare Audit',           type: 'file', isFolder: true, subtype: 'Folder · 2 files · 12.4 MB', createdAt: dayOffset(0),

@@ -185,8 +185,10 @@ export default function Racm() {
                 </td></tr>
                 {g.rows.map(c => {
                   const d = trackResult(c.design); const o = trackResult(c.operating);
+                  const ineffective = controlConclusion(c) === 'Ineffective';
                   return (
-                    <tr key={c.id} className={cn('reg-row', sel.has(c.id) && 'sel')} onClick={() => openControl(c.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') openControl(c.id); }} role="button" aria-label={`Open ${c.id} — ${c.description}`}>
+                    <tr key={c.id} className={cn('reg-row', sel.has(c.id) && 'sel')} onClick={() => openControl(c.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') openControl(c.id); }} role="button" aria-label={`Open ${c.id} — ${c.description}`}
+                      style={ineffective ? { boxShadow: 'inset 3px 0 0 var(--color-risk-500)' } : undefined}>
                       {/* toggle from the input's change only — a td-level toggle would double-fire when the checkbox itself is clicked */}
                       {isAuditor && <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>}
                       <td><span className="wp-ref">{c.wpRef}</span></td>
@@ -198,6 +200,8 @@ export default function Racm() {
                         <div className="flex items-center gap-1.5">
                           {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
                           <span className="font-semibold text-ink-900 text-[12.5px] truncate max-w-[340px]">{c.description}</span>
+                          {/* the auditor's verdict — kept loud so the risk owner can't miss it */}
+                          {ineffective && <Pill tone="risk">Ineffective</Pill>}
                         </div>
                         <div className="text-[11px] text-ink-400 mt-0.5">{c.id} · {c.frequency} · {c.owner} · {c.assertions[0]}{c.assertions.length > 1 ? ` +${c.assertions.length - 1}` : ''}</div>
                       </td>

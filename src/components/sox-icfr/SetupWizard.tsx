@@ -21,7 +21,7 @@ export default function SetupWizard() {
 
   const [name, setName] = useState('O2C — ICFR / SOX');
   const [code, setCode] = useState('ENG-NEW');
-  const [entity, setEntity] = useState('Air India Express Ltd');
+  const [entity, setEntity] = useState('Airline Group Ltd');
   const [framework, setFramework] = useState(FRAMEWORKS[0]!);
   const [periodStart, setPeriodStart] = useState('Apr 2025');
   const [periodEnd, setPeriodEnd] = useState('Mar 2026');

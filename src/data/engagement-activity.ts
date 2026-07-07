@@ -136,7 +136,7 @@ export const ENGAGEMENT_ACTIVITY: Record<string, ActivityEvent[]> = {
     { id: 'a-3-25', engagementId: 'eng-3', type: 'comment_added',        actor: 'Vijay Reddy',  dayOffset: 28, hour: 15, title: 'Comment — monthly review',                              detail: '"Pass rate trending upward. Good signal-to-noise."' },
   ],
 
-  // ─── Automation (Reconciliation) — Vendor Reconciliation Air India ─────────
+  // ─── Automation (Reconciliation) — Vendor Reconciliation Airline Group ─────────
   'eng-9': [
     { id: 'a-9-1', engagementId: 'eng-9', type: 'workflow_run',     actor: 'System',      dayOffset: 3,  hour: 6,  title: 'Workflow run — Three-Way Match',                detail: '6 mismatches flagged across 4,521 records', workflowId: 'wf1', workflowName: 'Three-Way Match (PO · GRN · Invoice)' },
     { id: 'a-9-2', engagementId: 'eng-9', type: 'exception_fired',  actor: 'System',      dayOffset: 3,  hour: 6,  title: 'EX-2410 — Invoice/GRN amount mismatch',         detail: '₹1.2L diff', workflowId: 'wf1', refId: 'EX-2410' },

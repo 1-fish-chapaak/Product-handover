@@ -107,7 +107,7 @@ export interface Engagement {
 
 export const ENGAGEMENTS: Engagement[] = [
   {
-    id: 'eng-1', code: 'ENG-001', name: 'FY26 ICFR — Air India Express',
+    id: 'eng-1', code: 'ENG-001', name: 'FY26 ICFR — Airline P2P & O2C',
     description: 'SOX 404 / ICFR engagement — entity-wide scoping, Procure-to-Pay key controls, design + operating effectiveness, and deficiency evaluation against materiality.',
     type: 'SOX / ICFR', process: 'P2P', framework: 'COSO 2013 / SOX 404', owner: 'A. Mehta',
     status: 'Active', periodStart: 'Apr 2025', periodEnd: 'Mar 2026', controls: 100,
@@ -224,7 +224,7 @@ export const ENGAGEMENTS: Engagement[] = [
     ],
   },
   {
-    id: 'eng-9', code: 'ENG-009', name: 'Vendor Reconciliation — Air India',
+    id: 'eng-9', code: 'ENG-009', name: 'Vendor Reconciliation — Airline Group',
     description: 'Three-way reconciliation across vendor invoices, GRN data, and bank statements for pan-India vendors.',
     type: 'Automation', subtype: 'Reconciliation', process: 'P2P', framework: 'Internal Policy', owner: 'Rohan Patel',
     status: 'Active', periodStart: 'Jul 2025', periodEnd: 'Mar 2026', controls: 4,
