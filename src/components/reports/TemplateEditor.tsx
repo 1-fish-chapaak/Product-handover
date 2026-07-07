@@ -8,7 +8,7 @@
 
 import { useState, useRef, useEffect, type ReactNode, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence, useDragControls } from 'motion/react';
+import { motion, AnimatePresence, useDragControls, useReducedMotion } from 'motion/react';
 import {
   Check, ChevronRight, FileText, GripVertical,
   Loader2, Plus, X, Pencil, ShieldCheck, Trash2,
@@ -34,6 +34,9 @@ import { useAuditLog } from '../../context/AdminDataContext';
 // Soft length guide for letterhead header/footer text — past this the counter
 // turns amber and a hint warns about truncation, but saving is never blocked.
 const LETTERHEAD_SOFT_MAX = 60;
+// Hard cap on the template name — mirrors the letterhead 60-char counter, but
+// enforced (a name this long overflows the cover and the picker rows).
+const TEMPLATE_NAME_MAX = 60;
 
 // Watermark placement → the flex alignment (+ edge padding) that pins the mark to
 // that side of the page. Center is the default diagonal stamp.
@@ -99,10 +102,10 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   );
 }
 
-// "Import from a report" extraction theatre — staged status while the PDF is read.
-// A short minimum on-screen time so the scan doesn't flicker on fast parses, but
-// no longer padded to feel "deliberate": the moment the parse finishes, sections
-// land straight in the outline (optimistic apply) and the overlay dismisses.
+// "Import from a report" scan theatre — staged status while the file is read.
+// The scan runs for a deliberate ~10s so the document-scanner animation plays out
+// in full and each status stage stays legible; the real parse (usually much
+// faster) resolves behind it, and its sections apply when the scan finishes.
 const IMPORT_SCAN_MESSAGES = [
   'Reading the document…',
   'Detecting structure…',
@@ -114,7 +117,12 @@ const SEED_SCAN_MESSAGES = [
   'Reading the document…',
   'Preparing a suggested outline…',
 ];
-const IMPORT_MIN_MS = 850;
+// Deliberate on-screen scan duration — the parse resolves behind it, but the
+// theatre always plays for this long so the animation reads as a real scan.
+const SCAN_DURATION_MS = 10000;
+// Fail a PDF parse that hasn't settled by here, so the progress card can't hang.
+// Kept above SCAN_DURATION_MS so a slow-but-fine parse still lands.
+const EXTRACT_TIMEOUT_MS = 30000;
 
 // Accepted source formats for "Import from a report". A PDF's structure (section
 // headings) and letterhead are read for real and land in the review canvas. Word
@@ -144,30 +152,21 @@ function stripLeadingEnumerator(name: string): string {
 // modal is open, or Open while minimized) and a done state (Open to review).
 function ExtractionCard({
   filename, messages = IMPORT_SCAN_MESSAGES, done = false, sectionCount,
+  progress = 0, msgIdx = 0,
   onMinimize, onOpen, onClose,
 }: {
   filename: string;
   messages?: string[];
   done?: boolean;
   sectionCount?: number;
+  /** Controlled progress + message step — driven by the parent so the run stays
+      continuous when switching between the full-modal overlay and this card. */
+  progress?: number;
+  msgIdx?: number;
   onMinimize?: () => void;
   onOpen?: () => void;
   onClose?: () => void;
 }) {
-  const [msgIdx, setMsgIdx] = useState(0);
-  const [progress, setProgress] = useState(8);
-  useEffect(() => {
-    if (done) return;
-    const step = Math.max(300, Math.floor(IMPORT_MIN_MS / messages.length));
-    const t = setInterval(() => setMsgIdx(i => Math.min(i + 1, messages.length - 1)), step);
-    return () => clearInterval(t);
-  }, [messages, done]);
-  useEffect(() => {
-    if (done) return;
-    // Ease toward ~95% while extraction runs; real completion flips to done.
-    const t = setInterval(() => setProgress(p => (p < 95 ? p + Math.max(1, Math.round((95 - p) / 10)) : p)), 240);
-    return () => clearInterval(t);
-  }, [done]);
   if (typeof document === 'undefined') return null;
   return createPortal(
     <motion.div
@@ -540,7 +539,9 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   const isNew = template.id === 'ct-blank';
   // The name field is shown in every flow (New / Edit), seeded to a sensible
   // default: an explicit initialName, or the template's own name when editing.
-  const defaultName = initialName ?? template.name;
+  // Cap the seeded name to the same 60-char limit the field enforces, so a long
+  // auto-generated name doesn't start over the limit (counter red on open).
+  const defaultName = (initialName ?? template.name).slice(0, TEMPLATE_NAME_MAX);
   const [copyName, setCopyName] = useState(defaultName);
   const [brand, setBrand] = useState(template.brand ?? 'Irame');
   const [theme, setTheme] = useState(template.theme ?? 'Purple & White');
@@ -626,6 +627,31 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
   // extraction card and the full modal isn't rendered, so extraction keeps
   // running (this component stays mounted) with the app fully usable behind it.
   const [minimized, setMinimized] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importMsgIdx, setImportMsgIdx] = useState(0);
+  const scanMessages = scanSeed ? SEED_SCAN_MESSAGES : IMPORT_SCAN_MESSAGES;
+  const reduceMotion = useReducedMotion();
+  // Drive the extraction progress + status message here (not in the card) so the
+  // same run feeds both the full-modal overlay and the minimized corner card —
+  // progress stays continuous when the user minimizes/restores. An eased rAF loop
+  // over SCAN_DURATION_MS (the same easeOutQuad the ATR flow uses) advances the
+  // bar and steps the status; messages spread evenly across the run. Holds just
+  // shy of 100% if the real parse outlasts the scan window.
+  useEffect(() => {
+    if (!importing) { setImportProgress(0); setImportMsgIdx(0); return; }
+    const msgs = scanSeed ? SEED_SCAN_MESSAGES : IMPORT_SCAN_MESSAGES;
+    const start = performance.now();
+    let raf = 0;
+    const loop = (now: number) => {
+      const t = Math.min(1, (now - start) / SCAN_DURATION_MS);
+      const eased = 1 - Math.pow(1 - t, 2);
+      setImportProgress(Math.min(99, eased * 100));
+      setImportMsgIdx(Math.min(msgs.length - 1, Math.floor(t * msgs.length)));
+      if (t < 1) raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [importing, scanSeed]);
   const [importedFrom, setImportedFrom] = useState<string | null>(null);
   // Drag-and-drop: drop a report anywhere on the editor to import it. A depth
   // counter avoids the flicker that dragenter/dragleave cause over child nodes.
@@ -683,7 +709,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     const base = fileName.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
     if (copyName === defaultName) {
       const candidate = hf?.fields.auditTitle || base.replace(/\b\w/g, c => c.toUpperCase());
-      setCopyName(uniqueTemplateName(candidate));
+      setCopyName(uniqueTemplateName(candidate).slice(0, TEMPLATE_NAME_MAX));
     }
     const kept = secs.filter(s => s.name.trim());
     setSections(kept.map(s => ({
@@ -714,7 +740,7 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
       setScanSeed(true);
       setImporting(true);
       setScanningName(file.name);
-      await new Promise(resolve => setTimeout(resolve, IMPORT_MIN_MS));
+      await new Promise(resolve => setTimeout(resolve, SCAN_DURATION_MS));
       setImporting(false);
       setScanningName(null);
       const seeded: CanvasSection[] = SUGGESTED_SECTIONS.map((s, i) => ({
@@ -733,18 +759,31 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     setScanSeed(false);
     setImporting(true);
     setScanningName(file.name);
-    const result: ReportStructure | null = await Promise.all([
-      extractReportStructure(file),
-      new Promise(resolve => setTimeout(resolve, IMPORT_MIN_MS)),
-    ]).then(([res]) => res).finally(() => {
+    // Guard the parse with a timeout so a hung read (e.g. the pdf.js worker
+    // failing to load) can't leave the progress card stuck forever — after
+    // EXTRACT_TIMEOUT_MS it falls through to the error path below.
+    let result: ReportStructure | null = null;
+    try {
+      const [res] = await Promise.all([
+        Promise.race([
+          extractReportStructure(file),
+          new Promise<ReportStructure | null>((_, reject) =>
+            setTimeout(() => reject(new Error('extract-timeout')), EXTRACT_TIMEOUT_MS)),
+        ]),
+        new Promise(resolve => setTimeout(resolve, SCAN_DURATION_MS)),
+      ]);
+      result = res;
+    } catch {
+      result = null;
+    } finally {
       setImporting(false);
       setScanningName(null);
-    });
+    }
     if (!result) {
       // Restore the editor if it was minimized, so the failure isn't hidden
       // behind a card that would otherwise read as "complete".
       setMinimized(false);
-      addToast({ type: 'error', message: `Couldn't read "${file.name}". It may be scanned or image-only.` });
+      addToast({ type: 'error', message: `Couldn't read "${file.name}". It may be scanned, image-only, or too large.` });
       return;
     }
     const detected: CanvasSection[] = result.sections.map((s, i) => ({
@@ -1072,9 +1111,11 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
     return (
       <ExtractionCard
         filename={scanningName ?? importedFrom ?? 'your report'}
-        messages={scanSeed ? SEED_SCAN_MESSAGES : IMPORT_SCAN_MESSAGES}
+        messages={scanMessages}
         done={!importing}
         sectionCount={!importing ? importBanner?.count : undefined}
+        progress={importProgress}
+        msgIdx={importMsgIdx}
         onOpen={() => setMinimized(false)}
       />
     );
@@ -1215,8 +1256,11 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
                     (next to its preview), so this column stays short and calm. */}
                 <div className="space-y-4">
                   <div>
-                    <FieldLabel required>Template name</FieldLabel>
-                    <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value)} aria-invalid={nameTaken}
+                    <FieldLabel
+                      required
+                      right={<span className={`text-[0.6875rem] tabular-nums ${copyName.length >= TEMPLATE_NAME_MAX ? 'text-risk-600 font-medium' : 'text-ink-400'}`}>{copyName.length}/{TEMPLATE_NAME_MAX}</span>}
+                    >Template name</FieldLabel>
+                    <input ref={copyNameRef} value={copyName} onChange={e => setCopyName(e.target.value.slice(0, TEMPLATE_NAME_MAX))} maxLength={TEMPLATE_NAME_MAX} aria-invalid={nameTaken}
                       placeholder="e.g. Internal Audit Report"
                       className={`w-full h-10 px-3 rounded-lg border text-[0.8125rem] transition-colors placeholder:text-ink-400 focus:outline-none focus:ring-2 ${nameTaken ? 'border-high/60 focus:border-high focus:ring-high/10' : 'border-canvas-border hover:border-ink-300 focus:border-brand-600/40 focus:ring-brand-600/10'}`} />
                     {nameTaken && <p className="mt-1 text-[0.6875rem] text-high-700 font-medium">A template named “{copyName.trim()}” already exists — choose a different name to save.</p>}
@@ -1707,10 +1751,147 @@ export function TemplateEditor({ template, onClose, onCancel, onSaveNew, onSaveE
           )}
         </AnimatePresence>
 
-        {/* Import-from-a-report extraction theatre — covers the editor while the
-            PDF is read, then dismisses as the fields populate. */}
+        {/* Import scan theatre — a real document-scanner: the uploaded page sits
+            under a sweeping scan light inside a focus frame, the passed region
+            "digitizing" behind it. Minimize (top-right) collapses the whole modal
+            to the bottom-right card, where the same run keeps advancing. */}
         <AnimatePresence>
-          {importing && <ExtractionCard filename={scanningName ?? 'your report'} messages={scanSeed ? SEED_SCAN_MESSAGES : IMPORT_SCAN_MESSAGES} onMinimize={() => setMinimized(true)} />}
+          {importing && (() => {
+            const kind = scanningName ? classifyImport(scanningName) : null;
+            const CORNERS = [
+              '-top-1.5 -left-1.5 border-t-2 border-l-2 rounded-tl-[8px]',
+              '-top-1.5 -right-1.5 border-t-2 border-r-2 rounded-tr-[8px]',
+              '-bottom-1.5 -left-1.5 border-b-2 border-l-2 rounded-bl-[8px]',
+              '-bottom-1.5 -right-1.5 border-b-2 border-r-2 rounded-br-[8px]',
+            ];
+            const sweep = { duration: 2.6, ease: 'linear' as const, repeat: Infinity };
+            return (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+              className="absolute inset-0 z-50 bg-canvas-elevated overflow-y-auto"
+              role="status" aria-busy="true" aria-label={`Scanning ${scanningName ?? 'your document'}`}
+            >
+              <div className="min-h-full flex flex-col items-center justify-center px-8 py-12">
+                <h3 className="text-[1rem] font-semibold text-ink-900 mb-8">Scanning your document</h3>
+
+                {/* Scanner stage — the document page under the sweeping light. */}
+                <div className="relative w-[228px] h-[300px]">
+                  {/* focus-frame corner brackets */}
+                  {CORNERS.map((c, i) => (
+                    <span key={i} className={`absolute w-5 h-5 border-brand-500/70 ${c}`} aria-hidden="true" />
+                  ))}
+
+                  <div className="absolute inset-0 rounded-[10px] bg-white border border-canvas-border shadow-[0_22px_50px_-20px_rgba(15,8,30,0.4)] overflow-hidden">
+                    {/* the page content — reads as a real report page */}
+                    <div className="p-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-[5px] bg-gradient-to-br from-brand-500 to-brand-400 shrink-0" />
+                        <div className="flex-1 space-y-1">
+                          <div className="h-1.5 w-20 rounded-full bg-ink-200" />
+                          <div className="h-1 w-12 rounded-full bg-paper-200" />
+                        </div>
+                      </div>
+                      <div className="mt-4 space-y-1.5">
+                        <div className="h-2.5 w-11/12 rounded bg-ink-300" />
+                        <div className="h-2.5 w-2/3 rounded bg-ink-300" />
+                      </div>
+                      <div className="mt-4 space-y-[7px]">
+                        {[100, 94, 98, 86].map((w, i) => <div key={i} className="h-1.5 rounded-full bg-paper-200" style={{ width: `${w}%` }} />)}
+                      </div>
+                      <div className="mt-4 grid grid-cols-3 gap-1">
+                        {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-3 rounded-[3px] bg-paper-100 border border-paper-200" />)}
+                      </div>
+                      <div className="mt-4 space-y-[7px]">
+                        {[96, 82, 90].map((w, i) => <div key={i} className="h-1.5 rounded-full bg-paper-200" style={{ width: `${w}%` }} />)}
+                      </div>
+                    </div>
+
+                    {/* digitized region — grows top→down behind the beam, with a
+                        scan-line texture so the passed area reads as "captured" */}
+                    {!reduceMotion && (
+                      <motion.div
+                        className="absolute inset-x-0 top-0 pointer-events-none"
+                        style={{
+                          backgroundColor: 'rgba(136,56,222,0.05)',
+                          backgroundImage: 'repeating-linear-gradient(0deg, rgba(106,18,205,0.07) 0px, rgba(106,18,205,0.07) 1px, transparent 1px, transparent 4px)',
+                        }}
+                        initial={{ height: '0%' }}
+                        animate={{ height: ['0%', '100%'] }}
+                        transition={sweep}
+                      />
+                    )}
+
+                    {/* the sweeping scan light: a bright line + a soft light bloom */}
+                    <motion.div
+                      className="absolute inset-x-0 pointer-events-none"
+                      initial={{ top: '0%' }}
+                      animate={reduceMotion ? { top: '46%' } : { top: ['0%', '100%'] }}
+                      transition={reduceMotion ? { duration: 0 } : sweep}
+                    >
+                      <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-brand-400/40 to-transparent" />
+                      <div
+                        className="absolute inset-x-0 bottom-0 h-[2px] bg-brand-200"
+                        style={{ boxShadow: '0 0 16px 3px rgba(136,56,222,0.8), 0 0 5px 1px rgba(216,180,254,0.95)' }}
+                      />
+                    </motion.div>
+                  </div>
+                </div>
+
+                {/* filename + status + progress */}
+                <div className="mt-9 flex flex-col items-center text-center w-full max-w-[340px]">
+                  <div className="flex items-center gap-2 max-w-full">
+                    <span className="inline-flex items-center h-5 px-2 rounded-full bg-brand-600 text-white text-[0.5625rem] font-bold tracking-wider uppercase shrink-0">
+                      {kind ? IMPORT_KIND_LABEL[kind] : 'File'}
+                    </span>
+                    {scanningName && <span className="text-[0.8125rem] font-medium text-ink-700 truncate">{scanningName}</span>}
+                  </div>
+
+                  <p className="mt-3 h-4 text-[0.8125rem] text-ink-500">
+                    <AnimatePresence mode="wait">
+                      <motion.span key={importMsgIdx} initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -3 }} transition={{ duration: 0.2 }} className="inline-block">
+                        {scanMessages[importMsgIdx]}
+                      </motion.span>
+                    </AnimatePresence>
+                  </p>
+
+                  <div className="mt-3.5 w-full flex items-center gap-3">
+                    <div className="relative flex-1 h-2.5 rounded-full bg-brand-100 overflow-hidden">
+                      <motion.div
+                        className="absolute inset-y-0 left-0 rounded-full overflow-hidden"
+                        style={{ background: 'linear-gradient(90deg, #550FA5 0%, #6A12CD 55%, #8838DE 100%)', boxShadow: '0 0 4px 0 rgba(106,18,205,0.25)' }}
+                        animate={{ width: `${importProgress}%` }}
+                        transition={{ ease: 'easeOut', duration: 0.2 }}
+                      >
+                        {/* subtle leading edge — the "scan head" */}
+                        <div className="absolute right-0 inset-y-0 w-4" style={{ background: 'linear-gradient(90deg, transparent, rgba(233,213,255,0.55))' }} />
+                        {/* light sheen sweeping the fill — echoes the scan */}
+                        {!reduceMotion && (
+                          <motion.div
+                            className="absolute inset-y-0 w-1/2"
+                            style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent)' }}
+                            initial={{ x: '-140%' }}
+                            animate={{ x: ['-140%', '320%'] }}
+                            transition={{ duration: 1.5, ease: 'easeInOut', repeat: Infinity, repeatDelay: 0.25 }}
+                          />
+                        )}
+                      </motion.div>
+                    </div>
+                    <span className="text-[0.8125rem] font-bold tabular-nums text-brand-700 w-10 text-right">{Math.round(importProgress)}%</span>
+                  </div>
+
+                  <button
+                    onClick={() => setMinimized(true)}
+                    className="mt-6 inline-flex items-center gap-2 h-10 px-5 rounded-[9px] text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+                  >
+                    <Minimize2 size={15} aria-hidden="true" /> Minimize
+                  </button>
+                  <p className="mt-2.5 text-[0.6875rem] text-ink-400">It’ll keep running in the background — keep working.</p>
+                </div>
+              </div>
+            </motion.div>
+            );
+          })()}
         </AnimatePresence>
 
         {/* Import review step — the shared "AI proposes, the human curates" canvas.

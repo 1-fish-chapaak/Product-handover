@@ -66,6 +66,8 @@ export interface AtrMeta {
   brandColor?: string;
   /** Customize: company logo (data URL) shown on the cover/header. */
   logoDataUrl?: string;
+  /** Section keys removed from this report during editing (AtrSectionKey[]). */
+  hiddenSections?: string[];
 }
 
 /** Everything needed to re-render a generated ATR as a saved report. Stored on

@@ -22,6 +22,7 @@ import type { AtrMeta, AtrObservation, AtrInsight, AtrReportData } from './atrTy
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS, GENERATED_REPORTS_KEY } from '../../data/mockData';
 import { ATR_LIBRARY, EVIDENCE_LIBRARY, type AtrLibraryReport } from '../../data/atrLibrary';
 import { exportAtrWord } from './atrTemplate';
+import { currentVersion } from './atrReview';
 import { type Tone } from '../shared/StatusBadge';
 import { ReportPill } from './ReportPill';
 import { reportDisplayName } from './reportName';
@@ -166,6 +167,18 @@ function ReportOpenSkeleton({ onBack }: { onBack: () => void }) {
         </div>
       </div>
     </motion.div>
+  );
+}
+
+// Source chip — where a report came from. Bordered + semibold (the platform's
+// default chip), cool-toned. Custom = user-made, so it carries the brand tint;
+// System = generated, stays neutral.
+function SourceChip({ source }: { source: 'system' | 'custom' | string }) {
+  const custom = source === 'custom';
+  return (
+    <span className={`inline-flex items-center h-6 px-2.5 rounded-full border text-[11px] font-semibold whitespace-nowrap shrink-0 ${custom ? 'bg-brand-50 text-brand-700 border-brand-200' : 'bg-draft-50 text-ink-600 border-canvas-border'}`}>
+      {custom ? 'Custom' : 'System'}
+    </span>
   );
 }
 
@@ -460,10 +473,20 @@ export default function ReportsView({
   const atrDesc = (a: AtrLibraryReport) => `${a.atrData.meta.auditEntity} — ${a.atrData.meta.auditPeriod}`;
   const atrPills = (a: AtrLibraryReport) => {
     const plans = a.atrData.observations.reduce((n, o) => n + o.actionPlans.length, 0);
-    return [a.status === 'final' ? 'Final' : 'Draft', `${a.atrData.observations.length} observations`, `${plans} action plans`];
+    const version = currentVersion(a.id, {
+      status: a.status === 'final' ? 'final' : 'draft',
+      by: a.generatedBy ?? a.atrData.meta.preparedBy ?? 'You',
+      at: a.generatedAt ?? a.atrData.meta.generatedOn ?? '',
+      reviewedBy: a.atrData.meta.reviewedBy,
+      observations: a.atrData.observations.map(o => o.title),
+    });
+    return [`v${version}`, `${a.atrData.observations.length} observations`, `${plans} action plans`];
   };
   const allReportsUnified = useMemo<UnifiedRow[]>(() => {
     const ts = (d?: string) => { const t = d ? Date.parse(d) : NaN; return Number.isNaN(t) ? 0 : t; };
+    // A report reads as "Custom" only when it was generated from a template that
+    // still exists in the user's custom list — not merely a `ct-` prefix.
+    const customTemplateIds = new Set(customTemplates.map(t => t.id));
     const rows: UnifiedRow[] = [];
     // IA + SOX live reports (ATR-kind reports are surfaced via allAtrs below).
     generatedReports.forEach(r => {
@@ -472,7 +495,7 @@ export default function ReportsView({
       if (k !== 'sox' && k !== 'ia') return;
       rows.push({
         id: r.id, kind: k, name: r.name, bulk: r.tag === 'Bulk Audit',
-        source: r.templateId?.startsWith('ct-') ? 'custom' : 'system',
+        source: r.templateId && customTemplateIds.has(r.templateId) ? 'custom' : 'system',
         description: reportDesc(r), pills: reportPills(r),
         status: r.status === 'final' ? 'final' : 'draft',
         date: r.generatedAt, sortDate: ts(r.generatedAt),
@@ -513,7 +536,7 @@ export default function ReportsView({
     });
     return rows.sort((a, b) => b.sortDate - a.sortDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generatedReports, allAtrs, addToast, updateToast, openAtr, openAtrById]);
+  }, [generatedReports, allAtrs, customTemplates, addToast, updateToast, openAtr, openAtrById]);
   const KIND_FULL_LABEL: Record<UnifiedKind, string> = {
     ia: 'Internal Audit',
     sox: 'SOX Compliance',
@@ -1160,11 +1183,16 @@ export default function ReportsView({
                       key={row.id}
                       index={i}
                       icon={m.icon}
-                      iconClass={m.classes}
-                      eyebrow={m.label}
+                      // Bulk Audit takes over the type eyebrow (amber, its identity
+                      // across the table pill + detail banner) instead of a footer chip.
+                      iconClass={row.bulk ? 'bg-mitigated-50 text-mitigated-700' : m.classes}
+                      eyebrow={row.bulk ? 'Bulk Audit' : m.label}
                       title={reportDisplayName(row.name)}
                       description={row.description}
-                      pills={row.bulk ? ['Bulk Audit', ...row.pills] : row.pills}
+                      // Drop the Draft/Final status chip from the card — it's
+                      // carried by the list view's status column, not the cards.
+                      pills={row.pills.filter(p => p !== 'Draft' && p !== 'Final')}
+                      badge={<SourceChip source={row.source} />}
                       footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{row.date}</span>}
                       onClick={() => row.open()}
                       selectable={Boolean(row.del)}
@@ -1233,9 +1261,7 @@ export default function ReportsView({
                 );
               }},
               { key: 'source', label: 'Source', width: COL_W.source, render: (item) => (
-                <span className="inline-flex items-center h-5 px-2 rounded-full bg-paper-100 text-[0.6875rem] font-medium text-ink-500 whitespace-nowrap">
-                  {(item as unknown as UnifiedRow).source === 'custom' ? 'Custom' : 'System'}
-                </span>
+                <SourceChip source={(item as unknown as UnifiedRow).source} />
               )},
               { key: 'date', label: 'Generated', width: COL_W.generated, render: (item) => (
                 <span className="text-[0.75rem] tabular-nums text-ink-500 whitespace-nowrap">{String(item.date)}</span>
@@ -1326,9 +1352,7 @@ export default function ReportsView({
                 return TYPE_PILL(KIND_FULL_LABEL[k], KIND_TONE[k]);
               }},
               { key: 'source', label: 'Source', width: COL_W.source, render: (item) => (
-                <span className="inline-flex items-center h-5 px-2 rounded-full bg-paper-100 text-[0.6875rem] font-medium text-ink-500 whitespace-nowrap">
-                  {item.source === 'custom' ? 'Custom' : 'System'}
-                </span>
+                <SourceChip source={String(item.source)} />
               )},
               { key: 'sharedBy', label: 'Shared by', width: COL_W.sharedBy, render: (item) => (
                 <div className="flex items-center gap-2">
@@ -1664,7 +1688,7 @@ export default function ReportsView({
           const sectionLabel = (label: string, count: number) => (
             <div className="flex items-center gap-2 mb-3">
               <h3 className="text-[0.8125rem] font-semibold text-ink-900">{label}</h3>
-              <span className="inline-flex items-center justify-center h-[1.125rem] min-w-[1.125rem] px-1.5 rounded-full bg-paper-100 text-[0.6875rem] font-semibold text-ink-500 tabular-nums">
+              <span className="inline-flex items-center justify-center h-[1.125rem] min-w-[1.125rem] px-1.5 rounded-full bg-brand-50 text-brand-700 text-[0.625rem] font-semibold tabular-nums">
                 {count}
               </span>
             </div>

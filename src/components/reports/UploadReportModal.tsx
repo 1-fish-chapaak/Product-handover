@@ -238,7 +238,7 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
   const annexureSection = (
     <div className="mt-4 shrink-0">
       <label className="text-xs font-semibold text-ink-800 mb-1.5 flex items-center gap-1.5">
-        <Paperclip size={12} /> Upload Annexures <span className="text-ink-400 font-normal">(optional)</span>
+        <Paperclip size={12} /> Annexures <span className="text-ink-400 font-normal">(optional)</span>
         {embeddedAnnex.length > 0 && <span className="ml-1 text-xs font-semibold text-compliant-700">· {embeddedAnnex.length} auto-added from report</span>}
       </label>
       {(embeddedAnnex.length > 0 || annexFiles.length > 0) && (
@@ -258,9 +258,18 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
           ))}
         </div>
       )}
-      <Button variant="outline" size="md" leftIcon={<Upload size={15} />} onClick={() => setAnnexUploadOpen(true)} className="w-full">
-        {annexFiles.length > 0 ? 'Add more annexures' : 'Upload annexures'}
-      </Button>
+      <button
+        onClick={() => setAnnexUploadOpen(true)}
+        className="group w-full flex items-center justify-center gap-3 px-4 py-3.5 rounded-[12px] border border-dashed border-canvas-border bg-canvas hover:border-brand-300 hover:bg-brand-50/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+      >
+        <span className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0 transition-colors group-hover:bg-brand-100">
+          <Upload size={16} />
+        </span>
+        <span className="text-left leading-tight">
+          <span className="block text-[0.8125rem] font-semibold text-ink-800">{annexFiles.length > 0 ? 'Add more annexures' : 'Upload annexures'}</span>
+          <span className="block text-[0.6875rem] text-ink-400 mt-0.5">Excel, PDF or CSV — the exception detail behind your observations</span>
+        </span>
+      </button>
     </div>
   );
 
@@ -408,19 +417,17 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
         className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[680px] max-h-[92vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col"
         role="dialog" aria-modal="true" aria-label="ATR Builder" tabIndex={-1}
       >
-        {/* Header + stepper */}
-        <header className="shrink-0 px-6 pt-3.5 pb-3 border-b border-canvas-border">
-          <div className="flex items-center justify-between gap-4 mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Sparkles size={16} /></div>
-              <div>
-                <h2 className="text-base font-semibold text-ink-900 leading-tight">Build an Action Taken Report</h2>
-                <p className="text-xs text-ink-500 leading-snug">Start from a template or report, validate, link annexures, then generate.</p>
-              </div>
-            </div>
-            <button onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Close"><X size={16} /></button>
+        {/* Header + inline stepper — one compact row so the header stays tight
+            (mirrors the report wizard). The step rail sits inline on the right;
+            done steps stay clickable to jump back. */}
+        <header className="shrink-0 px-6 py-3 border-b border-canvas-border flex items-center gap-4">
+          <div className="w-9 h-9 rounded-[10px] bg-gradient-to-br from-brand-50 to-brand-100 text-brand-700 flex items-center justify-center shrink-0 ring-1 ring-brand-200/60"><Sparkles size={16} /></div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight truncate">Build an Action Taken Report</h2>
+            <p className="text-[0.75rem] text-ink-500 leading-snug truncate">Start from a template or report, validate, link annexures, then generate.</p>
           </div>
-          <div className="flex items-center gap-2">
+          {/* Compact step rail — slim dots + labels, no heavy pill chrome. */}
+          <nav aria-label="Progress" className="hidden md:flex items-center gap-2.5 shrink-0">
             {STEPPER.map((s, i) => {
               const state = i < activeStep ? 'done' : i === activeStep ? 'active' : 'todo';
               const canGoBack = state === 'done' && stage !== 'processing';
@@ -428,24 +435,26 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
                 : state === 'active' ? STEP_TIP[s.key]
                 : `Complete Step ${activeStep + 1} to unlock`;
               return (
-                <div key={s.key} className="flex items-center gap-2">
+                <div key={s.key} className="flex items-center gap-2.5">
                   <button
                     type="button"
                     title={tip}
                     aria-label={canGoBack ? `Go back to ${s.label}` : undefined}
                     aria-disabled={!canGoBack}
+                    aria-current={state === 'active' ? 'step' : undefined}
                     onClick={() => canGoBack && setStage(stepBackTarget(s.key))}
-                    className={`group inline-flex items-center gap-1.5 h-7 pl-1.5 pr-2.5 rounded-full text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${state === 'active' ? 'bg-brand-50 text-brand-700' : state === 'done' ? 'bg-compliant-50 text-compliant-700 hover:bg-compliant-100 cursor-pointer' : 'bg-draft-50 text-ink-500 hover:bg-draft-100 cursor-not-allowed'}`}
+                    className={`group inline-flex items-center gap-1.5 text-[0.75rem] whitespace-nowrap rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${state === 'active' ? 'font-semibold text-brand-700' : state === 'done' ? 'font-medium text-ink-600 hover:text-compliant-700 cursor-pointer' : 'font-medium text-ink-400 cursor-not-allowed'}`}
                   >
-                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-xs ${state === 'active' ? 'bg-brand-600 text-white' : state === 'done' ? 'bg-compliant text-white' : 'bg-ink-300 text-white'}`}>{state === 'done' ? <Check size={10} /> : i + 1}</span>
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[0.625rem] font-semibold transition-colors ${state === 'active' ? 'bg-brand-600 text-white' : state === 'done' ? 'bg-compliant text-white' : 'bg-white text-ink-400 ring-1 ring-canvas-border'}`}>{state === 'done' ? <Check size={11} strokeWidth={3} /> : i + 1}</span>
                     {s.label}
                     {canGoBack && <ArrowLeft size={11} className="-mr-0.5 max-w-0 opacity-0 group-hover:max-w-[14px] group-hover:opacity-100 transition-all duration-150" />}
                   </button>
-                  {i < STEPPER.length - 1 && <span className="w-5 h-px bg-canvas-border" />}
+                  {i < STEPPER.length - 1 && <span className="w-5 h-px bg-canvas-border" aria-hidden="true" />}
                 </div>
               );
             })}
-          </div>
+          </nav>
+          <button onClick={requestClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Close"><X size={16} /></button>
         </header>
 
         {/* Body */}
@@ -458,9 +467,10 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
               <h3 className="text-base font-semibold text-ink-900 mb-0.5">How would you like to start?</h3>
               <p className="text-xs text-ink-500 mb-4">Choose the input that matches what you have.</p>
 
-              {/* Input paths — premium cards (icon + chip on top, title/desc
-                  anchored to the bottom). Fixed height so content stays top-packed. */}
-              <div className="grid grid-cols-3 gap-3.5 min-h-[140px]">
+              {/* Input paths — flat, bordered cards. Selection = brand border +
+                  a light brand wash + a filled brand icon. No gradients, glows,
+                  decorative shadows or hover-float. */}
+              <div className="grid grid-cols-3 gap-3">
                 {([
                   { mode: 'template' as const, icon: LayoutTemplate, title: 'Use IRAME template', rec: true, desc: 'Download, fill offline, upload back.' },
                   { mode: 'upload' as const, icon: UploadCloud, title: 'Upload a report', rec: false, desc: "We'll extract the observations." },
@@ -468,16 +478,15 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
                 ]).map(c => {
                   const active = startMode === c.mode;
                   return (
-                    <button key={c.mode} onClick={() => selectPath(c.mode)} aria-pressed={active} className={`group relative flex flex-col overflow-hidden rounded-[18px] border p-5 text-left transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${active ? 'border-brand-500 bg-gradient-to-br from-brand-50 via-brand-50/50 to-canvas-elevated shadow-lg shadow-brand-900/[0.07]' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:-translate-y-0.5 hover:shadow-md hover:shadow-brand-900/[0.05]'}`}>
-                      {/* Ambient brand glow on the selected card. */}
-                      {active && <span aria-hidden className="pointer-events-none absolute -top-10 -right-10 w-32 h-32 rounded-full bg-brand-400/20 blur-3xl" />}
-                      <div className="relative flex items-start justify-between gap-2">
-                        <span className={`w-12 h-12 rounded-[14px] flex items-center justify-center shrink-0 transition-all duration-200 ${active ? 'bg-gradient-to-br from-brand-600 to-brand-500 text-white shadow-md shadow-brand-600/30' : 'bg-brand-50 text-brand-700 group-hover:bg-brand-100'}`}><c.icon size={22} strokeWidth={2} /></span>
-                        {c.rec && <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-brand-600 to-brand-500 text-white text-[9px] font-bold uppercase tracking-wider pl-1.5 pr-2 py-1 shadow-sm shadow-brand-600/30"><Sparkles size={9} strokeWidth={2.5} aria-hidden="true" />Recommended</span>}
+                    <button key={c.mode} onClick={() => selectPath(c.mode)} aria-pressed={active} className={`group relative flex flex-col rounded-[12px] border p-4 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${active ? 'border-brand-600 bg-brand-50/50' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-canvas'}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0 transition-colors ${active ? 'bg-brand-600 text-white' : 'bg-brand-50 text-brand-700 group-hover:bg-brand-100'}`}><c.icon size={18} strokeWidth={2} /></span>
+                        {c.rec && <span className="inline-flex items-center h-5 px-2 rounded-full bg-brand-50 text-brand-700 border border-brand-200 text-[0.625rem] font-semibold uppercase tracking-[0.08em]">Recommended</span>}
+                        {active && !c.rec && <Check size={16} className="text-brand-600 shrink-0" strokeWidth={2.5} aria-hidden="true" />}
                       </div>
-                      <div className="relative mt-auto pt-5">
-                        <div className="text-[15px] font-semibold text-ink-900 leading-tight">{c.title}</div>
-                        <p className="text-[12.5px] text-ink-500 leading-snug mt-1">{c.desc}</p>
+                      <div className="mt-4">
+                        <div className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">{c.title}</div>
+                        <p className="text-[0.8125rem] text-ink-500 leading-snug mt-1">{c.desc}</p>
                       </div>
                     </button>
                   );
@@ -485,27 +494,27 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
               </div>
 
               {/* Selected-path action + the "captures" reference share one full-width row */}
-              <div className="mt-4 grid grid-cols-[1.35fr_1fr] gap-5 items-start">
+              <div className="mt-4 grid grid-cols-[1.35fr_1fr] gap-4 items-stretch">
                 {/* Left — the one thing this path needs */}
                 {startMode === 'template' && (
-                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-5">
-                    <div className="text-sm font-semibold text-ink-900 mb-0.5">Download the template</div>
-                    <p className="text-xs text-ink-500 leading-relaxed mb-3">Fill one row per observation, then upload it on the next step.</p>
+                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-4 h-full">
+                    <div className="text-[0.8125rem] font-semibold text-ink-900">Download the template</div>
+                    <p className="text-[0.75rem] text-ink-500 leading-relaxed mt-0.5 mb-3">Fill one row per observation, then upload it on the next step.</p>
                     <div className="space-y-1.5">
                       {([
                         { key: 'excel', icon: FileSpreadsheet, tint: 'bg-compliant-50 text-compliant-700', title: 'Excel template', ext: '.xlsx', dashed: false, onClick: () => { downloadExcelTemplate(); markDownloaded('excel'); addToast({ type: 'success', message: 'Excel template downloaded.' }); } },
                         { key: 'word', icon: FileText, tint: 'bg-brand-50 text-brand-700', title: 'Word template', ext: '.doc', dashed: false, onClick: () => { downloadWordTemplate(); markDownloaded('word'); addToast({ type: 'success', message: 'Word template downloaded.' }); } },
-                        { key: 'sample', icon: Sparkles, tint: 'bg-brand-50 text-brand-700', title: 'Filled sample', ext: 'example data', dashed: true, onClick: () => { exportAtrExcel({ reportId: 'ATR-SAMPLE' }, SAMPLE_OBSERVATIONS); markDownloaded('sample'); addToast({ type: 'success', message: 'Filled sample downloaded.' }); } },
+                        { key: 'sample', icon: Sparkles, tint: 'bg-draft-50 text-ink-500', title: 'Filled sample', ext: 'example data', dashed: true, onClick: () => { exportAtrExcel({ reportId: 'ATR-SAMPLE' }, SAMPLE_OBSERVATIONS); markDownloaded('sample'); addToast({ type: 'success', message: 'Filled sample downloaded.' }); } },
                       ] as const).map(opt => {
                         const done = downloadedTmpls.has(opt.key);
                         return (
                           <button key={opt.key} onClick={opt.onClick}
-                            className={`group flex items-center gap-3 w-full h-11 pl-2.5 pr-3 rounded-[10px] border transition-colors cursor-pointer text-left ${done ? 'border-compliant-200 bg-compliant-50/50' : `bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/30 ${opt.dashed ? 'border-dashed border-canvas-border' : 'border-canvas-border'}`}`}>
+                            className={`group flex items-center gap-3 w-full h-11 pl-2.5 pr-3 rounded-[10px] border transition-colors cursor-pointer text-left ${done ? 'border-compliant-200 bg-compliant-50/50' : `bg-canvas-elevated hover:border-brand-300 hover:bg-canvas ${opt.dashed ? 'border-dashed border-canvas-border' : 'border-canvas-border'}`}`}>
                             <span className={`w-8 h-8 rounded-[8px] flex items-center justify-center shrink-0 ${opt.tint}`}><opt.icon size={16} /></span>
-                            <span className="flex-1 min-w-0 text-sm font-medium text-ink-800 truncate">{opt.title} <span className="text-ink-400 font-normal">· {opt.ext}</span></span>
+                            <span className="flex-1 min-w-0 text-[0.8125rem] font-medium text-ink-800 truncate">{opt.title} <span className="text-ink-400 font-normal">· {opt.ext}</span></span>
                             {done
-                              ? <span className="text-xs font-semibold text-compliant-700 flex items-center gap-1 shrink-0"><Check size={13} /> Downloaded</span>
-                              : <span className="text-xs font-semibold text-brand-700 flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100"><Download size={14} /> Download</span>}
+                              ? <span className="text-[0.75rem] font-semibold text-compliant-700 flex items-center gap-1 shrink-0"><Check size={13} /> Downloaded</span>
+                              : <span className="text-[0.75rem] font-semibold text-brand-700 flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100"><Download size={14} /> Download</span>}
                           </button>
                         );
                       })}
@@ -513,25 +522,26 @@ export default function UploadReportModal({ onClose, onAddToReport, onFreeze, on
                   </div>
                 )}
                 {startMode === 'upload' && (
-                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-5 flex items-start gap-3">
+                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-4 h-full flex items-center gap-3">
                     <FileCheck2 size={16} className="text-brand-600 shrink-0 mt-0.5" />
-                    <p className="text-xs text-ink-600 leading-relaxed">Upload any PDF, Word, Excel or CSV report on the next step. We'll extract the observations, risks, recommendations and evidence — you'll review everything before it's finalized.</p>
+                    <p className="text-[0.75rem] text-ink-600 leading-relaxed">Upload any PDF, Word, Excel or CSV report on the next step. We'll extract the observations, risks, recommendations and evidence — you'll review everything before it's finalized.</p>
                   </div>
                 )}
                 {startMode === 'manual' && (
-                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-5 flex items-start gap-3">
+                  <div className="rounded-[12px] border border-canvas-border bg-canvas p-4 h-full flex items-center gap-3">
                     <PencilLine size={16} className="text-brand-600 shrink-0 mt-0.5" />
-                    <p className="text-xs text-ink-600 leading-relaxed">Add observations row by row on the next step — title, risk, classification, status and action plans. Each row becomes one observation.</p>
+                    <p className="text-[0.75rem] text-ink-600 leading-relaxed">Add observations row by row on the next step — title, risk, classification, status and action plans. Each row becomes one observation.</p>
                   </div>
                 )}
 
-                {/* Right — what every observation captures (fills the modal's open space) */}
-                <div className="rounded-[12px] bg-brand-50/40 border border-brand-100/70 p-5">
-                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-brand-700/80 mb-2.5">Each observation captures</div>
-                  <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                {/* Right — what every observation captures. Neutral card; a small
+                    brand check per field reads as a spec, not a decorated panel. */}
+                <div className="rounded-[12px] border border-canvas-border bg-canvas p-4 h-full">
+                  <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-400 mb-3">Each observation captures</div>
+                  <ul className="grid grid-cols-2 gap-x-4 gap-y-2">
                     {[REQUIRED_FIELDS[0].label, 'Category / Area', ...REQUIRED_FIELDS.slice(1).map(f => f.label)].map(label => (
-                      <li key={label} className="flex items-start gap-1.5 text-xs text-ink-700 leading-snug">
-                        <span className="mt-[5px] w-1 h-1 rounded-full bg-brand-400 shrink-0" /> {label}
+                      <li key={label} className="flex items-start gap-2 text-[0.8125rem] text-ink-700 leading-snug">
+                        <Check size={13} className="text-brand-500 mt-0.5 shrink-0" strokeWidth={2.5} aria-hidden="true" /> {label}
                       </li>
                     ))}
                   </ul>
