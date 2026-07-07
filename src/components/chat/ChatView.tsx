@@ -25,7 +25,11 @@ import { Button } from '../shared/Button';
 import { KpiTile } from '../shared/KpiTile';
 import AuditResultBody from './AuditResultBody';
 import PlanFlowDiagram from '../shared/PlanFlowDiagram';
-import { CHAT_PLAN_STEPS } from '../../data/chatPlan';
+import {
+  DEFAULT_SEVERITY_THRESHOLD, SEVERITY_THRESHOLD_OPTIONS,
+  buildChatPlanSteps, buildChatPlanRiskItems, severityThresholdFromAnswer, severityRuleNote, isHighByAmount,
+  CHAT_RISK_TABLE_COLUMNS, buildChatPlanRiskRows, CHAT_RISK_SUMMARY,
+} from '../../data/chatPlan';
 import type { WorkflowTypeId } from '../../data/mockData';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { TextShimmer } from '../shared/TextShimmer';
@@ -98,7 +102,7 @@ export interface ChatMessage {
   artifactType?: 'workflow' | 'query' | 'report';
   followUps?: string[];
   // Categorised follow-ups for data results. `depth` drills into the OUTPUT
-  // the run just produced (e.g. the flagged pairs); `breadth` explores
+  // the run just produced (e.g. the risky payments); `breadth` explores
   // adjacent dimensions of the INPUT sources the run hasn't touched yet. When
   // present, the "What next?" block renders the two tracks (output / input) as
   // labelled cards instead of a flat card grid. Falls back to `followUps` for
@@ -164,137 +168,86 @@ interface ClarificationData {
 // KPIs render in the dashboard's widget pattern: 4 across on lg, 2 on mobile,
 // with a hard cap of 8 (two full rows on lg). Values stay neutral ink-900 —
 // magnitude + label carries the story, the chart + table fill in the rest.
+// ₹ in lakhs for KPI tiles: ₹11.7L / ₹3.6L (whole number when exact).
+const fmtLakh = (n: number) => `₹${(n / 100_000).toFixed(n % 100_000 === 0 ? 0 : 1)}L`;
+
+// The chat audit result. The table, KPIs, and charts all describe the SAME 9
+// risky payments the DAG output lists — table rows and the roll-up KPIs come
+// straight from RISK_FACTS (via chatPlan), so the count/amounts/vendors line up
+// across the prose, the flow diagram, and this result.
 const AUDIT_RESULT = {
   kpis: [
-    { label: 'Records scanned',  value: '1.2M',   color: 'text-ink-900' },
-    { label: 'Duplicates found', value: '8',      color: 'text-ink-900' },
-    { label: 'Total amount',     value: '₹6.16L', color: 'text-ink-900' },
-    { label: 'Highest match',    value: '96%',    color: 'text-ink-900' },
-    { label: 'Vendors flagged',  value: '4',      color: 'text-ink-900' },
-    { label: 'Days covered',     value: '90',     color: 'text-ink-900' },
-    { label: 'Avg confidence',   value: '91%',    color: 'text-ink-900' },
-    { label: 'Cross-checks',     value: '24',     color: 'text-ink-900' },
+    { label: 'Payments checked', value: '1.2M',                                 color: 'text-ink-900' },
+    { label: 'Risks found',      value: String(CHAT_RISK_SUMMARY.count),        color: 'text-ink-900' },
+    { label: 'Total exposure',   value: fmtLakh(CHAT_RISK_SUMMARY.totalExposure), color: 'text-ink-900' },
+    { label: 'Largest single',   value: fmtLakh(CHAT_RISK_SUMMARY.largest),     color: 'text-ink-900' },
+    { label: 'Vendors flagged',  value: String(CHAT_RISK_SUMMARY.vendors),      color: 'text-ink-900' },
+    { label: 'Controls tripped', value: String(CHAT_RISK_SUMMARY.controls),     color: 'text-ink-900' },
+    { label: 'Days covered',     value: '90',                                   color: 'text-ink-900' },
+    { label: 'Data sources',     value: '2',                                    color: 'text-ink-900' },
   ],
   charts: [
     {
-      id: 'confidence',
-      label: 'Findings by Confidence',
-      // Single-hue (brand) ramp — opacity falls with the bucket. The eye
-      // reads rank without learning a 4-color legend.
+      id: 'control',
+      label: 'Findings by Control',
+      // Single-hue (brand) ramp — opacity falls with the bucket. Counts sum to 9.
       data: [
-        { bucket: '90–100%', count: 5, tone: 'bg-ink-800' },
-        { bucket: '80–89%', count: 2, tone: 'bg-ink-800/70' },
-        { bucket: '70–79%', count: 1, tone: 'bg-ink-800/50' },
-        { bucket: '60–69%', count: 0, tone: 'bg-ink-800/30' },
+        { bucket: 'Duplicate payment',    count: 3, tone: 'bg-ink-800'    },
+        { bucket: 'Vendor detail change', count: 2, tone: 'bg-ink-800/70' },
+        { bucket: 'Invoice-vs-PO match',  count: 2, tone: 'bg-ink-800/60' },
+        { bucket: 'Approval rules',       count: 2, tone: 'bg-ink-800/50' },
       ],
     },
     {
       id: 'vendor',
       label: 'Findings by Vendor',
       data: [
-        { bucket: 'Acme Corp', count: 4, tone: 'bg-ink-800' },
-        { bucket: 'Global Supplies', count: 2, tone: 'bg-ink-800/70' },
-        { bucket: 'TechParts Ltd', count: 1, tone: 'bg-ink-800/50' },
-        { bucket: 'FastShip Logistics', count: 1, tone: 'bg-ink-800/50' },
-      ],
-    },
-    // High-data stress test: 12 monthly buckets with thousands-scale values
-    // and long category labels. Confirms y-axis formatting + x-axis label
-    // overflow handling under realistic enterprise data sizes.
-    {
-      id: 'monthly-high',
-      label: 'Findings by Month',
-      data: [
-        { bucket: 'Jan 2026', count: 11_842, tone: 'bg-ink-800/70' },
-        { bucket: 'Feb 2026', count: 9_405, tone: 'bg-ink-800/60' },
-        { bucket: 'Mar 2026', count: 14_207, tone: 'bg-ink-800/80' },
-        { bucket: 'Apr 2026', count: 12_661, tone: 'bg-ink-800/75' },
-        { bucket: 'May 2026', count: 15_904, tone: 'bg-ink-800/85' },
-        { bucket: 'Jun 2026', count: 17_532, tone: 'bg-ink-800/90' },
-        { bucket: 'Jul 2026', count: 13_088, tone: 'bg-ink-800/75' },
-        { bucket: 'Aug 2026', count: 8_270, tone: 'bg-ink-800/55' },
-        { bucket: 'Sep 2026', count: 10_410, tone: 'bg-ink-800/65' },
-        { bucket: 'Oct 2026', count: 16_741, tone: 'bg-ink-800/85' },
-        { bucket: 'Nov 2026', count: 18_220, tone: 'bg-ink-800' },
-        { bucket: 'Dec 2026', count: 21_350, tone: 'bg-ink-800' },
-      ],
-    },
-    // Additional cuts of the same flagged-pair population. Together with the
-    // first three this brings the chart count to 7, which trips the picker
-    // from segmented control to dropdown (CHART_TAB_LIMIT = 4).
-    {
-      id: 'region',
-      label: 'Findings by Region',
-      data: [
-        { bucket: 'India',  count: 6, tone: 'bg-ink-800'    },
-        { bucket: 'UAE',    count: 4, tone: 'bg-ink-800/75' },
-        { bucket: 'EMEA',   count: 3, tone: 'bg-ink-800/60' },
-        { bucket: 'APAC',   count: 2, tone: 'bg-ink-800/45' },
-      ],
-    },
-    {
-      id: 'match-method',
-      label: 'Findings by Match Method',
-      data: [
-        { bucket: 'Exact + ±2d',  count: 5, tone: 'bg-ink-800'    },
-        { bucket: 'Fuzzy name',   count: 4, tone: 'bg-ink-800/75' },
-        { bucket: 'Exact amount', count: 4, tone: 'bg-ink-800/70' },
-        { bucket: 'Fuzzy + ±2d',  count: 2, tone: 'bg-ink-800/55' },
-      ],
-    },
-    {
-      id: 'status',
-      label: 'Status Distribution',
-      data: [
-        { bucket: 'Open',      count: 10, tone: 'bg-ink-800'    },
-        { bucket: 'In review', count: 3,  tone: 'bg-ink-800/65' },
-        { bucket: 'Resolved',  count: 2,  tone: 'bg-ink-800/45' },
+        { bucket: 'Acme Corp',          count: 2, tone: 'bg-ink-800'    },
+        { bucket: 'Global Supplies',    count: 2, tone: 'bg-ink-800/80' },
+        { bucket: 'TechParts Ltd',      count: 2, tone: 'bg-ink-800/70' },
+        { bucket: 'FastShip Logistics', count: 2, tone: 'bg-ink-800/60' },
+        { bucket: 'Bluepeak Logistics', count: 1, tone: 'bg-ink-800/45' },
       ],
     },
     {
       id: 'amount-band',
       label: 'Findings by Amount Band',
       data: [
-        { bucket: '< ₹50K',       count: 3, tone: 'bg-ink-800/50' },
-        { bucket: '₹50K – ₹1L',   count: 5, tone: 'bg-ink-800/70' },
-        { bucket: '₹1L – ₹2L',    count: 5, tone: 'bg-ink-800/85' },
-        { bucket: '> ₹2L',         count: 2, tone: 'bg-ink-800'    },
+        { bucket: '< ₹50K',      count: 2, tone: 'bg-ink-800/50' },
+        { bucket: '₹50K – ₹1L',  count: 3, tone: 'bg-ink-800/70' },
+        { bucket: '₹1L – ₹2L',   count: 2, tone: 'bg-ink-800/85' },
+        { bucket: '> ₹2L',        count: 2, tone: 'bg-ink-800'    },
+      ],
+    },
+    {
+      id: 'status',
+      label: 'Findings by Status',
+      data: [
+        { bucket: 'Open',      count: 6, tone: 'bg-ink-800'    },
+        { bucket: 'In review', count: 2, tone: 'bg-ink-800/65' },
+        { bucket: 'Resolved',  count: 1, tone: 'bg-ink-800/45' },
       ],
     },
   ],
   table: {
-    columns: ['Invoice A', 'Invoice B', 'Vendor', 'Amount', 'Date A', 'Date B', 'PO Ref', 'Match Method', 'Match %', 'Status'],
-    rows: [
-      ['INV-2024-8821', 'INV-2024-8847', 'Acme Corp',          '₹1,42,500', '2026-01-12', '2026-01-18', 'PO-AC-44102', 'Exact + ±2d',    '96%', 'Open'],
-      ['INV-2024-8910', 'INV-2024-9001', 'Acme Corp',          '₹89,200',   '2026-02-03', '2026-02-09', 'PO-AC-44210', 'Fuzzy name',     '94%', 'Open'],
-      ['INV-2024-9112', 'INV-2024-9183', 'Global Supplies',    '₹2,18,400', '2026-02-15', '2026-02-22', 'PO-GS-12044', 'Exact amount',   '92%', 'Open'],
-      ['INV-2024-9245', 'INV-2024-9301', 'Acme Corp',          '₹54,000',   '2026-03-02', '2026-03-08', 'PO-AC-44318', 'Fuzzy + ±2d',    '91%', 'In review'],
-      ['INV-2024-9377', 'INV-2024-9420', 'Global Supplies',    '₹76,800',   '2026-03-11', '2026-03-15', 'PO-GS-12099', 'Exact + ±2d',    '90%', 'Open'],
-      ['INV-2024-9501', 'INV-2024-9544', 'TechParts Ltd',      '₹38,200',   '2026-03-22', '2026-03-29', 'PO-TP-08815', 'Fuzzy name',     '89%', 'Open'],
-      ['INV-2024-9612', 'INV-2024-9655', 'FastShip Logistics', '₹1,02,400', '2026-04-01', '2026-04-07', 'PO-FS-22041', 'Exact amount',   '88%', 'In review'],
-      ['INV-2024-9728', 'INV-2024-9760', 'Acme Corp',          '₹47,950',   '2026-04-09', '2026-04-14', 'PO-AC-44502', 'Fuzzy + ±2d',    '87%', 'Open'],
-      ['INV-2024-9841', 'INV-2024-9879', 'Global Supplies',    '₹1,68,300', '2026-04-15', '2026-04-21', 'PO-GS-12188', 'Exact + ±5d',    '86%', 'Open'],
-      ['INV-2024-9955', 'INV-2024-9998', 'TechParts Ltd',      '₹62,150',   '2026-04-22', '2026-04-28', 'PO-TP-08920', 'Fuzzy name',     '85%', 'In review'],
-      ['INV-2025-0042', 'INV-2025-0089', 'Acme Corp',          '₹1,21,400', '2026-05-04', '2026-05-09', 'PO-AC-44612', 'Exact amount',   '84%', 'Open'],
-      ['INV-2025-0155', 'INV-2025-0202', 'FastShip Logistics', '₹58,700',   '2026-05-12', '2026-05-18', 'PO-FS-22158', 'Fuzzy + ±2d',    '83%', 'Open'],
-      ['INV-2025-0287', 'INV-2025-0334', 'Global Supplies',    '₹2,04,800', '2026-05-21', '2026-05-26', 'PO-GS-12257', 'Exact + ±2d',    '82%', 'Resolved'],
-      ['INV-2025-0411', 'INV-2025-0456', 'Acme Corp',          '₹73,250',   '2026-06-02', '2026-06-07', 'PO-AC-44720', 'Fuzzy name',     '81%', 'Open'],
-      ['INV-2025-0533', 'INV-2025-0579', 'TechParts Ltd',      '₹49,800',   '2026-06-10', '2026-06-16', 'PO-TP-09042', 'Exact + ±5d',    '80%', 'Resolved'],
-    ],
-    totalRows: 15,
+    // Same 9 findings as the DAG output list — from RISK_FACTS. The inline table
+    // prepends a dynamic Risk (High/Medium) column computed from the user's rule.
+    columns: CHAT_RISK_TABLE_COLUMNS,
+    rows: buildChatPlanRiskRows(),
+    totalRows: CHAT_RISK_SUMMARY.count,
   },
 };
 
 // Two-track follow-ups for the audit result. DEPTH questions interrogate the
-// OUTPUT the run just surfaced (the 8 flagged pairs); BREADTH questions point
+// OUTPUT the run just surfaced (the 9 risky payments); BREADTH questions point
 // outward at adjacent dimensions of the INPUT sources (POs, vendor master,
 // credit notes) the run never looked at. Keeping them as separate lists lets
 // the "What next?" UI tag them as the output track / input track.
 const AUDIT_FOLLOWUP_TRACKS: { depth: string[]; breadth: string[] } = {
   depth: [
-    'Drill into Acme Corp’s 4 flagged pairs',
-    'Rank all 8 pairs by exposure amount',
-    'Which pairs cleared the same approval limit?',
+    'Rank the 9 risky payments by exposure amount',
+    'Show only the duplicate-payment findings',
+    'Which vendor has the most flags?',
   ],
   breadth: [
     'Check the same vendors for split purchase orders',
@@ -860,15 +813,11 @@ export interface ChatViewProps {
   onMessagesChange?: (messages: ChatMessage[]) => void;
 }
 
-// Step labels for the subtle inline audit loader. The artifact panel renders
-// the full Plan / Code / Sources detail; here we only narrate progress as a
-// single shimmering line and sync the active artifact tab.
-const LOADING_STEPS: { label: string; tab: ArtifactTab | null }[] = [
-  { label: 'Generating execution plan…',  tab: 'plan' },
-  { label: 'Writing SQL query…',          tab: 'code' },
-  { label: 'Connecting data sources…',    tab: 'sources' },
-  { label: 'Processing 1.2M records…',    tab: null },
-];
+// The response loader is the flow chart building itself (PlanFlowDiagram in
+// `building` mode). It reveals the CHAT_PLAN_STEPS nodes one at a time and
+// PAUSES after this step (the risk step) so Ira can ask the user's severity
+// rule before rating the findings.
+const PLAN_RUN_GATE_ID = 'execute';
 
 // Streaming v2 — opt-in via ?stream=v2. When on, the audit answer streams from
 // the event spine (text.delta + smoothing + collapsed wait) instead of the
@@ -879,21 +828,20 @@ const STREAM_V2 = typeof window !== 'undefined'
 
 // The audit answer prose — shared by the legacy completion path and the v2
 // stream so both render the exact same content.
-const AUDIT_PROSE = `## Duplicate invoice detection — Q1 FY26
+const AUDIT_PROSE = `## Risky payments — Purchase-to-Pay, Q1 FY26
 
-Scanned **1.2M invoice records** across the last **90 days** and surfaced **8 high-confidence duplicates** totalling **₹6.16L** in exposure. The strongest pair sits at a **96% match** on **Acme Corp**, which alone accounts for *half of the flags*.
+Scanned **1.2M payment records** across the last **90 days** and flagged **9 risky payments** totalling **₹11.7L** in exposure — spanning **4 controls** and **5 vendors**. The largest single exposure is a **₹3,60,000** TechParts Ltd payment made two days after its bank account changed.
 
 > Sample-data preview: this run used the connected sandbox source. Re-run against your production SAP AP module before promoting any flag to a finding.
 
 ### Where to look first
 
-- **Acme Corp** — 4 of 8 flags. Two invoices were posted **3 days apart** for identical amounts under near-identical PO references.
-  - One pair was approved by the same AP clerk; check whether the duplicate-payment control failed open.
-  - The other pair crossed an approval-limit boundary; payment may have already cleared.
-- **Bluepeak Logistics** — 2 flags, both at month-end, both **₹84,000** exactly. Confirm whether one is a credit-note reversal.
-- **Two tail vendors** — single flags each, lower priority but worth a glance before sign-off.
+- **Duplicate payments** — Acme Corp billed the same **₹54,000** twice, 3 days apart; Bluepeak Logistics sent two month-end invoices for **₹84,000** each.
+- **Missing / mismatched POs** — Global Supplies was paid **₹2,18,400** with no matching purchase order.
+- **Approval gaps** — a **₹1,45,000** Acme Corp invoice was approved by the person who raised it; a FastShip payment was split into two **₹95,000** parts to stay under the approval limit.
+- **Vendor-master risks** — TechParts changed its bank account just before a **₹3,60,000** payment; FastShip was paid **₹58,700** while marked inactive.
 
-The full plan, SQL, and sources are in the Workspace on the right. Promote any pair to a formal finding from the \`Flagged pairs\` table, or open the [duplicate-payment SOP](https://docs.auditify.example/sops/duplicate-payment) for the standard remediation path.`;
+The full plan, SQL, and sources are in the Workspace on the right. Promote any row to a formal finding from the \`Risky payments\` table, or open the relevant control's SOP for the standard remediation path.`;
 
 // The v2 stream's content — same numbers/prose/rows as the legacy result, fed
 // to the mock emitter so the answer materializes from events.
@@ -901,7 +849,7 @@ const AUDIT_STREAM_DATA: MockAuditData = {
   reasoning: ['Generating execution plan', 'Writing SQL query', 'Connecting to data sources'],
   answer: AUDIT_PROSE,
   kpis: AUDIT_RESULT.kpis,
-  chart: { id: 'confidence' },
+  chart: { id: 'control' },
   columns: AUDIT_RESULT.table.columns,
   rows: AUDIT_RESULT.table.rows,
 };
@@ -1441,7 +1389,8 @@ function FullscreenChartModal({
 const PREVIEW_ROW_COUNT = 9;
 
 function ResultsTable({
-  columns, rows, totalRows, onDownload, title = 'Flagged duplicate pairs', animateRows = false,
+  columns, rows, totalRows, onDownload, title = 'Results', animateRows = false,
+  caption, levelForRow,
 }: {
   columns: string[];
   rows: string[][];
@@ -1449,14 +1398,21 @@ function ResultsTable({
   /** Caller can fire side-effects (toast) when a download starts. The
    *  fullscreen / expand path is handled locally. */
   onDownload: () => void;
-  /** Card / fullscreen / new-tab heading. Defaults to the audit fixture's
-   *  "Flagged duplicate pairs"; the workflow-run recap passes the run's own
-   *  result title (e.g. "Duplicate Invoice Matches"). */
+  /** Card / fullscreen / new-tab heading. The chat audit result passes
+   *  "Risky payments"; the workflow-run recap passes the run's own result
+   *  title. Defaults to a neutral "Results". */
   title?: string;
   /** Opt-in: each row animates in (fade + slide-up, lightly staggered) as it
    *  mounts — used by the streaming result so rows visibly arrive instead of
    *  popping. Off by default; legacy callers are unchanged. */
   animateRows?: boolean;
+  /** Optional legend under the header — e.g. the active severity rule, so the
+   *  table states the rule that produced its Risk column. */
+  caption?: ReactNode;
+  /** Opt-in: when provided, a leading "Risk" column is prepended and each row's
+   *  level is computed from it (High/Medium chip). Drives "the rule updates the
+   *  table". Off by default; other callers keep their exact column set. */
+  levelForRow?: (row: string[]) => 'High' | 'Medium' | null;
 }) {
   const [fullscreen, setFullscreen] = useState(false);
   const prefersReducedMotion = useReducedMotion();
@@ -1489,7 +1445,7 @@ function ResultsTable({
     onDownload();
   };
 
-  // Real .xlsx workbook with a single "Flagged duplicates" sheet, built
+  // Real .xlsx workbook with a single sheet (named from the table title), built
   // via SheetJS. Lazy-loaded so the ~400KB lib only ships when a user
   // actually clicks Excel. Replaces the HTML-as-Excel hack that modern
   // Excel and Google Sheets refused to open as a real workbook.
@@ -1501,7 +1457,9 @@ function ResultsTable({
       const sheetRows: (string | number)[][] = [columns, ...rows];
       const sheet = XLSX.utils.aoa_to_sheet(sheetRows);
       sheet['!cols'] = columns.map(() => ({ wch: 16 }));
-      XLSX.utils.book_append_sheet(wb, sheet, 'Flagged duplicates');
+      // Excel sheet names can't contain : \ / ? * [ ] and cap at 31 chars.
+      const sheetName = title.replace(/[:\\/?*[\]]/g, '').slice(0, 31) || 'Results';
+      XLSX.utils.book_append_sheet(wb, sheet, sheetName);
       // Build the blob ourselves — see handleExcel for why writeFile is avoided.
       const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
       triggerDownload(
@@ -1610,10 +1568,20 @@ function ResultsTable({
             the 10-column table; vertical overflow is clipped (no scrollbar).
             Only the first PREVIEW_ROW_COUNT rows render — any additional
             rows live in the fullscreen modal / new tab. */}
-        <div className="overflow-x-auto overflow-y-hidden" style={{ height: 390 }}>
+        {/* Rule legend — states the severity rule the Risk column applies, so
+            the table itself carries the "why" behind each level. */}
+        {caption && (
+          <div className="px-5 py-2 border-b border-canvas-border/70 bg-brand-50/25 text-[0.6875rem] text-ink-600 leading-snug">
+            {caption}
+          </div>
+        )}
+        <div className="overflow-x-auto overflow-y-hidden" style={{ height: caption ? 358 : 390 }}>
           <table className="w-full text-[0.8125rem]">
             <thead>
               <tr className="border-b border-canvas-border/70 bg-paper-50/40">
+                {levelForRow && (
+                  <th className="text-left px-5 py-2.5 font-medium text-ink-500 uppercase tracking-[0.06em] text-[0.65625rem] whitespace-nowrap">Risk</th>
+                )}
                 {columns.map(c => (
                   <th key={c} className="text-left px-5 py-2.5 font-medium text-ink-500 uppercase tracking-[0.06em] text-[0.65625rem] whitespace-nowrap">{c}</th>
                 ))}
@@ -1621,9 +1589,19 @@ function ResultsTable({
             </thead>
             <tbody>
               {rows.slice(0, PREVIEW_ROW_COUNT).map((row, i) => {
+                const level = levelForRow?.(row) ?? null;
                 const cells = row.map((cell, j) => (
                   <td key={j} className={`px-5 py-2.5 text-ink-700 whitespace-nowrap ${j >= 3 ? 'tabular-nums' : ''}`}>{cell}</td>
                 ));
+                // Prepend the computed Risk chip (High/Medium) when rating is on.
+                const allCells = levelForRow ? [
+                  <td key="risk" className="px-5 py-2.5 whitespace-nowrap">
+                    {level && (
+                      <span className={`inline-flex rounded px-1.5 py-0.5 text-[0.625rem] font-bold uppercase tracking-wide ${level === 'High' ? 'bg-high-50 text-high-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{level}</span>
+                    )}
+                  </td>,
+                  ...cells,
+                ] : cells;
                 const rowCls = 'border-b border-canvas-border/40 last:border-b-0 hover:bg-brand-50/40 transition-colors';
                 // Each newly-mounted row slides + fades up (streaming reveal),
                 // lightly staggered within a batch. Mounted rows never replay.
@@ -1635,10 +1613,10 @@ function ResultsTable({
                     transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1], delay: (i % 3) * 0.04 }}
                     className={rowCls}
                   >
-                    {cells}
+                    {allCells}
                   </motion.tr>
                 ) : (
-                  <tr key={i} className={rowCls}>{cells}</tr>
+                  <tr key={i} className={rowCls}>{allCells}</tr>
                 );
               })}
             </tbody>
@@ -1956,90 +1934,6 @@ function WorkflowOutputPreviewCard({
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ─── Subtle inline audit loader ───────────────────────────────────────────────
-// Single shimmering line that cycles through LOADING_STEPS, syncs the active
-// artifact tab as it advances, and fires onComplete when done. The artifact
-// panel carries the heavy detail (Plan / Code / Sources); inline stays quiet.
-function InlineAuditLoader({
-  steps,
-  onTabSwitch,
-  onComplete,
-  stepDurationMs = 1700,
-}: {
-  steps: { label: string; tab: ArtifactTab | null }[];
-  onTabSwitch?: (tab: ArtifactTab) => void;
-  onComplete: () => void;
-  stepDurationMs?: number;
-}) {
-  const [stepIdx, setStepIdx] = useState(0);
-  const completedRef = useRef(false);
-  const onCompleteRef = useRef(onComplete);
-  const onTabSwitchRef = useRef(onTabSwitch);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  onCompleteRef.current = onComplete;
-  onTabSwitchRef.current = onTabSwitch;
-
-  useEffect(() => {
-    if (completedRef.current) return;
-    if (stepIdx >= steps.length) {
-      completedRef.current = true;
-      onCompleteRef.current();
-      return;
-    }
-    const tab = steps[stepIdx].tab;
-    if (tab) onTabSwitchRef.current?.(tab);
-    const t = setTimeout(() => setStepIdx(i => i + 1), stepDurationMs);
-    return () => clearTimeout(t);
-  }, [stepIdx, steps, stepDurationMs]);
-
-  // Pin the loader near the top of the chat viewport on every step change.
-  // The loader bubble has a tall `paddingBottom: 50vh` buffer (see render
-  // site), so scrolling the container to scrollHeight puts the buffer at
-  // the bottom of the viewport and the loader text well above it. Parent
-  // ResizeObserver is gated on showProgressiveLoader so it won't override.
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    const findScrollParent = (node: HTMLElement | null): HTMLElement | null => {
-      let p = node?.parentElement ?? null;
-      while (p) {
-        const oy = window.getComputedStyle(p).overflowY;
-        if (oy === 'auto' || oy === 'scroll') return p;
-        p = p.parentElement;
-      }
-      return null;
-    };
-    const scrollable = findScrollParent(el);
-    const r1 = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (scrollable) {
-          scrollable.scrollTo({ top: scrollable.scrollHeight, behavior: 'smooth' });
-        } else {
-          el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-        }
-      });
-    });
-    return () => cancelAnimationFrame(r1);
-  }, [stepIdx]);
-
-  const active = steps[Math.min(stepIdx, steps.length - 1)];
-  return (
-    <div
-      ref={rootRef}
-      style={{ scrollMarginBottom: 24 }}
-      className="flex items-center gap-2 text-[0.8125rem] text-ink-600"
-    >
-      <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
-        <span className="absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-60 motion-safe:animate-ping" />
-        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-600" />
-      </span>
-      <TextShimmer as="span" duration={2} spread={1.5}>
-        {active.label}
-      </TextShimmer>
     </div>
   );
 }
@@ -2894,7 +2788,7 @@ function InlineEditBubble({
 //   - PDF  → fires the browser's native print-preview over a hidden iframe;
 //            user picks "Save as PDF" in the native dialog.
 //   - XLSX → builds a real .xlsx workbook via SheetJS with three sheets:
-//            Summary (KPIs), Flagged pairs (full table), Transcript (chat thread).
+//            Summary (KPIs), Risky payments (full table), Transcript (chat thread).
 // Single source of truth for "the full result", separate from per-artifact
 // downloads.
 
@@ -3076,8 +2970,8 @@ function ExportReportButton({
       return `<div class="chart"><div class="chart-title">${escHtml(c.label)}</div>${svg}</div>`;
     }).join('');
 
-    const tableHtml = !includeRichResult ? '' : `<div class="data-table"><div class="data-table-title">Flagged duplicate pairs · ${AUDIT_RESULT.table.totalRows}</div><table><thead><tr>${AUDIT_RESULT.table.columns.map(c => `<th>${escHtml(c)}</th>`).join('')}</tr></thead><tbody>${AUDIT_RESULT.table.rows.map(r =>
-      `<tr>${r.map((c, j) => `<td class="${j === 3 || j === 8 ? 'num' : ''}">${escHtml(c)}</td>`).join('')}</tr>`
+    const tableHtml = !includeRichResult ? '' : `<div class="data-table"><div class="data-table-title">Risky payments · ${AUDIT_RESULT.table.totalRows}</div><table><thead><tr>${AUDIT_RESULT.table.columns.map(c => `<th>${escHtml(c)}</th>`).join('')}</tr></thead><tbody>${AUDIT_RESULT.table.rows.map(r =>
+      `<tr>${r.map((c, j) => `<td class="${j === 1 ? 'num' : ''}">${escHtml(c)}</td>`).join('')}</tr>`
     ).join('')}</tbody></table></div>`;
 
     const renderMsg = (m: ChatMessage) => {
@@ -3212,7 +3106,7 @@ ${transcriptHtml}
     document.body.appendChild(iframe);
   };
 
-  // Real .xlsx workbook with three sheets (Summary / Flagged pairs /
+  // Real .xlsx workbook with three sheets (Summary / Risky payments /
   // Transcript), built via SheetJS. Lazy-loaded so the lib (~400KB
   // minified) only ships to users who actually export. Replaces the prior
   // HTML-as-Excel hack that modern Excel + Google Sheets opened as raw
@@ -3236,14 +3130,14 @@ ${transcriptHtml}
       summarySheet['!cols'] = [{ wch: 28 }, { wch: 18 }];
       XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
 
-      // Sheet 2 — Flagged pairs (full table — header + rows).
+      // Sheet 2 — Risky payments (full table — header + rows).
       const tableRows: (string | number)[][] = [
         AUDIT_RESULT.table.columns,
         ...AUDIT_RESULT.table.rows,
       ];
       const tableSheet = XLSX.utils.aoa_to_sheet(tableRows);
       tableSheet['!cols'] = AUDIT_RESULT.table.columns.map(() => ({ wch: 16 }));
-      XLSX.utils.book_append_sheet(wb, tableSheet, 'Flagged pairs');
+      XLSX.utils.book_append_sheet(wb, tableSheet, 'Risky payments');
 
       // Sheet 3 — Transcript (chat thread up to this assistant message).
       const transcriptRows: (string | number)[][] = transcript.length === 0
@@ -3384,17 +3278,22 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
   // New flow state
   const [showClarificationCard, setShowClarificationCard] = useState(false);
+  // The user's materiality rule — "findings of ₹X or more are High" — captured
+  // by the MID-RUN severity question when the plan reaches the risk step (never
+  // assumed). Feeds the flow diagram's output list, the results-table Risk
+  // column, and the table caption; the categorical lenses (certainty / control)
+  // are post-run re-rates inside the output box.
+  const [severityThreshold, setSeverityThreshold] = useState<number>(DEFAULT_SEVERITY_THRESHOLD);
+  // Released (→ true) once the severity rule is answered. The plan checklist
+  // parks at the risk step until this flips, then finishes and renders the
+  // result. Reset to false at the start of every run (and on stop/reset).
+  const [severityGateOpen, setSeverityGateOpen] = useState(false);
   const [clarificationQuestions, setClarificationQuestions] = useState<Array<{ question: string; options: string[] }>>([]);
   // Answers for the legacy phase-based workflow clarification, now rendered
   // through the shared QueryClarificationCard. Keyed by question index; each
   // value is a string[] (single-select → length 1). Reset on submit/cancel.
   const [wfPhaseAnswers, setWfPhaseAnswers] = useState<Record<number, string[]>>({});
   const [showProgressiveLoader, setShowProgressiveLoader] = useState(false);
-  // Ref mirror of showProgressiveLoader — read inside the ResizeObserver
-  // closure (which would otherwise capture stale state) to gate the auto-
-  // snap-to-bottom while the InlineAuditLoader is in charge of positioning.
-  const progressiveLoaderRef = useRef(false);
-  useEffect(() => { progressiveLoaderRef.current = showProgressiveLoader; }, [showProgressiveLoader]);
 
   // Workflow build flow state
   const [workflowBuildPhase, setWorkflowBuildPhase] = useState(0); // 0=idle, 1=asking-files, 2=asking-logic, 3=confirming, 4=input-config, 5=freeze-confirm, 6=output-config, 7=save
@@ -3657,12 +3556,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     let rafId: number | null = null;
     const followIfAtBottom = () => {
       if (isUserScrolledUp.current) return;
-      // Stand down while the InlineAuditLoader is running — it owns the
-      // scroll position during loading (it pins the active step in view
-      // using a tall bottom buffer on the loader bubble). Snapping to
-      // scrollHeight here would yank the loader text down behind the
-      // composer.
-      if (progressiveLoaderRef.current) return;
+      // NB: we deliberately DO follow during loading now — the flow chart builds
+      // node-by-node as the loader, so snapping to the growing bottom keeps each
+      // freshly-revealed step (and the severity card) in view. (The old text
+      // loader pinned itself and needed a stand-down here; the chart doesn't.)
       // Stand down while a smooth scroll is animating — otherwise our
       // instant snap would cancel the animation and the user sees a jump.
       if (smoothScrollTimerRef.current !== null) return;
@@ -3861,6 +3758,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setThinkingSteps([]);
     setShowProgressiveLoader(false);
     setStreamingActive(false);
+    setSeverityGateOpen(false);
     const haltedId = auditRunMsgIdRef.current;
     auditRunMsgIdRef.current = null;
     activeQueryFlowRef.current = null;
@@ -3894,6 +3792,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setInput('');
     setShowClarificationCard(false);
     setShowProgressiveLoader(false);
+    setSeverityGateOpen(false);
     setWorkflowBuildPhase(0);
     setCurrentWorkflowType(null);
     setLockedAsWorkflow(false);
@@ -4006,10 +3905,13 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     activeQueryFlowRef.current = 'audit-query';
     const msgId = `msg-audit-run-${Date.now()}`;
     auditRunMsgIdRef.current = msgId;
+    // Fresh run parks at the risk step again until severity is (re)answered.
+    setSeverityGateOpen(false);
 
     if (STREAM_V2) {
-      // v2: create the result message directly and let AuditResultBody stream it
-      // from the spine — no fixed 8.4s loader. Follow-ups are attached on done.
+      // v2: no checklist / gate — stream straight through with whatever severity
+      // rule is currently set (default on a first run). The mid-run severity
+      // question is a property of the default checklist path only.
       setMessages(prev => [...prev, {
         id: msgId,
         role: 'assistant',
@@ -4062,17 +3964,18 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setMessages(prev => prev.filter(m => m.id !== msgId));
   };
 
-  // ─── Submit the clarification — freeze it, drop a single user msg, start the run ───
+  // ─── Submit the clarification — freeze it, drop a single user msg, then run /
+  //     save / (mid-run) apply the severity rule, depending on the card's purpose ───
   const submitClarification = (msgId: string, fromSkip = false) => {
+    // Read the purpose synchronously from current state — the setMessages
+    // updater below runs later, so branching can't depend on it.
+    const target = messages.find(m => m.id === msgId);
+    const purpose = (target?.richData as unknown as QueryClarificationData | undefined)?.purpose ?? 'audit-query';
+
     let consolidated: { question: string; answer: string }[] = [];
-    // Holder object — TS narrows bare `let` initialized to a literal, but
-    // assignments inside the setMessages callback aren't visible to its flow
-    // analysis. Wrapping in an object property defeats that narrowing.
-    const flow: { purpose: 'audit-query' | 'save-workflow' } = { purpose: 'audit-query' };
     setMessages(prev => prev.map(m => {
       if (m.id !== msgId || m.richType !== 'clarification') return m;
       const data = m.richData as unknown as QueryClarificationData;
-      flow.purpose = data.purpose ?? 'audit-query';
       consolidated = data.questions
         .map((q, qi) => ({ question: q.question, answer: (data.answers[qi] ?? []).join(', ') }))
         .filter(p => !!p.answer);
@@ -4083,6 +3986,18 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }));
 
     schedule(() => {
+      // Mid-run severity is a special case: the single answer IS the materiality
+      // threshold. Capture it, but DON'T drop a Q/A transcript pill — the rule is
+      // recorded in the plan ("Prepare the results" step + output node) and the
+      // results-table caption, so a pill would just be redundant clutter landing
+      // after the result. (The severity card itself is removed once the gate
+      // opens, below.) Read inside this scheduled callback so the setMessages
+      // updater that fills `consolidated` has flushed; free-typed amounts parse.
+      if (purpose === 'severity') {
+        const sevAnswer = consolidated[0]?.answer;
+        if (sevAnswer) setSeverityThreshold(severityThresholdFromAnswer(sevAnswer));
+        return;
+      }
       // Claude-style Q/A transcript: each clarification pair on its own
       // pair of lines so the user pill (and the edit textarea) reads as
       // a structured transcript, not a bare bullet list.
@@ -4097,7 +4012,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       }]);
     }, 80);
 
-    if (flow.purpose === 'save-workflow') {
+    if (purpose === 'save-workflow') {
       // Stash the four clarification answers (objective & exception rule, input
       // source, same-schema handling, population/period) so the modal can seed
       // its name / description / Configuration section from them.
@@ -4109,12 +4024,48 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       return;
     }
 
-    // Clarification submitted — run the audit query directly. The legacy
-    // workflow-mode qna-plan gate ("Approve & run / Revise") is dropped:
-    // workflow builds now have their own Approve & Run on the Output
-    // Preview card, so a separate plan gate after a follow-up query is
-    // redundant.
+    if (purpose === 'severity') {
+      // Mid-run: the rule is captured above; release the plan gate so the
+      // checklist finishes the risk step and renders the rated results. Held
+      // slightly after the threshold set so the result reads the new value.
+      // Also drop the severity card itself — the rule now lives in the plan +
+      // table, so the Q/A shouldn't linger at the end of the thread.
+      schedule(() => {
+        setSeverityGateOpen(true);
+        setMessages(prev => prev.filter(m => m.id !== msgId));
+      }, 260);
+      return;
+    }
+
+    // Upfront audit-query clarification → run the plan. It pauses at the risk
+    // step to ask for severity (see showSeverityClarification) before finishing.
     schedule(() => startAuditQueryRun(), 240);
+  };
+
+  // ─── Mid-run severity question — shown when the plan reaches the risk step ───
+  // A single-question clarification (reusing QueryClarificationCard via purpose
+  // 'severity'). Answering it sets the threshold and releases the plan gate; the
+  // frozen checklist above stays visible so the run reads as one continuous flow.
+  const showSeverityClarification = () => {
+    const data: QueryClarificationData = {
+      intro: '',
+      questions: [{
+        question: 'Found 9 risky payments. Before I rate them — findings of what amount should I treat as High risk? Everything below that I’ll mark Medium.',
+        options: SEVERITY_THRESHOLD_OPTIONS.map(o => o.option),
+      }],
+      answers: {},
+      status: 'open',
+      purpose: 'severity',
+    };
+    setMessages(prev => [...prev, {
+      id: `msg-severity-${Date.now()}`,
+      role: 'assistant',
+      text: '',
+      thinking: ['Ran the checks — 9 payments broke a control', 'Need your risk threshold to rate them'],
+      timestamp: new Date(),
+      richType: 'clarification',
+      richData: data as unknown as Record<string, unknown>,
+    }]);
   };
 
   // ─── Workflow Clarification Complete Handler ───
@@ -4214,21 +4165,8 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       if (m.id !== targetId) return m;
       return {
         ...m,
-        text: `## Duplicate invoice detection — Q1 FY26
-
-Scanned **1.2M invoice records** across the last **90 days** and surfaced **8 high-confidence duplicates** totalling **₹6.16L** in exposure. The strongest pair sits at a **96% match** on **Acme Corp**, which alone accounts for *half of the flags*.
-
-> Sample-data preview: this run used the connected sandbox source. Re-run against your production SAP AP module before promoting any flag to a finding.
-
-### Where to look first
-
-- **Acme Corp** — 4 of 8 flags. Two invoices were posted **3 days apart** for identical amounts under near-identical PO references.
-  - One pair was approved by the same AP clerk; check whether the duplicate-payment control failed open.
-  - The other pair crossed an approval-limit boundary; payment may have already cleared.
-- **Bluepeak Logistics** — 2 flags, both at month-end, both **₹84,000** exactly. Confirm whether one is a credit-note reversal.
-- **Two tail vendors** — single flags each, lower priority but worth a glance before sign-off.
-
-The full plan, SQL, and sources are in the Workspace on the right. Promote any pair to a formal finding from the \`Flagged pairs\` table, or open the [duplicate-payment SOP](https://docs.auditify.example/sops/duplicate-payment) for the standard remediation path.`,
+        // Same prose as the v2 stream path — one source so they never diverge.
+        text: AUDIT_PROSE,
         followUpTracks: AUDIT_FOLLOWUP_TRACKS,
         richType: 'audit-result',
         richData: AUDIT_RESULT,
@@ -6430,17 +6368,22 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                         )}
                       </div>
                     ) : msg.richType === 'audit-loading' ? (
-                      // ~40px of breathing room directly below the loader.
-                      // Combined with the parent's pb-10 (40px), the active
-                      // shimmering line lands ~80px above the composer when
-                      // auto-scroll snaps to scrollHeight — comfortable
-                      // without floating the loader off the top.
+                      // The loader IS the flow chart building itself: it reveals
+                      // node-by-node, pauses at the risk step for the severity
+                      // rule, then finishes — the same diagram then carries into
+                      // the result below, so there's no swap-flicker.
                       <div className="w-full" style={{ paddingBottom: 40 }}>
                         {showProgressiveLoader && msg.id === auditRunMsgIdRef.current && (
-                          <InlineAuditLoader
-                            steps={LOADING_STEPS}
-                            onTabSwitch={setActiveArtifactTab}
-                            onComplete={handleProgressiveLoadingComplete}
+                          <PlanFlowDiagram
+                            building
+                            steps={buildChatPlanSteps(severityThreshold)}
+                            outputLabel="Risk results"
+                            outputItems={buildChatPlanRiskItems(severityThreshold)}
+                            outputNote={severityRuleNote(severityThreshold)}
+                            gateAfterId={PLAN_RUN_GATE_ID}
+                            gateOpen={severityGateOpen}
+                            onReachGate={showSeverityClarification}
+                            onBuildComplete={handleProgressiveLoadingComplete}
                           />
                         )}
                       </div>
@@ -6451,7 +6394,12 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                             result so the "how did Ira get here" answer is a glance,
                             not the text-heavy plan in the right workspace. Full
                             chat-column width, matching the result body below. */}
-                        <PlanFlowDiagram steps={CHAT_PLAN_STEPS} outputLabel="Risk results" />
+                        <PlanFlowDiagram
+                          steps={buildChatPlanSteps(severityThreshold)}
+                          outputLabel="Risk results"
+                          outputItems={buildChatPlanRiskItems(severityThreshold)}
+                          outputNote={severityRuleNote(severityThreshold)}
+                        />
                         {/* Streamed composite output — prose typewriter, KPI
                             count-up, chart draw-in and a row-streamed table all
                             brew in parallel with staggered onsets. Render-prop
@@ -6486,11 +6434,20 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                           )}
                           renderTable={(revealedRows) => (
                             <ResultsTable
+                              title="Risky payments"
                               columns={AUDIT_RESULT.table.columns}
                               rows={AUDIT_RESULT.table.rows.slice(0, revealedRows)}
                               totalRows={AUDIT_RESULT.table.totalRows}
                               onDownload={() => addToast({ type: 'success', message: 'CSV download started.' })}
                               animateRows={STREAM_V2}
+                              // The rule the user set mid-run stamps the table:
+                              // a caption states it, and each row's Risk is
+                              // computed from its Amount (column 1) against the threshold.
+                              caption={`Risk column · ${severityRuleNote(severityThreshold)}`}
+                              levelForRow={(row) => {
+                                const amount = parseInt(String(row[1]).replace(/[^\d]/g, ''), 10);
+                                return Number.isFinite(amount) && isHighByAmount(amount, severityThreshold) ? 'High' : 'Medium';
+                              }}
                             />
                           )}
                         />

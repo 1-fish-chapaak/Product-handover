@@ -741,6 +741,12 @@ export const CLARIFICATION_STEPS = [
     category: 'Logic',
   },
   {
+    // Severity is NOT asked here. It is user-defined, but the only rule a user
+    // could state up front is a materiality amount — and even that reads better
+    // once the findings exist. So severity is asked MID-RUN, when the plan
+    // reaches the risk step (see ChatView → showSeverityClarification), then
+    // used to rate the flow diagram's output list and stamp the results table
+    // (chatPlan.ts → buildChatPlanRiskItems / severityRuleNote).
     stage: 4,
     question: 'What matching logic should I use to detect duplicates between candidate invoice pairs in your data?',
     options: ['Invoice number + amount', 'Fuzzy match all fields', 'AI-powered pattern detection'],

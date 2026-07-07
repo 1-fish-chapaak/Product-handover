@@ -16,7 +16,7 @@
 // resizable Plan panel. Calm by default (hairline ink edges); brand colour and
 // the arrowheads only light up on interaction — the Auditor's Pen stays rare.
 
-import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -32,6 +32,23 @@ const fmt = (n: number) => n.toLocaleString('en-US');
 
 const FLOW_TITLE = 'How Ira built this answer';
 const FLOW_HINT = 'Each step from your files to the result, in plain English.';
+
+/** One finding the pipeline landed on — listed in the output node's click
+ *  detail so "9 risks" is inspectable, not just a count. Plain English. */
+export interface PlanOutputItem {
+  id: string;
+  /** What broke, in plain words — includes the vendor/party. */
+  title: string;
+  /** Risk level — drives the chip tone (severity token families). */
+  level: 'High' | 'Medium';
+  /** The control this finding relates to. */
+  control: string;
+}
+
+const LEVEL_TONE: Record<PlanOutputItem['level'], string> = {
+  High:   'bg-high-50 text-high-700',
+  Medium: 'bg-mitigated-50 text-mitigated-700',
+};
 
 // ─── View toggle (Flow / Steps) ──────────────────────────────────────────
 
@@ -101,12 +118,68 @@ function edgePath(a: Rect, b: Rect, kind: Edge['kind']): string {
 // the detail strip. Owns all hover/select/measurement state so it works the
 // same dropped into the inline card or the modal.
 
-export function PlanFlowGraph({ steps, outputLabel = 'Result' }: {
+export function PlanFlowGraph({
+  steps, outputLabel = 'Result', outputItems, outputNote,
+  building = false, gateAfterId, gateOpen = true, onReachGate, onBuildComplete, buildStepMs = 950,
+}: {
   steps: PlanCardStep[];
   outputLabel?: string;
+  /** The findings behind the output count — listed when the output node is clicked. */
+  outputItems?: PlanOutputItem[];
+  /** One-line provenance for the levels (e.g. the user's own High/Medium rule). */
+  outputNote?: string;
+  /** When true, the graph BUILDS: nodes reveal one at a time (parse → … →
+   *  output) instead of all at once. Doubles as the response loader. */
+  building?: boolean;
+  /** Step id after which the build pauses until `gateOpen` (the risk step). */
+  gateAfterId?: string;
+  /** Parent flips this true (e.g. after the severity answer) to resume the build. */
+  gateOpen?: boolean;
+  /** Fired once, when the build parks at the gate. */
+  onReachGate?: () => void;
+  /** Fired once, when every node (incl. output) has been revealed. */
+  onBuildComplete?: () => void;
+  /** Dwell between node reveals while building. */
+  buildStepMs?: number;
 }) {
   const [hover, setHover] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
+
+  const outList = outputItems;
+  const outNote = outputNote;
+  const hasOutList = (outList?.length ?? 0) > 0;
+
+  // ── Progressive build (nodes = the steps + the output node) ──
+  const totalNodes = steps.length + 1;
+  const gateIndex = gateAfterId ? steps.findIndex((s) => s.id === gateAfterId) : -1;
+  // Nodes currently revealed. Not building → everything at once.
+  const [revealCount, setRevealCount] = useState(building ? 1 : totalNodes);
+  const buildDoneRef = useRef(!building);
+  const gateFiredRef = useRef(false);
+  const onReachGateRef = useRef(onReachGate);
+  const onBuildCompleteRef = useRef(onBuildComplete);
+  onReachGateRef.current = onReachGate;
+  onBuildCompleteRef.current = onBuildComplete;
+  // Parked at the gate: the gate step is revealed but the rule isn't in yet.
+  const atGate = building && gateIndex >= 0 && revealCount === gateIndex + 1 && !gateOpen;
+  const stepsShown = building ? Math.min(revealCount, steps.length) : steps.length;
+  const outputShown = building ? revealCount >= totalNodes : true;
+
+  useEffect(() => {
+    if (!building || buildDoneRef.current) return;
+    // Every node (incl. output) shown → hold one beat, then complete.
+    if (revealCount >= totalNodes) {
+      const t = setTimeout(() => { buildDoneRef.current = true; onBuildCompleteRef.current?.(); }, buildStepMs);
+      return () => clearTimeout(t);
+    }
+    // Hold at the risk step until the rule arrives.
+    if (gateIndex >= 0 && revealCount === gateIndex + 1 && !gateOpen) {
+      if (!gateFiredRef.current) { gateFiredRef.current = true; onReachGateRef.current?.(); }
+      return;
+    }
+    const t = setTimeout(() => setRevealCount((c) => c + 1), buildStepMs);
+    return () => clearTimeout(t);
+  }, [building, revealCount, gateOpen, gateIndex, totalNodes, buildStepMs]);
 
   // Distinct input files, in first-seen order.
   const inputs = useMemo(() => {
@@ -164,7 +237,8 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result' }: {
     const ro = new ResizeObserver(measure);
     if (wrapRef.current) ro.observe(wrapRef.current);
     return () => ro.disconnect();
-  }, [steps, inputs.length]);
+    // revealCount: re-measure as nodes reveal during the build so edges track.
+  }, [steps, inputs.length, revealCount]);
 
   const nodeClass = (id: string, extra = '') => {
     const dim = lit && !lit.has(id);
@@ -230,7 +304,7 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result' }: {
             hand-off box on the connector, ending in the output. Each step names
             the data it reads inline, so there's no separate input lane. */}
         <div className="relative z-10 flex flex-col gap-5">
-            {steps.map((s, idx) => {
+            {steps.slice(0, stepsShown).map((s, idx) => {
               const tables = s.sources ?? [];
               const hasFunnel = s.rowsIn != null && s.rowsOut != null;
               return (
@@ -293,32 +367,92 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result' }: {
               );
             })}
 
-            {/* Output node */}
-            <button
-              type="button"
+            {/* Output node — clicking the header expands the purple box in
+                place with the findings behind the count. A div shell wraps the
+                header button so the expanded list sits inside the same box.
+                While building, it reveals only after the last step. */}
+            {outputShown && (
+            <div
               ref={registerNode('out')}
-              {...nodeHandlers('out')}
-              className={nodeClass('out', 'flex items-center gap-2 px-3 py-2 !bg-brand-50/50')}
+              onMouseEnter={() => setHover('out')}
+              onMouseLeave={() => setHover(null)}
+              className={nodeClass('out', '!bg-brand-50/50')}
             >
-              <span className="shrink-0 size-5 rounded-full bg-brand-600 text-white flex items-center justify-center" aria-hidden>
-                <Table2 size={11} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[9.5px] font-bold uppercase tracking-wider text-brand-700/80 leading-none">Output</span>
-                <span className="block text-[12px] font-semibold text-ink-900 leading-tight truncate mt-0.5">{outputLabel}</span>
-              </span>
-              {finalRows != null && (
-                <span className="shrink-0 inline-flex items-center rounded-md border border-brand-100 bg-canvas-elevated px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 tabular-nums">
-                  {fmt(finalRows)} risks
+              <button
+                type="button"
+                onClick={() => setActive((a) => (a === 'out' ? null : 'out'))}
+                onFocus={() => setHover('out')}
+                onBlur={() => setHover(null)}
+                aria-expanded={hasOutList ? active === 'out' : undefined}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left rounded-lg cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                <span className="shrink-0 size-5 rounded-full bg-brand-600 text-white flex items-center justify-center" aria-hidden>
+                  <Table2 size={11} />
                 </span>
-              )}
-            </button>
+                <span className="min-w-0 flex-1 text-left">
+                  <span className="block text-[9.5px] font-bold uppercase tracking-wider text-brand-700/80 leading-none">Output</span>
+                  <span className="block text-[12px] font-semibold text-ink-900 leading-tight truncate mt-0.5">{outputLabel}</span>
+                </span>
+                {finalRows != null && (
+                  <span className="shrink-0 inline-flex items-center rounded-md border border-brand-100 bg-canvas-elevated px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 tabular-nums">
+                    {fmt(finalRows)} risks
+                  </span>
+                )}
+                {hasOutList && (
+                  <motion.span
+                    animate={{ rotate: active === 'out' ? 180 : 0 }}
+                    transition={{ type: 'spring', stiffness: 360, damping: 26 }}
+                    className="shrink-0 inline-flex text-brand-700/60"
+                    aria-hidden
+                  >
+                    <ChevronDown size={14} />
+                  </motion.span>
+                )}
+              </button>
+
+              {/* Expanded state — the findings, inside the same purple box. */}
+              <AnimatePresence initial={false}>
+                {active === 'out' && hasOutList && (
+                  <motion.div
+                    key="out-risks"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mx-3 mb-3 border-t border-brand-100 pt-2.5">
+                      {/* The user's own rule, echoed above the findings it
+                          produced. There is no "re-rate by another basis"
+                          switch — the user already answered which rule to use. */}
+                      {outNote && (
+                        <p className="text-left text-[10.5px] text-ink-500 leading-snug pb-1.5">{outNote}</p>
+                      )}
+                      <ul className="space-y-1.5">
+                        {outList!.map((r, i) => (
+                          <li key={r.id} className="flex items-baseline gap-2">
+                            <span className="shrink-0 w-4 text-right text-[10.5px] tabular-nums text-ink-400" aria-hidden>{i + 1}.</span>
+                            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide ${LEVEL_TONE[r.level]}`}>{r.level}</span>
+                            <span className="text-[11.5px] text-ink-800 leading-snug text-left">
+                              {r.title}
+                              <span className="text-ink-400"> · {r.control}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            )}
           </div>
         </div>
 
-      {/* Detail strip for the selected node. */}
+      {/* Detail strip for the selected node. The output node expands in place
+          (list inside the purple box), so it skips the strip when it has items. */}
       <AnimatePresence initial={false}>
-        {active && (
+        {active && !(active === 'out' && hasOutList) && (
           <motion.div
             key={active}
             initial={{ opacity: 0, y: -4 }}
@@ -340,13 +474,30 @@ export function PlanFlowGraph({ steps, outputLabel = 'Result' }: {
 export default function PlanFlowDiagram({
   steps,
   outputLabel = 'Result',
+  outputItems,
+  outputNote,
   headerAccessory,
   defaultOpen = true,
+  building = false,
+  gateAfterId,
+  gateOpen = true,
+  onReachGate,
+  onBuildComplete,
 }: {
   steps: PlanCardStep[];
   outputLabel?: string;
+  /** The findings behind the output count — listed when the output node is clicked. */
+  outputItems?: PlanOutputItem[];
+  /** One-line provenance for the levels (e.g. the user's own High/Medium rule). */
+  outputNote?: string;
   headerAccessory?: ReactNode;
   defaultOpen?: boolean;
+  /** Build the graph node-by-node (doubles as the response loader). See PlanFlowGraph. */
+  building?: boolean;
+  gateAfterId?: string;
+  gateOpen?: boolean;
+  onReachGate?: () => void;
+  onBuildComplete?: () => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [expanded, setExpanded] = useState(false);
@@ -394,7 +545,11 @@ export default function PlanFlowDiagram({
           >
             <div className="px-4 pt-3 pb-4">
               <p className="text-[11.5px] text-ink-500 leading-snug mb-3">{FLOW_HINT}</p>
-              <PlanFlowGraph steps={steps} outputLabel={outputLabel} />
+              <PlanFlowGraph
+                steps={steps} outputLabel={outputLabel} outputItems={outputItems} outputNote={outputNote}
+                building={building} gateAfterId={gateAfterId} gateOpen={gateOpen}
+                onReachGate={onReachGate} onBuildComplete={onBuildComplete}
+              />
             </div>
           </motion.div>
         )}
@@ -413,7 +568,7 @@ export default function PlanFlowDiagram({
               onClose={() => setExpanded(false)}
               ariaLabel="How Ira built this answer"
             >
-              <PlanFlowGraph steps={steps} outputLabel={outputLabel} />
+              <PlanFlowGraph steps={steps} outputLabel={outputLabel} outputItems={outputItems} outputNote={outputNote} />
             </Modal>
           )}
         </AnimatePresence>,
@@ -431,6 +586,8 @@ function NodeDetail({ active, steps, inputs, outputLabel }: {
   inputs: PlanCardSource[];
   outputLabel: string;
 }) {
+  // The output node expands in place when it has items, so this strip only
+  // sees 'out' in the item-less generic case.
   if (active === 'out') {
     return (
       <div className="flex items-start gap-2">
