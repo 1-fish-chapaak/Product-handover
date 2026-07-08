@@ -6,7 +6,7 @@ import {
 import { useIcfr } from './store';
 import {
   controlConclusion, courtFor, designProgress, designStarted, engagementProgress, openDiscussionCount,
-  operatingProgress, operatingStarted, testDueInDays, testDueLabel, testsDueNow, trackResult,
+  operatingProgress, operatingStarted, isTestDueNow, testDueDisplay, testsDueNow, trackResult,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
 import BulkTestModal from './BulkTestModal';
@@ -55,7 +55,7 @@ function ControlCard({ c, discN, onOpen }: { c: Control; discN: number; onOpen: 
       <h3 className="ac-title mt-2">{c.description}</h3>
       <div className="ac-meta">
         {c.id} · {c.nature} ·{' '}
-        {(() => { const dd = testDueInDays(c); return <span className={cn(dd < 0 && 'text-risk-700 font-semibold', dd === 0 && 'text-mitigated-700 font-semibold')}>{testDueLabel(dd)}</span>; })()}
+        {(() => { const dd = testDueDisplay(c); return <span className={dd.cls}>{dd.label}</span>; })()}
       </div>
       <div className="ac-div" />
       <div className="space-y-1.5">
@@ -106,7 +106,7 @@ export default function ControlRegister() {
       if (nature !== 'All' && c.nature !== nature) return false;
       if (term && !(`${c.id} ${c.wpRef} ${c.description} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       const concl = controlConclusion(c);
-      if (savedView === 'due' && testDueInDays(c) > 0) return false;
+      if (savedView === 'due' && !isTestDueNow(c)) return false;
       if (savedView === 'court' && courtFor(c, eng.tasks) !== role) return false;
       if (savedView === 'design' && trackResult(c.design) !== 'Not tested') return false;
       if (savedView === 'operating' && trackResult(c.operating) !== 'Not tested') return false;
@@ -251,7 +251,7 @@ export default function ControlRegister() {
                         </div>
                         <div className="text-[11px] text-ink-400 mt-0.5">
                           {c.id} · {c.subProcess} · {c.owner} ·{' '}
-                          {(() => { const dd = testDueInDays(c); return <span className={cn(dd < 0 && 'text-risk-700 font-semibold', dd === 0 && 'text-mitigated-700 font-semibold')}>{testDueLabel(dd)}</span>; })()}
+                          {(() => { const dd = testDueDisplay(c); return <span className={dd.cls}>{dd.label}</span>; })()}
                         </div>
                       </td>
                       <td><NatureChip nature={c.nature} small /></td>

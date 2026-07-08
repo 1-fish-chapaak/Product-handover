@@ -238,7 +238,7 @@ const DETAILED: Control[] = [
     precision: 'All manual AP journals are reviewed before posting; review evidenced by sign-off.',
     owner: 'D. Rao · Controller', riskId: 'R-19', riskDescription: 'Unauthorised or erroneous manual adjustments to AP.',
     assertions: ['Accuracy', 'Completeness'],
-    racmReview: remark('Design gap stands — the review happens after posting. Redesign the control to a pre-posting hold before this row is approved (see DEF-002).'), testDueInDays: -1,
+    racmReview: remark('Design gap stands — the review happens after posting. Redesign the control to a pre-posting hold before this row is approved (see DEF-002).'),
     design: designTrack('Ineffective', [
       doc('Process narrative', 'Manual-journal narrative.pdf', 'Received'),
       doc('Walkthrough', 'Walkthrough — 12 Apr.pdf', 'Received'),

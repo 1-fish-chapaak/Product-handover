@@ -4,7 +4,7 @@ import {
   Paperclip, Search, Star, Table2, UploadCloud, X, Check, MessageSquarePlus, RotateCcw,
 } from 'lucide-react';
 import { useIcfr } from './store';
-import { controlConclusion, testDueInDays, testDueLabel, trackResult } from './helpers';
+import { controlConclusion, testDueDisplay, trackResult } from './helpers';
 import { useToast } from '../shared/Toast';
 import { Pill } from '../shared/StatusBadge';
 import { NatureChip, Tickmark } from './parts';
@@ -239,9 +239,7 @@ export default function Racm() {
                         </div>
                         <div className="text-[11px] text-ink-400 mt-0.5">
                           {c.id} · {c.frequency} ·{' '}
-                          {(() => { const dd = testDueInDays(c); return (
-                            <span className={cn(dd < 0 && 'text-risk-700 font-semibold', dd === 0 && 'text-mitigated-700 font-semibold')}>{testDueLabel(dd)}</span>
-                          ); })()}{' '}
+                          {(() => { const dd = testDueDisplay(c); return <span className={dd.cls}>{dd.label}</span>; })()}{' '}
                           · {c.owner} · {c.assertions[0]}{c.assertions.length > 1 ? ` +${c.assertions.length - 1}` : ''}
                         </div>
                       </td>
