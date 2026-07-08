@@ -74,6 +74,9 @@ interface IcfrCtx {
   remarkRacmRow: (controlId: string, remark: string) => void;
   clearRacmReview: (controlId: string) => void;
   bulkTestControls: (controlIds: string[]) => void;
+  // RACM / SOP source documents uploaded on the RACM page
+  racmDocs: EvidenceFile[];
+  addRacmDoc: (fileName: string) => void;
   // discussions
   addComment: (controlId: string, anchor: DiscussionAnchor, text: string) => void;
   resolveDiscussion: (discussionId: string, resolved: boolean) => void;
@@ -110,6 +113,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const [view, setView] = useState<View>('overview');
   const [selectedControlId, setSelectedControlId] = useState<string | null>(null);
   const [racmEditor, setRacmEditor] = useState<RacmEditorMeta | null>(null);
+  const [racmDocs, setRacmDocs] = useState<EvidenceFile[]>([]);
 
   const me = `You · ${ROLE_LABEL[role]}`;
 
@@ -345,6 +349,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [me, role]);
 
+  const addRacmDoc = useCallback<IcfrCtx['addRacmDoc']>((fileName) => {
+    const lower = fileName.toLowerCase();
+    const kind: EvidenceFile['kind'] = lower.endsWith('.csv') ? 'CSV' : lower.endsWith('.xlsx') || lower.endsWith('.xls') ? 'XLSX' : lower.endsWith('.png') || lower.endsWith('.jpg') ? 'IMG' : 'PDF';
+    setRacmDocs(prev => [{ id: uid('rd'), name: fileName, kind, uploadedBy: me, uploadedAt: 'just now' }, ...prev]);
+  }, [me]);
+
   // ── discussions ───────────────────────────────────────────────────────────────
   const addComment = useCallback<IcfrCtx['addComment']>((controlId, anchor, text) => {
     setEng(prev => {
@@ -448,12 +458,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
-    approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls,
+    approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException,
     togglePeriod, rollForward, createEngagement,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, changeRole, setTab, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, togglePeriod, rollForward, createEngagement]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, changeRole, setTab, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, togglePeriod, rollForward, createEngagement]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

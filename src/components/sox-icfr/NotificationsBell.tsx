@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Bell, CheckCircle2, ClipboardList, FileText, MessageSquareWarning, Table2, XCircle,
+  Bell, CheckCircle2, ClipboardList, Clock, FileText, MessageSquareWarning, Table2, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { controlConclusion, trackResult } from './helpers';
@@ -17,7 +17,7 @@ import { cn } from '../../lib/cn';
 
 type Item = {
   id: string;
-  kind: 'ineffective' | 'remark' | 'task' | 'review' | 'exception';
+  kind: 'ineffective' | 'due' | 'remark' | 'task' | 'review' | 'exception';
   title: string;
   detail: string;
   onOpen: () => void;
@@ -25,6 +25,7 @@ type Item = {
 
 const KIND_META: Record<Item['kind'], { Icon: typeof Bell; cls: string }> = {
   ineffective: { Icon: XCircle, cls: 'bg-risk-50 text-risk-700 border-risk-200' },
+  due: { Icon: Clock, cls: 'bg-mitigated-50 text-mitigated-700 border-mitigated-200' },
   remark: { Icon: MessageSquareWarning, cls: 'bg-high-50 text-high-700 border-high-200' },
   task: { Icon: ClipboardList, cls: 'bg-brand-50 text-brand-700 border-brand-200' },
   review: { Icon: Table2, cls: 'bg-evidence-50 text-evidence-700 border-evidence-200' },
@@ -62,6 +63,31 @@ export default function NotificationsBell() {
           onOpen: () => go(c.id),
         });
       }
+    }
+
+    // ── open tasks assigned to me — due today / overdue jump the queue and land
+    //    right after the verdicts; clicking goes to the control's TOD / TOE ───────
+    const myTasks = eng.tasks.filter(t => t.status === 'open' && t.assigneeRole === role);
+    const isDueNow = (t: typeof myTasks[number]) => t.overdue || /today/i.test(t.dueLabel);
+    for (const t of myTasks.filter(isDueNow)) {
+      out.push({
+        id: `due-${t.id}`, kind: 'due',
+        title: `${t.controlId} ${t.overdue ? 'is OVERDUE' : 'is due today'} · ${t.id}`,
+        detail: `${t.title} — open the control to complete TOD / TOE.`,
+        onOpen: () => go(t.controlId),
+      });
+    }
+    for (const t of myTasks.filter(t => !isDueNow(t))) {
+      out.push({
+        id: `task-${t.id}`, kind: 'task',
+        title: `${t.type === 'pbc' ? 'Provide documents' : t.type === 'query' ? 'Answer query' : 'Remediate'} · ${t.id}`,
+        detail: `${t.title} — ${t.dueLabel}`,
+        onOpen: () => go(t.controlId),
+      });
+    }
+
+    // ── the auditor's remarks on my rows ────────────────────────────────────────
+    if (role === 'risk-owner') {
       for (const c of eng.controls) {
         if (c.racmReview?.status !== 'Remark') continue;
         out.push({
@@ -71,17 +97,6 @@ export default function NotificationsBell() {
           onOpen: () => go(c.id),
         });
       }
-    }
-
-    // ── open tasks assigned to me ────────────────────────────────────────────────
-    for (const t of eng.tasks) {
-      if (t.status !== 'open' || t.assigneeRole !== role) continue;
-      out.push({
-        id: `task-${t.id}`, kind: 'task',
-        title: `${t.type === 'pbc' ? 'Provide documents' : t.type === 'query' ? 'Answer query' : 'Remediate'} · ${t.id}`,
-        detail: `${t.title} — ${t.dueLabel}${t.overdue ? ' · overdue' : ''}`,
-        onOpen: () => go(t.controlId),
-      });
     }
 
     if (role === 'auditor') {
