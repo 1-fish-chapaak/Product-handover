@@ -14,7 +14,7 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Users, User, Activity, Sparkles, FileBarChart, BarChart3, Download,
-  Zap, UserMinus, ArrowRight, CalendarClock, ListChecks, type LucideIcon,
+  Zap, UserMinus, ArrowRight, CalendarClock, ListChecks, ChevronRight, type LucideIcon,
 } from 'lucide-react';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -243,11 +243,14 @@ function UsageLensSwitch({ lens, onSelect }: { lens: Lens; onSelect: (l: Lens) =
   );
 }
 
-/* ── Highlights — sentences derived from the same aggregates the cards show ── */
-function HighlightCard({ icon: Icon, children }: { icon: LucideIcon; children: React.ReactNode }) {
+/* ── Highlights — sentences derived from the same aggregates the cards show.
+      'attention' turns the icon chip amber (the platform's attention tone) so
+      warnings don't wear the same purple as good news. ── */
+function HighlightCard({ icon: Icon, tone, children }: { icon: LucideIcon; tone?: 'attention'; children: React.ReactNode }) {
+  const attn = tone === 'attention';
   return (
     <div className={`${CARD} p-3.5 flex items-start gap-2.5`}>
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-50 text-brand-600">
+      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${attn ? 'bg-mitigated-700/12 text-mitigated-700' : 'bg-brand-50 text-brand-600'}`}>
         <Icon size={14} strokeWidth={2} />
       </div>
       <p className="text-[0.75rem] text-ink-700 leading-snug">{children}</p>
@@ -609,14 +612,14 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
               <HighlightCard icon={Sparkles}>
                 <span className="font-semibold text-ink-900">{aiAdoption}%</span> of active members used AI in this range.
               </HighlightCard>
-              <HighlightCard icon={UserMinus}>
+              <HighlightCard icon={UserMinus} tone={seats.dormant.length > 0 ? 'attention' : undefined}>
                 {seats.dormant.length > 0 ? (
                   <><span className="font-semibold text-ink-900">{seats.dormant.length} member{seats.dormant.length !== 1 ? 's' : ''}</span> {seats.dormant.length !== 1 ? 'haven’t' : 'hasn’t'} signed in for 30+ days.</>
                 ) : (
                   <>Everyone has signed in within the last 30 days.</>
                 )}
               </HighlightCard>
-              <HighlightCard icon={Users}>
+              <HighlightCard icon={Users} tone={typeof concentration === 'number' && concentration >= 60 ? 'attention' : undefined}>
                 {typeof concentration === 'number' ? (
                   <>Top 3 members account for <span className="font-semibold text-ink-900">{concentration}%</span> of all activity.</>
                 ) : (
@@ -641,7 +644,7 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
               }
             >
               <div>
-                <ResponsiveContainer width="100%" height={240}>
+                <ResponsiveContainer width="100%" height={330}>
                   <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -8, bottom: 0 }}>
                     <defs>
                       <linearGradient id="usageActions" x1="0" y1="0" x2="0" y2="1">
@@ -672,11 +675,14 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
                     <button
                       key={module}
                       onClick={() => setDrawerModule(module)}
-                      className="w-full text-left -mx-2 px-2 py-1.5 rounded-md hover:bg-canvas transition-colors cursor-pointer"
+                      className="group w-full text-left -mx-2 px-2 py-1.5 rounded-md hover:bg-canvas transition-colors cursor-pointer"
                     >
-                      <div className="flex items-baseline justify-between mb-1">
-                        <span className="text-[0.75rem] font-medium text-ink-700">{module}</span>
-                        <span className="text-[0.75rem] text-ink-500 tabular-nums">{fmt(count)} · {share}%</span>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[0.75rem] font-medium text-ink-700 group-hover:text-brand-700 transition-colors">{module}</span>
+                        <span className="inline-flex items-center gap-1 text-[0.75rem] text-ink-500 tabular-nums">
+                          {fmt(count)} · {share}%
+                          <ChevronRight size={11} className="text-brand-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </span>
                       </div>
                       <div className="h-1.5 rounded-full bg-brand-50 overflow-hidden">
                         <motion.div

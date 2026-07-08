@@ -91,7 +91,7 @@ function UsageKpiTile({ stat, index, rangeDays }: { stat: UsageStat; index: numb
 
       {/* Value + delta */}
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[1.5rem] font-semibold leading-none tabular-nums text-ink-900">
+        <span className="text-[1.625rem] font-semibold leading-none tabular-nums text-ink-900">
           <KpiCountUp value={String(stat.value)} delay={120 + index * 80} />
         </span>
         {typeof stat.deltaPct === 'number' && <DeltaChip deltaPct={stat.deltaPct} rangeDays={rangeDays} />}
