@@ -14,7 +14,7 @@ import {
   Bookmark, BookmarkCheck,
   Search, GitCompare, ShieldCheck, Info, Loader2, AlertTriangle, type LucideIcon,
   LayoutDashboard, ListChecks, FileCode,
-  Trash2,
+  Trash2, Zap,
 } from 'lucide-react';
 import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS, WORKFLOWS } from '../../data/mockData';
 import {
@@ -37,6 +37,7 @@ import { AuditifyHelloEffect } from '../shared/HelloEffect';
 import FloatingLines from '../shared/FloatingLines';
 // Persona removed — Rive WebGL crashes in some browsers
 import DataPickerModal, { type AttachmentSelection } from './DataPickerModal';
+import OneClickAuditModal from '../one-click-audit/OneClickAuditModal';
 import { type ComposerContext, type ComposerIconKey, type ComposerTone, editPlanContext } from './composerContext';
 
 // Tone palette + icon map for the composer "context mode" banner and the
@@ -5488,6 +5489,10 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
   const isEmpty = messages.length === 0;
 
+  // One-Click Audit — the "audit with AI" wizard surfaced as a banner on the
+  // empty state (integrated DB sources are connected, so Ira can draft a plan).
+  const [showOneClickAudit, setShowOneClickAudit] = useState(false);
+
   // Memoize the FloatingLines element so its canvas animation doesn't
   // re-init on every parent re-render. Without this, the typewriter
   // placeholder's ~50ms state updates trigger ChatView re-renders, and
@@ -5770,6 +5775,42 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
               </div>
             </div>
           )}
+
+          {/* One-Click Audit banner — mirrors the pendingDashboard banner slot.
+              Dark brand gradient so it reads as the AI surface it opens. */}
+          <div className="shrink-0 mx-5 mt-14 mb-2 relative overflow-hidden rounded-xl border border-brand-300/40 bg-gradient-to-r from-[#26064A] via-[#3B0B72] to-[#550FA5] px-4 py-2.5 flex items-center justify-between gap-3 z-10">
+            <FloatingLines
+              enabledWaves={['top', 'bottom']}
+              lineCount={3}
+              lineDistance={8}
+              bendRadius={5}
+              bendStrength={-0.3}
+              interactive
+              parallax
+              color="#C393FA"
+              opacity={0.35}
+            />
+            <div className="relative flex items-center gap-2.5 min-w-0">
+              <div className="size-8 rounded-lg bg-gradient-to-br from-brand-500 to-fuchsia-500 flex items-center justify-center shadow-[0_0_14px_rgba(163,102,240,0.45)] shrink-0">
+                <Sparkles size={14} className="text-white" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-[0.8125rem] font-semibold text-white">One-Click Audit</p>
+                  <span className="px-1.5 h-[16px] inline-flex items-center rounded-full bg-fuchsia-400/25 text-fuchsia-100 text-[8.5px] font-bold uppercase tracking-[0.1em]">New</span>
+                </div>
+                <p className="text-[0.6875rem] text-white/65 truncate">Your databases are connected — let Ira draft engagements, controls & workflows for your review.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowOneClickAudit(true)}
+              className="relative shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-brand-800 hover:bg-brand-50 text-[0.75rem] font-semibold rounded-md transition-colors cursor-pointer shadow-[0_4px_14px_-4px_rgba(0,0,0,0.4)]"
+            >
+              <Zap size={12} />
+              Start
+            </button>
+          </div>
 
           <div className="flex-1 overflow-y-auto">
             <motion.div
@@ -6141,6 +6182,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
           initialSourceIds={attachedSources.flatMap(s => s.kind === 'source' ? [s.sourceId] : [])}
           initialFiles={files}
         />
+        <AnimatePresence>
+          {showOneClickAudit && <OneClickAuditModal onClose={() => setShowOneClickAudit(false)} />}
+        </AnimatePresence>
       </>
     );
   }

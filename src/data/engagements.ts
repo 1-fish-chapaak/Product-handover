@@ -103,6 +103,8 @@ export interface Engagement {
   team?: EngagementTeam;
   /** Dated milestones (ISO) — source of truth for the Upcoming milestones feed. */
   milestones?: EngagementMilestone[];
+  /** Set for engagements drafted by Ira's One-Click Audit — drives the "AI Recommended" badge. */
+  aiRecommended?: boolean;
 }
 
 export const ENGAGEMENTS: Engagement[] = [

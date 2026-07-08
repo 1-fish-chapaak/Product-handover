@@ -3,10 +3,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
   Play, Trash2, AlertTriangle, X, LayoutDashboard, List,
-  Pencil, UserPlus, CheckCircle2, GitBranch,
+  Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { ENGAGEMENTS, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
+import { useCreatedEngagements } from '../../data/createdEngagementsStore';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { OWNER_NAMES } from '../../data/grc-domain';
 import CreateEngagementWizard from './CreateEngagementWizard';
@@ -111,6 +112,18 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
   const [editTarget, setEditTarget] = useState<Engagement | null>(null);
   /** Session list — seeds + anything created/edited/closed/deleted this session. */
   const [all, setAll] = useState<Engagement[]>(() => [...ENGAGEMENTS]);
+  /** Engagements created outside this view (e.g. One-Click Audit from Knowledge
+   *  Hub / Ask Ira) — merged into the session list without disturbing edits. */
+  const createdEngagements = useCreatedEngagements();
+  useEffect(() => {
+    // Intentional merge-on-change: prepend store entries the session list
+    // doesn't know yet (session deletes win — deps don't change on delete).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAll(prev => {
+      const missing = createdEngagements.filter(c => !prev.some(e => e.id === c.id));
+      return missing.length ? [...missing, ...prev] : prev;
+    });
+  }, [createdEngagements]);
   /** Row id whose "Assign owner" popover is open. */
   const [assignFor, setAssignFor] = useState<string | null>(null);
   /** Row pending delete confirmation. */
@@ -322,6 +335,15 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                         <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[eng.status]}`} aria-hidden="true" />
                         {eng.status}
                       </span>
+                      {eng.aiRecommended && (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold bg-gradient-to-r from-brand-500 to-fuchsia-500 text-white"
+                          title="Drafted by Ira's One-Click Audit"
+                        >
+                          <Sparkles size={10} />
+                          AI Recommended
+                        </span>
+                      )}
                     </div>
                     <p className="text-[12px] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">
                       {eng.description}
