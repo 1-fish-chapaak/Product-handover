@@ -175,7 +175,7 @@ const DETAILED: Control[] = [
     precision: 'POs above ₹5L route to the next authority tier; release is blocked without approval at the correct tier.',
     owner: 'S. Iyer · Procurement', riskId: 'R-08', riskDescription: 'Unauthorised commitments / purchases outside delegated authority.',
     assertions: ['Existence / Occurrence', 'Accuracy'],
-    racmReview: approved(),
+    racmReview: approved(), testDueInDays: 0,
     design: designTrack('Effective', [
       doc('Process narrative', 'Purchasing narrative v2.pdf', 'Received'),
       doc('Flowchart', 'PO approval flowchart.pdf', 'Received'),
@@ -197,7 +197,7 @@ const DETAILED: Control[] = [
     precision: 'Quantity/price tolerance breaches are held and cannot pay until cleared by the buyer.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-05', riskDescription: 'Payment for goods not received or at incorrect price.',
     assertions: ['Accuracy', 'Existence / Occurrence'],
-    racmReview: remark('Tolerance configuration evidence is still outstanding — approve this row once the MM config export is on file.'),
+    racmReview: remark('Tolerance configuration evidence is still outstanding — approve this row once the MM config export is on file.'), testDueInDays: 0,
     design: designTrack('Effective', [
       doc('Process narrative', 'AP three-way match narrative.pdf', 'Received'),
       doc('Flowchart', '3-way match flowchart.pdf', 'Received'),
@@ -238,7 +238,7 @@ const DETAILED: Control[] = [
     precision: 'All manual AP journals are reviewed before posting; review evidenced by sign-off.',
     owner: 'D. Rao · Controller', riskId: 'R-19', riskDescription: 'Unauthorised or erroneous manual adjustments to AP.',
     assertions: ['Accuracy', 'Completeness'],
-    racmReview: remark('Design gap stands — the review happens after posting. Redesign the control to a pre-posting hold before this row is approved (see DEF-002).'),
+    racmReview: remark('Design gap stands — the review happens after posting. Redesign the control to a pre-posting hold before this row is approved (see DEF-002).'), testDueInDays: -1,
     design: designTrack('Ineffective', [
       doc('Process narrative', 'Manual-journal narrative.pdf', 'Received'),
       doc('Walkthrough', 'Walkthrough — 12 Apr.pdf', 'Received'),
@@ -259,6 +259,7 @@ const DETAILED: Control[] = [
     precision: 'Receipts in the last/first 5 days are checked to GRN dates for correct-period recording.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-21', riskDescription: 'Goods/liabilities recorded in the wrong period (cut-off).',
     assertions: ['Cut-off', 'Completeness'],
+    testDueInDays: 0,
     design: designTrack('Not tested', [
       doc('Process narrative', 'Cut-off narrative.pdf', 'Requested'),
       doc('Flowchart', 'GR cut-off flowchart.pdf', 'Missing'),

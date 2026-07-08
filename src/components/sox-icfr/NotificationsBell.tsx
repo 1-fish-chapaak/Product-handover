@@ -4,7 +4,7 @@ import {
   Bell, CheckCircle2, ClipboardList, Clock, FileText, MessageSquareWarning, Table2, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
-import { controlConclusion, trackResult } from './helpers';
+import { controlConclusion, testDueInDays, testsDueNow, trackResult } from './helpers';
 import { cn } from '../../lib/cn';
 
 /**
@@ -77,6 +77,28 @@ export default function NotificationsBell() {
         onOpen: () => go(t.controlId),
       });
     }
+    // ── control tests due — every control has a due date on its testing cycle.
+    //    Regular testing is how the risk owner lives in the tool, so due tests
+    //    are first-class notifications, not just document requests. ─────────────
+    const dueTests = testsDueNow(eng.controls);
+    for (const c of dueTests.slice(0, 5)) {
+      const dd = testDueInDays(c);
+      out.push({
+        id: `test-${c.id}`, kind: 'due',
+        title: `${c.wpRef} · control test ${dd < 0 ? `overdue ${-dd}d` : 'due today'}`,
+        detail: `${c.description} — ${c.frequency.toLowerCase()} control · open to run TOD / TOE.`,
+        onOpen: () => go(c.id),
+      });
+    }
+    if (dueTests.length > 5) {
+      out.push({
+        id: 'tests-more', kind: 'due',
+        title: `${dueTests.length - 5} more control tests due`,
+        detail: 'Open the Control Library "Due now" view to run the rest.',
+        onOpen: () => { setOpen(false); setTab('controls'); },
+      });
+    }
+
     for (const t of myTasks.filter(t => !isDueNow(t))) {
       out.push({
         id: `task-${t.id}`, kind: 'task',

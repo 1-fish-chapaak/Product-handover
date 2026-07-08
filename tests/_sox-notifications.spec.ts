@@ -25,6 +25,7 @@ test('notification bell shows pending items per persona', async ({ page }) => {
   await page.getByRole('button', { name: /Notifications —/ }).click();
   await expect(page.getByText(/concluded INEFFECTIVE/).first()).toBeVisible();
   await expect(page.getByText(/is due today/).first()).toBeVisible();
+  await expect(page.getByText(/control test due today|control test overdue/).first()).toBeVisible();
   await expect(page.getByText(/Auditor remark on/).first()).toBeVisible();
   // clicking an ineffective item opens that control's dossier
   await page.getByText(/concluded INEFFECTIVE/).first().click();
@@ -55,6 +56,14 @@ test('risk owner overview task opens the control', async ({ page }) => {
   await page.waitForTimeout(1000);
   await page.getByRole('button', { name: 'Risk Owner', exact: true }).click();
   await page.waitForTimeout(600);
+  // regular testing: every control carries a due date; today's tests lead the inbox
+  await expect(page.getByText('Control tests due today')).toBeVisible();
+  await page.getByText('Run test').first().click();
+  await page.waitForTimeout(700);
+  await expect(page.getByText('Test of Design', { exact: false }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.waitForTimeout(500);
+  // document-request tasks still deep-link the same way
   await expect(page.getByText('Due today').first()).toBeVisible();
   await page.getByText('Open control · TOD / TOE').first().click();
   await page.waitForTimeout(700);

@@ -6,7 +6,7 @@ import {
 import { useIcfr } from './store';
 import {
   controlConclusion, courtFor, designProgress, designStarted, engagementProgress, openDiscussionCount,
-  operatingProgress, operatingStarted, trackResult,
+  operatingProgress, operatingStarted, testDueInDays, testDueLabel, testsDueNow, trackResult,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
 import BulkTestModal from './BulkTestModal';
@@ -14,9 +14,10 @@ import { downloadIcfrWorkingPaper } from './icfrWorkingPaper';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
 
-type SavedView = 'all' | 'court' | 'design' | 'operating' | 'exceptions' | 'key';
+type SavedView = 'all' | 'due' | 'court' | 'design' | 'operating' | 'exceptions' | 'key';
 const VIEWS: { id: SavedView; label: string }[] = [
   { id: 'all', label: 'All' },
+  { id: 'due', label: 'Due now' },
   { id: 'court', label: 'My court' },
   { id: 'design', label: 'Design' },
   { id: 'operating', label: 'Operating' },
@@ -52,7 +53,10 @@ function ControlCard({ c, discN, onOpen }: { c: Control; discN: number; onOpen: 
         </span>
       </div>
       <h3 className="ac-title mt-2">{c.description}</h3>
-      <div className="ac-meta">{c.id} · {c.nature}</div>
+      <div className="ac-meta">
+        {c.id} · {c.nature} ·{' '}
+        {(() => { const dd = testDueInDays(c); return <span className={cn(dd < 0 && 'text-risk-700 font-semibold', dd === 0 && 'text-mitigated-700 font-semibold')}>{testDueLabel(dd)}</span>; })()}
+      </div>
       <div className="ac-div" />
       <div className="space-y-1.5">
         <CardTrack label="Design" res={trackResult(c.design)} started={designStarted(c)} />
@@ -102,6 +106,7 @@ export default function ControlRegister() {
       if (nature !== 'All' && c.nature !== nature) return false;
       if (term && !(`${c.id} ${c.wpRef} ${c.description} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       const concl = controlConclusion(c);
+      if (savedView === 'due' && testDueInDays(c) > 0) return false;
       if (savedView === 'court' && courtFor(c, eng.tasks) !== role) return false;
       if (savedView === 'design' && trackResult(c.design) !== 'Not tested') return false;
       if (savedView === 'operating' && trackResult(c.operating) !== 'Not tested') return false;
@@ -131,7 +136,7 @@ export default function ControlRegister() {
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
           <h1 className="text-[22px] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>Control library</h1>
-          <p className="text-[13px] text-ink-500 mt-0.5">{eng.controls.length} controls · {stats.effective} effective · {stats.waitingOnOwner} waiting on owner</p>
+          <p className="text-[13px] text-ink-500 mt-0.5">{eng.controls.length} controls · <span className="font-semibold text-mitigated-700">{testsDueNow(eng.controls).length} tests due now</span> · {stats.effective} effective · {stats.waitingOnOwner} waiting on owner</p>
         </div>
         <div className="flex items-center gap-1.5">
           <button onClick={() => downloadIcfrWorkingPaper(eng)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>
@@ -244,7 +249,10 @@ export default function ControlRegister() {
                           <span className="font-semibold text-ink-900 text-[12.5px] truncate max-w-[420px]">{c.description}</span>
                           {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[10.5px] font-bold text-brand-700 bg-brand-50 px-1.5 h-[17px] rounded-full"><MessageSquare size={9} />{discN}</span>}
                         </div>
-                        <div className="text-[11px] text-ink-400 mt-0.5">{c.id} · {c.subProcess} · {c.owner}</div>
+                        <div className="text-[11px] text-ink-400 mt-0.5">
+                          {c.id} · {c.subProcess} · {c.owner} ·{' '}
+                          {(() => { const dd = testDueInDays(c); return <span className={cn(dd < 0 && 'text-risk-700 font-semibold', dd === 0 && 'text-mitigated-700 font-semibold')}>{testDueLabel(dd)}</span>; })()}
+                        </div>
                       </td>
                       <td><NatureChip nature={c.nature} small /></td>
                       <td><TrackCell result={trackResult(c.design)} a={dp.docsReceived} b={dp.docsTotal} label={`${dp.docsReceived}/${dp.docsTotal} docs`} /></td>

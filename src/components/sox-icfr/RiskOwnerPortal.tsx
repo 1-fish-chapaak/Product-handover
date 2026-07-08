@@ -1,6 +1,7 @@
-import { Upload, CheckCircle2, MessageSquare, Clock, FileWarning, Inbox, ArrowRight } from 'lucide-react';
+import { Upload, CheckCircle2, MessageSquare, Clock, FileWarning, Inbox, ArrowRight, FlaskConical } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useIcfr } from './store';
+import { testDueInDays, testDueLabel, testsDueNow } from './helpers';
 import { cn } from '../../lib/cn';
 import type { HandoffTask, TaskType } from './types';
 
@@ -11,7 +12,7 @@ const TASK_META: Record<TaskType, { label: string; Icon: typeof Upload; tone: st
 };
 
 export default function RiskOwnerPortal() {
-  const { eng, submitTask, openControl } = useIcfr();
+  const { eng, submitTask, openControl, setTab } = useIcfr();
   const { addToast } = useToast();
   const mine = eng.tasks.filter(t => t.assigneeRole === 'risk-owner');
   const dueNow = (t: HandoffTask) => t.overdue || /today/i.test(t.dueLabel);
@@ -24,12 +25,48 @@ export default function RiskOwnerPortal() {
     addToast({ type: 'success', title: 'Sent to the audit team', message: t.type === 'remediation' ? 'Marked remediated — they’ll re-test.' : 'Submitted — we’ll let you know if more is needed.' });
   };
 
+  const dueTests = testsDueNow(eng.controls);
+
   return (
     <div className="max-w-[760px] mx-auto space-y-5">
       <div>
         <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Your control tasks</h1>
-        <p className="text-[13px] text-ink-500 mt-0.5">{open.length} open · what the audit team needs from you, and by when.</p>
+        <p className="text-[13px] text-ink-500 mt-0.5">{dueTests.length} control tests due · {open.length} requests open · what needs doing, and by when.</p>
       </div>
+
+      {/* regular testing — every control is due on its cycle; today's tests lead */}
+      {dueTests.length > 0 && (
+        <div className="rounded-2xl border border-mitigated-300 bg-canvas-elevated overflow-hidden">
+          <div className="px-4 py-3 border-b border-canvas-border flex items-center gap-2 bg-mitigated-50/50">
+            <FlaskConical size={15} className="text-mitigated-700" />
+            <span className="text-[13px] font-bold text-ink-900">Control tests due today</span>
+            <span className="text-[11.5px] font-semibold text-mitigated-700 tabular-nums">{dueTests.length}</span>
+            <button onClick={() => setTab('controls')} className="ml-auto inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">
+              Due now view <ArrowRight size={12} />
+            </button>
+          </div>
+          <div className="divide-y divide-canvas-border/70">
+            {dueTests.slice(0, 5).map(c => {
+              const dd = testDueInDays(c);
+              return (
+                <button key={c.id} onClick={() => openControl(c.id)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-paper-50 transition-colors cursor-pointer">
+                  <span className="wp-ref shrink-0">{c.wpRef}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[12.5px] font-semibold text-ink-900 truncate">{c.description}</span>
+                    <span className="block text-[11px] text-ink-400 mt-0.5">{c.frequency} · {c.process}</span>
+                  </span>
+                  <span className={cn('text-[11px] font-semibold rounded-full px-2 h-5 inline-flex items-center shrink-0', dd < 0 ? 'text-risk-700 bg-risk-50' : 'text-mitigated-700 bg-mitigated-50')}>{testDueLabel(dd)}</span>
+                  <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 shrink-0">Run test <ArrowRight size={12} /></span>
+                </button>
+              );
+            })}
+          </div>
+          {dueTests.length > 5 && (
+            <div className="px-4 py-2 border-t border-canvas-border text-[11.5px] text-ink-400">+{dueTests.length - 5} more in the Control Library "Due now" view</div>
+          )}
+        </div>
+      )}
 
       {open.length === 0 ? (
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-12 flex flex-col items-center text-center gap-2">

@@ -4,7 +4,7 @@ import {
   Paperclip, Search, Star, Table2, UploadCloud, X, Check, MessageSquarePlus, RotateCcw,
 } from 'lucide-react';
 import { useIcfr } from './store';
-import { controlConclusion, trackResult } from './helpers';
+import { controlConclusion, testDueInDays, testDueLabel, trackResult } from './helpers';
 import { useToast } from '../shared/Toast';
 import { Pill } from '../shared/StatusBadge';
 import { NatureChip, Tickmark } from './parts';
@@ -237,7 +237,13 @@ export default function Racm() {
                           {/* the auditor's verdict — kept loud so the risk owner can't miss it */}
                           {ineffective && <Pill tone="risk">Ineffective</Pill>}
                         </div>
-                        <div className="text-[11px] text-ink-400 mt-0.5">{c.id} · {c.frequency} · {c.owner} · {c.assertions[0]}{c.assertions.length > 1 ? ` +${c.assertions.length - 1}` : ''}</div>
+                        <div className="text-[11px] text-ink-400 mt-0.5">
+                          {c.id} · {c.frequency} ·{' '}
+                          {(() => { const dd = testDueInDays(c); return (
+                            <span className={cn(dd < 0 && 'text-risk-700 font-semibold', dd === 0 && 'text-mitigated-700 font-semibold')}>{testDueLabel(dd)}</span>
+                          ); })()}{' '}
+                          · {c.owner} · {c.assertions[0]}{c.assertions.length > 1 ? ` +${c.assertions.length - 1}` : ''}
+                        </div>
                       </td>
                       <td><NatureChip nature={c.nature} small /></td>
                       <td><span className="inline-flex items-center gap-1.5"><Tickmark result={d === 'Effective' ? 'Pass' : d === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>

@@ -105,6 +105,34 @@ export function courtFor(c: Control, tasks: HandoffTask[]): Court {
   return 'auditor';
 }
 
+// ─── Test schedule — every control carries a next-test due date ──────────────────
+// Regular testing is the tool's heartbeat for the risk owner: each control is due
+// on its frequency cycle. Concluding the operating track pushes the date out to
+// the next cycle; an untested control can be due today or overdue.
+
+import type { Frequency } from './types';
+const CYCLE_DAYS: Record<Frequency, number> = { Daily: 1, Weekly: 7, Monthly: 30, Quarterly: 90, Annual: 365, Recurring: 7, 'Ad-hoc': 30 };
+
+export function testDueInDays(c: Control): number {
+  if (c.testDueInDays != null) return c.testDueInDays;
+  const cycle = CYCLE_DAYS[c.frequency];
+  let h = 0; for (let i = 0; i < c.id.length; i++) h = (h * 31 + c.id.charCodeAt(i)) >>> 0;
+  // tested → next cycle; untested → somewhere in the current window, possibly overdue
+  if (trackResult(c.operating) !== 'Not tested') return Math.max(1, cycle - (h % Math.max(1, Math.floor(cycle / 3))));
+  return (h % (cycle + 4)) - 3;
+}
+
+export function testDueLabel(d: number): string {
+  if (d < 0) return `Overdue ${-d}d`;
+  if (d === 0) return 'Due today';
+  if (d === 1) return 'Due tomorrow';
+  return `Due in ${d}d`;
+}
+
+export function testsDueNow(controls: Control[]): Control[] {
+  return controls.filter(c => testDueInDays(c) <= 0).sort((a, b) => testDueInDays(a) - testDueInDays(b));
+}
+
 // ─── Engagement progress ─────────────────────────────────────────────────────────
 
 export function engagementProgress(eng: IcfrEngagement) {
