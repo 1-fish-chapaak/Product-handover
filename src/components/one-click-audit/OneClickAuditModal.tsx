@@ -336,6 +336,27 @@ export default function OneClickAuditModal({ onClose }: { onClose: () => void })
     setup: 0.18, thinking: 0.1, engagements: 0.07, controls: 0.07, workflows: 0.07, review: 0.07, live: 0.15,
   };
 
+  // Memoize the shader element — same trap ChatView documents for the 2D
+  // FloatingLines: inline array props (enabledWaves/lineCount/lineDistance)
+  // are new references every render, and they're deps of the component's
+  // setup effect. The thinking step re-renders every 80ms (elapsed ticker),
+  // which would tear down and rebuild the whole WebGL renderer each tick —
+  // visible as flicker. One stable element means the effect runs once.
+  const linesBg = useMemo(() => (
+    <FloatingLinesGL
+      linesGradient={GRADIENT_STOPS}
+      enabledWaves={['top', 'middle', 'bottom']}
+      lineCount={[4, 7, 5]}
+      lineDistance={[7, 5, 4]}
+      bendRadius={4}
+      bendStrength={-0.6}
+      interactive
+      parallax
+      mixBlendMode="multiply"
+      className="[filter:invert(1)_hue-rotate(180deg)]"
+    />
+  ), []);
+
   /* selected counts for footer copy */
   const countSelected = (key: 'risks' | 'controls' | 'workflows') =>
     selectedEngs.reduce((n, e) => n + e[key].filter(i => i.selected).length, 0);
@@ -374,18 +395,7 @@ export default function OneClickAuditModal({ onClose }: { onClose: () => void })
             animate={{ opacity: LINES_OPACITY[step] }}
             transition={{ duration: 0.6 }}
           >
-            <FloatingLinesGL
-              linesGradient={GRADIENT_STOPS}
-              enabledWaves={['top', 'middle', 'bottom']}
-              lineCount={[4, 7, 5]}
-              lineDistance={[7, 5, 4]}
-              bendRadius={4}
-              bendStrength={-0.6}
-              interactive
-              parallax
-              mixBlendMode="multiply"
-              className="[filter:invert(1)_hue-rotate(180deg)]"
-            />
+            {linesBg}
           </motion.div>
 
           {/* ── header ── */}
