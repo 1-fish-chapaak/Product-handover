@@ -28,7 +28,7 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
   await expect(page.getByText('Active users')).toBeVisible();
 
   // Delta chips + footnote (30d default)
-  await expect(page.getByText(/^[+\-]\d+%$/).first()).toBeVisible();
+  await expect(page.getByText(/^[+-]\d+%$/).first()).toBeVisible();
   await expect(page.getByText('Change compared with the previous 30 days.')).toBeVisible();
 
   // Cards
@@ -44,13 +44,13 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
   await page.waitForTimeout(900);
   const after = await actionsKpi.getAttribute('aria-label');
   expect(after).not.toBe(before);
-  await expect(page.getByText(/^[+\-]\d+%$/).first()).toBeVisible();
+  await expect(page.getByText(/^[+-]\d+%$/).first()).toBeVisible();
   await expect(page.getByText('Change compared with the previous 90 days.')).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/v2-90d.png` });
 
   await page.getByRole('button', { name: 'Last 7 days' }).click();
   await page.waitForTimeout(900);
-  await expect(page.getByText(/^[+\-]\d+%$/).first()).toBeVisible();
+  await expect(page.getByText(/^[+-]\d+%$/).first()).toBeVisible();
 
   // Seats: seeded Invited users are Ajay 14110008 + Priya Singh
   await expect(page.getByText('Invited, pending')).toBeVisible();
@@ -123,6 +123,49 @@ test('CSV export downloads the filtered set and shows a toast', async ({ page })
   const download = await dl;
   expect(download.suggestedFilename()).toMatch(/^platform-usage-users-\d+d-/);
   await expect(page.getByText(/Exported \d+ members as CSV/)).toBeVisible();
+});
+
+test('depth: highlights, rhythm, module drawer, segments, team drawer', async ({ page }) => {
+  test.setTimeout(120000);
+  await openUsage(page);
+
+  // Highlights strip + activity rhythm heatmap
+  await expect(page.getByText('Highlights')).toBeVisible();
+  await expect(page.getByText(/of active members used AI in this range/)).toBeVisible();
+  await expect(page.getByText('Activity rhythm')).toBeVisible();
+
+  // Trend column in the member table
+  await expect(page.getByRole('columnheader', { name: 'Trend' }).or(page.locator('th', { hasText: 'Trend' }))).toBeVisible();
+
+  // Module drill-down: the breakdown rows are buttons whose name includes counts
+  await page.getByRole('button', { name: /Ask IRA \d/ }).click();
+  await page.waitForTimeout(600);
+  const moduleDrawer = page.getByRole('dialog', { name: 'Ask IRA usage' });
+  await expect(moduleDrawer).toBeVisible();
+  await expect(moduleDrawer.getByText('Top members')).toBeVisible();
+  await expect(moduleDrawer.getByText('Share of all activity')).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/v3-module-drawer.png` });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+
+  // Segment chips filter the member list (Abhinav is active today → never "No activity")
+  await page.getByRole('button', { name: /^No activity \(\d+\)$/ }).click();
+  await page.waitForTimeout(400);
+  await expect(page.locator('tr', { hasText: 'Abhinav Sharma' })).not.toBeVisible();
+  await page.getByRole('button', { name: /^All \(\d+\)$/ }).click();
+  await page.waitForTimeout(300);
+  await expect(page.locator('tr', { hasText: 'Abhinav Sharma' }).first()).toBeVisible();
+
+  // Team drill-down drawer
+  await page.getByRole('button', { name: 'Teams' }).click();
+  await page.waitForTimeout(500);
+  await page.locator('tr', { hasText: 'SOX Audit' }).first().click();
+  await page.waitForTimeout(600);
+  const teamDrawer = page.getByRole('dialog', { name: 'SOX Audit' });
+  await expect(teamDrawer).toBeVisible();
+  await expect(teamDrawer.getByText('Members', { exact: true })).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/v3-team-drawer.png` });
+  await page.keyboard.press('Escape');
 });
 
 test('live audit events raise today\'s totals', async ({ page }) => {

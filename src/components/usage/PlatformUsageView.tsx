@@ -3,15 +3,19 @@
  *
  * Read-only diagnostic surface over the seeded usage series
  * (src/data/platform-usage.ts) with today's live audit-log events folded in:
- * KPI band with prior-period deltas → usage chart + module breakdown →
- * AI usage + seats & lifecycle → Users|Teams table with drill-down drawer and
- * CSV export. People-management stays in Administration; this view only
- * links there.
+ * KPI band with prior-period deltas → derived highlights → usage chart +
+ * module breakdown (click a module for its drill-down) → AI usage + seats &
+ * lifecycle → activity-rhythm heatmap → segmented Users|Teams table with
+ * member/team drill-down drawers and CSV export. People-management stays in
+ * Administration; this view only links there.
  */
 
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { Users, User, Activity, Sparkles, FileBarChart, BarChart3, Download } from 'lucide-react';
+import {
+  Users, User, Activity, Sparkles, FileBarChart, BarChart3, Download,
+  Zap, UserMinus, CalendarClock, type LucideIcon,
+} from 'lucide-react';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
@@ -22,7 +26,9 @@ import type { View } from '../../hooks/useAppState';
 import {
   USAGE_MODULES, usageDaysWithLive, userUsageRows, usageDayLabel,
   usageWindowTotals, usageDeltaPct, seatBuckets, lastLoginOffsetDays,
-  type UsageModule, type UserUsageRow,
+  segmentFor, activeMeanActions, aiAdoptionPct, usageHourlyMatrix,
+  ENGAGEMENT_SEGMENTS, SEGMENT_LABELS,
+  type UsageModule, type UserUsageRow, type EngagementSegment,
 } from '../../data/platform-usage';
 import SmartTable, { type Column } from '../shared/SmartTable';
 import ColumnFilter from '../shared/ColumnFilter';
@@ -33,6 +39,10 @@ import { InitialsAvatar, MemberSearch } from '../admin/AdminPrimitives';
 import { presetChip } from '../admin/adminTokens';
 import UsageKpiRow, { type UsageStat } from './UsageKpiRow';
 import UserUsageDrawer from './UserUsageDrawer';
+import ModuleUsageDrawer from './ModuleUsageDrawer';
+import TeamUsageDrawer from './TeamUsageDrawer';
+import UsageHeatmap from './UsageHeatmap';
+import { USAGE_DAY_LABELS as DAY_LABELS } from '../../data/platform-usage';
 
 type RangeDays = 7 | 30 | 90;
 const RANGES: { days: RangeDays; label: string }[] = [
@@ -55,6 +65,8 @@ interface UsageRow extends Record<string, unknown> {
   actions: number;
   aiQueries: number;
   topModule: UsageModule;
+  trendPct: number | null;
+  segment: EngagementSegment;
 }
 
 interface TeamUsageRow extends Record<string, unknown> {
@@ -81,22 +93,34 @@ const userColumns: Column<UsageRow>[] = [
       </div>
     ),
   },
-  { key: 'roleName', label: 'Role', sortable: true, width: '13%', render: (r) => <span className="text-[0.8125rem] text-ink-700">{r.roleName}</span> },
-  { key: 'team', label: 'Team', sortable: true, width: '12%', render: (r) => <span className="text-[0.8125rem] text-ink-700">{r.team}</span> },
+  { key: 'roleName', label: 'Role', sortable: true, width: '11%', render: (r) => <span className="text-[0.8125rem] text-ink-700">{r.roleName}</span> },
+  { key: 'team', label: 'Team', sortable: true, width: '10%', render: (r) => <span className="text-[0.8125rem] text-ink-700">{r.team}</span> },
   {
-    key: 'lastLogin', label: 'Last Active', sortable: true, width: '12%',
+    key: 'lastLogin', label: 'Last Active', sortable: true, width: '11%',
     render: (r) => <span className={`text-[0.75rem] font-mono tabular-nums ${r.lastLogin === 'Never' ? 'italic text-ink-400' : 'text-ink-700'}`}>{r.lastLogin}</span>,
   },
   {
-    key: 'actions', label: 'Actions', sortable: true, width: '9%', align: 'right',
+    key: 'actions', label: 'Actions', sortable: true, width: '8%', align: 'right',
     render: (r) => <span className="text-[0.8125rem] font-semibold text-ink-900 tabular-nums">{fmt(r.actions)}</span>,
   },
   {
-    key: 'aiQueries', label: 'AI Queries', sortable: true, width: '10%', align: 'right',
+    key: 'trendPct', label: 'Trend', sortable: false, width: '8%', align: 'right',
+    render: (r) => r.trendPct === null
+      ? <span className="text-[0.75rem] text-ink-400">—</span>
+      : (
+        <span className={`text-[0.75rem] font-medium tabular-nums ${
+          r.trendPct > 0 ? 'text-compliant-700' : r.trendPct < 0 ? 'text-mitigated-700' : 'text-ink-400'
+        }`}>
+          {r.trendPct > 0 ? '+' : ''}{r.trendPct}%
+        </span>
+      ),
+  },
+  {
+    key: 'aiQueries', label: 'AI Queries', sortable: true, width: '9%', align: 'right',
     render: (r) => <span className="text-[0.8125rem] text-ink-700 tabular-nums">{fmt(r.aiQueries)}</span>,
   },
   {
-    key: 'topModule', label: 'Top Module', sortable: true, width: '13%',
+    key: 'topModule', label: 'Top Module', sortable: true, width: '12%',
     render: (r) => r.actions === 0
       ? <span className="text-[0.75rem] text-ink-400">—</span>
       : <span className={MODULE_CHIP}>{r.topModule}</span>,
@@ -174,6 +198,18 @@ function UsageLensSwitch({ lens, onSelect }: { lens: Lens; onSelect: (l: Lens) =
   );
 }
 
+/* ── Highlights — sentences derived from the same aggregates the cards show ── */
+function HighlightCard({ icon: Icon, children }: { icon: LucideIcon; children: React.ReactNode }) {
+  return (
+    <div className={`${CARD} p-3.5 flex items-start gap-2.5`}>
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-50 text-brand-600">
+        <Icon size={14} strokeWidth={2} />
+      </div>
+      <p className="text-[0.75rem] text-ink-700 leading-snug">{children}</p>
+    </div>
+  );
+}
+
 /* ── Seats & lifecycle bucket row: label + count + avatar stack ── */
 function SeatRow({ label, people }: { label: string; people: AdminUser[] }) {
   const shown = people.slice(0, 4);
@@ -210,12 +246,15 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string[]>([]);
+  const [segmentFilter, setSegmentFilter] = useState<EngagementSegment | null>(null);
   const [drawerEmail, setDrawerEmail] = useState<string | null>(null);
+  const [drawerModule, setDrawerModule] = useState<UsageModule | null>(null);
+  const [drawerTeam, setDrawerTeam] = useState<string | null>(null);
 
   // Switching lens resets the toolbar so filters never apply invisibly.
   const setLens = (l: Lens) => {
     setLensState(l);
-    setSearchQuery(''); setRoleFilter([]); setTeamFilter([]);
+    setSearchQuery(''); setRoleFilter([]); setTeamFilter([]); setSegmentFilter(null);
   };
 
   // Full 180-day series (live events folded into today), then the slices.
@@ -227,6 +266,14 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
   const priorTotals = useMemo(() => usageWindowTotals(priorDays, users, range), [priorDays, users, range]);
 
   const rawRows = useMemo(() => userUsageRows(users, days, logs), [users, days, logs]);
+  // Prior-window per-user rows (no live events — those only exist today).
+  const priorByEmail = useMemo(() => {
+    const map = new Map<string, number>();
+    userUsageRows(users, priorDays, [], range).forEach(r => map.set(r.user.email, r.actions));
+    return map;
+  }, [users, priorDays, range]);
+  const activeMean = useMemo(() => activeMeanActions(rawRows), [rawRows]);
+
   const rows = useMemo<UsageRow[]>(() =>
     rawRows.map(r => ({
       name: r.user.name,
@@ -237,7 +284,9 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
       actions: r.actions,
       aiQueries: r.aiQueries,
       topModule: r.topModule,
-    })), [rawRows]);
+      trendPct: usageDeltaPct(r.actions, priorByEmail.get(r.user.email) ?? 0),
+      segment: segmentFor(r, activeMean),
+    })), [rawRows, priorByEmail, activeMean]);
 
   const stats: UsageStat[] = [
     { key: 'active', label: 'Active users', value: totals.activeUsers, icon: Users, deltaPct: usageDeltaPct(totals.activeUsers, priorTotals.activeUsers) },
@@ -254,18 +303,37 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
   }));
   const tickInterval = range === 7 ? 0 : range === 30 ? 4 : 13;
 
-  // Module breakdown across the slice, ranked.
+  // Module breakdown across the slice, ranked, with prior-window deltas.
   const moduleTotals = useMemo(() => {
-    const sums = Object.fromEntries(USAGE_MODULES.map(m => [m, 0])) as Record<UsageModule, number>;
-    days.forEach(d => USAGE_MODULES.forEach(m => { sums[m] += d.byModule[m]; }));
-    return USAGE_MODULES.map(m => ({ module: m, count: sums[m] }))
+    const sum = (slice: typeof days) => {
+      const sums = Object.fromEntries(USAGE_MODULES.map(m => [m, 0])) as Record<UsageModule, number>;
+      slice.forEach(d => USAGE_MODULES.forEach(m => { sums[m] += d.byModule[m]; }));
+      return sums;
+    };
+    const cur = sum(days);
+    const prior = sum(priorDays);
+    return USAGE_MODULES.map(m => ({ module: m, count: cur[m], deltaPct: usageDeltaPct(cur[m], prior[m]) }))
       .sort((a, b) => b.count - a.count);
-  }, [days]);
+  }, [days, priorDays]);
   const moduleMax = Math.max(1, ...moduleTotals.map(m => m.count));
 
   const topAiUsers = [...rows].sort((a, b) => b.aiQueries - a.aiQueries).slice(0, 3).filter(r => r.aiQueries > 0);
+  const aiAdoption = useMemo(() => aiAdoptionPct(rawRows), [rawRows]);
 
   const seats = useMemo(() => seatBuckets(users, range), [users, range]);
+  const heatmap = useMemo(() => usageHourlyMatrix(days), [days]);
+
+  // Derived highlights — same aggregates the cards render, phrased as findings.
+  const highlights = useMemo(() => {
+    const growing = moduleTotals
+      .filter(m => m.count >= 10 && typeof m.deltaPct === 'number')
+      .sort((a, b) => (b.deltaPct ?? 0) - (a.deltaPct ?? 0))[0];
+    const daySums = heatmap.matrix.map(row => row.reduce((s, v) => s + v, 0));
+    const busiestDow = daySums.indexOf(Math.max(...daySums));
+    const hourSums = Array.from({ length: 24 }, (_, h) => heatmap.matrix.reduce((s, row) => s + row[h], 0));
+    const peakHour = hourSums.indexOf(Math.max(...hourSums));
+    return { growing, busiestDow, peakHour };
+  }, [moduleTotals, heatmap]);
 
   // Teams lens: aggregate the user rows by team.
   const teamRows = useMemo<TeamUsageRow[]>(() => {
@@ -298,10 +366,11 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
   // Toolbar filtering
   const uniqueRoles = [...new Set(rows.map(r => r.roleName))];
   const uniqueTeams = [...new Set(rows.map(r => r.team))].filter(t => t !== '—');
-  const hasAnyFilter = searchQuery.length > 0 || roleFilter.length > 0 || teamFilter.length > 0;
-  const clearAll = () => { setSearchQuery(''); setRoleFilter([]); setTeamFilter([]); };
+  const hasAnyFilter = searchQuery.length > 0 || roleFilter.length > 0 || teamFilter.length > 0 || segmentFilter !== null;
+  const clearAll = () => { setSearchQuery(''); setRoleFilter([]); setTeamFilter([]); setSegmentFilter(null); };
 
   const filteredRows = rows.filter(r => {
+    if (segmentFilter && r.segment !== segmentFilter) return false;
     if (roleFilter.length && !roleFilter.includes(r.roleName)) return false;
     if (teamFilter.length && !teamFilter.includes(r.team)) return false;
     if (searchQuery.trim()) {
@@ -314,7 +383,16 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
   const filteredTeamRows = teamRows.filter(r =>
     !searchQuery.trim() || r.team.toLowerCase().includes(searchQuery.toLowerCase()));
 
+  const segmentCounts = useMemo(() => {
+    const counts = new Map<EngagementSegment, number>();
+    rows.forEach(r => counts.set(r.segment, (counts.get(r.segment) ?? 0) + 1));
+    return counts;
+  }, [rows]);
+
   const drawerRow = drawerEmail ? rawRows.find(r => r.user.email === drawerEmail) ?? null : null;
+  const drawerTeamMembers = drawerTeam
+    ? rawRows.filter(r => (r.user.team === '—' ? 'Unassigned' : r.user.team) === drawerTeam)
+    : [];
 
   // Export exactly what's on screen (the filtered set for the active lens).
   const exportCsv = () => {
@@ -324,10 +402,14 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
       return `"${s.replace(/"/g, '""')}"`;
     };
     const headers = lens === 'users'
-      ? ['Member', 'Email', 'Role', 'Team', 'Last Active', 'Actions', 'AI Queries', 'Top Module']
+      ? ['Member', 'Email', 'Role', 'Team', 'Last Active', 'Actions', 'Trend vs prior', 'AI Queries', 'Top Module', 'Segment']
       : ['Team', 'Members', 'Actions', 'AI Queries', 'Top Module', 'Last Active'];
     const body = lens === 'users'
-      ? filteredRows.map(r => [r.name, r.email, r.roleName, r.team, r.lastLogin, r.actions, r.aiQueries, r.actions === 0 ? '—' : r.topModule])
+      ? filteredRows.map(r => [
+          r.name, r.email, r.roleName, r.team, r.lastLogin, r.actions,
+          r.trendPct === null ? '—' : `${r.trendPct > 0 ? '+' : ''}${r.trendPct}%`,
+          r.aiQueries, r.actions === 0 ? '—' : r.topModule, SEGMENT_LABELS[r.segment],
+        ])
       : filteredTeamRows.map(r => [r.team, r.members, r.actions, r.aiQueries, r.topModule, r.lastActive]);
     const csv = [headers.map(esc).join(','), ...body.map(row => row.map(esc).join(','))].join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -427,6 +509,33 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
 
           <UsageKpiRow stats={stats} rangeDays={range} />
 
+          {/* Highlights — findings derived from the same aggregates below. */}
+          <div className="mb-4">
+            <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2">Highlights</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <HighlightCard icon={Zap}>
+                {highlights.growing && typeof highlights.growing.deltaPct === 'number' && highlights.growing.deltaPct > 0 ? (
+                  <><span className="font-semibold text-ink-900">{highlights.growing.module}</span> is the fastest-growing module, <span className="font-semibold text-ink-900">{highlights.growing.deltaPct > 0 ? '+' : ''}{highlights.growing.deltaPct}%</span> vs the prior window.</>
+                ) : (
+                  <>Module activity is flat against the prior window.</>
+                )}
+              </HighlightCard>
+              <HighlightCard icon={Sparkles}>
+                <span className="font-semibold text-ink-900">{aiAdoption}%</span> of active members used AI in this range.
+              </HighlightCard>
+              <HighlightCard icon={UserMinus}>
+                {seats.dormant.length > 0 ? (
+                  <><span className="font-semibold text-ink-900">{seats.dormant.length} member{seats.dormant.length !== 1 ? 's' : ''}</span> {seats.dormant.length !== 1 ? 'haven’t' : 'hasn’t'} signed in for 30+ days.</>
+                ) : (
+                  <>No members are dormant right now.</>
+                )}
+              </HighlightCard>
+              <HighlightCard icon={CalendarClock}>
+                <span className="font-semibold text-ink-900">{DAY_LABELS[highlights.busiestDow]}</span> is the busiest day; activity peaks around <span className="font-semibold text-ink-900 tabular-nums">{String(highlights.peakHour).padStart(2, '0')}:00</span>.
+              </HighlightCard>
+            </div>
+          </div>
+
           {/* Usage over time + module breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
             <div className={`${CARD} lg:col-span-2 p-5`}>
@@ -461,13 +570,17 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
             <div className={`${CARD} p-5`}>
               <div className="mb-4">
                 <div className="text-[0.875rem] font-semibold text-ink-900">Module breakdown</div>
-                <div className="text-[0.75rem] text-ink-500 mt-0.5">Where the activity happens.</div>
+                <div className="text-[0.75rem] text-ink-500 mt-0.5">Where the activity happens. Click a module for its detail.</div>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-1">
                 {moduleTotals.map(({ module, count }) => {
                   const share = totals.actions > 0 ? Math.round((count / totals.actions) * 100) : 0;
                   return (
-                    <div key={module}>
+                    <button
+                      key={module}
+                      onClick={() => setDrawerModule(module)}
+                      className="w-full text-left -mx-2 px-2 py-1.5 rounded-md hover:bg-canvas transition-colors cursor-pointer"
+                    >
                       <div className="flex items-baseline justify-between mb-1">
                         <span className="text-[0.75rem] font-medium text-ink-700">{module}</span>
                         <span className="text-[0.75rem] text-ink-500 tabular-nums">{fmt(count)} · {share}%</span>
@@ -480,7 +593,7 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
                           transition={{ duration: prefersReduced ? 0 : 0.5, ease: [0.22, 1, 0.36, 1] }}
                         />
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -491,7 +604,7 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
             <div className={`${CARD} lg:col-span-2 p-5`}>
               <div className="flex flex-wrap items-start gap-6">
-                <div className="min-w-[200px]">
+                <div className="min-w-[240px]">
                   <div className="text-[0.875rem] font-semibold text-ink-900">AI usage</div>
                   <div className="text-[0.75rem] text-ink-500 mt-0.5 mb-4">Ask IRA and Concierge activity in this range.</div>
                   <div className="flex items-center gap-6">
@@ -506,6 +619,10 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
                     <div>
                       <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(Math.round(totals.reports * 0.6))}</div>
                       <div className="text-[0.6875rem] text-ink-500 mt-1">AI-assisted reports</div>
+                    </div>
+                    <div title="Share of active members with at least one AI query in this range">
+                      <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{aiAdoption}%</div>
+                      <div className="text-[0.6875rem] text-ink-500 mt-1">AI adoption</div>
                     </div>
                   </div>
                 </div>
@@ -559,11 +676,29 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
             </div>
           </div>
 
-          {/* Lens switch + table */}
-          <div className="mb-3 flex items-center justify-between gap-3">
+          {/* Activity rhythm */}
+          <div className={`${CARD} p-5 mb-3`}>
+            <div className="mb-4">
+              <div className="text-[0.875rem] font-semibold text-ink-900">Activity rhythm</div>
+              <div className="text-[0.75rem] text-ink-500 mt-0.5">When work happens across the selected range, by weekday and hour.</div>
+            </div>
+            <UsageHeatmap data={heatmap} />
+          </div>
+
+          {/* Lens switch + engagement segments */}
+          <div className="mb-3 flex flex-wrap items-center gap-3">
             <UsageLensSwitch lens={lens} onSelect={setLens} />
             {lens === 'users' && (
-              <span className="text-[0.75rem] text-ink-400">Click a member for their detail.</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button className={presetChip(segmentFilter === null)} onClick={() => setSegmentFilter(null)} aria-pressed={segmentFilter === null}>
+                  All ({rows.length})
+                </button>
+                {ENGAGEMENT_SEGMENTS.filter(seg => (segmentCounts.get(seg) ?? 0) > 0).map(seg => (
+                  <button key={seg} className={presetChip(segmentFilter === seg)} onClick={() => setSegmentFilter(segmentFilter === seg ? null : seg)} aria-pressed={segmentFilter === seg}>
+                    {SEGMENT_LABELS[seg]} ({segmentCounts.get(seg) ?? 0})
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 
@@ -600,7 +735,7 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
               pageSize={10}
               hideResultCount
               animateRows={false}
-              noRowHover
+              onRowClick={(r) => setDrawerTeam(r.team as string)}
               headerExtra={toolbar}
               emptyContent={
                 <EmptyState
@@ -618,13 +753,36 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
       <AnimatePresence>
         {drawerRow && (
           <UserUsageDrawer
-            key={drawerRow.user.email}
+            key={`user-${drawerRow.user.email}`}
             row={drawerRow}
             days={days}
             logs={logs}
             rangeDays={range}
+            segment={segmentFor(drawerRow, activeMean)}
             onManage={() => setView('admin-users')}
             onClose={() => setDrawerEmail(null)}
+          />
+        )}
+        {drawerModule && (
+          <ModuleUsageDrawer
+            key={`module-${drawerModule}`}
+            module={drawerModule}
+            days={days}
+            priorDays={priorDays}
+            totalActions={totals.actions}
+            rows={rawRows}
+            rangeDays={range}
+            onClose={() => setDrawerModule(null)}
+          />
+        )}
+        {drawerTeam && (
+          <TeamUsageDrawer
+            key={`team-${drawerTeam}`}
+            team={drawerTeam}
+            members={drawerTeamMembers}
+            rangeDays={range}
+            onManage={() => setView('admin-users')}
+            onClose={() => setDrawerTeam(null)}
           />
         )}
       </AnimatePresence>

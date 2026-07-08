@@ -256,9 +256,11 @@ export function usageDeltaPct(current: number, prior: number): number | null {
   return Math.round(((current - prior) / prior) * 100);
 }
 
-/** Per-user rows for a range: each person's share of the range total, plus
- *  their live events from this session counted one-for-one. */
-export function userUsageRows(users: AdminUser[], days: UsageDay[], logs: AuditLog[]): UserUsageRow[] {
+/** Per-user rows for a window: each person's share of the window total, plus
+ *  their live events from this session counted one-for-one. Pass a non-zero
+ *  `windowStartOffset` (and empty logs) to compute a prior window — live
+ *  events only exist today, so they never belong to a past window. */
+export function userUsageRows(users: AdminUser[], days: UsageDay[], logs: AuditLog[], windowStartOffset = 0): UserUsageRow[] {
   const totalActions = days.reduce((s, d) => s + d.actions, 0);
   const profiles = users.map(u => ({ u, p: userUsageProfile(u) }));
   const shareSum = profiles.reduce((s, x) => s + x.p.share, 0) || 1;
@@ -271,9 +273,9 @@ export function userUsageRows(users: AdminUser[], days: UsageDay[], logs: AuditL
   });
   const rangeDays = days.length;
   return profiles.map(({ u, p }) => {
-    // Someone whose last login predates the whole range did nothing in it —
+    // Someone whose last login predates the whole window did nothing in it —
     // same predicate as usageWindowTotals, so the KPI and the table agree.
-    const inRange = activeInWindow(u, 0, rangeDays);
+    const inRange = activeInWindow(u, windowStartOffset, rangeDays);
     const seeded = inRange ? Math.round(totalActions * (p.share / shareSum)) : 0;
     const mine = liveByUser.get(u.name) ?? [];
     return {
@@ -323,9 +325,9 @@ export function userDailySeries(row: UserUsageRow, days: UsageDay[]): UserDayPoi
   }));
 }
 
-/** A member's activity split by module, scaled to their row total. Their
- *  table `topModule` is forced to rank first for consistency. Top 4. */
-export function userModuleMix(row: UserUsageRow): { module: UsageModule; count: number }[] {
+/** A member's activity split across all 8 modules, scaled to their row total.
+ *  Their table `topModule` is forced to rank first for consistency. */
+export function fullUserModuleMix(row: UserUsageRow): { module: UsageModule; count: number }[] {
   if (row.actions <= 0) return [];
   const rnd = mulberry32(hashStr(row.user.email.toLowerCase() + ':mix'));
   const weights = USAGE_MODULES.map(m => ({ module: m, w: 0.2 + rnd() * 0.8 }));
@@ -334,8 +336,126 @@ export function userModuleMix(row: UserUsageRow): { module: UsageModule; count: 
   const wSum = weights.reduce((s, x) => s + x.w, 0);
   return weights
     .map(x => ({ module: x.module, count: Math.round((x.w / wSum) * row.actions) }))
+    .sort((a, b) => b.count - a.count);
+}
+
+/** The drawer's ranked module list — top 4 of the full mix. */
+export function userModuleMix(row: UserUsageRow): { module: UsageModule; count: number }[] {
+  return fullUserModuleMix(row).slice(0, 4);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Module drill-down
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** One module's daily counts over a window (for the drill-down trend). */
+export function moduleDailySeries(module: UsageModule, days: UsageDay[]): { dayOffset: number; count: number }[] {
+  return days.map(d => ({ dayOffset: d.dayOffset, count: d.byModule[module] }));
+}
+
+/** The members who use a module most, from the same per-user mix the member
+ *  drawer shows — the two drill-downs can never disagree. */
+export function moduleTopUsers(module: UsageModule, rows: UserUsageRow[], top = 3): { name: string; email: string; count: number }[] {
+  return rows
+    .map(r => ({ r, count: fullUserModuleMix(r).find(m => m.module === module)?.count ?? 0 }))
+    .filter(x => x.count > 0)
     .sort((a, b) => b.count - a.count)
-    .slice(0, 4);
+    .slice(0, top)
+    .map(x => ({ name: x.r.user.name, email: x.r.user.email, count: x.count }));
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Engagement segments
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export type EngagementSegment = 'Power' | 'Core' | 'Casual' | 'Dormant';
+export const ENGAGEMENT_SEGMENTS: EngagementSegment[] = ['Power', 'Core', 'Casual', 'Dormant'];
+
+/** Display names. The Dormant segment reads "No activity" in the UI so it
+ *  can't be confused with the seats card's "Dormant 30d+" (no login) bucket —
+ *  they measure different things and their counts legitimately differ. */
+export const SEGMENT_LABELS: Record<EngagementSegment, string> = {
+  Power: 'Power',
+  Core: 'Core',
+  Casual: 'Casual',
+  Dormant: 'No activity',
+};
+
+/** Mean actions across members who did anything — the segment baseline. */
+export function activeMeanActions(rows: UserUsageRow[]): number {
+  const active = rows.filter(r => r.actions > 0);
+  if (active.length === 0) return 0;
+  return active.reduce((s, r) => s + r.actions, 0) / active.length;
+}
+
+/** Segment a member relative to the active mean: Power ≥ 1.4x, Casual < 0.6x,
+ *  Core in between, Dormant = nothing in the window. */
+export function segmentFor(row: UserUsageRow, activeMean: number): EngagementSegment {
+  if (row.actions === 0) return 'Dormant';
+  if (activeMean > 0 && row.actions >= activeMean * 1.4) return 'Power';
+  if (activeMean > 0 && row.actions < activeMean * 0.6) return 'Casual';
+  return 'Core';
+}
+
+/** Share of active members who used AI in the window (0-100). */
+export function aiAdoptionPct(rows: UserUsageRow[]): number {
+  const active = rows.filter(r => r.actions > 0);
+  if (active.length === 0) return 0;
+  return Math.round((active.filter(r => r.aiQueries > 0).length / active.length) * 100);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Activity rhythm — weekday x hour heatmap
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** Working-hours intensity curve (24 slots): quiet nights, morning and
+ *  afternoon peaks, a lunch dip. */
+const HOUR_CURVE = [
+  0.2, 0.1, 0.1, 0.1, 0.2, 0.4,   // 00-05
+  0.8, 1.5, 3.0, 5.0, 6.0, 5.5,   // 06-11
+  3.5, 4.5, 5.5, 6.0, 5.5, 4.5,   // 12-17
+  2.5, 1.5, 1.0, 0.8, 0.5, 0.3,   // 18-23
+];
+
+/** Weekday names in JS getDay() order — shared by the heatmap and highlights. */
+export const USAGE_DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+export interface UsageHeatmapData {
+  /** matrix[dow][hour], dow in JS getDay() order (0 = Sunday). */
+  matrix: number[][];
+  max: number;
+  /** Total across all cells — equals the window's action total. */
+  total: number;
+}
+
+/** Distribute each day's actions across 24 hours (deterministic jitter,
+ *  largest-remainder rounding so the grid sums exactly to the window total)
+ *  and accumulate by weekday. */
+export function usageHourlyMatrix(days: UsageDay[]): UsageHeatmapData {
+  const matrix = Array.from({ length: 7 }, () => Array<number>(24).fill(0));
+  const todayDow = new Date().getDay();
+  days.forEach(day => {
+    // Same weekday derivation as the seed, so weekends stay quiet here too.
+    const dow = ((todayDow - (day.dayOffset % 7)) + 7) % 7;
+    const rnd = mulberry32(hashStr('rhythm:' + day.dayOffset));
+    const weights = HOUR_CURVE.map(w => w * (0.7 + rnd() * 0.6));
+    const wSum = weights.reduce((s, w) => s + w, 0) || 1;
+    const raw = weights.map(w => (w / wSum) * day.actions);
+    const floors = raw.map(v => Math.floor(v));
+    let remainder = day.actions - floors.reduce((s, f) => s + f, 0);
+    const byFraction = raw
+      .map((v, i) => ({ i, frac: v - floors[i] }))
+      .sort((a, b) => b.frac - a.frac);
+    for (const { i } of byFraction) {
+      if (remainder <= 0) break;
+      floors[i] += 1;
+      remainder -= 1;
+    }
+    floors.forEach((n, h) => { matrix[dow][h] += n; });
+  });
+  const max = Math.max(1, ...matrix.flat());
+  const total = matrix.flat().reduce((s, v) => s + v, 0);
+  return { matrix, max, total };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

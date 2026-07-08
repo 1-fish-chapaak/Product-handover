@@ -16,8 +16,8 @@ import { BTN_CTA_OUTLINE } from '../admin/adminTokens';
 import { getRole } from '../../data/rbac';
 import type { AuditLog } from '../../context/AdminDataContext';
 import {
-  userDailySeries, userModuleMix, liveLogsToday,
-  type UserUsageRow, type UsageDay,
+  userDailySeries, userModuleMix, liveLogsToday, SEGMENT_LABELS,
+  type UserUsageRow, type UsageDay, type EngagementSegment,
 } from '../../data/platform-usage';
 
 const fmt = (n: number) => n.toLocaleString('en-US');
@@ -27,12 +27,14 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export default function UserUsageDrawer({
-  row, days, logs, rangeDays, onManage, onClose,
+  row, days, logs, rangeDays, segment, onManage, onClose,
 }: {
   row: UserUsageRow;
   days: UsageDay[];
   logs: AuditLog[];
   rangeDays: number;
+  /** The member's engagement segment for this range (computed by the view). */
+  segment?: EngagementSegment;
   onManage: () => void;
   onClose: () => void;
 }) {
@@ -62,6 +64,11 @@ export default function UserUsageDrawer({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[0.875rem] font-semibold text-ink-900">{roleName}</span>
             <StatusBadge status={user.status.toLowerCase()} />
+            {segment && (
+              <span className="inline-flex items-center px-2 h-6 rounded-full border border-canvas-border bg-canvas text-[0.6875rem] font-medium text-ink-600 whitespace-nowrap">
+                {SEGMENT_LABELS[segment]}{segment === 'Power' ? ' user' : ''}
+              </span>
+            )}
           </div>
           <div className="text-[0.75rem] text-ink-500 mt-0.5">
             {user.team === '—' ? 'No team' : user.team}
