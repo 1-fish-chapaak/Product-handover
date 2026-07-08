@@ -371,13 +371,14 @@ export function moduleTopUsers(module: UsageModule, rows: UserUsageRow[], top = 
 export type EngagementSegment = 'Power' | 'Core' | 'Casual' | 'Dormant';
 export const ENGAGEMENT_SEGMENTS: EngagementSegment[] = ['Power', 'Core', 'Casual', 'Dormant'];
 
-/** Display names. The Dormant segment reads "No activity" in the UI so it
- *  can't be confused with the seats card's "Dormant 30d+" (no login) bucket —
- *  they measure different things and their counts legitimately differ. */
+/** Display names — plain words, not analytics jargon. "No activity" (rather
+ *  than "Dormant") also keeps the segment from being confused with the
+ *  Members card's "No sign-in 30+ days" bucket — they measure different
+ *  things and their counts legitimately differ. */
 export const SEGMENT_LABELS: Record<EngagementSegment, string> = {
-  Power: 'Power',
-  Core: 'Core',
-  Casual: 'Casual',
+  Power: 'Heavy',
+  Core: 'Regular',
+  Casual: 'Light',
   Dormant: 'No activity',
 };
 

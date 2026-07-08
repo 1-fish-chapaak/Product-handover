@@ -42,7 +42,6 @@ import UserUsageDrawer from './UserUsageDrawer';
 import ModuleUsageDrawer from './ModuleUsageDrawer';
 import TeamUsageDrawer from './TeamUsageDrawer';
 import UsageHeatmap from './UsageHeatmap';
-import { USAGE_DAY_LABELS as DAY_LABELS } from '../../data/platform-usage';
 
 type RangeDays = 7 | 30 | 90;
 const RANGES: { days: RangeDays; label: string }[] = [
@@ -158,6 +157,9 @@ const teamColumns: Column<TeamUsageRow>[] = [
 ];
 
 const CARD = 'rounded-xl border border-canvas-border bg-canvas-elevated';
+
+/** Full day names (JS getDay() order) for the busiest-day sentence. */
+const FULL_DAYS = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
 
 /* ── Users | Teams lens toggle — the platform's sliding-pill segmented
       switch (mirrors Admin's MembersSwitch, own layoutId). ── */
@@ -289,10 +291,10 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
     })), [rawRows, priorByEmail, activeMean]);
 
   const stats: UsageStat[] = [
-    { key: 'active', label: 'Active users', value: totals.activeUsers, icon: Users, deltaPct: usageDeltaPct(totals.activeUsers, priorTotals.activeUsers) },
-    { key: 'actions', label: 'Actions', value: fmt(totals.actions), icon: Activity, deltaPct: usageDeltaPct(totals.actions, priorTotals.actions) },
-    { key: 'ai', label: 'AI queries', value: fmt(totals.aiQueries), icon: Sparkles, deltaPct: usageDeltaPct(totals.aiQueries, priorTotals.aiQueries) },
-    { key: 'reports', label: 'Reports', value: fmt(totals.reports), icon: FileBarChart, deltaPct: usageDeltaPct(totals.reports, priorTotals.reports) },
+    { key: 'active', label: 'Active users', value: totals.activeUsers, icon: Users, hint: 'Members who did at least one thing in this period', deltaPct: usageDeltaPct(totals.activeUsers, priorTotals.activeUsers) },
+    { key: 'actions', label: 'Actions', value: fmt(totals.actions), icon: Activity, hint: 'Everything done on the platform in this period', deltaPct: usageDeltaPct(totals.actions, priorTotals.actions) },
+    { key: 'ai', label: 'AI queries', value: fmt(totals.aiQueries), icon: Sparkles, hint: 'Questions asked to Ask IRA and the AI tools', deltaPct: usageDeltaPct(totals.aiQueries, priorTotals.aiQueries) },
+    { key: 'reports', label: 'Reports', value: fmt(totals.reports), icon: FileBarChart, hint: 'Reports generated in this period', deltaPct: usageDeltaPct(totals.reports, priorTotals.reports) },
   ];
 
   // Chart data — oldest → today; thin the axis labels so long ranges stay legible.
@@ -515,9 +517,9 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <HighlightCard icon={Zap}>
                 {highlights.growing && typeof highlights.growing.deltaPct === 'number' && highlights.growing.deltaPct > 0 ? (
-                  <><span className="font-semibold text-ink-900">{highlights.growing.module}</span> is the fastest-growing module, <span className="font-semibold text-ink-900">{highlights.growing.deltaPct > 0 ? '+' : ''}{highlights.growing.deltaPct}%</span> vs the prior window.</>
+                  <><span className="font-semibold text-ink-900">{highlights.growing.module}</span> is growing fastest: <span className="font-semibold text-ink-900">+{highlights.growing.deltaPct}%</span> vs the previous period.</>
                 ) : (
-                  <>Module activity is flat against the prior window.</>
+                  <>No area grew vs the previous period.</>
                 )}
               </HighlightCard>
               <HighlightCard icon={Sparkles}>
@@ -527,11 +529,11 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
                 {seats.dormant.length > 0 ? (
                   <><span className="font-semibold text-ink-900">{seats.dormant.length} member{seats.dormant.length !== 1 ? 's' : ''}</span> {seats.dormant.length !== 1 ? 'haven’t' : 'hasn’t'} signed in for 30+ days.</>
                 ) : (
-                  <>No members are dormant right now.</>
+                  <>Everyone has signed in within the last 30 days.</>
                 )}
               </HighlightCard>
               <HighlightCard icon={CalendarClock}>
-                <span className="font-semibold text-ink-900">{DAY_LABELS[highlights.busiestDow]}</span> is the busiest day; activity peaks around <span className="font-semibold text-ink-900 tabular-nums">{String(highlights.peakHour).padStart(2, '0')}:00</span>.
+                Busiest: <span className="font-semibold text-ink-900">{FULL_DAYS[highlights.busiestDow]}</span> around <span className="font-semibold text-ink-900 tabular-nums">{String(highlights.peakHour).padStart(2, '0')}:00</span>.
               </HighlightCard>
             </div>
           </div>
@@ -539,9 +541,15 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
           {/* Usage over time + module breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
             <div className={`${CARD} lg:col-span-2 p-5`}>
-              <div className="mb-4">
-                <div className="text-[0.875rem] font-semibold text-ink-900">Usage over time</div>
-                <div className="text-[0.75rem] text-ink-500 mt-0.5">Actions per day across the platform, with AI queries shown inside the total.</div>
+              <div className="mb-4 flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <div className="text-[0.875rem] font-semibold text-ink-900">Daily activity</div>
+                  <div className="text-[0.75rem] text-ink-500 mt-0.5">How much happened each day.</div>
+                </div>
+                <div className="flex items-center gap-4 text-[0.6875rem] text-ink-500">
+                  <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#6A12CD' }} />All actions</span>
+                  <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#A366F0' }} />AI queries</span>
+                </div>
               </div>
               <div>
                 <ResponsiveContainer width="100%" height={240}>
@@ -569,8 +577,8 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
 
             <div className={`${CARD} p-5`}>
               <div className="mb-4">
-                <div className="text-[0.875rem] font-semibold text-ink-900">Module breakdown</div>
-                <div className="text-[0.75rem] text-ink-500 mt-0.5">Where the activity happens. Click a module for its detail.</div>
+                <div className="text-[0.875rem] font-semibold text-ink-900">Most-used areas</div>
+                <div className="text-[0.75rem] text-ink-500 mt-0.5">Share of all activity. Click one for details.</div>
               </div>
               <div className="space-y-1">
                 {moduleTotals.map(({ module, count }) => {
@@ -606,11 +614,11 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
               <div className="flex flex-wrap items-start gap-6">
                 <div className="min-w-[240px]">
                   <div className="text-[0.875rem] font-semibold text-ink-900">AI usage</div>
-                  <div className="text-[0.75rem] text-ink-500 mt-0.5 mb-4">Ask IRA and Concierge activity in this range.</div>
+                  <div className="text-[0.75rem] text-ink-500 mt-0.5 mb-4">How much the team uses Ask IRA and the AI tools.</div>
                   <div className="flex items-center gap-6">
                     <div>
                       <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(totals.aiQueries)}</div>
-                      <div className="text-[0.6875rem] text-ink-500 mt-1">AI queries</div>
+                      <div className="text-[0.6875rem] text-ink-500 mt-1">Questions asked</div>
                     </div>
                     <div>
                       <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(Math.round(totals.aiQueries * 0.42))}</div>
@@ -620,9 +628,9 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
                       <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(Math.round(totals.reports * 0.6))}</div>
                       <div className="text-[0.6875rem] text-ink-500 mt-1">AI-assisted reports</div>
                     </div>
-                    <div title="Share of active members with at least one AI query in this range">
+                    <div title="Share of active members who asked the AI at least one question in this period">
                       <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{aiAdoption}%</div>
-                      <div className="text-[0.6875rem] text-ink-500 mt-1">AI adoption</div>
+                      <div className="text-[0.6875rem] text-ink-500 mt-1">Members using AI</div>
                     </div>
                   </div>
                 </div>
@@ -658,13 +666,13 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
 
             <div className={`${CARD} p-5 flex flex-col`}>
               <div className="mb-4">
-                <div className="text-[0.875rem] font-semibold text-ink-900">Seats & lifecycle</div>
-                <div className="text-[0.75rem] text-ink-500 mt-0.5">{seats.total} seats. Read-only; manage members in Administration.</div>
+                <div className="text-[0.875rem] font-semibold text-ink-900">Members</div>
+                <div className="text-[0.75rem] text-ink-500 mt-0.5">{seats.total} seats in total. View only.</div>
               </div>
               <div className="space-y-3 flex-1">
-                <SeatRow label={`Active in range`} people={seats.activeInRange} />
-                <SeatRow label="Dormant 30d+" people={seats.dormant} />
-                <SeatRow label="Invited, pending" people={seats.invited} />
+                <SeatRow label="Active this period" people={seats.activeInRange} />
+                <SeatRow label="No sign-in 30+ days" people={seats.dormant} />
+                <SeatRow label="Invited, not joined yet" people={seats.invited} />
                 <SeatRow label="Suspended or inactive" people={seats.suspendedOrInactive} />
               </div>
               <button
@@ -676,11 +684,11 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
             </div>
           </div>
 
-          {/* Activity rhythm */}
+          {/* When people are active */}
           <div className={`${CARD} p-5 mb-3`}>
             <div className="mb-4">
-              <div className="text-[0.875rem] font-semibold text-ink-900">Activity rhythm</div>
-              <div className="text-[0.75rem] text-ink-500 mt-0.5">When work happens across the selected range, by weekday and hour.</div>
+              <div className="text-[0.875rem] font-semibold text-ink-900">When people are active</div>
+              <div className="text-[0.75rem] text-ink-500 mt-0.5">By weekday and hour. Darker means more activity.</div>
             </div>
             <UsageHeatmap data={heatmap} />
           </div>

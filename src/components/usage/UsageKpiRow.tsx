@@ -47,6 +47,7 @@ function UsageKpiCard({ stat, index, rangeDays }: { stat: UsageStat; index: numb
     <motion.div
       role="listitem"
       aria-label={`${stat.label}: ${stat.value}`}
+      title={stat.hint}
       initial={prefersReducedMotion ? false : { opacity: 0, y: 10, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 18, mass: 0.7, delay: 0.08 + index * 0.08 }}

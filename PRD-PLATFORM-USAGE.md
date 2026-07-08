@@ -24,13 +24,13 @@ One page, one range control (7 / 30 / 90 days) that applies to everything below 
 | AI queries | Ask IRA and Concierge events | vs previous equal window |
 | Reports | Reports generated in the range | vs previous equal window |
 
-- Highlights: four derived findings, phrased as sentences: fastest-growing module, AI adoption rate, dormant members, busiest day and peak hour.
-- Usage over time: actions per day with AI queries shown inside the total.
-- Module breakdown: ranked share of activity; clicking a module opens its drill-down (trend, delta, share, top members).
-- AI usage: queries, chats started, AI-assisted reports, adoption rate, top three AI users.
-- Seats and lifecycle: total seats, active in range, dormant 30 days or more, invited and pending, suspended or inactive. Counts plus faces, no actions, one link to Administration.
-- Activity rhythm: a weekday-by-hour heatmap of when work happens, single brand hue, exact counts on hover.
-- Member table: per-member actions, trend vs prior window, AI queries, top module. Segment chips (Power, Core, Casual, No activity, relative to the active mean; empty segments hidden) filter the list; clicking a row opens the member drawer (trend, module mix, session events, segment, link to Admin). "No activity" is scoped to the selected range and is deliberately distinct from the seats card's "Dormant 30d+" (no login) bucket.
+- Highlights: four derived findings, phrased as sentences: fastest-growing area, AI adoption rate, members without a recent sign-in, busiest day and peak hour.
+- Daily activity: actions per day with AI queries shown inside the total, with a legend.
+- Most-used areas: ranked share of activity; clicking an area opens its drill-down (trend, delta, share, top members).
+- AI usage: questions asked, chats started, AI-assisted reports, share of members using AI, top three AI users.
+- Members (seats): total seats, active this period, no sign-in for 30+ days, invited but not joined, suspended or inactive. Counts plus faces, no actions, one link to Administration.
+- When people are active: a weekday-by-hour heatmap, single brand hue, darker means more, exact counts on hover.
+- Member table: per-member actions, trend vs prior window, AI queries, top module. Segment chips (Heavy, Regular, Light, No activity, relative to the active mean; empty segments hidden) filter the list; clicking a row opens the member drawer (trend, module mix, session events, segment, link to Admin). "No activity" is scoped to the selected range and is deliberately distinct from the Members card's "No sign-in 30+ days" bucket.
 - Teams lens: the same table aggregated by team; clicking a team opens its drawer with members ranked by activity.
 - Export CSV: downloads exactly the filtered table including trend and segment, writes an audit event, gated by `ad_usage_export`.
 - Live events: anything done in the current session folds into today's numbers immediately.

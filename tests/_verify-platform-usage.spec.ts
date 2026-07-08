@@ -32,9 +32,9 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
   await expect(page.getByText('Change compared with the previous 30 days.')).toBeVisible();
 
   // Cards
-  await expect(page.getByText('Usage over time')).toBeVisible();
-  await expect(page.getByText('Module breakdown')).toBeVisible();
-  await expect(page.getByText('Seats & lifecycle')).toBeVisible();
+  await expect(page.getByText('Daily activity')).toBeVisible();
+  await expect(page.getByText('Most-used areas')).toBeVisible();
+  await expect(page.getByText('No sign-in 30+ days')).toBeVisible();
   await expect(page.getByText('Top AI users')).toBeVisible();
 
   // Range switch changes the Actions KPI and keeps deltas (proves 180d seed)
@@ -53,7 +53,7 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
   await expect(page.getByText(/^[+-]\d+%$/).first()).toBeVisible();
 
   // Seats: seeded Invited users are Ajay 14110008 + Priya Singh
-  await expect(page.getByText('Invited, pending')).toBeVisible();
+  await expect(page.getByText('Invited, not joined yet')).toBeVisible();
 
   // Table search filters rows
   await page.getByRole('button', { name: 'Last 30 days' }).click();
@@ -132,7 +132,7 @@ test('depth: highlights, rhythm, module drawer, segments, team drawer', async ({
   // Highlights strip + activity rhythm heatmap
   await expect(page.getByText('Highlights')).toBeVisible();
   await expect(page.getByText(/of active members used AI in this range/)).toBeVisible();
-  await expect(page.getByText('Activity rhythm')).toBeVisible();
+  await expect(page.getByText('When people are active')).toBeVisible();
 
   // Trend column in the member table
   await expect(page.getByRole('columnheader', { name: 'Trend' }).or(page.locator('th', { hasText: 'Trend' }))).toBeVisible();
