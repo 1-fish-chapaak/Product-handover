@@ -61,6 +61,8 @@ export interface UsageDay {
   aiQueries: number;
   /** Reports generated that day (subset of actions). */
   reports: number;
+  /** Files downloaded / exported that day (subset of actions). */
+  downloads: number;
   byModule: Record<UsageModule, number>;
 }
 
@@ -109,6 +111,7 @@ export const USAGE_DAYS: UsageDay[] = (() => {
       : 4 + Math.floor(rnd() * 5);
     const aiQueries = Math.round(actions * (0.24 + rnd() * 0.12));
     const reports = Math.round(actions * (0.05 + rnd() * 0.05));
+    const downloads = Math.round(actions * (0.06 + rnd() * 0.06));
     const byModule = {} as Record<UsageModule, number>;
     let assigned = 0;
     USAGE_MODULES.forEach((m, i) => {
@@ -121,7 +124,7 @@ export const USAGE_DAYS: UsageDay[] = (() => {
       byModule[m] = Math.max(0, n);
       assigned += byModule[m];
     });
-    days.push({ dayOffset: offset, activeUsers, actions, aiQueries, reports, byModule });
+    days.push({ dayOffset: offset, activeUsers, actions, aiQueries, reports, downloads, byModule });
   }
   return days;
 })();
@@ -163,6 +166,7 @@ export function usageDaysWithLive(logs: AuditLog[]): UsageDay[] {
       activeUsers: Math.max(day.activeUsers, liveUsers.size),
       aiQueries: day.aiQueries + live.filter(l => usageModuleFor(l.module) === 'Ask IRA').length,
       reports: day.reports + live.filter(l => usageModuleFor(l.module) === 'Reports').length,
+      downloads: day.downloads + live.filter(l => l.action === 'Export').length,
       byModule,
     };
   });
@@ -177,6 +181,8 @@ export interface UserUsage {
   share: number;
   /** Fraction of their actions that are AI queries. */
   aiRatio: number;
+  /** Fraction of their actions that are downloads/exports. */
+  dlRatio: number;
   topModule: UsageModule;
 }
 
@@ -185,7 +191,7 @@ export interface UserUsage {
  *  fraction, since their activity stopped partway through the window. */
 export function userUsageProfile(user: Pick<AdminUser, 'email' | 'status'>): UserUsage {
   if (user.status === 'Invited') {
-    return { share: 0, aiRatio: 0, topModule: 'Ask IRA' };
+    return { share: 0, aiRatio: 0, dlRatio: 0, topModule: 'Ask IRA' };
   }
   const rnd = mulberry32(hashStr(user.email.toLowerCase()));
   const raw = 0.3 + rnd() * 0.7;
@@ -194,6 +200,7 @@ export function userUsageProfile(user: Pick<AdminUser, 'email' | 'status'>): Use
   return {
     share: raw * damp,
     aiRatio: 0.15 + rnd() * 0.3,
+    dlRatio: 0.05 + rnd() * 0.1,
     topModule,
   };
 }
@@ -202,6 +209,7 @@ export interface UserUsageRow {
   user: AdminUser;
   actions: number;
   aiQueries: number;
+  downloads: number;
   topModule: UsageModule;
 }
 
@@ -236,6 +244,7 @@ export interface UsageTotals {
   actions: number;
   aiQueries: number;
   reports: number;
+  downloads: number;
 }
 
 /** Totals for one window of the series. `windowStartOffset` is how many days
@@ -247,6 +256,7 @@ export function usageWindowTotals(days: UsageDay[], users: AdminUser[], windowSt
     actions: days.reduce((s, d) => s + d.actions, 0),
     aiQueries: days.reduce((s, d) => s + d.aiQueries, 0),
     reports: days.reduce((s, d) => s + d.reports, 0),
+    downloads: days.reduce((s, d) => s + d.downloads, 0),
   };
 }
 
@@ -282,9 +292,100 @@ export function userUsageRows(users: AdminUser[], days: UsageDay[], logs: AuditL
       user: u,
       actions: seeded + mine.length,
       aiQueries: Math.round(seeded * p.aiRatio) + mine.filter(l => usageModuleFor(l.module) === 'Ask IRA').length,
+      downloads: Math.round(seeded * p.dlRatio) + mine.filter(l => l.action === 'Export').length,
       topModule: p.topModule,
     };
   });
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Downloads & exports — every download button funnels through logEvent, so
+ * "who downloaded what" is derivable: seeded history + live Export events.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export type DownloadFormat = 'PDF' | 'CSV' | 'XLSX' | 'DOCX';
+
+export interface DownloadEvent {
+  id: string;
+  user: string;
+  item: string;
+  format: DownloadFormat;
+  /** Days ago; 0 = today. */
+  dayOffset: number;
+  /** Display time (HH:MM) for the row. */
+  time: string;
+  /** True when this came from a real logEvent in the current session. */
+  live: boolean;
+}
+
+/** The artifacts people pull out of a GRC platform — the seed catalog. */
+const DOWNLOAD_CATALOG: { item: string; format: DownloadFormat }[] = [
+  { item: 'SOX Compliance Report', format: 'PDF' },
+  { item: 'P2P RACM matrix', format: 'XLSX' },
+  { item: 'Audit log', format: 'CSV' },
+  { item: 'Q2 exceptions summary', format: 'DOCX' },
+  { item: 'Vendor risk dashboard data', format: 'CSV' },
+  { item: 'ITGC control library', format: 'XLSX' },
+  { item: 'IA engagement report', format: 'PDF' },
+  { item: 'Workflow run output', format: 'CSV' },
+];
+
+/** Pull the artifact name + format out of an Export log's description
+ *  (e.g. 'Exported audit log as CSV (12 events)' → 'Audit log' / CSV). */
+function parseExportLog(l: AuditLog): { item: string; format: DownloadFormat } {
+  const m = l.description.match(/Exported (.+?) as (PDF|CSV|XLSX|DOCX)/i);
+  if (m) {
+    const item = m[1].charAt(0).toUpperCase() + m[1].slice(1);
+    return { item, format: m[2].toUpperCase() as DownloadFormat };
+  }
+  return { item: l.entity, format: 'CSV' };
+}
+
+/** Latest downloads, newest first: real session Export events on top, then a
+ *  deterministic seeded history assigned to the most-active members. */
+export function recentDownloads(rows: UserUsageRow[], logs: AuditLog[], limit = 6): DownloadEvent[] {
+  const liveEvents: DownloadEvent[] = liveLogsToday(logs)
+    .filter(l => l.action === 'Export')
+    .map(l => ({
+      id: l.id,
+      user: l.user,
+      ...parseExportLog(l),
+      dayOffset: 0,
+      time: l.timestamp.split(' ')[1]?.slice(0, 5) ?? '',
+      live: true,
+    }));
+  const downloaders = [...rows].filter(r => r.downloads > 0).sort((a, b) => b.downloads - a.downloads);
+  const rnd = mulberry32(0xd07a10ad);
+  const seeded: DownloadEvent[] = downloaders.length === 0 ? [] : DOWNLOAD_CATALOG.map((c, i) => ({
+    id: `dl-seed-${i}`,
+    user: downloaders[Math.floor(rnd() * downloaders.length)].user.name,
+    item: c.item,
+    format: c.format,
+    dayOffset: i === 0 ? 0 : Math.min(1 + Math.floor(rnd() * 6), USAGE_RANGE_DAYS),
+    time: `${String(9 + Math.floor(rnd() * 8)).padStart(2, '0')}:${String(Math.floor(rnd() * 60)).padStart(2, '0')}`,
+    live: false,
+  })).sort((a, b) => a.dayOffset - b.dayOffset);
+  return [...liveEvents, ...seeded].slice(0, limit);
+}
+
+/** Split a download total across formats (largest-remainder, sums exactly). */
+export function downloadFormatSplit(total: number): { format: DownloadFormat; count: number }[] {
+  const weights: { format: DownloadFormat; w: number }[] = [
+    { format: 'PDF', w: 0.38 },
+    { format: 'CSV', w: 0.27 },
+    { format: 'XLSX', w: 0.22 },
+    { format: 'DOCX', w: 0.13 },
+  ];
+  const raw = weights.map(x => x.w * total);
+  const floors = raw.map(v => Math.floor(v));
+  let remainder = total - floors.reduce((s, f) => s + f, 0);
+  const order = raw.map((v, i) => ({ i, frac: v - floors[i] })).sort((a, b) => b.frac - a.frac);
+  for (const { i } of order) {
+    if (remainder <= 0) break;
+    floors[i] += 1;
+    remainder -= 1;
+  }
+  return weights.map((x, i) => ({ format: x.format, count: floors[i] }));
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

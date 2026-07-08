@@ -28,7 +28,8 @@ import {
   USAGE_MODULES, usageDaysWithLive, userUsageRows, usageDayLabel,
   usageWindowTotals, usageDeltaPct, seatBuckets, lastLoginOffsetDays,
   segmentFor, activeMeanActions, aiAdoptionPct, usageHourlyMatrix,
-  activityConcentration, usageSpikes, ENGAGEMENT_SEGMENTS, SEGMENT_LABELS,
+  activityConcentration, usageSpikes, recentDownloads, downloadFormatSplit,
+  ENGAGEMENT_SEGMENTS, SEGMENT_LABELS,
   type UsageModule, type UserUsageRow, type EngagementSegment,
 } from '../../data/platform-usage';
 import SmartTable, { type Column } from '../shared/SmartTable';
@@ -64,6 +65,7 @@ interface UsageRow extends Record<string, unknown> {
   lastLogin: string;
   actions: number;
   aiQueries: number;
+  downloads: number;
   topModule: UsageModule;
   trendPct: number | null;
   segment: EngagementSegment;
@@ -93,18 +95,18 @@ const userColumns: Column<UsageRow>[] = [
       </div>
     ),
   },
-  { key: 'roleName', label: 'Role', sortable: true, width: '11%', render: (r) => <span className="text-[0.8125rem] text-ink-700">{r.roleName}</span> },
-  { key: 'team', label: 'Team', sortable: true, width: '10%', render: (r) => <span className="text-[0.8125rem] text-ink-700">{r.team}</span> },
+  { key: 'roleName', label: 'Role', sortable: true, width: '10%', render: (r) => <span className="text-[0.8125rem] text-ink-700">{r.roleName}</span> },
+  { key: 'team', label: 'Team', sortable: true, width: '9%', render: (r) => <span className="text-[0.8125rem] text-ink-700">{r.team}</span> },
   {
     key: 'lastLogin', label: 'Last Active', sortable: true, width: '11%',
     render: (r) => <span className={`text-[0.75rem] font-mono tabular-nums ${r.lastLogin === 'Never' ? 'italic text-ink-400' : 'text-ink-700'}`}>{r.lastLogin}</span>,
   },
   {
-    key: 'actions', label: 'Actions', sortable: true, width: '8%', align: 'right',
+    key: 'actions', label: 'Actions', sortable: true, width: '7%', align: 'right',
     render: (r) => <span className="text-[0.8125rem] font-semibold text-ink-900 tabular-nums">{fmt(r.actions)}</span>,
   },
   {
-    key: 'trendPct', label: 'Trend', sortable: false, width: '8%', align: 'right',
+    key: 'trendPct', label: 'Trend', sortable: false, width: '7%', align: 'right',
     render: (r) => r.trendPct === null
       ? <span className="text-[0.75rem] text-ink-400">—</span>
       : (
@@ -116,11 +118,15 @@ const userColumns: Column<UsageRow>[] = [
       ),
   },
   {
-    key: 'aiQueries', label: 'AI Queries', sortable: true, width: '9%', align: 'right',
+    key: 'aiQueries', label: 'AI Queries', sortable: true, width: '8%', align: 'right',
     render: (r) => <span className="text-[0.8125rem] text-ink-700 tabular-nums">{fmt(r.aiQueries)}</span>,
   },
   {
-    key: 'topModule', label: 'Top Module', sortable: true, width: '12%',
+    key: 'downloads', label: 'Downloads', sortable: true, width: '9%', align: 'right',
+    render: (r) => <span className="text-[0.8125rem] text-ink-700 tabular-nums">{fmt(r.downloads)}</span>,
+  },
+  {
+    key: 'topModule', label: 'Top Module', sortable: true, width: '11%',
     render: (r) => r.actions === 0
       ? <span className="text-[0.75rem] text-ink-400">—</span>
       : <span className={MODULE_CHIP}>{r.topModule}</span>,
@@ -333,6 +339,7 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
       lastLogin: r.user.lastLogin,
       actions: r.actions,
       aiQueries: r.aiQueries,
+      downloads: r.downloads,
       topModule: r.topModule,
       trendPct: usageDeltaPct(r.actions, priorByEmail.get(r.user.email) ?? 0),
       segment: segmentFor(r, activeMean),
@@ -380,6 +387,16 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
 
   const seats = useMemo(() => seatBuckets(users, range), [users, range]);
   const heatmap = useMemo(() => usageHourlyMatrix(days), [days]);
+
+  // Downloads & exports — who is pulling data out of the platform.
+  const downloadDelta = usageDeltaPct(totals.downloads, priorTotals.downloads);
+  const formatSplit = useMemo(() => downloadFormatSplit(totals.downloads), [totals.downloads]);
+  const formatMax = Math.max(1, ...formatSplit.map(f => f.count));
+  const recentDl = useMemo(() => recentDownloads(rawRows, logs), [rawRows, logs]);
+  const topDownloaders = useMemo(
+    () => [...rows].sort((a, b) => b.downloads - a.downloads).slice(0, 3).filter(r => r.downloads > 0),
+    [rows],
+  );
 
   // Adoption funnel — every stage a fraction of total seats.
   const funnel = useMemo(() => [
@@ -507,13 +524,13 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
       return `"${s.replace(/"/g, '""')}"`;
     };
     const headers = lens === 'users'
-      ? ['Member', 'Email', 'Role', 'Team', 'Last Active', 'Actions', 'Trend vs prior', 'AI Queries', 'Top Module', 'Segment']
+      ? ['Member', 'Email', 'Role', 'Team', 'Last Active', 'Actions', 'Trend vs prior', 'AI Queries', 'Downloads', 'Top Module', 'Segment']
       : ['Team', 'Members', 'Actions', 'AI Queries', 'Top Module', 'Last Active'];
     const body = lens === 'users'
       ? filteredRows.map(r => [
           r.name, r.email, r.roleName, r.team, r.lastLogin, r.actions,
           r.trendPct === null ? '—' : `${r.trendPct > 0 ? '+' : ''}${r.trendPct}%`,
-          r.aiQueries, r.actions === 0 ? '—' : r.topModule, SEGMENT_LABELS[r.segment],
+          r.aiQueries, r.downloads, r.actions === 0 ? '—' : r.topModule, SEGMENT_LABELS[r.segment],
         ])
       : filteredTeamRows.map(r => [r.team, r.members, r.actions, r.aiQueries, r.topModule, r.lastActive]);
     const csv = [headers.map(esc).join(','), ...body.map(row => row.map(esc).join(','))].join('\r\n');
@@ -878,6 +895,84 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
               ) : (
                 <p className="text-[0.8125rem] text-ink-400">Nothing needs attention right now.</p>
               )}
+            </WidgetCard>
+          </div>
+
+          {/* Exports & downloads — who pulls data out, what, and when. */}
+          <div className="mb-3">
+            <WidgetCard
+              icon={Download}
+              title="Exports & downloads"
+              subtitle="Every download button on the platform, and who used it"
+            >
+              <div className="flex flex-wrap items-start gap-8">
+                {/* Total + format split */}
+                <div className="min-w-[190px]">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(totals.downloads)}</span>
+                    {typeof downloadDelta === 'number' && downloadDelta !== 0 && (
+                      <span className={`inline-flex items-center gap-1 text-[0.6875rem] font-semibold px-1.5 py-0.5 rounded-full tabular-nums ${downloadDelta > 0 ? 'text-compliant-700 bg-compliant-50' : 'text-mitigated-700 bg-mitigated-50'}`} title={`vs previous ${range} days`}>
+                        {downloadDelta > 0 ? '+' : ''}{downloadDelta}%
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[0.6875rem] text-ink-500 mt-1 mb-3">Files downloaded in this period</div>
+                  <div className="space-y-2">
+                    {formatSplit.map(f => (
+                      <div key={f.format}>
+                        <div className="flex items-baseline justify-between mb-0.5">
+                          <span className="text-[0.6875rem] font-medium text-ink-600">{f.format}</span>
+                          <span className="text-[0.6875rem] text-ink-500 tabular-nums">{fmt(f.count)}</span>
+                        </div>
+                        <div className="h-1 rounded-full bg-brand-50 overflow-hidden">
+                          <div className="h-full rounded-full bg-brand-400" style={{ width: `${Math.max(3, (f.count / formatMax) * 100)}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recent downloads — live session events first */}
+                <div className="flex-1 min-w-[280px]">
+                  <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2.5">Recent downloads</div>
+                  {recentDl.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {recentDl.map(dl => (
+                        <div key={dl.id} className="flex items-center gap-2.5 min-w-0">
+                          <InitialsAvatar name={dl.user} size={24} />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[0.75rem] font-semibold text-ink-900">{dl.user}</span>
+                            <span className="text-[0.75rem] text-ink-500"> downloaded </span>
+                            <span className="text-[0.75rem] text-ink-700">{dl.item}</span>
+                            <span className="ml-1.5 inline-flex items-center px-1.5 h-4 rounded border border-canvas-border bg-canvas text-[0.5625rem] font-semibold text-ink-500 align-middle">{dl.format}</span>
+                          </div>
+                          <span className={`shrink-0 text-[0.6875rem] font-mono tabular-nums ${dl.live ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>
+                            {dl.dayOffset === 0 ? `Today ${dl.time}` : dl.dayOffset === 1 ? 'Yesterday' : `${dl.dayOffset}d ago`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[0.8125rem] text-ink-400">No downloads in this period.</p>
+                  )}
+                </div>
+
+                {/* Top downloaders */}
+                {topDownloaders.length > 0 && (
+                  <div className="min-w-[170px]">
+                    <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2.5">Top downloaders</div>
+                    <div className="space-y-2">
+                      {topDownloaders.map(u => (
+                        <div key={u.email} className="flex items-center gap-2">
+                          <InitialsAvatar name={u.name} size={22} />
+                          <span className="text-[0.75rem] font-medium text-ink-800 truncate">{u.name}</span>
+                          <span className="ml-auto text-[0.75rem] text-ink-500 tabular-nums">{fmt(u.downloads)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </WidgetCard>
           </div>
 

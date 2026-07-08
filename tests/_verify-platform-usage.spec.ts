@@ -60,8 +60,8 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
   await page.waitForTimeout(600);
   await page.getByPlaceholder('Search members...').fill('ayushi');
   await page.waitForTimeout(400);
-  await expect(page.getByText('Ayushi Narang')).toBeVisible();
-  await expect(page.getByText('Abhinav Sharma')).not.toBeVisible();
+  await expect(page.locator('tr', { hasText: 'Ayushi Narang' }).first()).toBeVisible();
+  await expect(page.locator('tr', { hasText: 'Abhinav Sharma' })).not.toBeVisible();
   await page.getByRole('button', { name: 'Clear all' }).click();
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${SHOTS}/v2-30d.png` });
@@ -123,6 +123,13 @@ test('CSV export downloads the filtered set and shows a toast', async ({ page })
   const download = await dl;
   expect(download.suggestedFilename()).toMatch(/^platform-usage-users-\d+d-/);
   await expect(page.getByText(/Exported \d+ members as CSV/)).toBeVisible();
+
+  // The export lands in Exports & downloads as a live event by the current user
+  await expect(page.getByText('Exports & downloads')).toBeVisible();
+  await expect(page.getByText('Top downloaders')).toBeVisible();
+  const recentList = page.getByText('Recent downloads').locator('..');
+  await expect(recentList.getByText('Nilesh Anand')).toBeVisible();
+  await expect(recentList.getByText('Platform usage')).toBeVisible();
 });
 
 test('depth: highlights, rhythm, module drawer, segments, team drawer', async ({ page }) => {

@@ -90,6 +90,10 @@ export default function UserUsageDrawer({
             <div className="text-[1.25rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(row.aiQueries)}</div>
             <div className="text-[0.6875rem] text-ink-500 mt-1">AI queries</div>
           </div>
+          <div>
+            <div className="text-[1.25rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(row.downloads)}</div>
+            <div className="text-[0.6875rem] text-ink-500 mt-1">Downloads</div>
+          </div>
         </div>
         {row.actions > 0 ? (
           <ResponsiveContainer width="100%" height={88}>

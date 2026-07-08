@@ -35,7 +35,8 @@ One page, one range control (7 / 30 / 90 days) that applies to everything below 
 - When people are active: a weekday-by-hour heatmap, single brand hue, darker means more, exact counts on hover.
 - Member table: per-member actions, trend vs prior window, AI queries, top module. Segment chips (Heavy, Regular, Light, No activity, relative to the active mean; empty segments hidden) filter the list; clicking a row opens the member drawer (trend, module mix, session events, segment, link to Admin). "No activity" is scoped to the selected range and is deliberately distinct from the Members card's "No sign-in 30+ days" bucket.
 - Teams lens: the same table aggregated by team; clicking a team opens its drawer with members ranked by activity.
-- Export CSV: downloads exactly the filtered table including trend and segment, writes an audit event, gated by `ad_usage_export`.
+- Exports and downloads: total files pulled out of the platform with a prior-period comparison, a format split (PDF, CSV, XLSX, DOCX), a recent-downloads feed (who downloaded what, when; real session exports appear on top immediately), and top downloaders. The member table and drawer carry a per-member Downloads count.
+- Export CSV: downloads exactly the filtered table including trend, downloads, and segment, writes an audit event, gated by `ad_usage_export`.
 - Live events: anything done in the current session folds into today's numbers immediately.
 
 Non-goals: backend telemetry, billing, impersonation, or any people-management action inside this view.
@@ -94,6 +95,10 @@ All formulas live in `src/data/platform-usage.ts`. The demo series is determinis
 | Adoption funnel | Seats = all users; Signed in ever = last login is not "Never"; Active this period = window predicate; Used AI = active with at least one AI query. Each stage rendered as a share of seats |
 | Compare overlay | previous window's daily actions aligned position-for-position under the current window (day 1 vs day 1) |
 | Spike detection | days with actions above mean + 2 standard deviations of the window; ratio = day / mean, driver = the day's largest module bucket |
+| Downloads per day | actions x (6% to 12%), plus one for every real Export audit event today |
+| Downloads per member | member actions x (5% to 15% per-member ratio), plus their real Export events |
+| Format split | PDF 38%, CSV 27%, XLSX 22%, DOCX 13% of the window total, largest-remainder so it sums exactly |
+| Recent downloads | real session Export events first (artifact and format parsed from the audit description), then a deterministic seeded history assigned to the most-active downloaders |
 | Concentration | sum of the top 3 members' actions / all members' actions x 100; null when nobody did anything |
 | Next steps | shown when: pending invites > 0; no-sign-in-30d members > 0; concentration >= 60%; AI adoption < 50% with at least one active member. Top 3 by that order |
 
