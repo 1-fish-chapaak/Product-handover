@@ -405,6 +405,34 @@ export function aiAdoptionPct(rows: UserUsageRow[]): number {
   return Math.round((active.filter(r => r.aiQueries > 0).length / active.length) * 100);
 }
 
+/** Statistical outlier days: actions above mean + 2 standard deviations.
+ *  Each spike carries how many times "typical" it ran and which module drove
+ *  it — the passive anomaly-detection layer of the page. */
+export interface UsageSpike {
+  dayOffset: number;
+  actions: number;
+  /** Multiple of the window's mean day (e.g. 2.1). */
+  ratio: number;
+  topModule: UsageModule;
+}
+
+export function usageSpikes(days: UsageDay[]): UsageSpike[] {
+  if (days.length < 7) return [];
+  const mean = days.reduce((s, d) => s + d.actions, 0) / days.length;
+  if (mean <= 0) return [];
+  const variance = days.reduce((s, d) => s + (d.actions - mean) ** 2, 0) / days.length;
+  const threshold = mean + 2 * Math.sqrt(variance);
+  return days
+    .filter(d => d.actions > threshold)
+    .map(d => ({
+      dayOffset: d.dayOffset,
+      actions: d.actions,
+      ratio: Math.round((d.actions / mean) * 10) / 10,
+      topModule: USAGE_MODULES.reduce((best, m) => (d.byModule[m] > d.byModule[best] ? m : best), USAGE_MODULES[0]),
+    }))
+    .sort((a, b) => b.actions - a.actions);
+}
+
 /** How concentrated usage is: the share of all member activity that the top N
  *  members account for (0-100). High = the platform depends on a few people.
  *  Null when nobody did anything. */

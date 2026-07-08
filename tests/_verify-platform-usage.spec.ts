@@ -139,6 +139,20 @@ test('depth: highlights, rhythm, module drawer, segments, team drawer', async ({
   await expect(page.getByText('Seats used this period.')).toBeVisible();
   await expect(page.getByText('What to do next')).toBeVisible();
 
+  // Adoption funnel stages
+  await expect(page.getByText('Signed in ever')).toBeVisible();
+  await expect(page.getByText('Used AI this period')).toBeVisible();
+
+  // Compare-with-previous-period overlay toggles a legend entry
+  await expect(page.getByText('Previous period', { exact: true })).not.toBeVisible();
+  await page.getByRole('button', { name: 'Compare' }).click();
+  await page.waitForTimeout(500);
+  await expect(page.getByText('Previous period', { exact: true })).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/v6-compare.png` });
+  await page.getByRole('button', { name: 'Compare' }).click();
+  await page.waitForTimeout(300);
+  await expect(page.getByText('Previous period', { exact: true })).not.toBeVisible();
+
   // Trend column in the member table
   await expect(page.getByRole('columnheader', { name: 'Trend' }).or(page.locator('th', { hasText: 'Trend' }))).toBeVisible();
 

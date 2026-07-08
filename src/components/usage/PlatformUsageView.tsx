@@ -17,7 +17,8 @@ import {
   Zap, UserMinus, ArrowRight, CalendarClock, ListChecks, ChevronRight, type LucideIcon,
 } from 'lucide-react';
 import {
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, AreaChart, ComposedChart, Area, Line, XAxis, YAxis,
+  CartesianGrid, Tooltip, ReferenceDot,
 } from 'recharts';
 import { useAdminData, useAuditLog, type AdminUser } from '../../context/AdminDataContext';
 import { useCurrentUser } from '../../context/CurrentUserContext';
@@ -27,7 +28,7 @@ import {
   USAGE_MODULES, usageDaysWithLive, userUsageRows, usageDayLabel,
   usageWindowTotals, usageDeltaPct, seatBuckets, lastLoginOffsetDays,
   segmentFor, activeMeanActions, aiAdoptionPct, usageHourlyMatrix,
-  activityConcentration, ENGAGEMENT_SEGMENTS, SEGMENT_LABELS,
+  activityConcentration, usageSpikes, ENGAGEMENT_SEGMENTS, SEGMENT_LABELS,
   type UsageModule, type UserUsageRow, type EngagementSegment,
 } from '../../data/platform-usage';
 import SmartTable, { type Column } from '../shared/SmartTable';
@@ -290,6 +291,7 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
   const { addToast } = useToast();
 
   const [range, setRange] = useState<RangeDays>(30);
+  const [compareOn, setCompareOn] = useState(false);
   const [lens, setLensState] = useState<Lens>('users');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string[]>([]);
@@ -343,13 +345,20 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
     { key: 'reports', label: 'Reports', value: fmt(totals.reports), icon: FileBarChart, hint: 'Reports generated in this period', deltaPct: usageDeltaPct(totals.reports, priorTotals.reports), trend: bucketize(days.map(d => d.reports)) },
   ];
 
-  // Chart data — oldest → today; thin the axis labels so long ranges stay legible.
-  const chartData = days.map(d => ({
+  // Chart data — oldest → today; thin the axis labels so long ranges stay
+  // legible. `prior` aligns the previous window position-by-position for the
+  // compare overlay (day 1 of this window vs day 1 of the previous one).
+  const chartData = days.map((d, i) => ({
     label: usageDayLabel(d.dayOffset),
     actions: d.actions,
     aiQueries: d.aiQueries,
+    prior: priorDays[i]?.actions ?? null,
   }));
   const tickInterval = range === 7 ? 0 : range === 30 ? 4 : 13;
+
+  // Anomaly detection — days above mean + 2 standard deviations.
+  const spikes = useMemo(() => usageSpikes(days), [days]);
+  const biggestSpike = spikes[0];
 
   // Module breakdown across the slice, ranked, with prior-window deltas.
   const moduleTotals = useMemo(() => {
@@ -370,8 +379,15 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
   const concentration = useMemo(() => activityConcentration(rawRows), [rawRows]);
 
   const seats = useMemo(() => seatBuckets(users, range), [users, range]);
-  const seatUtilPct = seats.total > 0 ? Math.round((seats.activeInRange.length / seats.total) * 100) : 0;
   const heatmap = useMemo(() => usageHourlyMatrix(days), [days]);
+
+  // Adoption funnel — every stage a fraction of total seats.
+  const funnel = useMemo(() => [
+    { label: 'Seats', count: seats.total },
+    { label: 'Signed in ever', count: users.filter(u => u.lastLogin !== 'Never').length },
+    { label: 'Active this period', count: seats.activeInRange.length },
+    { label: 'Used AI this period', count: rawRows.filter(r => r.actions > 0 && r.aiQueries > 0).length },
+  ], [seats, users, rawRows]);
 
   // What to do next — the business "so what": each finding links to where you
   // act on it. Read-only here, actions live in Admin (or Ask IRA).
@@ -637,15 +653,21 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
               subtitle="How much happened each day"
               className="lg:col-span-2"
               right={
-                <div className="flex items-center gap-4 text-[0.6875rem] text-ink-500 shrink-0">
+                <div className="flex items-center gap-3 text-[0.6875rem] text-ink-500 shrink-0">
                   <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#6A12CD' }} />All actions</span>
                   <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#A366F0' }} />AI queries</span>
+                  {compareOn && (
+                    <span className="inline-flex items-center gap-1.5"><span className="w-3 border-t-2 border-dashed" style={{ borderColor: '#B0A3C7' }} />Previous period</span>
+                  )}
+                  <button className={presetChip(compareOn)} onClick={() => setCompareOn(c => !c)} aria-pressed={compareOn}>
+                    Compare
+                  </button>
                 </div>
               }
             >
               <div>
-                <ResponsiveContainer width="100%" height={330}>
-                  <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -8, bottom: 0 }}>
+                <ResponsiveContainer width="100%" height={310}>
+                  <ComposedChart data={chartData} margin={{ top: 4, right: 4, left: -8, bottom: 0 }}>
                     <defs>
                       <linearGradient id="usageActions" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#6A12CD" stopOpacity={0.22} />
@@ -662,8 +684,28 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
                     <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} cursor={{ stroke: 'rgba(106,18,205,0.25)' }} />
                     <Area type="monotone" dataKey="actions" name="Actions" stroke="#6A12CD" strokeWidth={2} fill="url(#usageActions)" />
                     <Area type="monotone" dataKey="aiQueries" name="AI queries" stroke="#A366F0" strokeWidth={1.5} fill="url(#usageAi)" />
-                  </AreaChart>
+                    {compareOn && (
+                      <Line type="monotone" dataKey="prior" name="Previous period" stroke="#B0A3C7" strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
+                    )}
+                    {spikes.map(s => (
+                      <ReferenceDot
+                        key={s.dayOffset}
+                        x={usageDayLabel(s.dayOffset)}
+                        y={s.actions}
+                        r={3.5}
+                        fill="#3D0A75"
+                        stroke="#FFFFFF"
+                        strokeWidth={1.5}
+                      />
+                    ))}
+                  </ComposedChart>
                 </ResponsiveContainer>
+                {biggestSpike && (
+                  <p className="mt-2 text-[0.6875rem] text-ink-500">
+                    <span className="inline-block w-2 h-2 rounded-full align-middle mr-1.5" style={{ backgroundColor: '#3D0A75' }} />
+                    Unusual spike on <span className="font-semibold text-ink-700">{usageDayLabel(biggestSpike.dayOffset)}</span>: {biggestSpike.ratio}x a typical day, mostly <span className="font-semibold text-ink-700">{biggestSpike.topModule}</span>.
+                  </p>
+                )}
               </div>
             </WidgetCard>
 
@@ -765,19 +807,31 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
               right={<CardLink onClick={() => setView('admin-users')}>Manage in Admin →</CardLink>}
               bodyClassName="p-5 flex flex-col"
             >
+              {/* Adoption funnel — seats → joined → active → using AI. Each
+                  stage is a fraction of total seats, so drop-offs read at a
+                  glance. Utilization is the "Active this period" stage. */}
               <div className="mb-4">
-                <div className="text-[0.6875rem] text-ink-400 mb-1.5">Seats used this period.</div>
-                <div className="flex items-baseline justify-between mb-1.5">
-                  <span className="text-[1.125rem] font-bold text-ink-900 tabular-nums leading-none">{seats.activeInRange.length} of {seats.total}</span>
-                  <span className="text-[0.75rem] text-ink-500 tabular-nums">{seatUtilPct}%</span>
-                </div>
-                <div className="h-1.5 rounded-full bg-brand-50 overflow-hidden">
-                  <motion.div
-                    className="h-full rounded-full bg-brand-500"
-                    initial={prefersReduced ? false : { width: 0 }}
-                    animate={{ width: `${Math.max(2, seatUtilPct)}%` }}
-                    transition={{ duration: prefersReduced ? 0 : 0.5, ease: [0.22, 1, 0.36, 1] }}
-                  />
+                <div className="text-[0.6875rem] text-ink-400 mb-2">Seats used this period.</div>
+                <div className="space-y-2">
+                  {funnel.map((stage, i) => {
+                    const pct = seats.total > 0 ? Math.round((stage.count / seats.total) * 100) : 0;
+                    return (
+                      <div key={stage.label}>
+                        <div className="flex items-baseline justify-between mb-0.5">
+                          <span className="text-[0.6875rem] text-ink-600">{stage.label}</span>
+                          <span className="text-[0.6875rem] text-ink-500 tabular-nums"><span className="font-semibold text-ink-900">{stage.count}</span> · {pct}%</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-brand-50 overflow-hidden">
+                          <motion.div
+                            className={`h-full rounded-full ${i === funnel.length - 1 ? 'bg-brand-600' : 'bg-brand-400'}`}
+                            initial={prefersReduced ? false : { width: 0 }}
+                            animate={{ width: `${Math.max(2, pct)}%` }}
+                            transition={{ duration: prefersReduced ? 0 : 0.5, delay: i * 0.06, ease: [0.22, 1, 0.36, 1] }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
               <div className="space-y-3 flex-1">
