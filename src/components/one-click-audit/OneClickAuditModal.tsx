@@ -18,6 +18,7 @@ import {
 import FloatingLinesGL from '../shared/FloatingLinesGL';
 import { TextShimmer } from '../shared/TextShimmer';
 import Toggle from '../shared/Toggle';
+import { useToast } from '../shared/Toast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { SEED } from '../data-sources/sources';
 import {
@@ -158,7 +159,10 @@ export default function OneClickAuditModal({ onClose }: { onClose: () => void })
   const [activeEngId, setActiveEngId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(containerRef, true, onClose);
+  // Esc routes through handleClose (defined below, after the state it needs);
+  // the ref indirection keeps the trap wired to the latest closure.
+  const closeRef = useRef<() => void>(onClose);
+  useFocusTrap(containerRef, true, () => closeRef.current());
 
   const dbSources = useMemo(() => SEED.filter(s => s.type === 'database'), []);
   // Totals the loader counts up to — read once from the same seed the plan uses.
@@ -316,11 +320,29 @@ export default function OneClickAuditModal({ onClose }: { onClose: () => void })
   }, [step]);
 
   const liveDone = step === 'live' && liveIdx >= selectedEngs.length;
+  const { addToast } = useToast();
 
   const goToEngagements = () => {
     window.dispatchEvent(new CustomEvent('app:navigate-view', { detail: { view: 'engagements' } }));
     onClose();
   };
+
+  /** Close after go-live (Done / X / Esc / backdrop) — leave a success toast
+   *  with a redirect action so "they're live" survives the modal closing. */
+  const handleClose = () => {
+    if (step === 'live' && liveDone) {
+      addToast({
+        message: `${selectedEngs.length} AI-recommended engagement${selectedEngs.length !== 1 ? 's are' : ' is'} live in your Engagement Library`,
+        type: 'success',
+        action: {
+          label: 'View in Engagements',
+          onClick: () => window.dispatchEvent(new CustomEvent('app:navigate-view', { detail: { view: 'engagements' } })),
+        },
+      });
+    }
+    onClose();
+  };
+  closeRef.current = handleClose;
 
   /* ── step rail ── */
   const RAIL: { id: Step; label: string }[] = [
@@ -369,7 +391,7 @@ export default function OneClickAuditModal({ onClose }: { onClose: () => void })
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
         className="fixed inset-0 z-[70] bg-ink-900/40 backdrop-blur-[3px]"
-        onClick={step === 'live' && !liveDone ? undefined : onClose}
+        onClick={step === 'live' && !liveDone ? undefined : handleClose}
       />
       <motion.div
         initial={{ opacity: 0, y: 18, scale: 0.985 }}
@@ -434,7 +456,7 @@ export default function OneClickAuditModal({ onClose }: { onClose: () => void })
 
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               aria-label="Close"
               className="size-8 rounded-lg text-ink-400 hover:text-ink-800 hover:bg-ink-500/10 flex items-center justify-center cursor-pointer shrink-0 transition-colors"
             >
@@ -1060,22 +1082,46 @@ export default function OneClickAuditModal({ onClose }: { onClose: () => void })
                           <Check size={30} className="text-white" strokeWidth={3} />
                         </div>
                       </div>
-                      <h3 className="font-display text-[1.875rem] text-ink-900 mb-2">Your AI audit universe is live</h3>
-                      <p className="text-[0.875rem] text-ink-500 max-w-md leading-relaxed mb-7">
-                        {selectedEngs.length} engagements, {countSelected('controls')} controls and {countSelected('workflows')} monitoring
-                        workflows are now in your Engagement Library — each tagged <span className="text-brand-700 font-semibold">AI Recommended</span>.
+                      <h3 className="font-display text-[1.875rem] text-ink-900 mb-2">Your engagements are live</h3>
+                      <p className="text-[0.875rem] text-ink-500 max-w-md leading-relaxed mb-5">
+                        {countSelected('controls')} controls and {countSelected('workflows')} monitoring workflows are now
+                        in your Engagement Library — each tagged <span className="text-brand-700 font-semibold">AI Recommended</span>.
                       </p>
+
+                      {/* the engagements that just went live */}
+                      <div className="w-full max-w-md space-y-2 mb-7 text-left">
+                        {selectedEngs.map((eng, i) => (
+                          <motion.div
+                            key={eng.id}
+                            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.15 + i * 0.08 }}
+                            className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white border border-emerald-200 shadow-[0_1px_2px_rgba(15,8,30,0.03)]"
+                          >
+                            <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                            <span className="text-[0.8125rem] font-semibold text-ink-800 truncate flex-1">{eng.name}</span>
+                            <span className="font-mono text-[0.625rem] text-ink-400 shrink-0">{eng.code}</span>
+                            <span className="inline-flex items-center gap-1 px-2 h-[18px] rounded-full bg-emerald-50 text-emerald-700 text-[0.625rem] font-bold shrink-0">
+                              <span className="relative flex size-1.5">
+                                <span className="animate-ping absolute inline-flex size-full rounded-full bg-emerald-500 opacity-50" />
+                                <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+                              </span>
+                              Live
+                            </span>
+                          </motion.div>
+                        ))}
+                      </div>
+
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
                           onClick={goToEngagements}
                           className="h-11 px-6 rounded-xl bg-gradient-to-r from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white text-[0.875rem] font-semibold flex items-center gap-2 cursor-pointer transition-all shadow-[0_8px_24px_-8px_rgba(106,18,205,0.55)]"
                         >
-                          View in Engagements <ArrowRight size={15} />
+                          Go to Engagements <ArrowRight size={15} />
                         </button>
                         <button
                           type="button"
-                          onClick={onClose}
+                          onClick={handleClose}
                           className="h-11 px-5 rounded-xl border border-canvas-border bg-white text-ink-600 hover:text-ink-900 hover:bg-canvas text-[0.875rem] font-semibold cursor-pointer transition-colors"
                         >
                           Done
