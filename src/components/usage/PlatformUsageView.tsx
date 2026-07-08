@@ -14,7 +14,7 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Users, User, Activity, Sparkles, FileBarChart, BarChart3, Download,
-  Zap, UserMinus, ArrowRight, type LucideIcon,
+  Zap, UserMinus, ArrowRight, CalendarClock, ListChecks, type LucideIcon,
 } from 'lucide-react';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -156,10 +156,53 @@ const teamColumns: Column<TeamUsageRow>[] = [
   },
 ];
 
-const CARD = 'rounded-xl border border-canvas-border bg-canvas-elevated';
+/* Home's widget-card surface: hairline border + the soft double shadow. */
+const CARD = 'rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)]';
 
 /** Full day names (JS getDay() order) for the busiest-day sentence. */
 const FULL_DAYS = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+
+/** Compress a daily series into at most `buckets` bars (sums), oldest → newest. */
+function bucketize(values: number[], buckets = 12): number[] {
+  if (values.length <= buckets) return values;
+  const size = values.length / buckets;
+  return Array.from({ length: buckets }, (_, i) =>
+    values.slice(Math.floor(i * size), Math.floor((i + 1) * size)).reduce((s, v) => s + v, 0));
+}
+
+/* ── Home's list-widget shell: icon header strip + optional right action ── */
+function WidgetCard({ icon: Icon, title, subtitle, right, className = '', bodyClassName = 'p-5', children }: {
+  icon: LucideIcon;
+  title: string;
+  subtitle?: string;
+  right?: React.ReactNode;
+  className?: string;
+  bodyClassName?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`${CARD} overflow-hidden flex flex-col ${className}`}>
+      <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon size={14} className="text-ink-500 shrink-0" strokeWidth={1.75} />
+          <h3 className="text-[0.75rem] font-semibold text-ink-900 truncate">{title}</h3>
+          {subtitle && <span className="hidden md:inline text-[0.6875rem] text-ink-400 truncate">· {subtitle}</span>}
+        </div>
+        {right}
+      </div>
+      <div className={`flex-1 ${bodyClassName}`}>{children}</div>
+    </div>
+  );
+}
+
+/** The header-strip action link, Home's "View all →" style. */
+function CardLink({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} className="text-xs font-medium text-ink-500 hover:text-brand-700 transition-colors cursor-pointer shrink-0">
+      {children}
+    </button>
+  );
+}
 
 /* ── Users | Teams lens toggle — the platform's sliding-pill segmented
       switch (mirrors Admin's MembersSwitch, own layoutId). ── */
@@ -291,10 +334,10 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
     })), [rawRows, priorByEmail, activeMean]);
 
   const stats: UsageStat[] = [
-    { key: 'active', label: 'Active users', value: totals.activeUsers, icon: Users, hint: 'Members who did at least one thing in this period', deltaPct: usageDeltaPct(totals.activeUsers, priorTotals.activeUsers) },
-    { key: 'actions', label: 'Actions', value: fmt(totals.actions), icon: Activity, hint: 'Everything done on the platform in this period', deltaPct: usageDeltaPct(totals.actions, priorTotals.actions) },
-    { key: 'ai', label: 'AI queries', value: fmt(totals.aiQueries), icon: Sparkles, hint: 'Questions asked to Ask IRA and the AI tools', deltaPct: usageDeltaPct(totals.aiQueries, priorTotals.aiQueries) },
-    { key: 'reports', label: 'Reports', value: fmt(totals.reports), icon: FileBarChart, hint: 'Reports generated in this period', deltaPct: usageDeltaPct(totals.reports, priorTotals.reports) },
+    { key: 'active', label: 'Active users', value: totals.activeUsers, icon: Users, hint: 'Members who did at least one thing in this period', deltaPct: usageDeltaPct(totals.activeUsers, priorTotals.activeUsers), trend: bucketize(days.map(d => d.activeUsers)) },
+    { key: 'actions', label: 'Actions', value: fmt(totals.actions), icon: Activity, hint: 'Everything done on the platform in this period', deltaPct: usageDeltaPct(totals.actions, priorTotals.actions), trend: bucketize(days.map(d => d.actions)) },
+    { key: 'ai', label: 'AI queries', value: fmt(totals.aiQueries), icon: Sparkles, hint: 'Questions asked to Ask IRA and the AI tools', deltaPct: usageDeltaPct(totals.aiQueries, priorTotals.aiQueries), trend: bucketize(days.map(d => d.aiQueries)) },
+    { key: 'reports', label: 'Reports', value: fmt(totals.reports), icon: FileBarChart, hint: 'Reports generated in this period', deltaPct: usageDeltaPct(totals.reports, priorTotals.reports), trend: bucketize(days.map(d => d.reports)) },
   ];
 
   // Chart data — oldest → today; thin the axis labels so long ranges stay legible.
@@ -585,17 +628,18 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
 
           {/* Usage over time + module breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
-            <div className={`${CARD} lg:col-span-2 p-5`}>
-              <div className="mb-4 flex items-start justify-between gap-4 flex-wrap">
-                <div>
-                  <div className="text-[0.875rem] font-semibold text-ink-900">Daily activity</div>
-                  <div className="text-[0.75rem] text-ink-500 mt-0.5">How much happened each day.</div>
-                </div>
-                <div className="flex items-center gap-4 text-[0.6875rem] text-ink-500">
+            <WidgetCard
+              icon={Activity}
+              title="Daily activity"
+              subtitle="How much happened each day"
+              className="lg:col-span-2"
+              right={
+                <div className="flex items-center gap-4 text-[0.6875rem] text-ink-500 shrink-0">
                   <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#6A12CD' }} />All actions</span>
                   <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#A366F0' }} />AI queries</span>
                 </div>
-              </div>
+              }
+            >
               <div>
                 <ResponsiveContainer width="100%" height={240}>
                   <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -8, bottom: 0 }}>
@@ -618,13 +662,9 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
-            </div>
+            </WidgetCard>
 
-            <div className={`${CARD} p-5`}>
-              <div className="mb-4">
-                <div className="text-[0.875rem] font-semibold text-ink-900">Most-used areas</div>
-                <div className="text-[0.75rem] text-ink-500 mt-0.5">Share of all activity. Click one for details.</div>
-              </div>
+            <WidgetCard icon={BarChart3} title="Most-used areas" subtitle="Click one for details">
               <div className="space-y-1">
                 {moduleTotals.map(({ module, count }) => {
                   const share = totals.actions > 0 ? Math.round((count / totals.actions) * 100) : 0;
@@ -650,16 +690,20 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
                   );
                 })}
               </div>
-            </div>
+            </WidgetCard>
           </div>
 
           {/* AI usage + Seats & lifecycle */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
-            <div className={`${CARD} lg:col-span-2 p-5`}>
+            <WidgetCard
+              icon={Sparkles}
+              title="AI usage"
+              subtitle="How much the team uses Ask IRA and the AI tools"
+              className="lg:col-span-2"
+              right={<CardLink onClick={() => setView('chat')}>Open Ask IRA →</CardLink>}
+            >
               <div className="flex flex-wrap items-start gap-6">
                 <div className="min-w-[240px]">
-                  <div className="text-[0.875rem] font-semibold text-ink-900">AI usage</div>
-                  <div className="text-[0.75rem] text-ink-500 mt-0.5 mb-4">How much the team uses Ask IRA and the AI tools.</div>
                   <div className="flex items-center gap-6">
                     <div>
                       <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(totals.aiQueries)}</div>
@@ -707,14 +751,16 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
                   </div>
                 )}
               </div>
-            </div>
+            </WidgetCard>
 
-            <div className={`${CARD} p-5 flex flex-col`}>
+            <WidgetCard
+              icon={Users}
+              title="Members"
+              right={<CardLink onClick={() => setView('admin-users')}>Manage in Admin →</CardLink>}
+              bodyClassName="p-5 flex flex-col"
+            >
               <div className="mb-4">
-                <div className="text-[0.875rem] font-semibold text-ink-900">Members</div>
-                <div className="text-[0.75rem] text-ink-500 mt-0.5">Seats used this period.</div>
-              </div>
-              <div className="mb-4">
+                <div className="text-[0.6875rem] text-ink-400 mb-1.5">Seats used this period.</div>
                 <div className="flex items-baseline justify-between mb-1.5">
                   <span className="text-[1.125rem] font-bold text-ink-900 tabular-nums leading-none">{seats.activeInRange.length} of {seats.total}</span>
                   <span className="text-[0.75rem] text-ink-500 tabular-nums">{seatUtilPct}%</span>
@@ -734,30 +780,26 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
                 <SeatRow label="Invited, not joined yet" people={seats.invited} />
                 <SeatRow label="Suspended or inactive" people={seats.suspendedOrInactive} />
               </div>
-              <button
-                onClick={() => setView('admin-users')}
-                className="mt-4 self-start text-[0.75rem] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
-              >
-                Manage in Admin →
-              </button>
-            </div>
+            </WidgetCard>
           </div>
 
           {/* When people are active + What to do next */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
-            <div className={`${CARD} lg:col-span-2 p-5`}>
-              <div className="mb-4">
-                <div className="text-[0.875rem] font-semibold text-ink-900">When people are active</div>
-                <div className="text-[0.75rem] text-ink-500 mt-0.5">By weekday and hour. Darker means more activity. Busiest: {FULL_DAYS[highlights.busiestDow]} around {String(highlights.peakHour).padStart(2, '0')}:00.</div>
-              </div>
+            <WidgetCard
+              icon={CalendarClock}
+              title="When people are active"
+              subtitle="Darker means more activity"
+              className="lg:col-span-2"
+              right={
+                <span className="hidden lg:inline text-xs text-ink-500 shrink-0">
+                  Busiest: <span className="font-semibold text-ink-700">{FULL_DAYS[highlights.busiestDow]}</span> around <span className="font-semibold text-ink-700 tabular-nums">{String(highlights.peakHour).padStart(2, '0')}:00</span>
+                </span>
+              }
+            >
               <UsageHeatmap data={heatmap} />
-            </div>
+            </WidgetCard>
 
-            <div className={`${CARD} p-5`}>
-              <div className="mb-4">
-                <div className="text-[0.875rem] font-semibold text-ink-900">What to do next</div>
-                <div className="text-[0.75rem] text-ink-500 mt-0.5">Based on this period's numbers.</div>
-              </div>
+            <WidgetCard icon={ListChecks} title="What to do next" subtitle="Based on this period's numbers">
               {nextSteps.length > 0 ? (
                 <div className="space-y-4">
                   {nextSteps.map(step => (
@@ -776,7 +818,7 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
               ) : (
                 <p className="text-[0.8125rem] text-ink-400">Nothing needs attention right now.</p>
               )}
-            </div>
+            </WidgetCard>
           </div>
 
           {/* Lens switch + engagement segments */}
