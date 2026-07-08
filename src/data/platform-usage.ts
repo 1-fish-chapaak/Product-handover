@@ -405,6 +405,17 @@ export function aiAdoptionPct(rows: UserUsageRow[]): number {
   return Math.round((active.filter(r => r.aiQueries > 0).length / active.length) * 100);
 }
 
+/** How concentrated usage is: the share of all member activity that the top N
+ *  members account for (0-100). High = the platform depends on a few people.
+ *  Null when nobody did anything. */
+export function activityConcentration(rows: UserUsageRow[], topN = 3): number | null {
+  const total = rows.reduce((s, r) => s + r.actions, 0);
+  if (total === 0) return null;
+  const top = [...rows].sort((a, b) => b.actions - a.actions).slice(0, topN)
+    .reduce((s, r) => s + r.actions, 0);
+  return Math.round((top / total) * 100);
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
  * Activity rhythm — weekday x hour heatmap
  * ────────────────────────────────────────────────────────────────────────── */

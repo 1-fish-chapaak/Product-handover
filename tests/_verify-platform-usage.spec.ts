@@ -132,7 +132,12 @@ test('depth: highlights, rhythm, module drawer, segments, team drawer', async ({
   // Highlights strip + activity rhythm heatmap
   await expect(page.getByText('Highlights')).toBeVisible();
   await expect(page.getByText(/of active members used AI in this range/)).toBeVisible();
+  await expect(page.getByText(/Top 3 members account for/)).toBeVisible();
   await expect(page.getByText('When people are active')).toBeVisible();
+
+  // Business framing: seat utilization + next steps
+  await expect(page.getByText('Seats used this period.')).toBeVisible();
+  await expect(page.getByText('What to do next')).toBeVisible();
 
   // Trend column in the member table
   await expect(page.getByRole('columnheader', { name: 'Trend' }).or(page.locator('th', { hasText: 'Trend' }))).toBeVisible();

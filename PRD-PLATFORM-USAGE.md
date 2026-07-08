@@ -15,6 +15,8 @@ Admins can see who exists (Admin > Users) and what happened (Audit Log), but not
 
 ## How it should work
 
+The page answers three business questions in order: are we paying for seats nobody uses, is adoption broad or carried by a few people, and what should the admin do about it. Everything else supports those.
+
 One page, one range control (7 / 30 / 90 days) that applies to everything below it.
 
 | Metric | Definition | Comparison |
@@ -24,11 +26,12 @@ One page, one range control (7 / 30 / 90 days) that applies to everything below 
 | AI queries | Ask IRA and Concierge events | vs previous equal window |
 | Reports | Reports generated in the range | vs previous equal window |
 
-- Highlights: four derived findings, phrased as sentences: fastest-growing area, AI adoption rate, members without a recent sign-in, busiest day and peak hour.
+- Highlights: four derived findings, phrased as sentences: fastest-growing area, AI adoption rate, members without a recent sign-in, and activity concentration (share of activity from the top 3 members, the key-person and shallow-adoption signal).
+- What to do next: up to three derived recommendations (pending invites, idle seats, shallow adoption, underused AI), each linking to where the action lives (Admin or Ask IRA). Never invents costs or data; when nothing qualifies it says so.
 - Daily activity: actions per day with AI queries shown inside the total, with a legend.
 - Most-used areas: ranked share of activity; clicking an area opens its drill-down (trend, delta, share, top members).
 - AI usage: questions asked, chats started, AI-assisted reports, share of members using AI, top three AI users.
-- Members (seats): total seats, active this period, no sign-in for 30+ days, invited but not joined, suspended or inactive. Counts plus faces, no actions, one link to Administration.
+- Members (seats): a seat-utilization headline ("7 of 12, 58%") over the buckets: active this period, no sign-in for 30+ days, invited but not joined, suspended or inactive. Counts plus faces, no actions, one link to Administration.
 - When people are active: a weekday-by-hour heatmap, single brand hue, darker means more, exact counts on hover.
 - Member table: per-member actions, trend vs prior window, AI queries, top module. Segment chips (Heavy, Regular, Light, No activity, relative to the active mean; empty segments hidden) filter the list; clicking a row opens the member drawer (trend, module mix, session events, segment, link to Admin). "No activity" is scoped to the selected range and is deliberately distinct from the Members card's "No sign-in 30+ days" bucket.
 - Teams lens: the same table aggregated by team; clicking a team opens its drawer with members ranked by activity.
@@ -87,6 +90,9 @@ All formulas live in `src/data/platform-usage.ts`. The demo series is determinis
 | AI adoption | round(active members with at least one AI query / active members x 100) |
 | Rhythm heatmap | each day's actions distributed over 24 hours by a working-hours curve (morning and afternoon peaks, lunch dip, quiet nights) with per-day jitter, largest-remainder rounding so the grid sums exactly to the window total, accumulated by weekday |
 | Highlights | fastest-growing module = highest module delta with at least 10 actions; busiest day = largest heatmap row sum; peak hour = largest column sum; the AI and dormant sentences reuse the numbers above |
+| Seat utilization | active members this period / total seats x 100 |
+| Concentration | sum of the top 3 members' actions / all members' actions x 100; null when nobody did anything |
+| Next steps | shown when: pending invites > 0; no-sign-in-30d members > 0; concentration >= 60%; AI adoption < 50% with at least one active member. Top 3 by that order |
 
 ## Appendix B: cold start, from a new user's first day
 

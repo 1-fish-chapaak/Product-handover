@@ -14,7 +14,7 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Users, User, Activity, Sparkles, FileBarChart, BarChart3, Download,
-  Zap, UserMinus, CalendarClock, type LucideIcon,
+  Zap, UserMinus, ArrowRight, type LucideIcon,
 } from 'lucide-react';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -27,7 +27,7 @@ import {
   USAGE_MODULES, usageDaysWithLive, userUsageRows, usageDayLabel,
   usageWindowTotals, usageDeltaPct, seatBuckets, lastLoginOffsetDays,
   segmentFor, activeMeanActions, aiAdoptionPct, usageHourlyMatrix,
-  ENGAGEMENT_SEGMENTS, SEGMENT_LABELS,
+  activityConcentration, ENGAGEMENT_SEGMENTS, SEGMENT_LABELS,
   type UsageModule, type UserUsageRow, type EngagementSegment,
 } from '../../data/platform-usage';
 import SmartTable, { type Column } from '../shared/SmartTable';
@@ -321,9 +321,50 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
 
   const topAiUsers = [...rows].sort((a, b) => b.aiQueries - a.aiQueries).slice(0, 3).filter(r => r.aiQueries > 0);
   const aiAdoption = useMemo(() => aiAdoptionPct(rawRows), [rawRows]);
+  const concentration = useMemo(() => activityConcentration(rawRows), [rawRows]);
 
   const seats = useMemo(() => seatBuckets(users, range), [users, range]);
+  const seatUtilPct = seats.total > 0 ? Math.round((seats.activeInRange.length / seats.total) * 100) : 0;
   const heatmap = useMemo(() => usageHourlyMatrix(days), [days]);
+
+  // What to do next — the business "so what": each finding links to where you
+  // act on it. Read-only here, actions live in Admin (or Ask IRA).
+  const nextSteps = useMemo(() => {
+    const steps: { key: string; text: string; action: string; go: () => void }[] = [];
+    if (seats.invited.length > 0) {
+      steps.push({
+        key: 'invites',
+        text: `${seats.invited.length} invite${seats.invited.length !== 1 ? 's' : ''} still pending — those seats are paid for but unused.`,
+        action: 'Resend or revoke in Admin',
+        go: () => setView('admin-users'),
+      });
+    }
+    if (seats.dormant.length > 0) {
+      steps.push({
+        key: 'dormant',
+        text: `${seats.dormant.length} member${seats.dormant.length !== 1 ? 's' : ''} haven't signed in for 30+ days — check if they still need a seat.`,
+        action: 'Review members in Admin',
+        go: () => setView('admin-users'),
+      });
+    }
+    if (typeof concentration === 'number' && concentration >= 60) {
+      steps.push({
+        key: 'concentration',
+        text: `Top 3 members drive ${concentration}% of all activity — adoption is shallow beyond them.`,
+        action: 'See who needs onboarding',
+        go: () => setView('admin-users'),
+      });
+    }
+    if (aiAdoption < 50 && totals.activeUsers > 0) {
+      steps.push({
+        key: 'ai',
+        text: `Only ${aiAdoption}% of active members use AI — the rest are missing the fastest way to work.`,
+        action: 'Open Ask IRA',
+        go: () => setView('chat'),
+      });
+    }
+    return steps.slice(0, 3);
+  }, [seats, concentration, aiAdoption, totals.activeUsers, setView]);
 
   // Derived highlights — same aggregates the cards render, phrased as findings.
   const highlights = useMemo(() => {
@@ -532,8 +573,12 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
                   <>Everyone has signed in within the last 30 days.</>
                 )}
               </HighlightCard>
-              <HighlightCard icon={CalendarClock}>
-                Busiest: <span className="font-semibold text-ink-900">{FULL_DAYS[highlights.busiestDow]}</span> around <span className="font-semibold text-ink-900 tabular-nums">{String(highlights.peakHour).padStart(2, '0')}:00</span>.
+              <HighlightCard icon={Users}>
+                {typeof concentration === 'number' ? (
+                  <>Top 3 members account for <span className="font-semibold text-ink-900">{concentration}%</span> of all activity.</>
+                ) : (
+                  <>No activity yet in this period.</>
+                )}
               </HighlightCard>
             </div>
           </div>
@@ -667,7 +712,21 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
             <div className={`${CARD} p-5 flex flex-col`}>
               <div className="mb-4">
                 <div className="text-[0.875rem] font-semibold text-ink-900">Members</div>
-                <div className="text-[0.75rem] text-ink-500 mt-0.5">{seats.total} seats in total. View only.</div>
+                <div className="text-[0.75rem] text-ink-500 mt-0.5">Seats used this period.</div>
+              </div>
+              <div className="mb-4">
+                <div className="flex items-baseline justify-between mb-1.5">
+                  <span className="text-[1.125rem] font-bold text-ink-900 tabular-nums leading-none">{seats.activeInRange.length} of {seats.total}</span>
+                  <span className="text-[0.75rem] text-ink-500 tabular-nums">{seatUtilPct}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-brand-50 overflow-hidden">
+                  <motion.div
+                    className="h-full rounded-full bg-brand-500"
+                    initial={prefersReduced ? false : { width: 0 }}
+                    animate={{ width: `${Math.max(2, seatUtilPct)}%` }}
+                    transition={{ duration: prefersReduced ? 0 : 0.5, ease: [0.22, 1, 0.36, 1] }}
+                  />
+                </div>
               </div>
               <div className="space-y-3 flex-1">
                 <SeatRow label="Active this period" people={seats.activeInRange} />
@@ -684,13 +743,40 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
             </div>
           </div>
 
-          {/* When people are active */}
-          <div className={`${CARD} p-5 mb-3`}>
-            <div className="mb-4">
-              <div className="text-[0.875rem] font-semibold text-ink-900">When people are active</div>
-              <div className="text-[0.75rem] text-ink-500 mt-0.5">By weekday and hour. Darker means more activity.</div>
+          {/* When people are active + What to do next */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
+            <div className={`${CARD} lg:col-span-2 p-5`}>
+              <div className="mb-4">
+                <div className="text-[0.875rem] font-semibold text-ink-900">When people are active</div>
+                <div className="text-[0.75rem] text-ink-500 mt-0.5">By weekday and hour. Darker means more activity. Busiest: {FULL_DAYS[highlights.busiestDow]} around {String(highlights.peakHour).padStart(2, '0')}:00.</div>
+              </div>
+              <UsageHeatmap data={heatmap} />
             </div>
-            <UsageHeatmap data={heatmap} />
+
+            <div className={`${CARD} p-5`}>
+              <div className="mb-4">
+                <div className="text-[0.875rem] font-semibold text-ink-900">What to do next</div>
+                <div className="text-[0.75rem] text-ink-500 mt-0.5">Based on this period's numbers.</div>
+              </div>
+              {nextSteps.length > 0 ? (
+                <div className="space-y-4">
+                  {nextSteps.map(step => (
+                    <div key={step.key}>
+                      <p className="text-[0.75rem] text-ink-700 leading-snug">{step.text}</p>
+                      <button
+                        onClick={step.go}
+                        className="mt-1 inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
+                      >
+                        {step.action}
+                        <ArrowRight size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[0.8125rem] text-ink-400">Nothing needs attention right now.</p>
+              )}
+            </div>
           </div>
 
           {/* Lens switch + engagement segments */}
