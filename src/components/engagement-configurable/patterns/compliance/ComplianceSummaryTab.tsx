@@ -11,6 +11,7 @@ import { getOrCreateControlReview } from './complianceReviewData';
 import { getOrCreateControlConclusion, CONCLUSION_DISPLAY, type ConclusionValue } from './complianceConclusionData';
 import { SEVERITY_DISPLAY, type DeficiencySeverity } from './complianceSeverityData';
 import { downloadComplianceSummaryReport } from './complianceExports';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 interface Props {
   engagement: ConfigurableEngagement;
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export default function ComplianceSummaryTab({ engagement, complianceState }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as ComplianceConfig;
   const testItems = complianceState.samplesEvidence.batches.flatMap(b => b.testItems);
   const results = complianceState.attributeTesting.results;
@@ -74,7 +76,7 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
           <h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Engagement Summary</h3>
           <p className="text-[0.75rem] text-text-muted">Roll-up view of compliance control testing status, review progress, and conclusions.</p>
         </div>
-        <button onClick={() => downloadComplianceSummaryReport(engagement, complianceState)}
+        <button onClick={() => { downloadComplianceSummaryReport(engagement, complianceState); logEvent({ action: 'Export', description: `Exported compliance summary report (.xlsx) for "${engagement.name}"`, module: 'Engagements', entity: 'Report' }); }}
           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors shrink-0">
           <Download size={13} />Export Summary Report (.xlsx)
         </button>
@@ -303,7 +305,7 @@ export default function ComplianceSummaryTab({ engagement, complianceState }: Pr
           <h4 className="text-[0.75rem] font-bold text-text mb-1">Compliance Summary Report</h4>
           <p className="text-[0.6875rem] text-gray-500">Excel workbook with KPIs, control rollup, exceptions, and deficiency severity sheets.</p>
         </div>
-        <button onClick={() => downloadComplianceSummaryReport(engagement, complianceState)}
+        <button onClick={() => { downloadComplianceSummaryReport(engagement, complianceState); logEvent({ action: 'Export', description: `Exported compliance summary report (.xlsx) for "${engagement.name}"`, module: 'Engagements', entity: 'Report' }); }}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[0.75rem] font-semibold hover:bg-primary/20 cursor-pointer transition-colors shrink-0">
           <Download size={12} />Download .xlsx
         </button>

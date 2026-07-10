@@ -70,6 +70,9 @@ const ACTION_DOT: Record<string, string> = {
   Delete: 'bg-risk-700',
   Login:  'bg-brand-500',
   Export: 'bg-draft-700',
+  Run:    'bg-evidence-700',
+  Upload: 'bg-evidence-700',
+  Share:  'bg-draft-700',
 };
 const RESULT_DOT: Record<string, string> = {
   Success: 'bg-compliant-700',
@@ -1956,7 +1959,7 @@ function AuditLogSection() {
                 selectIndicator="checkbox"
               />
               <ColumnFilter
-                variant="button" label="Action" options={['Create', 'Update', 'Delete', 'Login', 'Export']} value={actionFilter} onChange={setActionFilter} align="end"
+                variant="button" label="Action" options={['Create', 'Update', 'Delete', 'Run', 'Upload', 'Share', 'Login', 'Export']} value={actionFilter} onChange={setActionFilter} align="end"
                 renderOption={(opt) => (
                   <span className="flex items-center gap-2 min-w-0">
                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ACTION_DOT[opt] ?? 'bg-ink-300'}`} aria-hidden />

@@ -18,6 +18,7 @@ import {
   runAutomatedChecks, deriveAiVerdict,
   type AttributeTestResult, type AttrTestResult, type AttributeTestingState,
 } from './complianceAttributeTestingData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const RESULT_CLS: Record<AttrTestResult, string> = {
   NOT_TESTED: 'bg-gray-100 text-gray-500',
@@ -40,6 +41,7 @@ const nowStamp = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 const pairKey = (tiId: string, attrId: string) => `${tiId}::${attrId}`;
 
 export default function ComplianceAttributeTestingTab({ samplesEvidence, attributeTesting, onUpdateAttributeTesting, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const { currentUser } = useCurrentUser();
   const auditorName = currentUser?.name || 'Auditor';
   const testItems = samplesEvidence.batches.flatMap(b => b.testItems);
@@ -169,6 +171,7 @@ export default function ComplianceAttributeTestingTab({ samplesEvidence, attribu
       .filter(r => r.result === 'NOT_TESTED' && filteredItems.some(ti => ti.id === r.testItemId))
       .map(r => ({ testItemId: r.testItemId, attributeId: r.attributeId }));
     runAiVerdicts(pairs);
+    logEvent({ action: 'Run', description: `Ran AI verdicts on ${pairs.length} mapped attribute${pairs.length === 1 ? '' : 's'}`, module: 'Engagements', entity: 'Test Result' });
   };
 
   const mappedUntested = results.filter(r =>
@@ -181,11 +184,13 @@ export default function ComplianceAttributeTestingTab({ samplesEvidence, attribu
   const handleRunAutomated = () => {
     const updated = runAutomatedChecks(testItems, attributeTesting.results);
     onUpdateAttributeTesting({ ...attributeTesting, results: updated, testingStarted: true });
+    logEvent({ action: 'Run', description: `Ran automated checks on ${testItems.length} test item${testItems.length === 1 ? '' : 's'}`, module: 'Engagements', entity: 'Test Result' });
   };
 
   const handleBulkPassPending = () => {
     const now = nowStamp();
     const filteredTiIds = new Set(filteredItems.map(ti => ti.id));
+    let passedCount = 0;
     onUpdateAttributeTesting({
       ...attributeTesting,
       results: attributeTesting.results.map(r => {
@@ -196,9 +201,11 @@ export default function ComplianceAttributeTestingTab({ samplesEvidence, attribu
         const attr = ctrl?.attributes.find(a => a.id === r.attributeId);
         const wf = attr?.workflowId ? ctrl?.workflows.find(w => w.id === attr.workflowId) : null;
         if (wf && wf.type !== 'Manual') return r;
+        passedCount++;
         return { ...r, result: 'PASS' as const, source: 'MANUAL' as const, testedBy: auditorName, testedAt: now, notes: 'Bulk marked as Pass' };
       }),
     });
+    logEvent({ action: 'Update', description: `Bulk-passed ${passedCount} pending attribute${passedCount === 1 ? '' : 's'}`, module: 'Engagements', entity: 'Test Result' });
   };
 
   return (
@@ -404,6 +411,7 @@ function AttributeDetailPanel({ target, results, evidence, testItems, aiRunning,
   onUpdate: (testItemId: string, attributeId: string, result: AttrTestResult, notes?: string) => void;
   onClose: () => void;
 }) {
+  const logEvent = useAuditLog();
   const ar = results.find(r => r.testItemId === target.testItemId && r.attributeId === target.attributeId);
   const ti = testItems.find(t => t.id === target.testItemId);
   const ctrl = MOCK_COMPLIANCE_CONTROLS.find(c => c.id === ti?.linkedControlId);
@@ -421,12 +429,14 @@ function AttributeDetailPanel({ target, results, evidence, testItems, aiRunning,
 
   const handleMark = (result: AttrTestResult) => {
     onUpdate(target.testItemId, target.attributeId, result, notes);
+    logEvent({ action: 'Update', description: `Recorded ${result === 'NOT_TESTED' ? 'reset' : result} on attribute "${attr.name}" for ${ti.referenceId}`, module: 'Engagements', entity: 'Test Result' });
   };
 
   const handleOverride = () => {
     if (!notes.trim()) return;
     const flipped: AttrTestResult = ar.result === 'PASS' ? 'FAIL' : 'PASS';
     onUpdate(target.testItemId, target.attributeId, flipped, notes);
+    logEvent({ action: 'Update', description: `Overrode AI verdict to ${flipped} on attribute "${attr.name}" for ${ti.referenceId}`, module: 'Engagements', entity: 'Test Result' });
   };
 
   return (

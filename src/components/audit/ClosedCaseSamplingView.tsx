@@ -15,6 +15,7 @@ import {
   AlertTriangle, CheckCircle2, Clock, UserCheck, FilePlus2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { useCan } from '../../context/CurrentUserContext';
 import { ENGAGEMENTS, PROCESS_COLORS } from '../../data/engagements';
 import {
@@ -174,6 +175,7 @@ const SYNTHETIC_RESOLVED: SampleCase[] = (() => {
 
 export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
 
   // Config state
   const [engagementScope, setEngagementScope] = useState<Set<string>>(new Set()); // empty = all
@@ -243,6 +245,7 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
     setDecisions({});
     setDisagreeOpen({});
     addToast({ type: 'success', message: `Drew ${n} random closed case${n === 1 ? '' : 's'} for review.` });
+    logEvent({ action: 'Create', description: `Drew ${n} random closed case${n === 1 ? '' : 's'} for review`, module: 'Exceptions', entity: 'Sample' });
   }
 
   function recordDecision(caseId: string, decision: Decision, extra?: Partial<CaseDecision>) {

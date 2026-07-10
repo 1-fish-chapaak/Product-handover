@@ -16,6 +16,7 @@ import {
   FileSpreadsheet, ChevronDown, Clock, ListFilter, ArrowDownUp,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
 import { ENGAGEMENTS, type Engagement } from '../../data/engagements';
 import {
@@ -551,6 +552,7 @@ interface Props {
 
 export default function CaseManagementWorkspace({ engagementId, onBack, embedded, initialFilters }: Props): JSX.Element {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const eng: Engagement | undefined = useMemo(() => ENGAGEMENTS.find((e) => e.id === engagementId), [engagementId]);
   const allExceptions = useMemo(() => exceptionsForEngagement(engagementId), [engagementId]);
 
@@ -637,10 +639,12 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
     selectedIds.forEach((id) => { u[id] = [primary, ...names.filter((n) => n !== primary)]; });
     setExtraAssignees(u);
     addToast({ message: `Assigned ${names.length} owner${names.length === 1 ? '' : 's'} to ${N} exception${N === 1 ? '' : 's'} · Primary: ${primary}`, type: 'success' });
+    logEvent({ action: 'Update', description: `Assigned ${names.length} owner${names.length === 1 ? '' : 's'} to ${N} exception${N === 1 ? '' : 's'} (primary: ${primary})`, module: 'Exceptions', entity: 'Exception' });
     setOpenBulk(null); clearSelection();
   };
   const applyDue = (label: string) => {
     addToast({ message: `Due date set to ${label} for ${N} exception${N === 1 ? '' : 's'}`, type: 'success' });
+    logEvent({ action: 'Update', description: `Set due date to ${label} for ${N} exception${N === 1 ? '' : 's'}`, module: 'Exceptions', entity: 'Exception' });
     setOpenBulk(null); clearSelection();
   };
   const applyClassify = (cls: Classification, rationale?: string) => {
@@ -648,10 +652,12 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
     selectedIds.forEach((id) => { u[id] = cls; });
     setLocalClassifications(u);
     addToast({ message: `Classified ${N} exception${N === 1 ? '' : 's'} as ${cls}${rationale ? ` · ${rationale.slice(0, 40)}${rationale.length > 40 ? '…' : ''}` : ''}`, type: 'success' });
+    logEvent({ action: 'Update', description: `Classified ${N} exception${N === 1 ? '' : 's'} as ${cls}`, module: 'Exceptions', entity: 'Exception' });
     setOpenBulk(null); clearSelection();
   };
   const applySnooze = (label: string) => {
     addToast({ message: `Snoozed ${N} exception${N === 1 ? '' : 's'} · ${label}`, type: 'info' });
+    logEvent({ action: 'Update', description: `Snoozed ${N} exception${N === 1 ? '' : 's'} (${label})`, module: 'Exceptions', entity: 'Exception' });
     setOpenBulk(null); clearSelection();
   };
   const applyClose = (cls: Classification | null, note: string) => {
@@ -661,10 +667,12 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
     selectedIds.forEach((id) => { cu[id] = cls; su[id] = 'Resolved'; });
     setLocalClassifications(cu); setLocalStatuses(su);
     addToast({ message: `Closed ${N} exception${N === 1 ? '' : 's'}${note ? ` · "${note.slice(0, 30)}${note.length > 30 ? '…' : ''}"` : ''}`, type: 'success' });
+    logEvent({ action: 'Update', description: `Closed ${N} exception${N === 1 ? '' : 's'} as ${cls}`, module: 'Exceptions', entity: 'Exception' });
     setOpenBulk(null); clearSelection();
   };
   const applyReassign = (name: string) => {
     addToast({ message: `Reassigned ${N} exception${N === 1 ? '' : 's'} to ${name}`, type: 'success' });
+    logEvent({ action: 'Update', description: `Reassigned ${N} exception${N === 1 ? '' : 's'} to ${name}`, module: 'Exceptions', entity: 'Exception' });
     setOpenBulk(null); clearSelection();
   };
   const applyComment = (body: string) => {
@@ -674,6 +682,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
   };
   const applyExport = () => {
     addToast({ message: `Exporting ${N} exception${N === 1 ? '' : 's'} as CSV…`, type: 'info' });
+    logEvent({ action: 'Export', description: `Exported ${N} exception${N === 1 ? '' : 's'} as CSV`, module: 'Exceptions', entity: 'Exception' });
     clearSelection();
   };
 
@@ -684,6 +693,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
     setSavedViews((prev) => [...prev, { id: `sv-${Date.now()}`, name, filters }]);
     setShowSaveDialog(false); setSaveName('');
     addToast({ message: `Saved view "${name}"`, type: 'success' });
+    logEvent({ action: 'Create', description: `Saved exception view "${name}"`, module: 'Exceptions', entity: 'View' });
   };
 
   if (!eng) {

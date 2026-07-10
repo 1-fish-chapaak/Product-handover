@@ -7,6 +7,7 @@ import type { JourneyFiles, RunResult, StepSpec } from '../concierge-workflow-bu
 import EditClarificationStage from './EditClarificationStage';
 import EditChatPanel from './EditChatPanel';
 import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
+import { useAuditLog } from '../../context/AdminDataContext';
 import type {
   EditChatMessage,
   EditClarificationStep,
@@ -102,6 +103,7 @@ function resolveWorkflowName(workflowId: string): string | null {
 }
 
 export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props) {
+  const logEvent = useAuditLog();
   const workflowName = resolveWorkflowName(workflowId);
 
   const [phase, setPhase] = useState<'clarify' | 'editor'>('clarify');
@@ -358,7 +360,13 @@ export default function WorkflowEditInChatJourney({ workflowId, onBack }: Props)
 
   const handleSaveEdits = useCallback(() => {
     setEditsSaved(true);
-  }, []);
+    logEvent({
+      action: 'Update',
+      description: workflowName ? `Saved workflow edits to "${workflowName}"` : 'Saved workflow edits',
+      module: 'Workflows',
+      entity: 'Workflow',
+    });
+  }, [logEvent, workflowName]);
 
   if (phase === 'clarify') {
     return (

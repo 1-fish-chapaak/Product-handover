@@ -12,6 +12,7 @@ import {
   Minimize2, Maximize2,
 } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useAuditLog } from '../../context/AdminDataContext';
 import ColumnFilter from '../shared/ColumnFilter';
 import { ReportPill } from './ReportPill';
 import type { Tone } from '../shared/StatusBadge';
@@ -65,6 +66,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
   sources?: PickableQuery[];
 }) {
   const reduce = useReducedMotion();
+  const logEvent = useAuditLog();
   const ease = [0.2, 0, 0, 1] as const;
   const [step, setStep] = useState<1 | 2>(1);
   const [search, setSearch] = useState('');
@@ -150,6 +152,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
   const finishNow = () => {
     if (finishedRef.current || !payloadRef.current) return;
     finishedRef.current = true;
+    logEvent({ action: 'Create', description: `Created report from template "${template.name}"`, module: 'Reports', entity: 'Report' });
     onCreate(payloadRef.current);
   };
 

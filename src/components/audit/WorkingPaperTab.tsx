@@ -5,6 +5,7 @@ import {
   XCircle, AlertTriangle, Clock, User, X, BookText,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
 import type { Engagement } from '../../data/engagements';
 import { racmRowsForProcess, type RACMRow } from '../../data/racm';
@@ -89,6 +90,7 @@ function deriveControlPaper(row: RACMRow, engagement: Engagement, idx: number): 
 
 export default function WorkingPaperTab({ engagement }: Props) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const isIA = engagement.type === 'Internal Audit';
   const title = isIA ? 'Audit Report' : 'Working Paper';
   const titleShort = isIA ? 'Report' : 'Paper';
@@ -117,12 +119,14 @@ export default function WorkingPaperTab({ engagement }: Props) {
   const downloadConsolidated = () => {
     downloadWorkingPaper(engagement, wpControls, wpMeta);
     addToast({ type: 'success', title: 'Working paper exported', message: `Working_Paper_${engagement.code}.xlsx · ${wpControls.length} controls` });
+    logEvent({ action: 'Export', description: `Exported consolidated working paper Working_Paper_${engagement.code}.xlsx covering ${wpControls.length} controls`, module: 'Engagements', entity: 'Working Paper' });
   };
   const downloadOne = (controlId: string) => {
     const c = wpById.get(controlId);
     if (!c) return;
     downloadControlWorkingPaper(engagement, c, wpMeta);
     addToast({ type: 'success', message: `Working_Paper_${controlId}.xlsx downloaded` });
+    logEvent({ action: 'Export', description: `Downloaded working paper Working_Paper_${controlId}.xlsx for control ${controlId}`, module: 'Engagements', entity: 'Working Paper' });
   };
 
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
@@ -199,7 +203,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
           {!reviewSubmitted && (
             <Gated permission="eng_edit" mode="disable" title="You don't have permission to submit for review">
             <button
-              onClick={() => addToast({ message: allTested ? 'Engagement submitted for review' : 'Cannot submit — some controls not tested', type: allTested ? 'success' : 'error' })}
+              onClick={() => { addToast({ message: allTested ? 'Engagement submitted for review' : 'Cannot submit — some controls not tested', type: allTested ? 'success' : 'error' }); if (allTested) logEvent({ action: 'Update', description: `Submitted engagement "${engagement.name}" for review`, module: 'Engagements', entity: 'Engagement' }); }}
               disabled={!allTested}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[0.75rem] font-semibold transition-colors ${
                 allTested
@@ -216,7 +220,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
           {reviewSubmitted && engagement.status !== 'Closed' && (
             <Gated permission="eng_close" mode="disable" title="You don't have permission to sign off">
             <button
-              onClick={() => addToast({ message: 'Engagement signed off', type: 'success' })}
+              onClick={() => { addToast({ message: 'Engagement signed off', type: 'success' }); logEvent({ action: 'Update', description: `Signed off engagement "${engagement.name}"`, module: 'Engagements', entity: 'Engagement' }); }}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-compliant hover:bg-compliant-700 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
             >
               <ShieldCheck size={13} />

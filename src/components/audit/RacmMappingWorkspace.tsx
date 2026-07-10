@@ -6,6 +6,7 @@ import {
   Clock, User, FileText, Eye, Paperclip, FileCheck, XCircle, SlidersHorizontal,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
 import { Button } from '../shared/Button';
 import ListPlaceholder from '../shared/ListPlaceholder';
@@ -218,6 +219,7 @@ const BP_DOTS: Record<string, string> = { P2P: '#6a12cd', O2C: '#0284c7', R2R: '
 
 export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, racmName, racmProcess, isEmpty: isEmptyRacm, inline, hideAttributes, showEditAction }: Props) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [isLoading, setIsLoading] = useState(true);
   const [risks, setRisks] = useState<RiskItem[]>([]);
   const [selectedRiskId, setSelectedRiskId] = useState<string>('');
@@ -280,6 +282,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
     setShowLinkDrawer(false);
     if (racmValidated) setRacmValidated(false);
     addToast({ message: `"${ctrl.name}" mapped to "${selectedRisk.name}"`, type: 'success' });
+    logEvent({ action: 'Update', description: `Mapped control "${ctrl.name}" to risk "${selectedRisk.name}"`, module: 'Governance', entity: 'RACM' });
   };
 
   const handleRemoveControl = (controlId: string) => {
@@ -309,6 +312,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
     })));
     setLinkWorkflowControlId(null);
     addToast({ message: `Workflow "${wf.name}" linked to control (Control Library updated)`, type: 'success' });
+    logEvent({ action: 'Update', description: `Linked workflow "${wf.name}" to control ${controlId}`, module: 'Control Library', entity: 'Control' });
   };
 
   const handleCreateWorkflowForControl = (controlId: string, wf: ControlWorkflow) => {
@@ -329,6 +333,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
     })));
     setCreateWorkflowControlId(null);
     addToast({ message: `Workflow "${wf.name}" created in Control Library and linked`, type: 'success' });
+    logEvent({ action: 'Create', description: `Created workflow "${wf.name}" and linked it to control ${controlId}`, module: 'Workflows', entity: 'Workflow' });
   };
 
   const handleToggleKey = (controlId: string) => {
@@ -374,6 +379,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
     } : r));
     setShowCreateDrawer(false);
     addToast({ message: `"${ctrl.name}" created in Control Library and mapped`, type: 'success' });
+    logEvent({ action: 'Create', description: `Created control "${ctrl.name}" in Control Library and mapped it to risk "${selectedRisk.name}"`, module: 'Control Library', entity: 'Control' });
   };
 
   // Derived state from engine (single source of truth)
@@ -400,6 +406,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
     setRacmValidated(true);
     setShowValidateModal(false);
     addToast({ message: 'RACM validated. Status Active, ready for execution', type: 'success' });
+    logEvent({ action: 'Update', description: `Validated RACM${racmName ? ` "${racmName}"` : ''} — Active`, module: 'Governance', entity: 'RACM' });
   };
 
   // Create new risk and add to RACM
@@ -428,6 +435,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
     setDuplicateRiskWarning(null);
     if (racmValidated) setRacmValidated(false);
     addToast({ message: `Risk created and added to this RACM.`, type: 'success' });
+    logEvent({ action: 'Create', description: `Created risk "${data.name}" and added it to RACM${racmName ? ` "${racmName}"` : ''}`, module: 'Risk Register', entity: 'Risk' });
   };
 
   const addExistingRiskToRacm = (risk: RiskItem) => {
@@ -441,6 +449,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
     setDuplicateRiskWarning(null);
     if (racmValidated) setRacmValidated(false);
     addToast({ message: `Existing risk added to this RACM.`, type: 'success' });
+    logEvent({ action: 'Update', description: `Added existing risk "${risk.name}" to RACM${racmName ? ` "${racmName}"` : ''}`, module: 'Governance', entity: 'RACM' });
   };
 
   // Fallback guard — no RACM context
@@ -824,6 +833,7 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
   hideAttributes?: boolean;
 }) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [gridSearch, setGridSearch] = useState('');
   const [gridFilter, setGridFilter] = useState<'All' | 'Unmapped' | 'Mapped' | 'At Risk' | 'Unvalidated'>('All');
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
@@ -870,6 +880,7 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
     if (editNameValue.trim()) {
       onUpdateRisks(prev => prev.map(r => r.id === riskId ? { ...r, name: editNameValue.trim() } : r));
       addToast({ message: 'Risk name updated', type: 'success' });
+      logEvent({ action: 'Update', description: `Updated risk name to "${editNameValue.trim()}"`, module: 'Risk Register', entity: 'Risk' });
     }
     setEditingNameId(null);
   };
@@ -897,6 +908,7 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
       ...r, controls: [...r.controls, ctrl],
     } : r));
     addToast({ message: `"${ctrl.name}" mapped`, type: 'success' });
+    logEvent({ action: 'Update', description: `Mapped control "${ctrl.name}" to risk ${riskId}`, module: 'Governance', entity: 'RACM' });
   };
 
   // Confirm-remove state: { riskId, controlId } when user clicks X on a control
@@ -922,6 +934,7 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
       ...r, controls: r.controls.map(c => ({ ...c, isKey: true })),
     } : r));
     addToast({ message: `All controls marked as Key for ${selectedIds.size} risk${selectedIds.size !== 1 ? 's' : ''}`, type: 'success' });
+    logEvent({ action: 'Update', description: `Marked all controls as Key for ${selectedIds.size} risk${selectedIds.size !== 1 ? 's' : ''}`, module: 'Governance', entity: 'RACM' });
     setSelectedIds(new Set());
   };
 
@@ -1403,6 +1416,7 @@ function WorkflowReadinessDrawer({ risk, onClose, onLinkWorkflow, onCreateWorkfl
   onUpdateRisks: (updater: (prev: RiskItem[]) => RiskItem[]) => void;
 }) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   // Track which workflow is showing the add-attribute form: "ctrlId::wfId"
   const [addingAttrFor, setAddingAttrFor] = useState<string | null>(null);
   const [attrName, setAttrName] = useState('');
@@ -1430,6 +1444,7 @@ function WorkflowReadinessDrawer({ risk, onClose, onLinkWorkflow, onCreateWorkfl
       } : c),
     } : r));
     addToast({ message: `Attribute "${attrName.trim()}" added to workflow.`, type: 'success' });
+    logEvent({ action: 'Update', description: `Added attribute "${attrName.trim()}" to a workflow on control ${ctrlId}`, module: 'Control Library', entity: 'Control' });
     resetAttrForm();
   };
 

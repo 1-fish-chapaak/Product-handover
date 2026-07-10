@@ -9,6 +9,7 @@ import { Pill } from '../shared/StatusBadge';
 import { NatureChip, Tickmark } from './parts';
 import BulkTestModal from './BulkTestModal';
 import { cn } from '../../lib/cn';
+import { useAuditLog } from '../../context/AdminDataContext';
 import type { Control } from './types';
 
 const BINDINGS = ['#6A12CD', '#0369A1', '#550FA5', '#075985', '#8838DE', '#0284C7', '#3B0B72', '#1E3A5F'];
@@ -43,6 +44,7 @@ function ReviewCell({ c }: { c: Control }) {
  */
 export default function Racm() {
   const { eng, role, openRacmEditor, openControl, approveRacmRows, remarkRacmRow, clearRacmReview } = useIcfr();
+  const logEvent = useAuditLog();
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
   const [review, setReview] = useState<ReviewFilter>('All');
@@ -211,7 +213,7 @@ export default function Racm() {
                             {c.racmReview?.status === 'Approved' ? (
                               <button onClick={() => clearRacmReview(c.id)} title="Withdraw approval" aria-label={`Withdraw approval on ${c.id}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-ink-400 hover:text-ink-700 hover:border-ink-300 transition-colors cursor-pointer"><RotateCcw size={12} /></button>
                             ) : (
-                              <button onClick={() => approveRacmRows([c.id])} title="Approve row" aria-label={`Approve ${c.id}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-compliant-700 hover:bg-compliant-50 hover:border-compliant-300 transition-colors cursor-pointer"><Check size={13} /></button>
+                              <button onClick={() => { approveRacmRows([c.id]); logEvent({ action: 'Update', description: `Approved 1 RACM row (${c.id})`, module: 'SOX ICFR', entity: 'RACM' }); }} title="Approve row" aria-label={`Approve ${c.id}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-compliant-700 hover:bg-compliant-50 hover:border-compliant-300 transition-colors cursor-pointer"><Check size={13} /></button>
                             )}
                             <button onClick={() => openRemark(c)} title="Add remark" aria-label={`Remark on ${c.id}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-high-700 hover:bg-high-50 hover:border-high-300 transition-colors cursor-pointer"><MessageSquarePlus size={13} /></button>
                           </span>
@@ -238,7 +240,7 @@ export default function Racm() {
           <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
           <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>
-          <button onClick={() => { approveRacmRows(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve rows</button>
+          <button onClick={() => { approveRacmRows(Array.from(sel)); logEvent({ action: 'Update', description: `Approved ${sel.size} RACM rows`, module: 'SOX ICFR', entity: 'RACM' }); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve rows</button>
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
       )}

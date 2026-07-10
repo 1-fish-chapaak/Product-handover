@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { X, Download, Save, FileText } from 'lucide-react';
 import AtrDocument from '../reports/AtrDocument';
 import { SAMPLE_OBSERVATIONS, SAMPLE_INSIGHTS } from '../reports/atrTemplate';
+import { useAuditLog } from '../../context/AdminDataContext';
 import type { AtrReportData, AtrMeta } from '../reports/atrTypes';
 
 /** Pre-fillable metadata so the same preview can be reused from other flows. */
@@ -44,6 +45,7 @@ export default function GenerateATRModal({
 }) {
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [label, setLabel] = useState('');
+  const logEvent = useAuditLog();
 
   const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const meta: AtrMeta = atrData?.meta ?? {
@@ -58,10 +60,14 @@ export default function GenerateATRModal({
   const insights = atrData?.insights ?? SAMPLE_INSIGHTS;
   const data: AtrReportData = { meta, observations, insights };
 
-  const handleDownload = () => { window.print(); };
+  const handleDownload = () => {
+    logEvent({ action: 'Export', description: `Exported Action Taken Report (PDF) — ${meta.reportId}`, module: 'Exceptions', entity: 'ATR' });
+    window.print();
+  };
   const handleSave = () => {
     const finalLabel = label.trim() || `Snapshot · ${today}`;
     onSaveVersion?.(finalLabel, data);
+    logEvent({ action: 'Create', description: `Saved ATR version "${finalLabel}" — ${meta.reportId}`, module: 'Exceptions', entity: 'ATR' });
     setShowSavePrompt(false);
     setLabel('');
   };

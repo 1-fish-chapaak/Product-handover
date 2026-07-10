@@ -14,6 +14,7 @@ import { MOCK_WORKFLOWS } from './automationSetupData';
 import type { AutomationRunsState, AutomationRun, AutoRunType } from './automationRunsData';
 import { simulateRun, deriveRunsSummary, RUN_STATUS_CLS } from './automationRunsData';
 import { BulkExecuteModal, Checkbox } from '../../../workflow/BulkExecuteModal';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 import type { LibraryWorkflow } from '../../../workflow/WorkflowLibraryView';
 
 function now(): string { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
@@ -37,6 +38,7 @@ interface Props {
 }
 
 export default function AutomationWorkflowsTab({ engagement, inputData, setup, runsState, onUpdateSetup, onUpdateRuns, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as AutomationProjectConfig;
   const summary = deriveRunsSummary(runsState);
   const [search, setSearch] = useState('');
@@ -126,6 +128,7 @@ export default function AutomationWorkflowsTab({ engagement, inputData, setup, r
     };
     const completed = simulateRun(run, setup, inputData, engagement.owner);
     onUpdateRuns({ runs: [...runsState.runs, completed] });
+    logEvent({ action: 'Run', description: isBulk ? `Ran ${wfIds.length} automation workflows in "${engagement.name}"` : `Ran automation workflow "${wfNames[0] || wfLabel}" in "${engagement.name}"`, module: 'Engagements', entity: 'Workflow' });
     setShowBulkModal(false);
   };
 

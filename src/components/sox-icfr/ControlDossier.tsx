@@ -8,6 +8,7 @@ import {
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History,
 } from 'lucide-react';
 import { useIcfr } from './store';
+import { useAuditLog } from '../../context/AdminDataContext';
 import {
   controlConclusion, courtFor, designProgress, discussionsFor, operatingProgress, trackResult,
   pointResult, stepResult,
@@ -81,6 +82,7 @@ const menuItem = 'w-full text-left px-2.5 py-1.5 rounded-lg text-[12.5px] text-i
 // ── request-data modal (TOD) ──────────────────────────────────────────────────────
 function RequestDataModal({ control, onClose }: { control: Control; onClose: () => void }) {
   const { requestDataByEmail } = useIcfr();
+  const logEvent = useAuditLog();
   const [sel, setSel] = useState<Set<string>>(() => new Set(control.design.documents.filter(d => d.status !== 'Received').map(d => d.id)));
   const [emails, setEmails] = useState<string[]>(['controls.owner@airindiaexpress.in']);
   const [draft, setDraft] = useState('');
@@ -125,7 +127,7 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
           <span className="text-[11.5px] text-ink-400">{sel.size} document{sel.size === 1 ? '' : 's'} · {emails.length} recipient{emails.length === 1 ? '' : 's'}</span>
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="h-9 px-3.5 text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-            <button disabled={!canSend} onClick={() => { requestDataByEmail(control.id, Array.from(sel), emails); onClose(); }} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={14} /> Send request</button>
+            <button disabled={!canSend} onClick={() => { requestDataByEmail(control.id, Array.from(sel), emails); logEvent({ action: 'Share', description: `Requested ${sel.size} design document(s) for ${control.id} from ${emails.length} recipient(s)`, module: 'SOX ICFR', entity: 'Control' }); onClose(); }} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={14} /> Send request</button>
           </div>
         </div>
       </motion.div>
@@ -138,6 +140,7 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
 function ConcludeFooter({ control, which, suggestion, canEdit, disabled }: { control: Control; which: 'design' | 'operating'; suggestion: TrackConclusion; canEdit: boolean; disabled?: boolean }) {
   const { me, concludeDesign, concludeOperating, overrideDesign, overrideOperating } = useIcfr();
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const track = control[which];
   const conclude = which === 'design' ? concludeDesign : concludeOperating;
   const override = which === 'design' ? overrideDesign : overrideOperating;
@@ -146,6 +149,7 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled }: { con
   if (!canEdit) return null;
   const apply = (target: TrackConclusion) => {
     conclude(control.id, target);                                  // always save the conclusion
+    logEvent({ action: 'Update', description: `Concluded ${which === 'design' ? 'design' : 'operating effectiveness'} ${target.toLowerCase()} for ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
     const contradicts = suggestion !== 'Not tested' && target !== suggestion;
     if (contradicts) setPending(target); else override(control.id, null);
     addToast({ type: 'success', title: `${label} concluded ${target.toLowerCase()}`, message: contradicts ? 'Saved — add a rationale for going against the evidence.' : 'Saved to the working paper.' });
@@ -276,6 +280,7 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
 // ── operating attribute — its own workflow and/or self-attestation ────────────────
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
   const { me, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
+  const logEvent = useAuditLog();
   const [over, setOver] = useState(false);
   const [noteDraft, setNoteDraft] = useState(step.attestation?.note ?? '');
   const [validatingWf, setValidatingWf] = useState(false);
@@ -310,7 +315,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
             {resultBtn('Pass', 'Pass', CheckCircle2, eff === 'Pass', 'bg-compliant-50 border-compliant-300 text-compliant-700')}
             {resultBtn('Fail', 'Fail', XCircle, eff === 'Fail', 'bg-risk-50 border-risk-300 text-risk-700')}
             <button onClick={() => setOver(o => !o)} title="Override result with rationale" className={cn('h-8 w-8 inline-flex items-center justify-center rounded-lg border cursor-pointer', step.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={13} /></button>
-            <button onClick={() => removeAttribute(control.id, step.id)} title="Remove attribute" className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={13} /></button>
+            <button onClick={() => { removeAttribute(control.id, step.id); logEvent({ action: 'Delete', description: `Removed attribute ${step.code} from ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }} title="Remove attribute" className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={13} /></button>
           </div>
         )}
       </div>
@@ -336,7 +341,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                 {step.inputFile
                   ? <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md px-1.5 h-[20px] max-w-[180px]"><Paperclip size={9} className="shrink-0" /><span className="truncate">{step.inputFile.name}</span></span>
                   : <span className="text-[11px] text-ink-400">none uploaded yet</span>}
-                {canEdit && !busy && <button onClick={() => setStepInputFile(control.id, step.id, `${step.code}-evidence.xlsx`)} className="h-6 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[11px] font-semibold hover:border-brand-300 hover:text-brand-700 inline-flex items-center gap-1 cursor-pointer"><Upload size={10} /> {step.inputFile ? 'Replace' : 'Upload file'}</button>}
+                {canEdit && !busy && <button onClick={() => { setStepInputFile(control.id, step.id, `${step.code}-evidence.xlsx`); logEvent({ action: 'Upload', description: `Uploaded required file for attribute ${step.code} (${control.id})`, module: 'SOX ICFR', entity: 'Evidence' }); }} className="h-6 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[11px] font-semibold hover:border-brand-300 hover:text-brand-700 inline-flex items-center gap-1 cursor-pointer"><Upload size={10} /> {step.inputFile ? 'Replace' : 'Upload file'}</button>}
               </div>
               {/* run + result */}
               <div className="flex items-center gap-2.5 flex-wrap pt-2 border-t border-brand-100/70">
@@ -385,9 +390,9 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                 <textarea value={noteDraft} onChange={e => setNoteDraft(e.target.value)} rows={2} placeholder="Describe how this attribute is satisfied — recorded with your attestation." className="w-full text-[12px] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   <span className="text-[10.5px] font-semibold text-ink-400 uppercase tracking-wide">Attest</span>
-                  <button disabled={!noteDraft.trim()} onClick={() => attestStep(control.id, step.id, noteDraft.trim(), 'Pass')} className="h-7 px-2.5 rounded-md bg-compliant-600 text-white text-[11.5px] font-semibold disabled:opacity-40 enabled:hover:bg-compliant-700 inline-flex items-center gap-1 cursor-pointer"><CheckCircle2 size={12} /> Pass</button>
-                  <button disabled={!noteDraft.trim()} onClick={() => attestStep(control.id, step.id, noteDraft.trim(), 'Fail')} className="h-7 px-2.5 rounded-md border border-risk-300 text-risk-700 text-[11.5px] font-semibold disabled:opacity-40 enabled:hover:bg-risk-50 inline-flex items-center gap-1 cursor-pointer"><XCircle size={12} /> Fail</button>
-                  <button onClick={() => addStepEvidence(control.id, step.id, `evidence-${step.code}.pdf`)} className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[11.5px] font-semibold hover:border-brand-300 hover:text-brand-700 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>
+                  <button disabled={!noteDraft.trim()} onClick={() => { attestStep(control.id, step.id, noteDraft.trim(), 'Pass'); logEvent({ action: 'Update', description: `Attested ${step.code} for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); }} className="h-7 px-2.5 rounded-md bg-compliant-600 text-white text-[11.5px] font-semibold disabled:opacity-40 enabled:hover:bg-compliant-700 inline-flex items-center gap-1 cursor-pointer"><CheckCircle2 size={12} /> Pass</button>
+                  <button disabled={!noteDraft.trim()} onClick={() => { attestStep(control.id, step.id, noteDraft.trim(), 'Fail'); logEvent({ action: 'Update', description: `Attested ${step.code} for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); }} className="h-7 px-2.5 rounded-md border border-risk-300 text-risk-700 text-[11.5px] font-semibold disabled:opacity-40 enabled:hover:bg-risk-50 inline-flex items-center gap-1 cursor-pointer"><XCircle size={12} /> Fail</button>
+                  <button onClick={() => { addStepEvidence(control.id, step.id, `evidence-${step.code}.pdf`); logEvent({ action: 'Upload', description: `Attached evidence to attribute ${step.code} (${control.id})`, module: 'SOX ICFR', entity: 'Evidence' }); }} className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[11.5px] font-semibold hover:border-brand-300 hover:text-brand-700 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>
                 </div>
               </div>
             )}
@@ -409,12 +414,13 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
 // ── design section (TOD) ──────────────────────────────────────────────────────────
 function DesignSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
   const { setDocStatus, addDesignDoc, removeDesignDoc, addDesignPoint, validateDesignPoint } = useIcfr();
+  const logEvent = useAuditLog();
   const d = control.design; const prog = designProgress(control);
   const [modal, setModal] = useState(false);
   const [newPoint, setNewPoint] = useState('');
   const [addingPoint, setAddingPoint] = useState(false);
   const [validatingAll, setValidatingAll] = useState(false);
-  const runValidateAll = () => { setValidatingAll(true); window.setTimeout(() => { control.design.points.forEach(p => validateDesignPoint(control.id, p.id)); setValidatingAll(false); }, VALIDATE_MS); };
+  const runValidateAll = () => { setValidatingAll(true); logEvent({ action: 'Run', description: `Validated all design considerations for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); window.setTimeout(() => { control.design.points.forEach(p => validateDesignPoint(control.id, p.id)); setValidatingAll(false); }, VALIDATE_MS); };
   const missing = d.documents.filter(x => x.status !== 'Received');
   const suggestion: TrackConclusion = d.documents.length === 0 && d.points.length === 0 ? 'Not tested'
     : missing.length > 0 || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
@@ -426,7 +432,7 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
       {empty ? (
         <EmptyState icon={<FileText size={18} />} title="Test of design isn’t set up yet" hint="Add the design documents you need (process narrative, flowchart, walkthrough) and the design considerations to assess. You can request the documents from the control owner by email.">
           {canEdit && <>
-            <Dropdown trigger={<><Plus size={13} /> Add document</>}>{close => DESIGN_DOC_KINDS.map(k => <button key={k} className={menuItem} onClick={() => { addDesignDoc(control.id, k as DesignDocKind); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}</Dropdown>
+            <Dropdown trigger={<><Plus size={13} /> Add document</>}>{close => DESIGN_DOC_KINDS.map(k => <button key={k} className={menuItem} onClick={() => { addDesignDoc(control.id, k as DesignDocKind); logEvent({ action: 'Create', description: `Added design document to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}</Dropdown>
             <button onClick={() => setModal(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12px] font-semibold text-ink-700 hover:border-ink-300 cursor-pointer"><Mail size={13} /> Request data</button>
           </>}
         </EmptyState>
@@ -438,7 +444,7 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-ink-400 tabular-nums">{prog.docsReceived}/{prog.docsTotal} received</span>
               {canEdit && <button onClick={() => setModal(true)} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Mail size={12} /> Request data</button>}
-              {canEdit && <Dropdown trigger={<><Plus size={12} /> Add</>}>{close => DESIGN_DOC_KINDS.map(k => <button key={k} className={menuItem} onClick={() => { addDesignDoc(control.id, k as DesignDocKind); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}</Dropdown>}
+              {canEdit && <Dropdown trigger={<><Plus size={12} /> Add</>}>{close => DESIGN_DOC_KINDS.map(k => <button key={k} className={menuItem} onClick={() => { addDesignDoc(control.id, k as DesignDocKind); logEvent({ action: 'Create', description: `Added design document to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}</Dropdown>}
             </div>
           </div>
           {d.documents.length === 0 ? <p className="text-[12px] text-ink-400 mb-5">No documents yet — add one or request data.</p> : (
@@ -449,8 +455,8 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                   <div className="min-w-0 flex-1"><div className="text-[12px] font-semibold text-ink-800 truncate">{doc.kind}</div><div className="text-[11px] text-ink-400 truncate">{doc.name}{doc.uploadedBy ? ` · ${doc.uploadedBy}, ${doc.at}` : ''}</div></div>
                   <Pill tone={doc.status === 'Received' ? 'compliant' : doc.status === 'Requested' ? 'mitigated' : 'draft'}>{doc.status}</Pill>
                   {canEdit && <div className="flex items-center gap-1">
-                    {doc.status !== 'Received' && <button onClick={() => setDocStatus(control.id, doc.id, 'Received')} className="h-7 px-2.5 text-[11.5px] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach</button>}
-                    <button onClick={() => removeDesignDoc(control.id, doc.id)} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
+                    {doc.status !== 'Received' && <button onClick={() => { setDocStatus(control.id, doc.id, 'Received'); logEvent({ action: 'Upload', description: `Attached design document for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' }); }} className="h-7 px-2.5 text-[11.5px] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach</button>}
+                    <button onClick={() => { removeDesignDoc(control.id, doc.id); logEvent({ action: 'Delete', description: `Removed design document from ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
                   </div>}
                 </div>
               ))}
@@ -467,8 +473,8 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
           </div>
           {addingPoint && (
             <div className="flex items-center gap-2 mb-2.5">
-              <input autoFocus value={newPoint} onChange={e => setNewPoint(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newPoint.trim()) { addDesignPoint(control.id, newPoint.trim()); setNewPoint(''); setAddingPoint(false); } }} placeholder="e.g. Reviewer is independent of the preparer" className="flex-1 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] focus:outline-none focus:ring-2 focus:ring-brand-200" />
-              <button disabled={!newPoint.trim()} onClick={() => { addDesignPoint(control.id, newPoint.trim()); setNewPoint(''); setAddingPoint(false); }} className="h-9 px-3 rounded-lg bg-brand-600 text-white text-[12px] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
+              <input autoFocus value={newPoint} onChange={e => setNewPoint(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newPoint.trim()) { addDesignPoint(control.id, newPoint.trim()); logEvent({ action: 'Create', description: `Added design consideration to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewPoint(''); setAddingPoint(false); } }} placeholder="e.g. Reviewer is independent of the preparer" className="flex-1 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              <button disabled={!newPoint.trim()} onClick={() => { addDesignPoint(control.id, newPoint.trim()); logEvent({ action: 'Create', description: `Added design consideration to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewPoint(''); setAddingPoint(false); }} className="h-9 px-3 rounded-lg bg-brand-600 text-white text-[12px] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
             </div>
           )}
           {d.points.length === 0 ? <p className="text-[12px] text-ink-400 mb-2">No considerations yet — add the design points you’ll assess in the walkthrough.</p> : (
@@ -487,6 +493,7 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
 // ── operating section (TOE) — locked until design effective ───────────────────────
 function OperatingSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
   const { me, setPopulation, setSampling, addAttribute, testAllAttributes } = useIcfr();
+  const logEvent = useAuditLog();
   const o = control.operating; const prog = operatingProgress(control);
   const anyFail = o.steps.some(s => stepResult(s) === 'Fail');
   const allTested = o.steps.length > 0 && o.steps.every(s => stepResult(s) !== 'Not tested');
@@ -500,9 +507,9 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   const wfCount = o.steps.filter(s => s.workflowName).length;
   const attCount = o.steps.filter(s => s.attestEnabled || s.attestation).length;
 
-  const uploadPop = () => { setUploading(true); window.setTimeout(() => { setPopulation(control.id, { source: control.process === 'Procure to Pay' ? 'SAP ECC — ME2N PO release log, FY26 YTD' : 'SAP — full-period extract', count: 2640, tieOut: 'Agreed to GL control account', evidence: [{ id: 'ev', name: 'population.xlsx', kind: 'XLSX', uploadedBy: me, uploadedAt: 'just now' }] }); setUploading(false); }, 1800); };
-  const drawSample = () => { setDrawing(true); window.setTimeout(() => { const s: Sampling = { basis: `${sampleSize} items — judgment documented (handbook: no fixed minimum).`, method: 'Random', size: sampleSize, samples: sampleRefs(control.process, sampleSize).map((ref, i) => ({ id: `s${i}`, ref, result: 'Not tested' })) }; setSampling(control.id, s); setDrawing(false); }, 3000); };
-  const runAll = () => { setTesting(true); window.setTimeout(() => { testAllAttributes(control.id); setTesting(false); }, 2400); };
+  const uploadPop = () => { setUploading(true); logEvent({ action: 'Upload', description: `Uploaded population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' }); window.setTimeout(() => { setPopulation(control.id, { source: control.process === 'Procure to Pay' ? 'SAP ECC — ME2N PO release log, FY26 YTD' : 'SAP — full-period extract', count: 2640, tieOut: 'Agreed to GL control account', evidence: [{ id: 'ev', name: 'population.xlsx', kind: 'XLSX', uploadedBy: me, uploadedAt: 'just now' }] }); setUploading(false); }, 1800); };
+  const drawSample = () => { setDrawing(true); logEvent({ action: 'Run', description: `Drew sample for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); window.setTimeout(() => { const s: Sampling = { basis: `${sampleSize} items — judgment documented (handbook: no fixed minimum).`, method: 'Random', size: sampleSize, samples: sampleRefs(control.process, sampleSize).map((ref, i) => ({ id: `s${i}`, ref, result: 'Not tested' })) }; setSampling(control.id, s); setDrawing(false); }, 3000); };
+  const runAll = () => { setTesting(true); logEvent({ action: 'Run', description: `Tested all attributes for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); window.setTimeout(() => { testAllAttributes(control.id); setTesting(false); }, 2400); };
 
   if (locked) {
     return (
@@ -552,8 +559,8 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
       </div>
       {addingAttr && (
         <div className="flex items-center gap-2 mb-3">
-          <input autoFocus value={newAttr} onChange={e => setNewAttr(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newAttr.trim()) { addAttribute(control.id, newAttr.trim()); setNewAttr(''); setAddingAttr(false); } }} placeholder="e.g. Approval evidenced before the transaction posts" className="flex-1 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] focus:outline-none focus:ring-2 focus:ring-brand-200" />
-          <button disabled={!newAttr.trim()} onClick={() => { addAttribute(control.id, newAttr.trim()); setNewAttr(''); setAddingAttr(false); }} className="h-9 px-3 rounded-lg bg-brand-600 text-white text-[12px] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
+          <input autoFocus value={newAttr} onChange={e => setNewAttr(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newAttr.trim()) { addAttribute(control.id, newAttr.trim()); logEvent({ action: 'Create', description: `Added test attribute to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewAttr(''); setAddingAttr(false); } }} placeholder="e.g. Approval evidenced before the transaction posts" className="flex-1 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+          <button disabled={!newAttr.trim()} onClick={() => { addAttribute(control.id, newAttr.trim()); logEvent({ action: 'Create', description: `Added test attribute to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewAttr(''); setAddingAttr(false); }} className="h-9 px-3 rounded-lg bg-brand-600 text-white text-[12px] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
         </div>
       )}
       {o.steps.length === 0 ? (
@@ -684,6 +691,7 @@ function ExecutionTrail({ control }: { control: Control }) {
 
 function DiscussionPane({ control }: { control: Control }) {
   const { eng, role, addComment, resolveDiscussion } = useIcfr();
+  const logEvent = useAuditLog();
   const [tab, setTab] = useState<DiscussionAnchor | 'all'>('all');
   const [text, setText] = useState('');
   const threads = useMemo(() => discussionsFor(eng, control.id).filter(d => tab === 'all' || d.anchor === tab), [eng, control.id, tab]);
@@ -711,7 +719,7 @@ function DiscussionPane({ control }: { control: Control }) {
         <div className="text-[10.5px] text-ink-400 mb-1.5">Posting to <b className="text-ink-600">{postAnchor === 'control' ? 'Control' : postAnchor === 'design' ? '① Design' : '② Operating'}</b> as <b className="text-ink-600 capitalize">{role}</b></div>
         <div className="flex items-end gap-2">
           <textarea value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="Add a comment or ask the risk owner…" className="flex-1 text-[12px] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
-          <button disabled={!text.trim()} onClick={() => { addComment(control.id, postAnchor, text.trim()); setText(''); }} className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-lg bg-brand-600 text-white disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={15} /></button>
+          <button disabled={!text.trim()} onClick={() => { addComment(control.id, postAnchor, text.trim()); logEvent({ action: 'Create', description: `Posted comment on ${control.id}`, module: 'SOX ICFR', entity: 'Comment' }); setText(''); }} className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-lg bg-brand-600 text-white disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={15} /></button>
         </div>
       </div>
     </>
@@ -739,6 +747,7 @@ function ActivityRail({ control }: { control: Control }) {
 // ── the dossier ──────────────────────────────────────────────────────────────────
 export default function ControlDossier() {
   const { eng, role, selectedControlId, back, setView } = useIcfr();
+  const logEvent = useAuditLog();
   const control = eng.controls.find(c => c.id === selectedControlId);
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Back to register</button></div>;
   // Both personas can now execute TOD and TOE; the shared trail records who did what.
@@ -784,7 +793,7 @@ export default function ControlDossier() {
             <ChevronRight size={13} className="text-ink-300" />
             <span className="text-[11.5px] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> Operating {toeLocked ? 'locked' : opResult}</span>
             <div className="ml-auto flex items-center gap-2">
-              <button onClick={() => downloadControlWorkingPaper(eng, control)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Download size={13} /> Working paper</button>
+              <button onClick={() => { downloadControlWorkingPaper(eng, control); logEvent({ action: 'Export', description: `Exported working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Download size={13} /> Working paper</button>
               <span className="text-[11px] text-ink-400 inline-flex items-center gap-1">Auditor &amp; risk owner both test · every run is logged in History</span>
             </div>
           </div>

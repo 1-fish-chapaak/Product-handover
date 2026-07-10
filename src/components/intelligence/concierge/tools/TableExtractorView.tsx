@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { ConciergeFlow } from '../ConciergeKit';
 import type { PickedFile, HistoryJob } from '../types';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 // ─── Result type ─────────────────────────────────────────────────────────────
 
@@ -317,6 +318,7 @@ function SchemaBuilder({
   fields: Field[];
   setFields: (f: Field[]) => void;
 }) {
+  const logEvent = useAuditLog();
   const [profiles, setProfiles] = useState<LayoutProfile[]>(() => {
     try {
       const raw = localStorage.getItem(PROFILES_KEY);
@@ -396,7 +398,15 @@ function SchemaBuilder({
             <Upload size={12} /> Import
           </button>
           <button
-            onClick={() => exportSchemaCsv(fields)}
+            onClick={() => {
+              exportSchemaCsv(fields);
+              logEvent({
+                action: 'Export',
+                description: 'Exported Table Extractor schema as CSV',
+                module: 'AI Concierge',
+                entity: 'Table Extractor',
+              });
+            }}
             disabled={!fields.length}
             title="Export schema as CSV"
             className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.6875rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 px-2 py-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
@@ -598,6 +608,7 @@ const HISTORY_SEED: HistoryJob[] = [
 // ─── Main view ───────────────────────────────────────────────────────────────
 
 export default function TableExtractorView({ onBack }: { onBack: () => void }) {
+  const logEvent = useAuditLog();
   return (
     <ConciergeFlow<Result>
       title="Table Extractor"
@@ -647,7 +658,15 @@ export default function TableExtractorView({ onBack }: { onBack: () => void }) {
       renderResult={(result) => <ResultView result={result} />}
       resultActions={(result) => (
         <button
-          onClick={() => exportResultsCsv(result)}
+          onClick={() => {
+            exportResultsCsv(result);
+            logEvent({
+              action: 'Export',
+              description: 'Exported Table Extractor results as CSV',
+              module: 'AI Concierge',
+              entity: 'Table Extractor',
+            });
+          }}
           className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 px-3.5 py-2 transition-colors cursor-pointer"
         >
           <Download size={14} /> Export CSV

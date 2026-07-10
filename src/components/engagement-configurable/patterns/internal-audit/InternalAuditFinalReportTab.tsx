@@ -15,6 +15,7 @@ import {
   type InternalAuditFinalReportState, type OverallRating,
 } from './internalAuditFinalReportData';
 import FloatingLines from '../../../shared/FloatingLines';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 function now(): string { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export default function InternalAuditFinalReportTab({ engagement, iaState, finalReport, onUpdateFinalReport, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as InternalAuditConfig;
   const { ready, checks } = deriveFinalReportReadiness(iaState, engagement);
   const activeObs = iaState.observations.observations.filter(o => o.status !== 'DROPPED');
@@ -44,14 +46,17 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
   const handleGenerate = () => {
     const draft = generateReportDraft(engagement, iaState);
     onUpdateFinalReport({ ...finalReport, ...draft, status: 'DRAFT' });
+    logEvent({ action: 'Create', description: `Generated audit final report for "${engagement.name}"`, module: 'Engagements', entity: 'Report' });
   };
 
   const handleMarkReady = () => {
     onUpdateFinalReport({ ...finalReport, status: 'READY_FOR_REVIEW', history: [...finalReport.history, { id: `rh-${Date.now()}`, action: 'MARKED_READY', actor: engagement.owner, timestamp: now(), comments: '' }] });
+    logEvent({ action: 'Update', description: `Marked final report ready for review — "${engagement.name}"`, module: 'Engagements', entity: 'Report' });
   };
 
   const handleIssue = () => {
     onUpdateFinalReport({ ...finalReport, status: 'ISSUED', issuedAt: now(), issuedBy: engagement.reviewer || engagement.owner, history: [...finalReport.history, { id: `rh-${Date.now()}`, action: 'ISSUED', actor: engagement.reviewer || engagement.owner, timestamp: now(), comments: 'Final report issued.' }] });
+    logEvent({ action: 'Update', description: `Issued final report for "${engagement.name}"`, module: 'Engagements', entity: 'Report' });
   };
 
   // ── Not Started ──
@@ -320,7 +325,7 @@ export default function InternalAuditFinalReportTab({ engagement, iaState, final
 
       {/* ══ Actions ══ */}
       <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={() => alert('Report download will be connected later.')}
+        <button onClick={() => { logEvent({ action: 'Export', description: `Downloaded draft final report for "${engagement.name}"`, module: 'Engagements', entity: 'Report' }); alert('Report download will be connected later.'); }}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-medium text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">
           <Download size={12} />Download Draft
         </button>

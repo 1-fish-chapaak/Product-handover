@@ -12,6 +12,7 @@ import {
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import EngagementSetupPanel from '../engagement/EngagementSetupPanel';
 import RacmMappingWorkspace from './RacmMappingWorkspace';
 import { computeRacmState, RACM_STATUS_STYLES, RACM_READINESS_STYLES, RACM_ACTION_STYLES, type RacmSummaryInput, type ComputedRacmState } from './racmStateEngine';
@@ -667,6 +668,7 @@ function RacmImportDrawer({ onClose, onImport }: { onClose: () => void; onImport
 function RacmDashboard({ engagements, onGoToExecution }: { engagements: { sourceRacmVersionId: string }[]; onGoToExecution: () => void }) {
   const { addToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   const [showImportDrawer, setShowImportDrawer] = useState(false);
   const [importedRows, setImportedRows] = useState<ImportedRacmRow[]>([]);
   const [showMappingWorkspace, setShowMappingWorkspace] = useState(false);
@@ -679,11 +681,14 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
     setImportedRows(rows);
     setShowImportDrawer(false);
     addToast({ message: `${rows.length} rows imported — review and map controls below`, type: 'success' });
+    logEvent({ action: 'Create', description: `Imported ${rows.length} RACM rows from file`, module: 'Governance', entity: 'RACM' });
   };
 
   const handleMapRow = (idx: number) => {
+    const row = importedRows[idx];
     setImportedRows(prev => prev.map((r, i) => i === idx ? { ...r, mappingStatus: 'Mapped' } : r));
     addToast({ message: `Control mapped to Control Library`, type: 'success' });
+    logEvent({ action: 'Create', description: `Mapped control for risk "${row?.riskName ?? 'Unknown'}" to the Control Library`, module: 'Control Library', entity: 'Control' });
   };
 
   // Summary KPIs (all derived from data)
@@ -904,6 +909,7 @@ function RacmDashboard({ engagements, onGoToExecution }: { engagements: { source
               setRacmList(prev => [newRacm, ...prev]);
               setShowCreateRacmModal(false);
               addToast({ message: `RACM "${newRacm.name}" created — status: Draft`, type: 'success' });
+              logEvent({ action: 'Create', description: `Created RACM "${newRacm.name}"`, module: 'Governance', entity: 'RACM' });
               setSelectedRacmId(newRacm.id);
             }}
           />
@@ -925,6 +931,7 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
 }) {
   const { addToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   const computed = getRacmComputed(racm);
   const statusCls = RACM_STATUS_STYLES[computed.status];
 
@@ -950,6 +957,7 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
     setLocalRisks(prev => [...prev, { id, name: riskName, description: riskDesc, process: racm.process, sourceRow: 'Manual' }]);
     setRiskName(''); setRiskDesc(''); setShowAddRisk(false);
     addToast({ message: `Risk "${riskName}" added`, type: 'success' });
+    logEvent({ action: 'Create', description: `Added risk "${riskName}" to RACM "${racm.name}"`, module: 'Risk Register', entity: 'Risk' });
   };
 
   const handleImportRisks = () => {
@@ -963,6 +971,7 @@ function RacmSetupWorkspace({ racm, onBack, onStartMapping, onImport }: {
     ];
     setLocalRisks(prev => [...prev, ...imported]);
     addToast({ message: `5 risks imported from file — ready for mapping`, type: 'success' });
+    logEvent({ action: 'Create', description: `Imported ${imported.length} risks from file into RACM "${racm.name}"`, module: 'Risk Register', entity: 'Risk' });
   };
 
   const handleProceedToMapping = () => {
@@ -1966,6 +1975,7 @@ interface Props {
 
 export default function AuditPlanningView({ onNavigateToExecution, embedded = false }: Props) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [plan, setPlan] = useState<AuditEngagement[]>(INITIAL_AUDIT_PLAN);
   const [planFrozen, setPlanFrozen] = useState(false);
   const [signedOff, setSignedOff] = useState(false);
@@ -2024,6 +2034,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
     ));
     setShowFreezeModal(false);
     addToast({ type: 'success', message: 'Audit plan frozen — scheduling locked' });
+    logEvent({ action: 'Update', description: 'Froze audit plan', module: 'Engagements', entity: 'Audit Plan' });
   };
 
   const handleSignOff = () => {
@@ -2040,6 +2051,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
     setShowSignOffModal(false);
     setSignOffComment('');
     addToast({ type: 'success', message: 'Audit plan signed off — engagements ready for activation' });
+    logEvent({ action: 'Update', description: 'Signed off audit plan', module: 'Engagements', entity: 'Audit Plan' });
   };
 
   const handleActivate = (id: string) => {
@@ -2199,17 +2211,21 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
     if (drawerIsCreate) {
       setPlan(prev => [...prev, updated]);
       addToast({ type: 'success', message: `"${updated.name}" created as Draft` });
+      logEvent({ action: 'Create', description: `Created engagement "${updated.name}" as Draft`, module: 'Engagements', entity: 'Engagement' });
     } else {
       setPlan(prev => prev.map(p => p.id === updated.id ? updated : p));
       addToast({ type: 'success', message: `"${updated.name}" updated` });
+      logEvent({ action: 'Update', description: `Updated engagement "${updated.name}"`, module: 'Engagements', entity: 'Engagement' });
     }
     setDrawerEngagement(null);
   };
 
   const handleMoveToPlanned = (id: string) => {
+    const item = plan.find(p => p.id === id);
     setPlan(prev => prev.map(p => p.id === id ? { ...p, status: 'planned' as EngagementLifecycle } : p));
     setSetupPanelEngagement(null);
     addToast({ type: 'success', message: 'Engagement moved to Planned — ready for review and activation' });
+    logEvent({ action: 'Update', description: `Moved engagement "${item?.name ?? id}" to Planned`, module: 'Engagements', entity: 'Engagement' });
   };
 
   const handleSetupActivate = (id: string) => {
@@ -2226,6 +2242,7 @@ export default function AuditPlanningView({ onNavigateToExecution, embedded = fa
     const item = plan.find(p => p.id === id);
     setPlan(prev => prev.filter(p => p.id !== id));
     addToast({ type: 'warning', message: `"${item?.name}" removed from plan` });
+    logEvent({ action: 'Delete', description: `Removed engagement "${item?.name ?? id}" from the audit plan`, module: 'Engagements', entity: 'Engagement' });
     setDrawerEngagement(null);
   };
 

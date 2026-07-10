@@ -13,6 +13,7 @@ import CreateEngagementWizard from './CreateEngagementWizard';
 import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
 import { useCan } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import WorkflowConfigurator from '../exceptions/workflow/WorkflowConfigurator';
 import type { Persona } from '../exceptions/workflow/workflowTypes';
 
@@ -89,6 +90,7 @@ function healthTier(pct: number): { bar: string; text: string } {
 export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning, initialTypeFilter, onInitialFilterConsumed, initialApprovalFlow, onApprovalFlowConsumed }: Props) {
   const { can } = useCan();
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const presetType = initialTypeFilter && initialTypeFilter !== 'All';
   // When routed with an initial type (e.g. SOX → 'Compliance'), open straight
   // onto the list view, pre-filtered to that type. When routed to create an
@@ -173,6 +175,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
     if (newOwner === eng.owner) return;
     patchEngagement(eng.id, { owner: newOwner });
     addToast({ message: `"${eng.name}" reassigned to ${newOwner}`, type: 'success' });
+    logEvent({ action: 'Update', description: `Reassigned "${eng.name}" to ${newOwner}`, module: 'Engagements', entity: 'Engagement' });
   };
 
   /** Confirmed delete — removes from the session list with an undo toast. */
@@ -182,6 +185,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
     const idx = all.findIndex(e => e.id === eng.id);
     setAll(prev => prev.filter(e => e.id !== eng.id));
     setDeleteTarget(null);
+    logEvent({ action: 'Delete', description: `Deleted engagement "${eng.name}"`, module: 'Engagements', entity: 'Engagement' });
     addToast({
       message: `"${eng.name}" deleted`,
       type: 'success',

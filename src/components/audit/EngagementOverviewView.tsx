@@ -11,6 +11,7 @@ import {
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import {
@@ -231,6 +232,7 @@ function healthTier(pct: number): { bar: string; text: string } {
 
 export default function EngagementDetailView({ engagementId, onBack, onOpenExecution, onOpenRacmFullEditor, onLaunchWorkflowBuilder, onOpenWorkflow, onRunWorkflow, onCreateWorkflowForEngagement }: Props) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const { openShare } = useShare();
   const engagement = useMemo(() => ENGAGEMENTS.find(e => e.id === engagementId), [engagementId]);
 
@@ -559,7 +561,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
 
             {/* ═══ CONFIGURATION (all types) — editable engagement details ═══ */}
             {activeTab === 'config' && (
-              <EngagementConfigTab key={eng.id} eng={eng} onSaved={() => addToast({ message: 'Engagement configuration saved', type: 'success' })}
+              <EngagementConfigTab key={eng.id} eng={eng} onSaved={() => { addToast({ message: 'Engagement configuration saved', type: 'success' }); logEvent({ action: 'Update', description: `Saved engagement configuration for "${eng.name}"`, module: 'Engagements', entity: 'Engagement' }); }}
                 tabs={tabs} hiddenTabs={tabPrefs.hidden} onToggleTab={toggleTabHidden} />
             )}
           </motion.div>
@@ -575,6 +577,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             onSaved={() => {
               setConfigWorkflow(null);
               addToast({ message: 'Workflow configuration saved', type: 'success' });
+              logEvent({ action: 'Update', description: `Saved workflow configuration on engagement "${eng.name}"`, module: 'Engagements', entity: 'Workflow' });
             }}
           />
         )}
@@ -2227,6 +2230,7 @@ function WorkflowsBySubProcess({
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
 
   const toggle = (sp: string) => setCollapsed(prev => {
     const n = new Set(prev);
@@ -2258,6 +2262,7 @@ function WorkflowsBySubProcess({
     });
     setLinkModalOpen(false);
     addToast({ message: `Linked ${picked.length} workflow${picked.length === 1 ? '' : 's'} to ${engagementName}`, type: 'success' });
+    logEvent({ action: 'Update', description: `Linked ${picked.length} workflow${picked.length === 1 ? '' : 's'} to engagement "${engagementName}"`, module: 'Engagements', entity: 'Workflow' });
   };
 
   return (

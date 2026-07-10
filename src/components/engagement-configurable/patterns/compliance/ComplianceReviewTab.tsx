@@ -10,6 +10,7 @@ import {
 import type { ConfigurableEngagement } from '../../configurableEngagementTypes';
 import type { ComplianceWorkspaceState } from './complianceRequestsData';
 import { useCurrentUser } from '../../../../context/CurrentUserContext';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 import { deriveComplianceTestingSummary, deriveComplianceSampleResult } from './complianceAttributeTestingData';
 import {
   getOrCreateControlReview, submitForReview, approveReview, rejectReview,
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export default function ComplianceReviewTab({ engagement, complianceState, onUpdateReview, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const { currentUser } = useCurrentUser();
   const userName = currentUser?.name || 'Unknown User';
   const testItems = complianceState.samplesEvidence.batches.flatMap(b => b.testItems);
@@ -116,7 +118,7 @@ export default function ComplianceReviewTab({ engagement, complianceState, onUpd
           passedSamples={passedSamples} failedSamples={failedSamples}
           testingComplete={testingComplete} hasReviewer={hasReviewer} canSubmit={canSubmit}
           submitterName={userName}
-          onSubmit={() => onUpdateReview(submitForReview(reviewState, selectedControlId, userName))}
+          onSubmit={() => { onUpdateReview(submitForReview(reviewState, selectedControlId, userName)); logEvent({ action: 'Update', description: `Submitted control ${selectedControlId} for review in "${engagement.name}"`, module: 'Engagements', entity: 'Review' }); }}
           onNavigateTab={onNavigateTab}
         />
       )}
@@ -125,8 +127,8 @@ export default function ComplianceReviewTab({ engagement, complianceState, onUpd
           review={ctrlReview} engagement={engagement}
           reviewerName={userName} isSelfReview={isSelfReview}
           reviewComments={reviewComments} setReviewComments={setReviewComments}
-          onApprove={() => { if (!isSelfReview) onUpdateReview(approveReview(reviewState, selectedControlId, userName, reviewComments)); }}
-          onReject={() => { if (!isSelfReview && reviewComments.trim()) onUpdateReview(rejectReview(reviewState, selectedControlId, userName, reviewComments)); }}
+          onApprove={() => { if (!isSelfReview) { onUpdateReview(approveReview(reviewState, selectedControlId, userName, reviewComments)); logEvent({ action: 'Update', description: `Approved review of control ${selectedControlId} in "${engagement.name}"`, module: 'Engagements', entity: 'Review' }); } }}
+          onReject={() => { if (!isSelfReview && reviewComments.trim()) { onUpdateReview(rejectReview(reviewState, selectedControlId, userName, reviewComments)); logEvent({ action: 'Update', description: `Rejected review of control ${selectedControlId} in "${engagement.name}"`, module: 'Engagements', entity: 'Review' }); } }}
           onNavigateTab={onNavigateTab}
         />
       )}
@@ -136,7 +138,7 @@ export default function ComplianceReviewTab({ engagement, complianceState, onUpd
       {ctrlReview.status === 'REJECTED' && (
         <RejectedView
           review={ctrlReview}
-          onResubmit={() => onUpdateReview(submitForReview(reviewState, selectedControlId, userName))}
+          onResubmit={() => { onUpdateReview(submitForReview(reviewState, selectedControlId, userName)); logEvent({ action: 'Update', description: `Resubmitted control ${selectedControlId} for review in "${engagement.name}"`, module: 'Engagements', entity: 'Review' }); }}
           onNavigateTab={onNavigateTab}
         />
       )}

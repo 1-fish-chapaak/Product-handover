@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import type { ConfigurableEngagement, InternalAuditConfig } from '../../configurableEngagementTypes';
 import { BUSINESS_PROCESSES, deriveIAScopeReadiness, type InternalAuditScopeState } from './internalAuditScopeData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 import {
   generateAnnouncementDraft, deriveAnnouncementReadiness,
   type InternalAuditAnnouncementState, type AnnouncementStatus,
@@ -37,6 +38,7 @@ function now(): string {
 }
 
 export default function InternalAuditAnnouncementTab({ engagement, scope, announcement, onUpdateAnnouncement, onNavigateTab, hideTimeline }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as InternalAuditConfig;
   const scopeReadiness = deriveIAScopeReadiness(scope, engagement, cfg);
   const { canSend, missing } = deriveAnnouncementReadiness(announcement);
@@ -102,6 +104,7 @@ export default function InternalAuditAnnouncementTab({ engagement, scope, announ
       sentBy: engagement.owner,
       history: [...announcement.history, { id: `ah-${Date.now()}`, action: 'SENT', actor: engagement.owner, timestamp: now(), comments: '' }],
     });
+    logEvent({ action: 'Update', description: `Sent audit announcement "${announcement.subject}" for "${engagement.name}"`, module: 'Engagements', entity: 'Announcement' });
   };
 
   const handleAcknowledge = () => {

@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { DATA_SOURCES } from '../../data/mockData';
 import type { JourneyFiles, RunResult, WorkflowDraft } from './types';
+import { useAuditLog } from '../../context/AdminDataContext';
 import {
   type ComposerContext,
   editPlanContext,
@@ -1250,6 +1251,7 @@ const PY_KEYWORDS = new Set([
 // code block with Copy / Download icon buttons anchored top-right.
 
 function CodeSection({ code, filename, onEdit }: { code: string; filename: string; onEdit?: () => void }) {
+  const logEvent = useAuditLog();
   const [open, setOpen] = useState(true);
   const [copied, setCopied] = useState(false);
   const handleCopy = async () => {
@@ -1270,6 +1272,12 @@ function CodeSection({ code, filename, onEdit }: { code: string; filename: strin
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      logEvent({
+        action: 'Export',
+        description: 'Downloaded data source script',
+        module: 'Workflows',
+        entity: 'Data Source',
+      });
     } catch { /* download failed — silent */ }
   };
   return (

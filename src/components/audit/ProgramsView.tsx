@@ -7,6 +7,7 @@ import { BUSINESS_PROCESSES, RACMS, RISKS, CONTROLS } from '../../data/mockData'
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import FloatingLines from '../shared/FloatingLines';
 import { ChromaGrid, handleChromaCardMove } from '../reports/ChromaGrid';
 import { Button } from '../shared/Button';
@@ -49,6 +50,7 @@ function coverageForProcess(bp: { id: string }) {
 export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess }: Props) {
   const { addToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   const [search, setSearch] = useState('');
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
 
@@ -66,6 +68,7 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
     addUserProcess(newBP);
     setShowCreateDrawer(false);
     addToast({ message: `"${newBP.name}" (${newBP.abbr}) created as Draft`, type: 'success' });
+    logEvent({ action: 'Create', description: `Created business process "${newBP.name}" (${newBP.abbr})`, module: 'Process Hub', entity: 'Business Process' });
     onSelectBP(newBP.id);
   };
 

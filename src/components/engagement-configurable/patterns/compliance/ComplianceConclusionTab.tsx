@@ -10,6 +10,7 @@ import {
 import type { ConfigurableEngagement } from '../../configurableEngagementTypes';
 import type { ComplianceWorkspaceState } from './complianceRequestsData';
 import { useCurrentUser } from '../../../../context/CurrentUserContext';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 import { getOrCreateControlReview } from './complianceReviewData';
 import {
   deriveComplianceControlConclusion, getOrCreateControlConclusion, finalizeConclusion, classifySeverity,
@@ -182,6 +183,7 @@ function SeverityClassifier({ controlId, ctrlConclusion, conclusionState, actorN
   actorName: string;
   onUpdateConclusion: (state: ComplianceConclusionState) => void;
 }) {
+  const logEvent = useAuditLog();
   const saved = ctrlConclusion.severity;
   const [likelihood, setLikelihood] = useState<DeficiencyLikelihood>(saved?.likelihood || 'Reasonably Possible');
   const [magnitude, setMagnitude] = useState<number>(saved?.magnitude ?? 1_200_000);
@@ -204,6 +206,7 @@ function SeverityClassifier({ controlId, ctrlConclusion, conclusionState, actorN
       classifiedBy: actorName,
       classifiedAt: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
     }));
+    logEvent({ action: 'Update', description: `Classified deficiency severity as "${suggested}" for control ${controlId}`, module: 'Engagements', entity: 'Conclusion' });
   };
 
   return (
@@ -279,6 +282,7 @@ function ReadyToFinalizeView({ derivation, conclusionState, controlId, actorName
   actorName: string;
   onUpdateConclusion: (state: ComplianceConclusionState) => void;
 }) {
+  const logEvent = useAuditLog();
   const [selectedValue, setSelectedValue] = useState<ConclusionValue>(derivation.recommendedConclusion || 'EFFECTIVE');
   const [remarks, setRemarks] = useState('');
   const differsFromRecommendation = derivation.recommendedConclusion && selectedValue !== derivation.recommendedConclusion;
@@ -288,6 +292,7 @@ function ReadyToFinalizeView({ derivation, conclusionState, controlId, actorName
   const handleFinalize = () => {
     if (!canFinalize) return;
     onUpdateConclusion(finalizeConclusion(conclusionState, controlId, selectedValue, remarks, derivation.recommendedConclusion, derivation.reason, actorName));
+    logEvent({ action: 'Update', description: `Finalized conclusion "${selectedValue.replace(/_/g, ' ').toLowerCase()}" for control ${controlId}`, module: 'Engagements', entity: 'Conclusion' });
   };
 
   return (

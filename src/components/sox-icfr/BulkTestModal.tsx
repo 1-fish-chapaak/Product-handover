@@ -7,6 +7,7 @@ import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
 import { requiredDatasetsFor, type RequiredDataset } from './mockData';
 import { cn } from '../../lib/cn';
+import { useAuditLog } from '../../context/AdminDataContext';
 import type { Control } from './types';
 
 /**
@@ -47,6 +48,7 @@ const FORMAT_TONE: Record<RequiredDataset['format'], string> = {
 export default function BulkTestModal({ controlIds, onClose }: { controlIds: string[]; onClose: () => void }) {
   const { eng, bulkTestControls } = useIcfr();
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
 
   const [step, setStep] = useState<Step>(1);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
@@ -125,6 +127,7 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
       bulkTestControls(active.map(c => c.id));
       setFinished(true);
       const ineffective = active.filter(c => predictOutcome(c) === 'Ineffective').length;
+      logEvent({ action: 'Run', description: `Bulk-tested ${n} controls — ${n - ineffective} effective, ${ineffective} ineffective`, module: 'SOX ICFR', entity: 'Control' });
       addToast({
         type: ineffective ? 'error' : 'success',
         message: `Bulk test complete — ${n - ineffective} effective, ${ineffective} ineffective across ${n} controls.`,

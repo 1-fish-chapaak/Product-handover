@@ -12,6 +12,7 @@ import { AnimatePresence, motion, Reorder, useDragControls } from 'motion/react'
 import { ArrowLeft, Download, History, MoreVertical, SquareArrowOutUpRight, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2, GripVertical, Edit3, StickyNote, Sparkles, RefreshCw } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import EmptyState from '../shared/EmptyState';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
@@ -116,6 +117,7 @@ export function BulkAuditVariantView({
   onShare?: () => void;
 }) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const { can } = useCan();
   const [workflows, setWorkflows] = useState<WorkflowResult[]>(report.workflowResults ?? []);
   const [pendingDelete, setPendingDelete] = useState<WorkflowResult | null>(null);
@@ -298,6 +300,12 @@ export function BulkAuditVariantView({
       const idx = prev.findIndex(w => w.id === removed.id);
       removedWfIndexRef.current = idx >= 0 ? idx : prev.length;
       return prev.filter(w => w.id !== removed.id);
+    });
+    logEvent({
+      action: 'Delete',
+      description: `Removed workflow ${removed.workflowId} — ${removed.name} from bulk report "${report.name}"`,
+      module: 'Reports',
+      entity: 'Report',
     });
     addToast({
       type: 'success',

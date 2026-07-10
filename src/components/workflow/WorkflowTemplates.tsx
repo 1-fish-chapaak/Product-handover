@@ -13,6 +13,7 @@ import Gated from '../shared/Gated';
 import { useCan } from '../../context/CurrentUserContext';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 interface Props {
   onSelectWorkflow: (id: string) => void;
@@ -63,6 +64,7 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
 
   const { addToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedWfs, setSelectedWfs] = useState<Set<string>>(new Set());
   const [bulkSearch, setBulkSearch] = useState('');
@@ -85,6 +87,12 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
     if (!can('wf_run')) { addToast({ message: 'You do not have permission to run workflows.', type: 'error' }); return; }
     setBulkRunning(true);
     addToast({ message: `Running ${selectedWfs.size} workflows...`, type: 'success' });
+    logEvent({
+      action: 'Run',
+      description: `Bulk-ran ${selectedWfs.size} workflow${selectedWfs.size === 1 ? '' : 's'} and generated a consolidated report`,
+      module: 'Workflow Library',
+      entity: 'Workflow',
+    });
     setTimeout(() => {
       addToast({ message: 'All workflows completed', type: 'success' });
       setTimeout(() => {
@@ -474,7 +482,11 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
                   </Gated>
                   <Gated permission="wf_create" mode="disable" title="You don't have permission to create workflows">
                   <button
-                    onClick={(e) => { e.stopPropagation(); addToast({ message: `"${wf.name}" duplicated`, type: 'success' }); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addToast({ message: `"${wf.name}" duplicated`, type: 'success' });
+                      logEvent({ action: 'Create', description: `Duplicated workflow "${wf.name}"`, module: 'Workflow Library', entity: 'Workflow' });
+                    }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-text-muted hover:text-primary hover:bg-primary-xlight rounded-lg text-[0.75rem] font-medium transition-colors cursor-pointer"
                   >
                     <Copy size={11} /> Duplicate
@@ -482,7 +494,11 @@ export default function WorkflowTemplates({ onSelectWorkflow, onBuildNew, onRunW
                   </Gated>
                   <Gated permission="wf_update_delete" mode="disable" title="You don't have permission to delete workflows">
                   <button
-                    onClick={(e) => { e.stopPropagation(); addToast({ message: `"${wf.name}" deleted`, type: 'info' }); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addToast({ message: `"${wf.name}" deleted`, type: 'info' });
+                      logEvent({ action: 'Delete', description: `Deleted workflow "${wf.name}"`, module: 'Workflow Library', entity: 'Workflow' });
+                    }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-text-muted hover:text-risk-700 hover:bg-risk-50 rounded-lg text-[0.75rem] font-medium transition-colors cursor-pointer ml-auto"
                   >
                     <Trash2 size={11} /> Delete

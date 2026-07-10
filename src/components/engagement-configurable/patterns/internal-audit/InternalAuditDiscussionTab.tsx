@@ -13,6 +13,7 @@ import {
   initializeDiscussionItems, deriveDiscussionSummary, DISC_STATUS_CLS,
   type InternalAuditDiscussionState, type ObservationDiscussionItem, type DiscussionItemStatus, type DiscussionNote,
 } from './internalAuditDiscussionData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const labelCls = 'text-[0.6875rem] font-semibold text-text-muted block mb-1';
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export default function InternalAuditDiscussionTab({ engagement, observationsState, discussionState, onUpdateDiscussion, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const [detailId, setDetailId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
 
@@ -73,6 +75,7 @@ export default function InternalAuditDiscussionTab({ engagement, observationsSta
       ...discussionState,
       notes: [...discussionState.notes, { id: `dn-${Date.now()}`, observationId: '', note: noteText.trim(), author: engagement.owner, createdAt: now() }],
     });
+    logEvent({ action: 'Create', description: `Added discussion note in "${engagement.name}"`, module: 'Engagements', entity: 'Note' });
     setNoteText('');
   };
 
@@ -240,6 +243,7 @@ function DiscussionDetailPanel({ item, engagement, onUpdate, onTransition, onClo
   const [target, setTarget] = useState(item.targetDate);
   const [remediation, setRemediation] = useState(item.remediationRequired);
 
+  const logEvent = useAuditLog();
   const canAgree = response.trim().length > 0 && (!remediation || (action.trim().length > 0 && owner.trim().length > 0 && target.length > 0));
   const canDisagree = rationale.trim().length > 0;
 
@@ -263,7 +267,7 @@ function DiscussionDetailPanel({ item, engagement, onUpdate, onTransition, onClo
       {/* NOT_STARTED: show send CTA only, no response form */}
       {item.status === 'NOT_STARTED' && (
         <div className="flex items-center gap-2">
-          <button onClick={() => onTransition('SENT_TO_MANAGEMENT', 'Observation sent to process owner for response.')} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors"><Send size={11} />Send Observation to Process Owner</button>
+          <button onClick={() => { onTransition('SENT_TO_MANAGEMENT', 'Observation sent to process owner for response.'); logEvent({ action: 'Update', description: `Sent observation "${item.observationTitle}" to process owner`, module: 'Engagements', entity: 'Observation' }); }} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors"><Send size={11} />Send Observation to Process Owner</button>
         </div>
       )}
 
@@ -309,16 +313,16 @@ function DiscussionDetailPanel({ item, engagement, onUpdate, onTransition, onClo
       <div className="flex items-center gap-2 flex-wrap">
         {item.status === 'SENT_TO_MANAGEMENT' && (
           <>
-            <button onClick={handleSaveResponse} className="px-3 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-semibold text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Save Draft</button>
-            <button onClick={() => { handleSaveResponse(); onTransition('RESPONSE_RECEIVED', 'Process owner response submitted to auditor.'); }}
+            <button onClick={() => { handleSaveResponse(); logEvent({ action: 'Update', description: `Saved response draft for observation "${item.observationTitle}"`, module: 'Engagements', entity: 'Observation' }); }} className="px-3 py-1.5 rounded-lg border border-border-light text-[0.6875rem] font-semibold text-text-muted hover:bg-surface-2/30 cursor-pointer transition-colors">Save Draft</button>
+            <button onClick={() => { handleSaveResponse(); onTransition('RESPONSE_RECEIVED', 'Process owner response submitted to auditor.'); logEvent({ action: 'Update', description: `Submitted process owner response for observation "${item.observationTitle}"`, module: 'Engagements', entity: 'Observation' }); }}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors"><Send size={11} />Submit Response to Auditor</button>
           </>
         )}
         {item.status === 'RESPONSE_RECEIVED' && (
           <>
-            <button onClick={() => { handleSaveResponse(); if (canAgree) onTransition('AGREED', 'Auditor accepted process owner response.'); }}
+            <button onClick={() => { handleSaveResponse(); if (canAgree) { onTransition('AGREED', 'Auditor accepted process owner response.'); logEvent({ action: 'Update', description: `Accepted process owner response for observation "${item.observationTitle}"`, module: 'Engagements', entity: 'Observation' }); } }}
               disabled={!canAgree} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"><CheckCircle2 size={11} />Accept Response</button>
-            <button onClick={() => { handleSaveResponse(); onTransition('SENT_TO_MANAGEMENT', 'Response sent back to process owner for revision.'); }}
+            <button onClick={() => { handleSaveResponse(); onTransition('SENT_TO_MANAGEMENT', 'Response sent back to process owner for revision.'); logEvent({ action: 'Update', description: `Sent response back to process owner for observation "${item.observationTitle}"`, module: 'Engagements', entity: 'Observation' }); }}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 text-[0.6875rem] font-semibold cursor-pointer transition-colors"><RotateCcw size={11} />Send Back</button>
             <button onClick={() => { handleSaveResponse(); if (canDisagree) onTransition('DISAGREED', rationale); }}
               disabled={!canDisagree} className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 text-[0.6875rem] font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"><XCircle size={11} />Mark Disagreed</button>

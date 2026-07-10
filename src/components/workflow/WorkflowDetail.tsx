@@ -13,6 +13,7 @@ import { WORKFLOWS } from '../../data/mockData';
 import { LIBRARY_WORKFLOWS } from './WorkflowLibraryView';
 import { useToast } from '../shared/Toast';
 import Gated from '../shared/Gated';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 type StepType = 'INGESTION' | 'TRANSFORM' | 'COMPARISON' | 'VALIDATION' | 'SCORING' | 'ACTION';
 
@@ -535,6 +536,7 @@ function CustomRuleBuilder({ open, onClose, onSave }: {
   onClose: () => void;
   onSave: (rule: ToleranceRule) => void;
 }) {
+  const logEvent = useAuditLog();
   const [step, setStep] = useState(0);
   const [type, setType] = useState<TolType | null>(null);
   const [source, setSource] = useState<ColumnRef | null>(null);
@@ -585,6 +587,7 @@ function CustomRuleBuilder({ open, onClose, onSave }: {
       source,
       target,
     });
+    logEvent({ action: 'Create', description: `Created tolerance rule "${name.trim()}"`, module: 'Workflow Library', entity: 'Tolerance Rule' });
     reset();
   }
 
@@ -1023,6 +1026,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
   const [retryingRun, setRetryingRun] = useState(false);
   const [runOverride, setRunOverride] = useState<{ status: string | null; lastRun: string | null; error: string | null } | null>(null);
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   if (!wf) return null;
 
   // Effective last-run values (local override wins once an in-place retry succeeds).
@@ -1035,6 +1039,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
     if (retryingRun) return;
     setRetryingRun(true);
     addToast({ message: 'Re-running workflow…', type: 'info' });
+    logEvent({ action: 'Run', description: `Re-ran workflow "${wf.name}"`, module: 'Workflow Library', entity: 'Workflow' });
     setTimeout(() => {
       setRunOverride({ status: 'Success', lastRun: 'Just now', error: null });
       setRetryingRun(false);

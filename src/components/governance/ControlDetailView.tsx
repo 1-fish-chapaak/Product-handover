@@ -11,6 +11,7 @@ import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { RISKS, WORKFLOWS, RACMS } from '../../data/mockData';
 import LinkWorkflowDrawer from './LinkWorkflowDrawer';
 import {
@@ -48,6 +49,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
   const { addToast } = useToast();
   const { can } = useCan();
   const { openShare } = useShare();
+  const logEvent = useAuditLog();
   const [activeTab, setActiveTab] = useState<TabId>('definition');
   const [showLinkDrawer, setShowLinkDrawer] = useState(false);
   const [showLinkDrawerFromAttrs, setShowLinkDrawerFromAttrs] = useState(false);
@@ -140,12 +142,16 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
     onUpdate({ ...control, mappedRisks: [...control.mappedRisks, riskId], updatedAt: 'Apr 26, 2026' });
     addHistoryEntry(`Mapped risk ${riskId}`);
     addToast({ message: `Risk ${riskId} mapped to ${control.controlId}`, type: 'success' });
+    const risk = RISKS.find(r => r.id === riskId);
+    logEvent({ action: 'Update', description: `Mapped risk "${risk?.name || riskId}" to control "${control.name}" (${control.controlId})`, module: 'Control Library', entity: 'Control' });
   };
 
   const handleRemoveRisk = (riskId: string) => {
     onUpdate({ ...control, mappedRisks: control.mappedRisks.filter(r => r !== riskId), updatedAt: 'Apr 26, 2026' });
     addHistoryEntry(`Removed risk mapping ${riskId}`);
     addToast({ message: `Risk ${riskId} removed from ${control.controlId}`, type: 'info' });
+    const risk = RISKS.find(r => r.id === riskId);
+    logEvent({ action: 'Update', description: `Unmapped risk "${risk?.name || riskId}" from control "${control.name}" (${control.controlId})`, module: 'Control Library', entity: 'Control' });
   };
 
   const handleLinkWorkflow = (workflowId: string, workflowName: string) => {
@@ -166,6 +172,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
     setShowLinkDrawer(false);
     setShowLinkDrawerFromAttrs(false);
     addToast({ message: `Workflow "${workflowName}" linked to ${control.controlId}`, type: 'success' });
+    logEvent({ action: 'Update', description: `Linked workflow "${workflowName}" to control "${control.name}" (${control.controlId})`, module: 'Control Library', entity: 'Control' });
   };
 
   const handleUnlinkWorkflow = (workflowId: string, workflowName: string) => {
@@ -181,12 +188,14 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
     setWorkflowAttributes(prev => { const next = { ...prev }; delete next[workflowId]; return next; });
     addHistoryEntry(`Unlinked workflow "${workflowName}"`);
     addToast({ message: `Workflow "${workflowName}" unlinked`, type: 'info' });
+    logEvent({ action: 'Update', description: `Unlinked workflow "${workflowName}" from control "${control.name}" (${control.controlId})`, module: 'Control Library', entity: 'Control' });
   };
 
   const handleMarkReady = () => {
     onUpdate({ ...control, status: 'Active', updatedAt: 'Apr 26, 2026' });
     addHistoryEntry('Marked control as Active');
     addToast({ message: `${control.controlId} marked as Active — available for engagement snapshots`, type: 'success' });
+    logEvent({ action: 'Update', description: `Marked control "${control.name}" (${control.controlId}) Active`, module: 'Control Library', entity: 'Control' });
   };
 
   // Attribute handlers
@@ -207,6 +216,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
       }));
       addHistoryEntry(`Updated attribute "${data.name}"`);
       addToast({ message: `Attribute "${data.name}" updated`, type: 'success' });
+      logEvent({ action: 'Update', description: `Updated test attribute "${data.name}" on control "${control.name}" (${control.controlId})`, module: 'Control Library', entity: 'Test Attribute' });
     } else {
       const existing = workflowAttributes[primaryWfId] || [];
       const newId = `TA-${String(100 + existing.length + 1).padStart(3, '0')}`;
@@ -216,6 +226,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
       }));
       addHistoryEntry(`Added attribute "${data.name}" to workflow`);
       addToast({ message: `Attribute "${data.name}" added`, type: 'success' });
+      logEvent({ action: 'Create', description: `Added test attribute "${data.name}" to control "${control.name}" (${control.controlId})`, module: 'Control Library', entity: 'Test Attribute' });
     }
     setShowAddModal(false);
     setEditingAttribute(null);
@@ -231,6 +242,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
     }));
     addHistoryEntry(`Removed attribute "${attr?.name || attrId}"`);
     addToast({ message: 'Attribute removed', type: 'info' });
+    logEvent({ action: 'Delete', description: `Removed test attribute "${attr?.name || attrId}" from control "${control.name}" (${control.controlId})`, module: 'Control Library', entity: 'Test Attribute' });
   };
 
   /* ─── Tab definitions ─── */

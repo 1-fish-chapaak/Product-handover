@@ -24,6 +24,7 @@ import {
   deriveEvidenceMatrixReadiness,
   type StepAvailability, type DerivedControlType,
 } from './helpers';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 // ─── Step Definition ──────────────────────────────────────────────────────
 
@@ -585,6 +586,7 @@ function PopulationStep({ ctrl, onUpdateControl, onNavigate }: {
 }) {
   const pop = ctrl.execution.population;
   const [previewRows, setPreviewRows] = useState<Record<string, unknown>[] | null>(null);
+  const logEvent = useAuditLog();
 
   // State 3: Locked
   if (pop && pop.locked) {
@@ -640,6 +642,7 @@ function PopulationStep({ ctrl, onUpdateControl, onNavigate }: {
         ...prev,
         execution: { ...prev.execution, population: snapshot, status: ControlExecStatus.POPULATION_READY },
       }));
+      logEvent({ action: 'Update', description: `Locked control scope for testing on "${ctrl.name}" (${previewRows.length} rows)`, module: 'Engagement Execution', entity: 'Control' });
     };
 
     return (
@@ -753,6 +756,7 @@ function ExecutionModeStep({ ctrl, controlType, onUpdateControl, onNavigate }: {
   const pop = ctrl.execution.population;
   const mode = ctrl.execution.executionMode;
   const hasTestItems = ctrl.execution.testItems.length > 0;
+  const logEvent = useAuditLog();
 
   // Already chosen
   if (mode && hasTestItems) {
@@ -796,6 +800,7 @@ function ExecutionModeStep({ ctrl, controlType, onUpdateControl, onNavigate }: {
         status: ControlExecStatus.TEST_ITEMS_READY,
       },
     }));
+    logEvent({ action: 'Create', description: `Selected full population for testing on "${ctrl.name}" (${items.length} test items)`, module: 'Engagement Execution', entity: 'Sample' });
   };
 
   const handleSelectSampling = () => {
@@ -882,6 +887,7 @@ function SamplingConfigPanel({ ctrl, pop, onUpdateControl }: {
   const [sampleSize, setSampleSize] = useState(Math.min(5, pop.rowCount));
   const maxSize = pop.rowCount;
   const previewCount = Math.min(sampleSize, 5);
+  const logEvent = useAuditLog();
 
   // Random sample preview
   const previewIndices = Array.from({ length: previewCount }, (_, i) => Math.floor((i * pop.rowCount) / previewCount));
@@ -906,6 +912,7 @@ function SamplingConfigPanel({ ctrl, pop, onUpdateControl }: {
         status: ControlExecStatus.TEST_ITEMS_READY,
       },
     }));
+    logEvent({ action: 'Create', description: `Generated samples (Random) — ${items.length} of ${pop.rowCount} rows for "${ctrl.name}"`, module: 'Engagement Execution', entity: 'Sample' });
   };
 
   return (
@@ -1512,6 +1519,7 @@ function UnifiedSamplesStep({ ctrl, controlType, onUpdateControl, onNavigate }: 
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const hasSamples = ctrl.execution.testItems.length > 0;
   const anyTested = ctrl.execution.testItems.some(ti => ti.attributeResults.some(ar => ar.result !== AttrResult.NOT_TESTED));
+  const logEvent = useAuditLog();
 
   // Upload handler: trigger file picker, then create testItems from control-specific mock rows
   const handleUpload = () => {
@@ -1528,6 +1536,7 @@ function UnifiedSamplesStep({ ctrl, controlType, onUpdateControl, onNavigate }: 
         ...prev,
         execution: { ...prev.execution, testItems: items, status: ControlExecStatus.TEST_ITEMS_READY },
       }));
+      logEvent({ action: 'Upload', description: `Uploaded sample data "${fileName}" (${items.length} samples) for "${ctrl.name}"`, module: 'Engagement Execution', entity: 'Sample' });
     };
     input.click();
   };
@@ -1562,6 +1571,7 @@ function UnifiedSamplesStep({ ctrl, controlType, onUpdateControl, onNavigate }: 
       const newStatus = completedChecks === totalChecks && totalChecks > 0 ? ControlExecStatus.TESTING_COMPLETE : ControlExecStatus.TESTING_IN_PROGRESS;
       return { ...prev, execution: { ...prev.execution, testItems: updatedItems, status: newStatus } };
     });
+    logEvent({ action: 'Run', description: `Ran attribute testing on "${ctrl.name}" (${ctrl.execution.testItems.length} samples)`, module: 'Engagement Execution', entity: 'Test Result' });
     onNavigate('attr-testing');
   };
 
@@ -1830,6 +1840,7 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
   const [retestIds, setRetestIds] = useState<Set<string>>(new Set());
   const [showAllPreview, setShowAllPreview] = useState(false);
   const [retestCompletedIds, setRetestCompletedIds] = useState<Set<string>>(new Set());
+  const logEvent = useAuditLog();
 
   if (items.length === 0) {
     return (
@@ -1924,6 +1935,10 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
   // For prototype: auto-generate evidence for every sample × required attribute
   const autoAttachAllEvidence = () => {
     const now = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const attachedCount = ctrl.execution.testItems.reduce((s, ti) => s + ti.attributeResults.filter(ar => {
+      const attr = ctrl.attributes.find(a => a.id === ar.attributeId);
+      return attr?.required && ar.evidenceIds.length === 0;
+    }).length, 0);
     onUpdateControl(prev => {
       const updatedItems = prev.execution.testItems.map(ti => {
         const newEvidence = [...ti.evidence];
@@ -1950,6 +1965,9 @@ function AttributeTestingStep({ ctrl, onUpdateControl, onNavigate }: {
       });
       return { ...prev, execution: { ...prev.execution, testItems: updatedItems } };
     });
+    if (attachedCount > 0) {
+      logEvent({ action: 'Upload', description: `Bulk-uploaded ${attachedCount} evidence files for "${ctrl.name}"`, module: 'Engagement Execution', entity: 'Evidence' });
+    }
   };
 
   const applyBulkMappings = () => {
@@ -3283,6 +3301,7 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
   const progress = deriveTestingProgress(ctrl);
   const items = exec.testItems;
   const [comments, setComments] = useState(exec.review.comments);
+  const logEvent = useAuditLog();
 
   const isPending = exec.review.status === ReviewStatus.PENDING;
   const isApproved = exec.review.status === ReviewStatus.APPROVED;
@@ -3307,6 +3326,8 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
         workingPaper: { ...prev.execution.workingPaper, status: WorkingPaperStatus.GENERATED },
       },
     }));
+    logEvent({ action: 'Update', description: `Submitted control "${ctrl.name}" for review`, module: 'Engagement Execution', entity: 'Control' });
+    logEvent({ action: 'Create', description: `Generated working paper for "${ctrl.name}"`, module: 'Engagement Execution', entity: 'Working Paper' });
   };
 
   // Approve
@@ -3338,6 +3359,7 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
         },
       };
     });
+    logEvent({ action: 'Update', description: `Approved testing for control "${ctrl.name}"`, module: 'Engagement Execution', entity: 'Control' });
   };
 
   // Send back
@@ -3352,6 +3374,7 @@ function ReviewStep({ ctrl, onUpdateControl, onNavigate }: {
         review: { ...prev.execution.review, status: ReviewStatus.REJECTED, reviewedAt: now, reviewer: 'Audit Lead', comments },
       },
     }));
+    logEvent({ action: 'Update', description: `Sent control "${ctrl.name}" back for rework`, module: 'Engagement Execution', entity: 'Control' });
   };
 
   // ── Submit / Resubmit State ──
@@ -3999,16 +4022,19 @@ function ConfigureSamplesStep({ ctrl, onUpdateControl, onNavigate, onLaunchWorkf
   const [filterDesc, setFilterDesc] = useState('');
   const [samplesReady, setSamplesReady] = useState(false);
   const [sampleCount, setSampleCount] = useState(0);
+  const logEvent = useAuditLog();
 
   const sampleBasedCount = ctrl.attributes.length || 3;
 
   const handleUpload = () => {
     setProcessing(true);
-    setPopulationFile(`population_${ctrl.id.toLowerCase()}_FY26.xlsx`);
+    const fileName = `population_${ctrl.id.toLowerCase()}_FY26.xlsx`;
+    setPopulationFile(fileName);
     setTimeout(() => {
       setProcessing(false);
       setPopulationUploaded(true);
       setPopulationRows(487);
+      logEvent({ action: 'Upload', description: `Uploaded population file "${fileName}" (487 rows) for "${ctrl.name}"`, module: 'Engagement Execution', entity: 'Sample' });
     }, 5000);
   };
 
@@ -4046,6 +4072,7 @@ function ConfigureSamplesStep({ ctrl, onUpdateControl, onNavigate, onLaunchWorkf
           status: prev.execution.status === 'NOT_STARTED' ? 'TEST_ITEMS_READY' as any : prev.execution.status,
         },
       }));
+      logEvent({ action: 'Create', description: `Generated samples (${method}) — ${count} of ${populationRows} rows for "${ctrl.name}"`, module: 'Engagement Execution', entity: 'Sample' });
     }, 5000);
   };
 

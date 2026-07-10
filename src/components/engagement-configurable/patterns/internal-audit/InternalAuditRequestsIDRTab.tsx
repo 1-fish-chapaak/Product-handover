@@ -15,6 +15,7 @@ import {
   type InternalAuditRequestState,
 } from './internalAuditRequestsData';
 import type { InternalAuditScopeState } from './internalAuditScopeData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const STATUS_CLS: Record<IARequestStatus, string> = {
   DRAFT: 'bg-gray-100 text-gray-600', SENT: 'bg-blue-50 text-blue-700', PENDING: 'bg-amber-50 text-amber-700',
@@ -37,6 +38,7 @@ interface Props {
 }
 
 export default function InternalAuditRequestsIDRTab({ engagement, scope, requestState, onUpdateRequestState, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as InternalAuditConfig;
   const { requests, proceedWithoutIDR } = requestState;
   const summary = deriveIARequestSummary(requests);
@@ -55,18 +57,22 @@ export default function InternalAuditRequestsIDRTab({ engagement, scope, request
   });
 
   const updateStatus = (id: string, newStatus: IARequestStatus) => {
+    const req = requests.find(r => r.id === id);
     onUpdateRequestState({
       ...requestState,
       requests: requests.map(r => r.id === id ? { ...r, status: newStatus, updatedAt: new Date().toISOString().slice(0, 10) } : r),
     });
+    logEvent({ action: 'Update', description: `${newStatus === 'SENT' ? 'Sent' : newStatus === 'RECEIVED' ? 'Marked received' : 'Updated status of'} IDR request "${req?.title || id}"`, module: 'Engagements', entity: 'IDR Request' });
   };
 
   const addRequest = (req: IARequest) => {
     onUpdateRequestState({ ...requestState, requests: [req, ...requests] });
     setShowCreateForm(false);
+    logEvent({ action: 'Create', description: `Created IDR request "${req.title}" for ${req.requestedFrom}`, module: 'Engagements', entity: 'IDR Request' });
   };
 
   const addFile = (id: string, fileName: string) => {
+    const req = requests.find(r => r.id === id);
     onUpdateRequestState({
       ...requestState,
       requests: requests.map(r => {
@@ -76,6 +82,7 @@ export default function InternalAuditRequestsIDRTab({ engagement, scope, request
         return { ...r, filesReceived: files, status: newStatus, updatedAt: new Date().toISOString().slice(0, 10) };
       }),
     });
+    logEvent({ action: 'Upload', description: `Added received file "${fileName}" to IDR request "${req?.title || id}"`, module: 'Engagements', entity: 'Evidence' });
   };
 
   const hasReceived = requests.some(r => r.status === 'RECEIVED' || r.status === 'PARTIALLY_RECEIVED');

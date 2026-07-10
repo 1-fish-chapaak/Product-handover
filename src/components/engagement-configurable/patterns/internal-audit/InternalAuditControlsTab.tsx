@@ -13,6 +13,7 @@ import { RACMS, SOPS, CHECKLISTS, type InternalAuditScopeState } from './interna
 import { simulateAnalysisRun, type InternalAuditAnalysisState, type AnalysisRun } from './internalAuditAnalysisData';
 import { BulkExecuteModal } from '../../../workflow/BulkExecuteModal';
 import type { LibraryWorkflow } from '../../../workflow/WorkflowLibraryView';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 // ─── Derive controls with linked workflows ──────────────────────────────
 
@@ -191,6 +192,7 @@ interface Props {
 }
 
 export default function InternalAuditControlsTab({ engagement, scope, analysisState, onUpdateAnalysis, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const controls = useMemo(() => deriveControls(scope), [scope]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedWfIds, setSelectedWfIds] = useState<Set<string>>(new Set());
@@ -287,10 +289,13 @@ export default function InternalAuditControlsTab({ engagement, scope, analysisSt
       }
     }
     onUpdateAnalysis({ ...analysisState, runs: [...analysisState.runs, ...newRuns] });
+    if (newRuns.length > 0) {
+      logEvent({ action: 'Run', description: `Ran ${newRuns.length} control workflow${newRuns.length === 1 ? '' : 's'} in "${engagement.name}"`, module: 'Engagements', entity: 'Workflow' });
+    }
     setShowBulkModal(false);
     setSelectedWfIds(new Set());
     setSelectedControlIds(new Set());
-  }, [bulkMode, controls, selectedControlIds, expandedControl, selectedWfIds, engagement.owner, analysisState, onUpdateAnalysis]);
+  }, [bulkMode, controls, selectedControlIds, expandedControl, selectedWfIds, engagement.owner, engagement.name, analysisState, onUpdateAnalysis, logEvent]);
 
   const bulkControlWfCount = controls.filter(c => selectedControlIds.has(c.id)).reduce((s, c) => s + c.workflows.length, 0);
 

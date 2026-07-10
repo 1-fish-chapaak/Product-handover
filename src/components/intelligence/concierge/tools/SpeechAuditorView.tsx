@@ -14,6 +14,7 @@ import ListPlaceholder from '../../../shared/ListPlaceholder';
 import { Pill, type Tone } from '../../../shared/StatusBadge';
 import { DateFilterPicker, dateInFilter, DEFAULT_DATE_FILTER, type DateFilter } from '../../../shared/DateFilterPicker';
 import ConfirmationModal from '../../../shared/ConfirmationModal';
+import { useAuditLog, type LogInput } from '../../../../context/AdminDataContext';
 
 // ─── Result type ─────────────────────────────────────────────────────────────
 
@@ -642,15 +643,37 @@ function ExtraControls(
 
 // ─── Result actions: exports ─────────────────────────────────────────────────
 
-function ResultActions(result: SpeechAuditResult): ReactNode {
+function ResultActions(result: SpeechAuditResult, logEvent?: (e: LogInput) => void): ReactNode {
   const btn =
     'inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-[0.8125rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer';
   return (
     <>
-      <button onClick={() => exportTranscriptTxt(result)} className={btn}>
+      <button
+        onClick={() => {
+          exportTranscriptTxt(result);
+          logEvent?.({
+            action: 'Export',
+            description: 'Exported Speech Auditor transcript as TXT',
+            module: 'AI Concierge',
+            entity: 'Speech Auditor',
+          });
+        }}
+        className={btn}
+      >
         <Download size={14} /> Transcript (.txt)
       </button>
-      <button onClick={() => exportTranscriptCsv(result)} className={btn}>
+      <button
+        onClick={() => {
+          exportTranscriptCsv(result);
+          logEvent?.({
+            action: 'Export',
+            description: 'Exported Speech Auditor transcript as CSV',
+            module: 'AI Concierge',
+            entity: 'Speech Auditor',
+          });
+        }}
+        className={btn}
+      >
         <FileDown size={14} /> Export CSV
       </button>
     </>
@@ -827,6 +850,7 @@ function SpeechHistoryList({ jobs, onOpen, onDelete }: {
 // ─── View ────────────────────────────────────────────────────────────────────
 
 export default function SpeechAuditorView({ onBack }: { onBack: () => void }) {
+  const logEvent = useAuditLog();
   return (
     <ConciergeFlow<SpeechAuditResult>
       title="Speech Auditor"
@@ -845,7 +869,7 @@ export default function SpeechAuditorView({ onBack }: { onBack: () => void }) {
       tips={TIPS}
       buildResult={buildResult}
       renderResult={(result) => <ResultBody result={result} />}
-      resultActions={ResultActions}
+      resultActions={(result) => ResultActions(result, logEvent)}
       historyMeta={(r) =>
         `${overallLabel(r.transcript.overall_sentiment)} · ${r.report.findings.length} finding${r.report.findings.length === 1 ? '' : 's'}`
       }

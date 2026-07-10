@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { BulkExecuteModal, Checkbox } from './BulkExecuteModal';
 
 interface Props {
@@ -175,6 +176,7 @@ export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
 export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow, onRunWorkflow, processFilter }: Props) {
   const { can } = useCan();
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [search, setSearch] = useState('');
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
@@ -292,6 +294,8 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
       skippedCount: 0,
       date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
     });
+    // Bulk-run audit event is logged by BulkExecuteModal's handleStep3Execute
+    // (the commit point), so it isn't duplicated here.
   };
 
   const handleRowClick = (id: string) => {
@@ -345,7 +349,10 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
           <div className="ml-auto flex items-center gap-3">
             {can('wf_upload') && (
               <button
-                onClick={() => addToast({ message: 'Upload a workflow file to import', type: 'info' })}
+                onClick={() => {
+                  addToast({ message: 'Upload a workflow file to import', type: 'info' });
+                  logEvent({ action: 'Create', description: 'Imported a workflow file into the library', module: 'Workflow Library', entity: 'Workflow' });
+                }}
                 className="flex items-center gap-2 px-4 h-10 rounded-md bg-white text-text border border-border text-[0.8125rem] font-semibold hover:bg-surface-2 transition-colors cursor-pointer"
               >
                 <Upload size={14} />
@@ -546,7 +553,10 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                             <ActionIconButton
                               label="View output"
                               disabled={bulkMode}
-                              onClick={() => addToast({ message: `Opening latest output for "${wf.name}"…`, type: 'success' })}
+                              onClick={() => {
+                                addToast({ message: `Opening latest output for "${wf.name}"…`, type: 'success' });
+                                logEvent({ action: 'Export', description: `Opened latest output for "${wf.name}"`, module: 'Workflow Library', entity: 'Run Output' });
+                              }}
                             >
                               <FileText size={14} />
                             </ActionIconButton>
@@ -560,6 +570,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                                   onRunWorkflow(wf.id);
                                 } else {
                                   addToast({ message: `Running "${wf.name}"…`, type: 'success' });
+                                  logEvent({ action: 'Run', description: `Ran workflow "${wf.name}"`, module: 'Workflow Library', entity: 'Workflow' });
                                 }
                               }}
                             >
@@ -579,7 +590,10 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                             <ActionIconButton
                               label="Delete"
                               disabled={bulkMode}
-                              onClick={() => addToast({ message: `Deleted "${wf.name}"`, type: 'success' })}
+                              onClick={() => {
+                                addToast({ message: `Deleted "${wf.name}"`, type: 'success' });
+                                logEvent({ action: 'Delete', description: `Deleted workflow "${wf.name}"`, module: 'Workflow Library', entity: 'Workflow' });
+                              }}
                             >
                               <Trash2 size={14} />
                             </ActionIconButton>

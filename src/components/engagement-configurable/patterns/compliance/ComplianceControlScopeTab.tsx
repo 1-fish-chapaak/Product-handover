@@ -14,6 +14,7 @@ import {
   deriveScopeSummary, deriveComplianceControlReadiness, LIBRARY_CONTROLS, createImportedControls,
   type ScopeControl, type ControlReadiness,
 } from './complianceControlScopeData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const NATURE_CLS = { Preventive: 'bg-emerald-50 text-emerald-700', Detective: 'bg-blue-50 text-blue-700', Corrective: 'bg-amber-50 text-amber-700' };
 const AUTO_CLS = { Manual: 'bg-gray-100 text-gray-600', Automated: 'bg-purple-50 text-purple-700', Hybrid: 'bg-indigo-50 text-indigo-700' };
@@ -34,6 +35,7 @@ interface Props {
 type ActiveModal = 'library' | 'import' | 'manual' | null;
 
 export default function ComplianceControlScopeTab({ engagement, scopeControls, onUpdateScopeControls }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as ComplianceConfig;
   const controls = scopeControls;
   const summary = deriveScopeSummary(controls);
@@ -190,7 +192,7 @@ export default function ComplianceControlScopeTab({ engagement, scopeControls, o
       {activeModal === 'library' && (
         <LibraryPickerModal
           existingIds={new Set(controls.map(c => c.id))}
-          onAdd={(picked) => appendControls(picked, `${picked.length} control${picked.length !== 1 ? 's' : ''} added from library`)}
+          onAdd={(picked) => { appendControls(picked, `${picked.length} control${picked.length !== 1 ? 's' : ''} added from library`); logEvent({ action: 'Update', description: `Added ${picked.length} control${picked.length !== 1 ? 's' : ''} to scope from library in "${engagement.name}"`, module: 'Engagements', entity: 'Control' }); }}
           onClose={() => setActiveModal(null)}
         />
       )}
@@ -340,6 +342,7 @@ function LibraryPickerModal({ existingIds, onAdd, onClose }: {
 function ImportSheetModal({ onImported, onClose }: {
   onImported: (controls: ScopeControl[]) => void; onClose: () => void;
 }) {
+  const logEvent = useAuditLog();
   const [phase, setPhase] = useState<'idle' | 'parsing'>('idle');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -348,6 +351,7 @@ function ImportSheetModal({ onImported, onClose }: {
   const startParse = () => {
     setPhase('parsing');
     timer.current = setTimeout(() => onImported(createImportedControls()), 1500);
+    logEvent({ action: 'Upload', description: 'Parsed control scope source "controls_p2p_supplement.xlsx"', module: 'Engagements', entity: 'Control' });
   };
 
   return (
@@ -383,6 +387,7 @@ const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1';
 function ManualControlModal({ nextIndex, onCreate, onClose }: {
   nextIndex: number; onCreate: (ctrl: ScopeControl) => void; onClose: () => void;
 }) {
+  const logEvent = useAuditLog();
   const [name, setName] = useState('');
   const [risk, setRisk] = useState('');
   const [attrs, setAttrs] = useState<string[]>(['']);
@@ -404,6 +409,7 @@ function ManualControlModal({ nextIndex, onCreate, onClose }: {
       })),
       workflows: [],
     });
+    logEvent({ action: 'Create', description: `Created control "${name.trim()}" in compliance scope`, module: 'Engagements', entity: 'Control' });
   };
 
   return (

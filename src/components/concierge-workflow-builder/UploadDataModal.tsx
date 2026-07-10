@@ -23,6 +23,7 @@ import type { JourneyFiles, UploadedFile, WorkflowDraft } from './types';
 import Button from '../ui/Button';
 import { cn } from '../../lib/cn';
 import { useFavouriteSources } from '../data-sources/useFavouriteSources';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 interface Props {
   open: boolean;
@@ -247,6 +248,7 @@ export default function UploadDataModal({
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const logEvent = useAuditLog();
   const { favs, toggleFav } = useFavouriteSources();
   const [tab, setTab] = useState<TabId>(allowedTabs?.[0] ?? 'upload');
   // The catalog this instance shows — chat "Session file" assets are dropped
@@ -428,6 +430,12 @@ export default function UploadDataModal({
         linkedSources: linkedSourceNames,
       });
     }
+    logEvent({
+      action: 'Upload',
+      description: `Attached ${totalSelected} data source${totalSelected === 1 ? '' : 's'} to workflow`,
+      module: 'Workflows',
+      entity: 'Data Source',
+    });
     onClose();
   };
 

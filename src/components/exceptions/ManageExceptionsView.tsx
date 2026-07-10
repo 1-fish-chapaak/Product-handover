@@ -1380,6 +1380,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   comment: reason,
                 }, ...detail.activityLog];
               });
+              logEvent({ action: 'Update', description: `Requested revised due date (${fmtDue(revisedDueDate)}) for ${scope.length > 1 ? `${scope.length} linked cases` : drawerException.id}`, module: 'Exceptions', entity: 'Exception' });
               addToast({ type: 'success', message: scope.length > 1
                 ? `Revised due date requested for ${scope.length} linked cases — sent to the auditor.`
                 : 'Revised due date request sent to the auditor for approval.' });
@@ -1427,6 +1428,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   comment: comment || undefined,
                 }, ...detail.activityLog];
               });
+              logEvent({ action: 'Update', description: `${approved ? 'Approved' : 'Rejected'} revised due date request for ${scope.length > 1 ? `${scope.length} linked cases` : drawerException.id}`, module: 'Exceptions', entity: 'Exception' });
               addToast({
                 type: approved ? 'success' : 'info',
                 message: scope.length > 1
@@ -1615,6 +1617,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
               setActiveSheetId(id);
               setSampleCountLeft(c => Math.max(0, c - 1));
               setSampleModalOpen(false);
+              logEvent({ action: 'Create', description: `Created sample data sheet "${payload.name}"`, module: 'Exceptions', entity: 'Sample' });
               addToast({ type: 'success', message: `Sample sheet "${payload.name}" has been created` });
             }}
           />
@@ -1655,6 +1658,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   comment: reason,
                 }, ...detail.activityLog];
               });
+              logEvent({ action: 'Update', description: `Requested revised due date (${fmtDue(revisedDueDate)}) for ${ids.length} case${ids.length === 1 ? '' : 's'}`, module: 'Exceptions', entity: 'Exception' });
               addToast({ type: 'success', message: `Revised due date requested for ${ids.length} case${ids.length === 1 ? '' : 's'} — sent to the auditor.` });
               setSelected(new Set());
               setBulkRequestDueOpen(false);
@@ -1700,6 +1704,7 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
                   comment: comment || undefined,
                 }, ...detail.activityLog];
               });
+              logEvent({ action: 'Update', description: `${approved ? 'Approved' : 'Rejected'} ${ids.length} revised due date request${ids.length === 1 ? '' : 's'}`, module: 'Exceptions', entity: 'Exception' });
               addToast({
                 type: approved ? 'success' : 'info',
                 message: approved

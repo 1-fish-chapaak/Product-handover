@@ -19,6 +19,7 @@ import {
 } from './automationReportsData';
 import { DEFICIENCY_LABELS, type DeficiencyType } from './automationCasesData';
 import FloatingLines from '../../../shared/FloatingLines';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 function now(): string { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 
@@ -233,6 +234,7 @@ function WorkflowExceptionDetails({ exceptions, automationState: _as, openExc, r
 }
 
 export default function AutomationReportsTab({ engagement, automationState, reportsState, onUpdateReports, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as AutomationProjectConfig;
   const hasReportOutput = cfg.outputTypes.includes('REPORT');
   const completedRuns = automationState.runs.runs.filter(r => r.status === 'COMPLETED');
@@ -276,6 +278,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
     const report: AutomationReport = { id: `rpt-${Date.now()}`, ...draft } as AutomationReport;
     onUpdateReports({ ...reportsState, reports: [...reportsState.reports, report] });
     setSelectedReportId(report.id);
+    logEvent({ action: 'Create', description: `Generated automation report "${report.title}"`, module: 'Engagements', entity: 'Report' });
   };
 
   const updateReport = (id: string, updates: Partial<AutomationReport>) => {
@@ -288,6 +291,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
 
   const finalize = (id: string) => {
     updateReport(id, { status: 'FINAL', finalizedAt: now(), finalizedBy: engagement.owner, history: [...(selectedReport?.history || []), { id: `rrh-${Date.now()}`, action: 'FINALIZED', actor: engagement.owner, timestamp: now(), comments: 'Report finalized.' }] });
+    logEvent({ action: 'Update', description: `Finalized automation report "${selectedReport?.title || id}"`, module: 'Engagements', entity: 'Report' });
   };
 
   const isFinal = selectedReport?.status === 'FINAL';
@@ -359,7 +363,7 @@ export default function AutomationReportsTab({ engagement, automationState, repo
             <Share2 size={13} /> Share
           </button>
           </Gated>
-          <button onClick={() => alert('Download — placeholder')} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
+          <button onClick={() => { logEvent({ action: 'Export', description: `Downloaded automation report "${selectedReport?.title || 'Automation Output Report'}"`, module: 'Engagements', entity: 'Report' }); alert('Download — placeholder'); }} className="flex items-center gap-1.5 px-3 py-2 border border-border text-[0.75rem] font-medium text-text-secondary hover:bg-white hover:border-primary/30 transition-colors cursor-pointer bg-white rounded-lg">
             <Download size={13} /> Download
           </button>
         </div>

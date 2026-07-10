@@ -12,6 +12,7 @@ import {
   initializeActionItems, deriveActionPlanSummary, ACTION_STATUS_CLS, PRIORITY_CLS, PRIORITIES_LIST,
   type InternalAuditActionPlanState, type InternalAuditActionItem, type ActionItemStatus, type ActionPriority,
 } from './internalAuditActionPlanData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export default function InternalAuditActionPlanTab({ engagement, iaState, actionPlan, onUpdateActionPlan, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const isIssued = iaState.finalReport.status === 'ISSUED';
   const noObsConfirmed = iaState.observations.noObservationsConfirmed;
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -64,6 +66,7 @@ export default function InternalAuditActionPlanTab({ engagement, iaState, action
       completedAt: status === 'COMPLETED' ? now() : item.completedAt,
       history: [...item.history, { id: `aph-${Date.now()}`, action: 'STATUS_CHANGED', actor: engagement.owner, timestamp: now(), comments: comments || `Status → ${status}` }],
     });
+    logEvent({ action: 'Update', description: `${status === 'IN_PROGRESS' ? 'Started' : status === 'COMPLETED' ? 'Completed' : 'Updated'} action item "${item.title}"`, module: 'Engagements', entity: 'Action Item' });
   };
 
   const addEvidence = (id: string, fileName: string) => {
@@ -73,11 +76,13 @@ export default function InternalAuditActionPlanTab({ engagement, iaState, action
       remediationEvidence: [...item.remediationEvidence, fileName],
       history: [...item.history, { id: `aph-${Date.now()}`, action: 'EVIDENCE_ADDED', actor: engagement.owner, timestamp: now(), comments: fileName }],
     });
+    logEvent({ action: 'Upload', description: `Added remediation evidence "${fileName}" to action item "${item.title}"`, module: 'Engagements', entity: 'Evidence' });
   };
 
   const addManualItem = (item: InternalAuditActionItem) => {
     onUpdateActionPlan({ ...actionPlan, actionItems: [...actionPlan.actionItems, item] });
     setShowCreateForm(false);
+    logEvent({ action: 'Create', description: `Created remediation action item "${item.title}"`, module: 'Engagements', entity: 'Action Item' });
   };
 
   const allComplete = actionPlan.actionItems.length > 0 && actionPlan.actionItems.every(a => ['COMPLETED', 'CANCELLED'].includes(a.status));

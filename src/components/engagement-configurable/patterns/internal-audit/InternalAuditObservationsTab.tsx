@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import type { ConfigurableEngagement, InternalAuditConfig } from '../../configurableEngagementTypes';
 import type { InternalAuditAnalysisState, PotentialObservation } from './internalAuditAnalysisData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 import {
   validateObservationForDiscussion, deriveObservationsSummary,
   CATEGORY_LABELS, CATEGORIES_LIST, SEVERITIES_LIST, SEVERITY_CLS, STATUS_CLS,
@@ -47,6 +48,7 @@ interface Props {
 }
 
 export default function InternalAuditObservationsTab({ engagement, analysisState, observationsState, onUpdateObservations, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as InternalAuditConfig;
   const summary = deriveObservationsSummary(observationsState);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -82,6 +84,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
       observations: [...observationsState.observations, obs],
       noObservationsConfirmed: false,
     });
+    logEvent({ action: 'Create', description: `Converted potential observation "${po.title}" to observation`, module: 'Engagements', entity: 'Observation' });
   };
 
   const dismissPotObs = (poId: string) => {
@@ -91,6 +94,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
   const addManualObs = (obs: InternalAuditObservation) => {
     onUpdateObservations({ ...observationsState, observations: [...observationsState.observations, obs], noObservationsConfirmed: false });
     setShowCreateForm(false);
+    logEvent({ action: 'Create', description: `Created observation "${obs.title}" in "${engagement.name}"`, module: 'Engagements', entity: 'Observation' });
   };
 
   const updateObs = (updated: InternalAuditObservation) => {
@@ -111,6 +115,7 @@ export default function InternalAuditObservationsTab({ engagement, analysisState
     }
     setValidationMessage(null);
     updateObs({ ...obs, status: 'READY_FOR_DISCUSSION', updatedAt: new Date().toISOString().slice(0, 10), history: [...obs.history, { id: `oh-${Date.now()}`, action: 'MARKED_READY', actor: engagement.owner, timestamp: now(), comments: '' }] });
+    logEvent({ action: 'Update', description: `Marked observation "${obs.title}" ready for discussion`, module: 'Engagements', entity: 'Observation' });
   };
 
   const dropObs = (id: string) => {

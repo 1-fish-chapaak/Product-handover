@@ -4,6 +4,7 @@ import {
   Star, RefreshCw, ListFilter, FileText, X, Send, LayoutGrid, Table2, FlaskConical,
 } from 'lucide-react';
 import { useIcfr } from './store';
+import { useAuditLog } from '../../context/AdminDataContext';
 import {
   controlConclusion, courtFor, designProgress, designStarted, engagementProgress, openDiscussionCount,
   operatingProgress, operatingStarted, trackResult,
@@ -82,6 +83,7 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
 
 export default function ControlRegister() {
   const { eng, role, openControl, setView, rollForward, requestDesignDocs } = useIcfr();
+  const logEvent = useAuditLog();
   const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [q, setQ] = useState('');
@@ -134,8 +136,8 @@ export default function ControlRegister() {
           <p className="text-[13px] text-ink-500 mt-0.5">{eng.controls.length} controls · {stats.effective} effective · {stats.waitingOnOwner} waiting on owner</p>
         </div>
         <div className="flex items-center gap-1.5">
-          <button onClick={() => downloadIcfrWorkingPaper(eng)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>
-          {role === 'auditor' && <button onClick={rollForward} title="Roll forward to year-end" aria-label="Roll forward to year-end" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RefreshCw size={15} /></button>}
+          <button onClick={() => { downloadIcfrWorkingPaper(eng); logEvent({ action: 'Export', description: `Exported ICFR working paper (${eng.controls.length} controls)`, module: 'SOX ICFR', entity: 'Engagement' }); }} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>
+          {role === 'auditor' && <button onClick={() => { rollForward(); logEvent({ action: 'Update', description: 'Rolled engagement forward to year-end', module: 'SOX ICFR', entity: 'Engagement' }); }} title="Roll forward to year-end" aria-label="Roll forward to year-end" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RefreshCw size={15} /></button>}
           {role === 'auditor' && (
             <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
               title={sel.size ? `Bulk test the ${sel.size} selected controls` : 'Bulk test all controls in view'}
@@ -273,7 +275,7 @@ export default function ControlRegister() {
           <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
           {role === 'auditor' && <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>}
-          {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
+          {role === 'auditor' && <button onClick={() => { logEvent({ action: 'Share', description: `Requested design documents for ${sel.size} control(s)`, module: 'SOX ICFR', entity: 'Control' }); requestDesignDocs(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
           <button onClick={() => { openControl(Array.from(sel)[0]); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><Send size={14} /> Open first</button>
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>

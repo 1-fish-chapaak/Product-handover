@@ -1072,6 +1072,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
   onStartReview?: (racmName: string, fileName: string) => void;
 }) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   type SourceMode = 'blank' | 'upload' | 'sop';
   const [source, setSource] = useState<SourceMode | null>(sopName ? 'sop' : null);
   const [uploadedFile, setUploadedFile] = useState<string | null>(null);
@@ -1127,6 +1128,7 @@ function CreateRacmFromSOPModal({ sopName, bpAbbr, onClose, onCreate, onStartRev
       setUploadParsed(true);
       setExtractedStats({ risks: 5, controls: 7, rows: 7 });
       addToast({ message: `"${fileName}" parsed: 5 risks, 7 controls extracted.`, type: 'success' });
+      logEvent({ action: 'Upload', description: `Parsed SOP "${fileName}" — extracted 5 risks and 7 controls`, module: 'Process Hub', entity: 'SOP' });
     }, 1200);
   };
 
@@ -1618,6 +1620,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
 
     if (!startProcessing) {
       addToast({ message: `"${data.name}" saved as draft. Start processing when ready.`, type: 'success' });
+      logEvent({ action: 'Upload', description: `Uploaded SOP "${data.name}" (draft)`, module: 'Process Hub', entity: 'SOP' });
       return;
     }
 
@@ -1647,8 +1650,9 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         return { ...updated, status: 'Processed' as SOPStatus };
       }));
       addToast({ message: `"${data.name}" processed: ${risks.length} risks and ${controls.length} controls extracted. Review to create draft RACM.`, type: 'success' });
+      logEvent({ action: 'Upload', description: `Uploaded and processed SOP "${data.name}" — ${risks.length} risks and ${controls.length} controls extracted`, module: 'Process Hub', entity: 'SOP' });
     }, 4500);
-  }, [addToast, bpAbbr]);
+  }, [addToast, bpAbbr, logEvent]);
 
   // Retry a failed SOP — replace the failed record in place with the re-uploaded
   // document and re-run RACM generation, instead of adding a new SOP row.
@@ -1706,8 +1710,9 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         };
       }));
       addToast({ message: `"${data.name}" retried. RACM generated with ${risks.length} risks and ${controls.length} controls.`, type: 'success' });
+      logEvent({ action: 'Update', description: `Retried processing for SOP "${data.name}" — RACM generated with ${risks.length} risks and ${controls.length} controls`, module: 'Process Hub', entity: 'SOP' });
     }, 4500);
-  }, [retryingSopId, bpAbbr, addToast]);
+  }, [retryingSopId, bpAbbr, addToast, logEvent]);
 
   // Start processing for a draft SOP
   const handleStartProcessing = useCallback((sopId: string) => {
@@ -1740,8 +1745,9 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
         return { ...updated, status: 'Processed' as SOPStatus };
       }));
       addToast({ message: `"${sop.name}" processed: ${risks.length} risks and ${controls.length} controls extracted.`, type: 'success' });
+      logEvent({ action: 'Update', description: `Processed SOP "${sop.name}" — ${risks.length} risks and ${controls.length} controls extracted`, module: 'Process Hub', entity: 'SOP' });
     }, 4500);
-  }, [addToast, localSops]);
+  }, [addToast, localSops, logEvent]);
 
   const handleUpdateRisks = (sopId: string, risks: ExtractedRisk[]) => {
     setLocalSops(prev => prev.map(s => s.id === sopId ? { ...s, extractedRisks: risks, risks: risks.filter(r => r.accepted).length } : s));
@@ -1764,6 +1770,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
     } : s));
     setReviewingSopId(null);
     addToast({ message: `Draft RACM "${name}" created with ${acceptedRisks} risks and ${acceptedControls} control references. Open the RACM tab to continue.`, type: 'success' });
+    logEvent({ action: 'Create', description: `Created draft RACM "${name}" from SOP "${sop.name}" with ${acceptedRisks} risks and ${acceptedControls} controls`, module: 'Governance', entity: 'RACM' });
   };
 
   // Action click handlers — derived from status via getSOPAction
@@ -2170,7 +2177,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
                       <div className="relative group/download">
                         <button
                           type="button"
-                          onClick={() => addToast({ message: `Downloading ${sop.name}…`, type: 'info' })}
+                          onClick={() => { addToast({ message: `Downloading ${sop.name}…`, type: 'info' }); logEvent({ action: 'Export', description: `Downloaded SOP "${sop.name}"`, module: 'Process Hub', entity: 'SOP' }); }}
                           aria-label="Download SOP"
                           className="w-10 h-10 rounded-sm inline-flex items-center justify-center text-ink-500 hover:bg-brand-50 hover:text-primary cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60"
                         >
@@ -2235,6 +2242,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
               setShowCreateRacmForSopId(null);
               onRacmCreated?.(racmId, racmName, bpAbbr, framework);
               addToast({ message: `RACM "${racmName}" created. Open the RACM tab to start mapping.`, type: 'success' });
+              logEvent({ action: 'Create', description: `Created RACM "${racmName}" from SOP "${targetSop.name}"`, module: 'Governance', entity: 'RACM' });
             }}
           />;
         })()}
@@ -2265,7 +2273,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
             uploadedBy={viewingSop?.uploadedBy}
             uploadedAgo={viewingSop?.uploadedAt}
             sections={DEFAULT_SOP_SECTIONS}
-            onDownload={(kind) => viewingSop && addToast({ message: `Downloading ${viewingSop.name}${kind ? ` (${kind})` : ''}…`, type: 'info' })}
+            onDownload={(kind) => { if (viewingSop) { addToast({ message: `Downloading ${viewingSop.name}${kind ? ` (${kind})` : ''}…`, type: 'info' }); logEvent({ action: 'Export', description: `Downloaded SOP "${viewingSop.name}"${kind ? ` (${kind})` : ''}`, module: 'Process Hub', entity: 'SOP' }); } }}
             onClose={() => setViewingSopId(null)}
           />
         );
@@ -2473,6 +2481,7 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack }: {
   const [showAiMap, setShowAiMap] = useState(false);
   const [draftAttr, setDraftAttr] = useState('');
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
 
   useEffect(() => {
     const stored = loadStoredControls(bpAbbr) ?? getSeedControls(bpAbbr);
@@ -2495,6 +2504,7 @@ function ControlDetailPage({ ctrl, bpAbbr, onBack }: {
     setAttributes(prev => [...prev, { id: `${ctrl.id}-X${xCount + 1}`, description: desc, result: 'Pending', workflows: [] }]);
     setDraftAttr('');
     addToast({ message: 'Attribute added', type: 'success' });
+    logEvent({ action: 'Update', description: `Added attribute "${desc}" to control "${ctrl.name}"`, module: 'Control Library', entity: 'Control' });
   };
 
   // Classification / Nature / Automation are surfaced as header pills now, so the
@@ -2728,6 +2738,7 @@ function AiMapPanel({ attributes, onClose, onAccept }: {
 }) {
   type Sugg = { attrId: string; attrDesc: string; wf: AttrWorkflow };
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   // One plausible workflow per attribute that isn't already linked (offset by
   // index for variety). Stands in for an AI suggestion engine.
   const [pending, setPending] = useState<Sugg[]>(() =>
@@ -2744,6 +2755,7 @@ function AiMapPanel({ attributes, onClose, onAccept }: {
     onAccept(s.attrId, s.wf);
     setPending(prev => prev.filter(p => p !== s));
     addToast({ message: `Linked ${s.wf.code} to ${s.attrId}`, type: 'success' });
+    logEvent({ action: 'Update', description: `Linked workflow "${s.wf.name}" (${s.wf.code}) to attribute ${s.attrId}`, module: 'Control Library', entity: 'Control' });
   };
   const dismiss = (s: Sugg) => setPending(prev => prev.filter(p => p !== s));
 
@@ -3122,6 +3134,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
             }, ...prev]);
             setShowCreateControl(false);
             addToast({ message: `Control "${description.trim()}" created`, type: 'success' });
+            logEvent({ action: 'Create', description: `Created control "${description.trim()}" (${newId})`, module: 'Control Library', entity: 'Control' });
           }}
         />
       )}
@@ -3404,6 +3417,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
                   return { ...x, workflows: [...x.workflows, bound] };
                 }));
                 addToast({ message: `Workflow "${wf.name}" linked to ${c.name}`, type: 'success' });
+                logEvent({ action: 'Update', description: `Linked workflow "${wf.name}" to control "${c.name}"`, module: 'Control Library', entity: 'Control' });
                 setLinkWfCtrlId(null);
               }}
             />
@@ -3563,6 +3577,7 @@ const RUN_STATUS_PILL: Record<RunStatus, string> = {
 function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateWorkflow, onRunWorkflow, onBulkRunComplete }: { bpAbbr: string; seeded: boolean; onOpenWorkflowDetail?: (workflowId: string) => void; onCreateWorkflow?: () => void; onRunWorkflow?: (workflowId: string) => void; onBulkRunComplete?: (run: BulkAuditRun) => void }) {
   const { addToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   const [workflows, setWorkflows] = useState<BPWorkflow[]>(getSeedWorkflows(bpAbbr));
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [confirmDeleteWf, setConfirmDeleteWf] = useState<{ id: string; name: string } | null>(null);
@@ -3628,6 +3643,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
     const wf = workflows[idx];
     setWorkflows(prev => prev.filter(w => w.id !== id));
     setSelectedIds(prev => prev.filter(s => s !== id));
+    logEvent({ action: 'Delete', description: `Deleted workflow "${wf.name}"`, module: 'Workflows', entity: 'Workflow' });
     addToast({
       message: `Workflow "${wf.name}" deleted.`,
       type: 'info',
@@ -3646,6 +3662,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
     setWorkflows(prev => [{ id: `wf-${Date.now()}`, name: data.name, description: data.desc, type: data.type, nature: data.nature, status: 'Draft', linkedControls: [], owner: 'You', lastRun: null, lastRunStatus: null, lastRunError: null, lastRunErrorKind: null, tags: [], isSql: false }, ...prev]);
     setShowCreateDrawer(false);
     addToast({ message: `Workflow "${data.name}" created.`, type: 'success' });
+    logEvent({ action: 'Create', description: `Created workflow "${data.name}"`, module: 'Workflows', entity: 'Workflow' });
   };
 
   // Retry a failed run. A technical/server error re-runs in place (the input is
@@ -3661,6 +3678,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
         : w));
       setRetryingIds(prev => prev.filter(id => id !== wf.id));
       addToast({ message: `"${wf.name}" re-ran successfully.`, type: 'success' });
+      logEvent({ action: 'Run', description: `Re-ran workflow "${wf.name}"`, module: 'Workflows', entity: 'Workflow' });
     }, 1600);
   };
 
@@ -4263,6 +4281,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
   onBack: () => void; onFreeze: (rows: ImportedRow[]) => void;
 }) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [rows, setRows] = useState<ImportedRow[]>(() => {
     const validated = MOCK_IMPORT_ROWS.map(r => ({ ...r, validationIssues: validateRow(r, MOCK_IMPORT_ROWS) }));
     return validated;
@@ -4289,6 +4308,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
   const handleBulkMarkReviewed = () => {
     setRows(prev => prev.map(r => ({ ...r, reviewStatus: 'Reviewed' as const })));
     addToast({ message: 'All rows marked as reviewed.', type: 'success' });
+    logEvent({ action: 'Update', description: `Marked all ${rows.length} rows as reviewed in RACM "${racmName}"`, module: 'Governance', entity: 'RACM' });
   };
   const handleDeleteRow = (id: string) => {
     const idx = rows.findIndex(r => r.id === id);
@@ -4319,6 +4339,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
     };
     setRows(prev => revalidate([...prev, newRow]));
     addToast({ message: 'New row added.', type: 'success' });
+    logEvent({ action: 'Update', description: `Added a row to RACM "${racmName}"`, module: 'Governance', entity: 'RACM' });
   };
 
   // ─── Cell editing ────────────────────────────────────────────────────────
@@ -4404,7 +4425,7 @@ function ReviewImportWorkspace({ racmName, bpAbbr, fileName, onBack, onFreeze }:
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" shape="lg" onClick={() => addToast({ message: 'Draft saved.', type: 'success' })}>Save Draft</Button>
+                <Button variant="outline" size="sm" shape="lg" onClick={() => { addToast({ message: 'Draft saved.', type: 'success' }); logEvent({ action: 'Update', description: `Saved draft of RACM "${racmName}"`, module: 'Governance', entity: 'RACM' }); }}>Save Draft</Button>
                 <Button
                   variant="primary"
                   size="sm"
@@ -4896,6 +4917,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
   onRunWorkflow?: (workflowId: string) => void;
 }) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   // Completed bulk-run from the Workflows tab — when set, the shared AuditLogsView
   // takes over the page (same results view as the Workflow Library bulk run).
   const { can } = useCan();
@@ -4935,6 +4957,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
       addCreatedRacm(rows, name, file.name);
       const areas = new Set(rows.map(r => r.subProcess)).size;
       addToast({ type: 'success', message: `Imported "${file.name}": ${rows.length} rows · ${areas} sub-process${areas === 1 ? '' : 'es'}` });
+      logEvent({ action: 'Upload', description: `Imported "${file.name}" — ${rows.length} rows across ${areas} sub-process${areas === 1 ? '' : 'es'}`, module: 'Process Hub', entity: 'Business Process' });
     }
     e.target.value = '';
   };
@@ -4953,6 +4976,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
       extractTimer.current = null;
       setExtractingFile(null);
       addToast({ type: 'success', message: `Extracted ${s.controls} controls · ${s.risks} risks from "${filename}"` });
+      logEvent({ action: 'Update', description: `Extracted ${s.controls} controls and ${s.risks} risks from "${filename}"`, module: 'Process Hub', entity: 'Business Process' });
     }, 1600);
   };
   /** Tracks which RACM is open in the Excel review editor. Stores the racmId. */

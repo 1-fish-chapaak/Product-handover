@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { ConciergeFlow } from '../ConciergeKit';
 import type { PickedFile, HistoryJob } from '../types';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 // ─── Result type ─────────────────────────────────────────────────────────────
 
@@ -501,6 +502,7 @@ function ResultBody({ result }: { result: EdaResult }) {
 // ─── Tool ────────────────────────────────────────────────────────────────────
 
 export default function InsightsAnomalyView({ onBack }: { onBack: () => void }) {
+  const logEvent = useAuditLog();
   return (
     <ConciergeFlow<EdaResult>
       title="Insights & Anomaly Report"
@@ -545,19 +547,33 @@ export default function InsightsAnomalyView({ onBack }: { onBack: () => void }) 
       resultActions={(result) => (
         <>
           <button
-            onClick={() =>
+            onClick={() => {
               downloadBlob(
                 'insights-anomaly-report.json',
                 JSON.stringify(result, null, 2),
                 'application/json',
-              )
-            }
+              );
+              logEvent({
+                action: 'Export',
+                description: 'Exported Insights & Anomaly report as JSON',
+                module: 'AI Concierge',
+                entity: 'Insights & Anomaly Report',
+              });
+            }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-[0.8125rem] font-semibold text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-700 cursor-pointer"
           >
             <FileDown size={14} /> Export JSON
           </button>
           <button
-            onClick={() => downloadBlob('column-profile.csv', columnsToCsv(result.understanding.columns), 'text/csv')}
+            onClick={() => {
+              downloadBlob('column-profile.csv', columnsToCsv(result.understanding.columns), 'text/csv');
+              logEvent({
+                action: 'Export',
+                description: 'Exported Insights & Anomaly column profile as CSV',
+                module: 'AI Concierge',
+                entity: 'Insights & Anomaly Report',
+              });
+            }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 text-[0.8125rem] font-semibold text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-700 cursor-pointer"
           >
             <FileDown size={14} /> Export CSV

@@ -63,6 +63,9 @@ const ACTION_TONE: Record<string, { tone: Tone; label: string }> = {
   Delete: { tone: 'risk',      label: 'Delete' },
   Login:  { tone: 'info',      label: 'Login' },
   Export: { tone: 'draft',     label: 'Export' },
+  Run:    { tone: 'info',      label: 'Run' },
+  Upload: { tone: 'evidence',  label: 'Upload' },
+  Share:  { tone: 'draft',     label: 'Share' },
 };
 
 const SEVERITY_TONE: Record<string, { tone: Tone; label: string }> = {

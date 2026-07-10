@@ -5,6 +5,7 @@ import {
   X, Download, FileText, AlertTriangle, CheckCircle2, Sparkles, ShieldAlert, BarChart3, LayoutGrid, Loader2,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { exportReportWord, exportReportPpt, exportReportPdf, exportReportHtml } from './reportExport';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
@@ -105,6 +106,7 @@ export default function ReportDownloadModal({
   onClose,
 }: Props) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const FORMATS = useMemo(() => (onExcelExport ? [...BASE_FORMATS, EXCEL_FORMAT] : BASE_FORMATS), [onExcelExport]);
   const [format, setFormat] = useState<Format>('pdf');
   const [isDownloading, setIsDownloading] = useState(false);
@@ -163,6 +165,12 @@ export default function ReportDownloadModal({
         setIsDownloading(false);
         return;
       }
+      logEvent({
+        action: 'Export',
+        description: `Downloaded report "${reportName}" as ${activeFormat.label}`,
+        module: 'Reports',
+        entity: 'Report',
+      });
       setIsDownloading(false);
       onClose();
     }, 700);

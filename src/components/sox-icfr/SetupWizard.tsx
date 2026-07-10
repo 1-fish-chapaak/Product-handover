@@ -6,6 +6,7 @@ import { useIcfr } from './store';
 import { racmTemplate, TEMPLATE_ACCOUNTS } from './mockData';
 import { formatINR } from './helpers';
 import { cn } from '../../lib/cn';
+import { useAuditLog } from '../../context/AdminDataContext';
 import type { IcfrEngagement } from './types';
 
 const STEPS = ['Engagement', 'Materiality', 'Scope', 'RACM', 'Owners', 'Review'] as const;
@@ -17,6 +18,7 @@ const PEOPLE = ['Rohit Sharma', 'Anita Rao', 'Sneha Joshi', 'Karan Mehta', 'Priy
 export default function SetupWizard() {
   const { createEngagement, back } = useIcfr();
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [step, setStep] = useState<Step>(0);
 
   const [name, setName] = useState('O2C — ICFR / SOX');
@@ -48,6 +50,7 @@ export default function SetupWizard() {
       deficiencies: [], tasks: [], discussions: [], executions: [],
     };
     createEngagement(eng);
+    logEvent({ action: 'Create', description: `Created SOX ICFR engagement "${eng.name}" (${eng.controls.length} controls scoped)`, module: 'SOX ICFR', entity: 'Engagement' });
     addToast({ type: 'success', title: 'Engagement created', message: `${eng.name} · ${eng.controls.length} controls scoped` });
   };
 

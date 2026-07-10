@@ -9,6 +9,7 @@ import {
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import ColumnFilter from '../shared/ColumnFilter';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { Button as BaseButton } from '../shared/Button';
@@ -537,6 +538,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   const { addToast } = useToast();
   const { can } = useCan();
   const { openShare } = useShare();
+  const logEvent = useAuditLog();
   const [risks, setRisks] = useState<RiskEntry[]>(SEED_RISKS);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
@@ -704,9 +706,11 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     if (exists) {
       setRisks(prev => prev.map(r => r.id === risk.id ? risk : r));
       addToast({ message: `Risk "${risk.name}" updated`, type: 'success' });
+      logEvent({ action: 'Update', description: `Updated risk "${risk.name}" (${risk.id})`, module: 'Risk Register', entity: 'Risk' });
     } else {
       setRisks(prev => [risk, ...prev]);
       addToast({ message: `Risk "${risk.name}" created`, type: 'success' });
+      logEvent({ action: 'Create', description: `Created risk "${risk.name}" (${risk.id})`, module: 'Risk Register', entity: 'Risk' });
     }
     setShowCreateDrawer(false);
   };
@@ -715,20 +719,25 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
     setRisks(prev => prev.map(r => r.id === updated.id ? updated : r));
     // Editing happens on the full detail page; Save updates it in place + toasts.
     addToast({ message: `Risk "${updated.name}" updated`, type: 'success' });
+    logEvent({ action: 'Update', description: `Updated risk "${updated.name}" (${updated.id})`, module: 'Risk Register', entity: 'Risk' });
   };
 
   // Single-row archive replaces the old sticky bulk bar.
   const handleArchiveOne = (id: string) => {
+    const risk = risks.find(r => r.id === id);
     setArchivedRiskIds(prev => prev.includes(id) ? prev : [...prev, id]);
     setSelectedRiskIds(prev => prev.filter(s => s !== id));
     addToast({ message: `Risk archived`, type: 'success' });
+    logEvent({ action: 'Update', description: `Archived risk "${risk?.name || id}" (${id})`, module: 'Risk Register', entity: 'Risk' });
   };
   // Delete-risk confirmation (the trash action on a risk card).
   const [confirmDeleteRisk, setConfirmDeleteRisk] = useState<{ id: string; name: string } | null>(null);
   const handleDeleteOne = (id: string) => {
+    const risk = risks.find(r => r.id === id);
     setArchivedRiskIds(prev => prev.includes(id) ? prev : [...prev, id]);
     setSelectedRiskIds(prev => prev.filter(s => s !== id));
     addToast({ message: `Risk deleted`, type: 'success' });
+    logEvent({ action: 'Delete', description: `Deleted risk "${risk?.name || id}" (${id})`, module: 'Risk Register', entity: 'Risk' });
   };
   const handleCancelOne = (id: string) => {
     setSelectedRiskIds(prev => prev.filter(s => s !== id));
@@ -756,6 +765,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
             onApply={(controls) => {
               addRiskControlLinks(linkControlRisk.id, controls);
               addToast({ message: `Linked ${controls.length} control${controls.length !== 1 ? 's' : ''} to ${linkControlRisk.name}.`, type: 'success' });
+              logEvent({ action: 'Update', description: `Linked ${controls.length} control${controls.length !== 1 ? 's' : ''} to risk "${linkControlRisk.name}" (${linkControlRisk.id})`, module: 'Risk Register', entity: 'Risk' });
               setLinkControlRisk(null);
             }}
           />
@@ -800,6 +810,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                 linkedWorkflowId: null,
               };
               addCreatedControl(data);
+              logEvent({ action: 'Create', description: `Created control "${name}" and linked it to risk "${linkControlRisk.name}" (${linkControlRisk.id})`, module: 'Control Library', entity: 'Control' });
               addToast({
                 message: inRacm
                   ? `Created "${name}", linked it to ${linkControlRisk.name}, and added it to the RACM.`
@@ -839,6 +850,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
               onLink={(wf: ControlWorkflow) => {
                 addLinkedWorkflow(lwt.riskId, lwc.id, wf);
                 addToast({ message: `Linked "${wf.name}" to ${lwc.id}.`, type: 'success' });
+                logEvent({ action: 'Update', description: `Linked workflow "${wf.name}" to control "${lwc.name}" (${lwc.id})`, module: 'Control Library', entity: 'Control' });
                 setLinkWfControl(null);
                 setLinkWfTarget(null);
               }}

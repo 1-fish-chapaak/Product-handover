@@ -9,6 +9,7 @@ import {
   ChevronRight, ChevronDown, AlertTriangle, X, ExternalLink, Upload,
 } from 'lucide-react';
 import RacmMappingWorkspace from '../audit/RacmMappingWorkspace';
+import { useAuditLog } from '../../context/AdminDataContext';
 import type { EngagementExecution, ExecutionControl } from './types';
 import { MOCK_ENGAGEMENT_V2 } from './mockExecutionData';
 import {
@@ -36,6 +37,7 @@ interface Props {
 export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWorkflowBuilder, requestPbcEnabled = true, generateFromPopulation = false }: Props) {
   const [engagement, setEngagement] = useState<EngagementExecution>(MOCK_ENGAGEMENT_V2);
   const [showRacmModal, setShowRacmModal] = useState(false);
+  const logEvent = useAuditLog();
 
   const updateControl = (controlId: string, updater: (ctrl: ExecutionControl) => ExecutionControl) => {
     setEngagement(prev => ({
@@ -285,6 +287,7 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
                       const file = e.target.files?.[0];
                       if (file) {
                         // Simulate RACM upload — in production this would parse and import
+                        logEvent({ action: 'Upload', description: `Uploaded RACM file "${file.name}" for engagement "${engagement.name}"`, module: 'Engagement Execution', entity: 'RACM' });
                         alert(`RACM file "${file.name}" selected. This will be used as the linked RACM version for this engagement.`);
                         e.target.value = '';
                       }

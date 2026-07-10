@@ -10,6 +10,7 @@ import type { PickedFile, HistoryJob, JobState } from '../types';
 import ListPlaceholder from '../../../shared/ListPlaceholder';
 import { Button } from '../../../shared/Button';
 import { Pill, type Tone } from '../../../shared/StatusBadge';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 import { DateFilterPicker, dateInFilter, DEFAULT_DATE_FILTER, type DateFilter } from '../../../shared/DateFilterPicker';
 import ConfirmationModal from '../../../shared/ConfirmationModal';
 
@@ -958,6 +959,7 @@ function RacmHistoryList({ jobs, onOpen, onDelete }: {
 // ─── Main view ───────────────────────────────────────────────────────────────
 
 export default function RACMGeneratorView({ onBack, onOpenEditor }: { onBack: () => void; onOpenEditor: (name: string, sourceFiles: string[]) => void }) {
+  const logEvent = useAuditLog();
   return (
     <ConciergeFlow<Result>
       title="RACM Generator"
@@ -1001,12 +1003,20 @@ export default function RACMGeneratorView({ onBack, onOpenEditor }: { onBack: ()
       renderProgress={(api) => <RacmLoader {...api} />}
       buildResult={buildResult}
       renderResult={() => null}
-      onComplete={(r) => onOpenEditor(
-        r.sourceFiles.length > 1
-          ? `Consolidated RACM · ${r.sourceFiles.length} sources`
-          : `RACM · ${r.sourceFiles[0] ?? r.fileName}`,
-        r.sourceFiles,
-      )}
+      onComplete={(r) => {
+        logEvent({
+          action: 'Create',
+          description: 'Generated RACM with AI Concierge',
+          module: 'AI Concierge',
+          entity: 'RACM',
+        });
+        onOpenEditor(
+          r.sourceFiles.length > 1
+            ? `Consolidated RACM · ${r.sourceFiles.length} sources`
+            : `RACM · ${r.sourceFiles[0] ?? r.fileName}`,
+          r.sourceFiles,
+        );
+      }}
       historyMeta={(result) => `${result.entries.length} controls`}
       historyAsDrawer
       historySeed={HISTORY_SEED}

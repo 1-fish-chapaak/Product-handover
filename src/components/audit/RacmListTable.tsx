@@ -695,6 +695,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
     if (name && name !== current) {
       setRenamedNames(prev => ({ ...prev, [id]: name }));
       addToast({ message: `RACM renamed to "${name}".`, type: 'success' });
+      logEvent({ action: 'Update', description: `Renamed RACM "${current}" to "${name}"`, module: 'Governance', entity: 'RACM' });
     }
     setEditingRacmNameId(null);
   };
@@ -1291,7 +1292,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
               alreadyLinkedIds={alreadyLinkedIds}
               onClose={() => setLinkRiskTarget(null)}
               onCreateRisk={() => setCreateRiskFromLink(true)}
-              onLink={risks => { addLinkedRisks(lrt.racmId, risks); setLinkRiskTarget(null); addToast({ message: `Linked ${risks.length} risk${risks.length === 1 ? '' : 's'} to RACM.`, type: 'success' }); }}
+              onLink={risks => { addLinkedRisks(lrt.racmId, risks); setLinkRiskTarget(null); addToast({ message: `Linked ${risks.length} risk${risks.length === 1 ? '' : 's'} to RACM.`, type: 'success' }); logEvent({ action: 'Update', description: `Linked ${risks.length} risk${risks.length === 1 ? '' : 's'} to RACM ${lrt.racmId}`, module: 'Governance', entity: 'RACM' }); }}
             />
           );
         })()}
@@ -1321,7 +1322,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
               alreadyLinkedIds={alreadyLinkedIds}
               onClose={() => setLinkControlTarget(null)}
               onCreateControl={() => setCreateControlFromLink(true)}
-              onApply={controls => { addLinkedControls(lct.riskId, controls); setLinkControlTarget(null); addToast({ message: `Linked ${controls.length} control${controls.length === 1 ? '' : 's'} to risk.`, type: 'success' }); }}
+              onApply={controls => { addLinkedControls(lct.riskId, controls); setLinkControlTarget(null); addToast({ message: `Linked ${controls.length} control${controls.length === 1 ? '' : 's'} to risk.`, type: 'success' }); logEvent({ action: 'Update', description: `Linked ${controls.length} control${controls.length === 1 ? '' : 's'} to risk "${lct.riskName}"`, module: 'Governance', entity: 'RACM' }); }}
             />
           );
         })()}
@@ -1405,7 +1406,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
         version={viewSop?.version}
         uploadedBy={viewSop?.uploadedBy}
         uploadedAgo={viewSop?.uploadedAgo}
-        onDownload={() => viewSop && addToast({ message: `Downloading ${viewSop.sopName}…`, type: 'info' })}
+        onDownload={() => { if (viewSop) { addToast({ message: `Downloading ${viewSop.sopName}…`, type: 'info' }); logEvent({ action: 'Export', description: `Downloaded SOP "${viewSop.sopName}"`, module: 'Process Hub', entity: 'SOP' }); } }}
         onClose={() => setViewSop(null)}
       />
 
@@ -1433,7 +1434,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
             <LinkWorkflowToControlDrawer
               control={{ name: lwc.name, description: controlDescription(lwc.id), isKey: lwc.isKey, workflows: [] }}
               onClose={() => { if (lwt.controls.length > 1) setLinkWfControl(null); else { setLinkWfControl(null); setLinkWfTarget(null); } }}
-              onLink={(wf: ControlWorkflow) => { addLinkedWorkflow(lwt.riskId, lwc.id, wf); setLinkWfControl(null); setLinkWfTarget(null); addToast({ message: `Linked workflow "${wf.name}" to control.`, type: 'success' }); }}
+              onLink={(wf: ControlWorkflow) => { addLinkedWorkflow(lwt.riskId, lwc.id, wf); setLinkWfControl(null); setLinkWfTarget(null); addToast({ message: `Linked workflow "${wf.name}" to control.`, type: 'success' }); logEvent({ action: 'Update', description: `Linked workflow "${wf.name}" to control "${lwc.name}"`, module: 'Control Library', entity: 'Control' }); }}
             />
           );
         })()}

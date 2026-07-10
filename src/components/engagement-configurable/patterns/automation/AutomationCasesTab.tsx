@@ -14,6 +14,7 @@ import type { ExceptionRole } from '../../../../hooks/useAppState';
 import ManageExceptionsView from '../../../exceptions/ManageExceptionsView';
 import type { GrcException } from '../../../../data/mockData';
 import { mapV3ExceptionsToGrc, syncGrcToV3Exception } from './exceptionAdapter';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 function now(): string { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 function futureDate(days: number): string { const d = new Date(); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
@@ -229,6 +230,7 @@ function BulkAssignModal({ selectedExceptions, defaultOwner, onSave, onCancel }:
   onSave: (triage: { owner: string; reviewer: string; dueDate: string; notes: string }) => void;
   onCancel: () => void;
 }) {
+  const logEvent = useAuditLog();
   const [owner, setOwner] = useState('');
   const [reviewer, setReviewer] = useState('');
   const [dueDate, setDueDate] = useState(futureDate(14));
@@ -239,6 +241,7 @@ function BulkAssignModal({ selectedExceptions, defaultOwner, onSave, onCancel }:
     if (!owner.trim()) { setValidationMsg('Owner is required.'); return; }
     if (!dueDate) { setValidationMsg('Due date is required.'); return; }
     onSave({ owner: owner.trim(), reviewer: reviewer.trim(), dueDate, notes: notes.trim() });
+    logEvent({ action: 'Update', description: `Updated automation case — marked ${selectedExceptions.length} exception${selectedExceptions.length === 1 ? '' : 's'} as case and assigned to ${owner.trim()}`, module: 'Exceptions', entity: 'Case' });
   };
 
   return (

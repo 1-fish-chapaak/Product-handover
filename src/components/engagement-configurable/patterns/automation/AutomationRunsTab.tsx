@@ -16,6 +16,7 @@ import {
 } from './automationRunsData';
 import { BulkExecuteModal } from '../../../workflow/BulkExecuteModal';
 import type { LibraryWorkflow } from '../../../workflow/WorkflowLibraryView';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const labelCls = 'text-[0.6875rem] font-semibold text-text-muted block mb-1';
@@ -30,6 +31,7 @@ interface Props {
 }
 
 export default function AutomationRunsTab({ engagement, inputData, setup, runsState, onUpdateRuns, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as AutomationProjectConfig;
   const { status: setupStatus } = deriveSetupReadiness(inputData, setup, cfg);
   const isReady = setupStatus === 'READY_FOR_RUN';
@@ -91,6 +93,7 @@ export default function AutomationRunsTab({ engagement, inputData, setup, runsSt
     };
     const completed = simulateRun(run, setup, inputData, engagement.owner);
     onUpdateRuns({ runs: [...runsState.runs, completed] });
+    logEvent({ action: 'Create', description: `Created QA run "${run.runName}" in "${engagement.name}"`, module: 'Engagements', entity: 'Run' });
     setRunName('');
   };
 
@@ -114,12 +117,15 @@ export default function AutomationRunsTab({ engagement, inputData, setup, runsSt
     if (!run || run.status !== 'READY') return;
     const completed = simulateRun(run, setup, inputData, engagement.owner);
     onUpdateRuns({ runs: runsState.runs.map(r => r.id === runId ? completed : r) });
+    logEvent({ action: 'Run', description: `Executed automation run "${run.runName}" in "${engagement.name}"`, module: 'Engagements', entity: 'Run' });
   };
 
   const updateExceptionStatus = (runId: string, exId: string, status: ExceptionStatus) => {
+    const ex = runsState.runs.find(r => r.id === runId)?.exceptions.find(e => e.id === exId);
     onUpdateRuns({
       runs: runsState.runs.map(r => r.id === runId ? { ...r, exceptions: r.exceptions.map(e => e.id === exId ? { ...e, status } : e) } : r),
     });
+    logEvent({ action: 'Update', description: `${status === 'DISMISSED' ? 'Dismissed' : 'Reviewed'} exception "${ex?.title || exId}" in "${engagement.name}"`, module: 'Exceptions', entity: 'Exception' });
   };
 
   const hasCompleted = runsState.runs.some(r => r.status === 'COMPLETED');

@@ -9,6 +9,7 @@ import Drawer from '../../shared/Drawer';
 import { Button } from '../../shared/Button';
 import type { JobState, PickedFile, HistoryJob, ToolTab } from './types';
 import { useConciergeJob } from './useConciergeJob';
+import { useAuditLog } from '../../../context/AdminDataContext';
 
 let _seq = 0;
 const newId = () => `job-${Date.now()}-${_seq++}`;
@@ -581,6 +582,7 @@ export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
     renderHistory,
   } = props;
 
+  const logEvent = useAuditLog();
   const [tab, setTab] = useState('tool');
   const [showHistory, setShowHistory] = useState(false);
   const [files, setFiles] = useState<PickedFile[]>([]);
@@ -616,6 +618,12 @@ export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
       { id, files: files.map((f) => f.name), status: 'IN_PROGRESS', createdAt: 'Just now' },
       ...prev,
     ]);
+    logEvent({
+      action: 'Run',
+      description: `Ran ${title}`,
+      module: 'AI Concierge',
+      entity: title,
+    });
     job.start({ files, options });
   };
 
@@ -631,6 +639,12 @@ export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
       { id, files: newFiles.map((f) => f.name), status: 'IN_PROGRESS', createdAt: 'Just now' },
       ...prev,
     ]);
+    logEvent({
+      action: 'Run',
+      description: `Ran ${title}`,
+      module: 'AI Concierge',
+      entity: title,
+    });
     job.start({ files: newFiles, options: opts });
   };
   const finishNow = (newFiles: PickedFile[], extra?: Record<string, unknown>) => {

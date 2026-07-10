@@ -19,6 +19,7 @@ import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { WORKFLOWS } from '../../data/mockData';
 import CreateControlDrawer, { type NewControlData } from './CreateControlDrawer';
 import { useCreatedControls } from '../../data/createdControlsStore';
@@ -58,6 +59,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
   const { addToast } = useToast();
   const { can } = useCan();
   const { openShare } = useShare();
+  const logEvent = useAuditLog();
 
   // Stateful controls list
   const [controls, setControls] = useState<ControlRow[]>(SEED_CONTROLS);
@@ -206,6 +208,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
     setControls(prev => [newControl, ...prev]);
     setShowCreateDrawer(false);
     addToast({ message: `Control ${controlId} "${data.name}" created`, type: 'success' });
+    logEvent({ action: 'Create', description: `Created control "${data.name}" (${controlId})`, module: 'Control Library', entity: 'Control' });
 
     // Open the new control's detail view
     setSelectedControlId(controlId);
@@ -226,7 +229,10 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
           <div className="flex items-center gap-3">
             {can('ctrl_export') && (
               <button
-                onClick={() => addToast({ message: 'Control library exported as CSV', type: 'success' })}
+                onClick={() => {
+                  addToast({ message: 'Control library exported as CSV', type: 'success' });
+                  logEvent({ action: 'Export', description: `Exported the control library (${totalControls} controls) as CSV`, module: 'Control Library', entity: 'Control' });
+                }}
                 className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"
               >
                 <Download size={14} />
@@ -485,7 +491,11 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                     )}
                     {can('ctrl_edit') && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); addToast({ message: `Editing ${ctrl.name}`, type: 'info' }); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          addToast({ message: `Editing ${ctrl.name}`, type: 'info' });
+                          logEvent({ action: 'Update', description: `Edited control "${ctrl.name}" (${ctrl.controlId})`, module: 'Control Library', entity: 'Control' });
+                        }}
                         title="Edit Control"
                         className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
                       >
@@ -503,7 +513,11 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                     )}
                     {can('ctrl_delete') && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); addToast({ message: `Deleted ${ctrl.name}`, type: 'success' }); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          addToast({ message: `Deleted ${ctrl.name}`, type: 'success' });
+                          logEvent({ action: 'Delete', description: `Deleted control "${ctrl.name}" (${ctrl.controlId})`, module: 'Control Library', entity: 'Control' });
+                        }}
                         title="Delete Control"
                         className="p-1.5 rounded-md hover:bg-risk-50 text-text-muted hover:text-risk-700 transition-colors cursor-pointer"
                       >
@@ -603,6 +617,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                     }
                   : c));
                 addToast({ message: `Linked "${wf.name}" to ${ctrl.controlId}`, type: 'success' });
+                logEvent({ action: 'Update', description: `Linked workflow "${wf.name}" to control "${ctrl.name}" (${ctrl.controlId})`, module: 'Control Library', entity: 'Control' });
                 setLinkWfControlId(null);
               }}
             />

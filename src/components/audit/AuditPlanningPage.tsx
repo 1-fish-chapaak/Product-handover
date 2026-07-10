@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -84,6 +85,7 @@ const FRAMEWORK_LIST = ['SOX ICFR', 'IFC', 'COSO', 'SOC 1', 'SOC 2', 'ISO 27001'
 
 export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagements }: Props) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [activeTab, setActiveTab] = useState<PlanningTab>('timeline');
 
   // Stateful engagement list
@@ -94,6 +96,7 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
     setEngagements(prev => [...prev, eng]);
     setShowPlanDrawer(false);
     addToast({ message: `"${eng.name}" planned — visible on timeline and engagement list`, type: 'success' });
+    logEvent({ action: 'Create', description: `Planned engagement "${eng.name}"`, module: 'Engagements', entity: 'Engagement' });
   };
 
   // Filters
@@ -365,8 +368,10 @@ export default function AuditPlanningPage({ onNavigateToExecution, onOpenEngagem
             engagements={engagements}
             onPlanNew={() => setShowPlanDrawer(true)}
             onActivate={(id) => {
+              const eng = engagements.find(e => e.id === id);
               setEngagements(prev => prev.map(e => e.id === id ? { ...e, status: 'Active' as EngStatus } : e));
               addToast({ message: 'Engagement activated — now visible in execution workspace', type: 'success' });
+              logEvent({ action: 'Update', description: `Activated engagement "${eng?.name ?? id}"`, module: 'Engagements', entity: 'Engagement' });
             }}
           />
         )}

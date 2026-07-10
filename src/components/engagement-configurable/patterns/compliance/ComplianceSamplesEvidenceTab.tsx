@@ -18,6 +18,7 @@ import {
 } from './complianceSamplesEvidenceData';
 import { MOCK_COMPLIANCE_CONTROLS } from './complianceControlScopeData';
 import type { PBCRequest } from './complianceRequestsData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const EV_STATUS_CLS = { ATTACHED: 'bg-emerald-50 text-emerald-700', NEEDS_MAPPING: 'bg-amber-50 text-amber-700', MISSING: 'bg-gray-100 text-gray-500' };
 const TI_STATUS_CLS = { Missing: 'bg-gray-100 text-gray-500', Partial: 'bg-amber-50 text-amber-700', Ready: 'bg-emerald-50 text-emerald-700' };
@@ -40,6 +41,7 @@ interface Props {
 }
 
 export default function ComplianceSamplesEvidenceTab({ engagement, samplesEvidence, pbcRequests, onAddBatch, onAddEvidence, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as ComplianceConfig;
   const method = cfg.defaultTestingInputMethod;
   const summary = deriveSamplesEvidenceSummary(samplesEvidence);
@@ -80,7 +82,7 @@ export default function ComplianceSamplesEvidenceTab({ engagement, samplesEviden
 
       {/* Input Method Panel */}
       {!hasBatches && (
-        <InputMethodPanel method={method} onCreateBatch={onAddBatch} populationUploaded={populationUploaded} onUploadPopulation={() => setPopulationUploaded(true)} />
+        <InputMethodPanel method={method} onCreateBatch={(batch) => { onAddBatch(batch); logEvent({ action: 'Create', description: `Selected samples for testing — "${batch.name}" (${batch.sampleCount} item${batch.sampleCount === 1 ? '' : 's'})`, module: 'Engagements', entity: 'Sample' }); }} populationUploaded={populationUploaded} onUploadPopulation={() => setPopulationUploaded(true)} />
       )}
 
       {/* Test Items Preview */}
@@ -140,7 +142,7 @@ export default function ComplianceSamplesEvidenceTab({ engagement, samplesEviden
 
         {showEvidenceForm && (
           <AttachEvidenceForm
-            onSave={(ev) => { onAddEvidence(ev); setShowEvidenceForm(false); }}
+            onSave={(ev) => { onAddEvidence(ev); logEvent({ action: 'Upload', description: `Uploaded evidence "${ev.fileName}" in "${engagement.name}"`, module: 'Engagements', entity: 'Evidence' }); setShowEvidenceForm(false); }}
             onCancel={() => setShowEvidenceForm(false)}
             testItems={samplesEvidence.batches.flatMap(b => b.testItems)}
           />

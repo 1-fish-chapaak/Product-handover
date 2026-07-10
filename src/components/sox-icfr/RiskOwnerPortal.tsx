@@ -2,6 +2,7 @@ import { Upload, CheckCircle2, MessageSquare, Clock, FileWarning, ClipboardList,
 import { useToast } from '../shared/Toast';
 import { useIcfr } from './store';
 import { cn } from '../../lib/cn';
+import { useAuditLog } from '../../context/AdminDataContext';
 import type { HandoffTask, TaskType } from './types';
 
 const TASK_META: Record<TaskType, { label: string; Icon: typeof Upload; tone: string; action: string }> = {
@@ -13,12 +14,14 @@ const TASK_META: Record<TaskType, { label: string; Icon: typeof Upload; tone: st
 export default function RiskOwnerPortal() {
   const { eng, submitTask } = useIcfr();
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const mine = eng.tasks.filter(t => t.assigneeRole === 'risk-owner');
   const open = mine.filter(t => t.status === 'open');
   const submitted = mine.filter(t => t.status !== 'open');
 
   const act = (t: HandoffTask) => {
     submitTask(t.id);
+    logEvent({ action: 'Update', description: `Submitted assigned task "${t.title}" (${t.controlId})`, module: 'SOX ICFR', entity: 'Task' });
     addToast({ type: 'success', title: 'Sent to the audit team', message: t.type === 'remediation' ? 'Marked remediated — they’ll re-test.' : 'Submitted — we’ll let you know if more is needed.' });
   };
 

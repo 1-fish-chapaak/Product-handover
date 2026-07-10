@@ -8,6 +8,7 @@ import {
 import { AVG_TIME_TO_CLOSE, formatChartDay, type ActivityEvent } from '../../data/engagement-activity';
 import type { Engagement } from '../../data/engagements';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 type Preset = '7' | '30' | '90' | 'full' | 'custom';
 
@@ -35,6 +36,7 @@ interface Props {
 
 export default function ActionTrailReportModal({ eng, events, onClose }: Props) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [preset, setPreset] = useState<Preset>('30');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -121,7 +123,10 @@ export default function ActionTrailReportModal({ eng, events, onClose }: Props) 
   const handleGenerate = () => {
     if (!customValid) return;
     setStage('generating');
-    window.setTimeout(() => setStage('report'), 1700);
+    window.setTimeout(() => {
+      setStage('report');
+      logEvent({ action: 'Create', description: `Generated action trail report for "${eng.name}"`, module: 'Reports', entity: 'Report' });
+    }, 1700);
   };
 
   return (
@@ -307,7 +312,7 @@ export default function ActionTrailReportModal({ eng, events, onClose }: Props) 
                 <RefreshCw size={13} />Change period
               </button>
               <button
-                onClick={() => { addToast({ message: 'Action trail report exported (PDF)', type: 'success' }); onClose(); }}
+                onClick={() => { addToast({ message: 'Action trail report exported (PDF)', type: 'success' }); logEvent({ action: 'Export', description: `Exported action trail report for "${eng.name}" as PDF`, module: 'Reports', entity: 'Report' }); onClose(); }}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer"
               >
                 <Download size={14} />Export PDF

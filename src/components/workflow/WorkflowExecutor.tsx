@@ -32,6 +32,7 @@ import type {
 import { DATA_SOURCES } from '../../data/mockData';
 import { useCan } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
 
 interface WorkflowExecutorProps {
@@ -984,6 +985,7 @@ function StructuredFileCard({
 export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, onFollowUp, onShareResults, onOpenInKnowledgeHub, onComposeInChat }: WorkflowExecutorProps) {
   const { can } = useCan();
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   // Most workflow IDs resolve to the AP duplicate-detection mock. The
   // consolidated-file tester is a dedicated single-run journey driven by one
   // bundled workbook — its own flow is built out separately from the
@@ -1357,9 +1359,15 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
       return next;
     });
     addToast({ type: 'success', message: `Added ${toAdd.length} ${toAdd.length === 1 ? 'item' : 'items'} to this workflow.` });
+    logEvent({
+      action: 'Upload',
+      description: `Added ${toAdd.length} input file${toAdd.length === 1 ? '' : 's'} to "${workflow.name}"`,
+      module: 'Workflow Library',
+      entity: 'Workflow',
+    });
     // A fresh upload resolves the insufficient-data gate, unblocking the flow.
     setInsufficientData(false);
-  }, [files, pickTargetInputId, addToast]);
+  }, [files, pickTargetInputId, addToast, logEvent, workflow.name]);
 
   const advance = useCallback(() => {
     const totalDuration = EXECUTION_STEPS.reduce((a, s) => a + s.duration, 0);
@@ -1388,6 +1396,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
 
   const startExecution = useCallback(() => {
     if (!hasRequired) return;
+    logEvent({ action: 'Run', description: `Ran workflow "${workflow.name}"`, module: 'Workflow Library', entity: 'Workflow' });
     setPhase('running');
     setCurrentStep(0);
     setProgress(0);
@@ -1404,10 +1413,11 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     // Structured executors demo the insufficient-data gate; PDF flows don't.
     setInsufficientData(!isPdfExecutor);
     advance();
-  }, [hasRequired, advance, isPdfExecutor]);
+  }, [hasRequired, advance, isPdfExecutor, logEvent, workflow.name]);
 
   const stopExecution = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
+    logEvent({ action: 'Update', description: `Stopped run of "${workflow.name}"`, module: 'Workflow Library', entity: 'Workflow' });
     setPhase('idle');
     setCurrentStep(0);
     setProgress(0);
@@ -1416,7 +1426,7 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
     setUnstructuredMappings([]);
     setColumnMapPending(false);
     setInsufficientData(false);
-  }, []);
+  }, [logEvent, workflow.name]);
 
   const resolveClarification = useCallback(() => {
     clarificationAnsweredRef.current = true;

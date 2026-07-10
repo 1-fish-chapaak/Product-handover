@@ -33,6 +33,7 @@ import {
 } from './reportShared';
 import SmartTable from '../shared/SmartTable';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useCan } from '../../context/CurrentUserContext';
 import { BulkAuditVariantView } from './BulkAuditVariants';
@@ -195,6 +196,7 @@ export default function ReportsView({
   onOpenSox,
 }: ReportsViewProps = {}) {
   const { addToast, updateToast } = useToast();
+  const logEvent = useAuditLog();
   const { openShare } = useShare();
   const { can } = useCan();
   const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports'>(() => {
@@ -489,7 +491,10 @@ export default function ReportsView({
         status: r.status === 'final' ? 'final' : 'draft',
         date: r.generatedAt, sortDate: ts(r.generatedAt),
         open: () => openReport(r),
-        download: () => startReportDownload(addToast, updateToast, r.name),
+        download: () => {
+          startReportDownload(addToast, updateToast, r.name);
+          logEvent({ action: 'Export', description: `Downloaded report "${r.name}"`, module: 'Reports', entity: 'Report' });
+        },
         shareId: r.id,
         del: () => setReportToDelete({ id: r.id, name: r.name }),
       });
@@ -502,7 +507,7 @@ export default function ReportsView({
         status: a.status === 'final' ? 'final' : 'draft',
         date: a.generatedAt, sortDate: ts(a.generatedAt),
         open: () => openAtr(a),
-        download: () => { exportAtrWord(a.atrData.meta, a.atrData.observations); addToast({ type: 'success', message: `Downloading “${a.name}”.` }); },
+        download: () => { exportAtrWord(a.atrData.meta, a.atrData.observations); addToast({ type: 'success', message: `Downloading “${a.name}”.` }); logEvent({ action: 'Export', description: `Downloaded ATR "${a.name}" as Word`, module: 'Reports', entity: 'Report' }); },
         shareId: a.id,
       });
     });
@@ -519,7 +524,7 @@ export default function ReportsView({
         status: 'final',
         date: ev.uploadedAt, sortDate: ts(ev.uploadedAt),
         open: openFile,
-        download: () => addToast({ type: 'success', message: `Downloading “${ev.name}”.` }),
+        download: () => { addToast({ type: 'success', message: `Downloading “${ev.name}”.` }); logEvent({ action: 'Export', description: `Downloaded evidence file "${ev.name}" (${ev.type}, ${ev.size})`, module: 'Reports', entity: 'Evidence' }); },
         shareId: ev.id,
       });
     });
@@ -1355,7 +1360,7 @@ export default function ReportsView({
                 <span className="text-[0.75rem] tabular-nums text-ink-500 whitespace-nowrap">{String(item.sharedAt)}</span>
               )},              { key: 'actions', label: '', width: COL_W.actions, sortable: false, align: 'right', render: (item) => (
                 <div className="flex items-center justify-end gap-1.5 opacity-60 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                  <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, String(item.name)); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                  <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, String(item.name)); logEvent({ action: 'Export', description: `Downloaded report "${String(item.name)}"`, module: 'Reports', entity: 'Report' }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
                   {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: String(item.id), anchor: rectFromEvent(e) }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
                 </div>
               )},
@@ -1416,7 +1421,7 @@ export default function ReportsView({
                   footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{r.sharedAt}</span>}
                   onClick={() => openSharedReport(r as unknown as typeof SHARED_REPORTS[number])}
                   actions={<>
-                    <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
+                    <ActionTooltip label="Download"><button onClick={(e) => { e.stopPropagation(); startReportDownload(addToast, updateToast, r.name); logEvent({ action: 'Export', description: `Downloaded report "${r.name}"`, module: 'Reports', entity: 'Report' }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Download"><Download size={14} /></button></ActionTooltip>
                     {can('rp_share') && <ActionTooltip label="Share"><button onClick={(e) => { e.stopPropagation(); openShare({ type: 'report', id: r.id, anchor: rectFromEvent(e) }); }} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-ink-300/70 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" aria-label="Share"><Share2 size={14} /></button></ActionTooltip>}
                   </>}
                 />
@@ -1842,6 +1847,7 @@ export default function ReportsView({
           if (!templateToDelete) return;
           removeCustomTemplate(templateToDelete.id);
           addToast({ type: 'success', message: `Template "${templateToDelete.name}" deleted.` });
+          logEvent({ action: 'Delete', description: `Deleted custom template "${templateToDelete.name}"`, module: 'Reports', entity: 'Template' });
           setTemplateToDelete(null);
         }}
       />
@@ -1863,6 +1869,7 @@ export default function ReportsView({
           const snapshotIndex = generatedReports.findIndex(r => r.id === id);
           setGeneratedReports(prev => prev.filter(r => r.id !== id));
           setReportToDelete(null);
+          logEvent({ action: 'Delete', description: `Deleted report "${name}"`, module: 'Reports', entity: 'Report' });
           addToast({
             type: 'success',
             message: `${name} deleted.`,

@@ -12,6 +12,7 @@ import {
   createExcelSource, createPDFSource, createSQLSource, createImageSource, createHybridSources,
   type AutomationInputDataState, type AutomationDataSource, type DataSourceType,
 } from './automationInputData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const labelCls = 'text-[0.6875rem] font-semibold text-text-muted block mb-1';
@@ -37,6 +38,7 @@ export default function AutomationInputDataTab({ engagement, inputData, onUpdate
   const readiness = deriveInputDataReadiness(inputData);
   const summary = deriveInputDataSummary(inputData);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const logEvent = useAuditLog();
 
   const addSource = (creator: () => AutomationDataSource | AutomationDataSource[]) => {
     const result = creator();
@@ -47,6 +49,7 @@ export default function AutomationInputDataTab({ engagement, inputData, onUpdate
       dataSources: [...inputData.dataSources, ...sources],
       selectedSourceIds: [...inputData.selectedSourceIds, ...newIds],
     });
+    logEvent({ action: 'Create', description: `Added input data source ${sources.map(s => `"${s.name}"`).join(', ')} to "${engagement.name}"`, module: 'Engagements', entity: 'Data Source' });
   };
 
   const toggleSelect = (id: string) => {
@@ -59,11 +62,13 @@ export default function AutomationInputDataTab({ engagement, inputData, onUpdate
   };
 
   const removeSource = (id: string) => {
+    const removed = inputData.dataSources.find(d => d.id === id);
     onUpdateInputData({
       ...inputData,
       dataSources: inputData.dataSources.filter(d => d.id !== id),
       selectedSourceIds: inputData.selectedSourceIds.filter(x => x !== id),
     });
+    logEvent({ action: 'Delete', description: `Removed input data source "${removed?.name || id}" from "${engagement.name}"`, module: 'Engagements', entity: 'Data Source' });
   };
 
   const markReady = (id: string) => {

@@ -4,6 +4,7 @@ import { computeSeverity, formatINR, severityOf, isClearlyTrivial } from './help
 import { SeverityPill } from './parts';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { MW_INDICATOR_CATALOGUE, type ExceptionStatus } from './types';
 
 const fmt = (n: number) => formatINR(n);
@@ -137,6 +138,7 @@ const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
 
 export function DeficienciesView() {
   const { eng, back, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException } = useIcfr();
+  const logEvent = useAuditLog();
   const M = eng.materiality; const rules = eng.rules;
 
   return (
@@ -250,10 +252,10 @@ export function DeficienciesView() {
                   {d.status === 'Identified' && <button onClick={() => setExceptionStatus(d.id, 'Remediation')} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Start remediation</button>}
                   {d.status === 'Remediation' && <button onClick={() => setExceptionStatus(d.id, 'Retest')} className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold hover:bg-evidence-700 cursor-pointer inline-flex items-center gap-1.5">Submit for retest</button>}
                   {d.status === 'Retest' && <>
-                    <button onClick={() => recordRetest(d.id, 'Pass')} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Retest passed — close</button>
-                    <button onClick={() => recordRetest(d.id, 'Fail')} className="h-8 px-3 rounded-lg border border-risk-300 text-risk-700 text-[12px] font-semibold hover:bg-risk-50 cursor-pointer inline-flex items-center gap-1.5"><XCircle size={13} /> Retest failed</button>
+                    <button onClick={() => { recordRetest(d.id, 'Pass'); logEvent({ action: 'Update', description: `Recorded exception retest for ${d.id} — Pass`, module: 'Exceptions', entity: 'Exception' }); }} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Retest passed — close</button>
+                    <button onClick={() => { recordRetest(d.id, 'Fail'); logEvent({ action: 'Update', description: `Recorded exception retest for ${d.id} — Fail`, module: 'Exceptions', entity: 'Exception' }); }} className="h-8 px-3 rounded-lg border border-risk-300 text-risk-700 text-[12px] font-semibold hover:bg-risk-50 cursor-pointer inline-flex items-center gap-1.5"><XCircle size={13} /> Retest failed</button>
                   </>}
-                  {d.status === 'Closed' && !d.signoff && <button onClick={() => signOffException(d.id)} className="h-8 px-3 rounded-lg border border-canvas-border text-ink-700 text-[12px] font-semibold hover:border-brand-300 hover:text-brand-700 cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Auditor sign-off</button>}
+                  {d.status === 'Closed' && !d.signoff && <button onClick={() => { signOffException(d.id); logEvent({ action: 'Update', description: `Signed off exception ${d.id}`, module: 'Exceptions', entity: 'Exception' }); }} className="h-8 px-3 rounded-lg border border-canvas-border text-ink-700 text-[12px] font-semibold hover:border-brand-300 hover:text-brand-700 cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Auditor sign-off</button>}
                   {d.status === 'Closed' && d.signoff && <span className="text-[12px] font-semibold text-compliant-700 inline-flex items-center gap-1.5"><CheckCircle2 size={14} /> Closed &amp; signed off</span>}
                 </div>
               </div>

@@ -26,6 +26,7 @@ import {
   Check, Lock, Paperclip, MessageSquare,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { useCan } from '../../context/CurrentUserContext';
 import type { Engagement } from '../../data/engagements';
 import { racmRowsForProcess, attrCode, type RACMRow, type ControlAttribute } from '../../data/racm';
@@ -322,6 +323,7 @@ function seedFor(controls: DistinctControl[]): SeedBundle {
 
 export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openControlId, onOpened }: Props): JSX.Element {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const { can } = useCan();
   const ws = useEngagementWorkspace();
   const allRows = useMemo(() => racmRowsForProcess(engagement.process), [engagement.process]);
@@ -564,6 +566,7 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openC
     setPopulationsByCtrl(prev => ({ ...prev, [ctrl.controlId]: { rows: popSize, filename, uploadedAgo: 'just now' } }));
     pushEvent(ctrl.controlId, { actor: 'human', actorName: CURRENT_USER.name, icon: 'upload', type: 'population_uploaded', text: `Population uploaded · ${filename} · ${popSize.toLocaleString()} rows` });
     addToast({ type: 'success', message: `Population uploaded · ${popSize.toLocaleString()} rows` });
+    logEvent({ action: 'Upload', description: `Uploaded population file "${filename}" (${popSize.toLocaleString()} rows) for control ${ctrl.controlId}`, module: 'Engagements', entity: 'Evidence' });
   };
   const onReplacePopulation = (ctrl: DistinctControl) => {
     setPopulationsByCtrl(prev => { const n = { ...prev }; delete n[ctrl.controlId]; return n; });
@@ -598,6 +601,7 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openC
     setSamplesByCtrl(prev => ({ ...prev, [ctrl.controlId]: samples }));
     pushEvent(ctrl.controlId, { actor: 'system', actorName: 'System', icon: 'gear', type: 'samples_generated', text: `Generated ${size} samples (method: ${cfg.method})` });
     addToast({ type: 'success', message: `Generated ${size} ${cfg.method.toLowerCase()} samples — shared across ${sb.length} sample-based attribute${sb.length !== 1 ? 's' : ''}` });
+    logEvent({ action: 'Create', description: `Generated ${size} ${cfg.method.toLowerCase()} samples for control ${ctrl.controlId}`, module: 'Engagements', entity: 'Sample' });
   };
 
   const onUploadSampleEvidence = (ctrl: DistinctControl, attr: ControlAttribute, sampleId: string, evidenceType: string) => {
@@ -639,6 +643,7 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openC
     const sampleCount = (samplesByCtrl[ctrl.controlId] || []).length;
     pushEvent(ctrl.controlId, { actor: 'human', actorName: CURRENT_USER.name, icon: 'upload', type: 'evidence_bulk_uploaded', text: `Bulk-uploaded ${filled} evidence file${filled === 1 ? '' : 's'} for ${attr.id} across ${sampleCount} samples` });
     addToast({ type: filled > 0 ? 'success' : 'info', message: filled > 0 ? `Uploaded ${filled} evidence file${filled === 1 ? '' : 's'} across ${sampleCount} samples` : 'All samples already have their evidence.' });
+    if (filled > 0) logEvent({ action: 'Upload', description: `Uploaded ${filled} evidence file${filled === 1 ? '' : 's'} for attribute ${attr.id} across ${sampleCount} samples on control ${ctrl.controlId}`, module: 'Engagements', entity: 'Evidence' });
   };
   /** Control-level bulk: attach required evidence across every attribute (all samples + generic) at once. */
   const onBulkUploadAllAttrs = (ctrl: DistinctControl) => {
@@ -673,6 +678,7 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openC
     }
     pushEvent(ctrl.controlId, { actor: 'human', actorName: CURRENT_USER.name, icon: 'upload', type: 'evidence_bulk_uploaded', text: `Bulk-uploaded ${filled} evidence file${filled === 1 ? '' : 's'} across all attributes` });
     addToast({ type: filled > 0 ? 'success' : 'info', message: filled > 0 ? `Uploaded ${filled} evidence file${filled === 1 ? '' : 's'} across all attributes` : 'All attributes already have their evidence.' });
+    if (filled > 0) logEvent({ action: 'Upload', description: `Uploaded ${filled} evidence file${filled === 1 ? '' : 's'} across all attributes of control ${ctrl.controlId}`, module: 'Engagements', entity: 'Evidence' });
   };
 
   const onRunAttrAi = (ctrl: DistinctControl, attr: ControlAttribute) => {
@@ -958,7 +964,7 @@ export default function EvidenceTab({ engagement, onLaunchWorkflowBuilder, openC
                     attrsDone={attrsDone}
                     attrsTotal={ctrl.attributes.length}
                     failedSampleAttrs={ctrl.attributes.filter(a => attrScope(a) === 'SAMPLE_BASED' && sampleAttrFails(ctrl, a).length > 0).length}
-                    onGenerate={() => addToast({ type: 'success', message: `Generating ${ctrl.controlId}-Working-Paper.pdf …` })}
+                    onGenerate={() => { addToast({ type: 'success', message: `Generating ${ctrl.controlId}-Working-Paper.pdf …` }); logEvent({ action: 'Export', description: `Generated working paper ${ctrl.controlId}-Working-Paper.pdf`, module: 'Engagements', entity: 'Working Paper' }); }}
                   />
                 )}
               </motion.div>

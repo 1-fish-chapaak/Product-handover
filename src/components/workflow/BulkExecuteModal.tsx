@@ -8,6 +8,7 @@ import {
 import { DATA_SOURCES } from '../../data/mockData';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
 import { useBulkRunProgress } from '../shared/BulkRunProgress';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
@@ -340,6 +341,7 @@ export function BulkExecuteModal({
 }) {
   const { addToast } = useToast();
   const { can } = useCan();
+  const logEvent = useAuditLog();
   const { startBulkRun } = useBulkRunProgress();
   const [modalDeselected, setModalDeselected] = useState<Set<string>>(new Set());
   // Workflows added via the in-modal catalog search (on top of the pre-selected set).
@@ -477,6 +479,12 @@ export function BulkExecuteModal({
     startBulkRun({
       name: auditName.trim() || 'Bulk Run',
       workflows: activeRunWorkflows,
+    });
+    logEvent({
+      action: 'Run',
+      description: `Bulk-ran ${activeRunWorkflows.length} workflow${activeRunWorkflows.length === 1 ? '' : 's'} as "${auditName.trim() || 'Bulk Run'}"`,
+      module: 'Workflow Library',
+      entity: 'Workflow',
     });
     onContinue({
       auditName: auditName.trim(),

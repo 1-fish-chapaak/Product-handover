@@ -12,6 +12,7 @@ import { deriveIARequestSummary, REQUEST_TYPE_LABELS } from './internalAuditRequ
 import { RUN_TYPE_LABELS, SEVERITY_CLS as EX_SEVERITY_CLS, EX_STATUS_CLS } from './internalAuditAnalysisData';
 import { CATEGORY_LABELS, SEVERITY_CLS as OBS_SEVERITY_CLS, STATUS_CLS as OBS_STATUS_CLS } from './internalAuditObservationsData';
 import { DISC_STATUS_CLS, deriveDiscussionSummary } from './internalAuditDiscussionData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 interface Props {
   engagement: ConfigurableEngagement;
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export default function InternalAuditWorkingPaperTab({ engagement, iaState, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as InternalAuditConfig;
   const { scope, announcement, requests, analysis, observations, discussion } = iaState;
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
@@ -65,7 +67,7 @@ export default function InternalAuditWorkingPaperTab({ engagement, iaState, onNa
           <h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Working Paper</h3>
           <p className="text-[0.75rem] text-text-muted">System-generated documentation of internal audit scope, fieldwork, observations, and management discussion.</p>
         </div>
-        <button onClick={() => alert('Draft working paper export will be connected later.')}
+        <button onClick={() => { logEvent({ action: 'Export', description: `Exported draft working paper for "${engagement.name}"`, module: 'Engagements', entity: 'Working Paper' }); alert('Draft working paper export will be connected later.'); }}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[0.6875rem] font-semibold hover:bg-primary/20 cursor-pointer transition-colors shrink-0">
           <Download size={12} />Download Draft
         </button>

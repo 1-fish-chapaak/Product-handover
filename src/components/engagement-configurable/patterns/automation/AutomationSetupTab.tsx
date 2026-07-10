@@ -13,6 +13,7 @@ import {
   SUGGESTED_STEPS, SUGGESTED_QUESTIONS, EXPECTED_OUTPUTS, STEP_TYPE_LABELS,
   type AutomationSetupState, type SetupMode, type DraftWorkflowStep, type QASetup, type ProjectCreatedWorkflow,
 } from './automationSetupData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
@@ -397,6 +398,7 @@ function WorkflowBuilderPanel({ engagement, inputData, existingWorkflow, onSave,
   engagement: ConfigurableEngagement; inputData: AutomationInputDataState;
   existingWorkflow?: ProjectCreatedWorkflow; onSave: (wf: ProjectCreatedWorkflow, newSources: AutomationDataSource[]) => void; onCancel: () => void;
 }) {
+  const logEvent = useAuditLog();
   const [name, setName] = useState(existingWorkflow?.name || '');
   const [objective, setObjective] = useState(existingWorkflow?.objective || '');
   const [description, setDescription] = useState(existingWorkflow?.description || '');
@@ -483,6 +485,7 @@ function WorkflowBuilderPanel({ engagement, inputData, existingWorkflow, onSave,
     };
 
     onSave(wf, newSources);
+    logEvent({ action: 'Update', description: `Saved automation setup — workflow "${wf.name}" in "${engagement.name}"`, module: 'Engagements', entity: 'Workflow' });
     setValidationMsg('');
   };
 
@@ -593,6 +596,7 @@ function WorkflowBuilderPanel({ engagement, inputData, existingWorkflow, onSave,
 // ─── Q&A Setup Panel ──────────────────────────────────────────────────────
 
 function QASetupPanel({ setupState, onUpdateSetup, engagement, inputSourceIds, isRecurring }: { setupState: AutomationSetupState; onUpdateSetup: (s: AutomationSetupState) => void; engagement: ConfigurableEngagement; inputSourceIds: string[]; isRecurring: boolean }) {
+  const logEvent = useAuditLog();
   const qa = setupState.qaSetup || { id: `qa-${Date.now()}`, objective: '', questions: [], selectedSourceIds: inputSourceIds, expectedOutputs: [], status: 'DRAFT' as const };
   const [newQ, setNewQ] = useState('');
 
@@ -614,6 +618,7 @@ function QASetupPanel({ setupState, onUpdateSetup, engagement, inputSourceIds, i
   const markReady = () => {
     if (!qa.objective.trim() || qa.questions.length === 0) return;
     saveQA({ status: 'READY' });
+    logEvent({ action: 'Update', description: `Marked automation setup ready — Q&A setup with ${qa.questions.length} question${qa.questions.length === 1 ? '' : 's'} in "${engagement.name}"`, module: 'Engagements', entity: 'Workflow' });
   };
 
   return (

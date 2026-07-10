@@ -71,7 +71,7 @@ export interface AuditLog {
   id: string;
   timestamp: string;
   user: string;
-  action: 'Create' | 'Update' | 'Delete' | 'Login' | 'Export';
+  action: 'Create' | 'Update' | 'Delete' | 'Login' | 'Export' | 'Run' | 'Upload' | 'Share';
   description: string;
   module: string;
   entity: string;

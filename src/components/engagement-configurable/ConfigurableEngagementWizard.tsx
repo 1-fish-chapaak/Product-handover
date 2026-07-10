@@ -14,6 +14,7 @@ import {
   AuditScopeLevel, AutomationInputType, AutomationSetupMode, AutomationOutputType, RunType,
 } from './configurableEngagementTypes';
 import { getEngagementPatternDefinition } from './engagementPatterns';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { validateConfigurableEngagementDraft } from './configurableEngagementState';
 import { PatternSelectionStep, CommonDetailsStep, PatternConfigStep, ReviewCreateStep } from './components';
 import type { CommonDetails } from './components';
@@ -94,6 +95,7 @@ interface WizardProps {
 }
 
 export default function ConfigurableEngagementWizard({ onNavigateToView }: WizardProps = {}) {
+  const logEvent = useAuditLog();
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedPattern, setSelectedPattern] = useState<EngagementPatternType | null>(null);
   const [details, setDetails] = useState<CommonDetails>(DEFAULT_DETAILS);
@@ -210,6 +212,7 @@ export default function ConfigurableEngagementWizard({ onNavigateToView }: Wizar
         status: 'PENDING' as const,
       })),
     };
+    logEvent({ action: 'Create', description: `Created engagement "${eng.name}"`, module: 'Engagements', entity: 'Engagement' });
     setCreatedEngagement(eng);
     setOpenedFromLibrary(true);
     // For compliance engagements, route to EngagementExecutionV2 (controls table workspace)

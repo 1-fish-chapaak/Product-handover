@@ -21,6 +21,7 @@ import {
   readBookmarkedMessages, writeBookmarkedMessages, type BookmarkedMessage,
 } from '../../utils/bookmarkedMessages';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { Button } from '../shared/Button';
 import { KpiTile } from '../shared/KpiTile';
 import AuditResultBody from './AuditResultBody';
@@ -1011,6 +1012,7 @@ function chartIcon(id: string) {
 }
 
 function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.charts; embedded?: boolean }) {
+  const logEvent = useAuditLog();
   const [activeId, setActiveId] = useState(charts[0].id);
   const [fullscreen, setFullscreen] = useState(false);
   const [selectorOpen, setSelectorOpen] = useState(false);
@@ -1072,6 +1074,12 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
     const rows = [[active.label, 'Count'], ...active.data.map(d => [d.bucket, String(d.count)])];
     const csv = rows.map(r => r.map(esc).join(',')).join('\n');
     triggerChartDownload(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${slugifyChart(active.label)}.csv`);
+    logEvent({
+      action: 'Export',
+      description: `Downloaded chart "${active.label}" as CSV`,
+      module: 'Ask IRA',
+      entity: 'Query',
+    });
   };
   const handleChartExcel = async () => {
     try {
@@ -1088,6 +1096,12 @@ function ChartGroup({ charts, embedded = false }: { charts: typeof AUDIT_RESULT.
         new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
         `${slugifyChart(active.label)}.xlsx`,
       );
+      logEvent({
+        action: 'Export',
+        description: `Downloaded chart "${active.label}" as Excel`,
+        module: 'Ask IRA',
+        entity: 'Query',
+      });
     } catch (err) {
       console.error('Chart export failed', err);
     }
@@ -1460,6 +1474,7 @@ function ResultsTable({
 }) {
   const [fullscreen, setFullscreen] = useState(false);
   const prefersReducedMotion = useReducedMotion();
+  const logEvent = useAuditLog();
 
   // Filename-safe slug from the table title for CSV/Excel downloads.
   const fileSlug = (title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'results');
@@ -1486,6 +1501,12 @@ function ResultsTable({
       /["\n,]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
     const csv = [columns, ...rows].map(r => r.map(esc).join(',')).join('\n');
     triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${fileSlug}.csv`);
+    logEvent({
+      action: 'Export',
+      description: `Downloaded table "${title}" as CSV`,
+      module: 'Ask IRA',
+      entity: 'Query',
+    });
     onDownload();
   };
 
@@ -1508,6 +1529,12 @@ function ResultsTable({
         new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
         `${fileSlug}.xlsx`,
       );
+      logEvent({
+        action: 'Export',
+        description: `Downloaded table "${title}" as Excel`,
+        module: 'Ask IRA',
+        entity: 'Query',
+      });
       onDownload();
     } catch (err) {
       console.error('Excel export failed', err);
@@ -2910,6 +2937,7 @@ function ExportReportButton({
   chatTitle: string;
 }) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -3281,6 +3309,12 @@ ${transcriptHtml}
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 2000);
+      logEvent({
+        action: 'Export',
+        description: 'Exported chat result to Excel',
+        module: 'Ask IRA',
+        entity: 'Query',
+      });
       addToast({ type: 'success', message: `Query result downloaded as ${safeTitle}.xlsx` });
     } catch (err) {
       console.error('Excel export failed', err);
@@ -3349,6 +3383,7 @@ ${transcriptHtml}
 
 export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, composerContextSeed, onComposerContextSeedConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext, initialMessages, onMessagesChange }: ChatViewProps) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const { can } = useCan();
   const prefersReducedMotion = useReducedMotion();
   // Workflow-build seed handoff. Non-empty string = the chat starts in
@@ -4379,6 +4414,12 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     }
     onAddResultToDashboard?.(payload);
     const itemCount = payload.selection.kpis.length + payload.selection.charts.length + payload.selection.columns.length;
+    logEvent({
+      action: 'Update',
+      description: `Added ${itemCount} item${itemCount === 1 ? '' : 's'} to dashboard "${payload.dashboardName}"`,
+      module: 'Dashboards',
+      entity: 'Dashboard',
+    });
     // No Undo on dashboard toast: removeFromDashboard would only clear the
     // chat pill, leaving the persisted widgets orphaned on the dashboard.
     // Users remove widgets from the dashboard view itself.
@@ -4434,6 +4475,12 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     onAddResultToReport?.(outgoing);
     const undoMsgId = activeAddMsgId;
     const itemCount = payload.selection.kpis.length + payload.selection.charts.length + payload.selection.columns.length;
+    logEvent({
+      action: 'Update',
+      description: `Added ${itemCount} item${itemCount === 1 ? '' : 's'} to report "${payload.reportName}"`,
+      module: 'Reports',
+      entity: 'Report',
+    });
     addToast({
       type: 'success',
       message: `Added ${itemCount} item${itemCount === 1 ? '' : 's'} to report “${payload.reportName}”.`,
@@ -4603,6 +4650,13 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     // Toast the save intent immediately so the user sees commit feedback
     // independently of the canvas-flip animation. Clicking it jumps to the
     // workflow library where the new workflow now sits.
+    logEvent({
+      action: 'Create',
+      description: `Saved chat as workflow "${data.name}"`,
+      module: 'Workflows',
+      entity: 'Workflow',
+    });
+
     addToast({
       type: 'success',
       message: `Workflow draft "${data.name}" created.`,
@@ -4979,6 +5033,12 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     const trimmed = input.trim();
     if (!trimmed && files.length === 0) return;
     const text = trimmed;
+
+    // Every sent question is a platform AI query — feeds the Audit Log and
+    // the Platform Usage live fold-in (Ask IRA bucket / AI-queries counters).
+    if (trimmed) {
+      logEvent({ action: 'Create', description: `Asked IRA: "${trimmed.length > 80 ? `${trimmed.slice(0, 80)}…` : trimmed}"`, module: 'Ask IRA', entity: 'Query' });
+    }
 
     // Composer "context mode" — the user clicked a canvas CTA (Plan ▸ Edit,
     // Code ▸ Edit, a Source's Chat / Pick) or "Revise" on the plan preview.
@@ -5529,6 +5589,14 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
     setAttachedSources(sources);
     setFiles(uploads.map(u => u.file ?? new File([''], u.name, { type: 'application/octet-stream' })));
     setShowDataPicker(false);
+    if (selections.length > 0) {
+      logEvent({
+        action: 'Upload',
+        description: `Attached ${selections.length} item${selections.length === 1 ? '' : 's'} to chat`,
+        module: 'Ask IRA',
+        entity: 'Attachment',
+      });
+    }
     addToast({
       type: 'success',
       message: selections.length > 0

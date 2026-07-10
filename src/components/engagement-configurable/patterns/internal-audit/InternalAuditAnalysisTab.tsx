@@ -15,6 +15,7 @@ import {
   type InternalAuditAnalysisState, type AnalysisRun, type AnalysisRunType,
 } from './internalAuditAnalysisData';
 import type { InternalAuditObservationsState, InternalAuditObservation } from './internalAuditObservationsData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 function now(): string { return new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
@@ -35,6 +36,7 @@ interface Props {
 }
 
 export default function InternalAuditAnalysisTab({ engagement, scope, requestState, analysisState, onUpdateAnalysis, observationsState, onUpdateObservations, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const { requests, proceedWithoutIDR } = requestState;
   const receivedFiles = requests.filter(r => r.filesReceived.length > 0).flatMap(r => r.filesReceived.map(f => ({ file: f, requestId: r.id, requestTitle: r.title, requestType: r.requestType, scopeLabel: r.linkedScopeLabel })));
   const summary = deriveAnalysisSummary(analysisState);
@@ -92,6 +94,7 @@ export default function InternalAuditAnalysisTab({ engagement, scope, requestSta
       observations: [...observationsState.observations, formalObs],
       noObservationsConfirmed: false,
     });
+    logEvent({ action: 'Create', description: `Created potential observation "${ex.title}" from analysis finding`, module: 'Engagements', entity: 'Observation' });
   };
 
   // Batch promote — all open findings for a control → directly creates formal observations
@@ -119,18 +122,22 @@ export default function InternalAuditAnalysisTab({ engagement, scope, requestSta
       observations: [...observationsState.observations, ...newObs],
       noObservationsConfirmed: false,
     });
+    logEvent({ action: 'Create', description: `Created ${newObs.length} potential observation${newObs.length === 1 ? '' : 's'} from analysis findings`, module: 'Engagements', entity: 'Observation' });
   };
 
   const handleUpdateExStatus = (runId: string, exId: string, status: 'REVIEWED' | 'DISMISSED') => {
+    const ex = analysisState.runs.find(r => r.id === runId)?.exceptions.find(e => e.id === exId);
     onUpdateAnalysis({
       ...analysisState,
       runs: analysisState.runs.map(r => r.id === runId ? { ...r, exceptions: r.exceptions.map(e => e.id === exId ? { ...e, status } : e) } : r),
     });
+    logEvent({ action: 'Update', description: `${status === 'REVIEWED' ? 'Marked analysis finding reviewed' : 'Dismissed analysis finding'} — "${ex?.title || exId}"`, module: 'Engagements', entity: 'Run' });
   };
 
   const addRun = (run: AnalysisRun) => {
     onUpdateAnalysis({ ...analysisState, runs: [...analysisState.runs, run] });
     setShowCreateForm(false);
+    logEvent({ action: 'Create', description: `Created analysis run "${run.title}"`, module: 'Engagements', entity: 'Run' });
   };
 
   const hasCompletedRuns = analysisState.runs.some(r => r.status === 'COMPLETED');

@@ -15,6 +15,7 @@ import {
   derivePBCSummary, REQUEST_TYPES, PRIORITIES,
   type PBCRequest, type PBCRequestStatus, type PBCRequestType, type PBCPriority,
 } from './complianceRequestsData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const STATUS_CLS: Record<PBCRequestStatus, string> = {
   Draft: 'bg-gray-100 text-gray-600',
@@ -46,6 +47,7 @@ const nowStamp = () => new Date().toLocaleString('en-US', { month: 'short', day:
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function ComplianceRequestsPBCTab({ engagement, requests, onCreateRequest, onUpdateRequest }: Props) {
+  const logEvent = useAuditLog();
   const { currentUser } = useCurrentUser();
   const isRiskOwner = currentUser?.roleId === 'role-risk';
 
@@ -77,6 +79,7 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
     onCreateRequest(req);
     setShowCreateForm(false);
     setToast(`Request ${req.id} created as Draft`);
+    logEvent({ action: 'Create', description: `Created PBC request "${req.title}" for ${req.requestedFrom}`, module: 'Engagements', entity: 'PBC Request' });
   };
 
   const handleRemind = (req: PBCRequest) => {
@@ -100,6 +103,7 @@ export default function ComplianceRequestsPBCTab({ engagement, requests, onCreat
       comments: [...req.comments, `Evidence uploaded by ${providerName} on ${nowStamp()}.`],
     });
     setToast(`Marked provided — ${mockFile} attached`);
+    logEvent({ action: 'Upload', description: `Provided evidence for PBC request "${req.title}" (${mockFile})`, module: 'Engagements', entity: 'PBC Request' });
   };
 
   return (
@@ -277,9 +281,10 @@ function AuditorActions({ req, onUpdateRequest, onRemind }: {
   onUpdateRequest: (id: string, patch: Partial<PBCRequest>) => void;
   onRemind: (req: PBCRequest) => void;
 }) {
+  const logEvent = useAuditLog();
   if (req.status === 'Draft') {
     return (
-      <button onClick={() => onUpdateRequest(req.id, { status: 'Sent', sentAt: new Date().toISOString().slice(0, 10) })}
+      <button onClick={() => { onUpdateRequest(req.id, { status: 'Sent', sentAt: new Date().toISOString().slice(0, 10) }); logEvent({ action: 'Update', description: `Sent PBC request "${req.title}" to ${req.requestedFrom}`, module: 'Engagements', entity: 'PBC Request' }); }}
         className="inline-flex items-center gap-1 px-2 py-1 rounded text-[0.6875rem] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">
         <Send size={10} />Mark Sent
       </button>

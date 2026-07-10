@@ -12,6 +12,7 @@ import { getOrCreateControlReview } from './complianceReviewData';
 import { getOrCreateControlConclusion, CONCLUSION_DISPLAY } from './complianceConclusionData';
 import { SEVERITY_DISPLAY } from './complianceSeverityData';
 import { downloadComplianceWorkingPaper } from './complianceExports';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const RESULT_CLS: Record<AttrTestResult, string> = { NOT_TESTED: 'bg-gray-100 text-gray-500', PASS: 'bg-emerald-50 text-emerald-700', FAIL: 'bg-red-50 text-red-700', NA: 'bg-blue-50 text-blue-600' };
 const RESULT_LABEL: Record<AttrTestResult, string> = { NOT_TESTED: '—', PASS: 'P', FAIL: 'F', NA: 'N/A' };
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export default function ComplianceWorkingPaperTab({ engagement, complianceState, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as ComplianceConfig;
   const testItems = complianceState.samplesEvidence.batches.flatMap(b => b.testItems);
   const evidence = complianceState.samplesEvidence.evidence;
@@ -80,7 +82,7 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
           <h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Working Paper</h3>
           <p className="text-[0.75rem] text-text-muted">System-generated audit documentation for compliance control testing.</p>
         </div>
-        <button onClick={() => downloadComplianceWorkingPaper(engagement, complianceState)}
+        <button onClick={() => { downloadComplianceWorkingPaper(engagement, complianceState); logEvent({ action: 'Export', description: `Downloaded working paper draft (.xlsx) for "${engagement.name}"`, module: 'Engagements', entity: 'Working Paper' }); }}
           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors shrink-0">
           <Download size={13} />Download Draft (.xlsx)
         </button>

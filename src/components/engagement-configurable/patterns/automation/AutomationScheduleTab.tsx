@@ -13,6 +13,7 @@ import {
   deriveScheduleRequirement, calculateNextRun, SCHEDULE_STATUS_CLS,
   type AutomationScheduleState, type ScheduleStatus,
 } from './automationScheduleData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const labelCls = 'text-[0.6875rem] font-semibold text-text-muted block mb-1';
@@ -29,6 +30,7 @@ interface Props {
 }
 
 export default function AutomationScheduleTab({ engagement, automationState, schedule, onUpdateSchedule, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as AutomationProjectConfig;
   const { required, canSchedule, blockingReasons, warnings } = deriveScheduleRequirement(cfg, automationState);
   const completedRuns = automationState.runs.runs.filter(r => r.status === 'COMPLETED');
@@ -46,13 +48,24 @@ export default function AutomationScheduleTab({ engagement, automationState, sch
   const activate = () => {
     if (!canSchedule) return;
     onUpdateSchedule({ ...schedule, status: 'ACTIVE', nextRunAt: nextRun, history: [...schedule.history, addHistory('ACTIVATED')] });
+    logEvent({ action: 'Update', description: `Activated automation schedule for "${wfName}" in "${engagement.name}"`, module: 'Engagements', entity: 'Schedule' });
   };
-  const pause = () => onUpdateSchedule({ ...schedule, status: 'PAUSED', history: [...schedule.history, addHistory('PAUSED')] });
-  const resume = () => onUpdateSchedule({ ...schedule, status: 'ACTIVE', nextRunAt: nextRun, history: [...schedule.history, addHistory('RESUMED')] });
-  const disable = () => onUpdateSchedule({ ...schedule, status: 'DISABLED', nextRunAt: null, history: [...schedule.history, addHistory('DISABLED')] });
+  const pause = () => {
+    onUpdateSchedule({ ...schedule, status: 'PAUSED', history: [...schedule.history, addHistory('PAUSED')] });
+    logEvent({ action: 'Update', description: `Paused automation schedule for "${wfName}" in "${engagement.name}"`, module: 'Engagements', entity: 'Schedule' });
+  };
+  const resume = () => {
+    onUpdateSchedule({ ...schedule, status: 'ACTIVE', nextRunAt: nextRun, history: [...schedule.history, addHistory('RESUMED')] });
+    logEvent({ action: 'Update', description: `Resumed automation schedule for "${wfName}" in "${engagement.name}"`, module: 'Engagements', entity: 'Schedule' });
+  };
+  const disable = () => {
+    onUpdateSchedule({ ...schedule, status: 'DISABLED', nextRunAt: null, history: [...schedule.history, addHistory('DISABLED')] });
+    logEvent({ action: 'Update', description: `Disabled automation schedule for "${wfName}" in "${engagement.name}"`, module: 'Engagements', entity: 'Schedule' });
+  };
   const saveDraft = () => {
     const hist = schedule.history.length === 0 ? addHistory('CREATED') : addHistory('UPDATED');
     onUpdateSchedule({ ...schedule, status: 'DRAFT', history: [...schedule.history, hist] });
+    logEvent({ action: 'Update', description: `Saved automation schedule draft for "${wfName}" in "${engagement.name}"`, module: 'Engagements', entity: 'Schedule' });
   };
 
   // Not required

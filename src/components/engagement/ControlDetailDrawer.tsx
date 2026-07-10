@@ -8,6 +8,7 @@ import {
   Upload, Play, Calendar, Filter, BarChart3, Download, Settings, Plus
 } from 'lucide-react';
 import { getControlById, getLinkedWorkflows, getAttributesForWorkflow, FINDINGS, ENGAGEMENT, type ControlDetail, type SampleItem, type Finding, type LinkedWorkflow } from './engagementData';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -321,7 +322,7 @@ function OverviewStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep: (
       </div>
 
       {/* ── ATTRIBUTE DETAIL TABLE ── */}
-      <AttributeConditionsTable attrStats={attrStats} workflows={workflows} onGoToStep={onGoToStep} />
+      <AttributeConditionsTable ctrl={ctrl} attrStats={attrStats} workflows={workflows} onGoToStep={onGoToStep} />
 
       {/* ── CONTROL TEST OVERVIEW ── */}
       <div>
@@ -354,7 +355,8 @@ interface AttrStat {
   passCount: number; failCount: number; testedCount: number; exceptionCount: number; status: string;
 }
 
-function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
+function AttributeConditionsTable({ ctrl, attrStats, workflows, onGoToStep }: {
+  ctrl: ControlDetail;
   attrStats: AttrStat[];
   workflows: LinkedWorkflow[];
   onGoToStep: (s: TestingStep) => void;
@@ -362,6 +364,7 @@ function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
   // Local overrides for workflow mapping (demo only — does not mutate source data)
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const logEvent = useAuditLog();
 
   const handleRemap = (attrId: string, newWfId: string) => {
     if (newWfId === '__link_new__') {
@@ -371,7 +374,11 @@ function AttributeConditionsTable({ attrStats, workflows, onGoToStep }: {
     }
     setOverrides(prev => ({ ...prev, [attrId]: newWfId }));
     const wf = workflows.find(w => w.id === newWfId);
-    if (wf) showToast(`Attribute mapped to ${wf.name}`);
+    if (wf) {
+      showToast(`Attribute mapped to ${wf.name}`);
+      const attr = attrStats.find(a => a.id === attrId);
+      logEvent({ action: 'Update', description: `Mapped attribute "${attr?.name ?? attrId}" to workflow ${wf.name} on ${ctrl.controlName}`, module: 'Engagements', entity: 'Control' });
+    }
   };
 
   const showToast = (msg: string) => {
@@ -539,6 +546,7 @@ type PopulationState = 'NO_DATA_SELECTED' | 'DATA_SELECTED' | 'SNAPSHOT_CREATED'
 type SourceMode = 'existing' | 'upload' | null;
 
 function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: ControlDetail; onGoToStep?: (s: TestingStep) => void; onPopulationLocked?: (info: { locked: boolean; recordCount: number; source: string; snapshotId: string }) => void }) {
+  const logEvent = useAuditLog();
   // Always start with NO_DATA_SELECTED — user must explicitly choose
   const [popState, setPopState] = useState<PopulationState>('NO_DATA_SELECTED');
   const [sourceMode, setSourceMode] = useState<SourceMode>(null);
@@ -565,6 +573,7 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
   const handleSelectDataset = () => {
     if (!selectedDatasetId) return;
     setPopState('DATA_SELECTED');
+    if (selectedDataset) logEvent({ action: 'Update', description: `Selected population dataset "${selectedDataset.source}" (${selectedDataset.records} records) for ${ctrl.controlId}`, module: 'Engagements', entity: 'Sample' });
   };
 
   const handleFileUpload = (fileName: string) => {
@@ -572,6 +581,7 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
     const mockRecords = Math.floor(Math.random() * 5000) + 500;
     setUploadedFile({ name: fileName, records: mockRecords });
     setPopState('DATA_SELECTED');
+    logEvent({ action: 'Upload', description: `Uploaded population file "${fileName}" for ${ctrl.controlId}`, module: 'Engagements', entity: 'Sample' });
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -589,6 +599,7 @@ function PopulationStep({ ctrl, onGoToStep, onPopulationLocked }: { ctrl: Contro
       setPopState('SNAPSHOT_CREATED');
       setLocking(false);
       onPopulationLocked?.({ locked: true, recordCount: datasetInfo?.records || 0, source: datasetInfo?.source || '', snapshotId: datasetInfo?.snapshotId || `POP-SNAP-${ctrl.controlId}-001` });
+      logEvent({ action: 'Update', description: `Locked population snapshot for ${ctrl.controlName}`, module: 'Engagements', entity: 'Control' });
     }, 800);
   };
 
@@ -786,6 +797,7 @@ function ExecutionModeStep({ ctrl, executionMode, onSelect, onGoToStep, onCreate
   onCreateTestItems: (set: SampleSet) => void;
   populationInfo?: { locked: boolean; recordCount: number } | null;
 }) {
+  const logEvent = useAuditLog();
   const isAutomated = ctrl.workflowName?.toLowerCase().includes('automat') || ctrl.controlName?.toLowerCase().includes('automat');
   const defaultMode = isAutomated ? 'full-run' : 'sampling';
 
@@ -843,6 +855,7 @@ function ExecutionModeStep({ ctrl, executionMode, onSelect, onGoToStep, onCreate
           if (effectiveMode === 'full-run') {
             const popSize = populationInfo?.recordCount || ctrl.populationSize || 10245;
             onCreateTestItems({ rows: Array.from({ length: Math.min(popSize, 500) }, (_, i) => i), size: popSize, populationSize: popSize, method: 'full', generatedAt: new Date().toISOString() });
+            logEvent({ action: 'Create', description: `Selected ${effectiveMode} execution mode — ${popSize} test items for ${ctrl.controlName}`, module: 'Engagements', entity: 'Sample' });
             onGoToStep('evidence');
           } else {
             onGoToStep('samples');
@@ -899,11 +912,12 @@ function generateSamples(populationSize: number, config: SamplingConfig): number
 function CreateSamplesStep({ ctrl, onGoToStep, onSamplesCreated }: {
   ctrl: ControlDetail; onGoToStep?: (s: TestingStep) => void; onSamplesCreated?: (set: SampleSet) => void;
 }) {
+  const logEvent = useAuditLog();
   const [items, setItems] = useState<{ ref: string; desc: string }[]>([]);
   const [newRef, setNewRef] = useState('');
   const [newDesc, setNewDesc] = useState('');
-  const handleAdd = () => { if (!newRef.trim()) return; setItems(prev => [...prev, { ref: newRef.trim(), desc: newDesc.trim() }]); setNewRef(''); setNewDesc(''); };
-  const handleConfirm = () => { if (items.length === 0) return; onSamplesCreated?.({ rows: items.map((_, i) => i), size: items.length, populationSize: items.length, method: 'manual', generatedAt: new Date().toISOString() }); onGoToStep?.('evidence'); };
+  const handleAdd = () => { if (!newRef.trim()) return; const newRefVal = newRef.trim(); setItems(prev => [...prev, { ref: newRefVal, desc: newDesc.trim() }]); setNewRef(''); setNewDesc(''); logEvent({ action: 'Create', description: `Added manual sample "${newRefVal}" for ${ctrl.controlName}`, module: 'Engagements', entity: 'Sample' }); };
+  const handleConfirm = () => { if (items.length === 0) return; onSamplesCreated?.({ rows: items.map((_, i) => i), size: items.length, populationSize: items.length, method: 'manual', generatedAt: new Date().toISOString() }); logEvent({ action: 'Create', description: `Confirmed ${items.length} manual samples for ${ctrl.controlName}`, module: 'Engagements', entity: 'Sample' }); onGoToStep?.('evidence'); };
 
   return (
     <div className="space-y-5">
@@ -959,6 +973,7 @@ function CreateSamplesStep({ ctrl, onGoToStep, onSamplesCreated }: {
 // ─── SAMPLES STEP (NEW) ─────────────────────────────────────────────────────
 
 function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (s: TestingStep) => void }) {
+  const logEvent = useAuditLog();
   const [samplingMethod, setSamplingMethod] = useState<'random' | 'mus' | 'risk-based' | 'manual'>('random');
   const [sampleSize, setSampleSize] = useState(25);
   const [generating, setGenerating] = useState(false);
@@ -980,6 +995,7 @@ function SamplesStep({ ctrl, onGoToStep }: { ctrl: ControlDetail; onGoToStep?: (
     setTimeout(() => {
       setGenerated(true);
       setGenerating(false);
+      logEvent({ action: 'Create', description: `Generated samples (${samplingMethod}) — ${sampleSize} of ${populationSize} for ${ctrl.controlName}`, module: 'Engagements', entity: 'Sample' });
     }, 1200);
   };
 
@@ -2840,19 +2856,23 @@ export default function ControlDetailDrawer({ controlId, onClose, controlData }:
   const [attributeResults, setAttributeResults] = useState<Record<string, Record<string, { result: 'pass' | 'fail' | 'pending'; evidenceIds: string[]; notes: string }>>>({});
   const controlType = deriveControlType(ctrl);
   const eng = ENGAGEMENT;
+  const logEvent = useAuditLog();
 
   const handleSubmitForReview = () => {
     setReviewSubmitted(true);
+    logEvent({ action: 'Update', description: `Submitted control "${ctrl.controlName}" for review`, module: 'Engagements', entity: 'Control' });
   };
 
   const handleApprove = () => {
     setReviewApproved(true);
+    logEvent({ action: 'Update', description: `Approved testing for control "${ctrl.controlName}"`, module: 'Engagements', entity: 'Control' });
     // Auto-navigate to conclusion after approval
     setTimeout(() => setActiveStep('conclusion'), 600);
   };
 
   const handleSendBack = (_comment: string) => {
     setReviewSubmitted(false);
+    logEvent({ action: 'Update', description: `Sent control "${ctrl.controlName}" back for rework`, module: 'Engagements', entity: 'Control' });
     // Return to testing step
     setTimeout(() => setActiveStep('testing'), 600);
   };

@@ -13,6 +13,7 @@ import {
   type WorkflowOutputColumn,
 } from '../../data/mockData';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 interface Props {
   onClose: () => void;
@@ -92,6 +93,7 @@ function AISuggestionRow({ suggestion, colors: _colors, onApply }: { suggestion:
 
 export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStage }: Props) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const config = workflowType ? WORKFLOW_TYPE_CONFIGS[workflowType] : null;
   const colors = workflowType ? TYPE_COLOR_CLASSES[workflowType] : null;
 
@@ -181,6 +183,7 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
 
   const handleSaveWorkflow = () => {
     setShowSavedBanner(true);
+    logEvent({ action: 'Create', description: `Created workflow "${config?.name ?? 'Untitled workflow'}"`, module: 'Workflows', entity: 'Workflow' });
     addToast({ message: 'Workflow saved', type: 'success' });
     setTimeout(() => setShowSavedBanner(false), 2500);
   };

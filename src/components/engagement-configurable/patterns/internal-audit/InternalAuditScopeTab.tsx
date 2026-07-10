@@ -13,6 +13,7 @@ import {
   deriveIAScopeReadiness,
   type InternalAuditScopeState,
 } from './internalAuditScopeData';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const inputCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const selectCls = inputCls + ' cursor-pointer appearance-none';
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope, onNavigateTab }: Props) {
+  const logEvent = useAuditLog();
   const cfg = engagement.config as InternalAuditConfig;
   const { status, checks } = deriveIAScopeReadiness(scope, engagement, cfg);
   const selectedBP = BUSINESS_PROCESSES.find(bp => bp.id === scope.businessProcessId);
@@ -58,6 +60,7 @@ export default function InternalAuditScopeTab({ engagement, scope, onUpdateScope
     const id = `custom-subproc-${Date.now()}`;
     const custom = { id, name, businessProcessId: scope.businessProcessId, createdAt: new Date().toISOString().slice(0, 10), source: 'CUSTOM' as const };
     onUpdateScope({ ...scope, customSubProcesses: [...(scope.customSubProcesses || []), custom], subProcessIds: [...scope.subProcessIds, id] });
+    logEvent({ action: 'Update', description: `Added sub-process "${name}" to scope in "${engagement.name}"`, module: 'Engagements', entity: 'Scope' });
     setNewSubProcName('');
     setShowAddSubProc(false);
     setSubProcValidation('');

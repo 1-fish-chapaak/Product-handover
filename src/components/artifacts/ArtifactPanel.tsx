@@ -15,6 +15,7 @@ import { SEED as DATA_SOURCE_SEED, TYPE_META, formatDate, type DataSource } from
 import { type ComposerContext, editCodeContext } from '../chat/composerContext';
 import { QueryExecutionPlanCard, AssumptionsCard, type PlanCardStep, type PlanAssumption } from '../shared/PlanCards';
 import { CHAT_PLAN_STEPS } from '../../data/chatPlan';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 interface ArtifactPanelProps {
   activeTab: ArtifactTab;
@@ -220,6 +221,7 @@ function PlanTab({
 
 function CodeTab({ onCanvasAction }: { onCanvasAction?: (ctx: ComposerContext) => void } = {}) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const [copied, setCopied] = useState(false);
 
   const sql = `SELECT
@@ -260,6 +262,12 @@ ORDER BY
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      logEvent({
+        action: 'Export',
+        description: 'Downloaded query SQL',
+        module: 'Ask IRA',
+        entity: 'Query',
+      });
       addToast({ type: 'success', message: 'SQL downloaded as query.sql' });
     } catch {
       addToast({ type: 'error', message: 'Download failed' });

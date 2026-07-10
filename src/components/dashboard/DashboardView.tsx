@@ -19,6 +19,7 @@ import {
 import Orb from '../shared/Orb';
 import { useToast, type ToastType } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
+import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { KpiTile } from '../shared/KpiTile';
@@ -576,6 +577,7 @@ function EmptyAlertsPanel() {
 
 function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const { can } = useCan();
   const [expanded, setExpanded] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -614,6 +616,12 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
   const handleSendEmail = () => {
     setShowShareModal(false);
     addToast({ message: `Alert summary sent to ${recipient || 'team'}`, type: 'success' });
+    logEvent({
+      action: 'Share',
+      description: `Shared dashboard "${DASHBOARDS.find(d => d.id === dashboardId)?.name ?? dashboardId}" alert summary with ${recipient || 'team'}`,
+      module: 'Dashboards',
+      entity: 'Dashboard',
+    });
   };
 
   const handleCopyEmail = () => {
@@ -3829,6 +3837,7 @@ const FILE_SOURCES = [
 
 export default function DashboardView({ initialDashboardId, initialDashboardName, initialCustomFields, initialDataSource, initialDataSourceNames, savedWidgets = [], onSaveWidgets, onUpdateDashboardSource, onOpenKnowledgeHub, onBack, onImportPowerBI }: DashboardProps = {}) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const { openShare } = useShare();
   const { can } = useCan();
   const [loading, setLoading] = useState(true);
@@ -4052,6 +4061,12 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
     setTimeout(() => {
       setIsExporting(false);
       addToast({ message: 'Exported as PDF', type: 'success' });
+      logEvent({
+        action: 'Export',
+        description: `Exported dashboard "${dashName || DASHBOARDS.find(d => d.id === activeId)?.name || 'Dashboard'}" as PDF`,
+        module: 'Dashboards',
+        entity: 'Dashboard',
+      });
     }, 2000);
   };
 
@@ -4466,7 +4481,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                     } : undefined}
                     onExpand={() => setExpandedWidget({ title: w.title, subtitle: w.yField ? `${w.yField} by ${w.xField}` : '' })}
                     onEdit={() => { setEditingWidget({ index: i, data: w }); setAddWidgetOpen(true); }}
-                    onDelete={() => { const next = userWidgets.filter((_, j) => j !== i); setUserWidgets(next); onSaveWidgets?.(next); addToast({ message: 'Widget removed', type: 'info' }); }}
+                    onDelete={() => { const next = userWidgets.filter((_, j) => j !== i); setUserWidgets(next); onSaveWidgets?.(next); addToast({ message: 'Widget removed', type: 'info' }); logEvent({ action: 'Delete', description: `Removed widget "${w.title}" from dashboard "${displayName}"`, module: 'Dashboards', entity: 'Widget' }); }}
                     onFilter={() => addToast({ message: 'Widget filter opening.', type: 'info' })}
                     pageFilterFields={pageFilterFields}
                     widgetFields={[w.xField, w.yField].filter(Boolean)}
@@ -4570,7 +4585,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 addToast={addToast}
                 onExpand={() => setExpandedWidget({ title: dashboard.lineTrend?.title || 'Detection Accuracy Goals', subtitle: 'Performance over time' })}
                 onEdit={() => handleEditDefaultWidget(dashboard.lineTrend?.title || 'Detection Accuracy Goals', 'line', 'Performance over time')}
-                onDelete={() => addToast({ message: 'Widget deleted.', type: 'info' })}
+                onDelete={() => { addToast({ message: 'Widget deleted.', type: 'info' }); logEvent({ action: 'Delete', description: `Removed widget "${dashboard.lineTrend?.title || 'Detection Accuracy Goals'}" from dashboard "${displayName}"`, module: 'Dashboards', entity: 'Widget' }); }}
                 onFilter={() => addToast({ message: 'Widget filter opening.', type: 'info' })}
                 pageFilterFields={pageFilterFields}
                 widgetFields={['date', 'month', 'region', 'status']}
@@ -4595,7 +4610,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 addToast={addToast}
                 onExpand={() => setExpandedWidget({ title: dashboard.progress?.title || 'Invoice Volume Trend', subtitle: dashboard.progress ? 'Sheet distribution' : 'Volume over time' })}
                 onEdit={() => handleEditDefaultWidget(dashboard.progress?.title || 'Invoice Volume Trend', 'area', dashboard.progress ? 'Sheet distribution' : 'Volume over time')}
-                onDelete={() => addToast({ message: 'Widget deleted.', type: 'info' })}
+                onDelete={() => { addToast({ message: 'Widget deleted.', type: 'info' }); logEvent({ action: 'Delete', description: `Removed widget "${dashboard.progress?.title || 'Invoice Volume Trend'}" from dashboard "${displayName}"`, module: 'Dashboards', entity: 'Widget' }); }}
                 onFilter={() => addToast({ message: 'Widget filter opening.', type: 'info' })}
                 pageFilterFields={pageFilterFields}
                 widgetFields={['date', 'month', 'vendor', 'region']}
@@ -4620,7 +4635,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 addToast={addToast}
                 onExpand={() => setExpandedWidget({ title: dashboard.bars?.title || 'Monthly Invoice Volume', subtitle: 'Trend analysis' })}
                 onEdit={() => handleEditDefaultWidget(dashboard.bars?.title || 'Monthly Invoice Volume', 'clustered-column', 'Trend analysis')}
-                onDelete={() => addToast({ message: 'Widget deleted.', type: 'info' })}
+                onDelete={() => { addToast({ message: 'Widget deleted.', type: 'info' }); logEvent({ action: 'Delete', description: `Removed widget "${dashboard.bars?.title || 'Monthly Invoice Volume'}" from dashboard "${displayName}"`, module: 'Dashboards', entity: 'Widget' }); }}
                 onFilter={() => addToast({ message: 'Widget filter opening.', type: 'info' })}
                 pageFilterFields={pageFilterFields}
                 widgetFields={['date', 'month', 'vendor', 'region']}
@@ -4644,7 +4659,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 addToast={addToast}
                 onExpand={() => setExpandedWidget({ title: dashboard.donut?.title || 'Invoice Status', subtitle: 'Distribution breakdown' })}
                 onEdit={() => handleEditDefaultWidget(dashboard.donut?.title || 'Invoice Status', 'pie', 'Distribution breakdown')}
-                onDelete={() => addToast({ message: 'Widget deleted.', type: 'info' })}
+                onDelete={() => { addToast({ message: 'Widget deleted.', type: 'info' }); logEvent({ action: 'Delete', description: `Removed widget "${dashboard.donut?.title || 'Invoice Status'}" from dashboard "${displayName}"`, module: 'Dashboards', entity: 'Widget' }); }}
                 onFilter={() => addToast({ message: 'Widget filter opening.', type: 'info' })}
                 pageFilterFields={pageFilterFields}
                 widgetFields={['region', 'category', 'department', 'status']}
@@ -4676,7 +4691,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 addToast={addToast}
                 onExpand={() => setExpandedWidget({ title: dashboard.table.title, subtitle: 'Detailed records' })}
                 onEdit={() => handleEditDefaultWidget(dashboard.table.title, 'table', 'Detailed records')}
-                onDelete={() => addToast({ message: 'Widget deleted.', type: 'info' })}
+                onDelete={() => { addToast({ message: 'Widget deleted.', type: 'info' }); logEvent({ action: 'Delete', description: `Removed widget "${dashboard.table.title}" from dashboard "${displayName}"`, module: 'Dashboards', entity: 'Widget' }); }}
                 onFilter={() => addToast({ message: 'Widget filter opening.', type: 'info' })}
                 pageFilterFields={pageFilterFields}
                 widgetFields={['date', 'month', 'region', 'vendor', 'status', 'category', 'department']}
@@ -4854,6 +4869,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
             }
           }
           addToast({ message: 'Widget deleted', type: 'info' });
+          if (title) logEvent({ action: 'Delete', description: `Removed widget "${title}" from dashboard "${displayName}"`, module: 'Dashboards', entity: 'Widget' });
         }}
       >
         {/* Visualization tab content — render the matching ConfigurableChart */}
@@ -5052,6 +5068,14 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
           }
           setAddWidgetOpen(false);
           addToast({ message: editingWidget ? 'Widget updated' : 'Widget added', type: 'success' });
+          if (!editingWidget) {
+            logEvent({
+              action: 'Create',
+              description: `Added widget "${widget.title}" to dashboard "${displayName}"`,
+              module: 'Dashboards',
+              entity: 'Widget',
+            });
+          }
         }}
         onOpenExcelUpload={() => addToast({ message: 'Upload Excel', type: 'info' })}
         onOpenQueryModal={() => addToast({ message: 'Open Query', type: 'info' })}

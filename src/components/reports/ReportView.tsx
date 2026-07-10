@@ -39,6 +39,7 @@ import {
 } from './reportShared';
 import QueryWidgetModal from './QueryWidgetModal';
 import { useToast } from '../shared/Toast';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
 import { KpiCountUp } from '../shared/KpiTile';
 import { ReportBrandBanner, ReportNumberedHeading, ReportKpiTiles, ReportSignoffBlock } from './ReportDocumentChrome';
@@ -1840,6 +1841,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   onSaveAtrVersion?: (label: string, data: AtrReportData) => void;
 }) {
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
   const { currentUser } = useCurrentUser();
   // Manual sign-on / sign-off on the report's approval slots. Signing records
   // the slot's assigned name (or the current user) + today's date; signing off
@@ -2340,6 +2342,12 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       icon: 'file-text',
       sections: sectionDefs,
     } as typeof REPORT_TEMPLATES[number]);
+    logEvent({
+      action: 'Create',
+      description: `Saved report as template "${report.name} Template" (${sectionDefs.length} ${sectionDefs.length === 1 ? 'section' : 'sections'})`,
+      module: 'Reports',
+      entity: 'Template',
+    });
   };
 
   // ─── Add-Observation modal state ───
@@ -3296,7 +3304,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
 
 
       {/* Generate ATR — editable Action Taken Report preview (same as Action Hub) */}
-      {atrModalOpen && <GenerateATRModal onClose={() => setAtrModalOpen(false)} onSaveVersion={onSaveAtrVersion} />}
+      {atrModalOpen && <GenerateATRModal onClose={() => setAtrModalOpen(false)} onSaveVersion={onSaveAtrVersion ? (label, data) => { onSaveAtrVersion(label, data); logEvent({ action: 'Create', description: `Saved ATR version "${label}" from report "${report.name}"`, module: 'Reports', entity: 'Report' }); } : undefined} />}
 
       {/* Confirm dialog — section delete from Contents */}
       <ConfirmDialog

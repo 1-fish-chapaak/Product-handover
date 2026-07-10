@@ -41,6 +41,7 @@ import type { AutomationCasesState } from '../engagement-configurable/patterns/a
 import type { AutomationReportsState } from '../engagement-configurable/patterns/automation/automationReportsData';
 import type { AutomationScheduleState } from '../engagement-configurable/patterns/automation/automationScheduleData';
 import type { AutomationInputDataState } from '../engagement-configurable/patterns/automation/automationInputData';
+import { useAuditLog } from '../../context/AdminDataContext';
 
 // ─── Mock Data ──────────────────────────────────────────────────────────
 
@@ -164,6 +165,7 @@ function AutomationCreateModal({ onClose, onCreate }: {
   const [endDate, setEndDate] = useState('');
   const [category, setCategory] = useState('');
   const [validation, setValidation] = useState('');
+  const logEvent = useAuditLog();
 
   const handleCreate = () => {
     if (!name.trim()) { setValidation('Project name is required.'); return; }
@@ -189,6 +191,7 @@ function AutomationCreateModal({ onClose, onCreate }: {
       lastActivity: 'Just created',
     };
     onCreate(card);
+    logEvent({ action: 'Create', description: `Created Automation engagement "${card.name}"`, module: 'Engagements', entity: 'Engagement' });
   };
 
   return (
@@ -334,6 +337,7 @@ function IACreateModal({ onClose, onCreate }: {
   const [periodTo, setPeriodTo] = useState('');
   const [setup, setSetup] = useState<IASetupOptions>({ ...DEFAULT_SETUP });
   const [validation, setValidation] = useState('');
+  const logEvent = useAuditLog();
 
   const toggle = (key: keyof IASetupOptions) => setSetup(p => ({ ...p, [key]: !p[key] }));
 
@@ -361,6 +365,7 @@ function IACreateModal({ onClose, onCreate }: {
       lastActivity: 'Just created',
     };
     onCreate(card);
+    logEvent({ action: 'Create', description: `Created Internal Audit engagement "${card.name}"`, module: 'Engagements', entity: 'Engagement' });
   };
 
   const checkboxCls = 'w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/20 cursor-pointer accent-primary';
@@ -510,6 +515,7 @@ function ComplianceCreateModal({ onClose, onCreate }: {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [validation, setValidation] = useState('');
+  const logEvent = useAuditLog();
 
   const handleCreate = () => {
     if (!name.trim()) { setValidation('Engagement name is required.'); return; }
@@ -537,6 +543,7 @@ function ComplianceCreateModal({ onClose, onCreate }: {
       lastActivity: 'Just created',
     };
     onCreate(card);
+    logEvent({ action: 'Create', description: `Created Compliance engagement "${card.name}" (${card.framework})`, module: 'Engagements', entity: 'Engagement' });
   };
 
   return (
@@ -1265,6 +1272,7 @@ function IAIDRTab() {
   const [recipientEmail, setRecipientEmail] = useState('');
   const [receivedFiles, setReceivedFiles] = useState<ReceivedFile[]>([]);
   const [showSendModal, setShowSendModal] = useState(false);
+  const logEvent = useAuditLog();
 
   const totalRequests = idrItems.length;
   const sentCount = idrItems.filter(i => i.status === 'Sent').length;
@@ -1276,6 +1284,7 @@ function IAIDRTab() {
     setIdrItems(prev => prev.map(item => ({ ...item, status: 'Sent' as const })));
     setSentStatus('sent');
     setShowSendModal(false);
+    logEvent({ action: 'Update', description: `Sent IDR request to ${recipientName} (${totalRequests} document${totalRequests === 1 ? '' : 's'})`, module: 'Engagements', entity: 'IDR Request' });
   };
 
   const handleSimulateUpload = () => {
@@ -1293,6 +1302,7 @@ function IAIDRTab() {
       if (matched) return { ...item, status: 'Received' as const, filesReceived: 1 };
       return { ...item, status: 'Pending' as const };
     }));
+    logEvent({ action: 'Upload', description: `Uploaded evidence to request — ${mockFiles.length} files received from Process Owner`, module: 'Engagements', entity: 'Evidence' });
   };
 
   if (totalRequests === 0) {

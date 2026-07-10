@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { ConciergeFlow } from '../ConciergeKit';
 import type { PickedFile, HistoryJob } from '../types';
+import { useAuditLog } from '../../../../context/AdminDataContext';
 
 // ─── Result shape ────────────────────────────────────────────────────────────
 
@@ -475,6 +476,7 @@ function MedicalResultView({ result }: { result: MedicalResult }) {
 // ─── Tool entry ──────────────────────────────────────────────────────────────
 
 export default function MedicalReportReaderView({ onBack }: { onBack: () => void }) {
+  const logEvent = useAuditLog();
   return (
     <ConciergeFlow<MedicalResult>
       title="Medical Report Reader"
@@ -519,7 +521,15 @@ export default function MedicalReportReaderView({ onBack }: { onBack: () => void
       renderResult={(result) => <MedicalResultView result={result} />}
       resultActions={(result) => (
         <button
-          onClick={() => downloadEvidenceCsv(result)}
+          onClick={() => {
+            downloadEvidenceCsv(result);
+            logEvent({
+              action: 'Export',
+              description: 'Downloaded Medical Report Reader evidence as CSV',
+              module: 'AI Concierge',
+              entity: 'Medical Report Reader',
+            });
+          }}
           className="inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 px-3 py-2 transition-colors cursor-pointer"
         >
           <Download size={14} /> Download evidence (.csv)
