@@ -40,4 +40,27 @@ export const test = base.extend({
   },
 });
 
+/**
+ * Answer the query/workflow clarification card end-to-end.
+ *
+ * The card was redesigned from an auto-advancing role="option" listbox into a
+ * stepped radiogroup: each question is a set of role="radio" (single) or
+ * role="checkbox" (multi) options and you advance with an explicit Next / Done
+ * button (number keys only *toggle*, they no longer advance). This helper picks
+ * the first option on each step and advances until Done, driving the run.
+ */
+export async function answerClarification(page: Page) {
+  await expect(page.getByText(/Question 1 of/)).toBeVisible({ timeout: 8000 });
+  for (let guard = 0; guard < 10; guard++) {
+    await page.locator('[role=radio], [role=checkbox]').first().click();
+    const done = page.getByRole('button', { name: 'Done' });
+    if (await done.count() > 0) { // Done renders only on the last question
+      await done.click();
+      break;
+    }
+    await page.getByRole('button', { name: 'Next' }).click();
+    await page.waitForTimeout(150);
+  }
+}
+
 export { expect, type Page };

@@ -19,9 +19,10 @@ async function snap(page: Page, name: string) {
 
 test('workflow build with files attached via composer + button', async ({ page }) => {
   test.setTimeout(180_000);
-  await page.goto(BASE);
-  await page.getByRole('button', { name: 'Ask IRA' }).click();
-  await page.locator('textarea').first().waitFor({ timeout: 5000 });
+  // Deep-link straight into the chat view (the `test` helper auto-enters the
+  // workspace gate). Home's hero is a separate surface without this composer.
+  await page.goto(`${BASE}/?view=chat`);
+  await page.locator('textarea').first().waitFor({ timeout: 8000 });
 
   // Toggle Workflow mode FIRST
   await page.getByRole('radio', { name: /^Workflow$/ }).click();
@@ -31,19 +32,23 @@ test('workflow build with files attached via composer + button', async ({ page }
   await page.waitForTimeout(400);
   await snap(page, 'A-data-picker-open');
 
-  // Pick 2 existing assets from "All Data" tab and confirm
-  const allDataTab = page.getByRole('button', { name: /All Data/ });
+  // Pick 2 existing assets from "All Data" tab and confirm. Scope everything to
+  // the picker dialog — the source names also appear on background surfaces
+  // (e.g. the "Vendor Master Change Monitor" recent-workflow card), and the
+  // row-name is anchored (^) so it doesn't also match the favourite-star button
+  // ("Add <name> to favourites").
+  const dialog = page.getByRole('dialog');
+  const allDataTab = dialog.getByRole('button', { name: /All Data/ });
   if (await allDataTab.isVisible().catch(() => false)) {
     await allDataTab.click();
     await page.waitForTimeout(200);
   }
-  // Click 2 visible asset rows then Attach
-  await page.getByRole('button', { name: /SAP ERP: AP Module/i }).first().click().catch(() => {});
+  await dialog.getByRole('button', { name: /^SAP ERP: AP Module/i }).click();
   await page.waitForTimeout(150);
-  await page.getByRole('button', { name: /Vendor Master Data/i }).first().click().catch(() => {});
+  await dialog.getByRole('button', { name: /^Vendor Master Data/i }).click();
   await page.waitForTimeout(200);
   await snap(page, 'B-picked-2-sources');
-  await page.getByRole('button', { name: /^Attach(\s+\d+)?$/i }).click();
+  await dialog.getByRole('button', { name: /^Add( \d+)?$/i }).click();
   await page.waitForTimeout(400);
   await snap(page, 'C-attached-to-composer');
 
@@ -60,6 +65,6 @@ test('workflow build with files attached via composer + button', async ({ page }
   // Processing trail appears + clarify lands directly
   await expect(page.getByText(/Verifying your data sources/i)).toBeVisible({ timeout: 4000 });
   await snap(page, 'D-processing');
-  await expect(page.getByRole('option', { name: /Last 30 days/i })).toBeVisible({ timeout: 6000 });
+  await expect(page.getByRole('radio', { name: /Last 30 days/i })).toBeVisible({ timeout: 6000 });
   await snap(page, 'E-clarify');
 });

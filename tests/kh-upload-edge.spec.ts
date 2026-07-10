@@ -113,8 +113,10 @@ test('U6: removing a file mid-upload stops cleanly (no leaked timer / errors)', 
   await input.setInputFiles([{ name: 'midcancel.csv', mimeType: 'text/csv', buffer: Buffer.from('x\n' + '1\n'.repeat(1000)) }]);
   const dlg = page.getByRole('dialog');
   await expect(dlg.getByText('midcancel.csv')).toBeVisible();
-  // Cancel the row while it's still in flight (row remove button).
+  // Cancel the row while it's still in flight (row remove button). Removal now
+  // routes through a "Remove this item?" confirm — accept it.
   await dlg.getByRole('button', { name: /Cancel midcancel\.csv/ }).click();
+  await page.getByRole('button', { name: 'Remove', exact: true }).click();
   await expect(dlg.getByText('midcancel.csv')).toHaveCount(0);
   // The uploads list is gone and the (now-removed) progress timer fires no
   // further errors.

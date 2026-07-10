@@ -37,9 +37,9 @@ test('Fix 4 — start composer: Query/Workflow mode toggle, Q&A vs Workflow', as
   await page.goto('/?view=chat');
   await enterWorkspace(page);
 
-  // Mode control is a Query/Workflow segmented toggle (radiogroup): Query (Q&A)
+  // Mode control is a Chat/Workflow segmented toggle (radiogroup): Chat (Q&A)
   // is selected by default; clicking Workflow switches modes.
-  const query = page.getByRole('radio', { name: 'Query' });
+  const query = page.getByRole('radio', { name: 'Chat' });
   const workflow = page.getByRole('radio', { name: 'Workflow' });
   await expect(query).toBeVisible();
   await expect(query).toHaveAttribute('aria-checked', 'true'); // Q&A by default

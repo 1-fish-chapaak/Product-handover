@@ -18,9 +18,11 @@ async function gotoP2P(page: Page) {
   await page.goto('/');
   await enterWorkspace(page);
   await page.getByRole('button', { name: 'Process Hub' }).first().click();
-  await page.getByText('Procure to Pay').first().waitFor({ state: 'visible' });
-  await page.getByText('Procure to Pay').first().click();
-  await expect(page.getByText(/^RACMs?$/).first()).toBeVisible({ timeout: 5000 });
+  const card = page.getByText('Procure to Pay').first();
+  await card.waitFor({ state: 'visible' });
+  await page.waitForTimeout(700); // let the card entrance cascade settle before clicking
+  await card.click();
+  await expect(page.getByText(/^RACMs?$/).first()).toBeVisible({ timeout: 12000 });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -28,51 +30,12 @@ test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
 });
 
-// ── TASK 1 — RACM detail back-button journey ────────────────────────────────
-test('T1 — RACM list → detail (Back to RACMs) → list', async ({ page }) => {
-  await gotoP2P(page);
-  await page.getByText(/^RACMs?$/).first().click();
-  await expect(page).toHaveURL(/\?section=racm/);
-  await page.waitForTimeout(700); // past skeleton
-  await page.screenshot({ path: 'test-results/journey-t1-01-list.png' });
-
-  // Open a RACM detail.
-  const racmName = page.getByRole('button', { name: /FY26 P2P/ }).first();
-  await expect(racmName).toBeVisible({ timeout: 5000 });
-  await racmName.click();
-
-  // Detail: URL gains ?racm=, and the trail collapses to one back button.
-  await expect(page).toHaveURL(/[?&]racm=/, { timeout: 3000 });
-  const backBtn = page.getByRole('button', { name: /Back to RACMs/i });
-  await expect(backBtn).toBeVisible({ timeout: 3000 });
-  await page.screenshot({ path: 'test-results/journey-t1-02-detail.png' });
-
-  // Back → list.
-  await backBtn.click();
-  await expect(page).not.toHaveURL(/[?&]racm=/, { timeout: 3000 });
-  await expect(page.getByRole('button', { name: /FY26 P2P/ }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Back to RACMs/i })).toBeHidden();
-  await page.screenshot({ path: 'test-results/journey-t1-03-back-on-list.png' });
-});
-
-// ── TASK 1b — Open mapping keeps a working back affordance ───────────────────
-// After main's RACM rework, the Process-Hub mapping view shows "Back to RACMs"
-// plus an inline "Show/Hide summary" toggle (the standalone "RACM Summary" back
-// screen now lives only in the engagement/AR mapping path). What matters here:
-// opening a mapping doesn't strand the user — a back affordance is still present.
-test('T1b — Open mapping keeps a working back + summary toggle', async ({ page }) => {
-  await gotoP2P(page);
-  await page.getByText(/^RACMs?$/).first().click();
-  await page.waitForTimeout(700);
-  await page.getByRole('button', { name: /FY26 P2P/ }).first().click();
-  await expect(page.getByRole('button', { name: /Back to RACMs/i })).toBeVisible();
-
-  await page.getByRole('button', { name: /Open mapping/i }).click();
-  await expect(page).toHaveURL(/[?&]racm=/, { timeout: 3000 });
-  await expect(page.getByRole('button', { name: /Back to RACMs/i })).toBeVisible({ timeout: 3000 });
-  await expect(page.getByRole('button', { name: /(Show|Hide) summary/i })).toBeVisible({ timeout: 3000 });
-  await page.screenshot({ path: 'test-results/journey-t1b-mapping.png' });
-});
+// TASK 1 / 1b DELETED (2026-07): the in-Process-Hub RACM detail journey these
+// asserted was removed in main's RACM rework. Clicking a RACM card no longer
+// opens an in-place "Back to RACMs" detail (URL ?racm=) with an "Open mapping" +
+// "Show/Hide summary" toggle — the whole card is now a role="button" that opens
+// the full-page RACM editor in a NEW TAB (?view=racm-full-editor). The standalone
+// RACM summary/mapping-back screen now lives only in the engagement/AR path.
 
 // ── TASK 3 + 4 — Controls: card opens detail in a deep-linked new tab ────────
 // The inline expand-to-workflow-row was dropped in main's rework (mirrors the SOP
