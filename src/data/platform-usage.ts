@@ -38,12 +38,14 @@ const MODULE_WEIGHTS: Record<UsageModule, number> = {
 /** Map an AuditLog.module string onto a usage bucket (live fold-in). */
 export function usageModuleFor(logModule: string): UsageModule {
   switch (logModule) {
-    case 'Ask IRA': case 'Chat': return 'Ask IRA';
+    // Concierge tools count as AI usage — the PRD defines AI queries as
+    // "Ask IRA and Concierge events".
+    case 'Ask IRA': case 'Chat': case 'AI Concierge': return 'Ask IRA';
     case 'Report': case 'Reports': return 'Reports';
-    case 'Engagements': case 'Engagement Execution': return 'Engagements';
+    case 'Engagements': case 'Engagement Execution': case 'SOX ICFR': return 'Engagements';
     case 'Workflow Library': case 'Workflows': return 'Workflows';
     case 'Dashboard': case 'Dashboards': return 'Dashboards';
-    case 'Knowledge Hub': return 'Knowledge Hub';
+    case 'Knowledge Hub': case 'Data Sources': return 'Knowledge Hub';
     case 'Admin': return 'Admin';
     // Process Hub, RACM, Control Library, Risk Register, Exceptions, …
     default: return 'Risk & Controls';
@@ -151,6 +153,12 @@ export function liveLogsToday(logs: AuditLog[]): AuditLog[] {
   return logs.filter(l => l.timestamp.startsWith(today));
 }
 
+/** A live event that counts as an AI query: a question asked or a tool run in
+ *  the Ask IRA bucket — not exports/renames of chat artifacts. */
+function isAiQuery(l: AuditLog): boolean {
+  return usageModuleFor(l.module) === 'Ask IRA' && (l.action === 'Create' || l.action === 'Run');
+}
+
 /** The seeded series with today's live events folded into the newest bucket. */
 export function usageDaysWithLive(logs: AuditLog[]): UsageDay[] {
   const live = liveLogsToday(logs);
@@ -164,8 +172,10 @@ export function usageDaysWithLive(logs: AuditLog[]): UsageDay[] {
       ...day,
       actions: day.actions + live.length,
       activeUsers: Math.max(day.activeUsers, liveUsers.size),
-      aiQueries: day.aiQueries + live.filter(l => usageModuleFor(l.module) === 'Ask IRA').length,
-      reports: day.reports + live.filter(l => usageModuleFor(l.module) === 'Reports').length,
+      aiQueries: day.aiQueries + live.filter(isAiQuery).length,
+      // A report counts as generated only on a Create — downloading or
+      // sharing one is not a new report.
+      reports: day.reports + live.filter(l => l.action === 'Create' && l.entity === 'Report').length,
       downloads: day.downloads + live.filter(l => l.action === 'Export').length,
       byModule,
     };
@@ -291,7 +301,7 @@ export function userUsageRows(users: AdminUser[], days: UsageDay[], logs: AuditL
     return {
       user: u,
       actions: seeded + mine.length,
-      aiQueries: Math.round(seeded * p.aiRatio) + mine.filter(l => usageModuleFor(l.module) === 'Ask IRA').length,
+      aiQueries: Math.round(seeded * p.aiRatio) + mine.filter(isAiQuery).length,
       downloads: Math.round(seeded * p.dlRatio) + mine.filter(l => l.action === 'Export').length,
       topModule: p.topModule,
     };
@@ -303,7 +313,7 @@ export function userUsageRows(users: AdminUser[], days: UsageDay[], logs: AuditL
  * "who downloaded what" is derivable: seeded history + live Export events.
  * ────────────────────────────────────────────────────────────────────────── */
 
-export type DownloadFormat = 'PDF' | 'CSV' | 'XLSX' | 'DOCX';
+export type DownloadFormat = 'PDF' | 'CSV' | 'XLSX' | 'DOCX' | 'PPTX' | 'HTML' | 'TXT' | 'JSON';
 
 export interface DownloadEvent {
   id: string;
@@ -330,13 +340,20 @@ const DOWNLOAD_CATALOG: { item: string; format: DownloadFormat }[] = [
   { item: 'Workflow run output', format: 'CSV' },
 ];
 
-/** Pull the artifact name + format out of an Export log's description
- *  (e.g. 'Exported audit log as CSV (12 events)' → 'Audit log' / CSV). */
+/** Pull the artifact name + format out of an Export log's description.
+ *  Export events come from every download button on the platform, so the
+ *  phrasing varies: 'Exported audit log as CSV (12 events)', 'Downloaded
+ *  ATR "…" as Word', 'Generated C-01-Working-Paper.pdf'. */
+const FORMAT_ALIASES: Record<string, DownloadFormat> = {
+  PDF: 'PDF', CSV: 'CSV', XLSX: 'XLSX', DOCX: 'DOCX', PPTX: 'PPTX',
+  HTML: 'HTML', TXT: 'TXT', JSON: 'JSON', WORD: 'DOCX', EXCEL: 'XLSX', POWERPOINT: 'PPTX',
+};
 function parseExportLog(l: AuditLog): { item: string; format: DownloadFormat } {
-  const m = l.description.match(/Exported (.+?) as (PDF|CSV|XLSX|DOCX)/i);
-  if (m) {
-    const item = m[1].charAt(0).toUpperCase() + m[1].slice(1);
-    return { item, format: m[2].toUpperCase() as DownloadFormat };
+  const m = l.description.match(/(?:Exported|Downloaded|Generated) (.+?) (?:as |\()(\w+)/i);
+  const format = m ? FORMAT_ALIASES[m[2].toUpperCase()] : undefined;
+  if (m && format) {
+    const item = m[1];
+    return { item: item.charAt(0).toUpperCase() + item.slice(1), format };
   }
   return { item: l.entity, format: 'CSV' };
 }
@@ -543,6 +560,316 @@ export function activityConcentration(rows: UserUsageRow[], topN = 3): number | 
   const top = [...rows].sort((a, b) => b.actions - a.actions).slice(0, topN)
     .reduce((s, r) => s + r.actions, 0);
   return Math.round((top / total) * 100);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * What got created — workflows, dashboards, RACMs, engagements and reports
+ * built in the window. Seeded counts derive from each module's daily series;
+ * real Create events from this session (logged by the create flows across the
+ * platform) are counted one-for-one on top.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface CreationKind {
+  key: 'workflows' | 'dashboards' | 'racms' | 'engagements' | 'reports';
+  label: string;
+  /** AuditLog.entity values that count as this kind (with action 'Create'). */
+  entities: string[];
+  module: UsageModule;
+  /** Fraction of the module's daily actions that are creations (seed only). */
+  share: number;
+}
+
+export const CREATION_KINDS: CreationKind[] = [
+  { key: 'workflows', label: 'Workflows', entities: ['Workflow'], module: 'Workflows', share: 0.07 },
+  { key: 'dashboards', label: 'Dashboards', entities: ['Dashboard'], module: 'Dashboards', share: 0.06 },
+  { key: 'racms', label: 'RACMs', entities: ['RACM'], module: 'Risk & Controls', share: 0.05 },
+  { key: 'engagements', label: 'Engagements', entities: ['Engagement'], module: 'Engagements', share: 0.04 },
+  // Reports reuse the day series' `reports` count, so the card and the
+  // Reports KPI always show the same number.
+  { key: 'reports', label: 'Reports', entities: ['Report'], module: 'Reports', share: 0 },
+];
+
+/** Seeded creations of one kind on one day — deterministic per (kind, day). */
+function seededCreations(kind: CreationKind, day: UsageDay): number {
+  if (kind.key === 'reports') return day.reports;
+  const rnd = mulberry32(hashStr(`create:${kind.key}:${day.dayOffset}`));
+  return Math.round(day.byModule[kind.module] * kind.share * (0.7 + rnd() * 0.6));
+}
+
+/** Today's real Create events for a kind. */
+function liveCreates(kind: CreationKind, logs: AuditLog[]): AuditLog[] {
+  return liveLogsToday(logs).filter(l => l.action === 'Create' && kind.entities.includes(l.entity));
+}
+
+export interface CreationTotal {
+  kind: CreationKind;
+  count: number;
+  deltaPct: number | null;
+}
+
+/** Per-kind created counts for the window with prior-window deltas. Live
+ *  events only exist today, so they only ever land in the current window.
+ *  Reports skip the live add — `usageDaysWithLive` already folds live report
+ *  events into today's `reports`, and this reuses that number. */
+export function creationTotals(days: UsageDay[], priorDays: UsageDay[], logs: AuditLog[]): CreationTotal[] {
+  return CREATION_KINDS.map(kind => {
+    const seeded = days.reduce((s, d) => s + seededCreations(kind, d), 0);
+    const prior = priorDays.reduce((s, d) => s + seededCreations(kind, d), 0);
+    const live = kind.key === 'reports' ? 0 : liveCreates(kind, logs).length;
+    return { kind, count: seeded + live, deltaPct: usageDeltaPct(seeded + live, prior) };
+  });
+}
+
+export interface CreationEvent {
+  id: string;
+  user: string;
+  /** What was created, e.g. 'workflow "Duplicate vendor payments"'. */
+  item: string;
+  kindLabel: string;
+  /** Days ago; 0 = today. */
+  dayOffset: number;
+  /** Display time (HH:MM) for live rows. */
+  time: string;
+  /** True when this came from a real logEvent in the current session. */
+  live: boolean;
+}
+
+/** The artifacts people build on a GRC platform — the seed catalog. */
+const CREATION_CATALOG: { item: string; kind: CreationKind['key'] }[] = [
+  { item: 'workflow "Duplicate vendor payments"', kind: 'workflows' },
+  { item: 'Vendor risk dashboard', kind: 'dashboards' },
+  { item: 'O2C revenue RACM', kind: 'racms' },
+  { item: 'engagement "FY26 Q1 SOX Walkthrough"', kind: 'engagements' },
+  { item: 'IA engagement report', kind: 'reports' },
+  { item: 'workflow "Three-way match exceptions"', kind: 'workflows' },
+  { item: 'ITGC compliance dashboard', kind: 'dashboards' },
+  { item: 'SOX compliance report', kind: 'reports' },
+];
+
+/** Latest creations, newest first: real session Create events on top, then a
+ *  deterministic seeded history assigned to the most-active members. */
+export function recentCreations(rows: UserUsageRow[], logs: AuditLog[], limit = 6): CreationEvent[] {
+  const labelByEntity = new Map<string, string>();
+  CREATION_KINDS.forEach(k => k.entities.forEach(e => labelByEntity.set(e, k.label)));
+  const liveEvents: CreationEvent[] = liveLogsToday(logs)
+    .filter(l => l.action === 'Create' && labelByEntity.has(l.entity))
+    .map(l => ({
+      id: l.id,
+      user: l.user,
+      item: l.description.replace(/^Created /, ''),
+      kindLabel: labelByEntity.get(l.entity)!,
+      dayOffset: 0,
+      time: l.timestamp.split(' ')[1]?.slice(0, 5) ?? '',
+      live: true,
+    }));
+  const creators = [...rows].filter(r => r.actions > 0).sort((a, b) => b.actions - a.actions);
+  const rnd = mulberry32(0xc0ffee42);
+  const kindLabel = (key: CreationKind['key']) => CREATION_KINDS.find(k => k.key === key)!.label;
+  const seeded: CreationEvent[] = creators.length === 0 ? [] : CREATION_CATALOG.map((c, i) => ({
+    id: `cr-seed-${i}`,
+    user: creators[Math.floor(rnd() * creators.length)].user.name,
+    item: c.item,
+    kindLabel: kindLabel(c.kind),
+    dayOffset: i === 0 ? 0 : Math.min(1 + Math.floor(rnd() * 6), USAGE_RANGE_DAYS),
+    time: `${String(9 + Math.floor(rnd() * 8)).padStart(2, '0')}:${String(Math.floor(rnd() * 60)).padStart(2, '0')}`,
+    live: false,
+  })).sort((a, b) => a.dayOffset - b.dayOffset);
+  return [...liveEvents, ...seeded].slice(0, limit);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Workflow runs — executions across the platform (library, engagements,
+ * AI tools). Seeded from each area's daily series; live Run events counted
+ * one-for-one on top.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export type RunArea = 'Workflow Library' | 'Engagements' | 'AI tools';
+export const RUN_AREAS: { area: RunArea; bucket: UsageModule; share: number }[] = [
+  { area: 'Workflow Library', bucket: 'Workflows', share: 0.30 },
+  { area: 'Engagements', bucket: 'Engagements', share: 0.10 },
+  { area: 'AI tools', bucket: 'Ask IRA', share: 0.08 },
+];
+
+function seededRuns(area: (typeof RUN_AREAS)[number], day: UsageDay): number {
+  const rnd = mulberry32(hashStr(`run:${area.area}:${day.dayOffset}`));
+  return Math.round(day.byModule[area.bucket] * area.share * (0.7 + rnd() * 0.6));
+}
+
+/** Which run area a live Run event belongs to, by its usage bucket. */
+function runAreaFor(l: AuditLog): RunArea {
+  const bucket = usageModuleFor(l.module);
+  if (bucket === 'Ask IRA') return 'AI tools';
+  if (bucket === 'Workflows') return 'Workflow Library';
+  return 'Engagements';
+}
+
+export interface RunTotals {
+  total: number;
+  deltaPct: number | null;
+  byArea: { area: RunArea; count: number }[];
+}
+
+export function workflowRunTotals(days: UsageDay[], priorDays: UsageDay[], logs: AuditLog[]): RunTotals {
+  const liveRuns = liveLogsToday(logs).filter(l => l.action === 'Run');
+  const byArea = RUN_AREAS.map(a => ({
+    area: a.area,
+    count: days.reduce((s, d) => s + seededRuns(a, d), 0) + liveRuns.filter(l => runAreaFor(l) === a.area).length,
+  }));
+  const total = byArea.reduce((s, a) => s + a.count, 0);
+  const prior = RUN_AREAS.reduce((s, a) => s + priorDays.reduce((t, d) => t + seededRuns(a, d), 0), 0);
+  return { total, deltaPct: usageDeltaPct(total, prior), byArea };
+}
+
+export interface RunEvent {
+  id: string;
+  user: string;
+  /** Verb-first phrase, e.g. 'ran workflow "Duplicate vendor payments"'. */
+  item: string;
+  area: RunArea;
+  dayOffset: number;
+  time: string;
+  live: boolean;
+}
+
+const RUN_CATALOG: { item: string; area: RunArea }[] = [
+  { item: 'ran workflow "Duplicate vendor payments"', area: 'Workflow Library' },
+  { item: 'ran workflow "Three-way match exceptions"', area: 'Workflow Library' },
+  { item: 'executed an automation run for "P2P continuous monitoring"', area: 'Engagements' },
+  { item: 'ran a document forensic scan', area: 'AI tools' },
+  { item: 'ran workflow "Vendor master changes"', area: 'Workflow Library' },
+  { item: 'ran attribute testing on "Invoice approval"', area: 'Engagements' },
+  { item: 'extracted tables from 3 files', area: 'AI tools' },
+  { item: 'ran workflow "GL journal anomalies"', area: 'Workflow Library' },
+];
+
+/** Latest runs, newest first: live session Run events on top, then a
+ *  deterministic seeded history assigned to the most-active members. */
+export function recentRuns(rows: UserUsageRow[], logs: AuditLog[], limit = 5): RunEvent[] {
+  const liveEvents: RunEvent[] = liveLogsToday(logs)
+    .filter(l => l.action === 'Run')
+    .map(l => ({
+      id: l.id,
+      user: l.user,
+      item: l.description.replace(/^./, c => c.toLowerCase()),
+      area: runAreaFor(l),
+      dayOffset: 0,
+      time: l.timestamp.split(' ')[1]?.slice(0, 5) ?? '',
+      live: true,
+    }));
+  const runners = [...rows].filter(r => r.actions > 0).sort((a, b) => b.actions - a.actions);
+  const rnd = mulberry32(0x5eedca11);
+  const seeded: RunEvent[] = runners.length === 0 ? [] : RUN_CATALOG.map((c, i) => ({
+    id: `run-seed-${i}`,
+    user: runners[Math.floor(rnd() * runners.length)].user.name,
+    item: c.item,
+    area: c.area,
+    dayOffset: i === 0 ? 0 : Math.min(1 + Math.floor(rnd() * 6), USAGE_RANGE_DAYS),
+    time: `${String(9 + Math.floor(rnd() * 8)).padStart(2, '0')}:${String(Math.floor(rnd() * 60)).padStart(2, '0')}`,
+    live: false,
+  })).sort((a, b) => a.dayOffset - b.dayOffset);
+  return [...liveEvents, ...seeded].slice(0, limit);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Sharing — invites and share links across the platform. Seeded as a small
+ * slice of daily activity; live Share events counted one-for-one on top.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export const SHARE_KINDS = ['Reports', 'Dashboards', 'RACMs', 'Workflows', 'Other'] as const;
+export type ShareKind = (typeof SHARE_KINDS)[number];
+const SHARE_WEIGHTS: Record<ShareKind, number> = {
+  Reports: 0.40, Dashboards: 0.25, RACMs: 0.15, Workflows: 0.12, Other: 0.08,
+};
+
+function seededSharesForDay(day: UsageDay): number {
+  const rnd = mulberry32(hashStr(`share:${day.dayOffset}`));
+  return Math.round(day.actions * 0.015 * (0.6 + rnd() * 0.8));
+}
+
+function shareKindFor(l: AuditLog): ShareKind {
+  switch (l.entity) {
+    case 'Report': return 'Reports';
+    case 'Dashboard': return 'Dashboards';
+    case 'RACM': return 'RACMs';
+    case 'Workflow': return 'Workflows';
+    default: return 'Other';
+  }
+}
+
+export interface ShareTotals {
+  total: number;
+  deltaPct: number | null;
+  byKind: { kind: ShareKind; count: number }[];
+}
+
+export function shareTotals(days: UsageDay[], priorDays: UsageDay[], logs: AuditLog[]): ShareTotals {
+  const seeded = days.reduce((s, d) => s + seededSharesForDay(d), 0);
+  const prior = priorDays.reduce((s, d) => s + seededSharesForDay(d), 0);
+  const liveShares = liveLogsToday(logs).filter(l => l.action === 'Share');
+  const total = seeded + liveShares.length;
+  // Largest-remainder split of the seeded total, then live events by entity.
+  const raw = SHARE_KINDS.map(k => SHARE_WEIGHTS[k] * seeded);
+  const floors = raw.map(v => Math.floor(v));
+  let remainder = seeded - floors.reduce((s, f) => s + f, 0);
+  const order = raw.map((v, i) => ({ i, frac: v - floors[i] })).sort((a, b) => b.frac - a.frac);
+  for (const { i } of order) {
+    if (remainder <= 0) break;
+    floors[i] += 1;
+    remainder -= 1;
+  }
+  const byKind = SHARE_KINDS.map((kind, i) => ({
+    kind,
+    count: floors[i] + liveShares.filter(l => shareKindFor(l) === kind).length,
+  }));
+  return { total, deltaPct: usageDeltaPct(total, prior), byKind };
+}
+
+export interface ShareEvent {
+  id: string;
+  user: string;
+  /** Verb-first phrase, e.g. 'shared SOX compliance report with 2 people'. */
+  item: string;
+  kind: ShareKind;
+  dayOffset: number;
+  time: string;
+  live: boolean;
+}
+
+const SHARE_CATALOG: { item: string; kind: ShareKind }[] = [
+  { item: 'shared the SOX compliance report with 2 people', kind: 'Reports' },
+  { item: 'shared the vendor risk dashboard with 4 people', kind: 'Dashboards' },
+  { item: 'copied a share link for the P2P RACM', kind: 'RACMs' },
+  { item: 'shared the IA engagement report with 1 person', kind: 'Reports' },
+  { item: 'shared a workflow run output with 3 people', kind: 'Workflows' },
+  { item: 'shared the ITGC compliance dashboard with 2 people', kind: 'Dashboards' },
+];
+
+/** Latest shares, newest first: live session Share events on top, then a
+ *  deterministic seeded history assigned to the most-active members. */
+export function recentShares(rows: UserUsageRow[], logs: AuditLog[], limit = 5): ShareEvent[] {
+  const liveEvents: ShareEvent[] = liveLogsToday(logs)
+    .filter(l => l.action === 'Share')
+    .map(l => ({
+      id: l.id,
+      user: l.user,
+      item: l.description.replace(/^./, c => c.toLowerCase()),
+      kind: shareKindFor(l),
+      dayOffset: 0,
+      time: l.timestamp.split(' ')[1]?.slice(0, 5) ?? '',
+      live: true,
+    }));
+  const sharers = [...rows].filter(r => r.actions > 0).sort((a, b) => b.actions - a.actions);
+  const rnd = mulberry32(0x54a4e5);
+  const seeded: ShareEvent[] = sharers.length === 0 ? [] : SHARE_CATALOG.map((c, i) => ({
+    id: `share-seed-${i}`,
+    user: sharers[Math.floor(rnd() * sharers.length)].user.name,
+    item: c.item,
+    kind: c.kind,
+    dayOffset: i === 0 ? 0 : Math.min(1 + Math.floor(rnd() * 6), USAGE_RANGE_DAYS),
+    time: `${String(9 + Math.floor(rnd() * 8)).padStart(2, '0')}:${String(Math.floor(rnd() * 60)).padStart(2, '0')}`,
+    live: false,
+  })).sort((a, b) => a.dayOffset - b.dayOffset);
+  return [...liveEvents, ...seeded].slice(0, limit);
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

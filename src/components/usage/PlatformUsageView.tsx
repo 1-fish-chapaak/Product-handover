@@ -14,7 +14,7 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Users, User, Activity, Sparkles, FileBarChart, BarChart3, Download,
-  Zap, UserMinus, ArrowRight, CalendarClock, ListChecks, ChevronRight, type LucideIcon,
+  Zap, UserMinus, CalendarClock, ListChecks, ChevronRight, PackagePlus, Play, Share2, type LucideIcon,
 } from 'lucide-react';
 import {
   ResponsiveContainer, AreaChart, ComposedChart, Area, Line, XAxis, YAxis,
@@ -23,12 +23,12 @@ import {
 import { useAdminData, useAuditLog, type AdminUser } from '../../context/AdminDataContext';
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import { getRole } from '../../data/rbac';
-import type { View } from '../../hooks/useAppState';
 import {
   USAGE_MODULES, usageDaysWithLive, userUsageRows, usageDayLabel,
   usageWindowTotals, usageDeltaPct, seatBuckets, lastLoginOffsetDays,
   segmentFor, activeMeanActions, aiAdoptionPct, usageHourlyMatrix,
   activityConcentration, usageSpikes, recentDownloads, downloadFormatSplit,
+  creationTotals, recentCreations, workflowRunTotals, recentRuns, shareTotals, recentShares,
   ENGAGEMENT_SEGMENTS, SEGMENT_LABELS,
   type UsageModule, type UserUsageRow, type EngagementSegment,
 } from '../../data/platform-usage';
@@ -44,6 +44,7 @@ import UserUsageDrawer from './UserUsageDrawer';
 import ModuleUsageDrawer from './ModuleUsageDrawer';
 import TeamUsageDrawer from './TeamUsageDrawer';
 import UsageHeatmap from './UsageHeatmap';
+import UsagePlatformSections from './UsagePlatformSections';
 
 type RangeDays = 7 | 30 | 90;
 const RANGES: { days: RangeDays; label: string }[] = [
@@ -202,15 +203,6 @@ function WidgetCard({ icon: Icon, title, subtitle, right, className = '', bodyCl
   );
 }
 
-/** The header-strip action link, Home's "View all →" style. */
-function CardLink({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button onClick={onClick} className="text-xs font-medium text-ink-500 hover:text-brand-700 transition-colors cursor-pointer shrink-0">
-      {children}
-    </button>
-  );
-}
-
 /* ── Users | Teams lens toggle — the platform's sliding-pill segmented
       switch (mirrors Admin's MembersSwitch, own layoutId). ── */
 function UsageLensSwitch({ lens, onSelect }: { lens: Lens; onSelect: (l: Lens) => void }) {
@@ -289,7 +281,7 @@ function SeatRow({ label, people }: { label: string; people: AdminUser[] }) {
   );
 }
 
-export default function PlatformUsageView({ setView }: { setView: (v: View) => void }) {
+export default function PlatformUsageView() {
   const prefersReduced = useReducedMotion();
   const { logs, users } = useAdminData();
   const { can } = useCurrentUser();
@@ -398,6 +390,19 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
     [rows],
   );
 
+  // What got created — artifacts built in the window (live Create events fold in).
+  const creations = useMemo(() => creationTotals(days, priorDays, logs), [days, priorDays, logs]);
+  const creationMax = Math.max(1, ...creations.map(c => c.count));
+  const recentCr = useMemo(() => recentCreations(rawRows, logs), [rawRows, logs]);
+
+  // Workflow runs + sharing — executions and share events (live folds in).
+  const runs = useMemo(() => workflowRunTotals(days, priorDays, logs), [days, priorDays, logs]);
+  const runAreaMax = Math.max(1, ...runs.byArea.map(a => a.count));
+  const recentRn = useMemo(() => recentRuns(rawRows, logs), [rawRows, logs]);
+  const shares = useMemo(() => shareTotals(days, priorDays, logs), [days, priorDays, logs]);
+  const shareKindMax = Math.max(1, ...shares.byKind.map(k => k.count));
+  const recentSh = useMemo(() => recentShares(rawRows, logs), [rawRows, logs]);
+
   // Adoption funnel — every stage a fraction of total seats.
   const funnel = useMemo(() => [
     { label: 'Seats', count: seats.total },
@@ -406,44 +411,36 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
     { label: 'Used AI this period', count: rawRows.filter(r => r.actions > 0 && r.aiQueries > 0).length },
   ], [seats, users, rawRows]);
 
-  // What to do next — the business "so what": each finding links to where you
-  // act on it. Read-only here, actions live in Admin (or Ask IRA).
+  // Worth checking — the business "so what" of this period's numbers, as
+  // read-only findings. This page only reports; acting on them lives elsewhere.
   const nextSteps = useMemo(() => {
-    const steps: { key: string; text: string; action: string; go: () => void }[] = [];
+    const steps: { key: string; text: string }[] = [];
     if (seats.invited.length > 0) {
       steps.push({
         key: 'invites',
         text: `${seats.invited.length} invite${seats.invited.length !== 1 ? 's' : ''} still pending — those seats are paid for but unused.`,
-        action: 'Resend or revoke in Admin',
-        go: () => setView('admin-users'),
       });
     }
     if (seats.dormant.length > 0) {
       steps.push({
         key: 'dormant',
-        text: `${seats.dormant.length} member${seats.dormant.length !== 1 ? 's' : ''} haven't signed in for 30+ days — check if they still need a seat.`,
-        action: 'Review members in Admin',
-        go: () => setView('admin-users'),
+        text: `${seats.dormant.length} member${seats.dormant.length !== 1 ? 's' : ''} haven't signed in for 30+ days — they may not need a seat.`,
       });
     }
     if (typeof concentration === 'number' && concentration >= 60) {
       steps.push({
         key: 'concentration',
         text: `Top 3 members drive ${concentration}% of all activity — adoption is shallow beyond them.`,
-        action: 'See who needs onboarding',
-        go: () => setView('admin-users'),
       });
     }
     if (aiAdoption < 50 && totals.activeUsers > 0) {
       steps.push({
         key: 'ai',
         text: `Only ${aiAdoption}% of active members use AI — the rest are missing the fastest way to work.`,
-        action: 'Open Ask IRA',
-        go: () => setView('chat'),
       });
     }
     return steps.slice(0, 3);
-  }, [seats, concentration, aiAdoption, totals.activeUsers, setView]);
+  }, [seats, concentration, aiAdoption, totals.activeUsers]);
 
   // Derived highlights — same aggregates the cards render, phrased as findings.
   const highlights = useMemo(() => {
@@ -662,6 +659,11 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
             </div>
           </div>
 
+          {/* Per-section deep-dives — compact tiles, full detail opens in a modal */}
+          <div className="mb-3">
+            <UsagePlatformSections days={days} rows={rawRows} rangeDays={range} />
+          </div>
+
           {/* Usage over time + module breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
             <WidgetCard
@@ -765,7 +767,6 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
               title="AI usage"
               subtitle="How much the team uses Ask IRA and the AI tools"
               className="lg:col-span-2"
-              right={<CardLink onClick={() => setView('chat')}>Open Ask IRA →</CardLink>}
             >
               <div className="flex flex-wrap items-start gap-6">
                 <div className="min-w-[240px]">
@@ -821,7 +822,6 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
             <WidgetCard
               icon={Users}
               title="Members"
-              right={<CardLink onClick={() => setView('admin-users')}>Manage in Admin →</CardLink>}
               bodyClassName="p-5 flex flex-col"
             >
               {/* Adoption funnel — seats → joined → active → using AI. Each
@@ -860,7 +860,7 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
             </WidgetCard>
           </div>
 
-          {/* When people are active + What to do next */}
+          {/* When people are active + Worth checking */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
             <WidgetCard
               icon={CalendarClock}
@@ -876,25 +876,179 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
               <UsageHeatmap data={heatmap} />
             </WidgetCard>
 
-            <WidgetCard icon={ListChecks} title="What to do next" subtitle="Based on this period's numbers">
+            <WidgetCard icon={ListChecks} title="Worth checking" subtitle="Based on this period's numbers">
               {nextSteps.length > 0 ? (
                 <div className="space-y-4">
                   {nextSteps.map(step => (
-                    <div key={step.key}>
-                      <p className="text-[0.75rem] text-ink-700 leading-snug">{step.text}</p>
-                      <button
-                        onClick={step.go}
-                        className="mt-1 inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
-                      >
-                        {step.action}
-                        <ArrowRight size={11} />
-                      </button>
-                    </div>
+                    <p key={step.key} className="text-[0.75rem] text-ink-700 leading-snug">{step.text}</p>
                   ))}
                 </div>
               ) : (
                 <p className="text-[0.8125rem] text-ink-400">Nothing needs attention right now.</p>
               )}
+            </WidgetCard>
+          </div>
+
+          {/* What got created — workflows, dashboards, RACMs, engagements, reports. */}
+          <div className="mb-3">
+            <WidgetCard
+              icon={PackagePlus}
+              title="What got created"
+              subtitle="Workflows, dashboards, RACMs, engagements and reports built in this period"
+            >
+              <div className="flex flex-wrap items-start gap-8">
+                {/* Counts by kind, with prior-period deltas */}
+                <div className="min-w-[210px]">
+                  <div className="space-y-2.5">
+                    {creations.map(c => (
+                      <div key={c.kind.key}>
+                        <div className="flex items-baseline justify-between mb-0.5 gap-2">
+                          <span className="text-[0.6875rem] font-medium text-ink-600">{c.kind.label}</span>
+                          <span className="text-[0.6875rem] text-ink-500 tabular-nums inline-flex items-baseline gap-1.5">
+                            <span className="font-semibold text-ink-900">{fmt(c.count)}</span>
+                            {typeof c.deltaPct === 'number' && c.deltaPct !== 0 && (
+                              <span className={`font-semibold ${c.deltaPct > 0 ? 'text-compliant-700' : 'text-mitigated-700'}`} title={`vs previous ${range} days`}>
+                                {c.deltaPct > 0 ? '+' : ''}{c.deltaPct}%
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="h-1 rounded-full bg-brand-50 overflow-hidden">
+                          <div className="h-full rounded-full bg-brand-400" style={{ width: `${Math.max(3, (c.count / creationMax) * 100)}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recently created — live session events first */}
+                <div className="flex-1 min-w-[280px]">
+                  <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2.5">Recently created</div>
+                  {recentCr.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {recentCr.map(cr => (
+                        <div key={cr.id} className="flex items-center gap-2.5 min-w-0">
+                          <InitialsAvatar name={cr.user} size={24} />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[0.75rem] font-semibold text-ink-900">{cr.user}</span>
+                            <span className="text-[0.75rem] text-ink-500"> created </span>
+                            <span className="text-[0.75rem] text-ink-700">{cr.item}</span>
+                            <span className="ml-1.5 inline-flex items-center px-1.5 h-4 rounded border border-canvas-border bg-canvas text-[0.5625rem] font-semibold text-ink-500 align-middle">{cr.kindLabel}</span>
+                          </div>
+                          <span className={`shrink-0 text-[0.6875rem] font-mono tabular-nums ${cr.live ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>
+                            {cr.dayOffset === 0 ? `Today ${cr.time}` : cr.dayOffset === 1 ? 'Yesterday' : `${cr.dayOffset}d ago`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[0.8125rem] text-ink-400">Nothing created in this period.</p>
+                  )}
+                </div>
+              </div>
+            </WidgetCard>
+          </div>
+
+          {/* Workflow runs + Sharing — executions and share events. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+            <WidgetCard icon={Play} title="Workflow runs" subtitle="Executions across the platform">
+              <div className="flex flex-wrap items-start gap-6">
+                <div className="min-w-[180px]">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(runs.total)}</span>
+                    {typeof runs.deltaPct === 'number' && runs.deltaPct !== 0 && (
+                      <span className={`inline-flex items-center gap-1 text-[0.6875rem] font-semibold px-1.5 py-0.5 rounded-full tabular-nums ${runs.deltaPct > 0 ? 'text-compliant-700 bg-compliant-50' : 'text-mitigated-700 bg-mitigated-50'}`} title={`vs previous ${range} days`}>
+                        {runs.deltaPct > 0 ? '+' : ''}{runs.deltaPct}%
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[0.6875rem] text-ink-500 mt-1 mb-3">Runs in this period</div>
+                  <div className="space-y-2">
+                    {runs.byArea.map(a => (
+                      <div key={a.area}>
+                        <div className="flex items-baseline justify-between mb-0.5">
+                          <span className="text-[0.6875rem] font-medium text-ink-600">{a.area}</span>
+                          <span className="text-[0.6875rem] text-ink-500 tabular-nums">{fmt(a.count)}</span>
+                        </div>
+                        <div className="h-1 rounded-full bg-brand-50 overflow-hidden">
+                          <div className="h-full rounded-full bg-brand-400" style={{ width: `${Math.max(3, (a.count / runAreaMax) * 100)}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex-1 min-w-[240px]">
+                  <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2.5">Recent runs</div>
+                  {recentRn.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {recentRn.map(rn => (
+                        <div key={rn.id} className="flex items-start gap-2.5 min-w-0">
+                          <InitialsAvatar name={rn.user} size={24} />
+                          <div className="min-w-0 flex-1 leading-snug">
+                            <span className="text-[0.75rem] font-semibold text-ink-900">{rn.user}</span>
+                            <span className="text-[0.75rem] text-ink-700"> {rn.item}</span>
+                          </div>
+                          <span className={`shrink-0 text-[0.6875rem] font-mono tabular-nums ${rn.live ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>
+                            {rn.dayOffset === 0 ? `Today ${rn.time}` : rn.dayOffset === 1 ? 'Yesterday' : `${rn.dayOffset}d ago`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[0.8125rem] text-ink-400">No runs in this period.</p>
+                  )}
+                </div>
+              </div>
+            </WidgetCard>
+
+            <WidgetCard icon={Share2} title="Sharing" subtitle="Invites and share links sent">
+              <div className="flex flex-wrap items-start gap-6">
+                <div className="min-w-[160px]">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(shares.total)}</span>
+                    {typeof shares.deltaPct === 'number' && shares.deltaPct !== 0 && (
+                      <span className={`inline-flex items-center gap-1 text-[0.6875rem] font-semibold px-1.5 py-0.5 rounded-full tabular-nums ${shares.deltaPct > 0 ? 'text-compliant-700 bg-compliant-50' : 'text-mitigated-700 bg-mitigated-50'}`} title={`vs previous ${range} days`}>
+                        {shares.deltaPct > 0 ? '+' : ''}{shares.deltaPct}%
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[0.6875rem] text-ink-500 mt-1 mb-3">Shares in this period</div>
+                  <div className="space-y-2">
+                    {shares.byKind.filter(k => k.count > 0).map(k => (
+                      <div key={k.kind}>
+                        <div className="flex items-baseline justify-between mb-0.5">
+                          <span className="text-[0.6875rem] font-medium text-ink-600">{k.kind}</span>
+                          <span className="text-[0.6875rem] text-ink-500 tabular-nums">{fmt(k.count)}</span>
+                        </div>
+                        <div className="h-1 rounded-full bg-brand-50 overflow-hidden">
+                          <div className="h-full rounded-full bg-brand-400" style={{ width: `${Math.max(3, (k.count / shareKindMax) * 100)}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex-1 min-w-[240px]">
+                  <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2.5">Recent shares</div>
+                  {recentSh.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {recentSh.map(sh => (
+                        <div key={sh.id} className="flex items-start gap-2.5 min-w-0">
+                          <InitialsAvatar name={sh.user} size={24} />
+                          <div className="min-w-0 flex-1 leading-snug">
+                            <span className="text-[0.75rem] font-semibold text-ink-900">{sh.user}</span>
+                            <span className="text-[0.75rem] text-ink-700"> {sh.item}</span>
+                          </div>
+                          <span className={`shrink-0 text-[0.6875rem] font-mono tabular-nums ${sh.live ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>
+                            {sh.dayOffset === 0 ? `Today ${sh.time}` : sh.dayOffset === 1 ? 'Yesterday' : `${sh.dayOffset}d ago`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[0.8125rem] text-ink-400">No shares in this period.</p>
+                  )}
+                </div>
+              </div>
             </WidgetCard>
           </div>
 
@@ -1050,7 +1204,6 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
             logs={logs}
             rangeDays={range}
             segment={segmentFor(drawerRow, activeMean)}
-            onManage={() => setView('admin-users')}
             onClose={() => setDrawerEmail(null)}
           />
         )}
@@ -1072,7 +1225,6 @@ export default function PlatformUsageView({ setView }: { setView: (v: View) => v
             team={drawerTeam}
             members={drawerTeamMembers}
             rangeDays={range}
-            onManage={() => setView('admin-users')}
             onClose={() => setDrawerTeam(null)}
           />
         )}

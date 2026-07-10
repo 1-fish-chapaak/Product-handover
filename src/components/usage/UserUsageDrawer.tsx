@@ -12,7 +12,6 @@ import { ResponsiveContainer, AreaChart, Area } from 'recharts';
 import Drawer from '../shared/Drawer';
 import { StatusBadge, ActionBadge } from '../shared/StatusBadge';
 import { InitialsAvatar } from '../admin/AdminPrimitives';
-import { BTN_CTA_OUTLINE } from '../admin/adminTokens';
 import { getRole } from '../../data/rbac';
 import type { AuditLog } from '../../context/AdminDataContext';
 import {
@@ -27,7 +26,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export default function UserUsageDrawer({
-  row, days, logs, rangeDays, segment, onManage, onClose,
+  row, days, logs, rangeDays, segment, onClose,
 }: {
   row: UserUsageRow;
   days: UsageDay[];
@@ -35,7 +34,6 @@ export default function UserUsageDrawer({
   rangeDays: number;
   /** The member's engagement segment for this range (computed by the view). */
   segment?: EngagementSegment;
-  onManage: () => void;
   onClose: () => void;
 }) {
   const { user } = row;
@@ -51,11 +49,6 @@ export default function UserUsageDrawer({
       subtitle={user.email}
       width="max-w-[520px]"
       onClose={onClose}
-      footer={
-        <button className={BTN_CTA_OUTLINE} onClick={onManage}>
-          Manage in Admin
-        </button>
-      }
     >
       {/* Identity */}
       <div className="flex items-center gap-3.5 pb-5 border-b border-canvas-border">

@@ -9,20 +9,18 @@
 
 import Drawer from '../shared/Drawer';
 import { InitialsAvatar } from '../admin/AdminPrimitives';
-import { BTN_CTA_OUTLINE } from '../admin/adminTokens';
 import { getRole } from '../../data/rbac';
 import type { UserUsageRow } from '../../data/platform-usage';
 
 const fmt = (n: number) => n.toLocaleString('en-US');
 
 export default function TeamUsageDrawer({
-  team, members, rangeDays, onManage, onClose,
+  team, members, rangeDays, onClose,
 }: {
   team: string;
   /** The team's member rows, any order — sorted by actions here. */
   members: UserUsageRow[];
   rangeDays: number;
-  onManage: () => void;
   onClose: () => void;
 }) {
   const sorted = [...members].sort((a, b) => b.actions - a.actions);
@@ -35,11 +33,6 @@ export default function TeamUsageDrawer({
       subtitle={`${members.length} member${members.length !== 1 ? 's' : ''} · last ${rangeDays} days`}
       width="max-w-[520px]"
       onClose={onClose}
-      footer={
-        <button className={BTN_CTA_OUTLINE} onClick={onManage}>
-          Manage in Admin
-        </button>
-      }
     >
       {/* Team totals */}
       <div className="flex items-center gap-6 pb-5 border-b border-canvas-border">
