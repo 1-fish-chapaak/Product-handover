@@ -21,7 +21,7 @@ import {
 import {
   PROCESS_INSIGHTS, ENTERPRISE_CONTEXT, PATTERN_META, CONFIDENCE_FACTOR_META,
   SEVERITY_ORDER, SEVERITY_LABEL, MEMORY_CANDIDATE_THRESHOLD,
-  computeConfidence, confidencePct,
+  displayConfidencePct, isMemoryCandidate,
   type MemoryInsight, type InsightSeverity, type PatternType, type ApprovalStatus,
   type EnterpriseContextEntry, type KpiDriftPoint,
 } from '../../data/insightMemory';
@@ -66,6 +66,32 @@ function confDot(pct: number): string {
   return pct >= 45 ? 'rgb(217 119 6)' : 'rgb(148 163 184)';
 }
 
+/** Format a dollar figure or a null (missing master value) as an em dash. */
+const fmt = (n: number | null): string => (n == null ? '—' : n.toFixed(2));
+
+// ─── Evidence strength — the honesty signal ───────────────────────────────
+// Grounded in the real bundle: how many runs back the signal and how diverse
+// the sources are. Thin evidence is surfaced as an explicit caveat rather than
+// hidden behind a single confidence number — so a reviewer knows what is proven
+// versus merely directional before they promote it to shared memory.
+
+function evidenceStrength(insight: MemoryInsight): {
+  label: string; cls: string; tone: 'strong' | 'moderate' | 'limited'; caveat?: string;
+} {
+  const runs = insight.evidence.runsAnalysed;
+  const diversity = insight.factors.sourceDiversity;
+  if (runs >= 4 && diversity >= 0.6) {
+    return { label: 'Strong evidence', cls: 'bg-compliant-50 text-compliant-700', tone: 'strong' };
+  }
+  if (runs <= 2 || diversity < 0.55) {
+    return {
+      label: 'Limited evidence', cls: 'bg-mitigated-50 text-mitigated-700', tone: 'limited',
+      caveat: `Early signal — based on ${runs} run${runs === 1 ? '' : 's'}. Treat as directional, not proven; confidence should rise as more runs land.`,
+    };
+  }
+  return { label: 'Moderate evidence', cls: 'bg-canvas text-ink-600', tone: 'moderate' };
+}
+
 // ─── Sparkline (KPI drift) ────────────────────────────────────────────────
 
 function Sparkline({ series }: { series: KpiDriftPoint[] }) {
@@ -96,8 +122,9 @@ function Sparkline({ series }: { series: KpiDriftPoint[] }) {
 
 function ConfidencePill({ insight }: { insight: MemoryInsight }) {
   const [open, setOpen] = useState(false);
-  const pct = confidencePct(insight.factors);
-  const isCandidate = computeConfidence(insight.factors) >= MEMORY_CANDIDATE_THRESHOLD;
+  const pct = displayConfidencePct(insight);
+  const isCandidate = isMemoryCandidate(insight);
+  const engineScored = insight.confidenceOverride != null;
   return (
     <div className="relative">
       <button
@@ -121,25 +148,33 @@ function ConfidencePill({ insight }: { insight: MemoryInsight }) {
               <span className="text-[12px] font-bold text-ink-800">Confidence breakdown</span>
               <button type="button" onClick={() => setOpen(false)} className="text-ink-400 hover:text-ink-700 cursor-pointer"><X size={13} /></button>
             </div>
-            <div className="space-y-2.5">
-              {CONFIDENCE_FACTOR_META.map(m => {
-                const v = Math.round(insight.factors[m.key] * 100);
-                return (
-                  <div key={m.key}>
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-semibold text-ink-800">{m.label}</span>
-                      <span className="font-bold tabular-nums text-ink-800">{v}%</span>
+            {engineScored ? (
+              <p className="text-[11.5px] text-ink-600 leading-relaxed">
+                Engine-scored composite of frequency, source diversity, recency and business impact. This is a
+                single-run finding, so the score reflects within-run concentration and dollar exposure rather than
+                proven multi-period recurrence — see the evidence note on the card.
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {CONFIDENCE_FACTOR_META.map(m => {
+                  const v = Math.round(insight.factors[m.key] * 100);
+                  return (
+                    <div key={m.key}>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-ink-800">{m.label}</span>
+                        <span className="font-bold tabular-nums text-ink-800">{v}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-canvas mt-1 overflow-hidden">
+                        <div className={`h-full rounded-full ${confBar(v)}`} style={{ width: `${v}%` }} />
+                      </div>
+                      <p className="text-[10px] text-ink-400 mt-0.5">{m.hint}</p>
                     </div>
-                    <div className="h-1.5 rounded-full bg-canvas mt-1 overflow-hidden">
-                      <div className={`h-full rounded-full ${confBar(v)}`} style={{ width: `${v}%` }} />
-                    </div>
-                    <p className="text-[10px] text-ink-400 mt-0.5">{m.hint}</p>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
             <div className="mt-3 pt-2.5 border-t border-canvas-border flex items-center justify-between">
-              <span className="text-[10px] text-ink-400 font-mono">freq × diversity × recency × impact</span>
+              <span className="text-[10px] text-ink-400 font-mono">{engineScored ? 'engine composite · single run' : 'freq × diversity × recency × impact'}</span>
               <span className={`text-[11px] font-bold ${isCandidate ? 'text-compliant-700' : 'text-ink-400'}`}>
                 {pct}% {isCandidate ? '· candidate' : '· below gate'}
               </span>
@@ -185,6 +220,44 @@ function EvidenceBundleView({ insight }: { insight: MemoryInsight }) {
             transition={{ duration: 0.2 }} className="overflow-hidden"
           >
             <div className="px-3 pb-3 pt-1 space-y-2.5 border-t border-canvas-border/60">
+              {ev.rows && ev.rows.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[560px] text-[10.5px] border-collapse">
+                    <thead>
+                      <tr className="text-ink-400">
+                        <th className="text-left font-semibold uppercase tracking-wider py-1 pr-2">Product</th>
+                        <th className="text-left font-semibold uppercase tracking-wider py-1 pr-2">Contract</th>
+                        <th className="text-left font-semibold uppercase tracking-wider py-1 pr-2">Exception</th>
+                        <th className="text-right font-semibold uppercase tracking-wider py-1 pr-2">Paid</th>
+                        <th className="text-right font-semibold uppercase tracking-wider py-1 pr-2">WAC</th>
+                        <th className="text-right font-semibold uppercase tracking-wider py-1 pr-2">Contract $</th>
+                        <th className="text-right font-semibold uppercase tracking-wider py-1 pr-2">Revised</th>
+                        <th className="text-right font-semibold uppercase tracking-wider py-1">Diff</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ev.rows.map(r => (
+                        <tr key={r.productRef} className="border-t border-canvas-border/60 align-top">
+                          <td className="py-1.5 pr-2 text-ink-800 font-medium max-w-[180px]">
+                            {r.product}
+                            <span className="block font-mono text-ink-400 text-[9.5px]">{r.productRef}</span>
+                          </td>
+                          <td className="py-1.5 pr-2 font-mono text-ink-500 whitespace-nowrap">{r.contractRef}</td>
+                          <td className="py-1.5 pr-2 text-ink-600">{r.remark}</td>
+                          <td className="py-1.5 pr-2 text-right tabular-nums text-ink-700">{fmt(r.paid)}</td>
+                          <td className="py-1.5 pr-2 text-right tabular-nums text-ink-700">{fmt(r.wac)}</td>
+                          <td className="py-1.5 pr-2 text-right tabular-nums text-ink-700">{fmt(r.contractPrice)}</td>
+                          <td className="py-1.5 pr-2 text-right tabular-nums text-ink-700">{fmt(r.revised)}</td>
+                          <td className={`py-1.5 text-right tabular-nums font-semibold ${r.difference != null && r.difference < 0 ? 'text-risk' : 'text-ink-500'}`}>
+                            {r.difference != null ? r.difference.toFixed(2) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="text-[10px] text-ink-400 mt-1.5">Sampled exception rows · dollar amounts</p>
+                </div>
+              )}
               <EvidenceRow icon={<Layers size={12} />} label="Workflows">
                 <div className="flex flex-wrap gap-1">
                   {ev.workflows.map(w => (
@@ -344,6 +417,8 @@ function InsightCard({ insight, decision, onApprove, onDismiss, onUndo }: {
   const Icon = PATTERN_ICON[insight.type];
   const sev = SEV[insight.severity];
   const detected = DETECTED_BY_LABEL[insight.detectedBy];
+  const strength = evidenceStrength(insight);
+  const sourceCount = insight.evidence.workflows.length + insight.evidence.entities.length;
 
   return (
     <motion.div
@@ -369,6 +444,25 @@ function InsightCard({ insight, decision, onApprove, onDismiss, onUndo }: {
           <h4 className="text-[14px] font-bold text-ink-900 leading-snug">{insight.title}</h4>
         </div>
         <div className="shrink-0"><ConfidencePill insight={insight} /></div>
+      </div>
+
+      {/* Evidence strength — scannable state + an honest caveat when the signal is thin */}
+      <div className="ml-12 mt-2.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${strength.cls}`}>
+            {strength.tone === 'limited' ? <Info size={10} /> : <ShieldCheck size={10} />}
+            {strength.label}
+          </span>
+          <span className="text-[10.5px] text-ink-400 tabular-nums">
+            {insight.evidence.runsAnalysed} runs · {sourceCount} sources · detected {insight.detectedOn}
+          </span>
+        </div>
+        {strength.caveat && (
+          <div className="mt-2 flex items-start gap-2 rounded-lg border border-mitigated-200 bg-mitigated-50/50 px-3 py-2">
+            <Info size={13} className="text-mitigated-700 shrink-0 mt-0.5" />
+            <span className="text-[11px] text-mitigated-700 leading-relaxed">{strength.caveat}</span>
+          </div>
+        )}
       </div>
 
       {insight.series && (
@@ -399,12 +493,30 @@ function InsightCard({ insight, decision, onApprove, onDismiss, onUndo }: {
       <div className="ml-12 mt-3 space-y-2.5">
         <EvidenceBundleView insight={insight} />
 
-        <div className="flex items-start gap-2 rounded-lg bg-brand-50/50 border border-brand-100 px-3 py-2.5">
-          <ArrowRight size={14} className="text-brand-600 shrink-0 mt-0.5" />
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-brand-700 mb-0.5">Recommended action</div>
-            <p className="text-[12px] text-ink-800 leading-relaxed">{insight.recommendedAction}</p>
-          </div>
+        <div className="rounded-lg bg-brand-50/50 border border-brand-100 px-3 py-2.5">
+          {insight.recommendedActions && insight.recommendedActions.length > 0 ? (
+            <>
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-brand-700 mb-2">
+                <ArrowRight size={12} className="text-brand-600" /> Recommended actions · {insight.recommendedActions.length}
+              </div>
+              <ul className="space-y-2">
+                {insight.recommendedActions.map((a, idx) => (
+                  <li key={idx} className="flex items-start gap-2 text-[12px] text-ink-800 leading-relaxed">
+                    <span className="mt-0.5 size-4 shrink-0 rounded border border-brand-200 bg-canvas-elevated text-[9px] font-bold text-brand-700 flex items-center justify-center tabular-nums">{idx + 1}</span>
+                    <span>{a}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <div className="flex items-start gap-2">
+              <ArrowRight size={14} className="text-brand-600 shrink-0 mt-0.5" />
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-brand-700 mb-0.5">Recommended action</div>
+                <p className="text-[12px] text-ink-800 leading-relaxed">{insight.recommendedAction}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         <ApprovalGate decision={decision} onApprove={onApprove} onDismiss={onDismiss} onUndo={onUndo} />
@@ -535,7 +647,7 @@ export default function ProcessInsightsTab({ bpAbbr = 'P2P', bpName }: { bpAbbr?
           <div>
             <h2 className="text-[20px] font-semibold text-ink-900 tracking-tight leading-tight">AI Insights</h2>
             <p className="text-[13px] text-ink-500 mt-1">
-              Patterns memory learned across <span className="font-semibold text-ink-800">{runCount} runs</span> of the <span className="font-semibold text-ink-800">{bpName ?? bpAbbr}</span> process — risks and drift no single run can reveal.
+              Patterns memory surfaced across <span className="font-semibold text-ink-800">{runCount} run{runCount === 1 ? '' : 's'}</span> of the <span className="font-semibold text-ink-800">{bpName ?? bpAbbr}</span> process — vendor risks and pricing drift no single row can reveal.
             </p>
           </div>
           <button
