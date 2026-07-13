@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { controlConclusion, severityOf, trackResult, designProgress } from './helpers';
+import { assessSeverity, controlConclusion, trackResult, designProgress } from './helpers';
 import type { Control, IcfrEngagement, OperatingStep } from './types';
 
 function autofit(rows: (string | number)[][], max = 60): XLSX.ColInfo[] {
@@ -67,10 +67,13 @@ export function downloadIcfrWorkingPaper(eng: IcfrEngagement): void {
   const op = XLSX.utils.aoa_to_sheet([opH, ...opR]); op['!cols'] = autofit([opH, ...opR]);
   XLSX.utils.book_append_sheet(wb, op, 'Operating Testing');
 
-  const dfH = ['Deficiency', 'Control', 'Track', 'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality', 'MW indicators', 'Severity', 'Remediation', 'Due', 'Status'];
+  const dfH = ['Deficiency', 'Control', 'Track', 'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality', 'MW indicators', 'Compensating control', 'Severity', 'Remediation', 'Due', 'Status'];
   const dfR: (string | number)[][] = eng.deficiencies.length
-    ? eng.deficiencies.map(d => [d.id, d.controlId, d.track, d.description, d.rootCause, d.likelihood, d.magnitude, eng.materiality, d.mwIndicators.join('; ') || 'None', severityOf(d, eng.materiality), d.remediation.action, d.remediation.date ?? '—', d.remediation.status])
-    : [['—', '—', '—', 'No deficiencies', '—', '—', 0, eng.materiality, '—', '—', '—', '—', '—']];
+    ? eng.deficiencies.map(d => {
+        const a = assessSeverity(d, eng);
+        return [d.id, d.controlId, d.track, d.description, d.rootCause, d.likelihood, d.magnitude, eng.materiality, d.mwIndicators.join('; ') || 'None', d.compensatingControlId ?? 'None', a.capped ? `${a.final} (capped from ${a.raw})` : a.final, d.remediation.action, d.remediation.date ?? '—', d.remediation.status];
+      })
+    : [['—', '—', '—', 'No deficiencies', '—', '—', 0, eng.materiality, '—', '—', '—', '—', '—', '—']];
   const df = XLSX.utils.aoa_to_sheet([dfH, ...dfR]); df['!cols'] = autofit([dfH, ...dfR]);
   XLSX.utils.book_append_sheet(wb, df, 'Deficiencies');
 
@@ -143,7 +146,9 @@ export function downloadControlWorkingPaper(eng: IcfrEngagement, c: Control): vo
     const dR: (string | number)[][] = [
       ['Track', def.track], ['Description', def.description], ['Root cause', def.rootCause],
       ['Likelihood', def.likelihood], ['Magnitude', def.magnitude], ['Materiality', eng.materiality],
-      ['MW indicators', def.mwIndicators.join('; ') || 'None'], ['Severity', severityOf(def, eng.materiality)],
+      ['MW indicators', def.mwIndicators.join('; ') || 'None'],
+      ['Compensating control', def.compensatingControlId ?? 'None'],
+      ['Severity', (() => { const a = assessSeverity(def, eng); return a.capped ? `${a.final} (capped from ${a.raw} by ${def.compensatingControlId})` : a.final; })()],
       ['Remediation', def.remediation.action], ['Due', def.remediation.date ?? '—'], ['Status', def.remediation.status],
     ];
     const ds = XLSX.utils.aoa_to_sheet([dH, ...dR]); ds['!cols'] = [{ wch: 16 }, { wch: 76 }];

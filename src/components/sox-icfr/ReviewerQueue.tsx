@@ -1,6 +1,6 @@
 import { ArrowRight, CheckCircle2, PenLine, ShieldCheck } from 'lucide-react';
 import { useIcfr } from './store';
-import { severityOf } from './helpers';
+import { assessSeverity } from './helpers';
 import { SeverityPill } from './parts';
 
 // The reviewer's desk — everything waiting on the reviewer hat, and nothing else.
@@ -35,7 +35,7 @@ export default function ReviewerQueue() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-[11.5px] font-semibold text-ink-600">{d.id}</span>
                     <span className="font-mono text-[11.5px] text-brand-700">{d.controlId}</span>
-                    <SeverityPill s={severityOf(d, eng.materiality, eng.rules)} />
+                    <SeverityPill s={assessSeverity(d, eng).final} />
                   </div>
                   <div className="text-[13px] text-ink-800 truncate mt-0.5">{d.description}</div>
                   <div className="text-[11.5px] text-ink-400 mt-0.5">

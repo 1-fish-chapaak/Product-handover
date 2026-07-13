@@ -20,11 +20,33 @@ export function severityOf(d: Deficiency, materiality: number, rules?: Materiali
   return computeSeverity(d.likelihood, d.magnitude, materiality, d.mwIndicators, rules ? rules.sdBandPct / 100 : 0.2);
 }
 
+// ─── Assessed severity — the raw grade plus the compensating-control cap ─────────
+// The cap only rescues the magnitude-driven MW line (MW → SD). It applies only
+// when the chosen compensating control is itself concluded effective in this
+// engagement, never when an MW indicator is present, and it never clears the
+// exception — capBlocked says why a chosen control had no effect.
+export interface SeverityAssessment {
+  raw: Severity;
+  final: Severity;
+  capped: boolean;
+  capBlocked?: 'not-effective' | 'mw-indicator';
+}
+export function assessSeverity(d: Deficiency, eng: IcfrEngagement): SeverityAssessment {
+  const raw = severityOf(d, eng.materiality, eng.rules);
+  if (!d.compensatingControlId) return { raw, final: raw, capped: false };
+  if (d.mwIndicators.length > 0) return { raw, final: raw, capped: false, capBlocked: 'mw-indicator' };
+  const cc = eng.controls.find(c => c.id === d.compensatingControlId);
+  if (!cc || controlConclusion(cc) !== 'Effective') return { raw, final: raw, capped: false, capBlocked: 'not-effective' };
+  if (raw === 'Material Weakness') return { raw, final: 'Significant Deficiency', capped: true };
+  return { raw, final: raw, capped: false };
+}
+
 // ─── Engagement-level ICFR conclusion ────────────────────────────────────────────
 // An open material weakness at period end forces "not effective" — sign-off stays
 // possible, but the conclusion recorded is adverse (handbook: open MW ⇒ disclosure).
+// Uses the assessed (capped) severity: a validly-capped MW is an SD, not an MW.
 export function openMaterialWeaknesses(eng: IcfrEngagement): Deficiency[] {
-  return eng.deficiencies.filter(d => d.status !== 'Closed' && severityOf(d, eng.materiality, eng.rules) === 'Material Weakness');
+  return eng.deficiencies.filter(d => d.status !== 'Closed' && assessSeverity(d, eng).final === 'Material Weakness');
 }
 export function icfrConclusion(eng: IcfrEngagement): 'Effective' | 'Not effective' {
   return openMaterialWeaknesses(eng).length ? 'Not effective' : 'Effective';

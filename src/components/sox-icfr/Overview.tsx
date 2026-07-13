@@ -5,7 +5,7 @@ import {
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
 import {
-  controlConclusion, engagementProgress, formatINR, isClearlyTrivial, severityOf, trackResult,
+  assessSeverity, controlConclusion, engagementProgress, formatINR, isClearlyTrivial, trackResult,
 } from './helpers';
 import { cn } from '../../lib/cn';
 import RiskOwnerPortal from './RiskOwnerPortal';
@@ -47,12 +47,13 @@ export default function Overview() {
     const c: Record<Severity, number> = { 'Material Weakness': 0, 'Significant Deficiency': 0, Deficiency: 0 };
     let open = 0; let mwOpen = 0;
     eng.deficiencies.forEach(d => {
-      const s = severityOf(d, M, eng.rules);
+      // assessed severity — a validly-capped MW counts as an SD everywhere
+      const s = assessSeverity(d, eng).final;
       c[s] += 1;
       if (d.status !== 'Closed') { open += 1; if (s === 'Material Weakness') mwOpen += 1; }
     });
     return { c, open, mwOpen, trivial: eng.deficiencies.filter(d => isClearlyTrivial(d.magnitude, eng.rules)).length };
-  }, [eng.deficiencies, M, eng.rules]);
+  }, [eng, M]);
 
   // An open MW never blocks signing — it flips what the signature concludes.
   // Once signed, the stamped conclusion wins over the live derivation.

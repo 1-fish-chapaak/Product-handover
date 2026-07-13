@@ -1,6 +1,6 @@
 import { ArrowLeft, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, XCircle, Sliders, GitMerge, Route } from 'lucide-react';
 import { useIcfr } from './store';
-import { computeSeverity, formatINR, severityOf, isClearlyTrivial } from './helpers';
+import { assessSeverity, computeSeverity, formatINR, isClearlyTrivial } from './helpers';
 import { SeverityPill } from './parts';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
@@ -181,7 +181,8 @@ export function DeficienciesView() {
         <div className="space-y-3">
           {eng.deficiencies.map(d => {
             const ct = isClearlyTrivial(d.magnitude, rules);
-            const sev = severityOf(d, M, rules);
+            const assess = assessSeverity(d, eng);
+            const sev = assess.final;
             const material = d.magnitude >= M;
             const stageIdx = STAGES.indexOf(d.status);
             return (
@@ -234,9 +235,17 @@ export function DeficienciesView() {
                       <option value="">None</option>
                       {eng.controls.filter(c => c.id !== d.controlId).slice(0, 30).map(c => <option key={c.id} value={c.id}>{c.id}</option>)}
                     </select>
-                    {d.compensatingControlId && <span className="text-ink-400 text-[11px]">caps severity — never clears the deficiency</span>}
+                    {d.compensatingControlId && (
+                      assess.capped ? <span className="text-compliant-700 text-[11px] font-semibold">capping Material Weakness → Significant Deficiency — never clears the exception</span>
+                      : assess.capBlocked === 'not-effective' ? <span className="text-high-700 text-[11px] font-semibold">no cap — {d.compensatingControlId} isn't concluded effective in this engagement</span>
+                      : assess.capBlocked === 'mw-indicator' ? <span className="text-risk-700 text-[11px] font-semibold">no cap — MW indicators can't be argued down</span>
+                      : <span className="text-ink-400 text-[11px]">in place — the cap only rescues a Material Weakness grade, and never clears the exception</span>
+                    )}
                   </div>
-                  <p className="text-[12px] text-ink-600 pt-2 border-t border-canvas-border">→ {d.likelihood} × {fmt(d.magnitude)} (vs {fmt(M)}){d.mwIndicators.length ? ' + MW indicator' : ''} ⇒ <span className="font-bold text-ink-800">{sev}</span></p>
+                  <p className="text-[12px] text-ink-600 pt-2 border-t border-canvas-border">
+                    → {d.likelihood} × {fmt(d.magnitude)} (vs {fmt(M)}){d.mwIndicators.length ? ' + MW indicator' : ''} ⇒ <span className={cn('font-bold', assess.capped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.raw}</span>
+                    {assess.capped && <> · capped by {d.compensatingControlId} (effective) ⇒ <span className="font-bold text-ink-800">{assess.final}</span></>}
+                  </p>
                 </div>
 
                 {/* remediation + lifecycle actions */}
