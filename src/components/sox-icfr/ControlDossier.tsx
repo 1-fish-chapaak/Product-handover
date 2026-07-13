@@ -10,7 +10,7 @@ import {
 import { useIcfr } from './store';
 import {
   controlConclusion, courtFor, designProgress, discussionsFor, operatingProgress, trackResult,
-  pointResult, stepResult, isControlLocked, isEngagementLocked,
+  pointResult, stepResult, isControlLocked, isEngagementLocked, sampleSizeGuide,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp } from './parts';
 import { Pill } from '../shared/StatusBadge';
@@ -486,12 +486,14 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
 
 // ── operating section (TOE) — locked until design effective ───────────────────────
 function OperatingSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { me, setPopulation, setSampling, addAttribute, testAllAttributes } = useIcfr();
+  const { me, setPopulation, setSampling, extendSample, addAttribute, testAllAttributes } = useIcfr();
   const o = control.operating; const prog = operatingProgress(control);
   const anyFail = o.steps.some(s => stepResult(s) === 'Fail');
   const allTested = o.steps.length > 0 && o.steps.every(s => stepResult(s) !== 'Not tested');
   const suggestion: TrackConclusion = anyFail ? 'Ineffective' : allTested ? 'Effective' : 'Not tested';
-  const [sampleSize, setSampleSize] = useState(25);
+  // sample size starts at the handbook's frequency-based suggestion, not a flat 25
+  const guide = sampleSizeGuide(control);
+  const [sampleSize, setSampleSize] = useState(guide.suggested);
   const [uploading, setUploading] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -501,7 +503,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   const attCount = o.steps.filter(s => s.attestEnabled || s.attestation).length;
 
   const uploadPop = () => { setUploading(true); window.setTimeout(() => { setPopulation(control.id, { source: control.process === 'Procure to Pay' ? 'SAP ECC — ME2N PO release log, FY26 YTD' : 'SAP — full-period extract', count: 2640, tieOut: 'Agreed to GL control account', evidence: [{ id: 'ev', name: 'population.xlsx', kind: 'XLSX', uploadedBy: me, uploadedAt: 'just now' }] }); setUploading(false); }, 1800); };
-  const drawSample = () => { setDrawing(true); window.setTimeout(() => { const s: Sampling = { basis: `${sampleSize} items — judgment documented (handbook: no fixed minimum).`, method: 'Random', size: sampleSize, samples: sampleRefs(control.process, sampleSize).map((ref, i) => ({ id: `s${i}`, ref, result: 'Not tested' })) }; setSampling(control.id, s); setDrawing(false); }, 3000); };
+  const drawSample = () => { setDrawing(true); window.setTimeout(() => { const s: Sampling = { basis: sampleSize === guide.suggested ? `${sampleSize} items — frequency-based (${control.frequency}: ${guide.range}).` : `${sampleSize} items — judgment documented (handbook suggests ${guide.suggested} for ${control.frequency.toLowerCase()}).`, method: 'Random', size: sampleSize, samples: sampleRefs(control.process, sampleSize).map((ref, i) => ({ id: `s${i}`, ref, result: 'Not tested' })) }; setSampling(control.id, s); setDrawing(false); }, 3000); };
   const runAll = () => { setTesting(true); window.setTimeout(() => { testAllAttributes(control.id); setTesting(false); }, 2400); };
 
   if (locked) {
@@ -531,13 +533,35 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
               <div className="text-[12px] text-ink-700"><div className="font-semibold tabular-nums text-[15px] text-ink-900">{o.sampling.size} items</div><div className="text-[11px] text-ink-400">{o.sampling.method} · {o.sampling.basis}</div></div>
             ) : canEdit ? (
               drawing ? <div className="h-9 inline-flex items-center gap-1.5 text-[12px] font-semibold text-brand-600"><Loader2 size={13} className="animate-spin" /> Processing sample…</div> : (
-                <div className="flex items-center gap-2">
-                  <input type="number" min={1} max={60} value={sampleSize} onChange={e => setSampleSize(Math.max(1, +e.target.value || 1))} className="h-9 w-16 px-2 rounded-lg border border-canvas-border text-[12.5px] focus:outline-none focus:ring-2 focus:ring-brand-200" />
-                  <button disabled={!o.population} onClick={drawSample} className="h-9 px-3 text-[12px] font-semibold rounded-lg border border-canvas-border bg-canvas-elevated text-ink-600 enabled:hover:text-brand-700 enabled:hover:border-brand-300 disabled:opacity-40 inline-flex items-center gap-1.5 cursor-pointer"><FlaskConical size={13} /> Draw</button>
-                </div>
+                <>
+                  <div className="flex items-center gap-2">
+                    <input type="number" min={1} max={60} value={sampleSize} onChange={e => setSampleSize(Math.max(1, +e.target.value || 1))} className="h-9 w-16 px-2 rounded-lg border border-canvas-border text-[12.5px] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                    <button disabled={!o.population} onClick={drawSample} className="h-9 px-3 text-[12px] font-semibold rounded-lg border border-canvas-border bg-canvas-elevated text-ink-600 enabled:hover:text-brand-700 enabled:hover:border-brand-300 disabled:opacity-40 inline-flex items-center gap-1.5 cursor-pointer"><FlaskConical size={13} /> Draw</button>
+                  </div>
+                  <p className={cn('text-[10.5px] mt-1.5', sampleSize === guide.suggested ? 'text-ink-400' : 'text-mitigated-700')}>
+                    {sampleSize === guide.suggested
+                      ? <>Suggested {guide.suggested} — {control.frequency.toLowerCase()} control ({guide.range}). {guide.note}</>
+                      : <>Deviates from the handbook's {guide.suggested} for {control.frequency.toLowerCase()} ({guide.range}) — the basis will note your judgment.</>}
+                  </p>
+                </>
               )
             ) : <span className="text-[11.5px] text-ink-400">Not drawn</span>}
           </div>
+        </div>
+      )}
+
+      {/* extend-on-fail — a failure means a bigger sample, never "small miss, ignore" */}
+      {o.sampling && prog.failed > 0 && canEdit && (
+        <div className="mb-5 rounded-xl border border-high-200 bg-high-50/50 px-4 py-3 flex items-center gap-3 flex-wrap">
+          <AlertTriangle size={15} className="text-high-700 shrink-0" />
+          <div className="flex-1 min-w-[220px]">
+            <div className="text-[12.5px] font-semibold text-ink-800">{prog.failed} attribute{prog.failed === 1 ? '' : 's'} failed — extend the sample</div>
+            <div className="text-[11.5px] text-ink-500">A failure is never "small miss, ignore": widen the sample to size the problem before concluding.</div>
+          </div>
+          <button onClick={() => extendSample(control.id, Math.max(3, Math.ceil(guide.suggested / 2)))}
+            className="h-8 px-3.5 rounded-lg bg-high-600 text-white text-[12px] font-semibold hover:bg-high-700 cursor-pointer inline-flex items-center gap-1.5">
+            <FlaskConical size={13} /> Extend sample +{Math.max(3, Math.ceil(guide.suggested / 2))}
+          </button>
         </div>
       )}
 

@@ -69,6 +69,22 @@ export function icfrConclusion(eng: IcfrEngagement): 'Effective' | 'Not effectiv
   return openMaterialWeaknesses(eng).length ? 'Not effective' : 'Effective';
 }
 
+// ─── Frequency-based sample sizing (handbook table) ───────────────────────────────
+// Annual 1 · Quarterly 2 · Monthly 2–5 · Weekly 5–15 · Daily 15–40 · Recurring
+// (per-transaction) 25–60 · Automated nature = test of one, valid only while ITGCs hold.
+export function sampleSizeGuide(c: Control): { suggested: number; range: string; note: string } {
+  if (c.nature === 'Automated') return { suggested: 1, range: 'test of one', note: 'Automated — one instance proves the rule, valid only while ITGCs hold.' };
+  switch (c.frequency) {
+    case 'Annual': return { suggested: 1, range: '1', note: 'Runs once a year — test the occurrence.' };
+    case 'Quarterly': return { suggested: 2, range: '2', note: 'Test two quarters.' };
+    case 'Monthly': return { suggested: 4, range: '2–5', note: 'A handful of months.' };
+    case 'Weekly': return { suggested: 10, range: '5–15', note: 'Spread across the period.' };
+    case 'Daily': return { suggested: 25, range: '15–40', note: 'A meaningful spread of days.' };
+    case 'Recurring': return { suggested: 40, range: '25–60', note: 'Runs many times a day — the deepest samples.' };
+    case 'Ad-hoc': return { suggested: 10, range: 'judgment', note: 'Size by how often it actually ran.' };
+  }
+}
+
 // ─── Track + control conclusions (override wins) ─────────────────────────────────
 
 export function trackResult(t: DesignTrack | OperatingTrack): TrackConclusion {
