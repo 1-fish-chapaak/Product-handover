@@ -124,6 +124,9 @@ export interface OperatingStep {
   attestation?: Attestation;
   result: TestResult;
   override?: Override;
+  // Per-drawn-sample results for THIS attribute (keyed by Sample.id) — the
+  // handbook grain: every attribute is tested against every sampled item.
+  sampleResults?: Record<string, TestResult>;
 }
 export interface Sample { id: string; ref: string; result: TestResult; }
 export interface Sampling {

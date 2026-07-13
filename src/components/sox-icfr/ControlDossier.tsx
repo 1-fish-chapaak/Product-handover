@@ -275,7 +275,11 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
 
 // ── operating attribute — its own workflow and/or self-attestation ────────────────
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
-  const { me, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
+  const { me, setStepResult, setSampleResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
+  // this attribute tested against each drawn sample — the handbook grain
+  const samp = control.operating.sampling;
+  const sTested = samp ? samp.samples.filter(it => (step.sampleResults?.[it.id] ?? 'Not tested') !== 'Not tested').length : 0;
+  const sFails = samp ? samp.samples.filter(it => step.sampleResults?.[it.id] === 'Fail').length : 0;
   const [over, setOver] = useState(false);
   const [noteDraft, setNoteDraft] = useState(step.attestation?.note ?? '');
   const [validatingWf, setValidatingWf] = useState(false);
@@ -304,6 +308,28 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
           </div>
           <div className="text-[11px] text-ink-400 mt-1">{step.assertion} · {step.precision} · {step.procedures.join(' / ')}</div>
           {step.override && <div className="text-[11px] text-high-700 mt-1.5 flex items-start gap-1"><CornerDownRight size={11} className="mt-0.5 shrink-0" /> {step.override.rationale} <span className="text-ink-400">— {step.override.by}</span></div>}
+          {samp && (
+            <div className="mt-2 flex items-center gap-1 flex-wrap">
+              <span className="text-[10px] uppercase tracking-wide font-semibold text-ink-400 mr-0.5">Samples</span>
+              {samp.samples.map(it => {
+                const r = step.sampleResults?.[it.id] ?? 'Not tested';
+                const next: TestResult = r === 'Not tested' ? 'Pass' : r === 'Pass' ? 'Fail' : 'Not tested';
+                return (
+                  <button key={it.id} disabled={!canEdit} onClick={() => setSampleResult(control.id, step.id, it.id, next)}
+                    title={`${it.ref} — ${r}${canEdit ? ' · click to change' : ''}`}
+                    className={cn('h-6 px-1.5 rounded-md border text-[10.5px] font-semibold inline-flex items-center gap-1 transition-colors',
+                      r === 'Pass' ? 'bg-compliant-50 border-compliant-200 text-compliant-700'
+                        : r === 'Fail' ? 'bg-risk-50 border-risk-200 text-risk-700'
+                        : 'border-canvas-border bg-canvas-elevated text-ink-400',
+                      canEdit && 'cursor-pointer hover:border-ink-300')}>
+                    {r === 'Pass' ? <Check size={10} /> : r === 'Fail' ? <X size={10} /> : <span className="w-[7px] h-[7px] rounded-full border border-ink-300 inline-block" />}
+                    {it.ref.length > 12 ? `…${it.ref.slice(-6)}` : it.ref}
+                  </button>
+                );
+              })}
+              <span className="text-[10.5px] text-ink-400 ml-1 tabular-nums">{sTested}/{samp.samples.length} tested{sFails ? ` · ${sFails} fail` : ''}</span>
+            </div>
+          )}
         </div>
         {canEdit && (
           <div className="flex items-center gap-1.5 shrink-0">
