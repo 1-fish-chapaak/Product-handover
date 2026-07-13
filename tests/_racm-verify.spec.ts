@@ -26,7 +26,7 @@ test('Air India engagement RACM shows per-process matrix with approvals + bulk t
   await page.getByRole('button', { name: 'Open Procure to Pay RACM' }).click();
   await page.waitForTimeout(600);
   await expect(page.getByRole('heading', { name: /Procure to Pay — Risk & Control Matrix/ })).toBeVisible();
-  await expect(page.getByText('Auditor review').first()).toBeVisible();
+  await expect(page.getByText('Pre-testing review').first()).toBeVisible();
 
   // select two rows and bulk test — the knitted flow:
   // scope → compile required files → attach unique datasets → execute
