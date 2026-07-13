@@ -252,6 +252,10 @@ export type ExceptionStatus = 'Identified' | 'Remediation' | 'Retest' | 'Awaitin
 
 export interface SignificantAccount {
   id: string; name: string; balance: number; inScope: boolean; assertions: Assertion[];
+  // scoping front door: which business process covers this account, and the
+  // "what could go wrong" statements driving its relevant assertions
+  process?: string;
+  wcgw?: string[];
 }
 
 /** The engagement-level "ground rules" that drive how every exception is evaluated and routed. */

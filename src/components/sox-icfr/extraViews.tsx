@@ -6,7 +6,7 @@ import { assessSeverity, computeSeverity, formatINR, isClearlyTrivial, isEngagem
 import { SeverityPill } from './parts';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
-import { MW_INDICATOR_CATALOGUE, type Deficiency, type ExceptionStatus, type IcfrEngagement, type Severity } from './types';
+import { MW_INDICATOR_CATALOGUE, type Assertion, type Deficiency, type ExceptionStatus, type IcfrEngagement, type Severity, type SignificantAccount } from './types';
 
 const fmt = (n: number) => formatINR(n);
 const fmtFull = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
@@ -17,7 +17,7 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
 
 // ─── Materiality & scope — the ground rules ──────────────────────────────────────
 export function ScopeView() {
-  const { eng, role, back, updateRules, applyRules } = useIcfr();
+  const { eng, role, back, updateRules, applyRules, updateAccount } = useIcfr();
   const r = eng.rules;
   // The four grading thresholds edit as a DRAFT — nothing hits the engagement
   // until it's reviewed and applied (mid-engagement changes re-grade exceptions).
@@ -152,24 +152,125 @@ export function ScopeView() {
 
       {reviewing && <RulesReviewModal eng={eng} patch={patch} onClose={() => setReviewing(false)} onApply={reason => { applyRules(patch, reason); setReviewing(false); }} />}
 
-      {/* significant accounts */}
+      {/* significant accounts — the scoping front door: editable, with WCGWs */}
       <section className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
-        <header className="px-4 py-3 border-b border-canvas-border flex items-center justify-between"><h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><ShieldCheck size={15} className="text-brand-600" /> Significant accounts &amp; disclosures</h2><span className="text-[11.5px] text-ink-400">{eng.accounts.filter(a => a.inScope).length} in scope</span></header>
+        <header className="px-4 py-3 border-b border-canvas-border flex items-center justify-between">
+          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><ShieldCheck size={15} className="text-brand-600" /> Significant accounts &amp; disclosures</h2>
+          <span className="text-[11.5px] text-ink-400">{eng.accounts.filter(a => a.inScope).length} in scope · scoping unit = account × assertion</span>
+        </header>
         <table className="w-full text-[12.5px]">
-          <thead><tr className="text-ink-500 border-b border-canvas-border">{['Account', 'Balance', 'In scope', 'Assertions'].map(h => <th key={h} className="text-left font-semibold uppercase tracking-wide text-[10px] px-4 py-2">{h}</th>)}</tr></thead>
+          <thead><tr className="text-ink-500 border-b border-canvas-border">{['Account', 'Balance', 'Process', 'In scope', 'Relevant assertions', 'What could go wrong'].map(h => <th key={h} className="text-left font-semibold uppercase tracking-wide text-[10px] px-4 py-2">{h}</th>)}</tr></thead>
           <tbody>
-            {eng.accounts.map(a => (
-              <tr key={a.id} className="border-b border-canvas-border/60 last:border-0">
-                <td className="px-4 py-2.5 font-medium text-ink-800">{a.name}</td>
-                <td className="px-4 py-2.5 tabular-nums text-ink-600">{fmt(a.balance)}</td>
-                <td className="px-4 py-2.5">{a.inScope ? <Pill tone="compliant">In scope</Pill> : <Pill tone="draft">Out</Pill>}</td>
-                <td className="px-4 py-2.5 text-ink-500">{a.assertions.join(' · ')}</td>
-              </tr>
-            ))}
+            {eng.accounts.map(a => <AccountRow key={a.id} a={a} canEdit={canEditRules} onPatch={patch => updateAccount(a.id, patch)} />)}
           </tbody>
         </table>
       </section>
+
+      {/* coverage — where a relevant assertion has no key control, that's a gap */}
+      <section className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
+        <header className="px-4 py-3 border-b border-canvas-border">
+          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Target size={15} className="text-brand-600" /> Coverage — account × assertion</h2>
+          <p className="text-[11.5px] text-ink-400 mt-0.5">Key controls in each account's process, per relevant assertion. A relevant assertion with no key control is a design gap — a WCGW with nothing mapped to it.</p>
+        </header>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="text-ink-500 border-b border-canvas-border">
+                <th className="text-left font-semibold uppercase tracking-wide text-[10px] px-4 py-2">Account</th>
+                {ALL_ASSERTIONS.map(as_ => <th key={as_} className="text-center font-semibold uppercase tracking-wide text-[9.5px] px-2 py-2 whitespace-nowrap">{as_.replace(' / Occurrence', '/Occ.')}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {eng.accounts.filter(a => a.inScope).map(a => (
+                <tr key={a.id} className="border-b border-canvas-border/60 last:border-0">
+                  <td className="px-4 py-2.5 font-medium text-ink-800 whitespace-nowrap">{a.name}<span className="text-ink-400 font-normal"> · {a.process ?? '—'}</span></td>
+                  {ALL_ASSERTIONS.map(as_ => {
+                    const relevant = a.assertions.includes(as_);
+                    if (!relevant) return <td key={as_} className="text-center text-ink-300 px-2 py-2.5">—</td>;
+                    const n = eng.controls.filter(c => c.isKey && c.process === a.process && c.assertions.includes(as_)).length;
+                    return (
+                      <td key={as_} className="text-center px-2 py-2.5">
+                        {n > 0
+                          ? <span className="inline-flex items-center gap-1 text-[11px] font-bold text-compliant-700 bg-compliant-50 border border-compliant-200 rounded-md px-1.5 h-5 tabular-nums" title={`${n} key control${n === 1 ? '' : 's'} in ${a.process}`}>{n}</span>
+                          : <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase text-risk-700 bg-risk-50 border border-risk-200 rounded-md px-1.5 h-5" title="Relevant assertion with no key control — design gap by absence">gap</span>}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
+  );
+}
+
+const ALL_ASSERTIONS: Assertion[] = ['Existence / Occurrence', 'Completeness', 'Accuracy', 'Valuation', 'Cut-off', 'Rights & Obligations', 'Presentation'];
+
+// One editable scoping row: in/out toggle, assertion chips, expandable WCGWs.
+function AccountRow({ a, canEdit, onPatch }: { a: SignificantAccount; canEdit: boolean; onPatch: (patch: Partial<SignificantAccount>) => void }) {
+  const [open, setOpen] = useState(false);
+  const [newWcgw, setNewWcgw] = useState('');
+  const toggleAssertion = (as_: Assertion) => onPatch({ assertions: a.assertions.includes(as_) ? a.assertions.filter(x => x !== as_) : [...a.assertions, as_] });
+  return (
+    <>
+      <tr className={cn('border-b border-canvas-border/60', !open && 'last:border-0', !a.inScope && 'opacity-60')}>
+        <td className="px-4 py-2.5 font-medium text-ink-800">{a.name}</td>
+        <td className="px-4 py-2.5 tabular-nums text-ink-600">{fmt(a.balance)}</td>
+        <td className="px-4 py-2.5 text-ink-500">{a.process ?? '—'}</td>
+        <td className="px-4 py-2.5">
+          {canEdit
+            ? <button onClick={() => onPatch({ inScope: !a.inScope })} title={a.inScope ? 'Take out of scope' : 'Bring into scope'} className="cursor-pointer">{a.inScope ? <Pill tone="compliant">In scope</Pill> : <Pill tone="draft">Out</Pill>}</button>
+            : a.inScope ? <Pill tone="compliant">In scope</Pill> : <Pill tone="draft">Out</Pill>}
+        </td>
+        <td className="px-4 py-2.5">
+          <div className="flex items-center gap-1 flex-wrap">
+            {ALL_ASSERTIONS.map(as_ => {
+              const on = a.assertions.includes(as_);
+              if (!canEdit && !on) return null;
+              return (
+                <button key={as_} disabled={!canEdit} onClick={() => toggleAssertion(as_)}
+                  className={cn('h-6 px-1.5 rounded-md border text-[10.5px] font-semibold transition-colors', on ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-400', canEdit && 'cursor-pointer hover:border-ink-300')}>
+                  {as_.replace(' / Occurrence', '/Occ.')}
+                </button>
+              );
+            })}
+          </div>
+        </td>
+        <td className="px-4 py-2.5">
+          <button onClick={() => setOpen(o => !o)} className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
+            {(a.wcgw?.length ?? 0)} WCGW{(a.wcgw?.length ?? 0) === 1 ? '' : 's'} {open ? '▾' : '▸'}
+          </button>
+        </td>
+      </tr>
+      {open && (
+        <tr className="border-b border-canvas-border/60 last:border-0 bg-paper-50/40">
+          <td colSpan={6} className="px-4 py-3">
+            <div className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400 mb-1.5">What could go wrong — {a.name}</div>
+            <ul className="space-y-1 mb-2">
+              {(a.wcgw ?? []).map((w, i) => (
+                <li key={i} className="flex items-center gap-2 text-[12px] text-ink-700">
+                  <span className="w-1 h-1 rounded-full bg-risk-400 shrink-0" /> {w}
+                  {canEdit && <button onClick={() => onPatch({ wcgw: (a.wcgw ?? []).filter((_, j) => j !== i) })} className="text-ink-300 hover:text-risk-600 cursor-pointer text-[11px]">remove</button>}
+                </li>
+              ))}
+              {(a.wcgw?.length ?? 0) === 0 && <li className="text-[12px] text-ink-400">None captured — a relevant assertion should trace to at least one WCGW.</li>}
+            </ul>
+            {canEdit && (
+              <div className="flex items-center gap-2">
+                <input value={newWcgw} onChange={e => setNewWcgw(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && newWcgw.trim()) { onPatch({ wcgw: [...(a.wcgw ?? []), newWcgw.trim()] }); setNewWcgw(''); } }}
+                  placeholder="e.g. Sales near period end recorded in the wrong period"
+                  className="h-8 flex-1 max-w-[480px] px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[12px] focus:outline-none focus:border-brand-300" />
+                <button disabled={!newWcgw.trim()} onClick={() => { onPatch({ wcgw: [...(a.wcgw ?? []), newWcgw.trim()] }); setNewWcgw(''); }}
+                  className="h-8 px-2.5 rounded-md bg-brand-600 text-white text-[11.5px] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 

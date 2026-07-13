@@ -386,11 +386,16 @@ const DEFICIENCIES: Deficiency[] = [
 ];
 
 const ACCOUNTS: SignificantAccount[] = [
-  { id: 'a1', name: 'Accounts Payable', balance: 184_000_000, inScope: true, assertions: ['Completeness', 'Accuracy', 'Cut-off'] },
-  { id: 'a2', name: 'Inventory', balance: 96_000_000, inScope: true, assertions: ['Existence / Occurrence', 'Valuation'] },
-  { id: 'a3', name: 'Revenue', balance: 412_000_000, inScope: true, assertions: ['Existence / Occurrence', 'Cut-off'] },
-  { id: 'a4', name: 'Cash & bank', balance: 58_000_000, inScope: true, assertions: ['Existence / Occurrence'] },
-  { id: 'a5', name: 'Property, plant & equipment', balance: 240_000_000, inScope: false, assertions: ['Existence / Occurrence', 'Valuation'] },
+  { id: 'a1', name: 'Accounts Payable', balance: 184_000_000, inScope: true, assertions: ['Completeness', 'Accuracy', 'Cut-off'], process: 'Procure to Pay',
+    wcgw: ['Invoices are recorded twice or against the wrong PO', 'Liabilities at period end are incomplete (unrecorded GRNs)'] },
+  { id: 'a2', name: 'Inventory', balance: 96_000_000, inScope: true, assertions: ['Existence / Occurrence', 'Valuation'], process: 'Inventory',
+    wcgw: ['Recorded stock does not exist (shrinkage, phantom receipts)', 'Slow-moving stock is not written down'] },
+  { id: 'a3', name: 'Revenue', balance: 412_000_000, inScope: true, assertions: ['Existence / Occurrence', 'Cut-off'], process: 'Order to Cash',
+    wcgw: ['Revenue recognised for undelivered services', 'Sales near period end recorded in the wrong period'] },
+  { id: 'a4', name: 'Cash & bank', balance: 58_000_000, inScope: true, assertions: ['Existence / Occurrence'], process: 'Treasury',
+    wcgw: ['Payments made to altered or fictitious bank accounts'] },
+  { id: 'a5', name: 'Property, plant & equipment', balance: 240_000_000, inScope: false, assertions: ['Existence / Occurrence', 'Valuation'], process: 'Record to Report',
+    wcgw: ['Assets no longer in use remain on the register'] },
 ];
 
 // ── execution history — both personas act; each sees the other's runs ─────────────
