@@ -238,7 +238,9 @@ export interface Deficiency {
   mwIndicators: string[];
   compensatingControlId?: string;
   aggregationGroup?: string;
-  remediation: { action: string; date: string | null; owner: string; status: 'Open' | 'In progress' | 'Done' };
+  // The owner's commitment: what will fix the ROOT CAUSE, who does it, by when —
+  // and the evidence they attach before declaring it done (submit for retest).
+  remediation: { action: string; date: string | null; owner: string; status: 'Open' | 'In progress' | 'Done'; evidence?: EvidenceFile[] };
   // exception lifecycle
   status: ExceptionStatus;
   retest?: { result: 'Pass' | 'Fail'; at: string; by: string };

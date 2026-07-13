@@ -128,6 +128,8 @@ interface IcfrCtx {
   setExceptionStatus: (id: string, status: ExceptionStatus) => void;
   recordRetest: (id: string, result: 'Pass' | 'Fail') => void;
   signOffException: (id: string) => void;
+  updateRemediation: (id: string, patch: Partial<Deficiency['remediation']>) => void;
+  addRemediationEvidence: (id: string, fileName: string) => void;
   // create control + engagement-level sign-off
   addControl: (draft: NewControlDraft) => string;
   signOffEngagement: (step: 'preparer' | 'reviewer') => void;
@@ -661,16 +663,42 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [me]);
   // Lifecycle moves: reviewer only closes (below); submitting the fix for retest
   // is the owner's declaration — the auditor can't call the owner's fix done.
+  // Starting remediation marks the plan in progress; submitting marks it done.
   const setExceptionStatus = useCallback<IcfrCtx['setExceptionStatus']>((id, status) => {
     if (role === 'reviewer') return;
     if (status === 'Retest' && role !== 'risk-owner') return;
-    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, status } : d) }));
+    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => {
+      if (d.id !== id) return d;
+      const remStatus = status === 'Remediation' ? 'In progress' as const : status === 'Retest' ? 'Done' as const : d.remediation.status;
+      return { ...d, status, remediation: { ...d.remediation, status: remStatus } };
+    }) }));
   }, [role]);
   // A passed retest never closes itself — it parks at 'Awaiting reviewer'. Only
   // the auditor records retest results; the owner never tests their own fix.
+  // A failed retest sends the plan back to In progress.
   const recordRetest = useCallback<IcfrCtx['recordRetest']>((id, result) => {
     if (role !== 'auditor') return;
-    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, retest: { result, at: 'just now', by: me }, status: result === 'Pass' ? 'Awaiting reviewer' : 'Remediation', remediation: { ...d.remediation, status: result === 'Pass' ? 'Done' : d.remediation.status } } : d) }));
+    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, retest: { result, at: 'just now', by: me }, status: result === 'Pass' ? 'Awaiting reviewer' : 'Remediation', remediation: { ...d.remediation, status: result === 'Pass' ? 'Done' : 'In progress' } } : d) }));
+  }, [me, role]);
+
+  // The remediation plan is the owner's commitment — the action on the root
+  // cause, who does it, by when, and the evidence behind "done". The auditor
+  // advises but never writes the plan. Frozen once the fix is submitted.
+  const updateRemediation = useCallback<IcfrCtx['updateRemediation']>((id, patch) => {
+    if (role !== 'risk-owner') return;
+    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => {
+      if (d.id !== id) return d;
+      if (d.status !== 'Identified' && d.status !== 'Remediation') return d;
+      return { ...d, remediation: { ...d.remediation, ...patch } };
+    }) }));
+  }, [role]);
+  const addRemediationEvidence = useCallback<IcfrCtx['addRemediationEvidence']>((id, fileName) => {
+    if (role !== 'risk-owner') return;
+    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => {
+      if (d.id !== id) return d;
+      const file: EvidenceFile = { id: uid('f'), name: fileName, kind: fileName.endsWith('.xlsx') ? 'XLSX' : 'PDF', uploadedBy: me, uploadedAt: 'just now' };
+      return { ...d, remediation: { ...d.remediation, evidence: [...(d.remediation.evidence ?? []), file] } };
+    }) }));
   }, [me, role]);
   // Four-eyes: only the reviewer hat closes, and never the person who ran the retest.
   const signOffException = useCallback<IcfrCtx['signOffException']>((id) => {
@@ -766,9 +794,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
-    updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException,
+    updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence,
     addControl, signOffEngagement, reopenControl,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, addControl, signOffEngagement, reopenControl]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

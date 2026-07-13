@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ArrowRight, History, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, X, XCircle, Sliders, GitMerge, Route } from 'lucide-react';
+import { ArrowLeft, ArrowRight, History, Paperclip, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, X, XCircle, Sliders, GitMerge, Route } from 'lucide-react';
 import { useIcfr } from './store';
 import { assessSeverity, computeSeverity, formatINR, isClearlyTrivial, isEngagementLocked, previewRegrades, SEVERITY_RANK, type RulesPatch } from './helpers';
 import { SeverityPill } from './parts';
@@ -378,13 +378,72 @@ function PrudentRow({ d, baseFinal, onApply, onClear }: { d: Deficiency; baseFin
   );
 }
 
+// Is a '30 Jun'-style due label past, assuming the current year?
+function dueIsPast(date: string | null): boolean {
+  if (!date) return false;
+  const t = Date.parse(`${date} ${new Date().getFullYear()}`);
+  return !Number.isNaN(t) && t < Date.now();
+}
+
+// The remediation plan — the owner's commitment: the action on the root cause,
+// who does it, by when, plus the evidence behind "done". Editable only in the
+// owner's hat while the exception is still theirs; everyone else reads it.
+function RemediationPlan({ d, isOwner, onPatch, onAttach }: { d: Deficiency; isOwner: boolean; onPatch: (patch: Partial<Deficiency['remediation']>) => void; onAttach: (fileName: string) => void }) {
+  const r = d.remediation;
+  const editable = isOwner && (d.status === 'Identified' || d.status === 'Remediation');
+  const overdue = dueIsPast(r.date) && r.status !== 'Done';
+  const files = r.evidence ?? [];
+  return (
+    <div className="rounded-lg border border-canvas-border bg-paper-50/50 px-3 py-2.5">
+      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide font-semibold text-ink-500 mb-1.5">
+        <RotateCcw size={12} /> Remediation{isOwner ? ' — your commitment' : ''}
+        <span className="ml-auto normal-case tracking-normal font-medium text-ink-600">{r.status}</span>
+        {overdue && <span className="normal-case tracking-normal inline-flex items-center gap-1 text-[10.5px] font-bold text-risk-700 bg-risk-50 border border-risk-200 rounded px-1.5 h-5"><AlertTriangle size={10} /> overdue — escalate</span>}
+      </div>
+      {editable ? (
+        <div className="space-y-1.5">
+          <input value={r.action} onChange={e => onPatch({ action: e.target.value })}
+            placeholder="What fixes the root cause — not the symptom (e.g. normalise the match key, not recover the 4 invoices)"
+            className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 focus:outline-none focus:border-brand-300" />
+          <div className="flex items-center gap-2 flex-wrap text-[11.5px]">
+            <span className="text-ink-400">Owner</span>
+            <input value={r.owner} onChange={e => onPatch({ owner: e.target.value })} placeholder="Who does it"
+              className="h-7 w-56 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] focus:outline-none focus:border-brand-300" />
+            <span className="text-ink-400">Due</span>
+            <input value={r.date ?? ''} onChange={e => onPatch({ date: e.target.value || null })} placeholder="e.g. 30 Jun"
+              className={cn('h-7 w-24 px-2 rounded-md border bg-canvas-elevated text-[11.5px] focus:outline-none focus:border-brand-300', overdue ? 'border-risk-300 text-risk-700' : 'border-canvas-border')} />
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="text-[12.5px] text-ink-700">{r.action}</div>
+          <div className="text-[11.5px] text-ink-400 mt-0.5">Owner {r.owner} · due {r.date ?? '—'}{d.retest && <> · retest <span className={d.retest.result === 'Pass' ? 'text-compliant-700 font-semibold' : 'text-risk-700 font-semibold'}>{d.retest.result}</span></>}{d.signoff && <> · signed off by {d.signoff.by}</>}</div>
+        </>
+      )}
+      {/* evidence — "done" needs proof before the fix can be submitted for retest */}
+      <div className="flex items-center gap-1.5 flex-wrap mt-2">
+        <span className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400">Evidence</span>
+        {files.map(f => (
+          <span key={f.id} className="inline-flex items-center gap-1 h-6 px-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[10.5px] font-semibold text-ink-600"><Paperclip size={10} /> {f.name}</span>
+        ))}
+        {files.length === 0 && !editable && <span className="text-[11px] text-ink-400">none attached</span>}
+        {editable && (
+          <button onClick={() => onAttach(`${d.id.toLowerCase()}-fix-evidence${files.length ? `-${files.length + 1}` : ''}.pdf`)}
+            className="h-6 px-2 rounded-md border border-dashed border-canvas-border text-[10.5px] font-semibold text-ink-500 hover:text-brand-700 hover:border-brand-300 cursor-pointer inline-flex items-center gap-1 transition-colors"><Paperclip size={10} /> Attach evidence</button>
+        )}
+        {editable && files.length === 0 && <span className="text-[10.5px] text-mitigated-700">required before you can submit for retest</span>}
+      </div>
+    </div>
+  );
+}
+
 // ─── Exceptions — the lifecycle ──────────────────────────────────────────────────
 const STAGES: ExceptionStatus[] = ['Identified', 'Remediation', 'Retest', 'Awaiting reviewer', 'Closed'];
 const STATUS_TONE: Record<ExceptionStatus, Tone> = { Identified: 'high', Remediation: 'mitigated', Retest: 'evidence', 'Awaiting reviewer': 'info', Closed: 'compliant' };
 const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
 
 export function DeficienciesView() {
-  const { eng, role, me, back, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException } = useIcfr();
+  const { eng, role, me, back, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence } = useIcfr();
   const M = eng.materiality; const rules = eng.rules;
   // three lines, three lanes: the owner remediates, the auditor evaluates &
   // retests, the reviewer closes — each hat only sees its own actions.
@@ -477,6 +536,8 @@ export function DeficienciesView() {
                   ))}
                 </div>
 
+                {/* severity + remediation — the owner's card leads with THEIR work (visual reverse) */}
+                <div className={cn('mt-3 flex flex-col gap-3', isOwner && 'flex-col-reverse')}>
                 {/* severity — the auditor evaluates; owner and reviewer read the grade */}
                 {isAuditor ? (
                   <div className="rounded-lg border border-canvas-border p-3 space-y-2.5">
@@ -546,11 +607,8 @@ export function DeficienciesView() {
                   </div>
                 )}
 
-                {/* remediation + lifecycle actions */}
-                <div className="mt-3 rounded-lg border border-canvas-border bg-paper-50/50 px-3 py-2.5">
-                  <div className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wide font-semibold text-ink-500 mb-1"><RotateCcw size={12} /> Remediation</div>
-                  <div className="text-[12.5px] text-ink-700">{d.remediation.action}</div>
-                  <div className="text-[11.5px] text-ink-400 mt-0.5">Owner {d.remediation.owner} · due {d.remediation.date ?? '—'} · <span className="font-medium text-ink-600">{d.remediation.status}</span>{d.retest && <> · retest <span className={d.retest.result === 'Pass' ? 'text-compliant-700 font-semibold' : 'text-risk-700 font-semibold'}>{d.retest.result}</span></>}{d.signoff && <> · signed off by {d.signoff.by}</>}</div>
+                {/* remediation — the owner's plan; editable in their hat until submitted */}
+                <RemediationPlan d={d} isOwner={isOwner} onPatch={patch => updateRemediation(d.id, patch)} onAttach={name => addRemediationEvidence(d.id, name)} />
                 </div>
 
                 <div className="mt-3 flex items-center gap-2 flex-wrap">
@@ -562,7 +620,14 @@ export function DeficienciesView() {
                   )}
                   {d.status === 'Remediation' && (
                     isOwner
-                      ? <button onClick={() => setExceptionStatus(d.id, 'Retest')} title="Marks your fix as ready and hands it to the auditor" className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold hover:bg-evidence-700 cursor-pointer inline-flex items-center gap-1.5">Fixed — submit for retest</button>
+                      ? (() => {
+                          const hasEvidence = (d.remediation.evidence?.length ?? 0) > 0;
+                          return (
+                            <button onClick={() => setExceptionStatus(d.id, 'Retest')} disabled={!hasEvidence}
+                              title={hasEvidence ? 'Marks your fix as done and hands it to the auditor' : 'Attach evidence of the fix first — "done" needs proof'}
+                              className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5">Fixed — submit for retest</button>
+                          );
+                        })()
                       : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><RotateCcw size={14} className="text-ink-400" /> With {d.remediation.owner} for remediation — the owner submits it for retest</span>
                   )}
                   {/* auditor's lane: only the auditor records retest results — never the owner of the fix */}
