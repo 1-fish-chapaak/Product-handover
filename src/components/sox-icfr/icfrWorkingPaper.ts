@@ -1,6 +1,19 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, controlConclusion, trackResult, designProgress } from './helpers';
+import { assessSeverity, controlConclusion, icfrConclusion, openMaterialWeaknesses, trackResult, designProgress } from './helpers';
 import type { Control, IcfrEngagement, OperatingStep } from './types';
+
+// The sign-off block every working paper carries: who signed, who countersigned,
+// and the ICFR conclusion — stamped if signed, live-derived (and marked so) if not.
+function signoffRows(eng: IcfrEngagement): (string | number)[][] {
+  const so = eng.signoff;
+  const mwOpen = openMaterialWeaknesses(eng).length;
+  return [
+    ['Prepared by', so.preparer ? `${so.preparer.by} — signed off ${so.preparer.at}` : `${eng.preparer} — NOT YET SIGNED`],
+    ['Countersigned by', so.reviewer ? `${so.reviewer.by} — countersigned ${so.reviewer.at}` : `${eng.reviewer} — NOT YET COUNTERSIGNED`],
+    ['ICFR conclusion', so.icfrConclusion ? `${so.icfrConclusion} (stamped at sign-off)` : `${icfrConclusion(eng)} (live — not yet signed; ${mwOpen} material weakness${mwOpen === 1 ? '' : 'es'} open)`],
+    ['Engagement status', so.preparer && so.reviewer ? 'Concluded — record locked' : 'In progress'],
+  ];
+}
 
 function autofit(rows: (string | number)[][], max = 60): XLSX.ColInfo[] {
   const w: number[] = [];
@@ -47,6 +60,12 @@ export function downloadIcfrWorkingPaper(eng: IcfrEngagement): void {
   ix['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
   XLSX.utils.book_append_sheet(wb, ix, 'Index');
 
+  // Sign-off — its own sheet, first thing after the index
+  const soSheet = XLSX.utils.aoa_to_sheet([['Engagement sign-off'], [], ...signoffRows(eng)]);
+  soSheet['!cols'] = [{ wch: 22 }, { wch: 80 }];
+  soSheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+  XLSX.utils.book_append_sheet(wb, soSheet, 'Sign-off');
+
   const sumH = ['W/P', 'Control ID', 'Description', 'Process', 'Nature', 'Key', 'Owner', 'TOD (design)', 'TOE (operating)', 'TOE method', 'Conclusion'];
   const sumR: (string | number)[][] = eng.controls.map(c => [c.wpRef, c.id, c.description, c.process, c.nature, c.isKey ? 'Yes' : 'No', c.owner, trackResult(c.design), trackResult(c.operating), c.operating.method, controlConclusion(c)]);
   const sum = XLSX.utils.aoa_to_sheet([sumH, ...sumR]); sum['!cols'] = autofit([sumH, ...sumR]);
@@ -67,13 +86,14 @@ export function downloadIcfrWorkingPaper(eng: IcfrEngagement): void {
   const op = XLSX.utils.aoa_to_sheet([opH, ...opR]); op['!cols'] = autofit([opH, ...opR]);
   XLSX.utils.book_append_sheet(wb, op, 'Operating Testing');
 
-  const dfH = ['Deficiency', 'Control', 'Track', 'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality', 'MW indicators', 'Compensating control', 'Severity', 'Remediation', 'Due', 'Status'];
+  const dfH = ['Deficiency', 'Control', 'Track', 'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality', 'MW indicators', 'Compensating control', 'Severity', 'Remediation', 'Due', 'Status', 'Remediation evidence'];
   const dfR: (string | number)[][] = eng.deficiencies.length
     ? eng.deficiencies.map(d => {
         const a = assessSeverity(d, eng);
-        return [d.id, d.controlId, d.track, d.description, d.rootCause, d.likelihood, d.magnitude, eng.materiality, d.mwIndicators.join('; ') || 'None', d.compensatingControlId ?? 'None', a.capped ? `${a.final} (capped from ${a.raw})` : a.final, d.remediation.action, d.remediation.date ?? '—', d.remediation.status];
+        const sev = a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final;
+        return [d.id, d.controlId, d.track, d.description, d.rootCause, d.likelihood, d.magnitude, eng.materiality, d.mwIndicators.join('; ') || 'None', d.compensatingControlId ?? 'None', sev, d.remediation.action, d.remediation.date ?? '—', d.remediation.status, d.remediation.evidence?.map(f => f.name).join('; ') || 'None'];
       })
-    : [['—', '—', '—', 'No deficiencies', '—', '—', 0, eng.materiality, '—', '—', '—', '—', '—', '—']];
+    : [['—', '—', '—', 'No deficiencies', '—', '—', 0, eng.materiality, '—', '—', '—', '—', '—', '—', '—']];
   const df = XLSX.utils.aoa_to_sheet([dfH, ...dfR]); df['!cols'] = autofit([dfH, ...dfR]);
   XLSX.utils.book_append_sheet(wb, df, 'Deficiencies');
 
@@ -106,12 +126,12 @@ export function downloadControlWorkingPaper(eng: IcfrEngagement, c: Control): vo
     ['Precision', c.precision],
     ['Assertions', c.assertions.join('; ')],
     [],
-    ['Test of Design (independent)', trackResult(c.design)],
-    ['Test of Operating Effectiveness (independent)', trackResult(c.operating)],
+    ['Test of Design (independent)', `${trackResult(c.design)}${c.design.testedBy ? ` — ${c.design.testedBy}, ${c.design.testedAt}` : ''}`],
+    ['Test of Operating Effectiveness (independent)', `${trackResult(c.operating)}${c.operating.testedBy ? ` — ${c.operating.testedBy}, ${c.operating.testedAt}` : ''}`],
     ['Control conclusion', controlConclusion(c)],
     [],
-    ['Prepared by', eng.preparer],
-    ['Reviewed by', eng.reviewer],
+    ['Engagement sign-off', ''],
+    ...signoffRows(eng),
   ];
   const cs = XLSX.utils.aoa_to_sheet(cover); cs['!cols'] = [{ wch: 34 }, { wch: 76 }];
   cs['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
@@ -148,8 +168,9 @@ export function downloadControlWorkingPaper(eng: IcfrEngagement, c: Control): vo
       ['Likelihood', def.likelihood], ['Magnitude', def.magnitude], ['Materiality', eng.materiality],
       ['MW indicators', def.mwIndicators.join('; ') || 'None'],
       ['Compensating control', def.compensatingControlId ?? 'None'],
-      ['Severity', (() => { const a = assessSeverity(def, eng); return a.capped ? `${a.final} (capped from ${a.raw} by ${def.compensatingControlId})` : a.final; })()],
+      ['Severity', (() => { const a = assessSeverity(def, eng); return a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw} by ${def.compensatingControlId})` : a.final; })()],
       ['Remediation', def.remediation.action], ['Due', def.remediation.date ?? '—'], ['Status', def.remediation.status],
+      ['Remediation evidence', def.remediation.evidence?.map(f => f.name).join('; ') || 'None'],
     ];
     const ds = XLSX.utils.aoa_to_sheet([dH, ...dR]); ds['!cols'] = [{ wch: 16 }, { wch: 76 }];
     XLSX.utils.book_append_sheet(wb, ds, 'Deficiency');

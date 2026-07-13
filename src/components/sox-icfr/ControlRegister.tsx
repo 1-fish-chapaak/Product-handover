@@ -11,7 +11,7 @@ import {
 import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
 import BulkTestModal from './BulkTestModal';
 import NewControlPanel from './NewControlPanel';
-import { downloadIcfrWorkingPaper } from './icfrWorkingPaper';
+import WorkingPaperModal from './WorkingPaperModal';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
 
@@ -90,6 +90,8 @@ export default function ControlRegister() {
   const { eng, role, openControl, requestDesignDocs } = useIcfr();
   const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
   const [creating, setCreating] = useState(false);
+  // preview-before-download for the consolidated working paper
+  const [wpPreview, setWpPreview] = useState(false);
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
@@ -141,7 +143,7 @@ export default function ControlRegister() {
           <p className="text-[13px] text-ink-500 mt-0.5">{eng.controls.length} controls · {stats.effective} effective · {stats.waitingOnOwner} waiting on owner</p>
         </div>
         <div className="flex items-center gap-1.5">
-          <button onClick={() => downloadIcfrWorkingPaper(eng)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>
+          <button onClick={() => setWpPreview(true)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>
           {role === 'auditor' && !isEngagementLocked(eng) && (
             <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
               title={sel.size ? `Bulk test the ${sel.size} selected controls` : 'Bulk test all controls in view'}
@@ -293,6 +295,7 @@ export default function ControlRegister() {
 
       {/* create control — the focused form */}
       {creating && <NewControlPanel onClose={() => setCreating(false)} />}
+      {wpPreview && <WorkingPaperModal eng={eng} onClose={() => setWpPreview(false)} />}
     </div>
   );
 }

@@ -17,7 +17,7 @@ import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp } fr
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
 import { Sparkles } from 'lucide-react';
-import { downloadControlWorkingPaper } from './icfrWorkingPaper';
+import WorkingPaperModal from './WorkingPaperModal';
 import { cn } from '../../lib/cn';
 import { DESIGN_DOC_KINDS } from './types';
 import { sampleRefs } from './mockData';
@@ -890,6 +890,8 @@ function LockBanner({ engLocked, role, onReopen }: { engLocked: boolean; role: R
 
 export default function ControlDossier() {
   const { eng, role, selectedControlId, back, setView, reopenControl } = useIcfr();
+  // preview-before-download for the working paper (sign-off travels with it)
+  const [wpPreview, setWpPreview] = useState(false);
   const control = eng.controls.find(c => c.id === selectedControlId);
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Back to register</button></div>;
   // Both personas can execute TOD and TOE — until the control concludes. A concluded
@@ -939,7 +941,7 @@ export default function ControlDossier() {
             <ChevronRight size={13} className="text-ink-300" />
             <span className="text-[11.5px] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> Operating {toeLocked ? 'locked' : opResult}</span>
             <div className="ml-auto flex items-center gap-2">
-              <button onClick={() => downloadControlWorkingPaper(eng, control)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Download size={13} /> Working paper</button>
+              <button onClick={() => setWpPreview(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Download size={13} /> Working paper</button>
               <span className="text-[11px] text-ink-400 inline-flex items-center gap-1">Auditor &amp; risk owner both test · every run is logged in History</span>
             </div>
           </div>
@@ -969,6 +971,8 @@ export default function ControlDossier() {
         </motion.div>
         <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}><ActivityRail control={control} /></motion.div>
       </div>
+
+      {wpPreview && <WorkingPaperModal eng={eng} control={control} onClose={() => setWpPreview(false)} />}
     </motion.div>
   );
 }
