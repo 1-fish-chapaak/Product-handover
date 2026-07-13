@@ -31,6 +31,11 @@ interface Props {
   initialApprovalFlow?: boolean;
   /** Called once the Approval Flow tab has been opened, to clear the one-shot flag. */
   onApprovalFlowConsumed?: () => void;
+  /** Open directly on the All Engagements list — set when backing out of an
+   *  engagement workspace, so the arrow returns you to the list you came from. */
+  initialList?: boolean;
+  /** Called once the list has been opened, to clear the one-shot flag. */
+  onInitialListConsumed?: () => void;
 }
 
 const STATUS_CLS: Record<EngStatus, string> = {
@@ -86,19 +91,21 @@ function healthTier(pct: number): { bar: string; text: string } {
   return { bar: 'bg-risk', text: 'text-risk-700' };
 }
 
-export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning, initialTypeFilter, onInitialFilterConsumed, initialApprovalFlow, onApprovalFlowConsumed }: Props) {
+export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning, initialTypeFilter, onInitialFilterConsumed, initialApprovalFlow, onApprovalFlowConsumed, initialList, onInitialListConsumed }: Props) {
   const { can } = useCan();
   const { addToast } = useToast();
   const presetType = initialTypeFilter && initialTypeFilter !== 'All';
   // When routed with an initial type (e.g. SOX → 'Compliance'), open straight
   // onto the list view, pre-filtered to that type. When routed to create an
-  // approval flow, open straight onto the Approval Flow tab.
-  const [mode, setMode] = useState<EngViewMode>(initialApprovalFlow ? 'approval-flow' : presetType ? 'list' : 'overview');
+  // approval flow, open straight onto the Approval Flow tab. When backing out
+  // of an engagement workspace, open straight onto the All Engagements list.
+  const [mode, setMode] = useState<EngViewMode>(initialApprovalFlow ? 'approval-flow' : (presetType || initialList) ? 'list' : 'overview');
   // Which side's flows the Approval Flow tab manages.
   const [flowRole, setFlowRole] = useState<Persona>('risk-owner');
-  // Clear the parent's one-shot approval-flow flag once consumed (mode itself is
-  // already initialized from the flag in the useState initializer above).
+  // Clear the parent's one-shot flags once consumed (mode itself is already
+  // initialized from the flags in the useState initializer above).
   useEffect(() => { if (initialApprovalFlow) onApprovalFlowConsumed?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (initialList) onInitialListConsumed?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'All' | EngType>(initialTypeFilter ?? 'All');
   // Clear the parent's one-shot flag once we've taken the initial filter, so a

@@ -320,6 +320,10 @@ function AppInner() {
   // One-shot: open the Engagements view directly on its Approval Flow tab (e.g. from
   // the report "Create new approval flow" action).
   const [engApprovalFlow, setEngApprovalFlow] = useState(false);
+  // One-shot: backing out of an engagement workspace lands on the All Engagements
+  // list (not the portfolio overview) — the list is where the user came from.
+  const [engBackToList, setEngBackToList] = useState(false);
+  const backToEngagementList = () => { setEngBackToList(true); setView('engagements'); };
   useEffect(() => {
     const handler = (e: Event) => {
       const id = (e as CustomEvent<{ id: string }>).detail?.id;
@@ -887,10 +891,10 @@ function AppInner() {
         );
 
       case 'sox-icfr':
-        return <SoxIcfrApp engagementId={state.selectedEngagementId ?? undefined} onBack={() => setView('engagements')} />;
+        return <SoxIcfrApp engagementId={state.selectedEngagementId ?? undefined} onBack={backToEngagementList} />;
 
       case 'compliance-engagement':
-        return <ComplianceEngagementApp engagementId={state.selectedEngagementId ?? undefined} onBack={() => setView('engagements')} />;
+        return <ComplianceEngagementApp engagementId={state.selectedEngagementId ?? undefined} onBack={backToEngagementList} />;
 
       case 'engagements':
         return (
@@ -901,6 +905,8 @@ function AppInner() {
             onInitialFilterConsumed={() => setEngagementsSoxFilter(false)}
             initialApprovalFlow={engApprovalFlow}
             onApprovalFlowConsumed={() => setEngApprovalFlow(false)}
+            initialList={engBackToList}
+            onInitialListConsumed={() => setEngBackToList(false)}
           />
         );
 
@@ -908,7 +914,7 @@ function AppInner() {
         return (
           <EngagementOverviewView
             engagementId={state.selectedEngagementId ?? ''}
-            onBack={() => setView('engagements')}
+            onBack={backToEngagementList}
             onOpenExecution={(engId) => {
               setEngagementBackView('audit-planning');
               openAuditExecution(engId);
