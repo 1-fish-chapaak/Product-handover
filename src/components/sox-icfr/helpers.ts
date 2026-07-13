@@ -79,11 +79,23 @@ export function icfrConclusion(eng: IcfrEngagement): 'Effective' | 'Not effectiv
   return openMaterialWeaknesses(eng).length ? 'Not effective' : 'Effective';
 }
 
+// ─── ITGC cascade — a failed ITGC invalidates "test of one" downstream ───────────
+// Any IT General Controls control concluded ineffective puts every automated /
+// IT-dependent control in the other processes on notice: one instance no longer
+// proves the rule, and benchmarking is off the table.
+export function failedItgcs(eng: IcfrEngagement): Control[] {
+  return eng.controls.filter(c => c.process === 'IT General Controls' && controlConclusion(c) === 'Ineffective');
+}
+export function isItgcDependent(c: Control): boolean {
+  return c.nature !== 'Manual' && c.process !== 'IT General Controls';
+}
+
 // ─── Frequency-based sample sizing (handbook table) ───────────────────────────────
 // Annual 1 · Quarterly 2 · Monthly 2–5 · Weekly 5–15 · Daily 15–40 · Recurring
 // (per-transaction) 25–60 · Automated nature = test of one, valid only while ITGCs hold.
-export function sampleSizeGuide(c: Control): { suggested: number; range: string; note: string } {
-  if (c.nature === 'Automated') return { suggested: 1, range: 'test of one', note: 'Automated — one instance proves the rule, valid only while ITGCs hold.' };
+export function sampleSizeGuide(c: Control, itgcHolds = true): { suggested: number; range: string; note: string } {
+  if (c.nature === 'Automated' && itgcHolds) return { suggested: 1, range: 'test of one', note: 'Automated — one instance proves the rule, valid only while ITGCs hold.' };
+  if (c.nature === 'Automated' && !itgcHolds) return { suggested: 25, range: '25–60', note: 'ITGC failure in force — test of one is invalid; size like a manual control.' };
   switch (c.frequency) {
     case 'Annual': return { suggested: 1, range: '1', note: 'Runs once a year — test the occurrence.' };
     case 'Quarterly': return { suggested: 2, range: '2', note: 'Test two quarters.' };

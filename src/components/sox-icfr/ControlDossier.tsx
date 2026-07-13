@@ -10,7 +10,7 @@ import {
 import { useIcfr } from './store';
 import {
   controlConclusion, courtFor, designProgress, discussionsFor, operatingProgress, trackResult,
-  pointResult, stepResult, isControlLocked, isEngagementLocked, sampleSizeGuide,
+  pointResult, stepResult, isControlLocked, isEngagementLocked, sampleSizeGuide, failedItgcs, isItgcDependent,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp } from './parts';
 import { Pill } from '../shared/StatusBadge';
@@ -512,13 +512,16 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
 
 // ── operating section (TOE) — locked until design effective ───────────────────────
 function OperatingSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { me, setPopulation, setSampling, extendSample, addAttribute, testAllAttributes } = useIcfr();
+  const { eng, me, setPopulation, setSampling, extendSample, addAttribute, testAllAttributes } = useIcfr();
   const o = control.operating; const prog = operatingProgress(control);
   const anyFail = o.steps.some(s => stepResult(s) === 'Fail');
   const allTested = o.steps.length > 0 && o.steps.every(s => stepResult(s) !== 'Not tested');
   const suggestion: TrackConclusion = anyFail ? 'Ineffective' : allTested ? 'Effective' : 'Not tested';
-  // sample size starts at the handbook's frequency-based suggestion, not a flat 25
-  const guide = sampleSizeGuide(control);
+  // sample size starts at the handbook's frequency-based suggestion, not a flat 25;
+  // a failed ITGC invalidates "test of one" for automated controls
+  const itgcFails = failedItgcs(eng);
+  const itgcHolds = itgcFails.length === 0;
+  const guide = sampleSizeGuide(control, itgcHolds);
   const [sampleSize, setSampleSize] = useState(guide.suggested);
   const [uploading, setUploading] = useState(false);
   const [drawing, setDrawing] = useState(false);
@@ -544,6 +547,17 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
 
   return (
     <div className="p-5">
+      {/* ITGC cascade — a failed ITGC invalidates test-of-one for this control */}
+      {!itgcHolds && isItgcDependent(control) && (
+        <div className="mb-5 rounded-xl border border-high-200 bg-high-50/50 px-4 py-3 flex items-start gap-2.5">
+          <AlertTriangle size={15} className="text-high-700 shrink-0 mt-0.5" />
+          <div>
+            <div className="text-[12.5px] font-semibold text-ink-800">ITGC failure in force — {itgcFails.map(c => c.wpRef).join(', ')} concluded ineffective</div>
+            <div className="text-[11.5px] text-ink-500">This {control.nature === 'Automated' ? 'automated' : 'IT-dependent'} control can't rely on “test of one” or benchmarking until the ITGC is remediated — test it like a manual control.</div>
+          </div>
+        </div>
+      )}
+
       {/* optional sampling context */}
       {o.method === 'Manual' && (
         <div className="mb-5 grid grid-cols-2 gap-3">
