@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useIcfr } from './store';
 import {
-  controlConclusion, courtFor, designProgress, designStarted, engagementProgress, openDiscussionCount,
+  controlConclusion, courtFor, designProgress, designStarted, engagementProgress, isEngagementLocked, openDiscussionCount,
   operatingProgress, operatingStarted, trackResult,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
@@ -142,14 +142,14 @@ export default function ControlRegister() {
         </div>
         <div className="flex items-center gap-1.5">
           <button onClick={() => downloadIcfrWorkingPaper(eng)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>
-          {role === 'auditor' && (
+          {role === 'auditor' && !isEngagementLocked(eng) && (
             <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
               title={sel.size ? `Bulk test the ${sel.size} selected controls` : 'Bulk test all controls in view'}
               className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
               <FlaskConical size={14} /> {sel.size > 0 ? <>Bulk test <span className="tabular-nums text-brand-700">({sel.size})</span></> : <>Bulk test all <span className="tabular-nums text-ink-400">({filtered.length})</span></>}
             </button>
           )}
-          {role === 'auditor' && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
+          {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
         </div>
       </div>
 

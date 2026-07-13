@@ -51,6 +51,16 @@ export function controlConclusion(c: Control): Conclusion {
   return designStarted(c) || operatingStarted(c) ? 'In progress' : 'Not started';
 }
 
+// ─── Locks — a concluded control is frozen until reopened with a reason ──────────
+export function isControlLocked(c: Control): boolean {
+  const concl = controlConclusion(c);
+  return concl === 'Effective' || concl === 'Ineffective';
+}
+// A countersigned engagement is locked for good — no edits, no reopen.
+export function isEngagementLocked(eng: IcfrEngagement): boolean {
+  return !!(eng.signoff.preparer && eng.signoff.reviewer);
+}
+
 // ─── Track progress ──────────────────────────────────────────────────────────────
 
 import type { DesignPoint, OperatingStep, TestResult, ValidationQA, ValidationTable } from './types';

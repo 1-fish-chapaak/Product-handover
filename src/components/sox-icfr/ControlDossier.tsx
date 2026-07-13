@@ -10,7 +10,7 @@ import {
 import { useIcfr } from './store';
 import {
   controlConclusion, courtFor, designProgress, discussionsFor, operatingProgress, trackResult,
-  pointResult, stepResult,
+  pointResult, stepResult, isControlLocked, isEngagementLocked,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp } from './parts';
 import { Pill } from '../shared/StatusBadge';
@@ -738,12 +738,48 @@ function ActivityRail({ control }: { control: Control }) {
 }
 
 // ── the dossier ──────────────────────────────────────────────────────────────────
+// The freeze notice on a concluded control. Reopening is the auditor's move,
+// needs a reason, and lands in the activity trail; a countersigned engagement
+// is final — no way back in.
+function LockBanner({ engLocked, role, onReopen }: { engLocked: boolean; role: Role; onReopen: (reason: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  return (
+    <div className="mb-5 rounded-xl border border-mitigated-200 bg-mitigated-50/40 px-4 py-3">
+      <div className="flex items-center gap-2.5 flex-wrap">
+        <Lock size={14} className="text-mitigated-700 shrink-0" />
+        <span className="text-[12.5px] font-semibold text-ink-800">
+          {engLocked ? 'Engagement concluded — locked for good.' : 'Concluded — this control is locked.'}
+        </span>
+        <span className="text-[12px] text-ink-500">
+          {engLocked ? 'Signed and countersigned; the record is final.' : 'Results and evidence are frozen.'}
+        </span>
+        {!engLocked && role === 'auditor' && !open && (
+          <button onClick={() => setOpen(true)} className="ml-auto h-8 px-3 rounded-lg border border-mitigated-300 text-mitigated-700 text-[12px] font-semibold hover:bg-mitigated-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen control</button>
+        )}
+      </div>
+      {open && (
+        <div className="flex items-center gap-2 mt-2.5">
+          <input autoFocus value={reason} onChange={e => setReason(e.target.value)} placeholder="Why is this being reopened? — recorded in the activity trail"
+            className="h-9 flex-1 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+          <button disabled={!reason.trim()} onClick={() => onReopen(reason.trim())}
+            className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[12px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Reopen</button>
+          <button onClick={() => { setOpen(false); setReason(''); }} className="h-9 px-3 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Cancel</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ControlDossier() {
-  const { eng, role, selectedControlId, back, setView } = useIcfr();
+  const { eng, role, selectedControlId, back, setView, reopenControl } = useIcfr();
   const control = eng.controls.find(c => c.id === selectedControlId);
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Back to register</button></div>;
-  // Both personas can now execute TOD and TOE; the shared trail records who did what.
-  const canEdit = role === 'auditor' || role === 'risk-owner';
+  // Both personas can execute TOD and TOE — until the control concludes. A concluded
+  // control (or a countersigned engagement) is frozen; reopening requires a reason.
+  const engLocked = isEngagementLocked(eng);
+  const controlLocked = isControlLocked(control);
+  const canEdit = (role === 'auditor' || role === 'risk-owner') && !controlLocked && !engLocked;
   const concl = controlConclusion(control);
   const designResult = trackResult(control.design);
   const opResult = trackResult(control.operating);
@@ -791,6 +827,10 @@ export default function ControlDossier() {
           </div>
         </div>
       </motion.div>
+
+      {(controlLocked || engLocked) && (
+        <LockBanner engLocked={engLocked} role={role} onReopen={reason => reopenControl(control.id, reason)} />
+      )}
 
       {/* stepper + discussion */}
       <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">

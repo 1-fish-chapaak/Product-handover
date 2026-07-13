@@ -262,7 +262,7 @@ export interface MaterialityRules {
 // so the auditor and the risk owner each see what the other ran on a control, and when.
 export type ExecKind =
   | 'validate' | 'test-all' | 'pull-run' | 'attest' | 'conclude'
-  | 'override' | 'request-docs' | 'receive-doc' | 'population' | 'sample';
+  | 'override' | 'request-docs' | 'receive-doc' | 'population' | 'sample' | 'reopen';
 export interface ExecutionEvent {
   id: string;
   controlId: string;

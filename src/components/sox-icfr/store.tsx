@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { requiredDatasetsFor, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { icfrConclusion, validationQA, validationSummary, validationTable } from './helpers';
+import { icfrConclusion, isControlLocked, isEngagementLocked, validationQA, validationSummary, validationTable } from './helpers';
 import type {
   Assertion, Attestation, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
   EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -114,6 +114,8 @@ interface IcfrCtx {
   // create control + engagement-level sign-off
   addControl: (draft: NewControlDraft) => string;
   signOffEngagement: (step: 'preparer' | 'reviewer') => void;
+  // unlock a concluded control — auditor only, reason required, logged in the trail
+  reopenControl: (controlId: string, reason: string) => void;
 }
 
 const Ctx = createContext<IcfrCtx | null>(null);
@@ -139,8 +141,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
 
   const me = `You · ${ROLE_LABEL[role]}`;
 
+  // Every control mutation flows through here — a concluded control (or a
+  // countersigned engagement) is frozen; reopenControl below is the only way back in.
   const patchControl = useCallback((controlId: string, fn: (c: Control) => Control) => {
-    setEng(prev => ({ ...prev, controls: prev.controls.map(c => (c.id === controlId ? fn(c) : c)) }));
+    setEng(prev => {
+      const target = prev.controls.find(c => c.id === controlId);
+      if (!target || isEngagementLocked(prev) || isControlLocked(target)) return prev;
+      return { ...prev, controls: prev.controls.map(c => (c.id === controlId ? fn(c) : c)) };
+    });
   }, []);
 
   // Append one execution to the shared trail. `make` runs against fresh post-action
@@ -403,7 +411,13 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // then conclude each track from its results. One trail entry per control.
   const bulkTestControls = useCallback<IcfrCtx['bulkTestControls']>((controlIds) => {
     setEng(prev => {
-      const ids = new Set(controlIds);
+      if (isEngagementLocked(prev)) return prev;
+      // concluded controls are frozen — a bulk run silently skips them
+      const ids = new Set(controlIds.filter(id => {
+        const c = prev.controls.find(x => x.id === id);
+        return c && !isControlLocked(c);
+      }));
+      if (!ids.size) return prev;
       const execs: ExecutionEvent[] = [];
       const controls = prev.controls.map(c => {
         if (!ids.has(c.id)) return c;
@@ -502,33 +516,59 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [me, role]);
 
   const updateDeficiency = useCallback<IcfrCtx['updateDeficiency']>((id, patch) => {
-    setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => (d.id === id ? { ...d, ...patch } : d)) }));
+    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => (d.id === id ? { ...d, ...patch } : d)) }));
   }, []);
   const updateRules = useCallback<IcfrCtx['updateRules']>((patch) => {
-    setEng(prev => ({ ...prev, rules: { ...prev.rules, ...patch } }));
+    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, rules: { ...prev.rules, ...patch } }));
   }, []);
   const updateMateriality = useCallback<IcfrCtx['updateMateriality']>((patch) => {
-    setEng(prev => ({ ...prev, ...patch }));
+    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, ...patch }));
   }, []);
   const setExceptionStatus = useCallback<IcfrCtx['setExceptionStatus']>((id, status) => {
-    setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, status } : d) }));
+    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, status } : d) }));
   }, []);
   // A passed retest never closes itself — it parks at 'Awaiting reviewer'.
   const recordRetest = useCallback<IcfrCtx['recordRetest']>((id, result) => {
-    setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, retest: { result, at: 'just now', by: me }, status: result === 'Pass' ? 'Awaiting reviewer' : 'Remediation', remediation: { ...d.remediation, status: result === 'Pass' ? 'Done' : d.remediation.status } } : d) }));
+    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, retest: { result, at: 'just now', by: me }, status: result === 'Pass' ? 'Awaiting reviewer' : 'Remediation', remediation: { ...d.remediation, status: result === 'Pass' ? 'Done' : d.remediation.status } } : d) }));
   }, [me]);
   // Four-eyes: only the reviewer hat closes, and never the person who ran the retest.
   const signOffException = useCallback<IcfrCtx['signOffException']>((id) => {
-    setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => {
+    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => {
       if (d.id !== id) return d;
       if (role !== 'reviewer' || (d.retest && d.retest.by === me)) return d;
       return { ...d, signoff: { by: me, at: 'just now' }, status: 'Closed' };
     }) }));
   }, [me, role]);
 
+  // The only way back into a concluded control: the auditor reopens it with a
+  // reason. Results stay; both tracks' conclusions clear; the trail records why.
+  const reopenControl = useCallback<IcfrCtx['reopenControl']>((controlId, reason) => {
+    if (role !== 'auditor') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.controls.find(c => c.id === controlId);
+      if (!target || !isControlLocked(target)) return prev;
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId, track: 'design', kind: 'reopen',
+        verb: 'reopened the control', target: reason ? short(reason, 80) : undefined,
+        by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        controls: prev.controls.map(c => c.id === controlId ? {
+          ...c,
+          design: { ...c.design, conclusion: 'Not tested', override: undefined, testedBy: null, testedAt: null },
+          operating: { ...c.operating, conclusion: 'Not tested', override: undefined, testedBy: null, testedAt: null },
+        } : c),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
   // Create a control from the focused form — W/P ref and ID continue the
   // process's existing numbering; the control lands ready to test.
   const addControl = useCallback<IcfrCtx['addControl']>((draft) => {
+    if (isEngagementLocked(eng)) return '';
     const inProc = eng.controls.filter(c => c.process === draft.process);
     const wpPrefix = inProc[0]?.wpRef.split('-')[0]
       ?? (draft.process.split(/\s+/).map(w => w[0]?.toUpperCase() ?? '').join('').slice(0, 2) || 'C');
@@ -559,7 +599,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     };
     setEng(prev => ({ ...prev, controls: [...prev.controls, control] }));
     return id;
-  }, [eng.controls]);
+  }, [eng]);
 
   // Preparer signs first, reviewer countersigns — names come from the engagement record.
   // Each signature stamps the ICFR conclusion as of that moment: open MW ⇒ not effective.
@@ -586,8 +626,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException,
-    addControl, signOffEngagement,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, addControl, signOffEngagement]);
+    addControl, signOffEngagement, reopenControl,
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, addControl, signOffEngagement, reopenControl]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
