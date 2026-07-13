@@ -261,12 +261,17 @@ export function DeficienciesView() {
         </div>
       </div>
 
-      {/* aggregation */}
+      {/* aggregation — clearly-trivial items are logged but never aggregated (5% rule) */}
       {rules.aggregate && (() => {
         const LRANK: Record<string, number> = { Remote: 0, 'Reasonably possible': 1, Probable: 2 };
         const LBYR = ['Remote', 'Reasonably possible', 'Probable'] as const;
         const groups = new Map<string, typeof eng.deficiencies>();
-        eng.deficiencies.forEach(d => { const k = d.aggregationGroup ?? 'Ungrouped'; groups.set(k, [...(groups.get(k) ?? []), d]); });
+        const trivialByGroup = new Map<string, number>();
+        eng.deficiencies.forEach(d => {
+          const k = d.aggregationGroup ?? 'Ungrouped';
+          if (isClearlyTrivial(d.magnitude, rules)) { trivialByGroup.set(k, (trivialByGroup.get(k) ?? 0) + 1); return; }
+          groups.set(k, [...(groups.get(k) ?? []), d]);
+        });
         const agg = Array.from(groups.entries()).filter(([, ds]) => ds.length > 1);
         if (!agg.length) return null;
         return (
@@ -276,9 +281,13 @@ export function DeficienciesView() {
               const sum = ds.reduce((n, d) => n + d.magnitude, 0);
               const lk = LBYR[Math.max(...ds.map(d => LRANK[d.likelihood] ?? 0))]!;
               const mw = Array.from(new Set(ds.flatMap(d => d.mwIndicators)));
+              const trivial = trivialByGroup.get(group) ?? 0;
               return (
                 <div key={group} className="rounded-xl border border-mitigated-200 bg-mitigated-50/30 px-4 py-3 flex items-center justify-between gap-3">
-                  <div className="text-[12.5px] text-ink-700"><span className="font-semibold">{group}</span> · {ds.length} deficiencies · combined {fmt(sum)} (vs {fmt(M)})</div>
+                  <div className="text-[12.5px] text-ink-700">
+                    <span className="font-semibold">{group}</span> · {ds.length} deficiencies · combined {fmt(sum)} (vs {fmt(M)})
+                    {trivial > 0 && <span className="text-ink-400"> · {trivial} clearly-trivial logged, not aggregated</span>}
+                  </div>
                   <SeverityPill s={computeSeverity(lk, sum, M, mw, rules.sdBandPct / 100)} />
                 </div>
               );
