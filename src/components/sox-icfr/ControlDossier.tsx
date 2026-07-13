@@ -512,7 +512,7 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
 
 // ── operating section (TOE) — locked until design effective ───────────────────────
 function OperatingSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { eng, me, setPopulation, setSampling, extendSample, addAttribute, testAllAttributes } = useIcfr();
+  const { eng, me, setPopulation, validateIpe, setSampling, extendSample, addAttribute, testAllAttributes } = useIcfr();
   const o = control.operating; const prog = operatingProgress(control);
   const anyFail = o.steps.some(s => stepResult(s) === 'Fail');
   const allTested = o.steps.length > 0 && o.steps.every(s => stepResult(s) !== 'Not tested');
@@ -564,7 +564,19 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
           <div className="subcard p-3.5">
             <div className="text-[11.5px] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><Upload size={12} /> Population <span className="font-normal text-ink-400">· optional</span></div>
             {o.population ? (
-              <div className="text-[12px] text-ink-700"><div className="font-semibold tabular-nums text-[15px] text-ink-900">{o.population.count.toLocaleString()}</div><div className="text-[11px] text-ink-400">{o.population.source}</div><div className="text-[11px] text-compliant-700 mt-0.5 inline-flex items-center gap-1"><CheckCircle2 size={11} /> {o.population.tieOut}</div></div>
+              <div className="text-[12px] text-ink-700">
+                <div className="font-semibold tabular-nums text-[15px] text-ink-900">{o.population.count.toLocaleString()}</div>
+                <div className="text-[11px] text-ink-400">{o.population.source}</div>
+                <div className="text-[11px] text-compliant-700 mt-0.5 inline-flex items-center gap-1"><CheckCircle2 size={11} /> {o.population.tieOut}</div>
+                {o.population.ipeValidated ? (
+                  <div className="text-[11px] text-compliant-700 mt-0.5 inline-flex items-center gap-1"><ShieldCheck size={11} /> IPE validated · {o.population.ipeValidated.by} · {o.population.ipeValidated.at}</div>
+                ) : (
+                  <div className="mt-1.5">
+                    <div className="text-[10.5px] text-mitigated-700 inline-flex items-center gap-1"><AlertTriangle size={10} /> IPE not validated — confirm the report's completeness &amp; accuracy before relying on it.</div>
+                    {canEdit && <button onClick={() => validateIpe(control.id)} className="mt-1 h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[11px] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer inline-flex items-center gap-1"><ShieldCheck size={11} /> Validate IPE</button>}
+                  </div>
+                )}
+              </div>
             ) : canEdit ? <button disabled={uploading} onClick={uploadPop} className="h-9 px-3 text-[12px] font-semibold rounded-lg border border-dashed border-canvas-border text-ink-600 enabled:hover:text-brand-700 enabled:hover:border-brand-300 inline-flex items-center gap-1.5 cursor-pointer w-full justify-center disabled:opacity-70">{uploading ? <><Loader2 size={13} className="animate-spin" /> Uploading…</> : <><Upload size={13} /> Upload population</>}</button> : <span className="text-[11.5px] text-ink-400">Not uploaded</span>}
           </div>
           <div className="subcard p-3.5">
@@ -576,7 +588,9 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
                 <>
                   <div className="flex items-center gap-2">
                     <input type="number" min={1} max={60} value={sampleSize} onChange={e => setSampleSize(Math.max(1, +e.target.value || 1))} className="h-9 w-16 px-2 rounded-lg border border-canvas-border text-[12.5px] focus:outline-none focus:ring-2 focus:ring-brand-200" />
-                    <button disabled={!o.population} onClick={drawSample} className="h-9 px-3 text-[12px] font-semibold rounded-lg border border-canvas-border bg-canvas-elevated text-ink-600 enabled:hover:text-brand-700 enabled:hover:border-brand-300 disabled:opacity-40 inline-flex items-center gap-1.5 cursor-pointer"><FlaskConical size={13} /> Draw</button>
+                    <button disabled={!o.population || !o.population.ipeValidated} onClick={drawSample}
+                      title={!o.population ? 'Upload the population first' : !o.population.ipeValidated ? 'Validate the IPE before drawing from it' : 'Draw the sample'}
+                      className="h-9 px-3 text-[12px] font-semibold rounded-lg border border-canvas-border bg-canvas-elevated text-ink-600 enabled:hover:text-brand-700 enabled:hover:border-brand-300 disabled:opacity-40 inline-flex items-center gap-1.5 cursor-pointer"><FlaskConical size={13} /> Draw</button>
                   </div>
                   <p className={cn('text-[10.5px] mt-1.5', sampleSize === guide.suggested ? 'text-ink-400' : 'text-mitigated-700')}>
                     {sampleSize === guide.suggested

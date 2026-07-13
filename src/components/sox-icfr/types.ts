@@ -140,6 +140,9 @@ export interface Population {
   count: number;
   tieOut: string;
   evidence: EvidenceFile[];
+  // IPE check — a system report must itself be validated (completeness against
+  // the GL tie-out, accuracy spot-check) before anything is sampled from it.
+  ipeValidated?: { by: string; at: string };
 }
 export interface OperatingTrack {
   method: OperatingMethod;        // dominant evidence mode — informational; each attribute is evidenced independently
