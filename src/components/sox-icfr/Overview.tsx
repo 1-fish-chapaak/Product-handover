@@ -9,6 +9,7 @@ import {
 } from './helpers';
 import { cn } from '../../lib/cn';
 import RiskOwnerPortal from './RiskOwnerPortal';
+import ReviewerQueue from './ReviewerQueue';
 import type { Control, Severity, TaskType } from './types';
 
 const fmt = (n: number) => formatINR(n);
@@ -110,6 +111,9 @@ export default function Overview() {
         </section>
       )}
 
+      {/* Reviewer's desk — only the reviewer hat sees it; the other two get nothing extra. */}
+      {role === 'reviewer' && <ReviewerQueue />}
+
       {/* progress rail */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {tiles.map(s => (
@@ -184,7 +188,7 @@ export default function Overview() {
       </div>
 
       {/* engagement sign-off — the closure moment; unlocks when every control is concluded */}
-      <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
+      <section id="eng-signoff" className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0 flex-1">
             <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><PenLine size={15} className="text-brand-600" /> Engagement sign-off</h2>
@@ -216,26 +220,27 @@ export default function Overview() {
             </div>
           </div>
           <div className="flex flex-col gap-1.5 items-end shrink-0">
+            {/* each signature belongs to one hat: auditor prepares, reviewer countersigns */}
             {so.preparer ? (
               <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Prepared — {so.preparer.by} <span className="text-ink-400 font-medium">· {so.preparer.at}</span></span>
-            ) : isOwner ? (
-              <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Awaiting preparer — {eng.preparer}</span>
-            ) : (
+            ) : role === 'auditor' ? (
               <button onClick={signPreparer} disabled={!signoffReady} title={signoffReady ? `Sign off as ${eng.preparer}` : 'Every control must be concluded first'}
                 className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
                 <PenLine size={14} /> Sign off as preparer
               </button>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Awaiting preparer — {eng.preparer}</span>
             )}
             {so.reviewer ? (
               <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Reviewed — {so.reviewer.by} <span className="text-ink-400 font-medium">· {so.reviewer.at}</span></span>
             ) : so.preparer ? (
-              isOwner ? (
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Awaiting reviewer — {eng.reviewer}</span>
-              ) : (
+              role === 'reviewer' ? (
                 <button onClick={signReviewer} title={`Countersign as ${eng.reviewer}`}
                   className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700 text-[12.5px] font-semibold hover:bg-brand-100 transition-colors cursor-pointer">
                   <PenLine size={14} /> Countersign as reviewer
                 </button>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Awaiting reviewer — {eng.reviewer}</span>
               )
             ) : (
               <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Then: reviewer countersign — {eng.reviewer}</span>
