@@ -108,15 +108,15 @@ export default function RelationshipManagerModal({
       <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]" />
       <motion.div
         initial={{ opacity: 0, scale: 0.97, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 12 }}
-        className="relative bg-white rounded-[16px] shadow-2xl w-[640px] max-w-[94vw] max-h-[86vh] flex flex-col overflow-hidden"
+        className="relative bg-white rounded-xl shadow-2xl w-[640px] max-w-[94vw] max-h-[86vh] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <header className="shrink-0 px-5 py-3.5 border-b border-border-light flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-[8px] bg-primary/10 text-primary flex items-center justify-center"><Link2 size={15} /></div>
+            <div className="w-8 h-8 rounded-md bg-primary/10 text-primary flex items-center justify-center"><Link2 size={15} /></div>
             <div>
-              <h3 className="text-[14px] font-semibold text-text">Table relationships</h3>
-              <p className="text-[11.5px] text-text-muted">Connect tables so a single widget can combine fields from several of them.</p>
+              <h3 className="text-[0.875rem] font-semibold text-text">Table relationships</h3>
+              <p className="text-[0.71875rem] text-text-muted">Connect tables so a single widget can combine fields from several of them.</p>
             </div>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full text-text-muted hover:text-text hover:bg-paper-50 flex items-center justify-center cursor-pointer"><X size={16} /></button>
@@ -126,32 +126,32 @@ export default function RelationshipManagerModal({
           {view === 'list' && (
             <div className="p-5">
               <div className="flex items-center justify-between gap-2 mb-3">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{relationships.length} connection{relationships.length === 1 ? '' : 's'}</span>
+                <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-text-muted">{relationships.length} connection{relationships.length === 1 ? '' : 's'}</span>
                 <div className="flex items-center gap-2">
-                  <button onClick={runAutoDetect} disabled={detecting} className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-[8px] hover:bg-primary-xlight/70 cursor-pointer disabled:opacity-60">
+                  <button onClick={runAutoDetect} disabled={detecting} className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-primary bg-primary-xlight border border-primary/15 rounded-md hover:bg-primary-xlight/70 cursor-pointer disabled:opacity-60">
                     {detecting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Auto-detect
                   </button>
-                  <button onClick={() => { setEditing(undefined); setView('editor'); }} className="inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold text-white bg-primary hover:bg-primary-hover rounded-[8px] cursor-pointer"><Plus size={13} /> New connection</button>
+                  <button onClick={() => { setEditing(undefined); setView('editor'); }} className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-white bg-primary hover:bg-primary-hover rounded-md cursor-pointer"><Plus size={13} /> New connection</button>
                 </div>
               </div>
 
               {relationships.length === 0 ? (
-                <div className="border border-dashed border-border-light rounded-[12px] p-8 text-center">
+                <div className="border border-dashed border-border-light rounded-lg p-8 text-center">
                   <Link2 size={20} className="text-text-muted/50 mx-auto mb-2" />
-                  <p className="text-[12.5px] font-semibold text-text">No connections yet</p>
-                  <p className="text-[11.5px] text-text-muted mt-1">Use Auto-detect to find matching columns, or create one manually.</p>
+                  <p className="text-[0.78125rem] font-semibold text-text">No connections yet</p>
+                  <p className="text-[0.71875rem] text-text-muted mt-1">Use Auto-detect to find matching columns, or create one manually.</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {relationships.map(rel => (
-                    <div key={rel.id} className="border border-border-light rounded-[10px] px-3.5 py-2.5 flex items-center gap-3">
+                    <div key={rel.id} className="border border-border-light rounded-lg px-3.5 py-2.5 flex items-center gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 text-[12.5px] text-text flex-wrap">
+                        <div className="flex items-center gap-2 text-[0.78125rem] text-text flex-wrap">
                           <span className="font-semibold">{tname(rel.leftTable)}</span>
                           <ArrowLeftRight size={12} className="text-text-muted shrink-0" />
                           <span className="font-semibold">{tname(rel.rightTable)}</span>
                         </div>
-                        <div className="text-[11px] text-text-muted mt-0.5">
+                        <div className="text-[0.6875rem] text-text-muted mt-0.5">
                           {rel.columnPairs.map((p, i) => (
                             <span key={i}>{i > 0 ? ' · ' : ''}{clabel(rel.leftTable, p.left)} = {clabel(rel.rightTable, p.right)}</span>
                           ))}
@@ -160,7 +160,7 @@ export default function RelationshipManagerModal({
                       <button
                         onClick={() => setActive(rel, !rel.active)}
                         title={rel.active ? 'Active — used when combining these tables. Click to deactivate.' : 'Inactive. Click to make this the active connection.'}
-                        className={`shrink-0 inline-flex items-center h-6 px-2.5 text-[10.5px] font-semibold rounded-full cursor-pointer transition-colors ${rel.active ? 'bg-compliant-50 text-compliant-700' : 'bg-[#EEEEF1] text-ink-600 hover:bg-paper-50'}`}
+                        className={`shrink-0 inline-flex items-center h-6 px-2.5 text-[0.65625rem] font-semibold rounded-full cursor-pointer transition-colors ${rel.active ? 'bg-compliant-50 text-compliant-700' : 'bg-[#EEEEF1] text-ink-600 hover:bg-paper-50'}`}
                       >
                         {rel.active ? 'Active' : 'Inactive'}
                       </button>
@@ -186,20 +186,20 @@ export default function RelationshipManagerModal({
         <AnimatePresence>
           {deleteTarget && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 flex items-center justify-center p-4 bg-white/70 backdrop-blur-[1px]">
-              <div className="bg-white border border-border-light rounded-[14px] shadow-xl w-[380px] p-5">
+              <div className="bg-white border border-border-light rounded-lg shadow-xl w-[380px] p-5">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-8 h-8 rounded-full bg-risk-50 text-risk-700 flex items-center justify-center"><AlertTriangle size={15} /></div>
-                  <h4 className="text-[14px] font-semibold text-text">Remove this connection?</h4>
+                  <h4 className="text-[0.875rem] font-semibold text-text">Remove this connection?</h4>
                 </div>
-                <p className="text-[12.5px] text-text-secondary leading-relaxed mb-2">
+                <p className="text-[0.78125rem] text-text-secondary leading-relaxed mb-2">
                   {affectedByTarget.length} widget{affectedByTarget.length === 1 ? '' : 's'} combine these tables and will need attention:
                 </p>
                 <ul className="mb-4 space-y-1">
-                  {affectedByTarget.slice(0, 5).map((w, i) => <li key={i} className="text-[12px] text-text flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-text-muted" /> {w.title}</li>)}
+                  {affectedByTarget.slice(0, 5).map((w, i) => <li key={i} className="text-[0.75rem] text-text flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-text-muted" /> {w.title}</li>)}
                 </ul>
                 <div className="flex items-center justify-end gap-2">
-                  <button onClick={() => setDeleteTarget(null)} className="h-9 px-4 text-[12.5px] font-medium text-text bg-white border border-border-light rounded-[8px] hover:bg-paper-50 cursor-pointer">Cancel</button>
-                  <button onClick={() => doDelete(deleteTarget)} className="h-9 px-4 text-[12.5px] font-semibold text-white bg-risk hover:bg-risk-700 rounded-[8px] cursor-pointer">Remove anyway</button>
+                  <button onClick={() => setDeleteTarget(null)} className="h-9 px-4 text-[0.78125rem] font-medium text-text bg-white border border-border-light rounded-md hover:bg-paper-50 cursor-pointer">Cancel</button>
+                  <button onClick={() => doDelete(deleteTarget)} className="h-9 px-4 text-[0.78125rem] font-semibold text-white bg-risk hover:bg-risk-700 rounded-md cursor-pointer">Remove anyway</button>
                 </div>
               </div>
             </motion.div>

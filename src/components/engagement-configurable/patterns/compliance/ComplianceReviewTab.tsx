@@ -61,7 +61,7 @@ export default function ComplianceReviewTab({ engagement, complianceState, onUpd
   if (testItems.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <AlertCircle size={24} className="text-gray-300 mb-3" />
+        <AlertCircle size={24} className="text-ink-300 mb-3" />
         <h4 className="text-[0.875rem] font-semibold text-text mb-1">Review</h4>
         <p className="text-[0.75rem] text-text-muted mb-4">Prepare samples and complete attribute testing before review.</p>
         <button onClick={() => onNavigateTab?.('samples-evidence')}
@@ -104,7 +104,7 @@ export default function ComplianceReviewTab({ engagement, complianceState, onUpd
           const r = getOrCreateControlReview(reviewState, c.id);
           return (
             <button key={c.id} onClick={() => { setSelectedControlId(c.id); setReviewComments(''); }}
-              className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold cursor-pointer transition-colors ${selectedControlId === c.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+              className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold cursor-pointer transition-colors ${selectedControlId === c.id ? 'bg-primary text-white' : 'bg-canvas text-ink-500 hover:bg-canvas-border'}`}>
               {c.id} {r.status !== 'NOT_SUBMITTED' && <span className="ml-1">({r.status.replace(/_/g, ' ').toLowerCase()})</span>}
             </button>
           );
@@ -155,8 +155,8 @@ export default function ComplianceReviewTab({ engagement, complianceState, onUpd
                   <Icon size={12} className={`shrink-0 mt-0.5 ${ACTION_CLS[h.action]}`} />
                   <div>
                     <span className={`font-semibold ${ACTION_CLS[h.action]}`}>{h.action.replace(/_/g, ' ')}</span>
-                    <span className="text-gray-400 ml-2">by {h.actor} · {h.timestamp}</span>
-                    {h.comments && <p className="text-gray-500 mt-0.5 italic">"{h.comments}"</p>}
+                    <span className="text-ink-400 ml-2">by {h.actor} · {h.timestamp}</span>
+                    {h.comments && <p className="text-ink-500 mt-0.5 italic">"{h.comments}"</p>}
                   </div>
                 </div>
               );
@@ -192,7 +192,7 @@ function NotSubmittedView({ ctrlTestItems, ctrlEvidence, passedSamples, failedSa
           ].map(c => (
             <div key={c.label} className="flex items-center gap-2 text-[0.75rem]">
               {c.ok ? <CheckCircle2 size={11} className="text-emerald-500" /> : <AlertCircle size={11} className="text-amber-400" />}
-              <span className={c.ok ? 'text-gray-500' : 'text-text'}>{c.label}</span>
+              <span className={c.ok ? 'text-ink-500' : 'text-text'}>{c.label}</span>
             </div>
           ))}
         </div>
@@ -216,7 +216,7 @@ function NotSubmittedView({ ctrlTestItems, ctrlEvidence, passedSamples, failedSa
           <div><span className="text-text-muted block text-[0.6875rem]">Test Items</span><span className="text-text font-medium tabular-nums">{ctrlTestItems.length}</span></div>
           <div><span className="text-text-muted block text-[0.6875rem]">Evidence Files</span><span className="text-text font-medium tabular-nums">{ctrlEvidence.length}</span></div>
           <div><span className="text-text-muted block text-[0.6875rem]">Passed Samples</span><span className="text-emerald-600 font-medium tabular-nums">{passedSamples}</span></div>
-          <div><span className="text-text-muted block text-[0.6875rem]">Failed Samples</span><span className={`font-medium tabular-nums ${failedSamples > 0 ? 'text-red-600' : 'text-gray-400'}`}>{failedSamples}</span></div>
+          <div><span className="text-text-muted block text-[0.6875rem]">Failed Samples</span><span className={`font-medium tabular-nums ${failedSamples > 0 ? 'text-red-600' : 'text-ink-400'}`}>{failedSamples}</span></div>
         </div>
       </div>
 
@@ -248,7 +248,7 @@ function PendingReviewView({ review, engagement, reviewerName, isSelfReview, rev
         <div className="flex items-center gap-2 mb-2">
           <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
           <span className="text-[0.8125rem] font-bold text-text">Pending Review</span>
-          <span className="text-[0.75rem] text-gray-400">Submitted {review.submittedAt} by {review.submittedBy}</span>
+          <span className="text-[0.75rem] text-ink-400">Submitted {review.submittedAt} by {review.submittedBy}</span>
         </div>
         <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-50/50 border border-blue-200/50 text-[0.75rem] text-blue-600">
           <Info size={12} className="shrink-0 mt-0.5" />
@@ -263,9 +263,9 @@ function PendingReviewView({ review, engagement, reviewerName, isSelfReview, rev
             <Eye size={11} />View Working Paper
           </button>
         </div>
-        <div className="text-[0.75rem] text-gray-500 mb-3">
+        <div className="text-[0.75rem] text-ink-500 mb-3">
           Assigned reviewer: <span className="text-text font-medium">{engagement.reviewer || 'Audit Lead'}</span>
-          <span className="mx-1.5 text-gray-300">·</span>
+          <span className="mx-1.5 text-ink-300">·</span>
           Acting as: <span className="text-text font-medium">{reviewerName}</span>
         </div>
 
@@ -281,7 +281,7 @@ function PendingReviewView({ review, engagement, reviewerName, isSelfReview, rev
         )}
 
         <div className="mb-3">
-          <label className="text-[0.75rem] font-semibold text-gray-500 block mb-1">Review Comments</label>
+          <label className="text-[0.75rem] font-semibold text-ink-500 block mb-1">Review Comments</label>
           <textarea value={reviewComments} onChange={e => setReviewComments(e.target.value)} rows={3}
             placeholder="Add review comments..."
             disabled={actionsDisabled}
@@ -299,7 +299,7 @@ function PendingReviewView({ review, engagement, reviewerName, isSelfReview, rev
             <RotateCcw size={13} />Reject
           </button>
           {!actionsDisabled && !reviewComments.trim() && (
-            <span className="text-[0.75rem] text-gray-400 italic">Comments required to reject</span>
+            <span className="text-[0.75rem] text-ink-400 italic">Comments required to reject</span>
           )}
         </div>
       </div>

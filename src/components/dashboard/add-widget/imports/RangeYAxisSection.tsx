@@ -20,13 +20,13 @@ export default function RangeYAxisSection({ label = "Range (Y Axis)", yMin, yMax
   const invert = invertRange ?? localInvert;
 
   return (
-    <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm mt-3">
+    <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm mt-3">
       <button
         onClick={() => setRangeOpen(!rangeOpen)}
         className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] hover:to-[#fefefe] transition-all border-b border-[#f0f0f0]"
       >
         <div className="flex items-center gap-2">
-          <div className="size-[18px] rounded-[4px] flex items-center justify-center">
+          <div className="size-[18px] rounded-xs flex items-center justify-center">
             <MoveVertical className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
           </div>
           <span className="text-[0.6875rem] font-bold uppercase tracking-[0.8px] text-[#26064a]">{label}</span>
@@ -46,7 +46,7 @@ export default function RangeYAxisSection({ label = "Range (Y Axis)", yMin, yMax
                 value={minimum}
                 onChange={(e) => { setLocalMin(e.target.value); onYMinChange?.(e.target.value); }}
                 placeholder="Auto"
-                className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-md text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
               />
             </div>
             <div className="flex-1 flex flex-col gap-1.5">
@@ -56,7 +56,7 @@ export default function RangeYAxisSection({ label = "Range (Y Axis)", yMin, yMax
                 value={maximum}
                 onChange={(e) => { setLocalMax(e.target.value); onYMaxChange?.(e.target.value); }}
                 placeholder="Auto"
-                className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-md text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
               />
             </div>
           </div>
@@ -64,7 +64,7 @@ export default function RangeYAxisSection({ label = "Range (Y Axis)", yMin, yMax
             <p className="text-[0.75rem] font-medium text-[#26064a]">Invert Range</p>
             <button
               onClick={() => { setLocalInvert(!invert); onInvertChange?.(!invert); }}
-              className={`relative w-[36px] h-[20px] rounded-[12px] transition-all ${
+              className={`relative w-[36px] h-[20px] rounded-lg transition-all ${
                 invert ? "bg-[#6a12cd]" : "bg-[#e5e7eb]"
               }`}
             >

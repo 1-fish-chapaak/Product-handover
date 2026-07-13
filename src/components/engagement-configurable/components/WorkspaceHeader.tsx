@@ -16,13 +16,13 @@ const PATTERN_LABELS: Record<EngagementPatternType, string> = {
 };
 
 const STATUS_CLS: Record<string, string> = {
-  DRAFT: 'bg-gray-100 text-gray-600',
+  DRAFT: 'bg-canvas text-ink-600',
   PLANNED: 'bg-blue-50 text-blue-700',
   ACTIVE: 'bg-emerald-50 text-emerald-700',
   IN_PROGRESS: 'bg-purple-50 text-purple-700',
   PENDING_REVIEW: 'bg-amber-50 text-amber-700',
   COMPLETED: 'bg-emerald-50 text-emerald-700',
-  CLOSED: 'bg-gray-100 text-gray-500',
+  CLOSED: 'bg-canvas text-ink-500',
   ON_HOLD: 'bg-red-50 text-red-600',
 };
 
@@ -38,7 +38,7 @@ export default function WorkspaceHeader({ engagement, onBack, onEditSetup, backL
   const patternLabel = PATTERN_LABELS[engagement.patternType];
 
   return (
-    <div className="rounded-xl border border-border-light bg-white p-4 mb-4">
+    <div className="rounded-lg border border-border-light bg-white p-4 mb-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3 flex-1 min-w-0">
           <div className="p-2 rounded-lg bg-primary/10 shrink-0">
@@ -53,19 +53,19 @@ export default function WorkspaceHeader({ engagement, onBack, onEditSetup, backL
             </div>
             <div className="flex items-center gap-2 mb-2">
               <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[0.6875rem] font-bold">{engagement.displayLabel}</span>
-              <span className="text-[0.6875rem] text-gray-400">{patternLabel}</span>
-              {engagement.stage && <span className="text-[0.6875rem] text-gray-400">· {engagement.stage}</span>}
+              <span className="text-[0.6875rem] text-ink-400">{patternLabel}</span>
+              {engagement.stage && <span className="text-[0.6875rem] text-ink-400">· {engagement.stage}</span>}
             </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.6875rem] text-gray-500">
-              <span><span className="text-gray-400">Owner:</span> {engagement.owner}</span>
-              {engagement.reviewer && <span><span className="text-gray-400">Reviewer:</span> {engagement.reviewer}</span>}
-              {engagement.businessProcess && <span><span className="text-gray-400">Process:</span> {engagement.businessProcess}</span>}
-              {engagement.entityOrLocation && <span><span className="text-gray-400">Entity:</span> {engagement.entityOrLocation}</span>}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.6875rem] text-ink-500">
+              <span><span className="text-ink-400">Owner:</span> {engagement.owner}</span>
+              {engagement.reviewer && <span><span className="text-ink-400">Reviewer:</span> {engagement.reviewer}</span>}
+              {engagement.businessProcess && <span><span className="text-ink-400">Process:</span> {engagement.businessProcess}</span>}
+              {engagement.entityOrLocation && <span><span className="text-ink-400">Entity:</span> {engagement.entityOrLocation}</span>}
               {engagement.dataPeriodStart && engagement.dataPeriodEnd && (
-                <span><span className="text-gray-400">Data Period:</span> {engagement.dataPeriodStart} to {engagement.dataPeriodEnd}</span>
+                <span><span className="text-ink-400">Data Period:</span> {engagement.dataPeriodStart} to {engagement.dataPeriodEnd}</span>
               )}
               {engagement.plannedStartDate && engagement.plannedEndDate && (
-                <span><span className="text-gray-400">Planned:</span> {engagement.plannedStartDate} to {engagement.plannedEndDate}</span>
+                <span><span className="text-ink-400">Planned:</span> {engagement.plannedStartDate} to {engagement.plannedEndDate}</span>
               )}
             </div>
           </div>

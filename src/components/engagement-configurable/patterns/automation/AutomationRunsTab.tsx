@@ -45,11 +45,11 @@ export default function AutomationRunsTab({ engagement, inputData, setup, runsSt
     return (
       <div className="space-y-4">
         <div><h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Runs</h3><p className="text-[0.75rem] text-text-muted">Execute configured automation and review run history.</p></div>
-        <div className="rounded-xl border-2 border-gray-200 bg-gray-50/30 p-6 text-center space-y-3">
-          <Lock size={28} className="text-gray-300 mx-auto" />
+        <div className="rounded-xl border-2 border-canvas-border bg-canvas/30 p-6 text-center space-y-3">
+          <Lock size={28} className="text-ink-300 mx-auto" />
           <h4 className="text-[0.875rem] font-semibold text-text">Runs Locked</h4>
           <p className="text-[0.75rem] text-text-muted">Configure automation setup before creating runs.</p>
-          <div className="text-[0.6875rem] text-gray-500">Setup status: <span className="font-semibold">{setupStatus.replace(/_/g, ' ')}</span></div>
+          <div className="text-[0.6875rem] text-ink-500">Setup status: <span className="font-semibold">{setupStatus.replace(/_/g, ' ')}</span></div>
           <button onClick={() => onNavigateTab?.('automation-setup')} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors inline-flex items-center gap-1">Go to Automation Setup <ChevronRight size={12} /></button>
         </div>
       </div>
@@ -139,10 +139,10 @@ export default function AutomationRunsTab({ engagement, inputData, setup, runsSt
       {/* Context */}
       <div className="rounded-lg border border-border-light p-3">
         <div className="grid grid-cols-4 gap-3 text-[0.6875rem]">
-          <div><span className="text-gray-400 block text-[0.625rem]">Automation Approach</span><span className="text-text font-medium">{SETUP_MODE_LABELS[setup.setupMode]}</span></div>
-          <div><span className="text-gray-400 block text-[0.625rem]">Workflows</span><span className="text-text font-medium truncate">{isBulk ? `Bulk run available · ${wfNames.length} workflows selected` : wfNames.length === 1 ? '1 workflow selected' : setup.setupMode === 'QA_ADHOC_ANALYSIS' ? 'Q&A / ad-hoc analysis setup' : 'No workflow selected'}</span></div>
-          <div><span className="text-gray-400 block text-[0.625rem]">Input Sources</span><span className="text-text font-medium">{inputData.selectedSourceIds.length} selected</span></div>
-          <div><span className="text-gray-400 block text-[0.625rem]">Run Type</span><span className="text-text font-medium">{cfg.runType.replace(/_/g, ' ')}{cfg.frequency ? ` (${cfg.frequency})` : ''}</span></div>
+          <div><span className="text-ink-400 block text-[0.625rem]">Automation Approach</span><span className="text-text font-medium">{SETUP_MODE_LABELS[setup.setupMode]}</span></div>
+          <div><span className="text-ink-400 block text-[0.625rem]">Workflows</span><span className="text-text font-medium truncate">{isBulk ? `Bulk run available · ${wfNames.length} workflows selected` : wfNames.length === 1 ? '1 workflow selected' : setup.setupMode === 'QA_ADHOC_ANALYSIS' ? 'Q&A / ad-hoc analysis setup' : 'No workflow selected'}</span></div>
+          <div><span className="text-ink-400 block text-[0.625rem]">Input Sources</span><span className="text-text font-medium">{inputData.selectedSourceIds.length} selected</span></div>
+          <div><span className="text-ink-400 block text-[0.625rem]">Run Type</span><span className="text-text font-medium">{cfg.runType.replace(/_/g, ' ')}{cfg.frequency ? ` (${cfg.frequency})` : ''}</span></div>
         </div>
       </div>
 
@@ -158,7 +158,7 @@ export default function AutomationRunsTab({ engagement, inputData, setup, runsSt
         ].map(s => (
           <div key={s.label} className="rounded-lg border border-border-light p-2.5 text-center">
             <div className={`text-[1rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-            <div className="text-[0.5625rem] text-gray-400 font-medium">{s.label}</div>
+            <div className="text-[0.5625rem] text-ink-400 font-medium">{s.label}</div>
           </div>
         ))}
       </div>
@@ -171,10 +171,10 @@ export default function AutomationRunsTab({ engagement, inputData, setup, runsSt
         </div>
         {isBulk && (
           <div className="flex flex-wrap gap-1">
-            {wfNames.map((n, i) => <span key={i} className="px-1.5 py-0.5 rounded bg-gray-100 text-[0.5625rem] text-gray-600">{n}</span>)}
+            {wfNames.map((n, i) => <span key={i} className="px-1.5 py-0.5 rounded bg-canvas text-[0.5625rem] text-ink-600">{n}</span>)}
           </div>
         )}
-        {isWorkflowMode && <p className="text-[0.625rem] text-gray-500">Opens the Workflow Library bulk execution flow scoped to this automation project.</p>}
+        {isWorkflowMode && <p className="text-[0.625rem] text-ink-500">Opens the Workflow Library bulk execution flow scoped to this automation project.</p>}
 
         {isWorkflowMode ? (
           <div className="flex items-center gap-3">
@@ -198,7 +198,7 @@ export default function AutomationRunsTab({ engagement, inputData, setup, runsSt
         <div className="rounded-lg border border-border-light overflow-hidden">
           <div className="px-4 py-2 bg-surface-2/20 border-b border-border-light"><h4 className="text-[0.6875rem] font-bold text-text">Run History ({runsState.runs.length})</h4></div>
           <table className="w-full text-[0.6875rem]">
-            <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.5625rem] font-semibold text-gray-400 uppercase">
+            <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.5625rem] font-semibold text-ink-400 uppercase">
               <th className="px-3 py-1.5 text-left w-5"></th><th className="px-3 py-1.5 text-left">Run</th><th className="px-3 py-1.5 text-center">Type</th><th className="px-3 py-1.5 text-center">Processed</th><th className="px-3 py-1.5 text-center">Status</th><th className="px-3 py-1.5 text-center">Exceptions</th><th className="px-3 py-1.5 text-center">Outputs</th><th className="px-3 py-1.5 text-center">Action</th>
             </tr></thead>
             <tbody>{runsState.runs.map(run => {
@@ -206,13 +206,13 @@ export default function AutomationRunsTab({ engagement, inputData, setup, runsSt
               return (
                 <React.Fragment key={run.id}>
                   <tr className={`border-b border-border-light/50 cursor-pointer hover:bg-surface-2/20 ${isExp ? 'bg-surface-2/20' : ''}`} onClick={() => setExpandedRunId(isExp ? null : run.id)}>
-                    <td className="px-3 py-2 text-gray-400">{isExp ? <ChevronDown size={11} /> : <ChevronRight size={11} />}</td>
-                    <td className="px-3 py-2"><div className="font-medium text-text">{run.runName}</div><div className="text-[0.5625rem] text-gray-400">{run.completedAt || 'Pending'}</div></td>
-                    <td className="px-3 py-2 text-center text-[0.625rem] text-gray-500">{run.bulkRun ? `Bulk (${run.workflowNames?.length || 0})` : run.runType === 'QA_ADHOC' ? 'Q&A' : run.runType === 'DRAFT_WORKFLOW' ? 'Draft WF' : 'Workflow'}</td>
-                    <td className="px-3 py-2 text-center tabular-nums text-gray-500">{run.processedRecords || '—'}</td>
+                    <td className="px-3 py-2 text-ink-400">{isExp ? <ChevronDown size={11} /> : <ChevronRight size={11} />}</td>
+                    <td className="px-3 py-2"><div className="font-medium text-text">{run.runName}</div><div className="text-[0.5625rem] text-ink-400">{run.completedAt || 'Pending'}</div></td>
+                    <td className="px-3 py-2 text-center text-[0.625rem] text-ink-500">{run.bulkRun ? `Bulk (${run.workflowNames?.length || 0})` : run.runType === 'QA_ADHOC' ? 'Q&A' : run.runType === 'DRAFT_WORKFLOW' ? 'Draft WF' : 'Workflow'}</td>
+                    <td className="px-3 py-2 text-center tabular-nums text-ink-500">{run.processedRecords || '—'}</td>
                     <td className="px-3 py-2 text-center"><span className={`px-2 py-0.5 rounded-full text-[0.5rem] font-bold ${RUN_STATUS_CLS[run.status]}`}>{run.status}</span></td>
-                    <td className="px-3 py-2 text-center"><span className={`tabular-nums ${run.exceptionCount > 0 ? 'text-amber-600 font-medium' : 'text-gray-400'}`}>{run.exceptionCount}</span></td>
-                    <td className="px-3 py-2 text-center tabular-nums text-gray-500">{run.outputCount}</td>
+                    <td className="px-3 py-2 text-center"><span className={`tabular-nums ${run.exceptionCount > 0 ? 'text-amber-600 font-medium' : 'text-ink-400'}`}>{run.exceptionCount}</span></td>
+                    <td className="px-3 py-2 text-center tabular-nums text-ink-500">{run.outputCount}</td>
                     <td className="px-3 py-2 text-center" onClick={e => e.stopPropagation()}>
                       {run.status === 'READY' && <button onClick={() => handleExecuteRun(run.id)} className="flex items-center gap-1 px-2 py-1 rounded text-[0.5625rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors mx-auto"><Play size={9} />Run Now</button>}
                       {run.status === 'COMPLETED' && <span className="text-[0.5625rem] text-emerald-600">Done</span>}
@@ -234,7 +234,7 @@ export default function AutomationRunsTab({ engagement, inputData, setup, runsSt
       <div className="rounded-lg border border-border-light p-4 space-y-2">
         <div className="flex items-center justify-between">
           <h4 className="text-[0.6875rem] font-bold text-text">Output Readiness</h4>
-          <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-bold ${hasCompleted && hasOutputs ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{hasCompleted && hasOutputs ? 'Ready' : 'Pending'}</span>
+          <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-bold ${hasCompleted && hasOutputs ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-ink-500'}`}>{hasCompleted && hasOutputs ? 'Ready' : 'Pending'}</span>
         </div>
         <div className="space-y-1">
           {[
@@ -244,7 +244,7 @@ export default function AutomationRunsTab({ engagement, inputData, setup, runsSt
           ].map(c => (
             <div key={c.label} className="flex items-center gap-2 text-[0.625rem]">
               {c.ok ? <CheckCircle2 size={10} className="text-emerald-500" /> : <AlertCircle size={10} className="text-amber-400" />}
-              <span className={c.ok ? 'text-gray-500' : 'text-text'}>{c.label}</span>
+              <span className={c.ok ? 'text-ink-500' : 'text-text'}>{c.label}</span>
             </div>
           ))}
         </div>
@@ -273,32 +273,32 @@ export default function AutomationRunsTab({ engagement, inputData, setup, runsSt
 function RunDetail({ run, onUpdateException }: { run: AutomationRun; onUpdateException: (exId: string, status: ExceptionStatus) => void }) {
   return (
     <div className="bg-surface-2/15 border-b border-border-light px-6 py-4 space-y-3">
-      <div><h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Summary</h6><p className="text-[0.6875rem] text-text">{run.summary}</p></div>
+      <div><h6 className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">Summary</h6><p className="text-[0.6875rem] text-text">{run.summary}</p></div>
       <div className="grid grid-cols-4 gap-3 text-[0.625rem]">
-        <div><span className="text-gray-400 block text-[0.5625rem]">Processed</span><span className="text-text font-medium tabular-nums">{run.processedRecords}</span></div>
-        <div><span className="text-gray-400 block text-[0.5625rem]">Workflow{run.bulkRun ? 's' : ''}</span><span className="text-text">{run.bulkRun && run.workflowNames?.length ? `${run.workflowNames.length} workflows` : (run.workflowName || 'Q&A Analysis')}</span></div>
-        <div><span className="text-gray-400 block text-[0.5625rem]">Completed</span><span className="text-text">{run.completedAt} by {run.runBy}</span></div>
-        <div><span className="text-gray-400 block text-[0.5625rem]">Inputs</span><span className="text-text">{run.inputSourceIds.length} source(s)</span></div>
+        <div><span className="text-ink-400 block text-[0.5625rem]">Processed</span><span className="text-text font-medium tabular-nums">{run.processedRecords}</span></div>
+        <div><span className="text-ink-400 block text-[0.5625rem]">Workflow{run.bulkRun ? 's' : ''}</span><span className="text-text">{run.bulkRun && run.workflowNames?.length ? `${run.workflowNames.length} workflows` : (run.workflowName || 'Q&A Analysis')}</span></div>
+        <div><span className="text-ink-400 block text-[0.5625rem]">Completed</span><span className="text-text">{run.completedAt} by {run.runBy}</span></div>
+        <div><span className="text-ink-400 block text-[0.5625rem]">Inputs</span><span className="text-text">{run.inputSourceIds.length} source(s)</span></div>
       </div>
       {run.bulkRun && run.workflowNames && run.workflowNames.length > 1 && (
-        <div><h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Workflows ({run.workflowNames.length})</h6><div className="flex flex-wrap gap-1">{run.workflowNames.map((n, i) => <span key={i} className="px-1.5 py-0.5 rounded bg-purple-50 text-[0.5625rem] text-purple-700">{n}</span>)}</div></div>
+        <div><h6 className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">Workflows ({run.workflowNames.length})</h6><div className="flex flex-wrap gap-1">{run.workflowNames.map((n, i) => <span key={i} className="px-1.5 py-0.5 rounded bg-purple-50 text-[0.5625rem] text-purple-700">{n}</span>)}</div></div>
       )}
 
       {/* Outputs */}
       {run.outputs.length > 0 && (
         <div>
-          <h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Outputs ({run.outputs.length})</h6>
+          <h6 className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">Outputs ({run.outputs.length})</h6>
           <div className="rounded-lg border border-border-light overflow-hidden">
             <table className="w-full text-[0.625rem]">
-              <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.5rem] font-semibold text-gray-400 uppercase">
+              <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.5rem] font-semibold text-ink-400 uppercase">
                 <th className="px-2 py-1 text-left">Output</th><th className="px-2 py-1 text-left">Type</th>{run.bulkRun && <th className="px-2 py-1 text-left">Workflow</th>}<th className="px-2 py-1 text-center">Records</th><th className="px-2 py-1 text-center">Status</th>
               </tr></thead>
               <tbody>{run.outputs.map(o => (
                 <tr key={o.id} className="border-b border-border-light/50">
                   <td className="px-2 py-1.5 text-text font-medium">{o.name}</td>
-                  <td className="px-2 py-1.5 text-gray-500">{o.outputType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}</td>
-                  {run.bulkRun && <td className="px-2 py-1.5 text-gray-500 text-[0.5625rem]">{o.sourceWorkflowName || '—'}</td>}
-                  <td className="px-2 py-1.5 text-center tabular-nums text-gray-500">{o.recordCount || '—'}</td>
+                  <td className="px-2 py-1.5 text-ink-500">{o.outputType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}</td>
+                  {run.bulkRun && <td className="px-2 py-1.5 text-ink-500 text-[0.5625rem]">{o.sourceWorkflowName || '—'}</td>}
+                  <td className="px-2 py-1.5 text-center tabular-nums text-ink-500">{o.recordCount || '—'}</td>
                   <td className="px-2 py-1.5 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.4375rem] font-bold ${o.status === 'GENERATED' ? 'bg-emerald-50 text-emerald-700' : o.status === 'NEEDS_REVIEW' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>{o.status.replace(/_/g, ' ')}</span></td>
                 </tr>
               ))}</tbody>
@@ -310,15 +310,15 @@ function RunDetail({ run, onUpdateException }: { run: AutomationRun; onUpdateExc
       {/* Exceptions */}
       {run.exceptions.length > 0 && (
         <div>
-          <h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Exceptions ({run.exceptions.length})</h6>
-          <p className="text-[0.5625rem] text-gray-400 mb-1.5">Exceptions are not cases yet. Review and classify valid exceptions in Output Review.</p>
+          <h6 className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">Exceptions ({run.exceptions.length})</h6>
+          <p className="text-[0.5625rem] text-ink-400 mb-1.5">Exceptions are not cases yet. Review and classify valid exceptions in Output Review.</p>
           <div className="space-y-1.5">{run.exceptions.map(ex => (
             <div key={ex.id} className="rounded-lg border border-border-light p-3 flex items-start gap-3">
               <span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold shrink-0 mt-0.5 ${EX_SEVERITY_CLS[ex.severity]}`}>{ex.severity}</span>
               <div className="flex-1 min-w-0">
                 <div className="text-[0.6875rem] font-medium text-text mb-0.5">{ex.title}</div>
-                <div className="text-[0.625rem] text-gray-500 mb-1">{ex.description}</div>
-                <div className="flex items-center gap-2 text-[0.5625rem] text-gray-400">
+                <div className="text-[0.625rem] text-ink-500 mb-1">{ex.description}</div>
+                <div className="flex items-center gap-2 text-[0.5625rem] text-ink-400">
                   <span>{EX_CAT_LABELS[ex.category]}</span>
                   {ex.sourceWorkflowName && <span>· WF: {ex.sourceWorkflowName}</span>}
                   {ex.sourceRecord && <span>· Record: {ex.sourceRecord}</span>}
@@ -329,7 +329,7 @@ function RunDetail({ run, onUpdateException }: { run: AutomationRun; onUpdateExc
               {ex.status === 'OPEN' && (
                 <div className="flex items-center gap-1 shrink-0">
                   <button onClick={() => onUpdateException(ex.id, 'REVIEWED')} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">Review</button>
-                  <button onClick={() => onUpdateException(ex.id, 'DISMISSED')} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors">Dismiss</button>
+                  <button onClick={() => onUpdateException(ex.id, 'DISMISSED')} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-ink-500 bg-canvas hover:bg-canvas-border cursor-pointer transition-colors">Dismiss</button>
                 </div>
               )}
             </div>
@@ -340,10 +340,10 @@ function RunDetail({ run, onUpdateException }: { run: AutomationRun; onUpdateExc
       {/* Logs */}
       {run.logs.length > 0 && (
         <div>
-          <h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Logs</h6>
+          <h6 className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">Logs</h6>
           <div className="space-y-0.5">{run.logs.map(l => (
-            <div key={l.id} className={`text-[0.5625rem] ${l.level === 'ERROR' ? 'text-red-600' : l.level === 'WARNING' ? 'text-amber-600' : 'text-gray-500'}`}>
-              <span className="font-mono text-gray-400">{l.timestamp}</span> <span className="font-semibold">[{l.level}]</span> {l.message}
+            <div key={l.id} className={`text-[0.5625rem] ${l.level === 'ERROR' ? 'text-red-600' : l.level === 'WARNING' ? 'text-amber-600' : 'text-ink-500'}`}>
+              <span className="font-mono text-ink-400">{l.timestamp}</span> <span className="font-semibold">[{l.level}]</span> {l.message}
             </div>
           ))}</div>
         </div>

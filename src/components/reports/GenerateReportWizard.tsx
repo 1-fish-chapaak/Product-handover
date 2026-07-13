@@ -283,8 +283,8 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
           exit={{ opacity: 0, scale: 0.98, y: 8 }}
           transition={{ duration: 0.2, ease }}
           className={genMinimized
-            ? 'fixed bottom-4 right-4 w-[400px] max-w-[92vw] bg-canvas-elevated rounded-[14px] shadow-xl border border-canvas-border z-[60] overflow-hidden'
-            : 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col overflow-hidden'}
+            ? 'fixed bottom-4 right-4 w-[400px] max-w-[92vw] bg-canvas-elevated rounded-lg shadow-xl border border-canvas-border z-[60] overflow-hidden'
+            : 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] bg-canvas-elevated rounded-xl shadow-xl border border-canvas-border z-[60] flex flex-col overflow-hidden'}
           role="dialog" aria-modal={!genMinimized} aria-label={`Generating ${template.name}`}
           aria-busy={!genDone}
         >
@@ -292,7 +292,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
             /* Minimized floating card */
             <div className="p-4">
               <div className="flex items-start gap-3">
-                <span className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
+                <span className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
                   {genDone ? <Check size={16} /> : <Loader2 size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -310,7 +310,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                 <span className="text-[0.6875rem] text-ink-400">{genDone ? 'Your report is ready.' : 'Running in the background.'}</span>
                 <button
                   onClick={genDone ? finishNow : () => setGenMinimized(false)}
-                  className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[8px] text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 cursor-pointer transition-colors"
+                  className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 cursor-pointer transition-colors"
                 >
                   <Maximize2 size={13} aria-hidden="true" /> {genDone ? 'Open report' : 'Open'}
                 </button>
@@ -326,7 +326,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                 className="w-full max-w-[520px]"
               >
                 <div className="flex items-center gap-4">
-                  <span className="w-12 h-12 rounded-[14px] bg-gradient-to-br from-brand-50 to-brand-100 ring-1 ring-brand-200/60 text-brand-700 flex items-center justify-center shrink-0">
+                  <span className="w-12 h-12 rounded-lg bg-gradient-to-br from-brand-50 to-brand-100 ring-1 ring-brand-200/60 text-brand-700 flex items-center justify-center shrink-0">
                     {genDone ? <Check size={22} /> : <Loader2 size={22} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -360,14 +360,14 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                   {genDone ? (
                     <button
                       onClick={finishNow}
-                      className="inline-flex items-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[0.8125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-md text-[0.8125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
                     >
                       Open report <ArrowRight size={13} />
                     </button>
                   ) : (
                     <button
                       onClick={() => setGenMinimized(true)}
-                      className="inline-flex items-center gap-1.5 h-9 px-4 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-canvas rounded-[8px] transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 h-9 px-4 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-canvas rounded-md transition-colors cursor-pointer"
                     >
                       <Minimize2 size={14} /> Minimize
                     </button>
@@ -396,7 +396,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
         exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
         onAnimationComplete={() => { if (suppressed) setSuppressedSettled(true); }}
-        className={`fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col ${suppressed ? 'pointer-events-none' : ''}`}
+        className={`fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[662px] max-h-[90vh] bg-canvas-elevated rounded-xl shadow-xl border border-canvas-border z-[60] flex flex-col ${suppressed ? 'pointer-events-none' : ''}`}
         role="dialog" aria-modal="true" aria-label={`Generate ${template.name}`}
         aria-hidden={suppressed}
         inert={suppressedSettled}
@@ -405,7 +405,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
             never balloons the header. Title truncates; the step indicator and
             close stay pinned right. */}
         <header className="shrink-0 px-6 py-3 border-b border-canvas-border flex items-center gap-4">
-          <div className="w-9 h-9 rounded-[10px] bg-gradient-to-br from-brand-50 to-brand-100 text-brand-700 flex items-center justify-center shrink-0 ring-1 ring-brand-200/60">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-50 to-brand-100 text-brand-700 flex items-center justify-center shrink-0 ring-1 ring-brand-200/60">
             <FileText size={16} />
           </div>
           <div className="min-w-0 flex-1">
@@ -457,7 +457,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search queries…"
-                  className="w-full h-8 pl-8 pr-8 rounded-[8px] border border-canvas-border text-[0.75rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                  className="w-full h-8 pl-8 pr-8 rounded-md border border-canvas-border text-[0.75rem] focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
                 />
                 <AnimatePresence>
                   {search && (
@@ -479,7 +479,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {/* Type — a content-kind switch (single choice, always visible) */}
-                <div className="inline-flex items-center rounded-[8px] border border-canvas-border bg-canvas p-0.5" role="tablist" aria-label="Filter by type">
+                <div className="inline-flex items-center rounded-md border border-canvas-border bg-canvas p-0.5" role="tablist" aria-label="Filter by type">
                   {(['All', 'Queries', 'Bulk Audit'] as const).map(t => {
                     const active = typeFilter === t;
                     return (
@@ -488,13 +488,13 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                         role="tab"
                         aria-selected={active}
                         onClick={() => setTypeFilter(t)}
-                        className={`relative h-7 px-2.5 rounded-[6px] text-[0.75rem] whitespace-nowrap cursor-pointer transition-colors active:scale-[0.97] ${active ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-800'}`}
+                        className={`relative h-7 px-2.5 rounded-sm text-[0.75rem] whitespace-nowrap cursor-pointer transition-colors active:scale-[0.97] ${active ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-800'}`}
                       >
                         {active && (
                           <motion.span
                             layoutId="typeFilterPill"
                             transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 480, damping: 38 }}
-                            className="absolute inset-0 rounded-[6px] bg-white shadow-[0_1px_2px_rgba(15,8,30,0.08)] ring-1 ring-brand-200/60"
+                            className="absolute inset-0 rounded-sm bg-white shadow-[0_1px_2px_rgba(15,8,30,0.08)] ring-1 ring-brand-200/60"
                           />
                         )}
                         <span className="relative z-10">{t}</span>
@@ -550,7 +550,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                 );
               })() : (() => {
                 const checkbox = (state: 'on' | 'off' | 'some') => (
-                  <span className={`w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0 transition-colors ${state !== 'off' ? 'bg-brand-600 border-brand-600 text-white' : 'border-ink-300 bg-white'}`}>
+                  <span className={`w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0 transition-colors ${state !== 'off' ? 'bg-brand-600 border-brand-600 text-white' : 'border-ink-300 bg-white'}`}>
                     {state !== 'off' && (
                       <motion.span
                         className="flex"
@@ -589,7 +589,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                         const isWfGroup = items.every(i => i.kind === 'workflow');
                         const isCollapsed = collapsedGroups.has(name);
                         return (
-                          <div className="border border-canvas-border rounded-[12px] bg-white overflow-hidden" key={name}>
+                          <div className="border border-canvas-border rounded-lg bg-white overflow-hidden" key={name}>
                             <div
                               className={`flex items-center gap-2.5 px-3.5 py-2.5 bg-canvas ${isCollapsed ? '' : 'border-b border-canvas-border'}`}
                             >
@@ -714,9 +714,9 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                           animate={{ opacity: 1, x: 0, scale: 1 }}
                           exit={reduce ? { opacity: 0 } : { opacity: 0, x: 10, scale: 0.96, transition: { duration: 0.13, ease } }}
                           transition={{ duration: 0.2, ease }}
-                          className="group/sel flex items-center gap-2.5 px-2.5 py-2 rounded-[9px] bg-white border border-canvas-border hover:border-brand-200 transition-colors"
+                          className="group/sel flex items-center gap-2.5 px-2.5 py-2 rounded-md bg-white border border-canvas-border hover:border-brand-200 transition-colors"
                         >
-                          <span className="w-5 h-5 shrink-0 rounded-[6px] bg-brand-50 text-brand-700 text-[0.625rem] font-bold font-mono tabular-nums flex items-center justify-center">{String(i + 1).padStart(2, '0')}</span>
+                          <span className="w-5 h-5 shrink-0 rounded-sm bg-brand-50 text-brand-700 text-[0.625rem] font-bold font-mono tabular-nums flex items-center justify-center">{String(i + 1).padStart(2, '0')}</span>
                           <span className="flex-1 min-w-0">
                             <span className="block text-[0.75rem] font-medium text-ink-800 truncate">{s.label}</span>
                             <span className="block text-[0.625rem] text-ink-400 truncate">{s.kind === 'workflow' ? 'Workflow' : 'Query'} · {s.sourceLabel}</span>
@@ -724,7 +724,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                           <button
                             onClick={() => toggle(s)}
                             aria-label={`Remove ${s.label}`}
-                            className="shrink-0 w-6 h-6 rounded-[6px] flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 opacity-0 group-hover/sel:opacity-100 focus-visible:opacity-100 transition-all cursor-pointer"
+                            className="shrink-0 w-6 h-6 rounded-sm flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 opacity-0 group-hover/sel:opacity-100 focus-visible:opacity-100 transition-all cursor-pointer"
                           >
                             <X size={13} />
                           </button>
@@ -747,7 +747,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                 {selectedKeyCount > 0 && (
                   <button
                     onClick={() => setSelected([])}
-                    className="shrink-0 inline-flex items-center gap-1 h-7 px-2 text-[0.75rem] font-medium text-ink-500 hover:text-brand-600 rounded-[6px] hover:bg-brand-600/[0.06] transition-colors cursor-pointer"
+                    className="shrink-0 inline-flex items-center gap-1 h-7 px-2 text-[0.75rem] font-medium text-ink-500 hover:text-brand-600 rounded-sm hover:bg-brand-600/[0.06] transition-colors cursor-pointer"
                   >
                     <X size={12} /> Clear all
                   </button>
@@ -756,7 +756,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
               <button
                 onClick={goPreview}
                 disabled={selectedKeyCount === 0 || isCreating}
-                className="shrink-0 inline-flex items-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[0.8125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="shrink-0 inline-flex items-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-md text-[0.8125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Continue <ArrowRight size={13} />
               </button>
@@ -779,7 +779,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                       value={reportName}
                       onChange={e => setReportName(e.target.value)}
                       placeholder={`${currentPeriod()} ${template.name}`}
-                      className="w-full h-10 px-3.5 rounded-[8px] border border-canvas-border bg-white text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                      className="w-full h-10 px-3.5 rounded-md border border-canvas-border bg-white text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
                     />
                   </div>
                   <div>
@@ -796,14 +796,14 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                         onChange={e => setReportPeriod(e.target.value)}
                         onFocus={() => setPeriodMenuOpen(false)}
                         placeholder="e.g. FY26 Q2"
-                        className="w-full h-10 pl-9 pr-10 rounded-[8px] border border-canvas-border bg-white text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                        className="w-full h-10 pl-9 pr-10 rounded-md border border-canvas-border bg-white text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
                       />
                       <button
                         type="button"
                         aria-label="Choose a preset period"
                         aria-expanded={periodMenuOpen}
                         onClick={() => setPeriodMenuOpen(o => !o)}
-                        className="absolute right-1 top-1/2 -translate-y-1/2 w-7 h-7 rounded-[6px] flex items-center justify-center text-ink-400 hover:text-ink-800 hover:bg-canvas transition-colors cursor-pointer"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 w-7 h-7 rounded-sm flex items-center justify-center text-ink-400 hover:text-ink-800 hover:bg-canvas transition-colors cursor-pointer"
                       >
                         <ChevronDown size={15} className={`transition-transform ${periodMenuOpen ? 'rotate-180' : ''}`} />
                       </button>
@@ -812,7 +812,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                           <motion.div
                             initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
                             transition={{ duration: 0.12, ease: [0.2, 0, 0, 1] }}
-                            className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 rounded-[8px] border border-canvas-border bg-white shadow-lg py-1"
+                            className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 rounded-md border border-canvas-border bg-white shadow-lg py-1"
                             role="listbox"
                           >
                             {periodOptions.map(o => {
@@ -854,12 +854,12 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                   value={execSummary}
                   onChange={e => { setExecSummary(e.target.value); setSummaryEdited(true); }}
                   rows={4}
-                  className="w-full px-3.5 py-3 rounded-[8px] border border-canvas-border bg-white text-[0.8125rem] leading-relaxed text-ink-500 resize-none focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
+                  className="w-full px-3.5 py-3 rounded-md border border-canvas-border bg-white text-[0.8125rem] leading-relaxed text-ink-500 resize-none focus:outline-none focus:border-brand-600/40 focus:ring-2 focus:ring-brand-600/10"
                 />
               </div>
 
               {ordered.length > 0 && (
-                <div className="bg-white rounded-[12px] border border-canvas-border p-4">
+                <div className="bg-white rounded-lg border border-canvas-border p-4">
                   <div className="flex items-center justify-between mb-2.5">
                     <label className="text-[0.75rem] font-semibold text-ink-800">Query order — drag to rearrange</label>
                     <span className="text-[0.6875rem] text-ink-400">{ordered.length} {ordered.length === 1 ? 'query' : 'queries'}</span>
@@ -867,10 +867,10 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                   <Reorder.Group axis="y" values={ordered} onReorder={setOrdered} as="div" className="space-y-1.5">
                     {ordered.map((q, i) => (
                       <Reorder.Item key={q.id} value={q} as="div"
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-[10px] border border-canvas-border bg-white cursor-grab active:cursor-grabbing"
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-canvas-border bg-white cursor-grab active:cursor-grabbing"
                       >
                         <GripVertical size={14} className="text-ink-300 shrink-0" />
-                        <span className="w-5 h-5 shrink-0 rounded-[6px] bg-brand-50 text-brand-700 text-[0.625rem] font-bold font-mono tabular-nums flex items-center justify-center">{String(i + 1).padStart(2, '0')}</span>
+                        <span className="w-5 h-5 shrink-0 rounded-sm bg-brand-50 text-brand-700 text-[0.625rem] font-bold font-mono tabular-nums flex items-center justify-center">{String(i + 1).padStart(2, '0')}</span>
                         <span className="flex-1 min-w-0">
                           <span className="block text-[0.8125rem] font-medium text-ink-800 truncate">{q.title}</span>
                           <span className="block text-[0.6875rem] text-ink-400 truncate">{q.risk}</span>
@@ -885,7 +885,7 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
               )}
 
               {orderedWorkflows.length > 0 && (
-                <div className="bg-white rounded-[12px] border border-canvas-border p-4">
+                <div className="bg-white rounded-lg border border-canvas-border p-4">
                   <div className="flex items-center justify-between mb-2.5">
                     <label className="flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-800">
                       <Workflow size={13} className="text-brand-600" /> Workflow results — drag to rearrange
@@ -897,10 +897,10 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                       const n = w.outputTable?.rows.length ?? 0;
                       return (
                         <Reorder.Item key={w.id} value={w} as="div"
-                          className="flex items-center gap-3 px-3 py-2.5 rounded-[10px] border border-canvas-border bg-white cursor-grab active:cursor-grabbing"
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-canvas-border bg-white cursor-grab active:cursor-grabbing"
                         >
                           <GripVertical size={14} className="text-ink-300 shrink-0" />
-                          <span className="w-5 h-5 shrink-0 rounded-[6px] bg-brand-50 text-brand-700 text-[0.625rem] font-bold font-mono tabular-nums flex items-center justify-center">{String(ordered.length + i + 1).padStart(2, '0')}</span>
+                          <span className="w-5 h-5 shrink-0 rounded-sm bg-brand-50 text-brand-700 text-[0.625rem] font-bold font-mono tabular-nums flex items-center justify-center">{String(ordered.length + i + 1).padStart(2, '0')}</span>
                           <span className="flex-1 min-w-0">
                             <span className="block text-[0.8125rem] font-medium text-ink-800 truncate">{w.name}</span>
                             <span className="block text-[0.6875rem] text-ink-400 truncate font-mono tabular-nums">{w.workflowId} · {w.businessProcess ?? '—'} · {n} flagged {n === 1 ? 'record' : 'records'}</span>
@@ -921,14 +921,14 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
               <button
                 onClick={() => setStep(1)}
                 disabled={isCreating}
-                className="inline-flex items-center gap-1.5 h-9 px-4 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-canvas rounded-[8px] transition-colors cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 h-9 px-4 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-canvas rounded-md transition-colors cursor-pointer disabled:opacity-50"
               >
                 <ArrowLeft size={13} /> Back
               </button>
               <button
                 onClick={() => handleCreate()}
                 disabled={isCreating}
-                className="inline-flex items-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-[8px] text-[0.8125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 h-9 px-5 bg-brand-600 text-white rounded-md text-[0.8125rem] font-semibold hover:bg-brand-500 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {isCreating ? <><Loader2 size={13} className="animate-spin" /> Generating…</> : <>Generate report <ArrowRight size={13} /></>}
               </button>
@@ -941,11 +941,11 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
           {confirmAbandon && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="absolute inset-0 z-10 bg-ink-900/30 rounded-[16px] flex items-center justify-center"
+              className="absolute inset-0 z-10 bg-ink-900/30 rounded-xl flex items-center justify-center"
             >
               <motion.div
                 initial={{ scale: 0.97, y: 4 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.97, y: 4 }}
-                className="bg-white rounded-[12px] border border-canvas-border shadow-xl p-5 w-[340px]"
+                className="bg-white rounded-lg border border-canvas-border shadow-xl p-5 w-[340px]"
                 role="alertdialog" aria-label="Discard selection?"
               >
                 <h3 className="text-[0.875rem] font-semibold text-ink-800 mb-1">Discard selection?</h3>
@@ -955,13 +955,13 @@ export default function GenerateReportWizard({ template, onClose, onCreate, supp
                 <div className="flex justify-end gap-2">
                   <button
                     onClick={() => setConfirmAbandon(false)}
-                    className="h-8 px-3.5 text-[0.75rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-canvas rounded-[8px] transition-colors cursor-pointer"
+                    className="h-8 px-3.5 text-[0.75rem] font-semibold text-ink-800 bg-white border border-canvas-border hover:bg-canvas rounded-md transition-colors cursor-pointer"
                   >
                     Keep editing
                   </button>
                   <button
                     onClick={onClose}
-                    className="h-8 px-3.5 text-[0.75rem] font-semibold text-white bg-risk hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer"
+                    className="h-8 px-3.5 text-[0.75rem] font-semibold text-white bg-risk hover:bg-risk-700 rounded-md transition-colors cursor-pointer"
                   >
                     Discard
                   </button>

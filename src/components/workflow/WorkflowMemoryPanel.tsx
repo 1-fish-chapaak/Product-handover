@@ -55,8 +55,8 @@ function MemorySection({
         >
           <span className={`size-7 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>{icon}</span>
           <span className="min-w-0">
-            <span className="block text-[14px] font-bold text-ink-900 leading-tight">{title}</span>
-            {subtitle && <span className="block text-[11.5px] text-ink-500 leading-tight mt-px">{subtitle}</span>}
+            <span className="block text-[0.875rem] font-bold text-ink-900 leading-tight">{title}</span>
+            {subtitle && <span className="block text-[0.71875rem] text-ink-500 leading-tight mt-px">{subtitle}</span>}
           </span>
         </button>
         {right}
@@ -101,23 +101,23 @@ export function GoldenRecordBadge({ gr }: { gr: GoldenRecordStatus }) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[13px] font-bold text-ink-800">
+            <span className="text-[0.8125rem] font-bold text-ink-800">
               {gr.reusePct}% of this run replayed from memory
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-compliant-50 text-compliant-700 px-2 py-0.5 text-[10.5px] font-bold border border-compliant/25">
+            <span className="inline-flex items-center gap-1 rounded-full bg-compliant-50 text-compliant-700 px-2 py-0.5 text-[0.65625rem] font-bold border border-compliant/25">
               <Check size={10} strokeWidth={3} /> Golden record hit
             </span>
           </div>
-          <p className="text-[11.5px] text-ink-500 mt-1 leading-relaxed">
+          <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed">
             Inputs matched <span className="font-medium text-ink-700">{gr.matchedRecord}</span>, so most steps replayed
             deterministically. Only <span className="font-medium text-ink-700">{gr.recomputedSteps.join(', ')}</span> ran live.
           </p>
           <div className="flex items-center gap-2 mt-2.5">
             <span className="inline-flex items-baseline gap-1.5 rounded-lg bg-canvas-elevated border border-canvas-border px-2.5 py-1.5">
-              <span className="text-[15px] font-bold font-mono text-compliant-700">{gr.cachedCost}</span>
-              <span className="text-[11px] text-ink-400 line-through font-mono">{gr.freshCost}</span>
+              <span className="text-[0.9375rem] font-bold font-mono text-compliant-700">{gr.cachedCost}</span>
+              <span className="text-[0.6875rem] text-ink-400 line-through font-mono">{gr.freshCost}</span>
             </span>
-            <span className="text-[11px] text-ink-500">this run {gr.savedVs}</span>
+            <span className="text-[0.6875rem] text-ink-500">this run {gr.savedVs}</span>
           </div>
         </div>
       </div>
@@ -190,7 +190,7 @@ export function SourceDriftBanner() {
               <span className={`flex size-7 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset ${iconChip}`}>
                 {isGreen ? <Check size={14} strokeWidth={3} /> : <ShieldAlert size={14} />}
               </span>
-              <p className="min-w-0 flex-1 text-[12px] leading-snug">
+              <p className="min-w-0 flex-1 text-[0.75rem] leading-snug">
                 <span className="font-bold text-ink-800">{summary.title}</span>
                 <span className={summary.tailClass}>{summary.tail}</span>
               </p>
@@ -218,14 +218,14 @@ export function SourceDriftBanner() {
                     moving, not a rename. Chevron top-right mirrors the collapsed
                     strip's control. */}
                 <div className="flex items-start justify-between gap-3">
-                  <h4 className="text-[13px] font-bold text-ink-900 leading-snug">
+                  <h4 className="text-[0.8125rem] font-bold text-ink-900 leading-snug">
                     Source layout changed{' '}
                     <span className="text-mitigated-700">— verify before you run</span>
                   </h4>
                   {chevron}
                 </div>
 
-                <p className="text-[12px] text-ink-600 mt-1.5 leading-relaxed">
+                <p className="text-[0.75rem] text-ink-600 mt-1.5 leading-relaxed">
                   The Amount column on the Acme source moved position, so this upload no longer lines up with the
                   saved mapping. Left as-is, some checks would run against the wrong field.
                 </p>
@@ -235,17 +235,17 @@ export function SourceDriftBanner() {
                     the auditor must register. */}
                 <div className="mt-3 rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
                   <div className="px-3 py-1.5 border-b border-canvas-border/60 bg-canvas/50">
-                    <span className="font-mono text-[11px] text-ink-700">Acme · Amount</span>
+                    <span className="font-mono text-[0.6875rem] text-ink-700">Acme · Amount</span>
                   </div>
                   <div className="grid grid-cols-[132px_1fr] items-center gap-2 px-3 py-2">
-                    <span className="text-[11px] font-semibold text-ink-500">Promoted memory</span>
-                    <span className="font-mono text-[11.5px] text-ink-600">column&nbsp;F</span>
+                    <span className="text-[0.6875rem] font-semibold text-ink-500">Promoted memory</span>
+                    <span className="font-mono text-[0.71875rem] text-ink-600">column&nbsp;F</span>
                   </div>
                   <div className="grid grid-cols-[132px_1fr] items-center gap-2 px-3 py-2 border-t border-canvas-border/40 bg-mitigated-50/50">
-                    <span className="text-[11px] font-semibold text-ink-700">This upload</span>
-                    <span className="font-mono text-[11.5px] text-ink-700 flex items-center gap-2 flex-wrap">
+                    <span className="text-[0.6875rem] font-semibold text-ink-700">This upload</span>
+                    <span className="font-mono text-[0.71875rem] text-ink-700 flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-mitigated-700">column&nbsp;H</span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-mitigated-50 text-mitigated-700 px-1.5 py-0.5 text-[9.5px] font-sans font-bold uppercase tracking-wide border border-mitigated-200">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-mitigated-50 text-mitigated-700 px-1.5 py-0.5 text-[0.59375rem] font-sans font-bold uppercase tracking-wide border border-mitigated-200">
                         <ArrowRight size={9} strokeWidth={2.5} /> moved
                       </span>
                     </span>
@@ -256,14 +256,14 @@ export function SourceDriftBanner() {
                   <button
                     type="button"
                     onClick={() => decide('reconfirmed')}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer"
                   >
                     <RefreshCw size={12} /> Re-confirm mapping
                   </button>
                   <button
                     type="button"
                     onClick={() => decide('kept')}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-ink-600 text-[12px] font-semibold hover:bg-canvas hover:border-ink-300 transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.75rem] font-semibold hover:bg-canvas hover:border-ink-300 transition-colors cursor-pointer"
                   >
                     Keep old mapping
                   </button>
@@ -314,8 +314,8 @@ export function MemoryConflictStrip({
         <span className="size-6 rounded-lg bg-mitigated-50 text-mitigated-700 flex items-center justify-center shrink-0">
           <Brain size={13} />
         </span>
-        <span className="text-[12.5px] font-bold text-ink-800 shrink-0">Memory</span>
-        <span className="flex items-center gap-2 flex-wrap min-w-0 text-[11.5px]">
+        <span className="text-[0.78125rem] font-bold text-ink-800 shrink-0">Memory</span>
+        <span className="flex items-center gap-2 flex-wrap min-w-0 text-[0.71875rem]">
           <span className="inline-flex items-center gap-1 rounded-full bg-mitigated-50 text-mitigated-700 px-2 py-0.5 font-bold border border-mitigated-200">
             <ShieldAlert size={11} /> 1 conflict
           </span>
@@ -332,7 +332,7 @@ export function MemoryConflictStrip({
             </>
           )}
         </span>
-        <span className="ml-auto inline-flex items-center gap-1 text-[11.5px] font-semibold text-mitigated-700 shrink-0">
+        <span className="ml-auto inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-mitigated-700 shrink-0">
           {open ? 'Hide' : 'Verify before approving'}
           <motion.span
             animate={{ rotate: open ? 180 : 0 }}
@@ -369,18 +369,18 @@ function EntityMemoryRow({ mem }: { mem: EntityMemory }) {
   return (
     <div className="py-3.5 first:pt-1">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[13px] font-bold text-ink-900">{mem.entity}</span>
-        <span className="text-[11px] font-mono text-ink-400">{mem.vendorId}</span>
+        <span className="text-[0.8125rem] font-bold text-ink-900">{mem.entity}</span>
+        <span className="text-[0.6875rem] font-mono text-ink-400">{mem.vendorId}</span>
         {mem.onWatch && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-risk-50 text-risk px-2 py-0.5 text-[10px] font-bold border border-risk/25">
+          <span className="inline-flex items-center gap-1 rounded-full bg-risk-50 text-risk px-2 py-0.5 text-[0.625rem] font-bold border border-risk/25">
             <Eye size={10} /> On watch
           </span>
         )}
-        <span className="ml-auto inline-flex items-center rounded-full bg-canvas border border-canvas-border text-ink-500 px-2 py-0.5 text-[10.5px] font-bold tabular-nums shrink-0">
+        <span className="ml-auto inline-flex items-center rounded-full bg-canvas border border-canvas-border text-ink-500 px-2 py-0.5 text-[0.65625rem] font-bold tabular-nums shrink-0">
           {flags.length}
         </span>
       </div>
-      {mem.watchNote && <p className="text-[11px] text-ink-500 mt-1">{mem.watchNote}</p>}
+      {mem.watchNote && <p className="text-[0.6875rem] text-ink-500 mt-1">{mem.watchNote}</p>}
       {/* Prior flags as a connected timeline: a hairline rail through small
           nodes reads as one vendor's history across workflows — a ledger, not a
           loose list of arrowed lines. */}
@@ -390,12 +390,12 @@ function EntityMemoryRow({ mem }: { mem: EntityMemory }) {
         )}
         <div className="flex flex-col gap-1">
           {flags.map((f, i) => (
-            <div key={i} className="relative flex items-center gap-3 text-[11.5px] py-0.5">
+            <div key={i} className="relative flex items-center gap-3 text-[0.71875rem] py-0.5">
               <span
                 aria-hidden="true"
                 className="relative z-10 size-[7px] rounded-full bg-brand-400 ring-2 ring-canvas-elevated shrink-0"
               />
-              <span className="inline-flex items-center rounded-md bg-brand-50 text-brand-700 px-1.5 py-0.5 text-[10.5px] font-semibold shrink-0">
+              <span className="inline-flex items-center rounded-md bg-brand-50 text-brand-700 px-1.5 py-0.5 text-[0.65625rem] font-semibold shrink-0">
                 {f.workflow}
               </span>
               <span className="text-ink-600 truncate">{f.detail}</span>
@@ -433,14 +433,14 @@ function OutputComparePanel({ cmp }: { cmp: OutputCompare }) {
       <div className="grid grid-cols-3 divide-x divide-canvas-border/60">
         {cmp.kpiDeltas.map((k) => (
           <div key={k.label} className="px-5 first:pl-0 last:pr-0">
-            <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide mb-2">{k.label}</div>
+            <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide mb-2">{k.label}</div>
             <div className="flex items-center gap-2">
-              <span className="text-[21px] font-bold font-mono text-ink-900 leading-none">{k.current}</span>
-              <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums leading-none ${deltaPill(k.sentiment)}`}>
+              <span className="text-[1.3125rem] font-bold font-mono text-ink-900 leading-none">{k.current}</span>
+              <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[0.625rem] font-bold tabular-nums leading-none ${deltaPill(k.sentiment)}`}>
                 <DeltaGlyph direction={k.direction} />{k.delta}
               </span>
             </div>
-            <div className="text-[11px] text-ink-400 mt-2 font-mono">was {k.previous}</div>
+            <div className="text-[0.6875rem] text-ink-400 mt-2 font-mono">was {k.previous}</div>
           </div>
         ))}
       </div>
@@ -448,28 +448,28 @@ function OutputComparePanel({ cmp }: { cmp: OutputCompare }) {
       {/* New vs resolved — colour lives in the labels, not in boxes. */}
       <div className="grid grid-cols-2 divide-x divide-canvas-border/60">
         <div className="pr-5">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-mitigated-700 mb-2">
+          <div className="flex items-center gap-1.5 text-[0.6875rem] font-bold text-mitigated-700 mb-2">
             <Plus size={12} /> New this run ({cmp.newFindings.length})
           </div>
           {cmp.newFindings.map((f) => (
-            <div key={f.ref} className="text-[11.5px] text-ink-600 leading-snug mb-1 last:mb-0">
+            <div key={f.ref} className="text-[0.71875rem] text-ink-600 leading-snug mb-1 last:mb-0">
               <span className="font-mono font-medium text-ink-800">{f.ref}</span> · {f.detail}
             </div>
           ))}
         </div>
         <div className="pl-5">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-compliant-700 mb-2">
+          <div className="flex items-center gap-1.5 text-[0.6875rem] font-bold text-compliant-700 mb-2">
             <Check size={12} strokeWidth={3} /> Resolved since last run ({cmp.resolvedFindings.length})
           </div>
           {cmp.resolvedFindings.map((f) => (
-            <div key={f.ref} className="text-[11.5px] text-ink-500 leading-snug mb-1 last:mb-0">
+            <div key={f.ref} className="text-[0.71875rem] text-ink-500 leading-snug mb-1 last:mb-0">
               <span className="font-mono font-medium text-ink-700 line-through">{f.ref}</span> · {f.detail}
             </div>
           ))}
         </div>
       </div>
 
-      <p className="text-[11px] text-ink-400 pt-1 border-t border-canvas-border/50">
+      <p className="text-[0.6875rem] text-ink-400 pt-1 border-t border-canvas-border/50">
         {cmp.carriedOver} findings carried over unchanged · previous run {cmp.previousRunDate}
       </p>
     </div>
@@ -512,7 +512,7 @@ export default function WorkflowMemoryPanel({
         icon={<Brain size={14} />}
         title="What memory knows about this run"
         right={
-          <span className="inline-flex items-center rounded-full bg-brand-50 text-brand-700 px-2.5 py-0.5 text-[10px] font-bold border border-brand-100 shrink-0">
+          <span className="inline-flex items-center rounded-full bg-brand-50 text-brand-700 px-2.5 py-0.5 text-[0.625rem] font-bold border border-brand-100 shrink-0">
             Insight Memory Engine
           </span>
         }
@@ -530,10 +530,10 @@ export default function WorkflowMemoryPanel({
               <Network size={13} />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-bold text-ink-900 leading-tight">Cross-workflow correlation</div>
-              <div className="text-[11px] text-ink-500 leading-tight mt-0.5">Entities memory has seen flagged elsewhere</div>
+              <div className="text-[0.8125rem] font-bold text-ink-900 leading-tight">Cross-workflow correlation</div>
+              <div className="text-[0.6875rem] text-ink-500 leading-tight mt-0.5">Entities memory has seen flagged elsewhere</div>
             </div>
-            <span className="inline-flex items-center rounded-full bg-canvas text-ink-500 px-2 py-0.5 text-[10.5px] font-bold tabular-nums shrink-0">
+            <span className="inline-flex items-center rounded-full bg-canvas text-ink-500 px-2 py-0.5 text-[0.65625rem] font-bold tabular-nums shrink-0">
               {entities.length}
             </span>
           </div>
@@ -551,8 +551,8 @@ export default function WorkflowMemoryPanel({
               <GitCompareArrows size={13} />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-bold text-ink-900 leading-tight">Compare with previous output</div>
-              <div className="text-[11px] text-ink-500 leading-tight mt-0.5">vs {compare.previousRunLabel}</div>
+              <div className="text-[0.8125rem] font-bold text-ink-900 leading-tight">Compare with previous output</div>
+              <div className="text-[0.6875rem] text-ink-500 leading-tight mt-0.5">vs {compare.previousRunLabel}</div>
             </div>
           </div>
           <div className="mt-2.5">
@@ -573,7 +573,7 @@ export function RowMemoryMarker({ vendor }: { vendor: string }) {
   return (
     <span
       title={`Memory: also flagged in ${mem.alsoFlaggedIn.map(f => f.workflow).join(', ')}`}
-      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold ${mem.onWatch ? 'bg-risk-50 text-risk' : 'bg-brand-50 text-brand-700'}`}
+      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[0.625rem] font-bold ${mem.onWatch ? 'bg-risk-50 text-risk' : 'bg-brand-50 text-brand-700'}`}
     >
       {mem.onWatch ? <Eye size={9} /> : <Brain size={9} />}
       {mem.onWatch ? 'On watch' : `Seen in ${count}`}

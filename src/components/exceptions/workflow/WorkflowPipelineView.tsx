@@ -37,7 +37,7 @@ function Avatar({ id }: { id: string }) {
   return (
     <span
       title={u ? `${u.name} · ${u.role}` : id}
-      className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-semibold ${u?.active === false ? 'bg-risk-50 text-risk-700' : 'bg-brand-50 text-brand-700'}`}
+      className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[0.5625rem] font-semibold ${u?.active === false ? 'bg-risk-50 text-risk-700' : 'bg-brand-50 text-brand-700'}`}
     >
       {u?.initials ?? '?'}
     </span>
@@ -50,7 +50,7 @@ export default function WorkflowPipelineView({ assignment }: { assignment: Assig
   return (
     <div className="flex flex-col gap-2">
       {/* Plain-language current position — "what's pending and where". */}
-      <div className={`inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full text-[11px] font-semibold ${pos.cls} mb-1`}>
+      <div className={`inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold ${pos.cls} mb-1`}>
         {pos.text}
       </div>
 
@@ -60,8 +60,8 @@ export default function WorkflowPipelineView({ assignment }: { assignment: Assig
           {assignment.currentLevelIndex < 0 && assignment.status !== 'approved' ? <Clock size={12} /> : <Check size={12} />}
         </span>
         <div className="flex-1 min-w-0">
-          <div className="text-[12px] font-semibold text-ink-800">Assignee · drafting</div>
-          <div className="text-[11px] text-ink-500">{userById(assignment.assigneeId)?.name ?? assignment.assigneeId}</div>
+          <div className="text-[0.75rem] font-semibold text-ink-800">Assignee · drafting</div>
+          <div className="text-[0.6875rem] text-ink-500">{userById(assignment.assigneeId)?.name ?? assignment.assigneeId}</div>
         </div>
       </div>
 
@@ -75,8 +75,8 @@ export default function WorkflowPipelineView({ assignment }: { assignment: Assig
             </span>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[12px] font-semibold text-ink-800">{lvl.name}</span>
-                <span className="text-[10px] text-ink-500">· {MODE_LABEL[lvl.mode]}</span>
+                <span className="text-[0.75rem] font-semibold text-ink-800">{lvl.name}</span>
+                <span className="text-[0.625rem] text-ink-500">· {MODE_LABEL[lvl.mode]}</span>
               </div>
               <div className="flex items-center gap-1 mt-0.5">
                 {lvl.assigneeIds.map(id => <Avatar key={id} id={id} />)}

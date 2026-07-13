@@ -147,10 +147,10 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
                     {/* Identity row — abbr stamp + process name, with a quiet open affordance. */}
                     <div className="flex items-start justify-between gap-3 mb-5">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-[10px] flex items-center justify-center bg-brand-50 text-brand-700 font-mono text-[0.75rem] font-semibold tracking-tight shrink-0">{bp.abbr}</div>
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-brand-50 text-brand-700 font-mono text-[0.75rem] font-semibold tracking-tight shrink-0">{bp.abbr}</div>
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="text-[1rem] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors truncate">{bp.name}</span>
-                          {bp.status === 'Draft' && <span className="px-1.5 h-[18px] inline-flex items-center rounded-[5px] text-[0.5625rem] font-bold uppercase tracking-wide bg-paper-100 text-ink-500 shrink-0">Draft</span>}
+                          {bp.status === 'Draft' && <span className="px-1.5 h-[18px] inline-flex items-center rounded-sm text-[0.5625rem] font-bold uppercase tracking-wide bg-paper-100 text-ink-500 shrink-0">Draft</span>}
                         </div>
                       </div>
                       <ChevronRight size={16} className="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />

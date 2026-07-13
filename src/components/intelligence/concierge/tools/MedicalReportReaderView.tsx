@@ -193,8 +193,8 @@ function downloadEvidenceCsv(result: MedicalResult) {
 
 function StatCard({ label, value, icon: Icon }: { label: string; value: number; icon: typeof FileText }) {
   return (
-    <div className="rounded-[12px] border border-canvas-border bg-canvas-elevated px-4 py-3 flex items-center gap-3">
-      <span className="w-9 h-9 rounded-[10px] bg-brand-50 flex items-center justify-center shrink-0">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-4 py-3 flex items-center gap-3">
+      <span className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
         <Icon size={17} className="text-brand-700" />
       </span>
       <div className="min-w-0">
@@ -223,7 +223,7 @@ function CheckTile({
   title, sub, hint, children,
 }: { title: string; sub: ReactNode; hint: string; children?: ReactNode }) {
   return (
-    <div className="rounded-[10px] border border-canvas-border bg-paper-50/60 p-3 space-y-1.5">
+    <div className="rounded-lg border border-canvas-border bg-paper-50/60 p-3 space-y-1.5">
       <p className="text-[0.75rem] font-semibold text-ink-700">{title}</p>
       <div className="flex items-center gap-2 flex-wrap">{sub}</div>
       {children}
@@ -249,7 +249,7 @@ function TestTable({ tests }: { tests: TestRow[] }) {
           </span>
         )}
       </div>
-      <div className="overflow-x-auto rounded-[10px] border border-canvas-border">
+      <div className="overflow-x-auto rounded-lg border border-canvas-border">
         <table className="w-full text-left border-collapse">
           <thead className="bg-paper-50/80">
             <tr className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">
@@ -298,7 +298,7 @@ function ReportCard({ report, index }: { report: ReportEntry; index: number }) {
   const flags = report.tests.filter((t) => t.flag).length;
 
   return (
-    <div className="rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-hidden">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
       <button
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-paper-50/50 transition-colors cursor-pointer"
@@ -390,7 +390,7 @@ function ReportCard({ report, index }: { report: ReportEntry; index: number }) {
 function CrossReportCard({ cross }: { cross: MedicalResult['crossReport'] }) {
   const flagged = cross.fabricatedBySingleAgency;
   return (
-    <div className={`rounded-[12px] border overflow-hidden ${flagged ? 'border-risk-700/25' : 'border-canvas-border'}`}>
+    <div className={`rounded-lg border overflow-hidden ${flagged ? 'border-risk-700/25' : 'border-canvas-border'}`}>
       <div className={`px-4 py-3 border-b ${flagged ? 'bg-risk-50 border-risk-700/15' : 'bg-paper-50/70 border-canvas-border'}`}>
         <div className="flex items-center gap-2 flex-wrap">
           <Layers size={16} className={flagged ? 'text-risk-700' : 'text-ink-500'} />
@@ -430,8 +430,8 @@ function MedicalResultView({ result }: { result: MedicalResult }) {
   return (
     <div className="space-y-5">
       {/* Risk banner */}
-      <div className={`rounded-[14px] border ${rs.border} ${rs.bg} p-4 flex items-start gap-3`}>
-        <span className="w-10 h-10 rounded-[12px] bg-canvas-elevated/70 flex items-center justify-center shrink-0">
+      <div className={`rounded-lg border ${rs.border} ${rs.bg} p-4 flex items-start gap-3`}>
+        <span className="w-10 h-10 rounded-lg bg-canvas-elevated/70 flex items-center justify-center shrink-0">
           <RiskIcon size={20} className={rs.text} />
         </span>
         <div className="min-w-0">

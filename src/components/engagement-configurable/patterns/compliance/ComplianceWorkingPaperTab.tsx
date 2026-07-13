@@ -14,10 +14,10 @@ import { SEVERITY_DISPLAY } from './complianceSeverityData';
 import { downloadComplianceWorkingPaper } from './complianceExports';
 import { useAuditLog } from '../../../../context/AdminDataContext';
 
-const RESULT_CLS: Record<AttrTestResult, string> = { NOT_TESTED: 'bg-gray-100 text-gray-500', PASS: 'bg-emerald-50 text-emerald-700', FAIL: 'bg-red-50 text-red-700', NA: 'bg-blue-50 text-blue-600' };
+const RESULT_CLS: Record<AttrTestResult, string> = { NOT_TESTED: 'bg-canvas text-ink-500', PASS: 'bg-emerald-50 text-emerald-700', FAIL: 'bg-red-50 text-red-700', NA: 'bg-blue-50 text-blue-600' };
 const RESULT_LABEL: Record<AttrTestResult, string> = { NOT_TESTED: '—', PASS: 'P', FAIL: 'F', NA: 'N/A' };
-const SAMPLE_CLS = { PASS: 'bg-emerald-50 text-emerald-700', FAIL: 'bg-red-50 text-red-700', PENDING: 'bg-gray-100 text-gray-500' };
-const TI_EV_CLS = { Missing: 'bg-gray-100 text-gray-500', Partial: 'bg-amber-50 text-amber-700', Complete: 'bg-emerald-50 text-emerald-700' };
+const SAMPLE_CLS = { PASS: 'bg-emerald-50 text-emerald-700', FAIL: 'bg-red-50 text-red-700', PENDING: 'bg-canvas text-ink-500' };
+const TI_EV_CLS = { Missing: 'bg-canvas text-ink-500', Partial: 'bg-amber-50 text-amber-700', Complete: 'bg-emerald-50 text-emerald-700' };
 
 interface Props {
   engagement: ConfigurableEngagement;
@@ -63,7 +63,7 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
   if (testItems.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <FileText size={24} className="text-gray-300 mb-3" />
+        <FileText size={24} className="text-ink-300 mb-3" />
         <h4 className="text-[0.875rem] font-semibold text-text mb-1">Working Paper</h4>
         <p className="text-[0.75rem] text-text-muted mb-4">Prepare samples/test items before working paper can be generated.</p>
         <button onClick={() => onNavigateTab?.('samples-evidence')}
@@ -97,14 +97,14 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
           { label: 'Evidence', value: evidence.length },
           { label: 'Checks', value: `${deriveComplianceTestingSummary(results).completedChecks}/${deriveComplianceTestingSummary(results).totalChecks}` },
         ].map(s => (
-          <span key={s.label} className="px-2.5 py-1 rounded-lg bg-gray-50 border border-border-light text-[0.6875rem] text-text font-medium">
+          <span key={s.label} className="px-2.5 py-1 rounded-lg bg-canvas border border-border-light text-[0.6875rem] text-text font-medium">
             {s.label}: <span className="font-bold tabular-nums">{s.value}</span>
           </span>
         ))}
-        <span className="px-2.5 py-1 rounded-lg bg-gray-50 border border-border-light text-[0.6875rem] text-gray-500 font-medium">
+        <span className="px-2.5 py-1 rounded-lg bg-canvas border border-border-light text-[0.6875rem] text-ink-500 font-medium">
           Review: <span className={`font-bold ${ctrlReview.status === 'APPROVED' ? 'text-emerald-600' : ctrlReview.status === 'REJECTED' ? 'text-red-600' : ctrlReview.status === 'PENDING_REVIEW' ? 'text-purple-600' : ''}`}>{ctrlReview.status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}</span>
         </span>
-        <span className="px-2.5 py-1 rounded-lg bg-gray-50 border border-border-light text-[0.6875rem] text-gray-500 font-medium">
+        <span className="px-2.5 py-1 rounded-lg bg-canvas border border-border-light text-[0.6875rem] text-ink-500 font-medium">
           Conclusion: <span className="font-bold">{ctrlConclusion.finalConclusion ? CONCLUSION_DISPLAY[ctrlConclusion.finalConclusion].label : ctrlReview.status === 'APPROVED' ? 'Pending' : 'Locked'}</span>
         </span>
       </div>
@@ -113,26 +113,26 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
       <div className="flex items-center gap-1">
         {controlsWithItems.map(c => (
           <button key={c.id} onClick={() => { setSelectedControlId(c.id); setExpandedEvSampleId(null); setExpandedDetailSampleId(null); }}
-            className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold cursor-pointer transition-colors ${selectedControlId === c.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+            className={`px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold cursor-pointer transition-colors ${selectedControlId === c.id ? 'bg-primary text-white' : 'bg-canvas text-ink-500 hover:bg-canvas-border'}`}>
             {c.id} — {c.name.length > 30 ? c.name.slice(0, 29) + '…' : c.name}
           </button>
         ))}
       </div>
 
       {!selectedControl || ctrlTestItems.length === 0 ? (
-        <div className="text-center py-8 text-[0.75rem] text-gray-400">No test items prepared for this control yet.</div>
+        <div className="text-center py-8 text-[0.75rem] text-ink-400">No test items prepared for this control yet.</div>
       ) : (
-        <div className="rounded-xl border border-border-light bg-white p-5 space-y-4">
+        <div className="rounded-lg border border-border-light bg-white p-5 space-y-4">
 
           {/* 1. Header */}
           <Section collapsedSections={collapsedSections} onToggle={toggleSection} num={1} title="Working Paper Header">
             <div className="grid grid-cols-3 gap-3 text-[0.6875rem]">
-              <div><span className="text-gray-400 block text-[0.6875rem]">Engagement</span><span className="text-text font-medium">{engagement.name}</span></div>
-              <div><span className="text-gray-400 block text-[0.6875rem]">Framework</span><span className="text-text font-medium">{cfg.framework.replace(/_/g, ' ')}</span></div>
-              <div><span className="text-gray-400 block text-[0.6875rem]">Audit Type</span><span className="text-text font-medium">{cfg.auditType}</span></div>
-              <div><span className="text-gray-400 block text-[0.6875rem]">Audit Period</span><span className="text-text font-medium">{cfg.auditPeriodStart || '—'} to {cfg.auditPeriodEnd || '—'}</span></div>
-              <div><span className="text-gray-400 block text-[0.6875rem]">Owner</span><span className="text-text font-medium">{engagement.owner}</span></div>
-              <div><span className="text-gray-400 block text-[0.6875rem]">Reviewer</span><span className="text-text font-medium">{engagement.reviewer || '—'}</span></div>
+              <div><span className="text-ink-400 block text-[0.6875rem]">Engagement</span><span className="text-text font-medium">{engagement.name}</span></div>
+              <div><span className="text-ink-400 block text-[0.6875rem]">Framework</span><span className="text-text font-medium">{cfg.framework.replace(/_/g, ' ')}</span></div>
+              <div><span className="text-ink-400 block text-[0.6875rem]">Audit Type</span><span className="text-text font-medium">{cfg.auditType}</span></div>
+              <div><span className="text-ink-400 block text-[0.6875rem]">Audit Period</span><span className="text-text font-medium">{cfg.auditPeriodStart || '—'} to {cfg.auditPeriodEnd || '—'}</span></div>
+              <div><span className="text-ink-400 block text-[0.6875rem]">Owner</span><span className="text-text font-medium">{engagement.owner}</span></div>
+              <div><span className="text-ink-400 block text-[0.6875rem]">Reviewer</span><span className="text-text font-medium">{engagement.reviewer || '—'}</span></div>
             </div>
           </Section>
 
@@ -140,10 +140,10 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
           <Section collapsedSections={collapsedSections} onToggle={toggleSection} num={2} title="Control Objective">
             <div className="text-[0.6875rem] space-y-1">
               <div className="flex items-center gap-2 mb-1">
-                <span className="font-mono text-gray-400">{selectedControl.id}</span>
+                <span className="font-mono text-ink-400">{selectedControl.id}</span>
                 <span className="font-semibold text-text">{selectedControl.name}</span>
                 <span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${selectedControl.nature === 'Preventive' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}>{selectedControl.nature}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${selectedControl.automation === 'Automated' ? 'bg-purple-50 text-purple-700' : selectedControl.automation === 'Hybrid' ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>{selectedControl.automation}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${selectedControl.automation === 'Automated' ? 'bg-purple-50 text-purple-700' : selectedControl.automation === 'Hybrid' ? 'bg-indigo-50 text-indigo-700' : 'bg-canvas text-ink-600'}`}>{selectedControl.automation}</span>
               </div>
               <p className="text-text leading-relaxed">{selectedControl.description}</p>
             </div>
@@ -152,9 +152,9 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
           {/* 3. Test Design */}
           <Section collapsedSections={collapsedSections} onToggle={toggleSection} num={3} title="Test Design">
             <div className="grid grid-cols-3 gap-3 text-[0.6875rem]">
-              <div><span className="text-gray-400 block text-[0.6875rem]">Input Method</span><span className="text-text font-medium">{cfg.defaultTestingInputMethod.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}</span></div>
-              <div><span className="text-gray-400 block text-[0.6875rem]">Test Items</span><span className="text-text font-medium tabular-nums">{ctrlTestItems.length}</span></div>
-              <div><span className="text-gray-400 block text-[0.6875rem]">Testing Status</span><span className={`font-medium ${summary.completionPercent === 100 ? 'text-emerald-600' : summary.completedChecks > 0 ? 'text-amber-600' : 'text-gray-500'}`}>{summary.completionPercent === 100 ? 'Complete' : summary.completedChecks > 0 ? 'In Progress' : 'Not Started'} ({summary.completionPercent}%)</span></div>
+              <div><span className="text-ink-400 block text-[0.6875rem]">Input Method</span><span className="text-text font-medium">{cfg.defaultTestingInputMethod.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}</span></div>
+              <div><span className="text-ink-400 block text-[0.6875rem]">Test Items</span><span className="text-text font-medium tabular-nums">{ctrlTestItems.length}</span></div>
+              <div><span className="text-ink-400 block text-[0.6875rem]">Testing Status</span><span className={`font-medium ${summary.completionPercent === 100 ? 'text-emerald-600' : summary.completedChecks > 0 ? 'text-amber-600' : 'text-ink-500'}`}>{summary.completionPercent === 100 ? 'Complete' : summary.completedChecks > 0 ? 'In Progress' : 'Not Started'} ({summary.completionPercent}%)</span></div>
             </div>
           </Section>
 
@@ -162,7 +162,7 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
           <Section collapsedSections={collapsedSections} onToggle={toggleSection} num={4} title="Attribute Legend">
             <div className="rounded-lg border border-border-light overflow-hidden">
               <table className="w-full text-[0.75rem]">
-                <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.6875rem] font-semibold text-gray-400 uppercase">
+                <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.6875rem] font-semibold text-ink-400 uppercase">
                   <th className="px-2 py-1.5 text-left w-8">Code</th>
                   <th className="px-2 py-1.5 text-left">Assertion</th>
                   <th className="px-2 py-1.5 text-left">Attribute</th>
@@ -178,9 +178,9 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
                         <td className="px-2 py-1.5 font-bold text-primary">{a.code}</td>
                         <td className="px-2 py-1.5"><span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[0.6875rem] font-bold">{a.assertion}</span></td>
                         <td className="px-2 py-1.5 text-text">{a.name}</td>
-                        <td className="px-2 py-1.5 text-gray-500">{wf?.name || '—'} {wf?.version || ''}</td>
-                        <td className="px-2 py-1.5"><span className={`px-1 py-0.5 rounded text-[0.6875rem] font-bold ${wf?.type === 'Automated' ? 'bg-purple-50 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>{wf?.type || 'Manual'}</span></td>
-                        <td className="px-2 py-1.5 text-gray-500 text-[0.6875rem]">{wf?.type === 'Automated' || wf?.type === 'Hybrid' ? 'System + User' : 'User Evidence'}</td>
+                        <td className="px-2 py-1.5 text-ink-500">{wf?.name || '—'} {wf?.version || ''}</td>
+                        <td className="px-2 py-1.5"><span className={`px-1 py-0.5 rounded text-[0.6875rem] font-bold ${wf?.type === 'Automated' ? 'bg-purple-50 text-purple-700' : 'bg-canvas text-ink-600'}`}>{wf?.type || 'Manual'}</span></td>
+                        <td className="px-2 py-1.5 text-ink-500 text-[0.6875rem]">{wf?.type === 'Automated' || wf?.type === 'Hybrid' ? 'System + User' : 'User Evidence'}</td>
                       </tr>
                     );
                   })}
@@ -192,18 +192,18 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
           {/* 5. Sample Data Summary */}
           <Section collapsedSections={collapsedSections} onToggle={toggleSection} num={5} title="Sample Data Summary">
             <div className="grid grid-cols-3 gap-3 text-[0.6875rem]">
-              <div><span className="text-gray-400 block text-[0.6875rem]">Test Items</span><span className="text-text font-medium tabular-nums">{ctrlTestItems.length}</span></div>
-              <div><span className="text-gray-400 block text-[0.6875rem]">Source</span><span className="text-text font-medium">{complianceState.samplesEvidence.batches[0]?.inputMethod || 'Uploaded'}</span></div>
-              <div><span className="text-gray-400 block text-[0.6875rem]">Batch</span><span className="text-text font-medium">{complianceState.samplesEvidence.batches[0]?.name || '—'}</span></div>
+              <div><span className="text-ink-400 block text-[0.6875rem]">Test Items</span><span className="text-text font-medium tabular-nums">{ctrlTestItems.length}</span></div>
+              <div><span className="text-ink-400 block text-[0.6875rem]">Source</span><span className="text-text font-medium">{complianceState.samplesEvidence.batches[0]?.inputMethod || 'Uploaded'}</span></div>
+              <div><span className="text-ink-400 block text-[0.6875rem]">Batch</span><span className="text-text font-medium">{complianceState.samplesEvidence.batches[0]?.name || '—'}</span></div>
             </div>
           </Section>
 
           {/* 6. Evidence Coverage Matrix */}
           <Section collapsedSections={collapsedSections} onToggle={toggleSection} num={6} title="Evidence Coverage Matrix">
-            <p className="text-[0.6875rem] text-gray-400 mb-2">Attribute columns show user/PBC-uploaded files. System Evidence shows workflow logs.</p>
+            <p className="text-[0.6875rem] text-ink-400 mb-2">Attribute columns show user/PBC-uploaded files. System Evidence shows workflow logs.</p>
             <div className="rounded-lg border border-border-light overflow-hidden">
               <table className="w-full text-[0.75rem]">
-                <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.6875rem] font-semibold text-gray-400 uppercase">
+                <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.6875rem] font-semibold text-ink-400 uppercase">
                   <th className="px-2 py-1.5 text-left w-5"></th>
                   <th className="px-2 py-1.5 text-left">Sample</th>
                   {attrLegend.map(a => (
@@ -226,27 +226,27 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
                       <React.Fragment key={ti.id}>
                         <tr className={`border-b border-border-light/50 cursor-pointer hover:bg-surface-2/20 ${isExp ? 'bg-surface-2/20' : ''}`}
                           onClick={() => setExpandedEvSampleId(isExp ? null : ti.id)}>
-                          <td className="px-2 py-1.5 text-gray-400">{isExp ? <ChevronDown size={9} /> : <ChevronRight size={9} />}</td>
-                          <td className="px-2 py-1.5 font-mono text-gray-500">{ti.referenceId}</td>
+                          <td className="px-2 py-1.5 text-ink-400">{isExp ? <ChevronDown size={9} /> : <ChevronRight size={9} />}</td>
+                          <td className="px-2 py-1.5 font-mono text-ink-500">{ti.referenceId}</td>
                           {attrLegend.map(a => (
                             <td key={a.id} className="px-2 py-1.5 text-center text-[0.6875rem]">
-                              <span className={`font-medium ${(userByAttr.get(a.code) || 0) > 0 ? 'text-text' : 'text-gray-300'}`}>{userByAttr.get(a.code) || 0}</span>
+                              <span className={`font-medium ${(userByAttr.get(a.code) || 0) > 0 ? 'text-text' : 'text-ink-300'}`}>{userByAttr.get(a.code) || 0}</span>
                             </td>
                           ))}
-                          <td className="px-2 py-1.5 text-center text-[0.6875rem]"><span className={`font-medium ${sysEv.length > 0 ? 'text-blue-600' : 'text-gray-300'}`}>{sysEv.length}</span></td>
+                          <td className="px-2 py-1.5 text-center text-[0.6875rem]"><span className={`font-medium ${sysEv.length > 0 ? 'text-blue-600' : 'text-ink-300'}`}>{sysEv.length}</span></td>
                           <td className="px-2 py-1.5 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${TI_EV_CLS[evStatus]}`}>{evStatus}</span></td>
                         </tr>
                         {isExp && tiEvidence.length > 0 && (
                           <tr><td colSpan={attrLegend.length + 4} className="p-0">
                             <div className="bg-surface-2/15 px-4 py-2 border-b border-border-light space-y-1.5">
                               {userEv.length > 0 && (<div>
-                                <div className="text-[0.6875rem] font-semibold text-gray-400 uppercase mb-0.5">User / PBC Evidence</div>
+                                <div className="text-[0.6875rem] font-semibold text-ink-400 uppercase mb-0.5">User / PBC Evidence</div>
                                 {userEv.map(e => (
                                   <div key={e.id} className="flex items-center gap-2 text-[0.6875rem]">
                                     <span className="font-bold text-primary">{e.linkedAttributeIds.map(id => attrCodeMap.get(id) || '?').join(',')}</span>
-                                    <span className="text-gray-500">{e.evidenceType}</span>
+                                    <span className="text-ink-500">{e.evidenceType}</span>
                                     <span className="text-text">{e.fileName}</span>
-                                    <span className={`px-1 py-0.5 rounded text-[0.6875rem] font-bold ${e.source === 'RECEIVED_FROM_PBC' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-600'}`}>{e.source === 'RECEIVED_FROM_PBC' ? 'PBC' : 'User'}</span>
+                                    <span className={`px-1 py-0.5 rounded text-[0.6875rem] font-bold ${e.source === 'RECEIVED_FROM_PBC' ? 'bg-blue-50 text-blue-600' : 'bg-canvas text-ink-600'}`}>{e.source === 'RECEIVED_FROM_PBC' ? 'PBC' : 'User'}</span>
                                   </div>
                                 ))}
                               </div>)}
@@ -275,7 +275,7 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
           <Section collapsedSections={collapsedSections} onToggle={toggleSection} num={7} title="Attribute Testing Matrix">
             <div className="rounded-lg border border-border-light overflow-hidden">
               <table className="w-full text-[0.75rem]">
-                <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.6875rem] font-semibold text-gray-400 uppercase">
+                <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.6875rem] font-semibold text-ink-400 uppercase">
                   <th className="px-2 py-1.5 text-left">Sample</th>
                   <th className="px-2 py-1.5 text-left">Reference</th>
                   {attrLegend.map(a => (
@@ -288,7 +288,7 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
                     const sr = deriveComplianceSampleResult(ti.id, results);
                     return (
                       <tr key={ti.id} className="border-b border-border-light/50">
-                        <td className="px-2 py-1.5 font-mono text-gray-500">{ti.referenceId}</td>
+                        <td className="px-2 py-1.5 font-mono text-ink-500">{ti.referenceId}</td>
                         <td className="px-2 py-1.5 text-text text-[0.6875rem] truncate max-w-[120px]">{ti.description}</td>
                         {attrLegend.map(a => {
                           const ar = ctrlResults.find(r => r.testItemId === ti.id && r.attributeId === a.id);
@@ -302,7 +302,7 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
                 </tbody>
               </table>
             </div>
-            <div className="mt-1.5 text-[0.6875rem] text-gray-400">P = Attribute satisfied · F = Attribute not satisfied · — = Not tested · N/A = Not applicable</div>
+            <div className="mt-1.5 text-[0.6875rem] text-ink-400">P = Attribute satisfied · F = Attribute not satisfied · — = Not tested · N/A = Not applicable</div>
           </Section>
 
           {/* 8. Sample-Level Testing Details */}
@@ -316,10 +316,10 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
                   <div key={ti.id} className="rounded-lg border border-border-light overflow-hidden">
                     <button onClick={() => setExpandedDetailSampleId(isExp ? null : ti.id)}
                       className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-surface-2/20 cursor-pointer transition-colors">
-                      {isExp ? <ChevronDown size={9} className="text-gray-400 shrink-0" /> : <ChevronRight size={9} className="text-gray-400 shrink-0" />}
-                      <span className="text-[0.6875rem] font-mono text-gray-500 shrink-0 w-[70px]">{ti.referenceId}</span>
+                      {isExp ? <ChevronDown size={9} className="text-ink-400 shrink-0" /> : <ChevronRight size={9} className="text-ink-400 shrink-0" />}
+                      <span className="text-[0.6875rem] font-mono text-ink-500 shrink-0 w-[70px]">{ti.referenceId}</span>
                       <span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold shrink-0 ${SAMPLE_CLS[sr]}`}>{sr === 'PASS' ? 'Pass' : sr === 'FAIL' ? 'Fail' : 'Pending'}</span>
-                      <span className="text-[0.6875rem] text-gray-400 shrink-0">{tiEvCount} ev</span>
+                      <span className="text-[0.6875rem] text-ink-400 shrink-0">{tiEvCount} ev</span>
                       <span className="flex items-center gap-1 ml-auto shrink-0">
                         {attrLegend.map(a => {
                           const ar = ctrlResults.find(r => r.testItemId === ti.id && r.attributeId === a.id);
@@ -331,7 +331,7 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
                     {isExp && (
                       <div className="border-t border-border-light bg-surface-2/15 px-3 py-2">
                         <table className="w-full text-[0.75rem]">
-                          <thead><tr className="text-[0.6875rem] font-semibold text-gray-400 uppercase">
+                          <thead><tr className="text-[0.6875rem] font-semibold text-ink-400 uppercase">
                             <th className="text-left py-1 pr-2">Code</th>
                             <th className="text-left py-1 pr-2">Attribute</th>
                             <th className="text-left py-1 pr-2">Assertion</th>
@@ -353,9 +353,9 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
                                   <td className="py-1 pr-2 text-text">{a.name}</td>
                                   <td className="py-1 pr-2"><span className="px-1 py-0.5 rounded bg-primary/10 text-primary text-[0.6875rem] font-bold">{a.assertion}</span></td>
                                   <td className="py-1 pr-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${RESULT_CLS[r]}`}>{RESULT_LABEL[r]}</span></td>
-                                  <td className="py-1 pr-2 text-center text-gray-500">{userEvCt > 0 ? `${userEvCt}` : '—'}</td>
+                                  <td className="py-1 pr-2 text-center text-ink-500">{userEvCt > 0 ? `${userEvCt}` : '—'}</td>
                                   <td className="py-1 pr-2 text-center text-blue-500">{sysEvCt > 0 ? `${sysEvCt}` : '—'}</td>
-                                  <td className="py-1 text-gray-500 truncate max-w-[150px]">{ar?.notes || '—'}</td>
+                                  <td className="py-1 text-ink-500 truncate max-w-[150px]">{ar?.notes || '—'}</td>
                                 </tr>
                               );
                             })}
@@ -373,11 +373,11 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
           <Section collapsedSections={collapsedSections} onToggle={toggleSection} num={9} title="PBC / Request Trace">
             {(() => {
               const ctrlRequests = requests.filter(r => r.linkedControlId === selectedControlId);
-              if (ctrlRequests.length === 0) return <div className="text-[0.6875rem] text-gray-400 italic">No PBC requests linked to this control.</div>;
+              if (ctrlRequests.length === 0) return <div className="text-[0.6875rem] text-ink-400 italic">No PBC requests linked to this control.</div>;
               return (
                 <div className="rounded-lg border border-border-light overflow-hidden">
                   <table className="w-full text-[0.75rem]">
-                    <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.6875rem] font-semibold text-gray-400 uppercase">
+                    <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.6875rem] font-semibold text-ink-400 uppercase">
                       <th className="px-2 py-1.5 text-left">Request</th>
                       <th className="px-2 py-1.5 text-left">Title</th>
                       <th className="px-2 py-1.5 text-left">Type</th>
@@ -389,13 +389,13 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
                     <tbody>
                       {ctrlRequests.map(r => (
                         <tr key={r.id} className="border-b border-border-light/50">
-                          <td className="px-2 py-1.5 font-mono text-gray-500">{r.id}</td>
+                          <td className="px-2 py-1.5 font-mono text-ink-500">{r.id}</td>
                           <td className="px-2 py-1.5 text-text">{r.title}</td>
                           <td className="px-2 py-1.5"><span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[0.6875rem] font-bold">{r.requestType}</span></td>
-                          <td className="px-2 py-1.5 text-gray-500">{r.requestedFrom}</td>
-                          <td className="px-2 py-1.5 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${r.status === 'Received' ? 'bg-emerald-50 text-emerald-700' : r.status === 'Overdue' ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-500'}`}>{r.status}</span></td>
-                          <td className="px-2 py-1.5 text-center text-gray-500">{r.filesReceived.length || '—'}</td>
-                          <td className="px-2 py-1.5 text-center font-mono text-gray-500">{r.dueDate}</td>
+                          <td className="px-2 py-1.5 text-ink-500">{r.requestedFrom}</td>
+                          <td className="px-2 py-1.5 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold ${r.status === 'Received' ? 'bg-emerald-50 text-emerald-700' : r.status === 'Overdue' ? 'bg-red-50 text-red-700' : 'bg-canvas text-ink-500'}`}>{r.status}</span></td>
+                          <td className="px-2 py-1.5 text-center text-ink-500">{r.filesReceived.length || '—'}</td>
+                          <td className="px-2 py-1.5 text-center font-mono text-ink-500">{r.dueDate}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -408,7 +408,7 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
           {/* 10. Review & Approval */}
           <Section collapsedSections={collapsedSections} onToggle={toggleSection} num={10} title="Review & Approval">
             {ctrlReview.status === 'NOT_SUBMITTED' ? (
-              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-gray-50 text-[0.75rem] text-gray-500">
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-canvas text-[0.75rem] text-ink-500">
                 <Info size={13} className="shrink-0 mt-0.5" />
                 <span>This working paper has not been submitted for review yet. Submit it from the Review tab.</span>
               </div>
@@ -424,7 +424,7 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
                   <div><span className="text-text-muted block text-[0.6875rem]">Reviewed by</span><span className="text-text font-medium">{ctrlReview.reviewedBy || 'Pending'} {ctrlReview.reviewedAt ? `· ${ctrlReview.reviewedAt}` : ''}</span></div>
                 </div>
                 {ctrlReview.reviewerComments && (
-                  <p className="text-[0.75rem] text-gray-500 italic">"{ctrlReview.reviewerComments}"</p>
+                  <p className="text-[0.75rem] text-ink-500 italic">"{ctrlReview.reviewerComments}"</p>
                 )}
               </div>
             )}
@@ -451,7 +451,7 @@ export default function ComplianceWorkingPaperTab({ engagement, complianceState,
                 <p className="text-[0.6875rem]">Finalized by {ctrlConclusion.finalizedBy} on {ctrlConclusion.finalizedAt}{ctrlConclusion.remarks ? ` — "${ctrlConclusion.remarks}"` : ''}</p>
               </div>
             ) : (
-              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-gray-50 text-[0.75rem] text-gray-500">
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-canvas text-[0.75rem] text-ink-500">
                 <Lock size={13} className="shrink-0 mt-0.5" />
                 <span>
                   {ctrlReview.status === 'APPROVED'
@@ -483,7 +483,7 @@ function Section({ num, title, collapsedSections, onToggle, children }: {
         className="w-full flex items-center gap-2 text-left cursor-pointer group mb-2">
         <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[0.6875rem] font-bold inline-flex items-center justify-center shrink-0">{num}</span>
         <span className="text-[0.75rem] font-bold text-text-muted uppercase tracking-wider group-hover:text-text transition-colors">{title}</span>
-        {collapsed ? <ChevronRight size={12} className="text-gray-400 ml-auto" /> : <ChevronDown size={12} className="text-gray-400 ml-auto" />}
+        {collapsed ? <ChevronRight size={12} className="text-ink-400 ml-auto" /> : <ChevronDown size={12} className="text-ink-400 ml-auto" />}
       </button>
       {!collapsed && children}
     </div>

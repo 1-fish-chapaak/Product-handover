@@ -137,7 +137,7 @@ function PlanRegenerateSkeleton() {
     >
       <div className="flex items-center gap-2 px-4 py-3">
         <ListChecks size={14} className="text-brand-400 shrink-0" />
-        <span className="text-[13px] font-medium text-ink-500">Regenerating plan…</span>
+        <span className="text-[0.8125rem] font-medium text-ink-500">Regenerating plan…</span>
       </div>
       <ul className="flex flex-col border-t border-canvas-border">
         {[0, 1, 2].map(i => (
@@ -910,7 +910,7 @@ function ColumnRow({
         isChecked ? 'hover:bg-brand-50/60' : 'hover:bg-paper-50/70'
       }`}
     >
-      <span className={`inline-flex items-center justify-center size-[18px] rounded-[5px] shrink-0 transition-[background-color,border-color,box-shadow] duration-150 ${
+      <span className={`inline-flex items-center justify-center size-[18px] rounded-sm shrink-0 transition-[background-color,border-color,box-shadow] duration-150 ${
         isChecked
           ? 'bg-brand-600 shadow-[inset_0_-1px_0_rgba(0,0,0,0.08)]'
           : 'bg-canvas-elevated border border-ink-300 group-hover/row:border-ink-500'

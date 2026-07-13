@@ -303,7 +303,7 @@ export default function ClosedCaseSamplingView({ onBack }: Props): JSX.Element {
         </div>
 
         {/* Configuration bar */}
-        <div className="glass-card rounded-2xl p-5 mb-5">
+        <div className="glass-card p-5 mb-5">
           <div className="flex items-end gap-4 flex-wrap">
             {/* Engagement scope */}
             <div className="relative min-w-[220px]">

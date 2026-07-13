@@ -183,7 +183,7 @@ function NavFileTree({ files }: { files: { name: string; sheets: { name: string;
       {files.map(file => {
         const isFileOpen = expandedFiles[file.name] ?? false;
         return (
-          <div key={file.name} className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+          <div key={file.name} className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
             <button
               onClick={() => setExpandedFiles(p => ({ ...p, [file.name]: !p[file.name] }))}
               className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] transition-all cursor-pointer"
@@ -397,7 +397,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                         onChange={e => setName(e.target.value)}
                         placeholder="e.g., Q3 Financial Overview"
                         autoFocus
-                        className="w-full px-4 py-3 text-[0.875rem] border border-canvas-border rounded-xl text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors bg-canvas-elevated"
+                        className="w-full px-4 py-3 text-[0.875rem] border border-canvas-border rounded-lg text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors bg-canvas-elevated"
                       />
                     </div>
                     <div className="space-y-2">
@@ -409,7 +409,7 @@ function CreateDashboardModal({ open, onClose, onCreate, onOpenChat }: {
                         onChange={e => setDescription(e.target.value)}
                         placeholder="Briefly describe the purpose of this dashboard..."
                         rows={4}
-                        className="w-full px-4 py-3 text-[0.875rem] border border-canvas-border rounded-xl text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors bg-canvas-elevated resize-none"
+                        className="w-full px-4 py-3 text-[0.875rem] border border-canvas-border rounded-lg text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors bg-canvas-elevated resize-none"
                       />
                     </div>
                   </motion.div>
@@ -937,7 +937,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                 exit={{ opacity: 0 }}
                 transition={{ delay: i * 0.04 }}
                 onClick={() => onDashboardClick(dashboard.id)}
-                className={`glass-card rounded-xl p-5 cursor-pointer group relative flex flex-col transition-shadow ${
+                className={`glass-card p-5 cursor-pointer group relative flex flex-col transition-shadow ${
                   focusedDashboardId === dashboard.id ? 'ring-2 ring-brand-400 shadow-lg' : ''
                 }`}
               >
@@ -1104,7 +1104,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             onClick={() => onDashboardClick('excel')}
-            className="glass-card rounded-xl p-5 cursor-pointer group relative flex flex-col"
+            className="glass-card p-5 cursor-pointer group relative flex flex-col"
           >
             {/* Icon */}
             <div className="mb-4">
@@ -1150,7 +1150,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.04 }}
             onClick={() => onDashboardClick('sql')}
-            className="glass-card rounded-xl p-5 cursor-pointer group relative flex flex-col"
+            className="glass-card p-5 cursor-pointer group relative flex flex-col"
           >
             <div className="mb-4">
               <div className="inline-flex p-2.5 rounded-lg bg-purple-50 text-purple-700">
@@ -1275,7 +1275,7 @@ export default function DashboardListPage({ onDashboardClick, onImportPowerBI, c
                             addToast({ message: `Source changed to ${db.name}`, type: 'success' });
                             setChangeSourceDashboardId(null);
                           }}
-                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer text-left ${
+                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border transition-all cursor-pointer text-left ${
                             isCurrent ? 'border-brand-500 bg-brand-50' : 'border-canvas-border bg-canvas-elevated hover:border-brand-200'
                           }`}
                         >

@@ -415,7 +415,7 @@ function RiskDetailPage({
       <div className="space-y-6">
 
         {/* Mapped controls */}
-        <div className="glass-card rounded-xl p-5">
+        <div className="glass-card p-5">
           <div className="flex items-center justify-between gap-3 mb-4">
             <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider inline-flex items-center gap-1.5">
               <Shield size={13} className="text-ink-400" /> Mapped Controls
@@ -496,7 +496,7 @@ function RiskDetailPage({
         </div>
 
         {/* Found in RACMs */}
-        <div className="glass-card rounded-xl p-5">
+        <div className="glass-card p-5">
           <div className="flex items-baseline justify-between mb-4">
             <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider inline-flex items-center gap-1.5">
               <Grid3x3 size={13} className="text-ink-400" /> Found in RACMs
@@ -1002,7 +1002,7 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         <div className="space-y-2 min-h-[calc(100vh-280px)]">
           {isLoading && showSkeleton ? (
             [...Array(5)].map((_, i) => (
-              <div key={`skel-${i}`} className="px-6 py-5 rounded-xl border border-border-light bg-white">
+              <div key={`skel-${i}`} className="px-6 py-5 rounded-lg border border-border-light bg-white">
                 <div className="h-3 bg-paper-100 rounded-xs animate-pulse w-2/3 mb-2.5" />
                 <div className="h-3 bg-paper-100 rounded-xs animate-pulse w-1/2" />
               </div>

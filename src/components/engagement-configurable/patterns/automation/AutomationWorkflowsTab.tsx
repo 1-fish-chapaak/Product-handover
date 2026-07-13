@@ -376,7 +376,7 @@ function WorkflowDetailView({ wf, runs, onBack, onRun }: { wf: ProjectWorkflow; 
         {tab === 'configuration' && (
           <div className="space-y-5 max-w-[700px]">
             {/* Audit Run Frequency */}
-            <div className="rounded-2xl border border-border-light bg-white p-5">
+            <div className="rounded-lg border border-border-light bg-white p-5">
               <h4 className="text-[0.6875rem] font-mono uppercase tracking-tight text-text-muted mb-4 flex items-center gap-2">
                 <Clock size={13} className="text-primary" />Audit run frequency
               </h4>
@@ -414,7 +414,7 @@ function WorkflowDetailView({ wf, runs, onBack, onRun }: { wf: ProjectWorkflow; 
             </div>
 
             {/* Tolerance Rules placeholder */}
-            <div className="rounded-2xl border border-border-light bg-white p-5">
+            <div className="rounded-lg border border-border-light bg-white p-5">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-[0.875rem] font-semibold text-text flex items-center gap-2">
                   <AlertCircle size={14} className="text-primary" />Tolerance rules
@@ -435,7 +435,7 @@ function WorkflowDetailView({ wf, runs, onBack, onRun }: { wf: ProjectWorkflow; 
                         <div className="text-[0.6875rem] text-text-muted">{rule.type} · {rule.value}</div>
                       </div>
                     </div>
-                    <div className={`w-10 h-6 rounded-full relative cursor-pointer transition-colors ${rule.active ? 'bg-primary' : 'bg-gray-200'}`}>
+                    <div className={`w-10 h-6 rounded-full relative cursor-pointer transition-colors ${rule.active ? 'bg-primary' : 'bg-canvas-border'}`}>
                       <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${rule.active ? 'translate-x-4' : 'translate-x-0.5'}`} />
                     </div>
                   </div>
@@ -444,7 +444,7 @@ function WorkflowDetailView({ wf, runs, onBack, onRun }: { wf: ProjectWorkflow; 
             </div>
 
             {/* Workflow metadata */}
-            <div className="rounded-2xl border border-border-light bg-white p-5 space-y-3">
+            <div className="rounded-lg border border-border-light bg-white p-5 space-y-3">
               <h4 className="text-[0.6875rem] font-mono uppercase tracking-tight text-text-muted mb-2">Workflow Metadata</h4>
               {[
                 { label: 'Business Process', value: wf.businessProcess },

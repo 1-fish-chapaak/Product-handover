@@ -88,7 +88,7 @@ export default function GenerateATRModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="atr-print-root fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[960px] max-w-[94vw] h-[90vh] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col"
+        className="atr-print-root fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[960px] max-w-[94vw] h-[90vh] bg-canvas-elevated rounded-xl shadow-xl border border-canvas-border z-[60] flex flex-col"
         role="dialog"
         aria-label="Action Taken Report"
       >
@@ -96,7 +96,7 @@ export default function GenerateATRModal({
             bar stays a thin context strip. */}
         <header className="atr-no-print shrink-0 px-6 py-2.5 flex items-center justify-between gap-4 border-b border-canvas-border">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-[8px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
+            <div className="w-7 h-7 rounded-md bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
               <FileText size={14} />
             </div>
             <p className="text-[0.8125rem] font-medium text-ink-600 truncate">Live preview · read-only</p>
@@ -124,7 +124,7 @@ export default function GenerateATRModal({
               {showSavePrompt && (
                 <>
                   <div className="fixed inset-0 z-[65]" onClick={() => setShowSavePrompt(false)} />
-                  <div className="absolute right-0 bottom-full mb-2 z-[70] w-72 bg-white border border-canvas-border shadow-xl rounded-[10px] p-3">
+                  <div className="absolute right-0 bottom-full mb-2 z-[70] w-72 bg-white border border-canvas-border shadow-xl rounded-lg p-3">
                     <label className="block text-[0.75rem] font-semibold text-ink-700 mb-1.5">Version label</label>
                     <input
                       autoFocus
@@ -132,18 +132,18 @@ export default function GenerateATRModal({
                       onChange={e => setLabel(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
                       placeholder="e.g. Final · Audit Committee"
-                      className="w-full h-9 px-3 mb-2.5 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                      className="w-full h-9 px-3 mb-2.5 bg-canvas-elevated border border-canvas-border rounded-md text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
                     />
                     <div className="flex items-center justify-end gap-2">
                       <button onClick={() => setShowSavePrompt(false)} className="h-8 px-3 text-[0.75rem] font-medium text-ink-600 hover:text-ink-900 cursor-pointer">Discard</button>
-                      <button onClick={handleSave} className="h-8 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer">Save to ATR tab</button>
+                      <button onClick={handleSave} className="h-8 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md cursor-pointer">Save to ATR tab</button>
                     </div>
                   </div>
                 </>
               )}
               <button
                 onClick={() => setShowSavePrompt(s => !s)}
-                className="h-10 px-5 inline-flex items-center gap-2 text-[0.8125rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 cursor-pointer transition-colors"
+                className="h-10 px-5 inline-flex items-center gap-2 text-[0.8125rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 cursor-pointer transition-colors"
               >
                 <Save size={14} />
                 Save Version
@@ -152,7 +152,7 @@ export default function GenerateATRModal({
           )}
           <button
             onClick={handleDownload}
-            className="h-10 px-5 inline-flex items-center gap-2 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer transition-colors"
+            className="h-10 px-5 inline-flex items-center gap-2 text-[0.8125rem] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-md cursor-pointer transition-colors"
           >
             <Download size={14} />
             Download

@@ -369,7 +369,7 @@ export function BulkAuditVariantView({
       ) : (
         <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10">
           <aside className="hidden xl:block w-[252px] shrink-0 sticky top-[72px] self-start max-h-[calc(100vh-96px)] overflow-y-auto pr-1 -mr-1 print:hidden">
-            <div className="rounded-[14px] border border-canvas-border bg-canvas-elevated p-3.5">
+            <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-3.5">
               <EditorialContents
                 workflows={successfulWorkflows}
                 observations={observations}
@@ -515,7 +515,7 @@ function DeleteObservationConfirm({
           aria-modal="true"
           aria-labelledby="delete-obs-title"
           tabIndex={-1}
-          className="w-full max-w-[320px] bg-white border border-canvas-border rounded-[16px] shadow-xl overflow-hidden"
+          className="w-full max-w-[320px] bg-white border border-canvas-border rounded-xl shadow-xl overflow-hidden"
         >
           <div className="px-6 pt-6 pb-5">
             <h3 id="delete-obs-title" className="text-[0.9375rem] font-semibold text-ink-800 mb-2">Remove observation?</h3>
@@ -526,13 +526,13 @@ function DeleteObservationConfirm({
           <div className="flex items-center justify-end gap-2 px-6 pb-5 pt-1">
             <button
               onClick={onCancel}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-md hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Remove observation
             </button>
@@ -588,7 +588,7 @@ function DeleteWorkflowConfirm({
           aria-modal="true"
           aria-labelledby="delete-wf-title"
           tabIndex={-1}
-          className="w-full max-w-[320px] bg-white border border-canvas-border rounded-[16px] shadow-xl overflow-hidden"
+          className="w-full max-w-[320px] bg-white border border-canvas-border rounded-xl shadow-xl overflow-hidden"
         >
           <div className="px-6 pt-6 pb-5">
             <h3 id="delete-wf-title" className="text-[0.9375rem] font-semibold text-ink-800 mb-2">Remove workflow from this report?</h3>
@@ -600,13 +600,13 @@ function DeleteWorkflowConfirm({
           <div className="flex items-center justify-end gap-2 px-6 pb-5 pt-1">
             <button
               onClick={onCancel}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-[8px] hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-ink-800 bg-white border border-canvas-border rounded-md hover:bg-paper-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-[8px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-5 text-[0.8125rem] font-semibold text-white bg-risk-600 hover:bg-risk-700 rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               Remove workflow
             </button>
@@ -656,7 +656,7 @@ function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, 
       initial={{ opacity: 0, y: -5, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -5, scale: 0.97 }}
-      className="absolute right-0 top-full mt-1 w-[280px] bg-white rounded-[8px] shadow-xl border border-canvas-border z-50 overflow-hidden"
+      className="absolute right-0 top-full mt-1 w-[280px] bg-white rounded-md shadow-xl border border-canvas-border z-50 overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-canvas-border">
         <span className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wider">Select Template</span>
@@ -670,9 +670,9 @@ function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, 
               key={rt.id}
               onClick={() => { onSelect(rt); onClose(); }}
               aria-current={isActive || undefined}
-              className={`w-full text-left px-3 py-2.5 rounded-[8px] transition-colors cursor-pointer flex items-center gap-2.5 ${isActive ? 'bg-brand-50' : 'hover:bg-brand-50'}`}
+              className={`w-full text-left px-3 py-2.5 rounded-md transition-colors cursor-pointer flex items-center gap-2.5 ${isActive ? 'bg-brand-50' : 'hover:bg-brand-50'}`}
             >
-              <div className={`p-1.5 rounded-[8px] ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
+              <div className={`p-1.5 rounded-md ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
                 <Icon size={12} />
               </div>
               <div className="flex-1 min-w-0">
@@ -694,7 +694,7 @@ function BulkBackLink({ onBack }: { onBack: () => void }) {
   return (
     <button
       onClick={onBack}
-      className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+      className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
     >
       <ArrowLeft size={14} /> Back to Reports
     </button>
@@ -731,7 +731,7 @@ function BulkCoverActions({ onShare, onDownload, templates = REPORT_TEMPLATES }:
           onClick={() => setShowApplyTemplate(p => !p)}
           disabled={applyingTemplate}
           aria-busy={applyingTemplate || undefined}
-          className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 disabled:opacity-60 disabled:cursor-wait transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+          className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 disabled:opacity-60 disabled:cursor-wait transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
         >
           {applyingTemplate ? <Loader2 size={14} className="animate-spin" /> : <Layout size={14} />}
           <span className="truncate max-w-[200px] hidden md:inline">{applyingTemplate ? 'Applying…' : (appliedTemplate?.name ?? 'Apply Template')}</span>
@@ -757,7 +757,7 @@ function BulkCoverActions({ onShare, onDownload, templates = REPORT_TEMPLATES }:
       {onShare && (
         <button
           onClick={onShare}
-          className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+          className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
         >
           <Share2 size={14} /> Share
         </button>
@@ -765,7 +765,7 @@ function BulkCoverActions({ onShare, onDownload, templates = REPORT_TEMPLATES }:
       {/* Download — opens the shared preview modal (same as every other report) */}
       <button
         onClick={onDownload}
-        className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-[8px] hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+        className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-md hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
       >
         <Download size={14} /> Download
       </button>
@@ -781,7 +781,7 @@ function BulkCoverActions({ onShare, onDownload, templates = REPORT_TEMPLATES }:
             <motion.div
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
-              className="flex items-center gap-3 px-6 py-4 glass-card-strong rounded-[16px] shadow-lg"
+              className="flex items-center gap-3 px-6 py-4 glass-card-strong rounded-xl shadow-lg"
             >
               <Loader2 size={20} className="text-brand-600 animate-spin" />
               <span className="text-[0.875rem] font-semibold text-ink-800">Applying template...</span>
@@ -810,7 +810,7 @@ function AllFailedEmpty({ report, failedWorkflows, onBack }: {
       {/* Cover — same light letterhead as the editorial layout, but slimmer */}
       <ReportBrandBanner
         title={report.name}
-        className="rounded-[12px]"
+        className="rounded-lg"
       >
         <p className="text-[0.8125rem] leading-snug text-white/75">
           All {failedWorkflows.length} {failedWorkflows.length === 1 ? 'workflow' : 'workflows'} failed during this run.
@@ -818,7 +818,7 @@ function AllFailedEmpty({ report, failedWorkflows, onBack }: {
       </ReportBrandBanner>
 
       {/* Empty-state body */}
-      <div className="bg-white border border-canvas-border rounded-[12px] mt-5 p-10 text-center">
+      <div className="bg-white border border-canvas-border rounded-lg mt-5 p-10 text-center">
         <div className="w-12 h-12 rounded-full bg-brand-50 flex items-center justify-center mx-auto mb-4">
           <AlertTriangle size={20} className="text-brand-700" />
         </div>
@@ -826,7 +826,7 @@ function AllFailedEmpty({ report, failedWorkflows, onBack }: {
         <p className="text-[0.8125rem] text-ink-500 mb-6 max-w-[540px] mx-auto">
           None of the {failedWorkflows.length} workflows in this run produced results — the report has no audit content. The failed runs are listed below for reference.
         </p>
-        <div className="text-left max-w-[640px] mx-auto rounded-[12px] border border-brand-200 bg-brand-50/40 px-5 py-4">
+        <div className="text-left max-w-[640px] mx-auto rounded-lg border border-brand-200 bg-brand-50/40 px-5 py-4">
           <p className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wider mb-2">Failed runs</p>
           <ul className="space-y-1.5">
             {failedWorkflows.map(w => (
@@ -878,7 +878,7 @@ function EditorialLayout({
       {/* Cover — light letterhead with theme accent + key facts, rounded top only so the white body below attaches cleanly */}
       <ReportBrandBanner
         title={report.name}
-        className="rounded-t-[12px]"
+        className="rounded-t-lg"
         eyebrow={report.id && (
           <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{report.id.toUpperCase()}</span>
         )}
@@ -886,7 +886,7 @@ function EditorialLayout({
           <button
             onClick={onGenerateAtr}
             title="Generate Action Taken Report"
-            className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-700 border border-white/25 rounded-[8px] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-brand-600 hover:border-white/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-700 border border-white/25 rounded-md shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-brand-600 hover:border-white/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
           >
             <FileText size={14} />
             Generate ATR
@@ -918,7 +918,7 @@ function EditorialLayout({
 
       {/* Editorial body — white card attached to the header (no gap). The table
           of contents now lives in the persistent outline rail, not inline. */}
-      <article className="bg-white border-x border-b border-canvas-border rounded-b-[12px] px-8 py-8">
+      <article className="bg-white border-x border-b border-canvas-border rounded-b-lg px-8 py-8">
         <div id="bulk-exec-summary" className="scroll-mt-20">
           <EditorialSummary totals={totals} />
         </div>
@@ -1047,7 +1047,7 @@ function EditorialContents({
                 type="button"
                 onClick={() => onScrollToContent(r.anchor)}
                 aria-current={isActive ? 'true' : undefined}
-                className={`flex items-center gap-1.5 w-full py-2 pl-1 pr-1 rounded-[8px] transition-colors text-left cursor-pointer ${isActive ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
+                className={`flex items-center gap-1.5 w-full py-2 pl-1 pr-1 rounded-md transition-colors text-left cursor-pointer ${isActive ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
               >
                 <span className={`shrink-0 w-5 text-[0.6875rem] font-mono tabular-nums text-right ${isActive ? 'text-brand-700 font-semibold' : 'text-brand-500 font-semibold'}`}>{String(fixedStart + i + 1).padStart(2, '0')}</span>
                 <span className={`flex-1 min-w-0 text-[0.8125rem] truncate ${isActive ? 'font-semibold text-brand-700' : 'font-medium text-ink-600'}`}>{r.label}</span>
@@ -1117,7 +1117,7 @@ function EditorialContents({
 
       <button
         onClick={onAddObservation}
-        className="mt-3 w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+        className="mt-3 w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/15 rounded-md hover:bg-brand-50/70 hover:border-brand-600/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
       >
         <Plus size={14} />
         Add Observation
@@ -1162,7 +1162,7 @@ function BulkContentsRow<T extends { id: string }>({
       value={value}
       dragControls={controls}
       dragListener={false}
-      className={`group/crow relative flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-[8px] transition-colors list-none cursor-default ${active ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
+      className={`group/crow relative flex items-center gap-1.5 py-2 pl-1 pr-1 rounded-md transition-colors list-none cursor-default ${active ? 'bg-brand-50' : 'hover:bg-brand-50/30'}`}
     >
       <button
         onPointerDown={(e) => { controls.start(e); }}
@@ -1183,7 +1183,7 @@ function BulkContentsRow<T extends { id: string }>({
           }}
           autoFocus
           onClick={(e) => e.stopPropagation()}
-          className="flex-1 min-w-0 bg-white border border-brand-600/40 rounded-[8px] px-2 py-1 text-[0.75rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/15"
+          className="flex-1 min-w-0 bg-white border border-brand-600/40 rounded-md px-2 py-1 text-[0.75rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-600/15"
         />
       ) : (
         <button
@@ -1199,14 +1199,14 @@ function BulkContentsRow<T extends { id: string }>({
           <button
             onClick={(e) => { e.stopPropagation(); onStartEdit(); }}
             aria-label="Edit"
-            className="p-1.5 rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
+            className="p-1.5 rounded-md text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
           >
             <Edit3 size={14} />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
             aria-label="Delete"
-            className="p-1.5 rounded-[8px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+            className="p-1.5 rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
           >
             <Trash2 size={14} />
           </button>
@@ -1271,7 +1271,7 @@ function EditorialSummary({ totals }: { totals: Totals }) {
             disabled={isRegenerating}
             aria-busy={isRegenerating || undefined}
             title="Regenerate this summary with the latest workflow results"
-            className="group/regen inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-[8px] hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            className="group/regen inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-600 bg-brand-50 border border-brand-600/20 rounded-md hover:bg-brand-50/70 hover:border-brand-600/35 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isRegenerating ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} className="transition-transform duration-300 group-hover/regen:rotate-180" />}
             {isRegenerating ? 'Regenerating...' : 'Regenerate'}
@@ -1281,7 +1281,7 @@ function EditorialSummary({ totals }: { totals: Totals }) {
             onClick={generate}
             disabled={isGenerating}
             aria-busy={isGenerating || undefined}
-            className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-[8px] hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-md hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
             {isGenerating ? 'Generating...' : 'Generate Summary'}
@@ -1453,12 +1453,12 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
             onClick={() => setMenuOpen(o => !o)}
             title="More options"
             aria-label="More options"
-            className="w-8 h-8 flex items-center justify-center rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+            className="w-8 h-8 flex items-center justify-center rounded-md text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
           >
             <MoreVertical size={16} />
           </button>
           {menuOpen && (
-            <div className="absolute right-0 top-10 z-20 w-[180px] bg-white border border-canvas-border rounded-[12px] shadow-[0_12px_32px_-8px_rgba(15,8,30,0.18)] p-1.5">
+            <div className="absolute right-0 top-10 z-20 w-[180px] bg-white border border-canvas-border rounded-lg shadow-[0_12px_32px_-8px_rgba(15,8,30,0.18)] p-1.5">
               {[
                 { icon: SquareArrowOutUpRight, label: 'Open workflow', tile: 'text-brand-600 bg-brand-50', onClick: () => { setMenuOpen(false); onOpenWorkflow(); } },
                 { icon: Plus, label: 'Add output', tile: 'text-evidence-700 bg-evidence-50', onClick: () => { setMenuOpen(false); setOutputModalOpen(true); } },
@@ -1466,9 +1466,9 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
                 <button
                   key={item.label}
                   onClick={item.onClick}
-                  className="group/mi flex items-center gap-2.5 w-full text-left px-2 h-9 rounded-[8px] text-[0.8125rem] font-medium text-ink-700 hover:bg-brand-50 hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-brand-50"
+                  className="group/mi flex items-center gap-2.5 w-full text-left px-2 h-9 rounded-md text-[0.8125rem] font-medium text-ink-700 hover:bg-brand-50 hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-brand-50"
                 >
-                  <span className={`shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-[7px] ${item.tile}`}>
+                  <span className={`shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-sm ${item.tile}`}>
                     <item.icon size={14} strokeWidth={2.25} />
                   </span>
                   {item.label}
@@ -1477,9 +1477,9 @@ function EditorialChapter({ workflow, isLast, onOpenWorkflow, onRequestDelete }:
               <div className="my-1.5 -mx-1.5 border-t border-canvas-border" />
               <button
                 onClick={() => { setMenuOpen(false); onRequestDelete(); }}
-                className="group/mi flex items-center gap-2.5 w-full text-left px-2 h-9 rounded-[8px] text-[0.8125rem] font-medium text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-risk-50"
+                className="group/mi flex items-center gap-2.5 w-full text-left px-2 h-9 rounded-md text-[0.8125rem] font-medium text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:bg-risk-50"
               >
-                <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-[7px] text-risk-700 bg-risk-50">
+                <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-sm text-risk-700 bg-risk-50">
                   <Trash2 size={14} strokeWidth={2.25} />
                 </span>
                 Delete workflow
@@ -1649,9 +1649,9 @@ function AttachedOutputsBlock({
             return (
               <div
                 key={k.id}
-                className="group relative bg-white border border-canvas-border rounded-[12px] p-3.5 flex items-center gap-3"
+                className="group relative bg-white border border-canvas-border rounded-lg p-3.5 flex items-center gap-3"
               >
-                <div className={`p-2 rounded-[8px] ${kpi.color}`}><Icon size={16} /></div>
+                <div className={`p-2 rounded-md ${kpi.color}`}><Icon size={16} /></div>
                 <div className="min-w-0">
                   <div className="text-[1.125rem] font-bold text-ink-800 leading-tight tabular-nums">{kpi.compute(workflow)}</div>
                   <div className="text-[0.625rem] text-ink-400 tracking-wide truncate">{kpi.label}</div>
@@ -1659,7 +1659,7 @@ function AttachedOutputsBlock({
                 <button
                   onClick={() => onRemove(k)}
                   aria-label="Remove KPI"
-                  className="absolute top-1.5 right-1.5 w-5 h-5 inline-flex items-center justify-center rounded-[8px] text-ink-400 opacity-0 group-hover:opacity-100 hover:text-risk-700 hover:bg-risk-50 transition-all cursor-pointer"
+                  className="absolute top-1.5 right-1.5 w-5 h-5 inline-flex items-center justify-center rounded-md text-ink-400 opacity-0 group-hover:opacity-100 hover:text-risk-700 hover:bg-risk-50 transition-all cursor-pointer"
                 >
                   <X size={12} />
                 </button>
@@ -1673,7 +1673,7 @@ function AttachedOutputsBlock({
         const graph = GRAPH_CATALOG.find(c => c.id === g.id);
         if (!graph) return null;
         return (
-          <div key={g.id} className="group relative bg-canvas-elevated border border-canvas-border rounded-[12px] p-4">
+          <div key={g.id} className="group relative bg-canvas-elevated border border-canvas-border rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider">
                 <BarChart3 size={12} />
@@ -1682,7 +1682,7 @@ function AttachedOutputsBlock({
               <button
                 onClick={() => onRemove(g)}
                 aria-label="Remove graph"
-                className="w-6 h-6 inline-flex items-center justify-center rounded-[8px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                className="w-6 h-6 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
               >
                 <X size={14} />
               </button>
@@ -1711,7 +1711,7 @@ function AttachedOutputsBlock({
               <button
                 onClick={() => onRemove(t)}
                 aria-label="Remove table"
-                className="w-6 h-6 inline-flex items-center justify-center rounded-[8px] text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
+                className="w-6 h-6 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
               >
                 <X size={14} />
               </button>

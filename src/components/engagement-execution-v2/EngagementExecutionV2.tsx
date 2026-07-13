@@ -103,7 +103,7 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
         </button>
 
         {/* ═══ Engagement Header ═══ */}
-        <div className="bg-white rounded-2xl border border-border-light p-6 mb-5">
+        <div className="bg-white rounded-lg border border-border-light p-6 mb-5">
           <div className="flex items-start justify-between mb-4">
             <div>
               <p className="text-[0.6875rem] text-text-muted font-medium uppercase tracking-wider mb-1">Engagement Execution Workspace</p>
@@ -113,7 +113,7 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
               engagement.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' :
               engagement.status === 'COMPLETED' ? 'bg-blue-50 text-blue-700' :
               engagement.status === 'IN_REVIEW' ? 'bg-purple-50 text-purple-700' :
-              'bg-gray-100 text-gray-600'
+              'bg-canvas text-ink-600'
             }`}>{engagement.status === 'ACTIVE' ? 'Active' : engagement.status === 'IN_REVIEW' ? 'In Review' : engagement.status === 'COMPLETED' ? 'Completed' : 'Draft'}</span>
           </div>
 
@@ -127,9 +127,9 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
               { icon: User, label: 'Reviewer', value: engagement.reviewer },
             ].map(item => (
               <div key={item.label} className="flex items-center gap-2">
-                <item.icon size={13} className="text-gray-400 shrink-0" />
+                <item.icon size={13} className="text-ink-400 shrink-0" />
                 <div>
-                  <span className="text-gray-400 block text-[0.625rem]">{item.label}</span>
+                  <span className="text-ink-400 block text-[0.625rem]">{item.label}</span>
                   <span className="text-text font-medium">{item.value}</span>
                 </div>
               </div>
@@ -141,7 +141,7 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
         <div className="grid grid-cols-7 gap-2.5 mb-5">
           {[
             { label: 'Total Controls', value: kpis.totalControls, color: 'text-text', bg: 'bg-white' },
-            { label: 'Not Started', value: kpis.notStarted, color: 'text-gray-600', bg: 'bg-white' },
+            { label: 'Not Started', value: kpis.notStarted, color: 'text-ink-600', bg: 'bg-white' },
             { label: 'In Progress', value: kpis.inProgress, color: 'text-blue-700', bg: kpis.inProgress > 0 ? 'bg-blue-50/40' : 'bg-white' },
             { label: 'Pending Review', value: kpis.pendingReview, color: 'text-purple-700', bg: kpis.pendingReview > 0 ? 'bg-purple-50/40' : 'bg-white' },
             { label: 'Concluded', value: kpis.concluded, color: 'text-emerald-700', bg: kpis.concluded > 0 ? 'bg-emerald-50/40' : 'bg-white' },
@@ -150,13 +150,13 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
           ].map(card => (
             <div key={card.label} className={`${card.bg} rounded-xl border border-border-light px-3.5 py-2.5`}>
               <span className={`text-[1.25rem] font-bold ${card.color} block tabular-nums`}>{card.value}</span>
-              <span className="text-[0.5625rem] text-gray-400 font-medium">{card.label}</span>
+              <span className="text-[0.5625rem] text-ink-400 font-medium">{card.label}</span>
             </div>
           ))}
         </div>
 
         {/* ═══ Linked RACM Snapshot ═══ */}
-        <div className="bg-white rounded-xl border border-border-light p-4 mb-5 flex items-center justify-between">
+        <div className="bg-white rounded-lg border border-border-light p-4 mb-5 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="p-2 rounded-lg bg-primary/10"><Shield size={16} className="text-primary" /></div>
             <div>
@@ -164,13 +164,13 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
                 <span className="text-[0.8125rem] font-semibold text-text">Linked RACM Snapshot</span>
                 <span className="px-2 py-0.5 rounded-full text-[0.5625rem] font-semibold bg-emerald-50 text-emerald-700">Locked</span>
               </div>
-              <div className="flex items-center gap-3 text-[0.6875rem] text-gray-500">
+              <div className="flex items-center gap-3 text-[0.6875rem] text-ink-500">
                 <span className="font-medium text-text">FY26 P2P — Vendor Payment</span>
-                <span className="text-gray-300">·</span>
+                <span className="text-ink-300">·</span>
                 <span>{engagement.framework}</span>
-                <span className="text-gray-300">·</span>
+                <span className="text-ink-300">·</span>
                 <span>{engagement.primaryProcess}</span>
-                <span className="text-gray-300">·</span>
+                <span className="text-ink-300">·</span>
                 <span>9 risks · {kpis.totalControls} controls</span>
               </div>
             </div>
@@ -270,7 +270,7 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
                     <h2 className="text-[1rem] font-bold text-text">Linked RACM Snapshot</h2>
                     <p className="text-[0.75rem] text-text-muted mt-0.5">FY26 P2P — Vendor Payment · {engagement.framework} · {engagement.primaryProcess}</p>
                   </div>
-                  <button onClick={() => setShowRacmModal(false)} className="w-8 h-8 rounded-full text-gray-400 hover:text-text hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors">
+                  <button onClick={() => setShowRacmModal(false)} className="w-8 h-8 rounded-full text-ink-400 hover:text-text hover:bg-canvas flex items-center justify-center cursor-pointer transition-colors">
                     <X size={16} />
                   </button>
                 </div>
@@ -279,7 +279,7 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
                   <Upload size={14} className="text-primary shrink-0" />
                   <div className="flex-1">
                     <span className="text-[0.6875rem] font-semibold text-text">Upload RACM</span>
-                    <span className="text-[0.625rem] text-gray-400 ml-2">Upload an Excel/CSV RACM file to replace or update the linked version.</span>
+                    <span className="text-[0.625rem] text-ink-400 ml-2">Upload an Excel/CSV RACM file to replace or update the linked version.</span>
                   </div>
                   <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors">
                     <Upload size={11} />Choose File
@@ -306,8 +306,8 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
                 />
               </div>
               {/* Modal Footer */}
-              <div className="shrink-0 px-6 py-3 border-t border-border-light bg-gray-50/50 flex items-center justify-between">
-                <span className="text-[0.625rem] text-gray-400">Changes to the source RACM may require refreshing the engagement snapshot before testing.</span>
+              <div className="shrink-0 px-6 py-3 border-t border-border-light bg-canvas/50 flex items-center justify-between">
+                <span className="text-[0.625rem] text-ink-400">Changes to the source RACM may require refreshing the engagement snapshot before testing.</span>
                 <button onClick={() => setShowRacmModal(false)} className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.6875rem] font-semibold cursor-pointer transition-colors">
                   Close
                 </button>
@@ -352,7 +352,7 @@ function ControlTableRow({ ctrl, index, isSelected, onSelect, onActionClick }: {
 
       {/* Control ID */}
       <td className="px-3 py-3">
-        <span className="text-[0.6875rem] font-mono text-gray-500">{ctrl.id.replace('exec-', '')}</span>
+        <span className="text-[0.6875rem] font-mono text-ink-500">{ctrl.id.replace('exec-', '')}</span>
       </td>
 
       {/* Control Name */}
@@ -384,17 +384,17 @@ function ControlTableRow({ ctrl, index, isSelected, onSelect, onActionClick }: {
 
       {/* Population / Samples */}
       <td className="px-3 py-3 text-center">
-        <span className={`text-[0.625rem] tabular-nums ${popSamples === '—' ? 'text-gray-300' : 'text-text'}`}>{popSamples}</span>
+        <span className={`text-[0.625rem] tabular-nums ${popSamples === '—' ? 'text-ink-300' : 'text-text'}`}>{popSamples}</span>
       </td>
 
       {/* Evidence */}
       <td className="px-3 py-3 text-center">
-        <span className={`text-[0.625rem] tabular-nums ${evidenceCount === 0 ? 'text-gray-300' : 'text-text'}`}>{evidenceCount || '—'}</span>
+        <span className={`text-[0.625rem] tabular-nums ${evidenceCount === 0 ? 'text-ink-300' : 'text-text'}`}>{evidenceCount || '—'}</span>
       </td>
 
       {/* Attribute Testing */}
       <td className="px-3 py-3 text-center">
-        <span className={`text-[0.625rem] tabular-nums ${attrDisplay === '—' ? 'text-gray-300' : 'text-text'}`}>{attrDisplay}</span>
+        <span className={`text-[0.625rem] tabular-nums ${attrDisplay === '—' ? 'text-ink-300' : 'text-text'}`}>{attrDisplay}</span>
       </td>
 
       {/* Review */}
@@ -407,7 +407,7 @@ function ControlTableRow({ ctrl, index, isSelected, onSelect, onActionClick }: {
         {conclusionDisplay ? (
           <span className={`px-1.5 py-0.5 rounded text-[0.5625rem] font-bold ${conclusionDisplay.bg} ${conclusionDisplay.text}`}>{conclusionDisplay.label}</span>
         ) : (
-          <span className="text-[0.625rem] text-gray-300">—</span>
+          <span className="text-[0.625rem] text-ink-300">—</span>
         )}
       </td>
 

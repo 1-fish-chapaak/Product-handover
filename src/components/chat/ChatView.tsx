@@ -6819,7 +6819,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                       })()
                     ) : msg.richType === 'save-workflow-prompt' ? (
                       <div className="mt-1">
-                        <div className="glass-card rounded-xl p-4 border border-primary/10 max-w-md">
+                        <div className="glass-card p-4 border border-primary/10 max-w-md">
                           <div className="flex items-center gap-2 mb-2">
                             <Save size={13} className="text-primary" />
                             <span className="text-[0.75rem] font-semibold text-text">Save Workflow</span>
@@ -7908,7 +7908,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                 if (e.key === 'Escape') { e.preventDefault(); cancelFeedback(); }
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitFeedback(); }
               }}
-              className="w-[32rem] max-w-[92vw] rounded-2xl bg-canvas-elevated border border-canvas-border p-5"
+              className="w-[32rem] max-w-[92vw] rounded-lg bg-canvas-elevated border border-canvas-border p-5"
             >
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div>
@@ -8070,7 +8070,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
                   setNewChatConfirmAfter(null);
                 }
               }}
-              className="w-[28rem] max-w-[92vw] rounded-2xl bg-canvas-elevated border border-canvas-border p-5"
+              className="w-[28rem] max-w-[92vw] rounded-lg bg-canvas-elevated border border-canvas-border p-5"
             >
               <div className="flex items-start gap-3 mb-3">
                 <div className="size-9 rounded-lg bg-risk-50 flex items-center justify-center shrink-0">
@@ -8134,7 +8134,7 @@ The full plan, SQL, and sources are in the Workspace on the right. Promote any p
               transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => { if (e.key === 'Escape') setShowShortcutsModal(false); }}
-              className="w-[28rem] max-w-[92vw] rounded-2xl bg-canvas-elevated border border-canvas-border p-5"
+              className="w-[28rem] max-w-[92vw] rounded-lg bg-canvas-elevated border border-canvas-border p-5"
             >
               <div className="flex items-center justify-between mb-4">
                 <h2 id="shortcuts-title" className="text-[0.9375rem] font-semibold text-ink-800">Keyboard shortcuts</h2>

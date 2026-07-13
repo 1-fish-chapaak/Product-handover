@@ -24,9 +24,9 @@ export interface AutomationScheduleState {
 }
 
 export const SCHEDULE_STATUS_CLS: Record<ScheduleStatus, string> = {
-  NOT_REQUIRED: 'bg-gray-100 text-gray-600', NOT_CONFIGURED: 'bg-gray-100 text-gray-600',
+  NOT_REQUIRED: 'bg-canvas text-ink-600', NOT_CONFIGURED: 'bg-canvas text-ink-600',
   DRAFT: 'bg-blue-50 text-blue-700', ACTIVE: 'bg-emerald-50 text-emerald-700',
-  PAUSED: 'bg-amber-50 text-amber-700', DISABLED: 'bg-gray-50 text-gray-400',
+  PAUSED: 'bg-amber-50 text-amber-700', DISABLED: 'bg-canvas text-ink-400',
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────

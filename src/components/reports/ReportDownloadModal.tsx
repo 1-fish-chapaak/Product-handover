@@ -224,7 +224,7 @@ export default function ReportDownloadModal({
                     role="tab"
                     aria-selected={isActive}
                     onClick={() => setFormat(f.id)}
-                    className={`relative inline-flex items-center h-11 px-4 text-[0.8125rem] font-semibold cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-[8px] ${
+                    className={`relative inline-flex items-center h-11 px-4 text-[0.8125rem] font-semibold cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 rounded-md ${
                       isActive ? 'text-brand-600' : 'text-ink-400 hover:text-ink-800'
                     }`}
                   >
@@ -297,7 +297,7 @@ export default function ReportDownloadModal({
               onClick={handleDownload}
               disabled={isDownloading}
               aria-busy={isDownloading || undefined}
-              className="flex items-center justify-center gap-1.5 h-9 px-5 rounded-[8px] bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-80 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
+              className="flex items-center justify-center gap-1.5 h-9 px-5 rounded-md bg-brand-600 hover:bg-brand-500 text-white text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-80 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
             >
               {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
               {isDownloading ? 'Preparing…' : 'Download'}
@@ -667,7 +667,7 @@ function PptQuerySlideBody({ section }: { section: Extract<DownloadPreviewSectio
       {/* 2-column body */}
       <div className="flex-1 grid grid-cols-2 gap-4 min-h-0">
         {/* Left: chart */}
-        <div className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-3 flex flex-col min-h-0">
+        <div className="bg-canvas-elevated border border-canvas-border rounded-lg p-3 flex flex-col min-h-0">
           {firstChart ? (
             <>
               <div className="flex items-center gap-1.5 mb-1.5 text-[0.5625rem] font-bold uppercase tracking-[0.14em] text-ink-500 shrink-0">
@@ -786,7 +786,7 @@ function XlsxPreview({ reportName, sections }: { reportName: string; sections: D
   const cols = ['Ref', 'Title', 'Type', 'Severity / Status'];
   return (
     <div className="flex flex-col items-center">
-      <div className="bg-white shadow-[0_2px_12px_rgba(0,0,0,0.10)] overflow-hidden rounded-[4px]" style={{ width: 720 }}>
+      <div className="bg-white shadow-[0_2px_12px_rgba(0,0,0,0.10)] overflow-hidden rounded-xs" style={{ width: 720 }}>
         {/* Sheet tab bar */}
         <div className="flex items-center gap-2 px-4 h-10 bg-[#107C41] text-white">
           <LayoutGrid size={14} />
@@ -848,7 +848,7 @@ function SectionContent({ section, typeface, compact = false }: {
             {stats.map(st => (
               <div
                 key={st.label}
-                className="rounded-[10px] border border-canvas-border bg-white p-3"
+                className="rounded-lg border border-canvas-border bg-white p-3"
                 style={{ borderLeft: `3px solid ${st.accent ?? '#6A12CD'}` }}
               >
                 <div className="text-[1.125rem] font-bold tabular-nums leading-none mb-1" style={{ color: st.accent ?? '#6A12CD' }}>{st.value}</div>
@@ -894,7 +894,7 @@ function SectionContent({ section, typeface, compact = false }: {
 
         {/* Charts — render each available chart with the canonical renderer */}
         {!compact && charts.map(g => (
-          <div key={g.id} className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-3 mb-3">
+          <div key={g.id} className="bg-canvas-elevated border border-canvas-border rounded-lg p-3 mb-3">
             <div className="flex items-center gap-1.5 mb-2 text-[0.625rem] font-bold uppercase tracking-[0.14em] text-ink-500">
               <BarChart3 size={12} /> {g.title}
             </div>
@@ -913,11 +913,11 @@ function SectionContent({ section, typeface, compact = false }: {
 
         {/* Results tables — each attached table, dashboard styling via cellRender */}
         {!compact && tables.filter(t => t.rows.length > 0).map(t => (
-          <div key={t.id} className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-3 mb-3">
+          <div key={t.id} className="bg-canvas-elevated border border-canvas-border rounded-lg p-3 mb-3">
             <div className="flex items-center gap-1.5 mb-2 text-[0.625rem] font-bold uppercase tracking-[0.14em] text-ink-500">
               <LayoutGrid size={12} /> {t.title}
             </div>
-            <div className="overflow-hidden rounded-[12px] border border-canvas-border">
+            <div className="overflow-hidden rounded-lg border border-canvas-border">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-surface-2/50">

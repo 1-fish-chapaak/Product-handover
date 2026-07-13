@@ -36,7 +36,7 @@ function parseAtrDate(s: string): Date | null {
 /** Origin tag shown under each report name. */
 function OriginBadge() {
   return (
-    <span className="inline-flex items-center gap-1 h-[18px] px-2 rounded-full bg-info-50 text-info-700 text-[10.5px] font-semibold whitespace-nowrap">
+    <span className="inline-flex items-center gap-1 h-[18px] px-2 rounded-full bg-info-50 text-info-700 text-[0.65625rem] font-semibold whitespace-nowrap">
       <Sparkles size={11} aria-hidden="true" /> System generated
     </span>
   );
@@ -140,12 +140,12 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
 
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
-          <div className="w-12 h-12 rounded-[10px] bg-paper-50 flex items-center justify-center"><FolderOpen size={22} className="text-ink-400" /></div>
+          <div className="w-12 h-12 rounded-lg bg-paper-50 flex items-center justify-center"><FolderOpen size={22} className="text-ink-400" /></div>
           <div className="text-[0.8125rem] font-medium text-ink-700">No ATRs match your filters.</div>
           {activeFilters && <button onClick={clearAll} className="text-[0.75rem] text-brand-700 font-medium hover:underline cursor-pointer">Clear all filters</button>}
         </div>
       ) : view === 'list' ? (
-        <div className="flex-1 rounded-[12px] border border-canvas-border bg-canvas-elevated overflow-hidden">
+        <div className="flex-1 rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
         <SmartTable
           className=""
           variant="modern"

@@ -8,8 +8,8 @@ interface Props extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> {
 }
 
 const SIZES: Record<Size, string> = {
-  sm: 'h-7 text-[13px] px-2.5 pr-7',
-  md: 'h-9 text-[13px] px-3 pr-8',
+  sm: 'h-7 text-[0.8125rem] px-2.5 pr-7',
+  md: 'h-9 text-[0.8125rem] px-3 pr-8',
 };
 
 const Select = forwardRef<HTMLSelectElement, Props>(function Select(

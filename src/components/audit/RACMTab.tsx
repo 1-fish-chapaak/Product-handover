@@ -327,7 +327,7 @@ function RacmLibraryList({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="glass-card rounded-xl px-5 py-4 flex items-center gap-4 flex-wrap">
+      <div className="glass-card px-5 py-4 flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2 rounded-lg bg-brand-50 shrink-0"><FileStack size={16} className="text-brand-600" /></div>
           <div className="min-w-0">
@@ -418,7 +418,7 @@ function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
   const s = entryStats(entry.rows);
   const badge = SOURCE_BADGE[entry.source];
   return (
-    <div className="glass-card rounded-xl p-4 flex items-center gap-4 hover:border-primary/30 transition-colors">
+    <div className="glass-card p-4 flex items-center gap-4 hover:border-primary/30 transition-colors">
       <div className="p-2.5 rounded-xl bg-brand-50 shrink-0"><BookOpen size={18} className="text-brand-600" /></div>
 
       {/* Identity + counts */}
@@ -516,7 +516,7 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
       </button>
 
       {/* Toolbar */}
-      <div className="glass-card rounded-xl px-5 py-4 flex items-center gap-4 flex-wrap">
+      <div className="glass-card px-5 py-4 flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2 rounded-lg bg-brand-50 shrink-0"><BookOpen size={16} className="text-brand-600" /></div>
           <div className="min-w-0">
@@ -596,7 +596,7 @@ function RacmMatrixView({ entry, framework, onBack, onViewSop, onUploadSop, onOp
             const groupControls = new Set(group.rows.map(r => r.controlId)).size;
             const groupKey = group.rows.filter(r => r.isKey).length;
             return (
-              <div key={group.subProcess} className="glass-card rounded-xl overflow-hidden">
+              <div key={group.subProcess} className="glass-card overflow-hidden">
                 <button onClick={() => toggleGroup(group.subProcess)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-2/40 transition-colors cursor-pointer text-left" aria-expanded={!isCollapsed}>
                   <div className="p-1.5 rounded-lg bg-brand-50 shrink-0"><Layers size={13} className="text-brand-600" /></div>
                   <div className="flex-1 min-w-0">

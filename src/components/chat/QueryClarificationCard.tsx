@@ -226,7 +226,7 @@ export default function QueryClarificationCard({
                 {/* Marker — square checkbox for multi-select, round radio for single */}
                 <span
                   aria-hidden="true"
-                  className={`inline-flex items-center justify-center size-[18px] border-2 shrink-0 transition-colors ${isMulti ? 'rounded-[5px]' : 'rounded-full'} ${
+                  className={`inline-flex items-center justify-center size-[18px] border-2 shrink-0 transition-colors ${isMulti ? 'rounded-sm' : 'rounded-full'} ${
                     isChecked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-canvas-elevated border-canvas-border group-hover/opt:border-brand-300'
                   }`}
                 >

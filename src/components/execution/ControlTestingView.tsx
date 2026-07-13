@@ -91,7 +91,7 @@ function TestingBadge({ status }: { status: string }) {
   const map: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
     'Complete': { bg: 'bg-green-50', text: 'text-green-700', icon: <CheckCircle2 size={11} /> },
     'In Progress': { bg: 'bg-blue-50', text: 'text-blue-700', icon: <Clock size={11} /> },
-    'Not Started': { bg: 'bg-gray-100', text: 'text-gray-500', icon: <Circle size={11} /> },
+    'Not Started': { bg: 'bg-canvas', text: 'text-ink-500', icon: <Circle size={11} /> },
   };
   const s = map[status] || map['Not Started'];
   return (
@@ -103,12 +103,12 @@ function TestingBadge({ status }: { status: string }) {
 }
 
 function ConclusionBadge({ conclusion }: { conclusion: string }) {
-  if (!conclusion) return <span className="text-gray-300 text-[0.75rem]">-</span>;
+  if (!conclusion) return <span className="text-ink-300 text-[0.75rem]">-</span>;
   const map: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
     'Effective': { bg: 'bg-green-50', text: 'text-green-700', icon: <ShieldCheck size={11} /> },
     'Ineffective': { bg: 'bg-red-50', text: 'text-red-700', icon: <XCircle size={11} /> },
     'Exception': { bg: 'bg-amber-50', text: 'text-amber-700', icon: <AlertTriangle size={11} /> },
-    'Pending': { bg: 'bg-gray-100', text: 'text-gray-500', icon: <Clock size={11} /> },
+    'Pending': { bg: 'bg-canvas', text: 'text-ink-500', icon: <Clock size={11} /> },
   };
   const s = map[conclusion] || map['Pending'];
   return (
@@ -120,11 +120,11 @@ function ConclusionBadge({ conclusion }: { conclusion: string }) {
 }
 
 function EvidenceBadge({ label, status }: { label: string; status: 'complete' | 'partial' | 'none' }) {
-  if (label === '-') return <span className="text-gray-300 text-[0.75rem]">-</span>;
+  if (label === '-') return <span className="text-ink-300 text-[0.75rem]">-</span>;
   const colors = {
     complete: 'text-green-600',
     partial: 'text-amber-600',
-    none: 'text-gray-400',
+    none: 'text-ink-400',
   };
   return <span className={`text-[0.75rem] font-medium ${colors[status]}`}>{label}</span>;
 }
@@ -135,7 +135,7 @@ function ActionButton({ label, type, onClick }: { label: string; type: string; o
     warning: 'bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200',
     primary: 'bg-primary/5 text-primary hover:bg-primary/10 border-primary/20',
     danger: 'bg-red-50 text-red-700 hover:bg-red-100 border-red-200',
-    default: 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200',
+    default: 'bg-canvas text-ink-600 hover:bg-canvas border-canvas-border',
   };
   return (
     <button
@@ -197,7 +197,7 @@ export default function ControlTestingView({ onAskAI: _onAskAI, onOpenWorkingPap
             >
               {f.label}
               <span className={`text-[0.75rem] font-bold px-1.5 py-0.5 rounded-full ${
-                activeFilter === f.key ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-500'
+                activeFilter === f.key ? 'bg-primary/10 text-primary' : 'bg-canvas text-ink-500'
               }`}>
                 {f.count}
               </span>
@@ -214,7 +214,7 @@ export default function ControlTestingView({ onAskAI: _onAskAI, onOpenWorkingPap
             { label: 'Exceptions', value: '5', color: 'text-danger' },
             { label: 'Completion', value: '62%', color: 'text-primary', progress: 62 },
           ].map(card => (
-            <div key={card.label} className="bg-white rounded-xl border border-border-light p-3 text-center hover:shadow-md transition-all duration-200">
+            <div key={card.label} className="bg-white rounded-lg border border-border-light p-3 text-center hover: transition-all duration-200">
               <div className={`text-xl font-bold ${card.color}`}>{card.value}</div>
               <div className="text-[0.75rem] text-text-muted uppercaser">{card.label}</div>
               {card.progress !== undefined && (
@@ -269,7 +269,7 @@ export default function ControlTestingView({ onAskAI: _onAskAI, onOpenWorkingPap
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <span className="text-text-secondary font-mono text-[0.75rem] bg-gray-50 px-1.5 py-0.5 rounded">{row.engagement}</span>
+                        <span className="text-text-secondary font-mono text-[0.75rem] bg-canvas px-1.5 py-0.5 rounded">{row.engagement}</span>
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex flex-col gap-0.5">
@@ -301,13 +301,13 @@ export default function ControlTestingView({ onAskAI: _onAskAI, onOpenWorkingPap
                         <span className={`text-[0.75rem] font-medium ${
                           row.populationStatus === 'validated' ? 'text-green-600' :
                           row.populationStatus === 'received' ? 'text-blue-600' :
-                          'text-gray-400'
+                          'text-ink-400'
                         }`}>
                           {row.population}
                         </span>
                       </td>
                       <td className="px-3 py-3">
-                        <span className={`text-[0.75rem] ${row.sample === '-' ? 'text-gray-300' : 'text-text-secondary'}`}>
+                        <span className={`text-[0.75rem] ${row.sample === '-' ? 'text-ink-300' : 'text-text-secondary'}`}>
                           {row.sample}
                         </span>
                       </td>
@@ -385,7 +385,7 @@ export default function ControlTestingView({ onAskAI: _onAskAI, onOpenWorkingPap
             </span>
             <div className="flex items-center gap-1">
               <span className="text-[0.75rem] text-text-muted">Page 1 of 1</span>
-              <button className="p-1 rounded hover:bg-gray-100 text-text-muted cursor-pointer">
+              <button className="p-1 rounded hover:bg-canvas text-text-muted cursor-pointer">
                 <ChevronRight size={14} />
               </button>
             </div>

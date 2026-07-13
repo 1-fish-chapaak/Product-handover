@@ -48,7 +48,7 @@ const MOCK_RACMS: RACMRow[] = [
 const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
   Active: { bg: 'bg-success-bg', text: 'text-compliant-700', dot: 'bg-success' },
   'In Mapping': { bg: 'bg-warning-bg', text: 'text-mitigated-700', dot: 'bg-warning' },
-  Draft: { bg: 'bg-gray-100', text: 'text-gray-600', dot: 'bg-gray-400' },
+  Draft: { bg: 'bg-canvas', text: 'text-ink-600', dot: 'bg-ink-400' },
 };
 
 // Tone equivalents for the shared Pill primitive (DESIGN.md §7.10.4). STATUS_STYLES
@@ -390,7 +390,7 @@ export default function RACMView({}: Props) {
                         addToast({ message: `Exporting ${racm.name}...`, type: 'info' });
                         logEvent({ action: 'Export', description: `Exported RACM "${racm.name}" (${racm.id})`, module: 'Governance', entity: 'RACM' });
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-text-secondary text-[0.75rem] font-semibold rounded-lg cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-canvas hover:bg-canvas text-text-secondary text-[0.75rem] font-semibold rounded-lg cursor-pointer"
                     >
                       <Download size={12} />
                       Export
@@ -476,7 +476,7 @@ export default function RACMView({}: Props) {
               render: (item) => {
                 const racm = item as unknown as RACMRow;
                 const pct = racm.completeness;
-                const barColor = pct >= 80 ? 'bg-success' : pct >= 40 ? 'bg-warning' : 'bg-gray-300';
+                const barColor = pct >= 80 ? 'bg-success' : pct >= 40 ? 'bg-warning' : 'bg-ink-300';
                 return (
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-1.5 bg-surface-3 rounded-full overflow-hidden">

@@ -480,7 +480,7 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
           <div className="h-5 w-48 bg-paper-200 rounded-sm animate-pulse" />
           <div className="h-3 w-64 bg-paper-100 rounded-sm animate-pulse mt-2" />
         </div>
-        <div className="glass-card rounded-xl p-8">
+        <div className="glass-card p-8">
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map(n => (
               <div key={n} className="flex items-center gap-4">
@@ -718,9 +718,9 @@ export default function RacmMappingWorkspace({ onBack, onGoToExecution, racmId, 
 
                 {/* Summary */}
                 <div className="grid grid-cols-3 gap-3 text-center">
-                  <div className="glass-card rounded-lg p-2"><div className="text-[1.125rem] font-bold text-text">{totalRisks}</div><div className="text-[0.625rem] text-text-muted">Risks</div></div>
-                  <div className="glass-card rounded-lg p-2"><div className="text-[1.125rem] font-bold text-text">{mappedCount}</div><div className="text-[0.625rem] text-text-muted">Mapped</div></div>
-                  <div className="glass-card rounded-lg p-2"><div className="text-[1.125rem] font-bold text-text">{risks.flatMap(r => r.controls).filter(c => c.isKey).length}</div><div className="text-[0.625rem] text-text-muted">Key Controls</div></div>
+                  <div className="glass-card p-2"><div className="text-[1.125rem] font-bold text-text">{totalRisks}</div><div className="text-[0.625rem] text-text-muted">Risks</div></div>
+                  <div className="glass-card p-2"><div className="text-[1.125rem] font-bold text-text">{mappedCount}</div><div className="text-[0.625rem] text-text-muted">Mapped</div></div>
+                  <div className="glass-card p-2"><div className="text-[1.125rem] font-bold text-text">{risks.flatMap(r => r.controls).filter(c => c.isKey).length}</div><div className="text-[0.625rem] text-text-muted">Key Controls</div></div>
                 </div>
                 </div>
 
@@ -942,7 +942,7 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
     <div className={inline ? 'space-y-2' : 'space-y-3'} onClick={() => { if (controlPickerRiskId) setControlPickerRiskId(null); }}>
       {/* Summary bar — compact in inline mode */}
       {!inline && (
-        <div className="glass-card rounded-xl p-3">
+        <div className="glass-card p-3">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[0.75rem] font-semibold text-text">{mappedRiskCount} of {risks.length} risks mapped</span>
             <span className="text-[0.6875rem] text-text-muted tabular-nums">{mappedPct}%</span>
@@ -1004,7 +1004,7 @@ function RacmGridView({ risks, onSelectRisk, onUpdateRisks, onLinkControl, onCre
       </div>
 
       {/* Grid table */}
-      <div className={`${inline ? 'rounded-lg border border-border/50' : 'glass-card rounded-xl'} overflow-hidden`}>
+      <div className={`${inline ? 'rounded-lg border border-border/50' : 'glass-card'} overflow-hidden`}>
         <div className="overflow-x-auto" style={{ maxHeight: inline ? 400 : 560 }}>
           <table className="w-full text-[0.6875rem] table-fixed" style={{ minWidth: 1100 }}>
             <thead className="sticky top-0 z-10">
@@ -1484,7 +1484,7 @@ function WorkflowReadinessDrawer({ risk, onClose, onLinkWorkflow, onCreateWorkfl
               const totalAttrs = wfs.reduce((s, w) => s + w.attributes.length, 0);
 
               return (
-                <div key={ctrl.id} className="glass-card rounded-xl p-4">
+                <div key={ctrl.id} className="glass-card p-4">
                   {/* Control header */}
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -1817,7 +1817,7 @@ function LinkControlDrawer({ alreadyLinkedIds, onClose, onLink }: {
             />
           ) : filtered.map(ctrl => (
             <button key={ctrl.id} onClick={() => onLink(ctrl.id)}
-              className="w-full text-left px-4 py-3 rounded-xl border border-canvas-border bg-white hover:bg-canvas hover:border-primary/20 transition-all cursor-pointer">
+              className="w-full text-left px-4 py-3 rounded-lg border border-canvas-border bg-white hover:bg-canvas hover:border-primary/20 transition-all cursor-pointer">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-[0.75rem] font-semibold text-text">{ctrl.name}</span>
                 {ctrl.isKey && <Star size={10} className="fill-mitigated text-mitigated" />}
@@ -2157,10 +2157,10 @@ function CreateWorkflowBuilderDrawer({ control, onClose, onCreate }: {
               <motion.div key="choose" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
                 <p className="text-[0.8125rem] text-text-secondary">Choose how to build:</p>
                 <div className="space-y-3">
-                  <button onClick={() => setMode('builder')} className="w-full text-left px-4 py-4 rounded-xl border border-canvas-border bg-white hover:border-primary/20 hover:bg-primary-xlight/20 transition-all cursor-pointer">
+                  <button onClick={() => setMode('builder')} className="w-full text-left px-4 py-4 rounded-lg border border-canvas-border bg-white hover:border-primary/20 hover:bg-primary-xlight/20 transition-all cursor-pointer">
                     <div className="flex items-center gap-3"><div className="p-2 rounded-lg bg-brand-50"><Workflow size={18} className="text-brand-600" /></div><div><div className="text-[0.8125rem] font-semibold text-text">Workflow Builder</div><div className="text-[0.6875rem] text-text-muted mt-0.5">Define settings and attributes inline.</div></div><ChevronRight size={16} className="text-ink-300 ml-auto shrink-0" /></div>
                   </button>
-                  <button onClick={() => { setMode('builder'); addToast({ message: 'Q&A flow: same builder with guided questions', type: 'info' }); }} className="w-full text-left px-4 py-4 rounded-xl border border-canvas-border bg-white hover:border-primary/20 hover:bg-primary-xlight/20 transition-all cursor-pointer">
+                  <button onClick={() => { setMode('builder'); addToast({ message: 'Q&A flow: same builder with guided questions', type: 'info' }); }} className="w-full text-left px-4 py-4 rounded-lg border border-canvas-border bg-white hover:border-primary/20 hover:bg-primary-xlight/20 transition-all cursor-pointer">
                     <div className="flex items-center gap-3"><div className="p-2 rounded-lg bg-evidence-50"><FileText size={18} className="text-evidence-700" /></div><div><div className="text-[0.8125rem] font-semibold text-text">Q&A Flow</div><div className="text-[0.6875rem] text-text-muted mt-0.5">Answer guided questions step by step.</div></div><ChevronRight size={16} className="text-ink-300 ml-auto shrink-0" /></div>
                   </button>
                 </div>

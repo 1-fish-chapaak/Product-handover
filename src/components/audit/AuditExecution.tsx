@@ -67,7 +67,7 @@ export default function AuditExecution({ onAskAboutControl: _unused }: Props) {
         </div>
 
         {/* Engagement overview */}
-        <div className="bg-white rounded-xl border border-border-light p-6 mb-6">
+        <div className="bg-white rounded-lg border border-border-light p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-base font-semibold text-text">{eng.name}</h2>

@@ -139,7 +139,7 @@ export default function LinkWorkflowModal({ engagementName, alreadyLinkedIds = [
                       checked ? 'border-primary/40 bg-primary-xlight/40' : 'border-border-light hover:border-primary/20 hover:bg-surface-2/40'
                     }`}
                   >
-                    <span className={`w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0 transition-colors ${
+                    <span className={`w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0 transition-colors ${
                       checked ? 'bg-primary border-primary' : 'bg-white border-border'
                     }`}>
                       {checked && <Check size={12} className="text-white" strokeWidth={3} />}

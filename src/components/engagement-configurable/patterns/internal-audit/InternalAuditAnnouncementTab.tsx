@@ -17,12 +17,12 @@ import {
 const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const labelCls = 'text-[0.6875rem] font-semibold text-text-muted block mb-1';
 const STATUS_CLS: Record<AnnouncementStatus, string> = {
-  DRAFT: 'bg-gray-100 text-gray-600',
+  DRAFT: 'bg-canvas text-ink-600',
   READY_TO_SEND: 'bg-blue-50 text-blue-700',
   SENT: 'bg-emerald-50 text-emerald-700',
   ACKNOWLEDGED: 'bg-primary/10 text-primary',
 };
-const ACTION_CLS: Record<string, string> = { DRAFT_CREATED: 'text-gray-500', UPDATED: 'text-blue-600', SENT: 'text-emerald-600', ACKNOWLEDGED: 'text-primary', SAVED_DRAFT: 'text-gray-500' };
+const ACTION_CLS: Record<string, string> = { DRAFT_CREATED: 'text-ink-500', UPDATED: 'text-blue-600', SENT: 'text-emerald-600', ACKNOWLEDGED: 'text-primary', SAVED_DRAFT: 'text-ink-500' };
 
 interface Props {
   engagement: ConfigurableEngagement;
@@ -142,7 +142,7 @@ export default function InternalAuditAnnouncementTab({ engagement, scope, announ
         ].map(s => (
           <div key={s.label} className="rounded-lg border border-border-light p-2 text-center">
             <div className={`text-[0.8125rem] font-bold tabular-nums ${(s as any).cls || 'text-text'}`}>{s.value}</div>
-            <div className="text-[0.5rem] text-gray-400 font-medium">{s.label}</div>
+            <div className="text-[0.5rem] text-ink-400 font-medium">{s.label}</div>
           </div>
         ))}
       </div>
@@ -259,17 +259,17 @@ export default function InternalAuditAnnouncementTab({ engagement, scope, announ
           <div className="rounded-lg border border-border-light p-4 space-y-3 sticky top-4">
             <h4 className="text-[0.6875rem] font-bold text-text">Announcement Preview</h4>
             <div className="rounded-lg border border-border-light bg-white p-4 space-y-2">
-              <div className="text-[0.625rem] text-gray-400">Subject</div>
+              <div className="text-[0.625rem] text-ink-400">Subject</div>
               <div className="text-[0.75rem] font-semibold text-text">{announcement.subject || 'No subject'}</div>
               <div className="border-t border-border-light pt-2 space-y-1 text-[0.625rem]">
-                <div><span className="text-gray-400">To:</span> <span className="text-text">{announcement.recipients || '—'}</span></div>
-                {announcement.ccRecipients && <div><span className="text-gray-400">CC:</span> <span className="text-text">{announcement.ccRecipients}</span></div>}
-                {announcement.announcementDate && <div><span className="text-gray-400">Date:</span> <span className="text-text">{announcement.announcementDate}</span></div>}
+                <div><span className="text-ink-400">To:</span> <span className="text-text">{announcement.recipients || '—'}</span></div>
+                {announcement.ccRecipients && <div><span className="text-ink-400">CC:</span> <span className="text-text">{announcement.ccRecipients}</span></div>}
+                {announcement.announcementDate && <div><span className="text-ink-400">Date:</span> <span className="text-text">{announcement.announcementDate}</span></div>}
               </div>
               <div className="border-t border-border-light pt-2">
                 <pre className="text-[0.625rem] text-text whitespace-pre-wrap font-sans leading-relaxed">{announcement.body || 'No body content.'}</pre>
               </div>
-              <div className="border-t border-border-light pt-2 text-[0.5625rem] text-gray-400">
+              <div className="border-t border-border-light pt-2 text-[0.5625rem] text-ink-400">
                 <div className="font-semibold mb-0.5">Attachments (placeholder)</div>
                 <div>- Scope Summary</div>
                 <div>- Audit Plan</div>
@@ -287,11 +287,11 @@ export default function InternalAuditAnnouncementTab({ engagement, scope, announ
                   <div key={h.id} className="flex items-start gap-2 text-[0.625rem]">
                     {h.action === 'SENT' ? <Send size={10} className="text-emerald-500 shrink-0 mt-0.5" /> :
                      h.action === 'ACKNOWLEDGED' ? <CheckCircle2 size={10} className="text-primary shrink-0 mt-0.5" /> :
-                     <Clock size={10} className="text-gray-400 shrink-0 mt-0.5" />}
+                     <Clock size={10} className="text-ink-400 shrink-0 mt-0.5" />}
                     <div>
                       <span className={`font-semibold ${ACTION_CLS[h.action]}`}>{h.action.replace(/_/g, ' ')}</span>
-                      <span className="text-gray-400 ml-2">by {h.actor} · {h.timestamp}</span>
-                      {h.comments && <p className="text-gray-500 mt-0.5 italic">"{h.comments}"</p>}
+                      <span className="text-ink-400 ml-2">by {h.actor} · {h.timestamp}</span>
+                      {h.comments && <p className="text-ink-500 mt-0.5 italic">"{h.comments}"</p>}
                     </div>
                   </div>
                 ))}

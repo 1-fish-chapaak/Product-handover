@@ -47,7 +47,7 @@ export function FileTreeView({ files, search, draggable, fieldIdMap }: {
       {filteredFiles.map(file => {
         const isFileOpen = expandedFiles[file.name] ?? false;
         return (
-          <div key={file.name} className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+          <div key={file.name} className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
             <button
               onClick={() => toggleFile(file.name)}
               className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] transition-all cursor-pointer"

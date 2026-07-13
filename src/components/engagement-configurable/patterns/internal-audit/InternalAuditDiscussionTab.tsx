@@ -110,7 +110,7 @@ export default function InternalAuditDiscussionTab({ engagement, observationsSta
       <div className="space-y-4">
         <div><h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Discussion</h3><p className="text-[0.75rem] text-text-muted">Capture process owner responses and agreement on audit observations before final reporting.</p></div>
         <div className="flex flex-col items-center justify-center py-12 text-center">
-          <AlertCircle size={24} className="text-gray-300 mb-3" />
+          <AlertCircle size={24} className="text-ink-300 mb-3" />
           <p className="text-[0.75rem] text-text-muted mb-4">No observations are ready for discussion yet. Mark observations as "Ready for Discussion" first.</p>
           <button onClick={() => onNavigateTab?.('observations')} className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-[0.75rem] font-semibold cursor-pointer transition-colors flex items-center gap-1">Go to Observations <ChevronRight size={12} /></button>
         </div>
@@ -136,7 +136,7 @@ export default function InternalAuditDiscussionTab({ engagement, observationsSta
         ].map(s => (
           <div key={s.label} className="rounded-lg border border-border-light p-2 text-center">
             <div className={`text-[0.9375rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-            <div className="text-[0.5rem] text-gray-400 font-medium">{s.label}</div>
+            <div className="text-[0.5rem] text-ink-400 font-medium">{s.label}</div>
           </div>
         ))}
       </div>
@@ -145,7 +145,7 @@ export default function InternalAuditDiscussionTab({ engagement, observationsSta
       <div className="rounded-lg border border-border-light overflow-hidden">
         <div className="px-4 py-2 bg-surface-2/20 border-b border-border-light"><h4 className="text-[0.6875rem] font-bold text-text">Observation Discussions</h4></div>
         <table className="w-full text-[0.6875rem]">
-          <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.5625rem] font-semibold text-gray-400 uppercase">
+          <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.5625rem] font-semibold text-ink-400 uppercase">
             <th className="px-3 py-1.5 text-left">Observation</th>
             <th className="px-3 py-1.5 text-center">Severity</th>
             <th className="px-3 py-1.5 text-center">Status</th>
@@ -159,13 +159,13 @@ export default function InternalAuditDiscussionTab({ engagement, observationsSta
               <tr key={item.id} className="border-b border-border-light/50">
                 <td className="px-3 py-2">
                   <div className="font-medium text-text">{item.observationTitle}</div>
-                  <div className="text-[0.5625rem] text-gray-400">{item.linkedScopeLabel}</div>
+                  <div className="text-[0.5625rem] text-ink-400">{item.linkedScopeLabel}</div>
                 </td>
-                <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${SEVERITY_CLS[item.observationSeverity as keyof typeof SEVERITY_CLS] || 'bg-gray-100 text-gray-600'}`}>{item.observationSeverity}</span></td>
+                <td className="px-3 py-2 text-center"><span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${SEVERITY_CLS[item.observationSeverity as keyof typeof SEVERITY_CLS] || 'bg-canvas text-ink-600'}`}>{item.observationSeverity}</span></td>
                 <td className="px-3 py-2 text-center"><span className={`px-2 py-0.5 rounded-full text-[0.5rem] font-bold ${DISC_STATUS_CLS[item.status]}`}>{item.status.replace(/_/g, ' ')}</span></td>
-                <td className="px-3 py-2 text-[0.625rem] text-gray-500 truncate max-w-[150px]">{item.managementResponse || '—'}</td>
-                <td className="px-3 py-2 text-gray-500">{item.actionOwner || '—'}</td>
-                <td className="px-3 py-2 text-center text-[0.625rem] font-mono text-gray-500">{item.targetDate || '—'}</td>
+                <td className="px-3 py-2 text-[0.625rem] text-ink-500 truncate max-w-[150px]">{item.managementResponse || '—'}</td>
+                <td className="px-3 py-2 text-ink-500">{item.actionOwner || '—'}</td>
+                <td className="px-3 py-2 text-center text-[0.625rem] font-mono text-ink-500">{item.targetDate || '—'}</td>
                 <td className="px-3 py-2 text-center">
                   <button onClick={() => setDetailId(item.id)} className="px-2 py-1 rounded text-[0.5625rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors">Discuss</button>
                 </td>
@@ -187,9 +187,9 @@ export default function InternalAuditDiscussionTab({ engagement, observationsSta
         {discussionState.notes.length > 0 && (
           <div className="space-y-1 mb-2">
             {discussionState.notes.map(n => (
-              <div key={n.id} className="text-[0.625rem] text-gray-500 pl-2 border-l-2 border-gray-200">
+              <div key={n.id} className="text-[0.625rem] text-ink-500 pl-2 border-l-2 border-canvas-border">
                 <span className="text-text">{n.note}</span>
-                <span className="text-gray-400 ml-2">— {n.author}, {n.createdAt}</span>
+                <span className="text-ink-400 ml-2">— {n.author}, {n.createdAt}</span>
               </div>
             ))}
           </div>
@@ -204,7 +204,7 @@ export default function InternalAuditDiscussionTab({ engagement, observationsSta
       <div className="rounded-lg border border-border-light p-4 space-y-2">
         <div className="flex items-center justify-between">
           <h4 className="text-[0.6875rem] font-bold text-text">Working Paper Readiness</h4>
-          <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-bold ${canProceed ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{canProceed ? 'Ready' : 'Not Ready'}</span>
+          <span className={`px-2 py-0.5 rounded-full text-[0.5625rem] font-bold ${canProceed ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-ink-500'}`}>{canProceed ? 'Ready' : 'Not Ready'}</span>
         </div>
         <div className="space-y-1">
           {[
@@ -215,7 +215,7 @@ export default function InternalAuditDiscussionTab({ engagement, observationsSta
           ].map(c => (
             <div key={c.label} className="flex items-center gap-2 text-[0.625rem]">
               {c.ok ? <CheckCircle2 size={10} className="text-emerald-500" /> : <AlertCircle size={10} className="text-amber-400" />}
-              <span className={c.ok ? 'text-gray-500' : 'text-text'}>{c.label}</span>
+              <span className={c.ok ? 'text-ink-500' : 'text-text'}>{c.label}</span>
             </div>
           ))}
         </div>
@@ -255,13 +255,13 @@ function DiscussionDetailPanel({ item, engagement, onUpdate, onTransition, onClo
   };
 
   return (
-    <div className="rounded-xl border-2 border-primary/20 bg-white p-4 space-y-3 shadow-lg">
+    <div className="rounded-lg border-2 border-primary/20 bg-white p-4 space-y-3 shadow-lg">
       <div className="flex items-center justify-between">
         <div>
           <h4 className="text-[0.8125rem] font-bold text-text">{item.observationTitle}</h4>
-          <p className="text-[0.625rem] text-gray-400">{item.linkedScopeLabel} · {DISC_STATUS_CLS[item.status] ? item.status.replace(/_/g, ' ') : item.status}</p>
+          <p className="text-[0.625rem] text-ink-400">{item.linkedScopeLabel} · {DISC_STATUS_CLS[item.status] ? item.status.replace(/_/g, ' ') : item.status}</p>
         </div>
-        <button onClick={onClose} className="p-1 rounded text-gray-400 hover:text-text cursor-pointer"><X size={14} /></button>
+        <button onClick={onClose} className="p-1 rounded text-ink-400 hover:text-text cursor-pointer"><X size={14} /></button>
       </div>
 
       {/* NOT_STARTED: show send CTA only, no response form */}
@@ -302,9 +302,9 @@ function DiscussionDetailPanel({ item, engagement, onUpdate, onTransition, onClo
       {/* History */}
       {item.history.length > 0 && (
         <div>
-          <h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">History</h6>
+          <h6 className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">History</h6>
           <div className="space-y-1">{item.history.map(h => (
-            <div key={h.id} className="text-[0.5625rem] text-gray-500"><span className="font-semibold text-text">{h.action}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
+            <div key={h.id} className="text-[0.5625rem] text-ink-500"><span className="font-semibold text-text">{h.action}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
           ))}</div>
         </div>
       )}

@@ -54,7 +54,7 @@ export default function AtrReviewDrawer({ reportId, reportName, tab, onClose, on
         <header className="shrink-0 px-6 pt-5 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div className="flex items-start gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-[8px] bg-brand-600/10 text-brand-600 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-md bg-brand-600/10 text-brand-600 flex items-center justify-center shrink-0">
                 <History size={20} />
               </div>
               <div className="min-w-0">
@@ -114,7 +114,7 @@ export default function AtrReviewDrawer({ reportId, reportName, tab, onClose, on
           <>
             {/* Composer — top, mirroring the Report Activity Log. */}
             <section className="shrink-0 px-6 py-4 border-b border-canvas-border bg-canvas">
-              <div className="bg-white border border-canvas-border rounded-[10px] focus-within:border-brand-600/40 focus-within:ring-2 focus-within:ring-brand-600/15 transition-all overflow-hidden">
+              <div className="bg-white border border-canvas-border rounded-lg focus-within:border-brand-600/40 focus-within:ring-2 focus-within:ring-brand-600/15 transition-all overflow-hidden">
                 <textarea
                   value={draft}
                   onChange={e => setDraft(e.target.value)}
@@ -128,7 +128,7 @@ export default function AtrReviewDrawer({ reportId, reportName, tab, onClose, on
                     onClick={addComment}
                     disabled={!draft.trim()}
                     title="Post comment (⌘↵)"
-                    className={`inline-flex items-center gap-1.5 h-8 px-4 text-[0.75rem] font-semibold rounded-[8px] transition-colors ${draft.trim() ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/40 text-white/80 cursor-not-allowed'}`}
+                    className={`inline-flex items-center gap-1.5 h-8 px-4 text-[0.75rem] font-semibold rounded-md transition-colors ${draft.trim() ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/40 text-white/80 cursor-not-allowed'}`}
                   >
                     <Send size={12} /> Post
                   </button>
@@ -245,21 +245,21 @@ export default function AtrReviewDrawer({ reportId, reportName, tab, onClose, on
                               value={labelDraft}
                               onChange={e => setLabelDraft(e.target.value)}
                               onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') { setEditingVersion(null); setLabelDraft(''); } }}
-                              className="flex-1 min-w-0 h-8 px-2 rounded-[6px] border border-brand-600 text-[0.875rem] text-ink-900 focus:outline-none"
+                              className="flex-1 min-w-0 h-8 px-2 rounded-sm border border-brand-600 text-[0.875rem] text-ink-900 focus:outline-none"
                             />
-                            <button onClick={commitRename} title="Save name" className="w-8 h-8 rounded-[6px] bg-brand-600 text-white flex items-center justify-center hover:bg-brand-500 cursor-pointer shrink-0"><Check size={14} /></button>
-                            <button onClick={() => { setEditingVersion(null); setLabelDraft(''); }} title="Cancel" className="w-8 h-8 rounded-[6px] text-ink-500 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0"><X size={14} /></button>
+                            <button onClick={commitRename} title="Save name" className="w-8 h-8 rounded-sm bg-brand-600 text-white flex items-center justify-center hover:bg-brand-500 cursor-pointer shrink-0"><Check size={14} /></button>
+                            <button onClick={() => { setEditingVersion(null); setLabelDraft(''); }} title="Cancel" className="w-8 h-8 rounded-sm text-ink-500 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0"><X size={14} /></button>
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5">
                             <span className="text-[0.875rem] font-semibold text-ink-800 truncate">{v.label}</span>
                             {isLatest && <span className="shrink-0 inline-flex items-center h-[17px] px-1.5 rounded-full bg-brand-50 text-brand-700 text-[0.5625rem] font-semibold uppercase tracking-wide">Current</span>}
-                            <button onClick={() => startRename(v)} title="Rename version" className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 w-5 h-5 rounded-[5px] text-ink-400 hover:text-brand-700 hover:bg-brand-50 flex items-center justify-center cursor-pointer transition-opacity shrink-0"><Pencil size={12} /></button>
+                            <button onClick={() => startRename(v)} title="Rename version" className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 w-5 h-5 rounded-sm text-ink-400 hover:text-brand-700 hover:bg-brand-50 flex items-center justify-center cursor-pointer transition-opacity shrink-0"><Pencil size={12} /></button>
                             <span className="ml-auto text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap shrink-0">{v.at}</span>
                           </div>
                         )}
                         {v.changes && v.changes.length > 0 && (
-                          <ul className="mt-2 space-y-1.5 rounded-[8px] border border-canvas-border bg-canvas px-3 py-2.5">
+                          <ul className="mt-2 space-y-1.5 rounded-md border border-canvas-border bg-canvas px-3 py-2.5">
                             {v.changes.map((c, ci) => (
                               <li key={ci} className="flex gap-2 text-[0.75rem] leading-relaxed text-ink-600">
                                 <span className="mt-[7px] w-1 h-1 rounded-full bg-brand-400 shrink-0" />

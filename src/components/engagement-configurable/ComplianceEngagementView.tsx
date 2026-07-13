@@ -195,7 +195,7 @@ export default function ComplianceEngagementView({ onOpenEngagement, onCreateNew
                 exit={{ opacity: 0 }}
                 transition={{ delay: i * 0.06 }}
                 onClick={() => onOpenEngagement(buildComplianceEngagement(eng))}
-                className="text-left group relative bg-white rounded-2xl border border-border-light p-6 hover:border-primary/20 hover:shadow-sm transition-all cursor-pointer"
+                className="text-left group relative bg-white rounded-lg border border-border-light p-6 hover:border-primary/20 hover: transition-all cursor-pointer"
               >
                 <div className="flex items-start justify-between gap-3 mb-5">
                   <div className="flex items-center gap-3 min-w-0">

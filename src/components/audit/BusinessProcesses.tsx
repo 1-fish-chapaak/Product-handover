@@ -2072,7 +2072,7 @@ function SOPTabContent({ bpId, bpAbbr, existingSops, existingRacms, onGoToRacm, 
           <div className="min-h-[calc(100vh-280px)] pb-4 space-y-2">
             {isLoading && showSkeleton ? (
               [...Array(5)].map((_, i) => (
-                <div key={`skel-sop-card-${i}`} className="px-6 py-5 rounded-xl border border-border-light bg-white">
+                <div key={`skel-sop-card-${i}`} className="px-6 py-5 rounded-lg border border-border-light bg-white">
                   <div className="grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 items-start">
                     <div className="h-3.5 w-3.5 rounded-xs bg-paper-100 animate-pulse" />
                     <div className="space-y-2">
@@ -3230,7 +3230,7 @@ function ControlDesignTab({ bpAbbr, seeded, onGoToRacm }: { bpAbbr: string; seed
       <div className="space-y-2 min-h-[calc(100vh-280px)]">
         {isLoading && showSkeleton ? (
           [...Array(5)].map((_, i) => (
-            <div key={`skel-ctrl-${i}`} className="px-6 py-5 rounded-xl border border-border-light bg-white">
+            <div key={`skel-ctrl-${i}`} className="px-6 py-5 rounded-lg border border-border-light bg-white">
               <div className="flex items-start gap-4">
                 <div className="h-3.5 w-3.5 rounded-sm bg-paper-100 animate-pulse shrink-0 mt-0.5" />
                 <div className="flex-1 space-y-2.5">
@@ -3903,7 +3903,7 @@ function WorkflowGovernanceTab({ bpAbbr, seeded, onOpenWorkflowDetail, onCreateW
       {isLoading && showSkeleton ? (
         <div className="space-y-2.5">
           {[...Array(5)].map((_, i) => (
-            <div key={`skel-wf-${i}`} className="rounded-xl border border-border-light bg-white px-6 py-5">
+            <div key={`skel-wf-${i}`} className="rounded-lg border border-border-light bg-white px-6 py-5">
               <div className="grid grid-cols-[28px_2.6fr_1fr_1.7fr_80px] gap-5 items-start">
                 <div className="h-4 w-4 rounded-xs bg-paper-100 animate-pulse" />
                 <div className="space-y-2">
@@ -5902,7 +5902,7 @@ function BPDetailView({ bp, onBack, onOpenRacmEditor, onOpenWorkflowDetail, onCr
           const completed = SETUP_STEPS.filter(s => isStepDone(s.key)).length;
           const pct = Math.round((completed / SETUP_STEPS.length) * 100);
           return (
-            <motion.section className="rounded-xl border border-canvas-border bg-white p-5 mb-5" {...revealProps(0)}>
+            <motion.section className="rounded-lg border border-canvas-border bg-white p-5 mb-5" {...revealProps(0)}>
               <div className="flex items-center justify-between gap-4 mb-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="w-10 h-10 rounded-full bg-brand-600 grid place-items-center shrink-0">

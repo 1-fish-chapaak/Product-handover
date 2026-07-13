@@ -233,7 +233,7 @@ function AssigneeChip({ name, primary }: { name: string; primary?: boolean }) {
 
 function EmptyState({ title, sub, actionLabel, onAction }: { title: string; sub: string; actionLabel: string; onAction: () => void }) {
   return (
-    <div className="glass-card rounded-2xl p-14 text-center">
+    <div className="glass-card p-14 text-center">
       <AlertTriangle size={28} className="text-ink-400 mx-auto mb-3" />
       <p className="text-[0.875rem] font-semibold text-ink-900 mb-1">{title}</p>
       <p className="text-[0.75rem] text-ink-500">{sub}</p>
@@ -706,7 +706,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
               <ArrowLeft size={14} /> Back
             </button>
           )}
-          <div className="glass-card rounded-xl p-12 text-center">
+          <div className="glass-card p-12 text-center">
             <AlertTriangle size={28} className="text-ink-400 mx-auto mb-3" />
             <p className="text-[0.875rem] font-semibold text-ink-900 mb-1">Engagement not found</p>
             <p className="text-[0.75rem] text-ink-500">It may have been deleted or moved.</p>
@@ -728,7 +728,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
             </button>
 
             {/* Header */}
-            <header className="glass-card rounded-2xl p-5 mb-4 flex items-center justify-between gap-4 flex-wrap">
+            <header className="glass-card p-5 mb-4 flex items-center justify-between gap-4 flex-wrap">
               <div>
                 <h1 className="text-[1.375rem] font-semibold text-ink-900 tracking-tight">Case Management Workspace</h1>
                 <p className="text-[0.75rem] text-ink-500 mt-0.5">Triage, classify, and resolve every exception flagged for this engagement.</p>
@@ -748,7 +748,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
 
         {/* Embedded header — compact summary bar */}
         {embedded && (
-          <header className="rounded-xl border border-border-light bg-white p-4 mb-3 flex items-center justify-between gap-4 flex-wrap">
+          <header className="rounded-lg border border-border-light bg-white p-4 mb-3 flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3">
               <CountPill label="Open" value={totals.open} tone="risk" />
               <CountPill label="Triaging" value={totals.triaging} tone="mitigated" />
@@ -762,7 +762,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
         )}
 
         {/* Filter pane */}
-        <section aria-label="Filters" className="glass-card rounded-2xl px-4 py-3.5 mb-3 flex items-center gap-2 flex-wrap">
+        <section aria-label="Filters" className="glass-card px-4 py-3.5 mb-3 flex items-center gap-2 flex-wrap">
           <div className="inline-flex items-center gap-1.5 mr-1 text-ink-500">
             <ListFilter size={12} />
             <span className="text-[0.6875rem] font-semibold uppercase tracking-wide">Filters</span>
@@ -849,7 +849,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
 
         {/* Master select bar */}
         {filtered.length > 0 && (
-          <div className="flex items-center gap-3 px-4 py-2 mb-2 rounded-xl bg-canvas-elevated border border-canvas-border">
+          <div className="flex items-center gap-3 px-4 py-2 mb-2 rounded-lg bg-canvas-elevated border border-canvas-border">
             <TriStateCheckbox checked={allVisibleSelected} indeterminate={!allVisibleSelected && someVisibleSelected}
               onChange={toggleAllVisible} ariaLabel="Select all visible exceptions" />
             <span className="text-[0.75rem] text-ink-700 font-medium">
@@ -869,7 +869,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
           {selectedIds.size > 0 && (
             <motion.div initial={{ opacity: 0, y: -8, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, y: -8, height: 0 }} transition={{ duration: 0.16 }}
               className="sticky top-0 z-30 mb-3 overflow-visible">
-              <div className="glass-card rounded-2xl px-4 py-2.5 flex items-center gap-2 flex-wrap shadow-lg">
+              <div className="glass-card px-4 py-2.5 flex items-center gap-2 flex-wrap">
                 <span className="text-[0.75rem] font-semibold text-ink-900 mr-2">{selectedIds.size} selected</span>
                 <div className="h-5 w-px bg-canvas-border mr-1" />
                 <BulkBtn refEl={assignRef} icon={Users} label="Assign" active={openBulk === 'assign'} onClick={() => setOpenBulk(openBulk === 'assign' ? null : 'assign')} />
@@ -935,7 +935,7 @@ export default function CaseManagementWorkspace({ engagementId, onBack, embedded
                 .map((e) => ({ e, h: parseHoursAgo(e.opened) }))
                 .sort((a, b) => a.h - b.h)[0]?.e.opened ?? '—';
               return (
-                <div key={g.workflowId} className="glass-card rounded-2xl overflow-hidden">
+                <div key={g.workflowId} className="glass-card overflow-hidden">
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-canvas-border/60 bg-canvas-elevated">
                     <TriStateCheckbox checked={groupAllSelected(groupIds)} indeterminate={!groupAllSelected(groupIds) && groupSomeSelected(groupIds)}
                       onChange={() => toggleGroupSelection(groupIds)} ariaLabel={`Select all in ${g.workflowName}`} />

@@ -377,7 +377,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                   );
                 }
                 return (
-                  <span className="inline-flex items-center bg-gray-50 text-gray-500 px-2 py-0.5 rounded text-[0.75rem] font-medium">
+                  <span className="inline-flex items-center bg-canvas text-ink-500 px-2 py-0.5 rounded text-[0.75rem] font-medium">
                     Non-Key
                   </span>
                 );
@@ -476,7 +476,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                     <button
                       onClick={(e) => { e.stopPropagation(); setSelectedControlId(ctrl.id); }}
                       title="View Control"
-                      className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
+                      className="p-1.5 rounded-md hover:bg-canvas text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
                     >
                       <Eye size={13} />
                     </button>
@@ -484,7 +484,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                       <button
                         onClick={(e) => { e.stopPropagation(); openShare({ type: 'control', id: ctrl.id, anchor: rectFromEvent(e) }); }}
                         title="Share Control"
-                        className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-primary transition-colors cursor-pointer"
+                        className="p-1.5 rounded-md hover:bg-canvas text-text-muted hover:text-primary transition-colors cursor-pointer"
                       >
                         <Share2 size={13} />
                       </button>
@@ -497,7 +497,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                           logEvent({ action: 'Update', description: `Edited control "${ctrl.name}" (${ctrl.controlId})`, module: 'Control Library', entity: 'Control' });
                         }}
                         title="Edit Control"
-                        className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
+                        className="p-1.5 rounded-md hover:bg-canvas text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
                       >
                         <Pencil size={13} />
                       </button>
@@ -506,7 +506,7 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
                       <button
                         onClick={(e) => { e.stopPropagation(); setLinkWfControlId(ctrl.id); }}
                         title="Link Workflow"
-                        className="p-1.5 rounded-md hover:bg-gray-100 text-text-muted hover:text-primary transition-colors cursor-pointer"
+                        className="p-1.5 rounded-md hover:bg-canvas text-text-muted hover:text-primary transition-colors cursor-pointer"
                       >
                         <Workflow size={13} />
                       </button>

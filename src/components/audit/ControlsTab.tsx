@@ -425,7 +425,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
   if (controls.length === 0) {
     return (
       <>
-        <div className="glass-card rounded-xl">
+        <div className="glass-card">
           <ListPlaceholder
             icon={Shield}
             title="No controls in scope yet"
@@ -467,7 +467,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
       </div>
 
       {/* ─── Filter row ─── */}
-      <div className="glass-card rounded-xl p-3.5">
+      <div className="glass-card p-3.5">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
           {/* Status pills */}
           <div className="flex items-center gap-1">
@@ -539,7 +539,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
       </div>
       <div className="space-y-2.5">
         {filteredControls.length === 0 && (
-          <div className="glass-card rounded-xl">
+          <div className="glass-card">
             <ListPlaceholder
               icon={Search}
               title="No matching controls"
@@ -562,7 +562,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
           return (
             <div
               key={c.controlId}
-              className="glass-card rounded-xl overflow-hidden"
+              className="glass-card overflow-hidden"
             >
               <button
                 onClick={() => toggleExpand(c.controlId)} aria-expanded={expanded}
@@ -884,7 +884,7 @@ function WorkflowMapModal({
                       linked ? 'border-brand-300 bg-brand-50/50' : 'border-canvas-border hover:border-brand-200 hover:bg-canvas/50'
                     }`}
                   >
-                    <span className={`w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0 transition-colors ${
+                    <span className={`w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0 transition-colors ${
                       linked ? 'bg-brand-600 border-brand-600' : 'bg-white border-canvas-border'
                     }`}>
                       {linked && <Check size={12} className="text-white" strokeWidth={3} />}
@@ -1031,7 +1031,7 @@ function AddControlModal({
 
 function KpiTile({ label, value, tone }: { label: string; value: number | string; tone: string }): JSX.Element {
   return (
-    <div className="glass-card rounded-xl p-3">
+    <div className="glass-card p-3">
       <div className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-500 mb-1 truncate">{label}</div>
       <div className={`text-[1.375rem] font-bold tabular-nums leading-none ${tone}`}>{value}</div>
     </div>

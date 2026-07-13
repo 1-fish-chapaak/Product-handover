@@ -73,12 +73,12 @@ export default function AutomationScheduleTab({ engagement, automationState, sch
     return (
       <div className="space-y-4">
         <div><h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Schedule</h3><p className="text-[0.75rem] text-text-muted">Configure recurring automation execution.</p></div>
-        <div className="rounded-xl border-2 border-gray-200 bg-gray-50/30 p-6 text-center space-y-3">
-          <Clock size={28} className="text-gray-300 mx-auto" />
+        <div className="rounded-xl border-2 border-canvas-border bg-canvas/30 p-6 text-center space-y-3">
+          <Clock size={28} className="text-ink-300 mx-auto" />
           <h4 className="text-[0.875rem] font-semibold text-text">Schedule Not Required</h4>
           <p className="text-[0.75rem] text-text-muted">This project is configured as {cfg.runType.replace(/_/g, ' ').toLowerCase()}. No recurring schedule is needed.</p>
-          <div className="text-[0.6875rem] text-gray-500">Completed runs: {completedRuns.length} · Reports: {automationState.reports.reports.filter(r => r.status === 'FINAL').length} final</div>
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-border-light text-[0.625rem] text-gray-500 text-left max-w-md mx-auto">
+          <div className="text-[0.6875rem] text-ink-500">Completed runs: {completedRuns.length} · Reports: {automationState.reports.reports.filter(r => r.status === 'FINAL').length} final</div>
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-canvas border border-border-light text-[0.625rem] text-ink-500 text-left max-w-md mx-auto">
             <Info size={11} className="shrink-0 mt-0.5" /><span>Project closure/operational handoff will be connected later.</span>
           </div>
         </div>
@@ -92,8 +92,8 @@ export default function AutomationScheduleTab({ engagement, automationState, sch
     return (
       <div className="space-y-4">
         <div><h3 className="text-[0.9375rem] font-bold text-text mb-0.5">Schedule</h3><p className="text-[0.75rem] text-text-muted">Configure recurring automation execution.</p></div>
-        <div className="rounded-xl border-2 border-gray-200 bg-gray-50/30 p-6 text-center space-y-3">
-          <Lock size={28} className="text-gray-300 mx-auto" />
+        <div className="rounded-xl border-2 border-canvas-border bg-canvas/30 p-6 text-center space-y-3">
+          <Lock size={28} className="text-ink-300 mx-auto" />
           <h4 className="text-[0.875rem] font-semibold text-text">Schedule Setup Blocked</h4>
           <div className="space-y-1 text-left max-w-md mx-auto">{blockingReasons.map((r, i) => (
             <div key={i} className="flex items-start gap-2 text-[0.6875rem] text-red-600"><AlertCircle size={12} className="shrink-0 mt-0.5" /><span>{r}</span></div>
@@ -136,7 +136,7 @@ export default function AutomationScheduleTab({ engagement, automationState, sch
         ].map(s => (
           <div key={s.label} className="rounded-lg border border-border-light p-2 text-center">
             <div className="text-[0.8125rem] font-bold tabular-nums text-text">{s.value}</div>
-            <div className="text-[0.5rem] text-gray-400 font-medium">{s.label}</div>
+            <div className="text-[0.5rem] text-ink-400 font-medium">{s.label}</div>
           </div>
         ))}
       </div>
@@ -150,7 +150,7 @@ export default function AutomationScheduleTab({ engagement, automationState, sch
           <div><label className={labelCls}>End Date (optional)</label><DatePicker value={schedule.endDate} onChange={e => update('endDate', e.target.value)} className={inputCls} disabled={isActive} /></div>
           <div><label className={labelCls}>Run Time</label><input type="time" value={schedule.runTime} onChange={e => update('runTime', e.target.value)} className={inputCls} disabled={isActive} /></div>
           <div><label className={labelCls}>Timezone</label><input value={schedule.timezone} onChange={e => update('timezone', e.target.value)} className={inputCls} disabled={isActive} /></div>
-          <div><label className={labelCls}>Workflow{wfNames.length > 1 ? 's' : ''}</label><input value={wfName} disabled className={inputCls + ' bg-gray-50'} />{wfNames.length > 1 && <div className="flex flex-wrap gap-1 mt-1">{wfNames.map((n, i) => <span key={i} className="px-1.5 py-0.5 rounded bg-purple-50 text-[0.5rem] text-purple-700">{n}</span>)}</div>}</div>
+          <div><label className={labelCls}>Workflow{wfNames.length > 1 ? 's' : ''}</label><input value={wfName} disabled className={inputCls + ' bg-canvas'} />{wfNames.length > 1 && <div className="flex flex-wrap gap-1 mt-1">{wfNames.map((n, i) => <span key={i} className="px-1.5 py-0.5 rounded bg-purple-50 text-[0.5rem] text-purple-700">{n}</span>)}</div>}</div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div><label className={labelCls}>Notification Recipients</label><input value={schedule.notificationRecipients} onChange={e => update('notificationRecipients', e.target.value)} placeholder="e.g. owner@company.com" className={inputCls} disabled={isActive} /></div>
@@ -171,10 +171,10 @@ export default function AutomationScheduleTab({ engagement, automationState, sch
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-2">
           <h4 className="text-[0.6875rem] font-bold text-text flex items-center gap-1.5"><Clock size={12} className="text-primary" />Next Run Preview</h4>
           <div className="grid grid-cols-4 gap-3 text-[0.6875rem]">
-            <div><span className="text-gray-400 block text-[0.625rem]">Next Run</span><span className="text-text font-medium">{nextRun || 'Not calculated'}</span></div>
-            <div><span className="text-gray-400 block text-[0.625rem]">Workflow{wfNames.length > 1 ? 's' : ''}</span><span className="text-text font-medium">{wfName}</span></div>
-            <div><span className="text-gray-400 block text-[0.625rem]">Input Sources</span><span className="text-text font-medium">{automationState.inputData.selectedSourceIds.length} selected</span></div>
-            <div><span className="text-gray-400 block text-[0.625rem]">Auto Actions</span><span className="text-text font-medium">{[schedule.autoCreateCases && 'Cases', schedule.autoGenerateReport && 'Report'].filter(Boolean).join(', ') || 'None'}</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Next Run</span><span className="text-text font-medium">{nextRun || 'Not calculated'}</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Workflow{wfNames.length > 1 ? 's' : ''}</span><span className="text-text font-medium">{wfName}</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Input Sources</span><span className="text-text font-medium">{automationState.inputData.selectedSourceIds.length} selected</span></div>
+            <div><span className="text-ink-400 block text-[0.625rem]">Auto Actions</span><span className="text-text font-medium">{[schedule.autoCreateCases && 'Cases', schedule.autoGenerateReport && 'Report'].filter(Boolean).join(', ') || 'None'}</span></div>
           </div>
         </div>
       )}
@@ -203,11 +203,11 @@ export default function AutomationScheduleTab({ engagement, automationState, sch
       {/* Monitoring */}
       <div className="rounded-lg border border-border-light p-4 space-y-2">
         <h4 className="text-[0.6875rem] font-bold text-text">Run Monitoring</h4>
-        <div className="space-y-1 text-[0.625rem] text-gray-500">
-          <div className="flex items-center gap-2"><Info size={10} className="text-gray-400" />Scheduled runs will appear in the Runs tab.</div>
-          <div className="flex items-center gap-2"><Info size={10} className="text-gray-400" />Failures will notify configured recipients (integration pending).</div>
-          <div className="flex items-center gap-2"><Info size={10} className="text-gray-400" />Exceptions from scheduled runs can become case candidates.</div>
-          <div className="flex items-center gap-2"><Info size={10} className="text-gray-400" />Approved outputs can feed automated reports.</div>
+        <div className="space-y-1 text-[0.625rem] text-ink-500">
+          <div className="flex items-center gap-2"><Info size={10} className="text-ink-400" />Scheduled runs will appear in the Runs tab.</div>
+          <div className="flex items-center gap-2"><Info size={10} className="text-ink-400" />Failures will notify configured recipients (integration pending).</div>
+          <div className="flex items-center gap-2"><Info size={10} className="text-ink-400" />Exceptions from scheduled runs can become case candidates.</div>
+          <div className="flex items-center gap-2"><Info size={10} className="text-ink-400" />Approved outputs can feed automated reports.</div>
         </div>
       </div>
 
@@ -216,7 +216,7 @@ export default function AutomationScheduleTab({ engagement, automationState, sch
         <div className="rounded-lg border border-border-light p-4">
           <h4 className="text-[0.6875rem] font-bold text-text mb-1">Schedule History</h4>
           <div className="space-y-1">{schedule.history.map(h => (
-            <div key={h.id} className="text-[0.5625rem] text-gray-500"><span className="font-semibold text-text">{h.action}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
+            <div key={h.id} className="text-[0.5625rem] text-ink-500"><span className="font-semibold text-text">{h.action}</span> by {h.actor} · {h.timestamp}{h.comments ? ` — ${h.comments}` : ''}</div>
           ))}</div>
         </div>
       )}
@@ -254,10 +254,10 @@ function ProjectReadinessPanel({ automationState, cfg, required, isActive }: { a
       <div className="space-y-1">{checks.map(c => (
         <div key={c.label} className="flex items-center gap-2 text-[0.625rem]">
           {c.ok ? <CheckCircle2 size={10} className="text-emerald-500" /> : <AlertCircle size={10} className="text-amber-400" />}
-          <span className={c.ok ? 'text-gray-500' : 'text-text'}>{c.label}</span>
+          <span className={c.ok ? 'text-ink-500' : 'text-text'}>{c.label}</span>
         </div>
       ))}</div>
-      <div className="flex items-start gap-2 mt-2 px-3 py-2 rounded-lg bg-gray-50 border border-border-light text-[0.625rem] text-gray-500">
+      <div className="flex items-start gap-2 mt-2 px-3 py-2 rounded-lg bg-canvas border border-border-light text-[0.625rem] text-ink-500">
         <Info size={11} className="shrink-0 mt-0.5" /><span>Project closure/operational handoff will be connected later.</span>
       </div>
     </div>

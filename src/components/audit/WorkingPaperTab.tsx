@@ -232,7 +232,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
       </div>
 
       {/* Summary card */}
-      <div className="glass-card rounded-2xl p-6">
+      <div className="glass-card p-6">
         <div className="flex items-start justify-between gap-6 mb-5">
           <div className="flex-1">
             <div className="text-[0.75rem] uppercase tracking-wider font-semibold text-text-muted mb-1">
@@ -283,7 +283,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
             const isOpen = openIds.has(paper.row.controlId);
             const Ic = CONCLUSION_ICON[paper.conclusion];
             return (
-              <div key={paper.row.controlId} className="glass-card rounded-xl overflow-hidden">
+              <div key={paper.row.controlId} className="glass-card overflow-hidden">
                 <button
                   onClick={() => toggle(paper.row.controlId)}
                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-2/40 transition-colors cursor-pointer text-left"
@@ -368,7 +368,7 @@ export default function WorkingPaperTab({ engagement }: Props) {
       </div>
 
       {/* Sign-off chain */}
-      <div className="glass-card rounded-2xl p-6">
+      <div className="glass-card p-6">
         <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-4">Sign-off chain</h3>
         <div className="grid grid-cols-3 gap-4">
           {signOffChain.map((step, i) => (

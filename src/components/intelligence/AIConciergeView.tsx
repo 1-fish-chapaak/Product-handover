@@ -170,7 +170,7 @@ function ToolCard({
 }) {
   // #2 keyboard a11y (role=button + tabIndex + Enter/Space) · #3 flat-at-rest (no resting shadow; sanctioned diffuse hover lift) · #8 token tidiness (rounded-lg, brand-200 hover).
   // Revert: remove role/tabIndex/onKeyDown and restore the className below to:
-  // "bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-[12px] p-5 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:shadow-[0_12px_32px_rgba(15,8,30,0.08)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[176px]"
+  // "bg-canvas-elevated border border-canvas-border hover:border-brand-300 rounded-lg p-5 shadow-[0_1px_2px_rgba(15,8,30,0.04)] hover:shadow-[0_12px_32px_rgba(15,8,30,0.08)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[176px]"
   return (
     <motion.div
       role="button"
@@ -183,16 +183,16 @@ function ToolCard({
       className="bg-canvas-elevated border border-canvas-border hover:border-brand-200 rounded-lg p-5 hover:shadow-[0_8px_24px_rgba(15,8,30,0.04)] transition-[box-shadow,border-color] duration-200 group cursor-pointer flex flex-col min-h-[176px]"
     >
       <div className="flex items-start mb-4">
-        <span className={`w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 ${accent.chip} transition-transform duration-200 group-hover:scale-[1.06]`}>
+        <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${accent.chip} transition-transform duration-200 group-hover:scale-[1.06]`}>
           <Icon size={16} className={accent.icon} strokeWidth={1.75} />
         </span>
       </div>
 
       {/* #6 two-line titles → revert: replace line-clamp-2 with truncate */}
-      <h3 className="text-[15px] leading-[1.35] font-semibold text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2" title={title}>
+      <h3 className="text-[0.9375rem] leading-[1.35] font-semibold text-text group-hover:text-primary transition-colors mb-1.5 line-clamp-2" title={title}>
         {title}
       </h3>
-      <p className="text-[12px] text-text-secondary leading-[1.55] line-clamp-2" title={description}>
+      <p className="text-[0.75rem] text-text-secondary leading-[1.55] line-clamp-2" title={description}>
         {description}
       </p>
 
@@ -202,7 +202,7 @@ function ToolCard({
         {tags.map((t) => (
           <span
             key={t.label}
-            className="inline-flex items-center rounded-md bg-brand-50 px-2.5 py-1.5 text-[11px] font-semibold text-brand-700 whitespace-nowrap"
+            className="inline-flex items-center rounded-md bg-brand-50 px-2.5 py-1.5 text-[0.6875rem] font-semibold text-brand-700 whitespace-nowrap"
           >
             {t.label}
           </span>
@@ -246,7 +246,7 @@ export default function AIConciergeView({ setView, onLaunchWorkflowBuilder }: Pr
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="min-w-0"
           >
-            <h1 className="font-display text-[34px] font-[420] tracking-tight text-ink-900 leading-[1.15]">
+            <h1 className="font-display text-[2.125rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">
               AI Concierge
             </h1>
             <p className="mt-2 text-[0.8125rem] text-ink-500 leading-relaxed max-w-md">

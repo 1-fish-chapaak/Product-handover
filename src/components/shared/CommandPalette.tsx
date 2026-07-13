@@ -243,7 +243,7 @@ export default function CommandPalette() {
             role="dialog"
             aria-modal="true"
             aria-label="Command palette"
-            className="w-[600px] max-w-[90vw] bg-paper-0 rounded-[16px] shadow-2xl border border-paper-200 overflow-hidden"
+            className="w-[600px] max-w-[90vw] bg-paper-0 rounded-xl shadow-2xl border border-paper-200 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Search input */}
@@ -258,7 +258,7 @@ export default function CommandPalette() {
               aria-label="Search command"
               aria-controls="cmd-palette-listbox"
               aria-activedescendant={flatItems[highlightIdx] ? `cmd-opt-${highlightIdx}` : undefined}
-              className="w-full px-5 py-4 text-[14px] text-ink-800 bg-transparent border-b border-paper-200 placeholder:text-ink-400 focus:outline-none"
+              className="w-full px-5 py-4 text-[0.875rem] text-ink-800 bg-transparent border-b border-paper-200 placeholder:text-ink-400 focus:outline-none"
             />
 
             {/* Results / states */}
@@ -271,14 +271,14 @@ export default function CommandPalette() {
             >
               {/* Empty input → tip */}
               {query.trim() === '' && flatItems.length === ALL_ITEMS.length && (
-                <div className="px-5 py-8 text-center text-[13px] text-ink-500">
+                <div className="px-5 py-8 text-center text-[0.8125rem] text-ink-500">
                   Type to search…
                 </div>
               )}
 
               {/* Query present but no matches */}
               {query.trim() !== '' && flatItems.length === 0 && (
-                <div className="px-5 py-8 text-center text-[13px] text-ink-500">
+                <div className="px-5 py-8 text-center text-[0.8125rem] text-ink-500">
                   No results
                 </div>
               )}
@@ -292,7 +292,7 @@ export default function CommandPalette() {
                   return (
                     <div key={group.kind}>
                       <div
-                        className="px-5 pt-3 pb-1 text-[10px] font-bold tracking-wider uppercase text-ink-500"
+                        className="px-5 pt-3 pb-1 text-[0.625rem] font-bold tracking-wider uppercase text-ink-500"
                         role="presentation"
                       >
                         {KIND_LABEL[group.kind]}
@@ -316,11 +316,11 @@ export default function CommandPalette() {
                             }
                           >
                             <Icon size={16} className="text-ink-500 shrink-0" aria-hidden="true" />
-                            <span className="text-[13px] text-ink-800 font-medium truncate">
+                            <span className="text-[0.8125rem] text-ink-800 font-medium truncate">
                               {item.name}
                             </span>
                             {item.meta && (
-                              <span className="text-[11px] text-ink-500 ml-auto shrink-0">
+                              <span className="text-[0.6875rem] text-ink-500 ml-auto shrink-0">
                                 {item.meta}
                               </span>
                             )}
@@ -333,7 +333,7 @@ export default function CommandPalette() {
             </div>
 
             {/* Footer tip */}
-            <div className="px-5 py-2.5 border-t border-paper-200 text-[11px] text-ink-400 flex items-center justify-between">
+            <div className="px-5 py-2.5 border-t border-paper-200 text-[0.6875rem] text-ink-400 flex items-center justify-between">
               <span>↑↓ to navigate · Enter to select · Esc to close</span>
               <span className="text-ink-300">⌘K</span>
             </div>

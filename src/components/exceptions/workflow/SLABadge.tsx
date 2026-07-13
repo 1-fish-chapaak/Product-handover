@@ -14,7 +14,7 @@ export default function SLABadge({ startIso, slaHours, compact = false }: { star
   return (
     <span
       title={`SLA ${slaHours}h · ${sla.label}`}
-      className={`inline-flex items-center gap-1 h-5 px-2 rounded-full text-[10.5px] font-semibold whitespace-nowrap ${t.cls}`}
+      className={`inline-flex items-center gap-1 h-5 px-2 rounded-full text-[0.65625rem] font-semibold whitespace-nowrap ${t.cls}`}
     >
       <t.Icon size={10} />
       {compact ? sla.label : `SLA · ${sla.label}`}

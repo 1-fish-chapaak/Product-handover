@@ -92,7 +92,7 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
         <div className="flex items-center justify-between gap-3 flex-wrap border-t border-canvas-border bg-canvas-elevated px-6 py-3 print:hidden">
           <div className="flex items-center gap-2.5">
             <Button variant="ghost" size="md" leftIcon={<ArrowLeft size={15} />} onClick={() => goTo('annexures')}>Back</Button>
-            {state.versions[0] && <span className="text-[11px] font-semibold tabular-nums text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">{state.versions[0].versionNumber}</span>}
+            {state.versions[0] && <span className="text-[0.6875rem] font-semibold tabular-nums text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">{state.versions[0].versionNumber}</span>}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -106,31 +106,31 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
                 {sectionsOpen && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setSectionsOpen(false)} />
-                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className="absolute right-0 bottom-full mb-2 w-[306px] z-20 rounded-[12px] border border-canvas-border bg-canvas-elevated shadow-xl overflow-hidden">
+                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className="absolute right-0 bottom-full mb-2 w-[306px] z-20 rounded-lg border border-canvas-border bg-canvas-elevated shadow-xl overflow-hidden">
                       <div className="flex items-center justify-between px-3 py-2.5 border-b border-canvas-border">
-                        <span className="text-[12px] font-semibold text-ink-800">Reorder &amp; skip sections</span>
-                        <span className="text-[11px] tabular-nums text-ink-400">{visibleCount} of {order.length} shown</span>
+                        <span className="text-[0.75rem] font-semibold text-ink-800">Reorder &amp; skip sections</span>
+                        <span className="text-[0.6875rem] tabular-nums text-ink-400">{visibleCount} of {order.length} shown</span>
                       </div>
                       <div className="p-1.5 max-h-[320px] overflow-y-auto">
                         {order.map((key, i) => {
                           const isHidden = hidden.includes(key);
                           return (
-                            <div key={key} className="flex items-center gap-1 pl-1.5 pr-1 py-1 rounded-[8px] hover:bg-canvas transition-colors">
-                              <span className="w-5 shrink-0 text-center text-[11px] font-semibold tabular-nums text-ink-300">{i + 1}</span>
-                              <span className={`flex-1 min-w-0 truncate text-[12px] ${isHidden ? 'text-ink-400 line-through' : 'text-ink-700'}`}>{ATR_SECTION_LABEL[key]}</span>
-                              <div className="flex items-center rounded-[7px] border border-canvas-border overflow-hidden mr-0.5">
+                            <div key={key} className="flex items-center gap-1 pl-1.5 pr-1 py-1 rounded-md hover:bg-canvas transition-colors">
+                              <span className="w-5 shrink-0 text-center text-[0.6875rem] font-semibold tabular-nums text-ink-300">{i + 1}</span>
+                              <span className={`flex-1 min-w-0 truncate text-[0.75rem] ${isHidden ? 'text-ink-400 line-through' : 'text-ink-700'}`}>{ATR_SECTION_LABEL[key]}</span>
+                              <div className="flex items-center rounded-sm border border-canvas-border overflow-hidden mr-0.5">
                                 <button onClick={() => move(key, -1)} disabled={i === 0} aria-label="Move up" className="w-6 h-6 inline-flex items-center justify-center text-ink-400 hover:text-ink-800 hover:bg-canvas disabled:opacity-25 cursor-pointer disabled:cursor-not-allowed transition-colors"><ChevronUp size={13} /></button>
                                 <span className="w-px h-4 bg-canvas-border" aria-hidden="true" />
                                 <button onClick={() => move(key, 1)} disabled={i === order.length - 1} aria-label="Move down" className="w-6 h-6 inline-flex items-center justify-center text-ink-400 hover:text-ink-800 hover:bg-canvas disabled:opacity-25 cursor-pointer disabled:cursor-not-allowed transition-colors"><ChevronDown size={13} /></button>
                               </div>
-                              <button onClick={() => toggleHidden(key)} aria-label={isHidden ? 'Show section' : 'Skip section'} title={isHidden ? 'Show in report' : 'Skip in report'} className={`w-7 h-7 inline-flex items-center justify-center rounded-[7px] cursor-pointer transition-colors ${isHidden ? 'text-ink-400 hover:text-ink-700 hover:bg-canvas' : 'text-brand-700 bg-brand-50 hover:bg-brand-100'}`}>{isHidden ? <EyeOff size={14} /> : <Eye size={14} />}</button>
+                              <button onClick={() => toggleHidden(key)} aria-label={isHidden ? 'Show section' : 'Skip section'} title={isHidden ? 'Show in report' : 'Skip in report'} className={`w-7 h-7 inline-flex items-center justify-center rounded-sm cursor-pointer transition-colors ${isHidden ? 'text-ink-400 hover:text-ink-700 hover:bg-canvas' : 'text-brand-700 bg-brand-50 hover:bg-brand-100'}`}>{isHidden ? <EyeOff size={14} /> : <Eye size={14} />}</button>
                             </div>
                           );
                         })}
                       </div>
                       <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-canvas-border">
-                        <span className="text-[10.5px] text-ink-400 leading-tight">Hidden sections are skipped in the PDF.</span>
-                        <button onClick={resetSections} className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 hover:underline cursor-pointer"><RotateCcw size={11} aria-hidden="true" /> Reset</button>
+                        <span className="text-[0.65625rem] text-ink-400 leading-tight">Hidden sections are skipped in the PDF.</span>
+                        <button onClick={resetSections} className="shrink-0 inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-brand-700 hover:underline cursor-pointer"><RotateCcw size={11} aria-hidden="true" /> Reset</button>
                       </div>
                     </motion.div>
                   </>
@@ -168,7 +168,7 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
               type="button"
               onClick={() => onManageExceptions?.(eo.id)}
               title="Open these cases in Manage Exceptions (new tab)"
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[7px] text-[11.5px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 cursor-pointer transition-colors"
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-sm text-[0.71875rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 cursor-pointer transition-colors"
             >
               <ListTodo size={13} aria-hidden="true" /> Manage Exceptions
               <span className="tabular-nums text-brand-500">({rowCount})</span>
@@ -178,7 +178,7 @@ export default function Step7AtrPreview({ onManageExceptions, onSaveAtr }: {
       />
 
       {isEditing && (
-        <p className="text-center text-[11.5px] text-ink-400 mt-4 print:hidden">Click any text in the report to edit it. Changes save automatically.</p>
+        <p className="text-center text-[0.71875rem] text-ink-400 mt-4 print:hidden">Click any text in the report to edit it. Changes save automatically.</p>
       )}
     </div>
   );

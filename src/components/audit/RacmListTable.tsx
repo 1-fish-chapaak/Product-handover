@@ -1023,7 +1023,7 @@ export default function RacmListTable({ processFilter, initialMappingRacm, onMap
         <div className="space-y-2 min-h-[calc(100vh-280px)]">
           {isLoading && showSkeleton ? (
             [...Array(5)].map((_, i) => (
-              <div key={`skel-${i}`} className="grid grid-cols-[2.6fr_1fr_1.7fr_152px] gap-5 px-6 py-5 items-start rounded-xl border border-border-light bg-white">
+              <div key={`skel-${i}`} className="grid grid-cols-[2.6fr_1fr_1.7fr_152px] gap-5 px-6 py-5 items-start rounded-lg border border-border-light bg-white">
                 {/* Title + description lane */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-2.5">
@@ -1791,7 +1791,7 @@ export function WorkflowControlChooserDrawer({ riskName, controls, onPick, onClo
             </div>
           ) : controls.map(ctl => (
             <button key={ctl.id} type="button" onClick={() => onPick(ctl)}
-              className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl border border-canvas-border bg-white hover:border-brand-200 hover:bg-canvas/50 transition-all cursor-pointer text-left">
+              className="w-full flex items-center gap-2.5 px-4 py-3 rounded-lg border border-canvas-border bg-white hover:border-brand-200 hover:bg-canvas/50 transition-all cursor-pointer text-left">
               <Star size={12} className={`shrink-0 ${ctl.isKey ? 'fill-amber-400 text-amber-500' : 'fill-none text-ink-400'}`} aria-label={ctl.isKey ? 'Key control' : 'Control'} />
               <span className="font-mono text-[0.6875rem] text-brand-700 font-semibold shrink-0">{ctl.id}</span>
               <span className="text-[0.8125rem] text-ink-800 leading-snug flex-1 min-w-0 truncate">{ctl.name}</span>

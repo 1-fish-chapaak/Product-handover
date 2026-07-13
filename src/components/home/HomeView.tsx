@@ -115,7 +115,7 @@ function QuickActionPanel({ setView, onDismiss }: { setView: Props['setView']; o
     const remaining = steps.find(s => !done.has(s.id));
     const remainingCount = total - completed;
     return (
-      <section className="rounded-2xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_8_30_/_0.04)] px-5 py-3 flex items-center justify-between gap-4">
+      <section className="rounded-lg border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_8_30_/_0.04)] px-5 py-3 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-7 h-7 rounded-md bg-brand-50 flex items-center justify-center shrink-0">
             <Sparkles size={13} className="text-brand-700" />
@@ -156,7 +156,7 @@ function QuickActionPanel({ setView, onDismiss }: { setView: Props['setView']; o
   }
 
   return (
-    <section className="rounded-2xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_8_30_/_0.04)] p-6">
+    <section className="rounded-lg border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_8_30_/_0.04)] p-6">
       <div className="flex items-start justify-between gap-4 mb-5">
         <div className="flex items-start gap-3">
           <div className="w-9 h-9 rounded-md bg-brand-50 flex items-center justify-center shrink-0">
@@ -321,7 +321,7 @@ function WorkQueueSection({ setView, rangeDays }: { setView: Props['setView']; r
   );
 
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)] overflow-hidden h-full flex flex-col">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <ClipboardCheck size={14} className="text-ink-500 shrink-0" />
@@ -742,7 +742,7 @@ function HealthDashboardSection({
   const compMin = Math.min(...COMPLETION_TREND);
 
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)] overflow-hidden h-full flex flex-col">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-2 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <BarChart3 size={14} className="text-ink-500 shrink-0" />
@@ -816,7 +816,7 @@ function HealthDashboardSection({
               onClick={() => setView('audit-planning')}
               aria-label="Open audit planning"
               variants={HEALTH_TILE_VARIANTS}
-              className="text-left col-span-4 row-span-2 order-1 rounded-2xl p-6 flex flex-col gap-5 border border-canvas-border bg-white relative overflow-hidden cursor-pointer transition-[box-shadow,border-color] duration-300 ease-out hover:border-brand-300 hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              className="text-left col-span-4 row-span-2 order-1 rounded-lg p-6 flex flex-col gap-5 border border-canvas-border bg-white relative overflow-hidden cursor-pointer transition-[box-shadow,border-color] duration-300 ease-out hover:border-brand-300 hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
               {/* Aurora — pulled WAY back. The previous 14% alpha was washing
                   everything in pink and killing chart contrast. 5% is just
@@ -960,7 +960,7 @@ function HealthDashboardSection({
           onClick={() => setView('audit-risk-register')}
           aria-label="Open risk register"
           variants={HEALTH_TILE_VARIANTS}
-          className="relative text-left col-span-4 order-6 rounded-2xl p-5 flex flex-col justify-between border bg-canvas-elevated border-canvas-border/60 cursor-pointer transition-[box-shadow,border-color] duration-300 ease-out hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] hover:border-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          className="relative text-left col-span-4 order-6 rounded-lg p-5 flex flex-col justify-between border bg-canvas-elevated border-canvas-border/60 cursor-pointer transition-[box-shadow,border-color] duration-300 ease-out hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] hover:border-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
           <div className="absolute top-3 right-3 z-10"><StatusPill kind={riskStatus} /></div>
           <div>
@@ -1011,7 +1011,7 @@ function HealthDashboardSection({
           onClick={() => setView('governance-controls')}
           aria-label="Open controls library"
           variants={HEALTH_TILE_VARIANTS}
-          className="relative text-left col-span-3 order-7 rounded-2xl p-5 flex flex-col justify-between border bg-canvas-elevated border-canvas-border/60 cursor-pointer transition-[box-shadow,border-color] duration-300 ease-out hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] hover:border-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          className="relative text-left col-span-3 order-7 rounded-lg p-5 flex flex-col justify-between border bg-canvas-elevated border-canvas-border/60 cursor-pointer transition-[box-shadow,border-color] duration-300 ease-out hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] hover:border-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
           <div className="absolute top-3 right-3 z-10"><StatusPill kind={ctlStatus} /></div>
           <div>
@@ -1072,7 +1072,7 @@ function HealthDashboardSection({
               onClick={() => setView('dashboards')}
               aria-label="Open compliance posture"
               variants={HEALTH_TILE_VARIANTS}
-              className="text-left col-span-5 order-2 rounded-2xl p-5 flex flex-col gap-3 border bg-canvas-elevated border-canvas-border/60 relative overflow-hidden cursor-pointer transition-[box-shadow,border-color] duration-300 ease-out hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] hover:border-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              className="text-left col-span-5 order-2 rounded-lg p-5 flex flex-col gap-3 border bg-canvas-elevated border-canvas-border/60 relative overflow-hidden cursor-pointer transition-[box-shadow,border-color] duration-300 ease-out hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] hover:border-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
               <div className="absolute top-3 right-3 z-10"><StatusPill kind={complianceStatus} /></div>
 
@@ -1175,7 +1175,7 @@ function HealthDashboardSection({
           onClick={() => setView('governance-controls')}
           aria-label="Open framework coverage"
           variants={HEALTH_TILE_VARIANTS}
-          className="relative text-left col-span-5 order-4 rounded-2xl p-5 flex flex-col gap-4 border bg-canvas-elevated border-canvas-border/60 cursor-pointer transition-[box-shadow,border-color] duration-300 ease-out hover:border-brand-300 hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          className="relative text-left col-span-5 order-4 rounded-lg p-5 flex flex-col gap-4 border bg-canvas-elevated border-canvas-border/60 cursor-pointer transition-[box-shadow,border-color] duration-300 ease-out hover:border-brand-300 hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
           <div className="flex items-center gap-2">
             <Layers size={14} className="text-ink-400 shrink-0" strokeWidth={1.75} />
@@ -1210,7 +1210,7 @@ function HealthDashboardSection({
               return (
                 <div
                   key={f.name}
-                  className="flex flex-col items-center justify-between text-center rounded-xl border border-canvas-border/50 bg-canvas/40 px-2 py-3 transition-colors hover:border-canvas-border hover:bg-canvas"
+                  className="flex flex-col items-center justify-between text-center rounded-lg border border-canvas-border/50 bg-canvas/40 px-2 py-3 transition-colors hover:border-canvas-border hover:bg-canvas"
                 >
                   <span className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ink-500">{f.name}</span>
 
@@ -1261,7 +1261,7 @@ function HealthDashboardSection({
               onClick={() => setView('audit-planning')}
               aria-label="Open audit calendar"
               variants={HEALTH_TILE_VARIANTS}
-              className="relative text-left col-span-3 order-3 rounded-2xl p-5 flex flex-col gap-4 border bg-canvas-elevated border-canvas-border/60 cursor-pointer transition-[box-shadow,border-color] duration-300 ease-out hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] hover:border-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              className="relative text-left col-span-3 order-3 rounded-lg p-5 flex flex-col gap-4 border bg-canvas-elevated border-canvas-border/60 cursor-pointer transition-[box-shadow,border-color] duration-300 ease-out hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] hover:border-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
               <div className="absolute top-3 right-3 z-10"><StatusPill kind={auditStatus} /></div>
 
@@ -1338,7 +1338,7 @@ function HealthDashboardSection({
               onClick={() => setView('workflow-library')}
               aria-label="Open workflow performance"
               variants={HEALTH_TILE_VARIANTS}
-              className="relative text-left col-span-4 order-9 rounded-2xl p-5 flex flex-col gap-4 border bg-canvas-elevated border-canvas-border/60 cursor-pointer transition-[box-shadow,border-color] duration-300 ease-out hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] hover:border-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              className="relative text-left col-span-4 order-9 rounded-lg p-5 flex flex-col gap-4 border bg-canvas-elevated border-canvas-border/60 cursor-pointer transition-[box-shadow,border-color] duration-300 ease-out hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] hover:border-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
               {/* Header */}
               <div className="flex items-center gap-2">
@@ -1396,7 +1396,7 @@ function HealthDashboardSection({
         {/* ── Row 4 — Top Workflows mini-list ── */}
         {showTile('top-workflows') && <motion.div
           variants={HEALTH_TILE_VARIANTS}
-          className="text-left col-span-4 order-10 rounded-2xl p-5 flex flex-col border border-canvas-border/60 bg-canvas-elevated relative overflow-hidden transition-[box-shadow,border-color] duration-150 ease-out hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] hover:border-brand-300"
+          className="text-left col-span-4 order-10 rounded-lg p-5 flex flex-col border border-canvas-border/60 bg-canvas-elevated relative overflow-hidden transition-[box-shadow,border-color] duration-150 ease-out hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)] hover:border-brand-300"
         >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -1519,7 +1519,7 @@ function PlatformActivitySection({
   const actionCount = notifications.filter(n => n.requiresAction && !n.actionState).length;
 
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)] overflow-hidden h-full flex flex-col">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Bell size={14} className="text-ink-500 shrink-0" />
@@ -1683,7 +1683,7 @@ function RecentSharedSection({ setView, rangeDays }: { setView: Props['setView']
   }, [rangeDays]);
 
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)] overflow-hidden h-full flex flex-col">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Share2 size={14} className="text-ink-500 shrink-0" />
@@ -1698,7 +1698,7 @@ function RecentSharedSection({ setView, rangeDays }: { setView: Props['setView']
       </div>
       <div className="flex-1 overflow-auto p-4 grid grid-cols-2 gap-3 auto-rows-min">
         {items.length === 0 ? (
-          <div className="col-span-2 rounded-2xl border border-dashed border-canvas-border bg-canvas-elevated/50 p-6 text-center">
+          <div className="col-span-2 rounded-lg border border-dashed border-canvas-border bg-canvas-elevated/50 p-6 text-center">
             <p className="text-meta text-ink-700 font-medium">Nothing shared in this window.</p>
             <p className="text-xs text-ink-500 mt-0.5">Try widening the date range.</p>
           </div>
@@ -1772,7 +1772,7 @@ function RecentAskIraSection({
     setView('chat');
   };
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)] overflow-hidden h-full flex flex-col">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <MessageSquare size={14} className="text-ink-500 shrink-0" />
@@ -1819,7 +1819,7 @@ function ActiveEngagementsSection({ setView, rangeDays, openAuditExecution }: { 
   const items = useMemo(() => ENGAGEMENTS.filter(e => e.status === 'active'), []);
   const scale = scaleForRange(rangeDays);
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)] overflow-hidden h-full flex flex-col">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Briefcase size={14} className="text-ink-500 shrink-0" />
@@ -1889,7 +1889,7 @@ function OpenExceptionsSection({ setView, rangeDays }: { setView: Props['setView
   }, [rangeDays]);
   const totalOpen = useMemo(() => GRC_EXCEPTIONS.filter(e => e.status !== 'Closed').length, []);
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)] overflow-hidden h-full flex flex-col">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <AlertOctagon size={14} className="text-ink-500 shrink-0" />
@@ -2024,7 +2024,7 @@ function TopWorkflowsSection({ setView, rangeDays, setSelectedWorkflow }: { setV
   const liveCount = WORKFLOW_RUNS.filter(r => r.status === 'in-progress').length;
 
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)] overflow-hidden h-full flex flex-col">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Activity size={14} className="text-ink-500 shrink-0" />
@@ -2184,7 +2184,7 @@ function ConnectedSourcesSection({ setView, rangeDays }: { setView: Props['setVi
   const scale = scaleForRange(rangeDays);
   const syncsInRange = Math.max(1, Math.round(connected * scale));
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)] overflow-hidden h-full flex flex-col">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Database size={14} className="text-ink-500 shrink-0" />
@@ -2229,7 +2229,7 @@ function ConnectedSourcesSection({ setView, rangeDays }: { setView: Props['setVi
 function BusinessProcessesSection({ setView, rangeDays, setSelectedBP }: { setView: Props['setView']; rangeDays: number | null; setSelectedBP: Props['setSelectedBP'] }) {
   const scale = scaleForRange(rangeDays);
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)] overflow-hidden h-full flex flex-col">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Layers size={14} className="text-ink-500 shrink-0" />
@@ -2294,7 +2294,7 @@ function RecentReportsSection({
     return GENERATED_REPORTS.filter(r => isWithinDays(r.generatedAt, rangeDays));
   }, [rangeDays]);
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)] overflow-hidden h-full flex flex-col">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <FileText size={14} className="text-ink-500 shrink-0" />
@@ -2360,7 +2360,7 @@ function ConciergeSection({ setView, rangeDays, onLaunchWorkflowBuilder }: { set
   // Mock baseline: ~84 tool invocations YTD across the 3 tools.
   const usedInRange = Math.max(0, Math.round(84 * scale));
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)] overflow-hidden h-full flex flex-col">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Sparkles size={14} className="text-ink-500 shrink-0" />
@@ -2527,7 +2527,7 @@ function AuditCalendarSection({ setView, rangeDays, openAuditExecution }: { setV
   }, [events, today]);
 
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)] overflow-hidden h-full flex flex-col">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Calendar size={14} className="text-ink-500 shrink-0" />
@@ -2613,7 +2613,7 @@ function PinnedSection({
   const total = workflows.length + reports.length + engagements.length;
 
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)] overflow-hidden h-full flex flex-col">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <Star size={14} className="text-mitigated-700 shrink-0" fill="currentColor" />
@@ -3482,7 +3482,7 @@ function useTransitionPulse(deps: ReadonlyArray<unknown>, ms = 280): boolean {
 // (header strip + a few rows). Rendered while `useTransitionPulse` is true.
 function WidgetSkeleton() {
   return (
-    <div className="rounded-xl border border-canvas-border/70 bg-canvas-elevated overflow-hidden h-full flex flex-col animate-pulse">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col animate-pulse">
       <div className="h-10 border-b border-canvas-border/60 px-5 py-3 flex items-center gap-2">
         <div className="w-3.5 h-3.5 rounded bg-canvas-border/60" />
         <div className="h-3 w-32 rounded bg-canvas-border/60" />
@@ -4093,7 +4093,7 @@ function CompactLayout({
   return (
     <div className={editMode ? 'home-edit-mode' : ''}>
       {editMode && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50/40 px-4 py-2.5">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-brand-200 bg-brand-50/40 px-4 py-2.5">
           <div className="flex items-center gap-2 text-[0.75rem] text-brand-800">
             <GripVertical size={14} className="text-brand-600" />
             <span>Drag any tile to reposition. Drag the bottom-right corner to resize.</span>

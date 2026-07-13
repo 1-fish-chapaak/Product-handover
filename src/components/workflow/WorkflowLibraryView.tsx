@@ -890,7 +890,7 @@ export function AuditLogsView({
       className="h-full w-full bg-white flex flex-col overflow-hidden px-[120px]"
     >
       <div className="pt-8 pb-5">
-        <div className="flex items-center gap-2 text-[12.5px] text-ink-500">
+        <div className="flex items-center gap-2 text-[0.78125rem] text-ink-500">
           <button
             type="button"
             onClick={onBack}
@@ -907,11 +907,11 @@ export function AuditLogsView({
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
-        <div className="rounded-xl border border-border-light bg-white p-5 flex items-start justify-between gap-4">
+        <div className="rounded-lg border border-border-light bg-white p-5 flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-text mb-1">Overall Status</div>
-            <div className="text-[12px] text-text-muted">Total workflows audited successfully</div>
-            <div className="text-[28px] font-semibold text-primary mt-3 leading-none">
+            <div className="text-[0.8125rem] font-semibold text-text mb-1">Overall Status</div>
+            <div className="text-[0.75rem] text-text-muted">Total workflows audited successfully</div>
+            <div className="text-[1.75rem] font-semibold text-primary mt-3 leading-none">
               {successCount}/{totalCount}
             </div>
           </div>
@@ -919,11 +919,11 @@ export function AuditLogsView({
             <Database size={18} className="text-primary" />
           </div>
         </div>
-        <div className="rounded-xl border border-border-light bg-white p-5 flex items-start justify-between gap-4">
+        <div className="rounded-lg border border-border-light bg-white p-5 flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-text mb-1">Skipped Workflows</div>
-            <div className="text-[12px] text-text-muted">Workflows skipped due to exception</div>
-            <div className="text-[28px] font-semibold text-text mt-3 leading-none">{run.skippedCount}</div>
+            <div className="text-[0.8125rem] font-semibold text-text mb-1">Skipped Workflows</div>
+            <div className="text-[0.75rem] text-text-muted">Workflows skipped due to exception</div>
+            <div className="text-[1.75rem] font-semibold text-text mt-3 leading-none">{run.skippedCount}</div>
           </div>
           <div className="w-10 h-10 rounded-lg bg-surface-2 flex items-center justify-center shrink-0">
             <AlertTriangle size={18} className="text-text-muted" />
@@ -938,12 +938,12 @@ export function AuditLogsView({
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search Workflows"
-            className="w-full pl-9 pr-3 h-10 rounded-md border border-border-light text-[13px] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+            className="w-full pl-9 pr-3 h-10 rounded-md border border-border-light text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
           />
         </div>
         <button
           type="button"
-          className="inline-flex items-center gap-2 h-10 px-4 rounded-md border border-primary/30 text-primary bg-white text-[13px] font-semibold hover:bg-primary/5 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 h-10 px-4 rounded-md border border-primary/30 text-primary bg-white text-[0.8125rem] font-semibold hover:bg-primary/5 transition-colors cursor-pointer"
         >
           <FileText size={14} />
           View Report
@@ -951,14 +951,14 @@ export function AuditLogsView({
       </div>
 
       <div className="flex-1 overflow-y-auto rounded-xl border border-border-light bg-white">
-        <div className="grid grid-cols-[1fr_180px_140px_140px] gap-x-4 px-4 py-3 border-b border-border-light bg-surface-2/40 text-[11.5px] font-semibold text-text-muted">
+        <div className="grid grid-cols-[1fr_180px_140px_140px] gap-x-4 px-4 py-3 border-b border-border-light bg-surface-2/40 text-[0.71875rem] font-semibold text-text-muted">
           <div>Workflow Name</div>
           <div>Cases Flagged</div>
           <div>Status</div>
           <div>Audit Date</div>
         </div>
         {filtered.length === 0 ? (
-          <div className="text-[12.5px] text-text-muted text-center py-12">
+          <div className="text-[0.78125rem] text-text-muted text-center py-12">
             No workflows match this search.
           </div>
         ) : (
@@ -979,21 +979,21 @@ export function AuditLogsView({
                   className="w-full text-left grid grid-cols-[1fr_180px_140px_140px] gap-x-4 px-4 py-3.5 items-center hover:bg-surface-2/40 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="text-[13px] text-text truncate hover:text-primary">{w.name}</span>
-                    <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full bg-compliant-50 text-compliant-700 text-[10.5px] font-medium border border-compliant/25 shrink-0">
+                    <span className="text-[0.8125rem] text-text truncate hover:text-primary">{w.name}</span>
+                    <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full bg-compliant-50 text-compliant-700 text-[0.65625rem] font-medium border border-compliant/25 shrink-0">
                       <span className="w-1.5 h-1.5 rounded-full bg-compliant" />
                       Live
                     </span>
                   </div>
-                  <div className="text-[13px] text-text tabular-nums">
+                  <div className="text-[0.8125rem] text-text tabular-nums">
                     {w.casesFlagged.toLocaleString()} {w.casesFlagged === 1 ? 'case flagged' : 'cases flagged'}
                   </div>
                   <div>
-                    <span className="inline-flex items-center px-2.5 h-5 rounded-md bg-compliant-50 text-compliant-700 text-[10.5px] font-medium border border-compliant/25">
+                    <span className="inline-flex items-center px-2.5 h-5 rounded-md bg-compliant-50 text-compliant-700 text-[0.65625rem] font-medium border border-compliant/25">
                       Completed
                     </span>
                   </div>
-                  <div className="text-[13px] text-text">{run.date}</div>
+                  <div className="text-[0.8125rem] text-text">{run.date}</div>
                 </button>
               );
             })}

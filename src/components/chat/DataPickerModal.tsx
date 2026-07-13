@@ -641,7 +641,7 @@ function SourceRow({ source, selected, onToggle, fav, onToggleFav }: { source: D
         {/* Checkbox — mirrors the shared DS Checkbox (src/components/shared/Checkbox.tsx)
             so multi-select looks identical to the rest of the app. Kept as a div, not
             the shared <button> component, because the whole row is itself a button. */}
-        <div className={`w-4 h-4 rounded-[5px] border flex items-center justify-center shrink-0 transition-colors ${
+        <div className={`w-4 h-4 rounded-sm border flex items-center justify-center shrink-0 transition-colors ${
           selected ? 'bg-brand-600 border-brand-600' : 'bg-canvas-elevated border-canvas-border'
         }`}>
           {selected && <Check size={11} className="text-white" strokeWidth={3} />}

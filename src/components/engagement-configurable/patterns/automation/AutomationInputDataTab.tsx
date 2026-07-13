@@ -16,7 +16,7 @@ import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
 const labelCls = 'text-[0.6875rem] font-semibold text-text-muted block mb-1';
-const READINESS_CLS = { 'Not Ready': 'bg-gray-100 text-gray-600', 'Needs Mapping': 'bg-amber-50 text-amber-700', Ready: 'bg-emerald-50 text-emerald-700' };
+const READINESS_CLS = { 'Not Ready': 'bg-canvas text-ink-600', 'Needs Mapping': 'bg-amber-50 text-amber-700', Ready: 'bg-emerald-50 text-emerald-700' };
 
 const INPUT_METHODS: { type: DataSourceType; icon: React.ElementType; title: string; desc: string; creator: () => AutomationDataSource | AutomationDataSource[] }[] = [
   { type: 'EXCEL_CSV', icon: FileText, title: 'Excel / CSV', desc: 'Upload structured files such as ledgers, claim files, or reconciliation inputs.', creator: createExcelSource },
@@ -95,10 +95,10 @@ export default function AutomationInputDataTab({ engagement, inputData, onUpdate
       {/* Context */}
       <div className="rounded-lg border border-border-light p-3">
         <div className="grid grid-cols-4 gap-3 text-[0.6875rem]">
-          <div><span className="text-gray-400 block text-[0.625rem]">Project</span><span className="text-text font-medium">{engagement.name}</span></div>
-          <div><span className="text-gray-400 block text-[0.625rem]">Input Type</span><span className="text-text font-medium">{SOURCE_TYPE_LABELS[cfg.inputType]}</span></div>
-          <div><span className="text-gray-400 block text-[0.625rem]">Setup Mode</span><span className="text-text font-medium">{cfg.automationSetupMode.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}</span></div>
-          <div><span className="text-gray-400 block text-[0.625rem]">Run Type</span><span className="text-text font-medium">{cfg.runType.replace(/_/g, ' ')}{cfg.frequency ? ` (${cfg.frequency})` : ''}</span></div>
+          <div><span className="text-ink-400 block text-[0.625rem]">Project</span><span className="text-text font-medium">{engagement.name}</span></div>
+          <div><span className="text-ink-400 block text-[0.625rem]">Input Type</span><span className="text-text font-medium">{SOURCE_TYPE_LABELS[cfg.inputType]}</span></div>
+          <div><span className="text-ink-400 block text-[0.625rem]">Setup Mode</span><span className="text-text font-medium">{cfg.automationSetupMode.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}</span></div>
+          <div><span className="text-ink-400 block text-[0.625rem]">Run Type</span><span className="text-text font-medium">{cfg.runType.replace(/_/g, ' ')}{cfg.frequency ? ` (${cfg.frequency})` : ''}</span></div>
         </div>
       </div>
 
@@ -114,7 +114,7 @@ export default function AutomationInputDataTab({ engagement, inputData, onUpdate
         ].map(s => (
           <div key={s.label} className="rounded-lg border border-border-light p-2.5 text-center">
             <div className={`text-[1rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-            <div className="text-[0.5625rem] text-gray-400 font-medium">{s.label}</div>
+            <div className="text-[0.5625rem] text-ink-400 font-medium">{s.label}</div>
           </div>
         ))}
       </div>
@@ -129,7 +129,7 @@ export default function AutomationInputDataTab({ engagement, inputData, onUpdate
                 className="text-left rounded-xl border-2 border-dashed border-border-light p-4 hover:border-primary/30 hover:bg-primary/5 cursor-pointer transition-all">
                 <div className="p-2 rounded-lg bg-primary/10 inline-flex mb-2"><Icon size={16} className="text-primary" /></div>
                 <div className="text-[0.75rem] font-semibold text-text mb-0.5">{m.title}</div>
-                <div className="text-[0.625rem] text-gray-500">{m.desc}</div>
+                <div className="text-[0.625rem] text-ink-500">{m.desc}</div>
               </button>
             );
           })}
@@ -153,7 +153,7 @@ export default function AutomationInputDataTab({ engagement, inputData, onUpdate
         <div className="rounded-lg border border-border-light overflow-hidden">
           <div className="px-4 py-2 bg-surface-2/20 border-b border-border-light"><h4 className="text-[0.6875rem] font-bold text-text">Data Sources ({inputData.dataSources.length})</h4></div>
           <table className="w-full text-[0.6875rem]">
-            <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.5625rem] font-semibold text-gray-400 uppercase">
+            <thead><tr className="border-b border-border-light bg-surface-2/30 text-[0.5625rem] font-semibold text-ink-400 uppercase">
               <th className="px-3 py-1.5 text-center w-8">Sel</th>
               <th className="px-3 py-1.5 text-left">Source</th>
               <th className="px-3 py-1.5 text-center">Type</th>
@@ -170,12 +170,12 @@ export default function AutomationInputDataTab({ engagement, inputData, onUpdate
                 </td>
                 <td className="px-3 py-2">
                   <div className="font-medium text-text">{ds.name}</div>
-                  <div className="text-[0.5625rem] text-gray-400">{ds.fileName || ds.connectionName || '—'}{ds.tags.length > 0 ? ` · ${ds.tags.join(', ')}` : ''}</div>
+                  <div className="text-[0.5625rem] text-ink-400">{ds.fileName || ds.connectionName || '—'}{ds.tags.length > 0 ? ` · ${ds.tags.join(', ')}` : ''}</div>
                 </td>
                 <td className="px-3 py-2 text-center"><span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[0.5rem] font-bold">{SOURCE_TYPE_LABELS[ds.sourceType]}</span></td>
-                <td className="px-3 py-2 text-center text-gray-500 tabular-nums">{ds.recordCount || ds.pageCount || ds.imageCount || '—'}</td>
+                <td className="px-3 py-2 text-center text-ink-500 tabular-nums">{ds.recordCount || ds.pageCount || ds.imageCount || '—'}</td>
                 <td className="px-3 py-2 text-center"><span className={`px-2 py-0.5 rounded-full text-[0.5rem] font-bold ${SOURCE_STATUS_CLS[ds.status]}`}>{ds.status.replace(/_/g, ' ')}</span></td>
-                <td className="px-3 py-2 text-center">{ds.validationIssues.length > 0 ? <span className="text-[0.625rem] text-red-600 font-medium">{ds.validationIssues.length}</span> : <span className="text-gray-300">—</span>}</td>
+                <td className="px-3 py-2 text-center">{ds.validationIssues.length > 0 ? <span className="text-[0.625rem] text-red-600 font-medium">{ds.validationIssues.length}</span> : <span className="text-ink-300">—</span>}</td>
                 <td className="px-3 py-2 text-center">
                   <div className="flex items-center justify-center gap-1">
                     <button onClick={() => setPreviewId(previewId === ds.id ? null : ds.id)} className="px-2 py-1 rounded text-[0.5rem] font-semibold text-primary bg-primary/10 hover:bg-primary/20 cursor-pointer transition-colors"><Eye size={9} /></button>
@@ -230,7 +230,7 @@ export default function AutomationInputDataTab({ engagement, inputData, onUpdate
           ].map(c => (
             <div key={c.label} className="flex items-center gap-2 text-[0.625rem]">
               {c.ok ? <CheckCircle2 size={10} className="text-emerald-500" /> : <AlertCircle size={10} className="text-amber-400" />}
-              <span className={c.ok ? 'text-gray-500' : 'text-text'}>{c.label}</span>
+              <span className={c.ok ? 'text-ink-500' : 'text-text'}>{c.label}</span>
             </div>
           ))}
         </div>
@@ -247,22 +247,22 @@ export default function AutomationInputDataTab({ engagement, inputData, onUpdate
 
 function DataSourcePreview({ ds, onClose }: { ds: AutomationDataSource; onClose: () => void }) {
   return (
-    <div className="rounded-xl border-2 border-primary/20 bg-white p-4 space-y-3 shadow-lg">
+    <div className="rounded-lg border-2 border-primary/20 bg-white p-4 space-y-3 shadow-lg">
       <div className="flex items-center justify-between">
         <div>
           <h4 className="text-[0.8125rem] font-bold text-text">{ds.name}</h4>
-          <p className="text-[0.625rem] text-gray-400">{SOURCE_TYPE_LABELS[ds.sourceType]} · {ds.fileName || ds.connectionName || '—'}</p>
+          <p className="text-[0.625rem] text-ink-400">{SOURCE_TYPE_LABELS[ds.sourceType]} · {ds.fileName || ds.connectionName || '—'}</p>
         </div>
-        <button onClick={onClose} className="p-1 rounded text-gray-400 hover:text-text cursor-pointer"><X size={14} /></button>
+        <button onClick={onClose} className="p-1 rounded text-ink-400 hover:text-text cursor-pointer"><X size={14} /></button>
       </div>
 
       <div className="grid grid-cols-3 gap-3 text-[0.625rem]">
-        <div><span className="text-gray-400 block text-[0.5625rem]">Status</span><span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${SOURCE_STATUS_CLS[ds.status]}`}>{ds.status.replace(/_/g, ' ')}</span></div>
-        <div><span className="text-gray-400 block text-[0.5625rem]">Records/Items</span><span className="text-text font-medium">{ds.recordCount || ds.pageCount || ds.imageCount || '—'}</span></div>
-        <div><span className="text-gray-400 block text-[0.5625rem]">Uploaded</span><span className="text-text">{ds.uploadedAt} by {ds.uploadedBy}</span></div>
+        <div><span className="text-ink-400 block text-[0.5625rem]">Status</span><span className={`px-1.5 py-0.5 rounded text-[0.5rem] font-bold ${SOURCE_STATUS_CLS[ds.status]}`}>{ds.status.replace(/_/g, ' ')}</span></div>
+        <div><span className="text-ink-400 block text-[0.5625rem]">Records/Items</span><span className="text-text font-medium">{ds.recordCount || ds.pageCount || ds.imageCount || '—'}</span></div>
+        <div><span className="text-ink-400 block text-[0.5625rem]">Uploaded</span><span className="text-text">{ds.uploadedAt} by {ds.uploadedBy}</span></div>
       </div>
 
-      {ds.description && <div><span className="text-gray-400 text-[0.5625rem]">Description: </span><span className="text-[0.625rem] text-text">{ds.description}</span></div>}
+      {ds.description && <div><span className="text-ink-400 text-[0.5625rem]">Description: </span><span className="text-[0.625rem] text-text">{ds.description}</span></div>}
 
       {ds.validationIssues.length > 0 && (
         <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[0.625rem] text-amber-700">
@@ -273,18 +273,18 @@ function DataSourcePreview({ ds, onClose }: { ds: AutomationDataSource; onClose:
 
       {ds.columns.length > 0 && (
         <div>
-          <h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Columns ({ds.columns.length})</h6>
+          <h6 className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">Columns ({ds.columns.length})</h6>
           <div className="flex flex-wrap gap-1">{ds.columns.map(c => <span key={c} className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[0.5rem] font-semibold">{c}</span>)}</div>
         </div>
       )}
 
       {ds.samplePreviewRows.length > 0 && (
         <div>
-          <h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Sample Data ({ds.samplePreviewRows.length} rows)</h6>
+          <h6 className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">Sample Data ({ds.samplePreviewRows.length} rows)</h6>
           <div className="rounded-lg border border-border-light overflow-hidden">
             <table className="w-full text-[0.5625rem]">
               <thead><tr className="border-b border-border-light bg-surface-2/30">
-                {ds.columns.map(c => <th key={c} className="px-2 py-1 text-left text-[0.4375rem] font-semibold text-gray-400 uppercase">{c}</th>)}
+                {ds.columns.map(c => <th key={c} className="px-2 py-1 text-left text-[0.4375rem] font-semibold text-ink-400 uppercase">{c}</th>)}
               </tr></thead>
               <tbody>{ds.samplePreviewRows.map((row, i) => (
                 <tr key={i} className="border-b border-border-light/50">
@@ -296,11 +296,11 @@ function DataSourcePreview({ ds, onClose }: { ds: AutomationDataSource; onClose:
         </div>
       )}
 
-      {ds.sourceType === 'IMAGE' && <div className="text-[0.625rem] text-gray-500">{ds.imageCount} images in batch. Thumbnails will be available in automation setup.</div>}
-      {ds.sourceType === 'SQL' && <div className="text-[0.625rem] text-gray-500">Connection: {ds.connectionName}</div>}
+      {ds.sourceType === 'IMAGE' && <div className="text-[0.625rem] text-ink-500">{ds.imageCount} images in batch. Thumbnails will be available in automation setup.</div>}
+      {ds.sourceType === 'SQL' && <div className="text-[0.625rem] text-ink-500">Connection: {ds.connectionName}</div>}
 
       {ds.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1">{ds.tags.map(t => <span key={t} className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[0.5rem]">{t}</span>)}</div>
+        <div className="flex flex-wrap gap-1">{ds.tags.map(t => <span key={t} className="px-1.5 py-0.5 rounded bg-canvas text-ink-500 text-[0.5rem]">{t}</span>)}</div>
       )}
     </div>
   );

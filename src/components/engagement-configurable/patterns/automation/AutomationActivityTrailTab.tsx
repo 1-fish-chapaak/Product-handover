@@ -29,7 +29,7 @@ const TYPE_ICON: Record<ActivityType, { icon: React.ElementType; color: string; 
   ASSIGNMENT: { icon: UserPlus,       color: 'text-blue-600',    bg: 'bg-blue-100' },
   REPORT:     { icon: FileText,       color: 'text-primary',     bg: 'bg-primary/15' },
   OUTPUT:     { icon: CheckCircle2,   color: 'text-emerald-600', bg: 'bg-emerald-100' },
-  CONFIG:     { icon: Settings,       color: 'text-gray-500',    bg: 'bg-gray-200' },
+  CONFIG:     { icon: Settings,       color: 'text-ink-500',    bg: 'bg-canvas-border' },
 };
 
 const SEVERITY_BORDER: Record<string, string> = {
@@ -241,12 +241,12 @@ export default function AutomationActivityTrailTab({ engagement, automationState
       <div className="flex items-center gap-4 pb-4 border-b border-border-light">
         {/* Workflow dropdown */}
         <div className="relative">
-          <div className="text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider mb-1">Workflow</div>
+          <div className="text-[0.5625rem] font-semibold text-ink-400 uppercase tracking-wider mb-1">Workflow</div>
           <button onClick={() => setWfDropdownOpen(!wfDropdownOpen)}
             className="flex items-center gap-1.5 h-8 px-3 min-w-[160px] text-[0.75rem] font-medium text-text bg-white border border-border rounded-lg cursor-pointer hover:border-primary/30 transition-colors">
             <Workflow size={12} className="text-primary shrink-0" />
             <span className="flex-1 text-left truncate">{workflowFilter || 'All workflows'}</span>
-            <ChevronDown size={12} className="text-gray-400 shrink-0" />
+            <ChevronDown size={12} className="text-ink-400 shrink-0" />
           </button>
           {wfDropdownOpen && (
             <>
@@ -269,14 +269,14 @@ export default function AutomationActivityTrailTab({ engagement, automationState
 
         {/* Type pills */}
         <div>
-          <div className="text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider mb-1">Type</div>
+          <div className="text-[0.5625rem] font-semibold text-ink-400 uppercase tracking-wider mb-1">Type</div>
           <div className="flex items-center gap-1.5">
             {TYPE_FILTERS.map(f => (
               <button key={f.label} onClick={() => setTypeFilter(f.label)}
                 className={`h-8 px-3 rounded-full text-[0.6875rem] font-semibold cursor-pointer transition-colors ${
                   typeFilter === f.label
                     ? 'bg-primary text-white'
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    : 'bg-canvas text-ink-500 hover:bg-canvas-border'
                 }`}>
                 {f.label}
               </button>
@@ -285,7 +285,7 @@ export default function AutomationActivityTrailTab({ engagement, automationState
         </div>
 
         {/* Event count */}
-        <div className="ml-auto text-[0.6875rem] text-gray-400 self-end pb-1">
+        <div className="ml-auto text-[0.6875rem] text-ink-400 self-end pb-1">
           {filtered.length} event{filtered.length !== 1 ? 's' : ''}
         </div>
       </div>
@@ -293,7 +293,7 @@ export default function AutomationActivityTrailTab({ engagement, automationState
       {/* ── Timeline ── */}
       {groups.length === 0 ? (
         <div className="py-16 text-center">
-          <Clock size={32} className="text-gray-200 mx-auto mb-3" />
+          <Clock size={32} className="text-ink-300 mx-auto mb-3" />
           <p className="text-[0.875rem] font-semibold text-text mb-1">No Activity Yet</p>
           <p className="text-[0.75rem] text-text-muted">Events will appear here as you run workflows and manage exceptions.</p>
         </div>
@@ -303,8 +303,8 @@ export default function AutomationActivityTrailTab({ engagement, automationState
             <div key={group.label}>
               {/* Date header */}
               <div className="flex items-center gap-3 py-3 sticky top-0 bg-surface z-10">
-                <span className="text-[0.6875rem] font-bold text-gray-400 tracking-wider">{group.label}</span>
-                <span className="text-[0.625rem] text-gray-300">({group.entries.length})</span>
+                <span className="text-[0.6875rem] font-bold text-ink-400 tracking-wider">{group.label}</span>
+                <span className="text-[0.625rem] text-ink-300">({group.entries.length})</span>
                 <div className="flex-1 border-b border-border-light/50" />
               </div>
 
@@ -324,13 +324,13 @@ export default function AutomationActivityTrailTab({ engagement, automationState
                       {/* Content */}
                       <div className="flex-1 min-w-0">
                         <div className="text-[0.75rem] font-semibold text-text leading-snug">{entry.title}</div>
-                        <div className="flex items-center gap-2 mt-0.5 text-[0.625rem] text-gray-400">
+                        <div className="flex items-center gap-2 mt-0.5 text-[0.625rem] text-ink-400">
                           {entry.workflowName && (
                             <>
                               <span className="flex items-center gap-0.5 text-primary/70 font-medium">
                                 <Workflow size={9} />{entry.workflowName}
                               </span>
-                              <span className="text-gray-200">·</span>
+                              <span className="text-ink-300">·</span>
                             </>
                           )}
                           <span>{entry.subtitle}</span>
@@ -339,8 +339,8 @@ export default function AutomationActivityTrailTab({ engagement, automationState
 
                       {/* Time + actor */}
                       <div className="text-right shrink-0">
-                        <div className="text-[0.625rem] text-gray-300 tabular-nums">{formatTime(entry.timestamp)}</div>
-                        <div className="text-[0.625rem] text-gray-400 mt-0.5">{entry.actor}</div>
+                        <div className="text-[0.625rem] text-ink-300 tabular-nums">{formatTime(entry.timestamp)}</div>
+                        <div className="text-[0.625rem] text-ink-400 mt-0.5">{entry.actor}</div>
                       </div>
                     </div>
                   );

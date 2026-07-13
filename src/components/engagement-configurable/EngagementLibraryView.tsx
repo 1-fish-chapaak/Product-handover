@@ -120,7 +120,7 @@ export default function EngagementLibraryView({ onOpenEngagement, onPlanEngageme
       <div className="rounded-xl border border-border-light bg-white overflow-hidden">
         <table className="w-full text-[0.75rem]">
           <thead>
-            <tr className="border-b border-border-light bg-surface-2/30 text-[0.625rem] font-semibold text-gray-400 uppercase tracking-wider">
+            <tr className="border-b border-border-light bg-surface-2/30 text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider">
               <th className="px-4 py-2.5 text-left">Engagement</th>
               <th className="px-4 py-2.5 text-center w-[120px]">Type</th>
               <th className="px-4 py-2.5 text-left w-[140px]">Process</th>
@@ -151,7 +151,7 @@ export default function EngagementLibraryView({ onOpenEngagement, onPlanEngageme
                         </div>
                         <div className="min-w-0">
                           <div className="text-[0.8125rem] font-semibold text-text group-hover:text-primary transition-colors truncate">{eng.name}</div>
-                          <div className="text-[0.625rem] text-gray-400 mt-0.5 truncate max-w-[300px]">{eng.description}</div>
+                          <div className="text-[0.625rem] text-ink-400 mt-0.5 truncate max-w-[300px]">{eng.description}</div>
                         </div>
                       </div>
                     </td>
@@ -161,7 +161,7 @@ export default function EngagementLibraryView({ onOpenEngagement, onPlanEngageme
                     <td className="px-4 py-3 text-text-muted">{eng.process}</td>
                     <td className="px-4 py-3">
                       <div className="text-text font-medium">{eng.owner}</div>
-                      {eng.reviewer && <div className="text-[0.625rem] text-gray-400">{eng.reviewer}</div>}
+                      {eng.reviewer && <div className="text-[0.625rem] text-ink-400">{eng.reviewer}</div>}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[0.625rem] font-semibold ${eng.statusTone}`}>{eng.status}</span>
@@ -171,7 +171,7 @@ export default function EngagementLibraryView({ onOpenEngagement, onPlanEngageme
                         {eng.metrics.map(m => (
                           <div key={m.label} className="text-center">
                             <div className={`text-[0.8125rem] font-bold tabular-nums ${m.color || 'text-text'}`}>{m.value}</div>
-                            <div className="text-[0.5rem] text-gray-400">{m.label}</div>
+                            <div className="text-[0.5rem] text-ink-400">{m.label}</div>
                           </div>
                         ))}
                       </div>

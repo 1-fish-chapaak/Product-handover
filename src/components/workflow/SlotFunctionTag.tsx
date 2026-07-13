@@ -41,7 +41,7 @@ export default function SlotFunctionTag({ input }: { input: InputSpec }) {
   return (
     <span
       title={title}
-      className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-md bg-brand-50 border border-brand-200 text-brand-700 px-1.5 py-0.5"
+      className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold rounded-md bg-brand-50 border border-brand-200 text-brand-700 px-1.5 py-0.5"
     >
       <Icon size={11} />
       {label}

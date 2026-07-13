@@ -361,7 +361,7 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
                               <div className="text-[0.75rem] text-text-muted">{source.type}</div>
                             </div>
                           </div>
-                          <span className={`text-[0.75rem] font-bold px-1.5 py-0.5 rounded border ${FORMAT_COLORS[source.format] || 'bg-paper-50 text-ink-500 border-gray-200'}`}>
+                          <span className={`text-[0.75rem] font-bold px-1.5 py-0.5 rounded border ${FORMAT_COLORS[source.format] || 'bg-paper-50 text-ink-500 border-canvas-border'}`}>
                             {source.format}
                           </span>
                         </div>
@@ -384,7 +384,7 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
                             {source.frozen ? (
                               <ToggleRight size={18} className={colors.accent} />
                             ) : (
-                              <ToggleLeft size={18} className="text-gray-300" />
+                              <ToggleLeft size={18} className="text-ink-300" />
                             )}
                             <span className={`text-[0.75rem] font-medium ${source.frozen ? colors.accent : 'text-text-muted'}`}>
                               {source.frozen ? 'Frozen' : 'Freeze'}
@@ -420,7 +420,7 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
 
                 {/* Match Tolerance */}
                 {config.matchSettings.toleranceDefault !== 'N/A' && (
-                  <div className="bg-white rounded-xl border border-border-light shadow-sm p-3 mb-3">
+                  <div className="bg-white rounded-lg border border-border-light p-3 mb-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className={`text-[0.75rem] font-semibold text-text flex items-center gap-1.5`}>
                         <Hash size={12} className={colors.accent} /> Match Tolerance
@@ -443,7 +443,7 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
                 )}
 
                 {/* Match Logic */}
-                <div className="bg-white rounded-xl border border-border-light shadow-sm p-3 mb-4">
+                <div className="bg-white rounded-lg border border-border-light p-3 mb-4">
                   <span className="text-[0.75rem] font-semibold text-text mb-2 block">
                     {config.matchSettings.toleranceDefault === 'N/A' ? 'Detection Logic' : 'Match Logic'}
                   </span>
@@ -497,7 +497,7 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
                 </div>
 
                 {/* Output Sheets (Excel tabs) */}
-                <div className="bg-white rounded-xl border border-border-light shadow-sm p-3 mb-4">
+                <div className="bg-white rounded-lg border border-border-light p-3 mb-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[0.75rem] font-semibold text-text flex items-center gap-1.5">
                       <FileText size={12} className={colors.accent} /> Output Sheets
@@ -602,7 +602,7 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
                         {col.enabled ? (
                           <Eye size={14} className={colors.accent} />
                         ) : (
-                          <EyeOff size={14} className="text-gray-300" />
+                          <EyeOff size={14} className="text-ink-300" />
                         )}
                       </button>
                     </motion.div>
@@ -610,7 +610,7 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
                 </div>
 
                 {/* KPI Options */}
-                <div className="bg-white rounded-xl border border-border-light shadow-sm p-3 mb-4">
+                <div className="bg-white rounded-lg border border-border-light p-3 mb-4">
                   <span className="text-[0.75rem] font-semibold text-text mb-2 block">Dashboard KPIs</span>
                   <div className="space-y-1.5">
                     {config.kpiOptions.map(kpi => (
@@ -654,7 +654,7 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
                 </div>
 
                 {/* Layout Picker */}
-                <div className="bg-white rounded-xl border border-border-light shadow-sm p-3 mb-4">
+                <div className="bg-white rounded-lg border border-border-light p-3 mb-4">
                   <span className="text-[0.75rem] font-semibold text-text mb-2 block">Output Layout</span>
                   <div className="flex gap-2">
                     {config.layoutOptions.map(layout => (
@@ -739,7 +739,7 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
                 </div>
 
                 {/* Mini Area Chart */}
-                <div className="bg-white rounded-xl border border-border-light shadow-sm p-3 mb-4">
+                <div className="bg-white rounded-lg border border-border-light p-3 mb-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[0.75rem] font-bold text-text-muted">Execution Trend · Last 7 Runs</span>
                     <span className="text-[0.75rem] font-semibold text-compliant-700">{'\u2191'} 12% improvement</span>
@@ -904,7 +904,7 @@ export default function WorkflowBuilderCanvas({ onClose, workflowType, buildStag
                     <ChevronLeft size={12} /> Edit Configuration
                   </button>
                   <div className="flex items-center gap-2">
-                    <button onClick={handleSaveWorkflow} className="flex items-center gap-1.5 px-4 py-2 border border-border rounded-xl text-[0.75rem] font-medium text-text-secondary hover:bg-white transition-colors cursor-pointer">
+                    <button onClick={handleSaveWorkflow} className="flex items-center gap-1.5 px-4 py-2 border border-border rounded-lg text-[0.75rem] font-medium text-text-secondary hover:bg-white transition-colors cursor-pointer">
                       <Save size={12} /> Save to Library
                     </button>
                     <button className={`flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r ${colors.gradient} hover:opacity-90 text-white rounded-xl text-[0.75rem] font-semibold transition-all cursor-pointer shadow-md`}>

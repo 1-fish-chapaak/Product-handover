@@ -18,11 +18,11 @@ import type { InternalAuditScopeState } from './internalAuditScopeData';
 import { useAuditLog } from '../../../../context/AdminDataContext';
 
 const STATUS_CLS: Record<IARequestStatus, string> = {
-  DRAFT: 'bg-gray-100 text-gray-600', SENT: 'bg-blue-50 text-blue-700', PENDING: 'bg-amber-50 text-amber-700',
+  DRAFT: 'bg-canvas text-ink-600', SENT: 'bg-blue-50 text-blue-700', PENDING: 'bg-amber-50 text-amber-700',
   PARTIALLY_RECEIVED: 'bg-purple-50 text-purple-700', RECEIVED: 'bg-emerald-50 text-emerald-700',
-  OVERDUE: 'bg-red-50 text-red-700', CANCELLED: 'bg-gray-50 text-gray-400',
+  OVERDUE: 'bg-red-50 text-red-700', CANCELLED: 'bg-canvas text-ink-400',
 };
-const PRIORITY_CLS: Record<IAPriority, string> = { LOW: 'bg-gray-100 text-gray-500', MEDIUM: 'bg-blue-50 text-blue-600', HIGH: 'bg-amber-50 text-amber-700', CRITICAL: 'bg-red-50 text-red-700' };
+const PRIORITY_CLS: Record<IAPriority, string> = { LOW: 'bg-canvas text-ink-500', MEDIUM: 'bg-blue-50 text-blue-600', HIGH: 'bg-amber-50 text-amber-700', CRITICAL: 'bg-red-50 text-red-700' };
 type StatusFilter = 'All' | IARequestStatus;
 
 const inputCls = 'w-full px-3 py-2 border border-border rounded-lg text-[0.75rem] text-text bg-white outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all';
@@ -120,7 +120,7 @@ export default function InternalAuditRequestsIDRTab({ engagement, scope, request
         ].map(s => (
           <div key={s.label} className="rounded-lg border border-border-light p-2.5 text-center">
             <div className={`text-[1rem] font-bold tabular-nums ${s.cls || 'text-text'}`}>{s.value}</div>
-            <div className="text-[0.5625rem] text-gray-400 font-medium">{s.label}</div>
+            <div className="text-[0.5625rem] text-ink-400 font-medium">{s.label}</div>
           </div>
         ))}
       </div>
@@ -128,14 +128,14 @@ export default function InternalAuditRequestsIDRTab({ engagement, scope, request
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 max-w-[220px]">
-          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search IDR requests, scope, owner..."
             className="w-full pl-7 pr-3 py-1.5 border border-border rounded-lg text-[0.6875rem] text-text bg-white outline-none focus:border-primary/40" />
         </div>
         <div className="flex items-center gap-1">
           {(['All', 'DRAFT', 'PENDING', 'PARTIALLY_RECEIVED', 'RECEIVED', 'OVERDUE'] as StatusFilter[]).map(f => (
             <button key={f} onClick={() => setStatusFilter(f)}
-              className={`px-2 py-1 rounded-full text-[0.5625rem] font-semibold cursor-pointer transition-colors ${statusFilter === f ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+              className={`px-2 py-1 rounded-full text-[0.5625rem] font-semibold cursor-pointer transition-colors ${statusFilter === f ? 'bg-primary text-white' : 'bg-canvas text-ink-500 hover:bg-canvas-border'}`}>
               {f === 'All' ? 'All' : f === 'PARTIALLY_RECEIVED' ? 'Partial' : f.charAt(0) + f.slice(1).toLowerCase()}
             </button>
           ))}
@@ -154,7 +154,7 @@ export default function InternalAuditRequestsIDRTab({ engagement, scope, request
       <div className="rounded-lg border border-border-light overflow-hidden">
         <table className="w-full text-[0.6875rem]">
           <thead>
-            <tr className="border-b border-border-light bg-surface-2/30 text-[0.5625rem] font-semibold text-gray-400 uppercase">
+            <tr className="border-b border-border-light bg-surface-2/30 text-[0.5625rem] font-semibold text-ink-400 uppercase">
               <th className="px-3 py-2 text-left w-5"></th>
               <th className="px-3 py-2 text-left">Request</th>
               <th className="px-3 py-2 text-left">Linked Scope</th>
@@ -167,17 +167,17 @@ export default function InternalAuditRequestsIDRTab({ engagement, scope, request
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={8} className="px-3 py-8 text-center text-[0.6875rem] text-gray-400">No IDR requests match the current filter.</td></tr>
+              <tr><td colSpan={8} className="px-3 py-8 text-center text-[0.6875rem] text-ink-400">No IDR requests match the current filter.</td></tr>
             ) : filtered.map(req => {
               const isExpanded = expandedId === req.id;
               return (
                 <React.Fragment key={req.id}>
                   <tr className={`border-b border-border-light/50 cursor-pointer hover:bg-surface-2/20 transition-colors ${isExpanded ? 'bg-surface-2/20' : ''}`}
                     onClick={() => setExpandedId(isExpanded ? null : req.id)}>
-                    <td className="px-3 py-2.5 text-gray-400">{isExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}</td>
+                    <td className="px-3 py-2.5 text-ink-400">{isExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}</td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="font-mono text-gray-400 text-[0.625rem]">{req.id}</span>
+                        <span className="font-mono text-ink-400 text-[0.625rem]">{req.id}</span>
                         <span className="font-medium text-text">{req.title}</span>
                       </div>
                       <div className="flex items-center gap-1">
@@ -186,17 +186,17 @@ export default function InternalAuditRequestsIDRTab({ engagement, scope, request
                       </div>
                     </td>
                     <td className="px-3 py-2.5">
-                      <div className="text-[0.625rem] text-gray-500">{SCOPE_TYPE_LABELS[req.linkedScopeType]}</div>
+                      <div className="text-[0.625rem] text-ink-500">{SCOPE_TYPE_LABELS[req.linkedScopeType]}</div>
                       <div className="text-[0.625rem] text-text font-medium">{req.linkedScopeLabel}</div>
                     </td>
                     <td className="px-3 py-2.5 text-text">{req.requestedFrom}</td>
                     <td className="px-3 py-2.5 text-center">
-                      <span className={`text-[0.625rem] font-mono ${req.status === 'OVERDUE' ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>{req.dueDate}</span>
+                      <span className={`text-[0.625rem] font-mono ${req.status === 'OVERDUE' ? 'text-red-600 font-semibold' : 'text-ink-500'}`}>{req.dueDate}</span>
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-[0.5rem] font-bold ${STATUS_CLS[req.status]}`}>{req.status === 'PARTIALLY_RECEIVED' ? 'Partial' : req.status.replace(/_/g, ' ')}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-center text-[0.625rem] text-gray-500">
+                    <td className="px-3 py-2.5 text-center text-[0.625rem] text-ink-500">
                       {req.progressText || (req.filesReceived.length > 0 ? `${req.filesReceived.length} file${req.filesReceived.length !== 1 ? 's' : ''}` : '—')}
                     </td>
                     <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
@@ -215,11 +215,11 @@ export default function InternalAuditRequestsIDRTab({ engagement, scope, request
       <div className="rounded-lg border border-border-light p-4 space-y-2">
         <div className="flex items-center justify-between">
           <h4 className="text-[0.6875rem] font-bold text-text">Next Step</h4>
-          {!cfg.idrEnabled && <span className="text-[0.5625rem] text-gray-400">IDR is disabled for this assignment</span>}
+          {!cfg.idrEnabled && <span className="text-[0.5625rem] text-ink-400">IDR is disabled for this assignment</span>}
         </div>
         {!canProceed && (
           <div className="flex items-center gap-3">
-            <span className="text-[0.625rem] text-gray-500">Receive at least one IDR item or proceed without IDR.</span>
+            <span className="text-[0.625rem] text-ink-500">Receive at least one IDR item or proceed without IDR.</span>
             <button onClick={() => onUpdateRequestState({ ...requestState, proceedWithoutIDR: true })}
               className="text-[0.625rem] font-semibold text-primary hover:underline cursor-pointer">Proceed without IDR</button>
           </div>
@@ -259,11 +259,11 @@ function RequestDetail({ req, onAddFile }: { req: IARequest; onAddFile: (id: str
   const [newFile, setNewFile] = useState('');
   return (
     <div className="bg-surface-2/15 border-b border-border-light px-6 py-4 space-y-3">
-      <div><h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Description</h6><p className="text-[0.6875rem] text-text leading-relaxed">{req.description}</p></div>
+      <div><h6 className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">Description</h6><p className="text-[0.6875rem] text-text leading-relaxed">{req.description}</p></div>
       <div className="grid grid-cols-3 gap-4 text-[0.625rem]">
-        <div><span className="text-gray-400 block text-[0.5625rem]">Linked Scope</span><span className="text-text font-medium">{SCOPE_TYPE_LABELS[req.linkedScopeType]} — {req.linkedScopeLabel}</span></div>
-        <div><span className="text-gray-400 block text-[0.5625rem]">Requested From</span><span className="text-text font-medium">{req.requestedFrom}</span></div>
-        <div><span className="text-gray-400 block text-[0.5625rem]">Due Date</span><span className={`font-medium ${req.status === 'OVERDUE' ? 'text-red-600' : 'text-text'}`}>{req.dueDate}</span></div>
+        <div><span className="text-ink-400 block text-[0.5625rem]">Linked Scope</span><span className="text-text font-medium">{SCOPE_TYPE_LABELS[req.linkedScopeType]} — {req.linkedScopeLabel}</span></div>
+        <div><span className="text-ink-400 block text-[0.5625rem]">Requested From</span><span className="text-text font-medium">{req.requestedFrom}</span></div>
+        <div><span className="text-ink-400 block text-[0.5625rem]">Due Date</span><span className={`font-medium ${req.status === 'OVERDUE' ? 'text-red-600' : 'text-text'}`}>{req.dueDate}</span></div>
       </div>
       {req.status === 'OVERDUE' && (
         <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-[0.625rem] text-red-700">
@@ -272,7 +272,7 @@ function RequestDetail({ req, onAddFile }: { req: IARequest; onAddFile: (id: str
       )}
       {req.filesReceived.length > 0 && (
         <div>
-          <h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Files Received</h6>
+          <h6 className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">Files Received</h6>
           <div className="flex flex-wrap gap-1.5">
             {req.filesReceived.map(f => (
               <span key={f} className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-[0.5625rem] text-emerald-700"><FileText size={9} />{f}</span>
@@ -290,8 +290,8 @@ function RequestDetail({ req, onAddFile }: { req: IARequest; onAddFile: (id: str
       )}
       {req.comments.length > 0 && (
         <div>
-          <h6 className="text-[0.5625rem] font-bold text-gray-400 uppercase tracking-wider mb-1">Comments</h6>
-          <div className="space-y-1">{req.comments.map((c, i) => <div key={i} className="text-[0.625rem] text-gray-500 pl-2 border-l-2 border-gray-200">{c}</div>)}</div>
+          <h6 className="text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider mb-1">Comments</h6>
+          <div className="space-y-1">{req.comments.map((c, i) => <div key={i} className="text-[0.625rem] text-ink-500 pl-2 border-l-2 border-canvas-border">{c}</div>)}</div>
         </div>
       )}
     </div>
@@ -323,7 +323,7 @@ function CreateIDRForm({ onSave, onCancel }: { onSave: (r: IARequest) => void; o
 
   return (
     <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
-      <div className="flex items-center justify-between"><h4 className="text-[0.8125rem] font-bold text-text">Create IDR Request</h4><button onClick={onCancel} className="p-1 rounded text-gray-400 hover:text-text cursor-pointer"><X size={14} /></button></div>
+      <div className="flex items-center justify-between"><h4 className="text-[0.8125rem] font-bold text-text">Create IDR Request</h4><button onClick={onCancel} className="p-1 rounded text-ink-400 hover:text-text cursor-pointer"><X size={14} /></button></div>
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2"><label className={labelCls}>Title <span className="text-red-400">*</span></label><input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Provide invoice register" className={inputCls} /></div>
         <div className="col-span-2"><label className={labelCls}>Description</label><textarea value={desc} onChange={e => setDesc(e.target.value)} rows={2} placeholder="Describe what is needed..." className={inputCls + ' resize-none'} /></div>

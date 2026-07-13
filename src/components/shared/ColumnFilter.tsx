@@ -85,7 +85,7 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
           type="button"
           onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
           className={`no-focus-ring inline-flex items-center gap-2 border font-medium cursor-pointer transition-colors ${
-            size === 'sm' ? 'h-8 px-2.5 rounded-[8px] text-[0.75rem]' : 'h-10 px-3 rounded-[10px] text-[12.5px]'
+            size === 'sm' ? 'h-8 px-2.5 rounded-md text-[0.75rem]' : 'h-10 px-3 rounded-lg text-[0.78125rem]'
           } ${
             hasFilter
               ? 'bg-brand-50 border-brand-200 text-brand-700'
@@ -99,7 +99,7 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
           {icon && <SlidersHorizontal size={size === 'sm' ? 13 : 15} className={hasFilter || open ? 'text-brand-600' : 'text-ink-400'} />}
           <span>{label}</span>
           {hasFilter && (
-            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-brand-600 text-white text-[10px] font-bold tabular-nums">
+            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-brand-600 text-white text-[0.625rem] font-bold tabular-nums">
               {value.length}
             </span>
           )}
@@ -129,7 +129,7 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.98 }}
           transition={{ duration: reduce ? 0 : 0.14, ease: [0.2, 0, 0, 1] }}
-          className={`absolute top-full mt-1.5 z-50 overflow-hidden bg-canvas-elevated border border-canvas-border rounded-[10px] shadow-[0_10px_30px_-12px_rgba(15,8,30,0.28)] normal-case tracking-normal ${showSearch ? 'w-[224px]' : 'min-w-full w-max max-w-[240px]'} ${align === 'end' ? 'right-0 origin-top-right' : 'left-0 origin-top-left'}`}
+          className={`absolute top-full mt-1.5 z-50 overflow-hidden bg-canvas-elevated border border-canvas-border rounded-lg shadow-[0_10px_30px_-12px_rgba(15,8,30,0.28)] normal-case tracking-normal ${showSearch ? 'w-[224px]' : 'min-w-full w-max max-w-[240px]'} ${align === 'end' ? 'right-0 origin-top-right' : 'left-0 origin-top-left'}`}
           onClick={(e) => e.stopPropagation()}
         >
           {showSearch && (
@@ -141,7 +141,7 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={`Search ${label.toLowerCase()}…`}
-                className="no-focus-ring flex-1 min-w-0 bg-transparent border-0 p-0 text-[12px] text-ink-800 placeholder:text-ink-400 outline-none"
+                className="no-focus-ring flex-1 min-w-0 bg-transparent border-0 p-0 text-[0.75rem] text-ink-800 placeholder:text-ink-400 outline-none"
               />
               {query ? (
                 <button
@@ -156,7 +156,7 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
                 <button
                   type="button"
                   onClick={() => onChange([])}
-                  className="text-[10px] text-brand-700 hover:text-brand-600 cursor-pointer font-medium shrink-0"
+                  className="text-[0.625rem] text-brand-700 hover:text-brand-600 cursor-pointer font-medium shrink-0"
                 >
                   Clear
                 </button>
@@ -164,7 +164,7 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
             </div>
           )}
           {showSearch && hasFilter && !query && (
-            <div className="px-3 pt-1.5 text-[10px] uppercase tracking-wider font-semibold text-ink-400 tabular-nums">
+            <div className="px-3 pt-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-400 tabular-nums">
               {value.length} selected
             </div>
           )}
@@ -181,7 +181,7 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
                   <button
                     type="button"
                     onClick={() => toggle(opt)}
-                    className={`no-focus-ring flex items-center gap-2.5 w-full text-left px-2 h-8 rounded-lg text-[12px] cursor-pointer transition-colors ${
+                    className={`no-focus-ring flex items-center gap-2.5 w-full text-left px-2 h-8 rounded-lg text-[0.75rem] cursor-pointer transition-colors ${
                       // Checkbox variant: the box itself signals selection, so the
                       // row stays untinted (only hover). Check variant keeps the row fill.
                       checked
@@ -203,18 +203,18 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
               );
             })}
             {visibleOptions.length === 0 && (
-              <li className="px-2 py-3 text-center text-[12px] text-ink-400">{options.length === 0 ? 'No options' : 'No matches'}</li>
+              <li className="px-2 py-3 text-center text-[0.75rem] text-ink-400">{options.length === 0 ? 'No options' : 'No matches'}</li>
             )}
           </ul>
           {!showSearch && hasFilter && (
             <button
               type="button"
               onClick={() => onChange([])}
-              className="no-focus-ring flex items-center gap-2 w-full px-3 h-9 border-t border-canvas-border text-[12px] font-medium text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors"
+              className="no-focus-ring flex items-center gap-2 w-full px-3 h-9 border-t border-canvas-border text-[0.75rem] font-medium text-brand-700 hover:bg-brand-50 cursor-pointer transition-colors"
             >
               <X size={13} strokeWidth={2.5} className="shrink-0" />
               <span>Clear all</span>
-              <span className="ml-auto text-[11px] font-normal text-ink-400 tabular-nums">{value.length}</span>
+              <span className="ml-auto text-[0.6875rem] font-normal text-ink-400 tabular-nums">{value.length}</span>
             </button>
           )}
         </motion.div>

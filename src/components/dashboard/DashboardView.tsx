@@ -511,7 +511,7 @@ function IRAInlineSummary({ dashboardId }: { dashboardId: DashboardId }) {
 
   return (
     <div className="px-5 pt-4 pb-3">
-      <div className="p-5 rounded-xl border border-brand-200 bg-canvas-elevated">
+      <div className="p-5 rounded-lg border border-brand-200 bg-canvas-elevated">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <div className="p-1.5 rounded-lg bg-brand-50">
@@ -543,7 +543,7 @@ const AI_SUMMARIES: Record<DashboardId, string> = {
 function EmptyAlertsPanel() {
   const [expanded, setExpanded] = useState(true);
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl mb-5 overflow-hidden">
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card mb-5 overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border-light/50">
         <button onClick={() => setExpanded(p => !p)} className="flex items-center gap-2 cursor-pointer">
           <div className="p-1.5 rounded-lg bg-gradient-to-br from-primary to-primary-medium">
@@ -634,7 +634,7 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
 
   return (
     <>
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl mb-5 overflow-hidden">
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card mb-5 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-light/50">
           <button onClick={() => setExpanded(p => !p)} className="flex items-center gap-2 cursor-pointer">
@@ -705,7 +705,7 @@ function AlertsPanel({ dashboardId }: { dashboardId: DashboardId }) {
                     <p className="text-[0.75rem] text-text-muted">AI-generated email ready to send</p>
                   </div>
                 </div>
-                <button onClick={() => setShowShareModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">
+                <button onClick={() => setShowShareModal(false)} className="p-1.5 hover:bg-canvas rounded-lg transition-colors cursor-pointer">
                   <X size={16} className="text-text-muted" />
                 </button>
               </div>
@@ -2128,7 +2128,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                               <td className="px-4 py-3 text-[0.75rem] font-medium text-ink-900">{r.amount}</td>
                               <td className="px-4 py-3 text-[0.75rem] text-ink-600">{r.date}</td>
                               <td className="px-4 py-3">
-                                <span className={`text-[0.6875rem] font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[r.status] || 'bg-gray-50 text-gray-600'}`}>
+                                <span className={`text-[0.6875rem] font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[r.status] || 'bg-canvas text-ink-600'}`}>
                                   {r.status}
                                 </span>
                               </td>
@@ -2274,7 +2274,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                           <div className="p-3 space-y-2">
                             {/* AXIS FIELDS section — on top, hidden for Table */}
                             {editChartType !== 'table' && (
-                            <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+                            <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
                               <button
                                 onClick={() => setEditFieldsOpen(!editFieldsOpen)}
                                 className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] hover:to-[#fefefe] transition-all border-b border-[#f0f0f0]"
@@ -2327,7 +2327,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                             )}
 
                             {/* CHART TYPE section */}
-                            <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+                            <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
                               <button
                                 onClick={() => setEditChartTypeOpen(!editChartTypeOpen)}
                                 className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] hover:to-[#fefefe] transition-all border-b border-[#f0f0f0]"
@@ -2362,7 +2362,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                             </div>
 
                             {/* DATA SOURCE section */}
-                            <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+                            <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
                               <div className="flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white border-b border-[#f0f0f0]">
                                 <div className="flex items-center gap-2">
                                   <Database className="size-[12px] text-[#6a12cd]" strokeWidth={2} />
@@ -2384,7 +2384,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                     placeholder="Search fields..."
                                     value={editDataSearch}
                                     onChange={e => setEditDataSearch(e.target.value)}
-                                    className="w-full pl-7 pr-3 py-1.5 text-[0.6875rem] bg-white border border-[#e5e7eb] rounded-[6px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-200 transition-all"
+                                    className="w-full pl-7 pr-3 py-1.5 text-[0.6875rem] bg-white border border-[#e5e7eb] rounded-sm text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-200 transition-all"
                                   />
                                 </div>
                                 <FileTreeView files={FILE_TREE_DATA} search={editDataSearch} />
@@ -2397,7 +2397,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                       {editSidebarTab === 'customize' && (
                         <div className="p-3 space-y-2">
                           {/* GENERAL section */}
-                          <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+                          <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
                             <button
                               onClick={() => setEditGeneralOpen(!editGeneralOpen)}
                               className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] hover:to-[#fefefe] transition-all border-b border-[#f0f0f0]"
@@ -2420,7 +2420,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                     <select
                                       value={editFontFamily}
                                       onChange={e => setEditFontFamily(e.target.value)}
-                                      className="w-full h-[32px] px-2.5 py-1.5 text-[0.6875rem] bg-white border border-[#e5e7eb] rounded-[6px] text-[#26064a] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm appearance-none cursor-pointer pr-7"
+                                      className="w-full h-[32px] px-2.5 py-1.5 text-[0.6875rem] bg-white border border-[#e5e7eb] rounded-sm text-[#26064a] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm appearance-none cursor-pointer pr-7"
                                     >
                                       {['Inter', 'Poppins', 'Roboto', 'Open Sans', 'Montserrat', 'Lato', 'Nunito', 'Raleway', 'PT Sans', 'Merriweather', 'Playfair Display'].map(f => (
                                         <option key={f} value={f}>{f}</option>
@@ -2430,7 +2430,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                   </div>
                                 </div>
                                 {/* Bold / Italic / Underline */}
-                                <div className="flex items-center bg-white rounded-[6px] border border-[#e5e7eb] overflow-hidden">
+                                <div className="flex items-center bg-white rounded-sm border border-[#e5e7eb] overflow-hidden">
                                   <button
                                     onClick={() => setEditIsBold(!editIsBold)}
                                     className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border-r border-[#e5e7eb] transition-all duration-200 cursor-pointer ${editIsBold ? 'bg-[#6a12cd] text-white' : 'bg-white text-[#26064a] hover:bg-[#faf5ff]'}`}
@@ -2459,7 +2459,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
 
                           {/* X AXIS section — hidden for Pie, KPI, Table */}
                           {editChartType !== 'pie' && editChartType !== 'kpi' && editChartType !== 'table' && !isTable && (
-                          <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+                          <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
                             <button
                               onClick={() => setEditXAxisOpen(!editXAxisOpen)}
                               className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] hover:to-[#fefefe] transition-all border-b border-[#f0f0f0]"
@@ -2474,7 +2474,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                               <div className="bg-[#fafafa] p-2.5 space-y-3">
                                 <div className="flex flex-col gap-1.5">
                                   <label className="text-[0.75rem] font-medium text-[#26064a]">Title</label>
-                                  <input type="text" value={editXAxisTitleVal} onChange={e => onCustomizeChange?.('xAxisTitle', e.target.value)} placeholder="Enter X Axis Title" className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm" />
+                                  <input type="text" value={editXAxisTitleVal} onChange={e => onCustomizeChange?.('xAxisTitle', e.target.value)} placeholder="Enter X Axis Title" className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-md text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm" />
                                 </div>
                               </div>
                             )}
@@ -2483,7 +2483,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
 
                           {/* Y AXIS section — hidden for Pie, KPI, Table */}
                           {editChartType !== 'pie' && editChartType !== 'kpi' && editChartType !== 'table' && !isTable && (
-                          <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+                          <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
                             <button
                               onClick={() => setEditYAxisOpen(!editYAxisOpen)}
                               className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] hover:to-[#fefefe] transition-all border-b border-[#f0f0f0]"
@@ -2498,7 +2498,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                               <div className="bg-[#fafafa] p-2.5 space-y-3">
                                 <div className="flex flex-col gap-1.5">
                                   <label className="text-[0.75rem] font-medium text-[#26064a]">Title</label>
-                                  <input type="text" value={editYAxisTitleVal} onChange={e => onCustomizeChange?.('yAxisTitle', e.target.value)} placeholder="Enter Y Axis Title" className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm" />
+                                  <input type="text" value={editYAxisTitleVal} onChange={e => onCustomizeChange?.('yAxisTitle', e.target.value)} placeholder="Enter Y Axis Title" className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-md text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm" />
                                 </div>
                               </div>
                             )}
@@ -2517,7 +2517,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
 
                           {/* RANGE (Y AXIS) section — hidden for Pie, KPI, Table */}
                           {editChartType !== 'pie' && editChartType !== 'kpi' && editChartType !== 'table' && !isTable && (
-                          <div className="bg-white rounded-[8px] border border-[#e5e7eb] overflow-hidden shadow-sm">
+                          <div className="bg-white rounded-md border border-[#e5e7eb] overflow-hidden shadow-sm">
                             <button
                               onClick={() => setEditRangeOpen(!editRangeOpen)}
                               className="w-full flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-[#faf5ff] to-white hover:from-[#f5f0ff] hover:to-[#fefefe] transition-all border-b border-[#f0f0f0]"
@@ -2541,7 +2541,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                       value={editMinimum}
                                       onChange={e => setEditMinimum(e.target.value)}
                                       placeholder="Auto"
-                                      className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                                      className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-md text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                                     />
                                   </div>
                                   <div className="flex-1 flex flex-col gap-1.5">
@@ -2551,7 +2551,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                       value={editMaximum}
                                       onChange={e => setEditMaximum(e.target.value)}
                                       placeholder="Auto"
-                                      className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-[8px] text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                                      className="w-full px-3.5 py-2 text-[0.75rem] bg-white border border-[rgba(38,6,74,0.2)] rounded-md text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] focus:outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                                     />
                                   </div>
                                 </div>
@@ -2559,7 +2559,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                                   <p className="text-[0.75rem] font-medium text-[#26064a]">Invert Range</p>
                                   <button
                                     onClick={() => setEditInvertRange(!editInvertRange)}
-                                    className={`relative w-[36px] h-[20px] rounded-[12px] transition-all cursor-pointer ${editInvertRange ? 'bg-[#6a12cd]' : 'bg-[#e5e7eb]'}`}
+                                    className={`relative w-[36px] h-[20px] rounded-lg transition-all cursor-pointer ${editInvertRange ? 'bg-[#6a12cd]' : 'bg-[#e5e7eb]'}`}
                                   >
                                     <div
                                       className="absolute top-[2px] w-[16px] h-[16px] bg-white rounded-full shadow-sm transition-all"
@@ -2672,7 +2672,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
         <div className="fixed inset-0 z-[9999] bg-black/30 backdrop-blur-sm" onClick={() => setShowAlertNotifications(false)} />
         <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none">
           <div
-            className="pointer-events-auto bg-white rounded-[12px] border border-[#e5e7eb] shadow-[0_20px_60px_-10px_rgba(0,0,0,0.2)] w-[440px] max-h-[85vh] overflow-hidden font-['Inter',sans-serif]"
+            className="pointer-events-auto bg-white rounded-lg border border-[#e5e7eb] shadow-[0_20px_60px_-10px_rgba(0,0,0,0.2)] w-[440px] max-h-[85vh] overflow-hidden font-['Inter',sans-serif]"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
@@ -2703,7 +2703,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
                 </div>
               ) : (
                 alerts.map(alert => (
-                  <div key={alert.id} className="flex items-start gap-3 bg-[#fafafa] border border-[#e5e7eb] rounded-[8px] px-4 py-3 hover:bg-[#f5f0ff] transition-colors">
+                  <div key={alert.id} className="flex items-start gap-3 bg-[#fafafa] border border-[#e5e7eb] rounded-md px-4 py-3 hover:bg-[#f5f0ff] transition-colors">
                     <div className="size-7 rounded-md bg-[#f4f0ff] flex items-center justify-center shrink-0 mt-0.5">
                       <AlertTriangle size={13} className="text-[#6a12cd]" />
                     </div>
@@ -2733,7 +2733,7 @@ function ExpandedWidgetModal({ open, onClose, title, subtitle, children, onEdit,
               </button>
               <button
                 onClick={() => setShowAlertNotifications(false)}
-                className="px-4 py-1.5 bg-[#6a12cd] hover:bg-[#5a0ebd] text-white rounded-[8px] text-[0.75rem] font-semibold transition-colors cursor-pointer"
+                className="px-4 py-1.5 bg-[#6a12cd] hover:bg-[#5a0ebd] text-white rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer"
               >
                 Close
               </button>
@@ -2767,7 +2767,7 @@ function ThresholdAlertModal({ open, onClose, widgetTitle, addToast }: {
       <div className="fixed inset-0 z-[9999] bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none">
         <div
-          className="pointer-events-auto bg-white rounded-[12px] border border-[#e5e7eb] shadow-[0_20px_60px_-10px_rgba(0,0,0,0.2)] w-[440px] max-h-[85vh] overflow-hidden font-['Inter',sans-serif]"
+          className="pointer-events-auto bg-white rounded-lg border border-[#e5e7eb] shadow-[0_20px_60px_-10px_rgba(0,0,0,0.2)] w-[440px] max-h-[85vh] overflow-hidden font-['Inter',sans-serif]"
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
@@ -2791,7 +2791,7 @@ function ThresholdAlertModal({ open, onClose, widgetTitle, addToast }: {
                   type="number"
                   value={thresholdValue}
                   onChange={e => setThresholdValue(e.target.value)}
-                  className="w-full px-3 py-2 text-[0.75rem] border border-[rgba(38,6,74,0.2)] rounded-[8px] bg-white text-[#26064a] outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                  className="w-full px-3 py-2 text-[0.75rem] border border-[rgba(38,6,74,0.2)] rounded-md bg-white text-[#26064a] outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                 />
               </div>
               <div>
@@ -2800,7 +2800,7 @@ function ThresholdAlertModal({ open, onClose, widgetTitle, addToast }: {
                   <select
                     value={condition}
                     onChange={e => setCondition(e.target.value)}
-                    className="w-full px-3 py-2 text-[0.75rem] border border-[rgba(38,6,74,0.2)] rounded-[8px] bg-white text-[#26064a] outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all appearance-none cursor-pointer shadow-sm"
+                    className="w-full px-3 py-2 text-[0.75rem] border border-[rgba(38,6,74,0.2)] rounded-md bg-white text-[#26064a] outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all appearance-none cursor-pointer shadow-sm"
                   >
                     <option value="">Select</option>
                     <option value="greater">Greater than (&gt;)</option>
@@ -2852,7 +2852,7 @@ function ThresholdAlertModal({ open, onClose, widgetTitle, addToast }: {
                     }
                   }}
                   placeholder={emailList.length > 0 ? "Add another email..." : "Enter email and press Enter"}
-                  className="w-full px-3 py-2 text-[0.75rem] border border-[rgba(38,6,74,0.2)] rounded-[8px] bg-white text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
+                  className="w-full px-3 py-2 text-[0.75rem] border border-[rgba(38,6,74,0.2)] rounded-md bg-white text-[#26064a] placeholder:text-[rgba(38,6,74,0.2)] outline-none focus:border-[#6a12cd] focus:ring-1 focus:ring-[#6a12cd] transition-all shadow-sm"
                 />
               </>
             )}
@@ -2862,7 +2862,7 @@ function ThresholdAlertModal({ open, onClose, widgetTitle, addToast }: {
           <div className="flex gap-2 px-5 py-3 border-t border-[#f0f0f0]">
             <button
               onClick={onClose}
-              className="flex-1 py-2 border border-[#e5e7eb] rounded-[8px] text-[0.75rem] font-semibold text-[#26064a] hover:bg-[#f9fafb] transition-colors cursor-pointer"
+              className="flex-1 py-2 border border-[#e5e7eb] rounded-md text-[0.75rem] font-semibold text-[#26064a] hover:bg-[#f9fafb] transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -2871,7 +2871,7 @@ function ThresholdAlertModal({ open, onClose, widgetTitle, addToast }: {
                 addToast({ message: 'Threshold alert saved', type: 'success' });
                 onClose();
               }}
-              className="flex-1 py-2 bg-[#6a12cd] hover:bg-[#5a0ebd] text-white rounded-[8px] text-[0.75rem] font-semibold transition-colors cursor-pointer"
+              className="flex-1 py-2 bg-[#6a12cd] hover:bg-[#5a0ebd] text-white rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer"
             >
               Save Alert
             </button>
@@ -3042,7 +3042,7 @@ function WidgetCard({
 
   return (
     <div
-      className={`glass-card rounded-xl transition-all duration-300 group relative flex flex-col cursor-pointer ${colSpan === 2 ? 'lg:col-span-2' : ''}`}
+      className={`glass-card transition-all duration-300 group relative flex flex-col cursor-pointer ${colSpan === 2 ? 'lg:col-span-2' : ''}`}
       style={{ minHeight: 260, maxHeight: 800 }}
       onClick={() => onExpand?.()}
       onMouseEnter={() => setHovered(true)}
@@ -3532,10 +3532,10 @@ function DonutChart({ title, segments, centerLabel, onExpand }: { title: string;
   });
 
   return (
-    <div className="glass-card rounded-xl p-5 transition-all duration-150 group">
+    <div className="glass-card p-5 transition-all duration-150 group">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-text">{title}</h3>
-        <button onClick={onExpand} className="p-1.5 rounded-md hover:bg-gray-50 transition-colors cursor-pointer">
+        <button onClick={onExpand} className="p-1.5 rounded-md hover:bg-canvas transition-colors cursor-pointer">
           <Maximize2 size={12} className="text-text-muted hover:text-text-secondary" />
         </button>
       </div>
@@ -3590,10 +3590,10 @@ function BarChart({ title, data, color, onExpand }: { title: string; data: BarDa
   const max = Math.max(...data.map(d => d.value));
 
   return (
-    <div className="glass-card rounded-xl p-5 transition-all duration-150 group">
+    <div className="glass-card p-5 transition-all duration-150 group">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-text">{title}</h3>
-        <button onClick={onExpand} className="p-1.5 rounded-md hover:bg-gray-50 transition-colors cursor-pointer">
+        <button onClick={onExpand} className="p-1.5 rounded-md hover:bg-canvas transition-colors cursor-pointer">
           <Maximize2 size={12} className="text-text-muted hover:text-text-secondary" />
         </button>
       </div>
@@ -3627,10 +3627,10 @@ function BarChart({ title, data, color, onExpand }: { title: string; data: BarDa
 
 function ProgressChart({ title, data, onExpand }: { title: string; data: ProgressDatum[]; onExpand?: () => void }) {
   return (
-    <div className="glass-card rounded-xl p-5 transition-all duration-150 group">
+    <div className="glass-card p-5 transition-all duration-150 group">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-text">{title}</h3>
-        <button onClick={onExpand} className="p-1.5 rounded-md hover:bg-gray-50 transition-colors cursor-pointer">
+        <button onClick={onExpand} className="p-1.5 rounded-md hover:bg-canvas transition-colors cursor-pointer">
           <Maximize2 size={12} className="text-text-muted hover:text-text-secondary" />
         </button>
       </div>
@@ -3661,7 +3661,7 @@ function ProgressChart({ title, data, onExpand }: { title: string; data: Progres
 
 function MiniTable({ title, headers, rows }: { title: string; headers: string[]; rows: TableRow[] }) {
   return (
-    <div className="glass-card rounded-xl p-5 transition-all duration-150 group">
+    <div className="glass-card p-5 transition-all duration-150 group">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-text">{title}</h3>
         <button className="text-[0.75rem] text-primary font-medium hover:underline cursor-pointer">View all</button>
@@ -4539,7 +4539,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                       if (w.chartType === 'kpi') {
                         return (
                           <div className="flex items-center justify-center gap-5 py-8">
-                            <div className="bg-canvas-elevated border border-canvas-border rounded-xl p-6 min-w-[180px]">
+                            <div className="bg-canvas-elevated border border-canvas-border rounded-lg p-6 min-w-[180px]">
                               <p className="text-[0.6875rem] text-ink-500 mb-1">{w.yField || 'Metric'}</p>
                               <p className="text-[2rem] font-bold text-ink-900">12,450</p>
                               <p className="text-[0.75rem] text-compliant font-semibold mt-1 flex items-center gap-1"><TrendingUp size={10} />+8.2%</p>
@@ -4726,7 +4726,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                           <td className="px-4 py-3 text-[0.75rem] font-medium text-ink-900">{row.cells[2]}</td>
                           <td className="px-4 py-3 text-[0.75rem] text-ink-600">{row.cells[3]}</td>
                           <td className="px-4 py-3">
-                            <span className={`text-[0.6875rem] font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[row.cells[4]] || 'bg-gray-50 text-gray-600'}`}>
+                            <span className={`text-[0.6875rem] font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[row.cells[4]] || 'bg-canvas text-ink-600'}`}>
                               {row.cells[4]}
                             </span>
                           </td>
@@ -4766,7 +4766,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
               transition={{ delay: 0.4 }}
             >
               <div
-                className="glass-card rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-brand-300 hover:shadow-md transition-all group"
+                className="glass-card flex flex-col items-center justify-center cursor-pointer hover:border-brand-300 hover:shadow-md transition-all group"
                 style={{ minHeight: 280 }}
                 onClick={() => setAddWidgetOpen(true)}
               >
@@ -4940,7 +4940,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                           <td className="px-4 py-3 text-[0.75rem] font-medium text-ink-900">{row.cells[2]}</td>
                           <td className="px-4 py-3 text-[0.75rem] text-ink-600">{row.cells[3]}</td>
                           <td className="px-4 py-3">
-                            <span className={`text-[0.6875rem] font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[row.cells[4]] || 'bg-gray-50 text-gray-600'}`}>
+                            <span className={`text-[0.6875rem] font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[row.cells[4]] || 'bg-canvas text-ink-600'}`}>
                               {row.cells[4]}
                             </span>
                           </td>

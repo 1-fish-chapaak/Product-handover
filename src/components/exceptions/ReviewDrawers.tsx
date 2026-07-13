@@ -75,7 +75,7 @@ function SuggestedChip({ message, onApply }: { message: string; onApply: () => v
       type="button"
       onClick={onApply}
       title="Use this suggested message"
-      className="group/sc w-full text-left mb-2 inline-flex items-start gap-1.5 px-2.5 py-1.5 bg-brand-50/70 border border-brand-100 rounded-[8px] text-[11.5px] text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+      className="group/sc w-full text-left mb-2 inline-flex items-start gap-1.5 px-2.5 py-1.5 bg-brand-50/70 border border-brand-100 rounded-md text-[0.71875rem] text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
     >
       <Sparkles size={12} className="mt-[1px] shrink-0 text-brand-500" />
       <span className="leading-snug">
@@ -193,8 +193,8 @@ const MODAL_WIDTH: Record<'md' | 'lg' | 'xl', string> = {
 export function ContextChip({ label, children }: { label?: string; children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-      {label && <span className="text-[10.5px] uppercase tracking-wider text-ink-400">{label}</span>}
-      <span className="text-[12.5px] font-medium text-ink-800">{children}</span>
+      {label && <span className="text-[0.65625rem] uppercase tracking-wider text-ink-400">{label}</span>}
+      <span className="text-[0.78125rem] font-medium text-ink-800">{children}</span>
     </span>
   );
 }
@@ -231,14 +231,14 @@ export function RouteChainNote({ exceptionId }: { exceptionId: string }) {
   const a = primaryAssignment(assignments, exceptionId);
   if (!a) return null;
   return (
-    <div className="mb-5 rounded-[12px] border border-canvas-border bg-[#FAFAFB] p-4">
+    <div className="mb-5 rounded-lg border border-canvas-border bg-[#FAFAFB] p-4">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between gap-2 cursor-pointer group"
         aria-expanded={open}
       >
-        <span className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 text-left">
+        <span className="text-[0.65625rem] font-semibold uppercase tracking-wider text-ink-500 text-left">
           Approval route · {a.persona === 'auditor' ? 'Auditor' : 'Risk Owner'} side · {a.workflowName}
         </span>
         <ChevronDown size={16} className={`shrink-0 text-ink-500 group-hover:text-ink-700 transition-transform ${open ? '' : '-rotate-90'}`} />
@@ -260,18 +260,18 @@ export function StackedRouteChains({ assignment }: { assignment: Assignment }) {
   return (
     <div className="space-y-3">
       {prior.map((pc, i) => (
-        <div key={i} className="rounded-[10px] border border-canvas-border bg-canvas-elevated p-3">
-          <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-2">{pc.label} · complete</div>
+        <div key={i} className="rounded-lg border border-canvas-border bg-canvas-elevated p-3">
+          <div className="text-[0.65625rem] font-semibold uppercase tracking-wider text-ink-500 mb-2">{pc.label} · complete</div>
           <WorkflowPipelineView assignment={{ ...assignment, levels: pc.levels, levelStates: pc.levelStates, status: 'approved', currentLevelIndex: pc.levels.length, priorCycles: undefined }} />
         </div>
       ))}
-      <div className={prior.length ? 'rounded-[10px] border border-canvas-border bg-canvas-elevated p-3' : ''}>
-        {prior.length > 0 && <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-2">{currentLabel}</div>}
+      <div className={prior.length ? 'rounded-lg border border-canvas-border bg-canvas-elevated p-3' : ''}>
+        {prior.length > 0 && <div className="text-[0.65625rem] font-semibold uppercase tracking-wider text-ink-500 mb-2">{currentLabel}</div>}
         <WorkflowPipelineView assignment={assignment} />
       </div>
       {/* Auditor route attached to this case but not yet started (pre-handoff). */}
       {assignment.auditorRouteLevels && assignment.auditorRouteLevels.length > 0 && !assignment.auditorPhase && (
-        <div className="rounded-[10px] border border-dashed border-canvas-border bg-[#FAFAFB] p-3 text-[11.5px] text-ink-500">
+        <div className="rounded-lg border border-dashed border-canvas-border bg-[#FAFAFB] p-3 text-[0.71875rem] text-ink-500">
           Auditor route attached{assignment.auditorRouteName ? `: ${assignment.auditorRouteName}` : ''} — runs after the Risk Owner approvals complete.
         </div>
       )}
@@ -322,7 +322,7 @@ export function ModalShell({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.98, y: 8 }}
       transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-      className={`fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] ${MODAL_WIDTH[size]} max-h-[88vh] bg-canvas-elevated shadow-xl border border-canvas-border rounded-[16px] flex flex-col z-50`}
+      className={`fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] ${MODAL_WIDTH[size]} max-h-[88vh] bg-canvas-elevated shadow-xl border border-canvas-border rounded-xl flex flex-col z-50`}
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -331,9 +331,9 @@ export function ModalShell({
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-[20px] font-semibold text-ink-900 tracking-tight">{title}</h2>
+              <h2 className="text-[1.25rem] font-semibold text-ink-900 tracking-tight">{title}</h2>
               {step && step.total > 1 && (
-                <span className="inline-flex items-center gap-2 text-[11.5px] font-medium text-ink-500">
+                <span className="inline-flex items-center gap-2 text-[0.71875rem] font-medium text-ink-500">
                   <span className="flex items-center gap-1">
                     {Array.from({ length: step.total }).map((_, i) => (
                       <span key={i} className={`h-1.5 rounded-full transition-all ${i + 1 === step.current ? 'w-5 bg-brand-600' : i + 1 < step.current ? 'w-3 bg-brand-400' : 'w-3 bg-[#E5E1EC]'}`} />
@@ -343,7 +343,7 @@ export function ModalShell({
                 </span>
               )}
             </div>
-            {subtitle && <p className="text-[12.5px] text-ink-500 mt-0.5">{subtitle}</p>}
+            {subtitle && <p className="text-[0.78125rem] text-ink-500 mt-0.5">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
@@ -366,7 +366,7 @@ export function ModalShell({
                 <button
                   key={t}
                   onClick={() => onTabChange?.(t)}
-                  className={`pb-3 text-[13px] font-medium transition-colors cursor-pointer border-b-2 ${
+                  className={`pb-3 text-[0.8125rem] font-medium transition-colors cursor-pointer border-b-2 ${
                     active ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500 hover:text-ink-700'
                   }`}
                 >
@@ -387,7 +387,7 @@ export function ModalShell({
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-2">
+    <div className="text-[0.65625rem] font-semibold uppercase tracking-wider text-ink-500 mb-2">
       {children}
     </div>
   );
@@ -395,7 +395,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function Pill({ children, className }: { children: React.ReactNode; className: string }) {
   return (
-    <span className={`inline-flex items-center h-6 px-2.5 text-[11px] font-medium rounded-full whitespace-nowrap ${className}`}>
+    <span className={`inline-flex items-center h-6 px-2.5 text-[0.6875rem] font-medium rounded-full whitespace-nowrap ${className}`}>
       {children}
     </span>
   );
@@ -423,7 +423,7 @@ function FooterButtons({
     <>
       <button
         onClick={onCancel}
-        className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+        className="flex-1 h-10 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"
       >
         Cancel
       </button>
@@ -432,7 +432,7 @@ function FooterButtons({
           onClick={onSendBack}
           disabled={disabled}
           title={disabled ? disabledTitle : 'Send back to the previous reviewer'}
-          className={`flex-1 h-10 text-[13px] font-semibold text-mitigated-700 bg-mitigated-50 hover:bg-mitigated-100 border border-mitigated/30 rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${decisionCls}`}
+          className={`flex-1 h-10 text-[0.8125rem] font-semibold text-mitigated-700 bg-mitigated-50 hover:bg-mitigated-100 border border-mitigated/30 rounded-md transition-colors flex items-center justify-center gap-1.5 ${decisionCls}`}
         >
           <Undo2 size={14} />
           Send back
@@ -442,7 +442,7 @@ function FooterButtons({
         onClick={onReject}
         disabled={disabled}
         title={disabled ? disabledTitle : undefined}
-        className={`flex-1 h-10 text-[13px] font-semibold text-white bg-risk hover:bg-risk-700 rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${decisionCls}`}
+        className={`flex-1 h-10 text-[0.8125rem] font-semibold text-white bg-risk hover:bg-risk-700 rounded-md transition-colors flex items-center justify-center gap-1.5 ${decisionCls}`}
       >
         <XCircle size={14} />
         Reject
@@ -451,7 +451,7 @@ function FooterButtons({
         onClick={onApprove}
         disabled={disabled}
         title={disabled ? disabledTitle : undefined}
-        className={`flex-1 h-10 text-[13px] font-semibold text-white bg-compliant hover:bg-compliant-700 rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${decisionCls}`}
+        className={`flex-1 h-10 text-[0.8125rem] font-semibold text-white bg-compliant hover:bg-compliant-700 rounded-md transition-colors flex items-center justify-center gap-1.5 ${decisionCls}`}
       >
         <CheckCircle2 size={14} />
         Approve
@@ -476,20 +476,20 @@ function ActivityTimeline({ entries }: { entries: GrcActivityEntry[] }) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-3 mb-0.5">
-                <div className="text-[12.5px] text-ink-800">
+                <div className="text-[0.78125rem] text-ink-800">
                   <span className="font-semibold">{entry.author}</span>{' '}
                   <span className="text-ink-500">[{entry.role}]</span>
                 </div>
-                <span className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">{entry.timestamp}</span>
+                <span className="text-[0.6875rem] text-ink-500 tabular-nums whitespace-nowrap">{entry.timestamp}</span>
               </div>
-              <p className="text-[12.5px] text-ink-700 leading-snug">{entry.message}</p>
+              <p className="text-[0.78125rem] text-ink-700 leading-snug">{entry.message}</p>
               {entry.comment && (
-                <div className="mt-2 px-3 py-2 bg-[#FAFAFB] border border-canvas-border rounded-[8px] text-[12px] text-ink-700 leading-relaxed">
+                <div className="mt-2 px-3 py-2 bg-[#FAFAFB] border border-canvas-border rounded-md text-[0.75rem] text-ink-700 leading-relaxed">
                   {entry.comment}
                 </div>
               )}
               {entry.attachment && (
-                <button className="mt-2 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-50 text-brand-700 text-[11.5px] font-medium rounded-full hover:bg-brand-100 cursor-pointer">
+                <button className="mt-2 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-50 text-brand-700 text-[0.71875rem] font-medium rounded-full hover:bg-brand-100 cursor-pointer">
                   <Paperclip size={11} />
                   {entry.attachment.name}
                 </button>
@@ -501,7 +501,7 @@ function ActivityTimeline({ entries }: { entries: GrcActivityEntry[] }) {
       {hiddenCount > 0 && !showMore && (
         <button
           onClick={() => setShowMore(true)}
-          className="mt-4 inline-flex items-center gap-1 text-[12.5px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
+          className="mt-4 inline-flex items-center gap-1 text-[0.78125rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
         >
           <ChevronDown size={13} />
           Show {hiddenCount} more
@@ -551,22 +551,22 @@ export function CaseCommentBox({
   return (
     <div>
       <div className="flex items-baseline gap-1.5 mb-2">
-        <span className="text-[12.5px] font-semibold text-ink-800">{label}</span>
-        {hint && <span className="text-[11.5px] text-ink-400">{hint}</span>}
+        <span className="text-[0.78125rem] font-semibold text-ink-800">{label}</span>
+        {hint && <span className="text-[0.71875rem] text-ink-400">{hint}</span>}
       </div>
       {suggested && onApplySuggested && <SuggestedChip message={suggested} onApply={onApplySuggested} />}
-      <div className="rounded-[10px] border border-canvas-border bg-canvas-elevated focus-within:border-brand-600 focus-within:ring-[3px] focus-within:ring-brand-600/15 transition-colors">
+      <div className="rounded-lg border border-canvas-border bg-canvas-elevated focus-within:border-brand-600 focus-within:ring-[3px] focus-within:ring-brand-600/15 transition-colors">
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); post(); } }}
           rows={3}
           placeholder={placeholder}
-          className="w-full resize-y bg-transparent px-3.5 py-3 text-[13px] text-ink-900 leading-relaxed placeholder:text-ink-400 focus:outline-none"
+          className="w-full resize-y bg-transparent px-3.5 py-3 text-[0.8125rem] text-ink-900 leading-relaxed placeholder:text-ink-400 focus:outline-none"
         />
         {attachment && (
           <div className="px-3.5 pb-2.5">
-            <span className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1.5 bg-brand-50 border border-brand-100 rounded-full text-[11.5px] text-ink-700">
+            <span className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1.5 bg-brand-50 border border-brand-100 rounded-full text-[0.71875rem] text-ink-700">
               <Paperclip size={11} className="text-brand-600" /> {attachment.name}
               <button type="button" onClick={() => setAttachment(null)} aria-label="Remove attachment" className="w-4 h-4 inline-flex items-center justify-center rounded-full text-ink-500 hover:text-ink-800 hover:bg-white cursor-pointer"><X size={11} /></button>
             </span>
@@ -583,7 +583,7 @@ export function CaseCommentBox({
             type="button"
             onClick={() => fileRef.current?.click()}
             title="Attach a file"
-            className="inline-flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium text-ink-600 rounded-[8px] hover:bg-[#F4F2F7] hover:text-brand-700 cursor-pointer transition-colors"
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 text-[0.75rem] font-medium text-ink-600 rounded-md hover:bg-[#F4F2F7] hover:text-brand-700 cursor-pointer transition-colors"
           >
             <Paperclip size={14} /> Attach
           </button>
@@ -592,7 +592,7 @@ export function CaseCommentBox({
               type="button"
               onClick={post}
               disabled={!canPost}
-              className="inline-flex items-center gap-1.5 h-8 px-3.5 text-[12.5px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-[8px] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1.5 h-8 px-3.5 text-[0.78125rem] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-md cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Send size={13} /> Post Comment
             </button>
@@ -669,13 +669,13 @@ export function ReviewClassificationDrawer({
             <>
               <button
                 onClick={onClose}
-                className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+                className="flex-1 h-10 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={onClose}
-                className="flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 bg-brand-600 text-white hover:bg-brand-500 cursor-pointer"
+                className="flex-[2] h-10 text-[0.8125rem] font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 bg-brand-600 text-white hover:bg-brand-500 cursor-pointer"
               >
                 Submit
               </button>
@@ -695,7 +695,7 @@ export function ReviewClassificationDrawer({
               <ChevronDown size={16} className={`text-ink-500 group-hover:text-ink-700 transition-transform ${routeOpen ? '' : '-rotate-90'}`} />
             </button>
             {routeOpen && (
-              <div className="border border-canvas-border rounded-[12px] p-4">
+              <div className="border border-canvas-border rounded-lg p-4">
                 <StackedRouteChains assignment={caseAssignment} />
               </div>
             )}
@@ -703,12 +703,12 @@ export function ReviewClassificationDrawer({
         )}
 
         {bulk && (
-          <div className="bg-brand-50/70 border border-brand-100 rounded-[12px] p-4 mb-5">
-            <div className="flex items-center gap-2 text-[13px] font-semibold text-brand-700 mb-2">
+          <div className="bg-brand-50/70 border border-brand-100 rounded-lg p-4 mb-5">
+            <div className="flex items-center gap-2 text-[0.8125rem] font-semibold text-brand-700 mb-2">
               <LinkIcon size={13} />
               Part of Bulk Action
             </div>
-            <div className="flex items-center gap-3 text-[12.5px] text-ink-700">
+            <div className="flex items-center gap-3 text-[0.78125rem] text-ink-700">
               <span>ID: <span className="font-mono font-semibold text-brand-700">{bulk.id}</span></span>
               <span className="text-ink-300">|</span>
               <span className="tabular-nums">{bulk.caseIds.length} cases grouped</span>
@@ -717,7 +717,7 @@ export function ReviewClassificationDrawer({
         )}
 
         <div className="mb-5">
-          <section className="border border-canvas-border rounded-[12px] p-4">
+          <section className="border border-canvas-border rounded-lg p-4">
             <SectionLabel>Classification</SectionLabel>
             <Pill className={CLASSIFICATION_STYLE[exception.classification]}>
               {exception.classification}
@@ -727,32 +727,32 @@ export function ReviewClassificationDrawer({
 
         {caseAssignment?.draft && (caseAssignment.draft.actionName || caseAssignment.draft.actionDetails) && (
           <div className="mb-5">
-            <section className="border border-canvas-border rounded-[12px] p-4">
+            <section className="border border-canvas-border rounded-lg p-4">
               <SectionLabel>Management Action Plan</SectionLabel>
               {caseAssignment.draft.actionName && (
-                <h3 className="text-[14px] font-semibold text-ink-900 mb-1.5 leading-snug">
+                <h3 className="text-[0.875rem] font-semibold text-ink-900 mb-1.5 leading-snug">
                   <FileText size={14} className="inline mr-1.5 text-ink-500 -mt-0.5" />
                   {caseAssignment.draft.actionName}
                 </h3>
               )}
               {caseAssignment.draft.dueDate && (
-                <div className="inline-flex items-center gap-1.5 text-[12px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
+                <div className="inline-flex items-center gap-1.5 text-[0.75rem] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
                   <Calendar size={11} />
                   Due {fmtPlanDate(caseAssignment.draft.dueDate)}
                 </div>
               )}
-              {caseAssignment.draft.actionDetails && <p className="text-[12.5px] text-ink-700 leading-relaxed whitespace-pre-wrap">{caseAssignment.draft.actionDetails}</p>}
+              {caseAssignment.draft.actionDetails && <p className="text-[0.78125rem] text-ink-700 leading-relaxed whitespace-pre-wrap">{caseAssignment.draft.actionDetails}</p>}
             </section>
           </div>
         )}
 
         {(detail?.completion || caseAssignment?.draft?.actionTaken) && (
           <div className="mb-5">
-            <section className="border border-compliant/40 bg-compliant-50/40 rounded-[12px] p-4">
+            <section className="border border-compliant/40 bg-compliant-50/40 rounded-lg p-4">
               <SectionLabel>Risk Owner — Action Completed</SectionLabel>
               {(detail?.completion?.selfAssessment || caseAssignment?.draft?.actionStatus) && (
                 <div className="mb-2.5">
-                  <span className="text-[11px] text-ink-500 mr-1.5">Risk Owner reports:</span>
+                  <span className="text-[0.6875rem] text-ink-500 mr-1.5">Risk Owner reports:</span>
                   {(() => {
                     const status = detail?.completion?.selfAssessment ?? caseAssignment?.draft?.actionStatus;
                     return (
@@ -763,8 +763,8 @@ export function ReviewClassificationDrawer({
                   })()}
                 </div>
               )}
-              <p className="text-[12.5px] text-ink-700 leading-relaxed whitespace-pre-wrap">{detail?.completion?.note ?? caseAssignment?.draft?.actionTaken}</p>
-              {detail?.completion?.completedAt && <p className="text-[11px] text-ink-400 mt-2">Marked complete on {detail.completion.completedAt}</p>}
+              <p className="text-[0.78125rem] text-ink-700 leading-relaxed whitespace-pre-wrap">{detail?.completion?.note ?? caseAssignment?.draft?.actionTaken}</p>
+              {detail?.completion?.completedAt && <p className="text-[0.6875rem] text-ink-400 mt-2">Marked complete on {detail.completion.completedAt}</p>}
             </section>
           </div>
         )}
@@ -914,7 +914,7 @@ export function ReviewCaseDrawer({
           <>
             <button
               onClick={onClose}
-              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+              className="flex-1 h-10 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -922,7 +922,7 @@ export function ReviewCaseDrawer({
               <button
                 onClick={sendBack}
                 title="Send back to the previous reviewer"
-                className="flex-1 h-10 text-[13px] font-semibold text-mitigated-700 bg-mitigated-50 hover:bg-mitigated-100 border border-mitigated/30 rounded-[8px] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 h-10 text-[0.8125rem] font-semibold text-mitigated-700 bg-mitigated-50 hover:bg-mitigated-100 border border-mitigated/30 rounded-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Undo2 size={14} />
                 Send back
@@ -939,7 +939,7 @@ export function ReviewCaseDrawer({
               }}
               disabled={!canSubmit || (!isViewMode && !isAuditor && !onRouteTurn)}
               title={!isViewMode && !isAuditor && !onRouteTurn ? 'Only the Auditor can submit a review decision' : undefined}
-              className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+              className={`flex-[2] h-10 text-[0.8125rem] font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 ${
                 canSubmit
                   ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
                   : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
@@ -952,19 +952,19 @@ export function ReviewCaseDrawer({
       >
         <>
           {bulk && (
-              <div className="bg-brand-50/70 border border-brand-100 rounded-[12px] p-4 mb-5">
-                <div className="flex items-center gap-2 text-[13px] font-semibold text-brand-700 mb-2">
+              <div className="bg-brand-50/70 border border-brand-100 rounded-lg p-4 mb-5">
+                <div className="flex items-center gap-2 text-[0.8125rem] font-semibold text-brand-700 mb-2">
                   <LinkIcon size={13} />
                   Part of Bulk Action
                 </div>
-                <div className="flex items-center gap-3 text-[12.5px] text-ink-700 mb-2">
+                <div className="flex items-center gap-3 text-[0.78125rem] text-ink-700 mb-2">
                   <span>ID: <span className="font-mono font-semibold text-brand-700">{bulk.id}</span></span>
                   <span className="text-ink-300">|</span>
                   <span className="tabular-nums">{bulk.caseIds.length} cases grouped</span>
                 </div>
                 <button
                   onClick={() => onViewBulk(bulk.id)}
-                  className="inline-flex items-center gap-1 text-[12.5px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
+                  className="inline-flex items-center gap-1 text-[0.78125rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
                 >
                   View all cases in this bulk action
                   <ExternalLink size={12} />
@@ -973,7 +973,7 @@ export function ReviewCaseDrawer({
             )}
 
             <div className="mb-4">
-              <section className="border border-canvas-border rounded-[12px] p-4">
+              <section className="border border-canvas-border rounded-lg p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <SectionLabel>Classification</SectionLabel>
@@ -984,7 +984,7 @@ export function ReviewCaseDrawer({
                   {exception.actionableId && (
                     <div className="text-right">
                       <SectionLabel>Actionable ID</SectionLabel>
-                      <span className="inline-flex items-center gap-1 font-mono font-semibold text-brand-700 text-[12.5px]">
+                      <span className="inline-flex items-center gap-1 font-mono font-semibold text-brand-700 text-[0.78125rem]">
                         <Hash size={12} /> {exception.actionableId}
                       </span>
                     </div>
@@ -994,39 +994,39 @@ export function ReviewCaseDrawer({
             </div>
 
             {detail && actionable && (
-              <section className="border border-canvas-border rounded-[12px] p-4 mb-4">
+              <section className="border border-canvas-border rounded-lg p-4 mb-4">
                 <SectionLabel>{detail.actionPlans && detail.actionPlans.length > 1 ? `Management Action Plans · ${detail.actionPlans.length}` : 'Management Action Plan'}</SectionLabel>
                 {detail.actionPlans && detail.actionPlans.length > 0 ? (
                   <div className="space-y-3">
                     {detail.actionPlans.map((p, i) => (
                       <div key={i} className={i > 0 ? 'pt-3 border-t border-canvas-border' : ''}>
-                        <h3 className="text-[14px] font-semibold text-ink-900 mb-1.5 leading-snug">
+                        <h3 className="text-[0.875rem] font-semibold text-ink-900 mb-1.5 leading-snug">
                           <FileText size={14} className="inline mr-1.5 text-ink-500 -mt-0.5" />
                           {p.name || `Management Action Plan ${i + 1}`}
                         </h3>
                         {p.dueDate && (
-                          <div className="inline-flex items-center gap-1.5 text-[12px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
+                          <div className="inline-flex items-center gap-1.5 text-[0.75rem] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
                             <Calendar size={11} />
                             Due {fmtPlanDate(p.dueDate)}
                           </div>
                         )}
-                        {p.details && <p className="text-[12.5px] text-ink-700 leading-relaxed">{p.details}</p>}
+                        {p.details && <p className="text-[0.78125rem] text-ink-700 leading-relaxed">{p.details}</p>}
                       </div>
                     ))}
                   </div>
                 ) : (
                   <>
-                    <h3 className="text-[14px] font-semibold text-ink-900 mb-1.5 leading-snug">
+                    <h3 className="text-[0.875rem] font-semibold text-ink-900 mb-1.5 leading-snug">
                       <FileText size={14} className="inline mr-1.5 text-ink-500 -mt-0.5" />
                       {detail.actionTitle}
                     </h3>
                     {detail.actionDueDate && (
-                      <div className="inline-flex items-center gap-1.5 text-[12px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
+                      <div className="inline-flex items-center gap-1.5 text-[0.75rem] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
                         <Calendar size={11} />
                         {detail.actionDueDate}
                       </div>
                     )}
-                    <p className="text-[12.5px] text-ink-700 leading-relaxed">{detail.actionDescription}</p>
+                    <p className="text-[0.78125rem] text-ink-700 leading-relaxed">{detail.actionDescription}</p>
                   </>
                 )}
               </section>
@@ -1034,43 +1034,43 @@ export function ReviewCaseDrawer({
 
             {/* Completion review — the Risk Owner's completion note + evidence. */}
             {isCompletionReview && completion && (
-              <section className="border border-compliant/40 bg-compliant-50/40 rounded-[12px] p-4 mb-4">
+              <section className="border border-compliant/40 bg-compliant-50/40 rounded-lg p-4 mb-4">
                 <SectionLabel>Risk Owner — Action Completed</SectionLabel>
                 {completion.selfAssessment && (
                   <div className="mb-2.5">
-                    <span className="text-[11px] text-ink-500 mr-1.5">Risk Owner reports:</span>
+                    <span className="text-[0.6875rem] text-ink-500 mr-1.5">Risk Owner reports:</span>
                     <Pill className={completion.selfAssessment === 'Implemented' ? 'bg-compliant-50 text-compliant-700 border border-compliant/40' : 'bg-mitigated-50 text-mitigated-700 border border-mitigated/40'}>
                       {completion.selfAssessment}
                     </Pill>
                   </div>
                 )}
-                <p className="text-[12.5px] text-ink-700 leading-relaxed">{completion.note}</p>
+                <p className="text-[0.78125rem] text-ink-700 leading-relaxed">{completion.note}</p>
                 {completion.evidence.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2.5">
                     {completion.evidence.map((ev, i) => (
-                      <span key={i} className="inline-flex items-center gap-1.5 h-7 px-2.5 bg-white border border-canvas-border rounded-full text-[11.5px] text-ink-700">
+                      <span key={i} className="inline-flex items-center gap-1.5 h-7 px-2.5 bg-white border border-canvas-border rounded-full text-[0.71875rem] text-ink-700">
                         <Paperclip size={11} className="text-brand-600" /> {ev.name}
                       </span>
                     ))}
                   </div>
                 )}
-                {completion.completedAt && <p className="text-[11px] text-ink-400 mt-2">Marked complete on {completion.completedAt}</p>}
+                {completion.completedAt && <p className="text-[0.6875rem] text-ink-400 mt-2">Marked complete on {completion.completedAt}</p>}
               </section>
             )}
 
-            <section className="border border-canvas-border rounded-[12px] p-4">
+            <section className="border border-canvas-border rounded-lg p-4">
               <SectionLabel>Auditor Decision</SectionLabel>
 
               {/* Accept/Reject (plan) or Approve/Reject (completion / classification) */}
               {!isViewMode && (
                 <div className="mb-4">
-                  <label className="block text-[12.5px] font-medium text-ink-800 mb-2">
+                  <label className="block text-[0.78125rem] font-medium text-ink-800 mb-2">
                     Decision <span className="text-risk">*</span>
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => { setDecision('approve'); }}
-                      className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                      className={`h-10 text-[0.78125rem] font-semibold rounded-md border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                         decision === 'approve'
                           ? 'bg-compliant text-white border-compliant shadow-[0_2px_8px_rgba(22,163,74,0.25)]'
                           : 'bg-compliant-50 border-compliant text-compliant-700 hover:bg-compliant hover:text-white'
@@ -1081,7 +1081,7 @@ export function ReviewCaseDrawer({
                     </button>
                     <button
                       onClick={() => { setDecision('reject'); setImplementation(null); }}
-                      className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                      className={`h-10 text-[0.78125rem] font-semibold rounded-md border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                         decision === 'reject'
                           ? 'bg-risk text-white border-risk shadow-[0_2px_8px_rgba(220,38,38,0.25)]'
                           : 'bg-risk-50 border-risk text-risk-700 hover:bg-risk hover:text-white'
@@ -1092,7 +1092,7 @@ export function ReviewCaseDrawer({
                     </button>
                   </div>
                   {isPlanReview && decision === 'approve' && (
-                    <p className="text-[11.5px] text-ink-500 mt-2 leading-snug">The Risk Owner will implement this plan, then submit evidence of completion for your final review.</p>
+                    <p className="text-[0.71875rem] text-ink-500 mt-2 leading-snug">The Risk Owner will implement this plan, then submit evidence of completion for your final review.</p>
                   )}
                 </div>
               )}
@@ -1105,7 +1105,7 @@ export function ReviewCaseDrawer({
                   transition={{ duration: 0.15 }}
                   className="mb-4"
                 >
-                  <label className="block text-[12.5px] font-medium text-ink-800 mb-2">
+                  <label className="block text-[0.78125rem] font-medium text-ink-800 mb-2">
                     Implementation Status <span className="text-risk">*</span>
                   </label>
                   <div className="grid grid-cols-2 gap-2">
@@ -1115,7 +1115,7 @@ export function ReviewCaseDrawer({
                         <button
                           key={status}
                           onClick={() => setImplementation(status)}
-                          className={`h-10 text-[12.5px] font-medium rounded-[8px] border transition-colors cursor-pointer ${
+                          className={`h-10 text-[0.78125rem] font-medium rounded-md border transition-colors cursor-pointer ${
                             selected
                               ? 'bg-brand-50 border-brand-600 text-brand-700'
                               : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-200'
@@ -1135,14 +1135,14 @@ export function ReviewCaseDrawer({
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="mb-4 p-3 bg-risk-50 border border-risk/40 rounded-[8px]"
+                  className="mb-4 p-3 bg-risk-50 border border-risk/40 rounded-md"
                 >
                   {isCompletionReview && (
-                    <div className="flex items-center gap-2 text-[12.5px] font-semibold text-risk-700 mb-1">
+                    <div className="flex items-center gap-2 text-[0.78125rem] font-semibold text-risk-700 mb-1">
                       <Pill className="bg-risk-50 text-risk-700 border border-risk/40">Discrepancy</Pill>
                     </div>
                   )}
-                  <p className="text-[12px] text-risk-700 leading-snug">
+                  <p className="text-[0.75rem] text-risk-700 leading-snug">
                     {isPlanReview
                       ? "On submit, the management action plan is rejected and the case reopens for the Risk Owner to revise and resubmit."
                       : "On submit, the case will reopen at the Risk Owner's end for further action."}
@@ -1161,7 +1161,7 @@ export function ReviewCaseDrawer({
                 onApplySuggested={!isViewMode ? applySuggested : undefined}
               />
               {isCompletionReview && (
-                <p className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-brand-700">
+                <p className="mt-1.5 flex items-center gap-1.5 text-[0.71875rem] text-brand-700">
                   <FileText size={12} className="shrink-0" /> The comment you submit with the decision is captured in the Action Taken Report (ATR).
                 </p>
               )}
@@ -1251,7 +1251,7 @@ export function CompleteActionDrawer({
           <>
             <button
               onClick={onClose}
-              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+              className="flex-1 h-10 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -1264,7 +1264,7 @@ export function CompleteActionDrawer({
                 completionRoutes.forEach(r => submitActionForReview(r.id, { actionTaken: note.trim(), actionStatus: implementation }));
               }}
               disabled={!canSubmit}
-              className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+              className={`flex-[2] h-10 text-[0.8125rem] font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 ${
                 canSubmit ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
               }`}
             >
@@ -1276,12 +1276,12 @@ export function CompleteActionDrawer({
       >
         <>
           {isBulk && (
-            <div className="bg-brand-50/70 border border-brand-100 rounded-[12px] p-4 mb-4">
-              <div className="flex items-center gap-2 text-[13px] font-semibold text-brand-700 mb-2">
+            <div className="bg-brand-50/70 border border-brand-100 rounded-lg p-4 mb-4">
+              <div className="flex items-center gap-2 text-[0.8125rem] font-semibold text-brand-700 mb-2">
                 <LinkIcon size={13} />
                 Part of Bulk Action
               </div>
-              <div className="flex items-center gap-3 text-[12.5px] text-ink-700 mb-2">
+              <div className="flex items-center gap-3 text-[0.78125rem] text-ink-700 mb-2">
                 {bulkId && (
                   <>
                     <span>ID: <span className="font-mono font-semibold text-brand-700">{bulkId}</span></span>
@@ -1290,12 +1290,12 @@ export function CompleteActionDrawer({
                 )}
                 <span className="tabular-nums">{linkedCases.length} cases grouped</span>
               </div>
-              <p className="text-[11.5px] text-ink-600 leading-snug mb-2">
+              <p className="text-[0.71875rem] text-ink-600 leading-snug mb-2">
                 The plan was approved for the whole group, so this action taken is recorded against every linked case.
               </p>
               <button
                 onClick={() => setShowGroup(true)}
-                className="inline-flex items-center gap-1 text-[12.5px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
+                className="inline-flex items-center gap-1 text-[0.78125rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
               >
                 View grouped cases
                 <ExternalLink size={12} />
@@ -1303,21 +1303,21 @@ export function CompleteActionDrawer({
             </div>
           )}
 
-          <p className="text-[12.5px] text-ink-600 leading-relaxed mb-4">
+          <p className="text-[0.78125rem] text-ink-600 leading-relaxed mb-4">
             Confirm the management action plan has been completed. Use the attach icon to add evidence as proof — the Auditor will review and record the outcome.
           </p>
 
           {detail && (detail.actionPlans?.length || detail.actionTitle) && (
-            <section className="border border-canvas-border rounded-[12px] p-4 mb-4">
+            <section className="border border-canvas-border rounded-lg p-4 mb-4">
               <SectionLabel>Management Action Plan</SectionLabel>
               {(detail.actionPlans && detail.actionPlans.length > 0 ? detail.actionPlans : [{ name: detail.actionTitle, details: detail.actionDescription, dueDate: '' }]).map((p, i) => (
                 <div key={i} className={i > 0 ? 'pt-2.5 mt-2.5 border-t border-canvas-border' : ''}>
-                  <h3 className="text-[13.5px] font-semibold text-ink-900 leading-snug">
+                  <h3 className="text-[0.84375rem] font-semibold text-ink-900 leading-snug">
                     <FileText size={13} className="inline mr-1.5 text-ink-500 -mt-0.5" />
                     {p.name || `Management Action Plan ${i + 1}`}
                   </h3>
                   {p.dueDate && (
-                    <span className="inline-flex items-center gap-1.5 text-[11.5px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mt-1.5">
+                    <span className="inline-flex items-center gap-1.5 text-[0.71875rem] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mt-1.5">
                       <Calendar size={11} /> Due {fmtPlanDate(p.dueDate)}
                     </span>
                   )}
@@ -1328,7 +1328,7 @@ export function CompleteActionDrawer({
 
           {/* Action Taken — the Risk Owner describes what was done (manual). */}
           <div className="mb-4">
-            <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+            <label className="block text-[0.78125rem] font-semibold text-ink-800 mb-2">
               Action Taken <span className="text-risk">*</span>
             </label>
             <div className="relative">
@@ -1337,7 +1337,7 @@ export function CompleteActionDrawer({
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Describe the action you completed before the due date…"
                 rows={4}
-                className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-lg text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
               />
               <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
               <button
@@ -1353,7 +1353,7 @@ export function CompleteActionDrawer({
             {evidence.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {evidence.map((ev) => (
-                  <span key={ev.name} className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1 bg-brand-50 border border-brand-200 rounded-full text-[11.5px] text-brand-700">
+                  <span key={ev.name} className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1 bg-brand-50 border border-brand-200 rounded-full text-[0.71875rem] text-brand-700">
                     <Paperclip size={11} /> {ev.name}
                     <button onClick={() => setEvidence(prev => prev.filter(e => e.name !== ev.name))} className="w-5 h-5 rounded-full flex items-center justify-center hover:bg-white/70 cursor-pointer"><X size={11} /></button>
                   </span>
@@ -1364,7 +1364,7 @@ export function CompleteActionDrawer({
 
           {/* Implementation Status — Risk Owner reports how it landed, after Action Taken. */}
           <div className="mb-4">
-            <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+            <label className="block text-[0.78125rem] font-semibold text-ink-800 mb-2">
               Implementation Status <span className="text-risk">*</span>
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -1375,7 +1375,7 @@ export function CompleteActionDrawer({
                     key={status}
                     type="button"
                     onClick={() => setImplementation(status)}
-                    className={`h-10 text-[12.5px] font-medium rounded-[8px] border transition-colors cursor-pointer ${
+                    className={`h-10 text-[0.78125rem] font-medium rounded-md border transition-colors cursor-pointer ${
                       selected
                         ? (status === 'Implemented' ? 'bg-compliant-50 border-compliant text-compliant-700' : 'bg-mitigated-50 border-mitigated text-mitigated-700')
                         : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-200'
@@ -1386,7 +1386,7 @@ export function CompleteActionDrawer({
                 );
               })}
             </div>
-            <p className="text-[11.5px] text-ink-500 mt-2 leading-snug">The Auditor reviews your evidence and confirms the final outcome.</p>
+            <p className="text-[0.71875rem] text-ink-500 mt-2 leading-snug">The Auditor reviews your evidence and confirms the final outcome.</p>
           </div>
 
           {/* Unified comment — the note for the Auditor and the cross-persona
@@ -1668,7 +1668,7 @@ export function ClassifyExceptionDrawer({
           <>
             <button
               onClick={onClose}
-              className="h-10 px-5 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+              className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -1676,7 +1676,7 @@ export function ClassifyExceptionDrawer({
             {step === 1 && (
               <button
                 onClick={() => setStepIdx(0)}
-                className="h-10 px-5 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+                className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"
               >
                 Back
               </button>
@@ -1685,7 +1685,7 @@ export function ClassifyExceptionDrawer({
               <button
                 onClick={() => step1Valid && setStepIdx(1)}
                 disabled={!step1Valid}
-                className={`h-10 px-5 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center gap-1.5 ${
+                className={`h-10 px-5 text-[0.8125rem] font-semibold rounded-md transition-colors flex items-center gap-1.5 ${
                   step1Valid ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
                 }`}
               >
@@ -1696,7 +1696,7 @@ export function ClassifyExceptionDrawer({
               <button
                 onClick={doSave}
                 disabled={!canSave}
-                className={`h-10 px-5 text-[13px] font-semibold rounded-[8px] transition-colors ${
+                className={`h-10 px-5 text-[0.8125rem] font-semibold rounded-md transition-colors ${
                   canSave
                     ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
                     : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
@@ -1710,18 +1710,18 @@ export function ClassifyExceptionDrawer({
         }
       >
         {step === 0 && isBulk && (
-          <div className="mb-5 rounded-[12px] border border-brand-100 bg-brand-50/60 p-3.5">
-            <div className="flex items-center gap-2 text-[12.5px] font-semibold text-brand-700 mb-1.5">
+          <div className="mb-5 rounded-lg border border-brand-100 bg-brand-50/60 p-3.5">
+            <div className="flex items-center gap-2 text-[0.78125rem] font-semibold text-brand-700 mb-1.5">
               <LinkIcon size={13} />
               Bulk classification · {linkedCases.length} cases
             </div>
-            <p className="text-[11.5px] text-ink-600 leading-snug mb-2">
+            <p className="text-[0.71875rem] text-ink-600 leading-snug mb-2">
               The same classification and management action plan will be applied to all linked cases.
             </p>
             <button
               type="button"
               onClick={() => setShowLinked(true)}
-              className="inline-flex items-center gap-1 text-[12px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
+              className="inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
             >
               View all linked cases
               <ExternalLink size={12} />
@@ -1731,25 +1731,25 @@ export function ClassifyExceptionDrawer({
 
         {/* Skipped, locked cases — auditor-reviewed cases can't be silently overwritten. */}
         {step === 0 && skippedTotal > 0 && (
-          <div className="mb-5 rounded-[12px] border border-mitigated/40 bg-mitigated-50/50 p-3.5">
-            <div className="flex items-center gap-2 text-[12.5px] font-semibold text-mitigated-700 mb-1.5">
+          <div className="mb-5 rounded-lg border border-mitigated/40 bg-mitigated-50/50 p-3.5">
+            <div className="flex items-center gap-2 text-[0.78125rem] font-semibold text-mitigated-700 mb-1.5">
               <ShieldCheck size={13} />
               {skippedTotal} case{skippedTotal === 1 ? '' : 's'} skipped — locked by the auditor flow
             </div>
-            <p className="text-[11.5px] text-ink-600 leading-snug mb-2.5">
+            <p className="text-[0.71875rem] text-ink-600 leading-snug mb-2.5">
               An auditor-reviewed exception can’t be silently overwritten. Only editable cases —
               <span className="font-medium text-ink-700"> unclassified</span> or
               <span className="font-medium text-ink-700"> auditor-rejected</span> — are included in this bulk classification.
             </p>
             <ul className="space-y-1.5">
               {(bulkSkipped?.awaitingReview ?? 0) > 0 && (
-                <li className="flex items-center gap-2 text-[12px] text-ink-700">
+                <li className="flex items-center gap-2 text-[0.75rem] text-ink-700">
                   <span className="w-1.5 h-1.5 rounded-full bg-mitigated shrink-0" />
                   <span className="font-semibold tabular-nums">{bulkSkipped?.awaitingReview}</span> awaiting auditor review
                 </li>
               )}
               {(bulkSkipped?.approved ?? 0) > 0 && (
-                <li className="flex items-center gap-2 text-[12px] text-ink-700">
+                <li className="flex items-center gap-2 text-[0.75rem] text-ink-700">
                   <span className="w-1.5 h-1.5 rounded-full bg-compliant shrink-0" />
                   <span className="font-semibold tabular-nums">{bulkSkipped?.approved}</span> auditor-approved
                 </li>
@@ -1763,37 +1763,37 @@ export function ClassifyExceptionDrawer({
         {step === 0 && engagementMode && (
           <div className="mb-5 space-y-4">
             <div>
-              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Classification <span className="text-risk">*</span></label>
+              <label className="block text-[0.78125rem] font-semibold text-ink-800 mb-2">Classification <span className="text-risk">*</span></label>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => { setVerdict('true-positive'); if (!SUB_CLASSIFICATIONS.includes(classification)) setClassification(''); }}
-                  className={`flex flex-col items-start gap-1 p-3.5 rounded-[10px] border text-left transition-colors cursor-pointer ${verdict === 'true-positive' ? 'border-brand-400 bg-brand-50/60 ring-1 ring-brand-400/40' : 'border-canvas-border hover:border-brand-200'}`}
+                  className={`flex flex-col items-start gap-1 p-3.5 rounded-lg border text-left transition-colors cursor-pointer ${verdict === 'true-positive' ? 'border-brand-400 bg-brand-50/60 ring-1 ring-brand-400/40' : 'border-canvas-border hover:border-brand-200'}`}
                 >
-                  <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-900"><CheckCircle2 size={15} className="text-brand-600" /> True Positive</span>
-                  <span className="text-[11.5px] text-ink-500">Confirmed exception — needs remediation.</span>
+                  <span className="inline-flex items-center gap-1.5 text-[0.8125rem] font-semibold text-ink-900"><CheckCircle2 size={15} className="text-brand-600" /> True Positive</span>
+                  <span className="text-[0.71875rem] text-ink-500">Confirmed exception — needs remediation.</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => { setVerdict('false-positive'); setClassification('False Positive'); }}
-                  className={`flex flex-col items-start gap-1 p-3.5 rounded-[10px] border text-left transition-colors cursor-pointer ${verdict === 'false-positive' ? 'border-brand-400 bg-brand-50/60 ring-1 ring-brand-400/40' : 'border-canvas-border hover:border-brand-200'}`}
+                  className={`flex flex-col items-start gap-1 p-3.5 rounded-lg border text-left transition-colors cursor-pointer ${verdict === 'false-positive' ? 'border-brand-400 bg-brand-50/60 ring-1 ring-brand-400/40' : 'border-canvas-border hover:border-brand-200'}`}
                 >
-                  <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-900"><XCircle size={15} className="text-ink-500" /> False Positive</span>
-                  <span className="text-[11.5px] text-ink-500">Not a real issue — document the root cause.</span>
+                  <span className="inline-flex items-center gap-1.5 text-[0.8125rem] font-semibold text-ink-900"><XCircle size={15} className="text-ink-500" /> False Positive</span>
+                  <span className="text-[0.71875rem] text-ink-500">Not a real issue — document the root cause.</span>
                 </button>
               </div>
             </div>
 
             {verdict === 'true-positive' && (
               <div>
-                <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Sub-classification <span className="text-risk">*</span></label>
+                <label className="block text-[0.78125rem] font-semibold text-ink-800 mb-2">Sub-classification <span className="text-risk">*</span></label>
                 <div ref={classificationRef} className="relative">
                   <button
                     type="button"
                     onClick={() => setClassificationOpen(o => !o)}
                     aria-haspopup="listbox"
                     aria-expanded={classificationOpen}
-                    className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] flex items-center justify-between focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 hover:border-brand-200 cursor-pointer transition-colors"
+                    className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-md text-[0.8125rem] flex items-center justify-between focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 hover:border-brand-200 cursor-pointer transition-colors"
                   >
                     <span className={classification ? 'text-ink-800' : 'text-ink-400'}>{classification || 'Select sub-classification…'}</span>
                     <ChevronDown size={14} className={`text-ink-400 transition-transform duration-150 ${classificationOpen ? 'rotate-180' : ''}`} />
@@ -1804,7 +1804,7 @@ export function ClassifyExceptionDrawer({
                         initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
                         transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
                         role="listbox"
-                        className="absolute top-full mt-1 left-0 w-full z-30 bg-canvas-elevated border border-canvas-border rounded-[8px] shadow-lg overflow-hidden py-1"
+                        className="absolute top-full mt-1 left-0 w-full z-30 bg-canvas-elevated border border-canvas-border rounded-md shadow-lg overflow-hidden py-1"
                       >
                         {SUB_CLASSIFICATIONS.map(c => {
                           const selected = classification === c;
@@ -1812,7 +1812,7 @@ export function ClassifyExceptionDrawer({
                             <button
                               key={c} type="button" role="option" aria-selected={selected}
                               onClick={() => { setClassification(c); setClassificationOpen(false); }}
-                              className={`w-full text-left px-3 py-2 text-[13px] flex items-center justify-between cursor-pointer transition-colors ${selected ? 'bg-brand-50 text-brand-700' : 'text-ink-800 hover:bg-[#FAFAFB]'}`}
+                              className={`w-full text-left px-3 py-2 text-[0.8125rem] flex items-center justify-between cursor-pointer transition-colors ${selected ? 'bg-brand-50 text-brand-700' : 'text-ink-800 hover:bg-[#FAFAFB]'}`}
                             >
                               <span>{c}</span>{selected && <Check size={14} className="text-brand-700 shrink-0" />}
                             </button>
@@ -1823,28 +1823,28 @@ export function ClassifyExceptionDrawer({
                   </AnimatePresence>
                 </div>
                 {classification && (
-                  <span className="mt-2 inline-block text-[11.5px] text-ink-500">A management action plan will be created for this exception.</span>
+                  <span className="mt-2 inline-block text-[0.71875rem] text-ink-500">A management action plan will be created for this exception.</span>
                 )}
               </div>
             )}
 
             {verdict === 'false-positive' && (
               <div>
-                <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">Root Cause Analysis <span className="text-risk">*</span></label>
-                <div className="rounded-[10px] border border-canvas-border bg-canvas-elevated focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-600/15 transition-colors">
+                <label className="block text-[0.78125rem] font-semibold text-ink-800 mb-2">Root Cause Analysis <span className="text-risk">*</span></label>
+                <div className="rounded-lg border border-canvas-border bg-canvas-elevated focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-600/15 transition-colors">
                   <textarea
                     value={comment}
                     onChange={e => setComment(e.target.value)}
                     rows={4}
                     placeholder="Explain why this is a false positive — what was checked and the underlying root cause…"
-                    className="w-full px-3 py-2.5 bg-transparent text-[13px] text-ink-800 placeholder:text-ink-400 outline-none resize-none"
+                    className="w-full px-3 py-2.5 bg-transparent text-[0.8125rem] text-ink-800 placeholder:text-ink-400 outline-none resize-none"
                   />
                   <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 border-t border-canvas-border">
-                    <button type="button" onClick={() => rcaFileRef.current?.click()} className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-ink-500 hover:text-brand-700 cursor-pointer">
+                    <button type="button" onClick={() => rcaFileRef.current?.click()} className="inline-flex items-center gap-1.5 text-[0.71875rem] font-medium text-ink-500 hover:text-brand-700 cursor-pointer">
                       <Paperclip size={13} /> Attach
                     </button>
                     {rcaAttachment && (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">
+                      <span className="inline-flex items-center gap-1 text-[0.6875rem] text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">
                         <Paperclip size={10} /> {rcaAttachment.name}
                         <button type="button" onClick={() => setRcaAttachment(null)} className="ml-0.5 text-ink-400 hover:text-risk-700 cursor-pointer" aria-label="Remove attachment"><X size={10} /></button>
                       </span>
@@ -1859,7 +1859,7 @@ export function ClassifyExceptionDrawer({
 
         {step === 0 && !engagementMode && (
         <div className="mb-5">
-          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+          <label className="block text-[0.78125rem] font-semibold text-ink-800 mb-2">
             Classification <span className="text-risk">*</span>
           </label>
           <div ref={classificationRef} className="relative">
@@ -1868,7 +1868,7 @@ export function ClassifyExceptionDrawer({
               onClick={() => setClassificationOpen(o => !o)}
               aria-haspopup="listbox"
               aria-expanded={classificationOpen}
-              className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 flex items-center justify-between focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 hover:border-brand-200 cursor-pointer transition-colors"
+              className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-md text-[0.8125rem] text-ink-800 flex items-center justify-between focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 hover:border-brand-200 cursor-pointer transition-colors"
             >
               <span className={classification ? 'text-ink-800' : 'text-ink-400'}>
                 {classification || 'Select classification…'}
@@ -1886,7 +1886,7 @@ export function ClassifyExceptionDrawer({
                   exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
                   role="listbox"
-                  className="absolute top-full mt-1 left-0 w-full z-30 bg-canvas-elevated border border-canvas-border rounded-[8px] shadow-lg overflow-hidden py-1"
+                  className="absolute top-full mt-1 left-0 w-full z-30 bg-canvas-elevated border border-canvas-border rounded-md shadow-lg overflow-hidden py-1"
                 >
                   {CLASSIFY_OPTIONS.map(c => {
                     const selected = classification === c;
@@ -1900,7 +1900,7 @@ export function ClassifyExceptionDrawer({
                           setClassification(c);
                           setClassificationOpen(false);
                         }}
-                        className={`w-full text-left px-3 py-2 text-[13px] flex items-center justify-between cursor-pointer transition-colors ${
+                        className={`w-full text-left px-3 py-2 text-[0.8125rem] flex items-center justify-between cursor-pointer transition-colors ${
                           selected ? 'bg-brand-50 text-brand-700' : 'text-ink-800 hover:bg-[#FAFAFB]'
                         }`}
                       >
@@ -1914,7 +1914,7 @@ export function ClassifyExceptionDrawer({
             </AnimatePresence>
           </div>
           {classification && !requiresActionPlan && (
-            <span className="mt-2 inline-block text-[11.5px] text-ink-500">No action plan required.</span>
+            <span className="mt-2 inline-block text-[0.71875rem] text-ink-500">No action plan required.</span>
           )}
         </div>
         )}
@@ -1928,26 +1928,26 @@ export function ClassifyExceptionDrawer({
             className="border-t border-canvas-border pt-5 mb-5"
           >
             {actionableId && (
-              <div className="mb-3 flex items-center justify-between gap-3 px-3 py-2.5 rounded-[10px] bg-brand-50/70 border border-brand-100">
+              <div className="mb-3 flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg bg-brand-50/70 border border-brand-100">
                 <div className="flex items-center gap-2 min-w-0">
                   <Hash size={13} className="text-brand-600 shrink-0" />
-                  <span className="text-[11.5px] text-ink-600">Actionable ID</span>
-                  <span className="font-mono font-semibold text-brand-700 text-[12.5px]">{actionableId}</span>
+                  <span className="text-[0.71875rem] text-ink-600">Actionable ID</span>
+                  <span className="font-mono font-semibold text-brand-700 text-[0.78125rem]">{actionableId}</span>
                 </div>
-                <span className="text-[11px] text-ink-500 shrink-0">
+                <span className="text-[0.6875rem] text-ink-500 shrink-0">
                   {scopeCount > 1 ? `Shared across ${scopeCount} linked cases` : 'Auto-generated'}
                 </span>
               </div>
             )}
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[10.5px] uppercase tracking-wider font-semibold text-ink-500">
+              <span className="text-[0.65625rem] uppercase tracking-wider font-semibold text-ink-500">
                 Management Action Plans
                 <span className="ml-1.5 normal-case tracking-normal text-ink-400 tabular-nums">· {actionPlans.length}</span>
               </span>
               <button
                 type="button"
                 onClick={addPlan}
-                className="inline-flex items-center gap-1 h-7 px-2.5 text-[12px] font-semibold text-brand-700 bg-brand-50 rounded-[8px] hover:bg-brand-100 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 rounded-md hover:bg-brand-100 transition-colors cursor-pointer"
               >
                 <Plus size={13} />
                 Add plan
@@ -1959,7 +1959,7 @@ export function ClassifyExceptionDrawer({
                 const open = expandedPlan === plan.id;
                 const complete = plan.name.trim() && plan.details.trim() && !!plan.dueDate;
                 return (
-                  <div key={plan.id} className="border border-canvas-border rounded-[10px] overflow-hidden">
+                  <div key={plan.id} className="border border-canvas-border rounded-lg overflow-hidden">
                     {/* Collapsible header */}
                     <div className={`flex items-center gap-2 pl-3 pr-2 h-11 ${open ? 'bg-[#FAFAFB]' : ''}`}>
                       <button
@@ -1968,16 +1968,16 @@ export function ClassifyExceptionDrawer({
                         aria-expanded={open}
                         className="flex-1 min-w-0 flex items-center gap-2.5 text-left cursor-pointer h-full"
                       >
-                        <span className={`shrink-0 w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center tabular-nums ${plan.locked ? 'bg-risk-50 text-risk-700' : 'bg-brand-50 text-brand-700'}`}>
+                        <span className={`shrink-0 w-5 h-5 rounded-full text-[0.6875rem] font-bold flex items-center justify-center tabular-nums ${plan.locked ? 'bg-risk-50 text-risk-700' : 'bg-brand-50 text-brand-700'}`}>
                           {idx + 1}
                         </span>
-                        <span className={`flex-1 min-w-0 truncate text-[13px] font-semibold ${plan.locked ? 'text-ink-500 line-through' : 'text-ink-800'}`}>
+                        <span className={`flex-1 min-w-0 truncate text-[0.8125rem] font-semibold ${plan.locked ? 'text-ink-500 line-through' : 'text-ink-800'}`}>
                           {plan.name.trim() || `Management Action Plan ${idx + 1}`}
                         </span>
                         {plan.locked ? (
-                          <span className="inline-flex items-center h-5 px-1.5 text-[9px] font-bold uppercase tracking-wide bg-risk-50 text-risk-700 rounded-full shrink-0">Rejected</span>
+                          <span className="inline-flex items-center h-5 px-1.5 text-[0.5625rem] font-bold uppercase tracking-wide bg-risk-50 text-risk-700 rounded-full shrink-0">Rejected</span>
                         ) : plan.dueDate && (
-                          <span className="hidden sm:inline-flex items-center gap-1 h-6 px-2 text-[11px] text-brand-700 bg-brand-50 rounded-full shrink-0 tabular-nums">
+                          <span className="hidden sm:inline-flex items-center gap-1 h-6 px-2 text-[0.6875rem] text-brand-700 bg-brand-50 rounded-full shrink-0 tabular-nums">
                             <Calendar size={10} />
                             {plan.dueDate}
                           </span>
@@ -2019,7 +2019,7 @@ export function ClassifyExceptionDrawer({
                         >
                           <div className="px-3 pt-3 pb-3.5 space-y-3 border-t border-canvas-border">
                             <div>
-                              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                              <label className="block text-[0.78125rem] font-semibold text-ink-800 mb-2">
                                 Action Name <span className="text-risk">*</span>
                               </label>
                               <input
@@ -2027,12 +2027,12 @@ export function ClassifyExceptionDrawer({
                                 onChange={(e) => updatePlan(plan.id, { name: e.target.value })}
                                 disabled={plan.locked}
                                 placeholder="e.g. MFA enforcement for executive accounts"
-                                className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 disabled:bg-[#F4F2F7] disabled:text-ink-500 disabled:cursor-not-allowed"
+                                className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-md text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 disabled:bg-[#F4F2F7] disabled:text-ink-500 disabled:cursor-not-allowed"
                               />
                             </div>
 
                             <div>
-                              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                              <label className="block text-[0.78125rem] font-semibold text-ink-800 mb-2">
                                 Action Details <span className="text-risk">*</span>
                               </label>
                               <div className="relative">
@@ -2042,7 +2042,7 @@ export function ClassifyExceptionDrawer({
                                   disabled={plan.locked}
                                   rows={4}
                                   placeholder="Describe the remediation steps, evidence, and rollout plan…"
-                                  className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 disabled:bg-[#F4F2F7] disabled:text-ink-500 disabled:cursor-not-allowed"
+                                  className="w-full resize-none p-3 pr-10 bg-canvas-elevated border border-canvas-border rounded-lg text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20 disabled:bg-[#F4F2F7] disabled:text-ink-500 disabled:cursor-not-allowed"
                                 />
                                 <button
                                   type="button"
@@ -2056,12 +2056,12 @@ export function ClassifyExceptionDrawer({
                             </div>
 
                             <div>
-                              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+                              <label className="block text-[0.78125rem] font-semibold text-ink-800 mb-2">
                                 Due Date <span className="text-risk">*</span>
                               </label>
                               <div className="w-[220px]">
                                 {plan.locked ? (
-                                  <div className="h-10 px-3 flex items-center bg-[#F4F2F7] border border-canvas-border rounded-[8px] text-[13px] text-ink-500 tabular-nums">{plan.dueDate || '—'}</div>
+                                  <div className="h-10 px-3 flex items-center bg-[#F4F2F7] border border-canvas-border rounded-md text-[0.8125rem] text-ink-500 tabular-nums">{plan.dueDate || '—'}</div>
                                 ) : (
                                   <CustomDatePicker
                                     value={plan.dueDate}
@@ -2131,16 +2131,16 @@ const REVISION_STATUS_STYLE: Record<'Pending' | 'Approved' | 'Rejected', string>
 function DueDateDelta({ previous, revised }: { previous?: string; revised?: string }) {
   return (
     <div className="flex items-stretch gap-2.5">
-      <div className="flex-1 rounded-[10px] border border-canvas-border bg-[#FAFAFB] p-3">
-        <div className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500 mb-1">Previous Due Date</div>
-        <div className="text-[14px] font-semibold text-ink-600 line-through decoration-ink-300">{formatDueDate(previous)}</div>
+      <div className="flex-1 rounded-lg border border-canvas-border bg-[#FAFAFB] p-3">
+        <div className="text-[0.65625rem] font-semibold uppercase tracking-wider text-ink-500 mb-1">Previous Due Date</div>
+        <div className="text-[0.875rem] font-semibold text-ink-600 line-through decoration-ink-300">{formatDueDate(previous)}</div>
       </div>
       <div className="flex items-center shrink-0">
         <ArrowRight size={16} className="text-ink-400" />
       </div>
-      <div className="flex-1 rounded-[10px] border border-brand-200 bg-brand-50/60 p-3">
-        <div className="text-[10.5px] font-semibold uppercase tracking-wider text-brand-700 mb-1">Revised Due Date</div>
-        <div className="text-[14px] font-bold text-brand-700">{formatDueDate(revised)}</div>
+      <div className="flex-1 rounded-lg border border-brand-200 bg-brand-50/60 p-3">
+        <div className="text-[0.65625rem] font-semibold uppercase tracking-wider text-brand-700 mb-1">Revised Due Date</div>
+        <div className="text-[0.875rem] font-bold text-brand-700">{formatDueDate(revised)}</div>
       </div>
     </div>
   );
@@ -2177,7 +2177,7 @@ export function RequestDueDateDrawer({
           <>
             <button
               onClick={onClose}
-              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+              className="flex-1 h-10 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"
             >
               {pending ? 'Close' : 'Cancel'}
             </button>
@@ -2185,7 +2185,7 @@ export function RequestDueDateDrawer({
               <button
                 onClick={() => canSubmit && onSubmit({ revisedDueDate, reason: reason.trim() })}
                 disabled={!canSubmit}
-                className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+                className={`flex-[2] h-10 text-[0.8125rem] font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 ${
                   canSubmit
                     ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
                     : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
@@ -2200,18 +2200,18 @@ export function RequestDueDateDrawer({
       >
         <div className="mb-5">
           <SectionLabel>Management Action Plan</SectionLabel>
-          <h3 className="text-[14px] font-semibold text-ink-900 leading-snug">{exception.title}</h3>
+          <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-snug">{exception.title}</h3>
         </div>
 
         {pending && existing ? (
-          <div className="rounded-[12px] border border-mitigated/40 bg-mitigated-50/60 p-4 mb-5">
+          <div className="rounded-lg border border-mitigated/40 bg-mitigated-50/60 p-4 mb-5">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[12.5px] font-semibold text-mitigated-700">Revision already requested</span>
+              <span className="text-[0.78125rem] font-semibold text-mitigated-700">Revision already requested</span>
               <Pill className={REVISION_STATUS_STYLE[existing.status]}>Awaiting auditor approval</Pill>
             </div>
             <DueDateDelta previous={existing.previousDueDate} revised={existing.revisedDueDate} />
-            <p className="text-[12.5px] text-ink-700 leading-relaxed mt-3">{existing.reason}</p>
-            <p className="text-[11px] text-ink-500 mt-2">
+            <p className="text-[0.78125rem] text-ink-700 leading-relaxed mt-3">{existing.reason}</p>
+            <p className="text-[0.6875rem] text-ink-500 mt-2">
               Requested by {existing.requestedBy} · {formatDueDate(existing.requestedAt.slice(0, 10))}
             </p>
           </div>
@@ -2219,21 +2219,21 @@ export function RequestDueDateDrawer({
           <>
             <div className="mb-5">
               <SectionLabel>Current Due Date</SectionLabel>
-              <div className="inline-flex items-center gap-2 h-9 px-3 rounded-[8px] border border-canvas-border bg-[#FAFAFB] text-[13px] font-semibold text-ink-800">
+              <div className="inline-flex items-center gap-2 h-9 px-3 rounded-md border border-canvas-border bg-[#FAFAFB] text-[0.8125rem] font-semibold text-ink-800">
                 <Calendar size={13} className="text-ink-500" />
                 {formatDueDate(current)}
               </div>
             </div>
 
             <div className="mb-5">
-              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+              <label className="block text-[0.78125rem] font-semibold text-ink-800 mb-2">
                 Revised Due Date <span className="text-risk">*</span>
               </label>
               <div className="w-[220px]">
                 <CustomDatePicker value={revisedDueDate} onChange={setRevisedDueDate} minDate={todayIso} />
               </div>
               {revisedDueDate && revisedDueDate === current && (
-                <p className="mt-2 text-[11.5px] text-risk-700">Pick a date different from the current due date.</p>
+                <p className="mt-2 text-[0.71875rem] text-risk-700">Pick a date different from the current due date.</p>
               )}
             </div>
 
@@ -2245,7 +2245,7 @@ export function RequestDueDateDrawer({
             )}
 
             <div className="mb-5">
-              <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+              <label className="block text-[0.78125rem] font-semibold text-ink-800 mb-2">
                 Reason for change <span className="text-risk">*</span>
               </label>
               <textarea
@@ -2253,7 +2253,7 @@ export function RequestDueDateDrawer({
                 onChange={(e) => setReason(e.target.value)}
                 rows={4}
                 placeholder="Explain why the action can't be completed by the current due date…"
-                className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-lg text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
               />
             </div>
           </>
@@ -2293,7 +2293,7 @@ export function ReviewDueDateDrawer({
           <>
             <button
               onClick={onClose}
-              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+              className="flex-1 h-10 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"
             >
               {isPending ? 'Cancel' : 'Close'}
             </button>
@@ -2301,7 +2301,7 @@ export function ReviewDueDateDrawer({
               <button
                 onClick={() => canSubmit && decision && onDecision(decision, comment.trim())}
                 disabled={!canSubmit}
-                className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+                className={`flex-[2] h-10 text-[0.8125rem] font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 ${
                   canSubmit
                     ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
                     : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
@@ -2315,7 +2315,7 @@ export function ReviewDueDateDrawer({
       >
         <div className="mb-5">
           <SectionLabel>Management Action Plan</SectionLabel>
-          <h3 className="text-[14px] font-semibold text-ink-900 leading-snug">{exception.title}</h3>
+          <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-snug">{exception.title}</h3>
         </div>
 
         <div className="mb-5">
@@ -2325,21 +2325,21 @@ export function ReviewDueDateDrawer({
 
         <div className="mb-5">
           <SectionLabel>Reason from Risk Owner</SectionLabel>
-          <div className="px-3 py-2.5 bg-[#FAFAFB] border border-canvas-border rounded-[8px] text-[12.5px] text-ink-800 leading-relaxed">
+          <div className="px-3 py-2.5 bg-[#FAFAFB] border border-canvas-border rounded-md text-[0.78125rem] text-ink-800 leading-relaxed">
             {rev.reason}
           </div>
-          <p className="text-[11px] text-ink-500 mt-2">
+          <p className="text-[0.6875rem] text-ink-500 mt-2">
             Requested by {rev.requestedBy} · {formatDueDate(rev.requestedAt.slice(0, 10))}
           </p>
         </div>
 
         {isPending ? (
-          <section className="border border-canvas-border rounded-[12px] p-4">
+          <section className="border border-canvas-border rounded-lg p-4">
             <SectionLabel>Auditor Decision</SectionLabel>
             <div className="grid grid-cols-2 gap-2 mb-4">
               <button
                 onClick={() => setDecision('approve')}
-                className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                className={`h-10 text-[0.78125rem] font-semibold rounded-md border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                   decision === 'approve'
                     ? 'bg-compliant text-white border-compliant shadow-[0_2px_8px_rgba(22,163,74,0.25)]'
                     : 'bg-compliant-50 border-compliant text-compliant-700 hover:bg-compliant hover:text-white'
@@ -2350,7 +2350,7 @@ export function ReviewDueDateDrawer({
               </button>
               <button
                 onClick={() => setDecision('reject')}
-                className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                className={`h-10 text-[0.78125rem] font-semibold rounded-md border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                   decision === 'reject'
                     ? 'bg-risk text-white border-risk shadow-[0_2px_8px_rgba(220,38,38,0.25)]'
                     : 'bg-risk-50 border-risk text-risk-700 hover:bg-risk hover:text-white'
@@ -2361,37 +2361,37 @@ export function ReviewDueDateDrawer({
               </button>
             </div>
             {decision === 'approve' && (
-              <p className="mb-4 text-[12px] text-compliant-700 leading-snug">
+              <p className="mb-4 text-[0.75rem] text-compliant-700 leading-snug">
                 On approve, the action plan's due date moves to <span className="font-semibold">{formatDueDate(rev.revisedDueDate)}</span>.
               </p>
             )}
             {decision === 'reject' && (
-              <p className="mb-4 text-[12px] text-risk-700 leading-snug">
+              <p className="mb-4 text-[0.75rem] text-risk-700 leading-snug">
                 On reject, the due date stays at <span className="font-semibold">{formatDueDate(rev.previousDueDate)}</span> and the request returns to the Risk Owner.
               </p>
             )}
             <div>
-              <label className="block text-[12.5px] font-medium text-ink-800 mb-2">Comment</label>
+              <label className="block text-[0.78125rem] font-medium text-ink-800 mb-2">Comment</label>
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 rows={3}
                 placeholder="Add a note for the Risk Owner (optional)…"
-                className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-lg text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
               />
             </div>
           </section>
         ) : (
-          <div className="rounded-[12px] border border-canvas-border p-4">
+          <div className="rounded-lg border border-canvas-border p-4">
             <div className="flex items-center justify-between">
-              <span className="text-[12.5px] font-semibold text-ink-800">Decision</span>
+              <span className="text-[0.78125rem] font-semibold text-ink-800">Decision</span>
               <Pill className={REVISION_STATUS_STYLE[rev.status]}>{rev.status}</Pill>
             </div>
             {rev.decisionComment && (
-              <p className="text-[12.5px] text-ink-700 leading-relaxed mt-3">{rev.decisionComment}</p>
+              <p className="text-[0.78125rem] text-ink-700 leading-relaxed mt-3">{rev.decisionComment}</p>
             )}
             {rev.decidedBy && (
-              <p className="text-[11px] text-ink-500 mt-2">
+              <p className="text-[0.6875rem] text-ink-500 mt-2">
                 {rev.status} by {rev.decidedBy}{rev.decidedAt ? ` · ${formatDueDate(rev.decidedAt.slice(0, 10))}` : ''}
               </p>
             )}
@@ -2431,14 +2431,14 @@ export function BulkRequestDueDateDrawer({
           <>
             <button
               onClick={onClose}
-              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+              className="flex-1 h-10 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               onClick={() => canSubmit && onSubmit({ revisedDueDate, reason: reason.trim() })}
               disabled={!canSubmit}
-              className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+              className={`flex-[2] h-10 text-[0.8125rem] font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 ${
                 canSubmit ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
               }`}
             >
@@ -2450,28 +2450,28 @@ export function BulkRequestDueDateDrawer({
       >
         <div className="mb-5">
           <SectionLabel>Selected Cases</SectionLabel>
-          <div className="border border-canvas-border rounded-[10px] divide-y divide-canvas-border max-h-[200px] overflow-y-auto">
+          <div className="border border-canvas-border rounded-lg divide-y divide-canvas-border max-h-[200px] overflow-y-auto">
             {exceptions.map(e => (
               <div key={e.id} className="flex items-center justify-between px-3 py-2.5">
-                <span className="text-[12.5px] font-mono font-medium text-brand-700">{e.id}</span>
-                <span className="text-[12px] text-ink-600 tabular-nums">Current: {formatDueDate(e.dueDate)}</span>
+                <span className="text-[0.78125rem] font-mono font-medium text-brand-700">{e.id}</span>
+                <span className="text-[0.75rem] text-ink-600 tabular-nums">Current: {formatDueDate(e.dueDate)}</span>
               </div>
             ))}
           </div>
         </div>
 
         <div className="mb-5">
-          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+          <label className="block text-[0.78125rem] font-semibold text-ink-800 mb-2">
             New Revised Due Date <span className="text-risk">*</span>
           </label>
           <div className="w-[220px]">
             <CustomDatePicker value={revisedDueDate} onChange={setRevisedDueDate} minDate={todayIso} />
           </div>
-          <p className="mt-2 text-[11.5px] text-ink-500">Applied to all {n} selected case{n === 1 ? '' : 's'}.</p>
+          <p className="mt-2 text-[0.71875rem] text-ink-500">Applied to all {n} selected case{n === 1 ? '' : 's'}.</p>
         </div>
 
         <div className="mb-5">
-          <label className="block text-[12.5px] font-semibold text-ink-800 mb-2">
+          <label className="block text-[0.78125rem] font-semibold text-ink-800 mb-2">
             Reason for change <span className="text-risk">*</span>
           </label>
           <textarea
@@ -2479,7 +2479,7 @@ export function BulkRequestDueDateDrawer({
             onChange={(e) => setReason(e.target.value)}
             rows={4}
             placeholder="Explain why these actions can't be completed by their current due dates…"
-            className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+            className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-lg text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
           />
         </div>
       </ModalShell>
@@ -2514,14 +2514,14 @@ export function BulkReviewDueDateDrawer({
           <>
             <button
               onClick={onClose}
-              className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+              className="flex-1 h-10 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               onClick={() => canSubmit && decision && onDecision(decision, comment.trim())}
               disabled={!canSubmit}
-              className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+              className={`flex-[2] h-10 text-[0.8125rem] font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 ${
                 canSubmit ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
               }`}
             >
@@ -2532,11 +2532,11 @@ export function BulkReviewDueDateDrawer({
       >
         <div className="mb-5">
           <SectionLabel>Pending Requests</SectionLabel>
-          <div className="border border-canvas-border rounded-[10px] divide-y divide-canvas-border max-h-[260px] overflow-y-auto">
+          <div className="border border-canvas-border rounded-lg divide-y divide-canvas-border max-h-[260px] overflow-y-auto">
             {exceptions.map(e => (
               <div key={e.id} className="px-3 py-2.5">
-                <div className="text-[12.5px] font-mono font-medium text-brand-700 mb-1">{e.id}</div>
-                <div className="flex items-center gap-2 text-[12px]">
+                <div className="text-[0.78125rem] font-mono font-medium text-brand-700 mb-1">{e.id}</div>
+                <div className="flex items-center gap-2 text-[0.75rem]">
                   <span className="text-ink-500 line-through decoration-ink-300 tabular-nums">{formatDueDate(e.dueDateRevision?.previousDueDate)}</span>
                   <ArrowRight size={12} className="text-ink-400" />
                   <span className="font-semibold text-brand-700 tabular-nums">{formatDueDate(e.dueDateRevision?.revisedDueDate)}</span>
@@ -2546,12 +2546,12 @@ export function BulkReviewDueDateDrawer({
           </div>
         </div>
 
-        <section className="border border-canvas-border rounded-[12px] p-4">
+        <section className="border border-canvas-border rounded-lg p-4">
           <SectionLabel>Decision · applies to all {n}</SectionLabel>
           <div className="grid grid-cols-2 gap-2 mb-4">
             <button
               onClick={() => setDecision('approve')}
-              className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+              className={`h-10 text-[0.78125rem] font-semibold rounded-md border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                 decision === 'approve'
                   ? 'bg-compliant text-white border-compliant shadow-[0_2px_8px_rgba(22,163,74,0.25)]'
                   : 'bg-compliant-50 border-compliant text-compliant-700 hover:bg-compliant hover:text-white'
@@ -2562,7 +2562,7 @@ export function BulkReviewDueDateDrawer({
             </button>
             <button
               onClick={() => setDecision('reject')}
-              className={`h-10 text-[12.5px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+              className={`h-10 text-[0.78125rem] font-semibold rounded-md border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                 decision === 'reject'
                   ? 'bg-risk text-white border-risk shadow-[0_2px_8px_rgba(220,38,38,0.25)]'
                   : 'bg-risk-50 border-risk text-risk-700 hover:bg-risk hover:text-white'
@@ -2573,13 +2573,13 @@ export function BulkReviewDueDateDrawer({
             </button>
           </div>
           <div>
-            <label className="block text-[12.5px] font-medium text-ink-800 mb-2">Comment</label>
+            <label className="block text-[0.78125rem] font-medium text-ink-800 mb-2">Comment</label>
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               rows={3}
               placeholder="Add a note for the Risk Owner (optional)…"
-              className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+              className="w-full resize-none p-3 bg-canvas-elevated border border-canvas-border rounded-lg text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
             />
           </div>
         </section>
@@ -2618,14 +2618,14 @@ function ViewActionPlanModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] max-w-[92vw] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[71] flex flex-col max-h-[80vh]"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] max-w-[92vw] bg-canvas-elevated rounded-xl shadow-xl border border-canvas-border z-[71] flex flex-col max-h-[80vh]"
         role="dialog"
         aria-label="Management Action Plan"
       >
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div className="min-w-0">
-            <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight">Management Action Plan</h2>
-            <p className="text-[12.5px] text-ink-500 mt-0.5 flex items-center gap-2">
+            <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight">Management Action Plan</h2>
+            <p className="text-[0.78125rem] text-ink-500 mt-0.5 flex items-center gap-2">
               <span className="font-mono font-medium text-brand-700">{exceptionId}</span>
               {actionableId && (
                 <>
@@ -2648,22 +2648,22 @@ function ViewActionPlanModal({
           {plans.length > 0 ? (
             <div className="space-y-3">
               {plans.map((p, i) => (
-                <div key={i} className="border border-canvas-border rounded-[12px] p-4">
-                  <h3 className="text-[14px] font-semibold text-ink-900 mb-1.5 leading-snug">
+                <div key={i} className="border border-canvas-border rounded-lg p-4">
+                  <h3 className="text-[0.875rem] font-semibold text-ink-900 mb-1.5 leading-snug">
                     <FileText size={14} className="inline mr-1.5 text-ink-500 -mt-0.5" />
                     {p.name || `Management Action Plan ${i + 1}`}
                   </h3>
                   {p.dueDate && (
-                    <div className="inline-flex items-center gap-1.5 text-[12px] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
+                    <div className="inline-flex items-center gap-1.5 text-[0.75rem] text-brand-700 bg-brand-50 rounded-full px-2.5 h-6 mb-2">
                       <Calendar size={11} /> Due {fmtPlanDate(p.dueDate)}
                     </div>
                   )}
-                  {p.details && <p className="text-[12.5px] text-ink-700 leading-relaxed">{p.details}</p>}
+                  {p.details && <p className="text-[0.78125rem] text-ink-700 leading-relaxed">{p.details}</p>}
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-[12.5px] text-ink-500">No management action plan has been submitted for this case yet.</p>
+            <p className="text-[0.78125rem] text-ink-500">No management action plan has been submitted for this case yet.</p>
           )}
         </div>
       </motion.div>
@@ -2699,17 +2699,17 @@ function BulkCasesModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[92vw] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[71] flex flex-col max-h-[80vh]"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[92vw] bg-canvas-elevated rounded-xl shadow-xl border border-canvas-border z-[71] flex flex-col max-h-[80vh]"
         role="dialog"
         aria-label="Grouped cases"
       >
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full"><LinkIcon size={11} /> Bulk</span>
-              <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight">Grouped Cases</h2>
+              <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[0.65625rem] font-semibold bg-brand-50 text-brand-700 rounded-full"><LinkIcon size={11} /> Bulk</span>
+              <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight">Grouped Cases</h2>
             </div>
-            <p className="text-[12.5px] text-ink-500 leading-snug">
+            <p className="text-[0.78125rem] text-ink-500 leading-snug">
               {groupId && <span className="font-mono tabular-nums">ID: {groupId} · </span>}{cases.length} linked cases · the action taken applies to all
             </p>
           </div>
@@ -2718,11 +2718,11 @@ function BulkCasesModal({
           </button>
         </header>
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          <div className="border border-canvas-border rounded-[12px] divide-y divide-canvas-border overflow-hidden">
+          <div className="border border-canvas-border rounded-lg divide-y divide-canvas-border overflow-hidden">
             {cases.map((c) => (
               <div key={c.id} className="flex items-center gap-3 px-4 py-3">
-                <span className="font-mono font-medium text-brand-700 text-[12.5px] shrink-0">{c.id}</span>
-                <span className="flex-1 min-w-0 truncate text-[12px] text-ink-600">{c.title}</span>
+                <span className="font-mono font-medium text-brand-700 text-[0.78125rem] shrink-0">{c.id}</span>
+                <span className="flex-1 min-w-0 truncate text-[0.75rem] text-ink-600">{c.title}</span>
                 <Pill className={CLASSIFICATION_STYLE[c.classification]}>{c.classification}</Pill>
                 <Pill className="bg-mitigated-50 text-mitigated-700">{c.statusLabel}</Pill>
               </div>
@@ -2951,7 +2951,7 @@ export function BulkReviewDrawer({
           <>
             <button
               onClick={onClose}
-              className="h-10 px-5 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+              className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -2959,7 +2959,7 @@ export function BulkReviewDrawer({
             {stepIdx === 1 && (
               <button
                 onClick={() => setStepIdx(0)}
-                className="h-10 px-5 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer"
+                className="h-10 px-5 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer"
               >
                 Back
               </button>
@@ -2969,7 +2969,7 @@ export function BulkReviewDrawer({
                 onClick={() => canSubmit && setStepIdx(1)}
                 disabled={!canSubmit}
                 title={decidedInvalid.length > 0 ? 'Some decided plans need an implementation outcome and a comment' : undefined}
-                className={`h-10 px-5 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+                className={`h-10 px-5 text-[0.8125rem] font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 ${
                   canSubmit ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
                 }`}
               >
@@ -2979,7 +2979,7 @@ export function BulkReviewDrawer({
               <button
                 onClick={submit}
                 disabled={!canSubmit}
-                className={`h-10 px-5 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+                className={`h-10 px-5 text-[0.8125rem] font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 ${
                   canSubmit ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
                 }`}
               >
@@ -2992,35 +2992,35 @@ export function BulkReviewDrawer({
       >
         {stepIdx === 0 && (<>
         {/* Progress + what's outstanding */}
-        <div className="mb-4 rounded-[12px] border border-canvas-border p-3.5">
+        <div className="mb-4 rounded-lg border border-canvas-border p-3.5">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[12.5px] font-semibold text-ink-800">Reviewed {decidedValid.length} of {groups.length} action plan{groups.length === 1 ? '' : 's'}</span>
-            <span className="text-[11.5px] text-ink-500 tabular-nums">{pendingCount} pending{decidedInvalid.length > 0 ? ` · ${decidedInvalid.length} need a comment` : ''}</span>
+            <span className="text-[0.78125rem] font-semibold text-ink-800">Reviewed {decidedValid.length} of {groups.length} action plan{groups.length === 1 ? '' : 's'}</span>
+            <span className="text-[0.71875rem] text-ink-500 tabular-nums">{pendingCount} pending{decidedInvalid.length > 0 ? ` · ${decidedInvalid.length} need a comment` : ''}</span>
           </div>
           <div className="h-1.5 rounded-full bg-[#EEEEF1] overflow-hidden">
             <div className="h-full bg-brand-600 transition-all" style={{ width: `${Math.round((decidedValid.length / Math.max(1, groups.length)) * 100)}%` }} />
           </div>
-          <p className="text-[11.5px] text-ink-500 leading-snug mt-2.5">
+          <p className="text-[0.71875rem] text-ink-500 leading-snug mt-2.5">
             Cases are grouped by their management action plan — one decision applies to every linked case. Expand a plan to review it step by step, or tick plans and use Accept / Reject below.
           </p>
         </div>
 
         {/* Skipped, non-reviewable cases */}
         {skippedTotal > 0 && (
-          <div className="mb-4 rounded-[12px] border border-mitigated/40 bg-mitigated-50/50 p-3.5">
-            <div className="flex items-center gap-2 text-[12.5px] font-semibold text-mitigated-700 mb-1.5">
+          <div className="mb-4 rounded-lg border border-mitigated/40 bg-mitigated-50/50 p-3.5">
+            <div className="flex items-center gap-2 text-[0.78125rem] font-semibold text-mitigated-700 mb-1.5">
               <ShieldCheck size={13} />
               {skippedTotal} case{skippedTotal === 1 ? '' : 's'} not included — nothing to review yet
             </div>
             <ul className="space-y-1.5">
               {skipped.awaitingRiskOwner > 0 && (
-                <li className="flex items-center gap-2 text-[12px] text-ink-700">
+                <li className="flex items-center gap-2 text-[0.75rem] text-ink-700">
                   <span className="w-1.5 h-1.5 rounded-full bg-mitigated shrink-0" />
                   <span className="font-semibold tabular-nums">{skipped.awaitingRiskOwner}</span> awaiting the Risk Owner (unclassified, in progress, or reopened)
                 </li>
               )}
               {skipped.alreadyReviewed > 0 && (
-                <li className="flex items-center gap-2 text-[12px] text-ink-700">
+                <li className="flex items-center gap-2 text-[0.75rem] text-ink-700">
                   <span className="w-1.5 h-1.5 rounded-full bg-compliant shrink-0" />
                   <span className="font-semibold tabular-nums">{skipped.alreadyReviewed}</span> already reviewed
                 </li>
@@ -3030,13 +3030,13 @@ export function BulkReviewDrawer({
         )}
 
         {/* Selection toolbar — tick plans, then Accept / Reject. Select all + Reject = Reject all. */}
-        <div className="mb-3 flex items-center justify-between gap-3 rounded-[10px] border border-canvas-border bg-[#FAFAFB] px-3 py-2">
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-canvas-border bg-[#FAFAFB] px-3 py-2">
           <button
             type="button"
             onClick={toggleSelectAll}
-            className="inline-flex items-center gap-2 text-[12px] font-medium text-ink-700 cursor-pointer"
+            className="inline-flex items-center gap-2 text-[0.75rem] font-medium text-ink-700 cursor-pointer"
           >
-            <span className={`w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0 ${
+            <span className={`w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0 ${
               allSelected ? 'bg-brand-600 border-brand-600 text-white' : selected.size > 0 ? 'bg-brand-50 border-brand-300 text-brand-600' : 'bg-canvas-elevated border-canvas-border'
             }`}>
               {allSelected ? <Check size={12} strokeWidth={3} /> : selected.size > 0 ? <span className="w-2 h-0.5 bg-brand-600 rounded" /> : null}
@@ -3048,7 +3048,7 @@ export function BulkReviewDrawer({
               type="button"
               onClick={() => applyToSelected('approve')}
               disabled={selected.size === 0}
-              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold rounded-[8px] border transition-colors ${
+              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold rounded-md border transition-colors ${
                 selected.size > 0 ? 'bg-compliant-50 border-compliant text-compliant-700 hover:bg-compliant hover:text-white cursor-pointer' : 'bg-canvas-elevated border-canvas-border text-ink-400 cursor-not-allowed'
               }`}
             >
@@ -3058,7 +3058,7 @@ export function BulkReviewDrawer({
               type="button"
               onClick={() => applyToSelected('reject')}
               disabled={selected.size === 0}
-              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold rounded-[8px] border transition-colors ${
+              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold rounded-md border transition-colors ${
                 selected.size > 0 ? 'bg-risk-50 border-risk text-risk-700 hover:bg-risk hover:text-white cursor-pointer' : 'bg-canvas-elevated border-canvas-border text-ink-400 cursor-not-allowed'
               }`}
             >
@@ -3066,7 +3066,7 @@ export function BulkReviewDrawer({
             </button>
           </div>
         </div>
-        <p className="text-[11px] text-ink-400 mb-3 -mt-1">Tip: tick <span className="font-medium text-ink-500">Select all</span> then Reject to reject every plan. Bulk actions add a suggested comment you can still edit.</p>
+        <p className="text-[0.6875rem] text-ink-400 mb-3 -mt-1">Tip: tick <span className="font-medium text-ink-500">Select all</span> then Reject to reject every plan. Bulk actions add a suggested comment you can still edit.</p>
 
         {/* Per-plan groups */}
         <SectionLabel>Management Action Plans</SectionLabel>
@@ -3076,8 +3076,8 @@ export function BulkReviewDrawer({
           <div key={stage} className="mb-4">
             {/* Stage name shown once per section — not on every plan */}
             <div className="flex items-center gap-2 mb-2">
-              <span className={`inline-flex items-center h-5 px-2 text-[10.5px] font-semibold rounded-full ${STAGE_BADGE[stage]}`}>{STAGE_META[stage].label}</span>
-              <span className="text-[11px] text-ink-400 tabular-nums">{stageGroups.length} plan{stageGroups.length === 1 ? '' : 's'}</span>
+              <span className={`inline-flex items-center h-5 px-2 text-[0.65625rem] font-semibold rounded-full ${STAGE_BADGE[stage]}`}>{STAGE_META[stage].label}</span>
+              <span className="text-[0.6875rem] text-ink-400 tabular-nums">{stageGroups.length} plan{stageGroups.length === 1 ? '' : 's'}</span>
             </div>
             <div className="space-y-2.5">
           {stageGroups.map((g) => {
@@ -3096,14 +3096,14 @@ export function BulkReviewDrawer({
                 : <Pill className="bg-[#EEEEF1] text-ink-500">Pending</Pill>;
 
             return (
-              <div key={g.key} className={`border rounded-[12px] overflow-hidden ${open ? 'border-brand-200' : 'border-canvas-border'}`}>
+              <div key={g.key} className={`border rounded-lg overflow-hidden ${open ? 'border-brand-200' : 'border-canvas-border'}`}>
                 {/* Group header — checkbox + plan identity */}
                 <div className={`flex items-center gap-2.5 px-3 py-3 ${open ? 'bg-brand-50/40' : ''}`}>
                   <button
                     type="button"
                     onClick={() => toggleSelect(g.key)}
                     aria-label={`Select ${g.actionableId ?? g.cases[0].id}`}
-                    className={`w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0 cursor-pointer ${
+                    className={`w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0 cursor-pointer ${
                       isSelected ? 'bg-brand-600 border-brand-600 text-white' : 'bg-canvas-elevated border-canvas-border'
                     }`}
                   >
@@ -3118,10 +3118,10 @@ export function BulkReviewDrawer({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {g.actionable && g.actionableId
-                          ? <span className="inline-flex items-center gap-0.5 font-mono font-semibold text-brand-700 text-[12.5px]"><Hash size={11} />{g.actionableId}</span>
+                          ? <span className="inline-flex items-center gap-0.5 font-mono font-semibold text-brand-700 text-[0.78125rem]"><Hash size={11} />{g.actionableId}</span>
                           : <Pill className={CLASSIFICATION_STYLE[g.classification]}>{g.classification}</Pill>}
                       </div>
-                      <div className="text-[12px] text-ink-600 truncate mt-0.5">
+                      <div className="text-[0.75rem] text-ink-600 truncate mt-0.5">
                         {g.actionable ? (headPlanName || 'Management action plan') : 'No action plan required'}
                       </div>
                     </div>
@@ -3132,7 +3132,7 @@ export function BulkReviewDrawer({
                 {/* Linked exceptions — scope picker (apply to all / only this / subset) */}
                 {linkedCount > 1 && (
                   <div className="flex items-center gap-2 px-3 pb-2.5 -mt-1 pl-[42px]">
-                    <span className="text-[11.5px] text-ink-500">
+                    <span className="text-[0.71875rem] text-ink-500">
                       {scopeCount(g) < linkedCount
                         ? <>Applies to <span className="font-semibold text-ink-700">{scopeCount(g)}</span> of {linkedCount} linked exceptions</>
                         : <>{linkedCount} linked exceptions</>}
@@ -3140,7 +3140,7 @@ export function BulkReviewDrawer({
                     <button
                       type="button"
                       onClick={() => setLinkedModalKey(g.key)}
-                      className="inline-flex items-center gap-1 text-[11.5px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
+                      className="inline-flex items-center gap-1 text-[0.71875rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
                     >
                       Choose linked exceptions
                       <ExternalLink size={11} />
@@ -3161,27 +3161,27 @@ export function BulkReviewDrawer({
                               <ol className="space-y-2.5">
                                 {g.plans.map((p, i) => (
                                   <li key={i} className="flex gap-2.5">
-                                    <span className="shrink-0 w-5 h-5 rounded-full bg-brand-50 text-brand-700 text-[11px] font-bold flex items-center justify-center tabular-nums">{i + 1}</span>
+                                    <span className="shrink-0 w-5 h-5 rounded-full bg-brand-50 text-brand-700 text-[0.6875rem] font-bold flex items-center justify-center tabular-nums">{i + 1}</span>
                                     <div className="min-w-0">
-                                      <div className="text-[13px] font-semibold text-ink-900 leading-snug">{p.name || `Management Action Plan ${i + 1}`}</div>
+                                      <div className="text-[0.8125rem] font-semibold text-ink-900 leading-snug">{p.name || `Management Action Plan ${i + 1}`}</div>
                                       {p.dueDate && (
-                                        <span className="inline-flex items-center gap-1 text-[11.5px] text-brand-700 bg-brand-50 rounded-full px-2 h-5 mt-1">
+                                        <span className="inline-flex items-center gap-1 text-[0.71875rem] text-brand-700 bg-brand-50 rounded-full px-2 h-5 mt-1">
                                           <Calendar size={10} /> Due {fmtPlanDate(p.dueDate)}
                                         </span>
                                       )}
-                                      {p.details && <p className="text-[12px] text-ink-700 leading-relaxed mt-1">{p.details}</p>}
+                                      {p.details && <p className="text-[0.75rem] text-ink-700 leading-relaxed mt-1">{p.details}</p>}
                                     </div>
                                   </li>
                                 ))}
                               </ol>
                             ) : (
-                              <p className="text-[12px] text-ink-500">No management action plan recorded.</p>
+                              <p className="text-[0.75rem] text-ink-500">No management action plan recorded.</p>
                             )}
                           </div>
                         ) : (
-                          <div className="rounded-[10px] border border-canvas-border bg-[#FAFAFB] p-3">
+                          <div className="rounded-lg border border-canvas-border bg-[#FAFAFB] p-3">
                             <SectionLabel>No Action Plan Required</SectionLabel>
-                            <p className="text-[12px] text-ink-600 leading-relaxed">
+                            <p className="text-[0.75rem] text-ink-600 leading-relaxed">
                               Classified as <span className="font-medium text-ink-800">{g.classification}</span> — no management action plan is required. Confirm the disposition: <span className="font-medium">Approve</span> to close, or <span className="font-medium">Reject</span> to send it back to the Risk Owner to re-assess.
                             </p>
                           </div>
@@ -3189,49 +3189,49 @@ export function BulkReviewDrawer({
 
                         {/* Action taken — completion review only */}
                         {g.stage === 'completion' && g.completion && (
-                          <div className="rounded-[10px] border border-compliant/30 bg-compliant-50/30 p-3">
+                          <div className="rounded-lg border border-compliant/30 bg-compliant-50/30 p-3">
                             <SectionLabel>Action Taken — Risk Owner</SectionLabel>
                             {g.completion.selfAssessment && (
                               <div className="mb-2">
-                                <span className="text-[11px] text-ink-500 mr-1.5">Risk Owner reports:</span>
+                                <span className="text-[0.6875rem] text-ink-500 mr-1.5">Risk Owner reports:</span>
                                 <Pill className={g.completion.selfAssessment === 'Implemented' ? 'bg-compliant-50 text-compliant-700 border border-compliant/40' : 'bg-mitigated-50 text-mitigated-700 border border-mitigated/40'}>
                                   {g.completion.selfAssessment}
                                 </Pill>
                               </div>
                             )}
-                            <p className="text-[12px] text-ink-700 leading-relaxed">{g.completion.note}</p>
+                            <p className="text-[0.75rem] text-ink-700 leading-relaxed">{g.completion.note}</p>
                             {g.completion.evidence.length > 0 && (
                               <div className="flex flex-wrap gap-1.5 mt-2">
                                 {g.completion.evidence.map((ev, i) => (
-                                  <span key={i} className="inline-flex items-center gap-1.5 h-6 px-2 bg-white border border-canvas-border rounded-full text-[11px] text-ink-700">
+                                  <span key={i} className="inline-flex items-center gap-1.5 h-6 px-2 bg-white border border-canvas-border rounded-full text-[0.6875rem] text-ink-700">
                                     <Paperclip size={10} className="text-brand-600" /> {ev.name}
                                   </span>
                                 ))}
                               </div>
                             )}
-                            {g.completion.completedAt && <p className="text-[11px] text-ink-400 mt-1.5">Marked complete on {g.completion.completedAt}</p>}
-                            {scopeCount(g) > 1 && <p className="text-[11px] text-ink-400 mt-1.5">Applies to {scopeCount(g)} linked case{scopeCount(g) === 1 ? '' : 's'}.</p>}
+                            {g.completion.completedAt && <p className="text-[0.6875rem] text-ink-400 mt-1.5">Marked complete on {g.completion.completedAt}</p>}
+                            {scopeCount(g) > 1 && <p className="text-[0.6875rem] text-ink-400 mt-1.5">Applies to {scopeCount(g)} linked case{scopeCount(g) === 1 ? '' : 's'}.</p>}
                           </div>
                         )}
 
                         {/* Decision */}
                         <div>
-                          <label className="block text-[12px] font-semibold text-ink-800 mb-2">Your decision{scopeCount(g) > 1 ? ` · applies to ${scopeCount(g)} cases` : ''}</label>
+                          <label className="block text-[0.75rem] font-semibold text-ink-800 mb-2">Your decision{scopeCount(g) > 1 ? ` · applies to ${scopeCount(g)} cases` : ''}</label>
                           <div className="grid grid-cols-2 gap-2">
-                            <button onClick={() => choose(g, 'approve')} className={`h-9 text-[12px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${st.decision === 'approve' ? 'bg-compliant text-white border-compliant' : 'bg-compliant-50 border-compliant text-compliant-700 hover:bg-compliant hover:text-white'}`}>
+                            <button onClick={() => choose(g, 'approve')} className={`h-9 text-[0.75rem] font-semibold rounded-md border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${st.decision === 'approve' ? 'bg-compliant text-white border-compliant' : 'bg-compliant-50 border-compliant text-compliant-700 hover:bg-compliant hover:text-white'}`}>
                               <CheckCircle2 size={13} /> {STAGE_META[g.stage].approve}
                             </button>
-                            <button onClick={() => choose(g, 'reject')} className={`h-9 text-[12px] font-semibold rounded-[8px] border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${st.decision === 'reject' ? 'bg-risk text-white border-risk' : 'bg-risk-50 border-risk text-risk-700 hover:bg-risk hover:text-white'}`}>
+                            <button onClick={() => choose(g, 'reject')} className={`h-9 text-[0.75rem] font-semibold rounded-md border transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${st.decision === 'reject' ? 'bg-risk text-white border-risk' : 'bg-risk-50 border-risk text-risk-700 hover:bg-risk hover:text-white'}`}>
                               <XCircle size={13} /> {STAGE_META[g.stage].reject}
                             </button>
                           </div>
 
                           {g.stage === 'completion' && st.decision === 'approve' && (
                             <div className="mt-2.5">
-                              <label className="block text-[11.5px] font-medium text-ink-700 mb-1.5">Implementation status <span className="text-risk">*</span></label>
+                              <label className="block text-[0.71875rem] font-medium text-ink-700 mb-1.5">Implementation status <span className="text-risk">*</span></label>
                               <div className="grid grid-cols-2 gap-2">
                                 {(['Implemented', 'Partially Implemented'] as const).map(s => (
-                                  <button key={s} onClick={() => setImpl(g, s)} className={`h-9 text-[12px] font-medium rounded-[8px] border transition-colors cursor-pointer ${st.implementation === s ? 'bg-brand-50 border-brand-600 text-brand-700' : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-200'}`}>
+                                  <button key={s} onClick={() => setImpl(g, s)} className={`h-9 text-[0.75rem] font-medium rounded-md border transition-colors cursor-pointer ${st.implementation === s ? 'bg-brand-50 border-brand-600 text-brand-700' : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-200'}`}>
                                     {s}
                                   </button>
                                 ))}
@@ -3241,13 +3241,13 @@ export function BulkReviewDrawer({
 
                           {st.decision && (
                             <div className="mt-2.5">
-                              <label className="block text-[11.5px] font-medium text-ink-700 mb-1.5">Comment {g.stage === 'completion' && <span className="text-risk">*</span>}</label>
-                              <textarea value={st.comment} onChange={(e) => setGroup(g.key, { comment: e.target.value })} rows={2} placeholder={g.stage === 'completion' ? 'Required — captured in the ATR…' : 'Add a comment (optional)…'} className="w-full resize-none p-2.5 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20" />
+                              <label className="block text-[0.71875rem] font-medium text-ink-700 mb-1.5">Comment {g.stage === 'completion' && <span className="text-risk">*</span>}</label>
+                              <textarea value={st.comment} onChange={(e) => setGroup(g.key, { comment: e.target.value })} rows={2} placeholder={g.stage === 'completion' ? 'Required — captured in the ATR…' : 'Add a comment (optional)…'} className="w-full resize-none p-2.5 bg-canvas-elevated border border-canvas-border rounded-md text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20" />
                               {g.stage === 'completion' && (
-                                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-brand-700"><FileText size={11} className="shrink-0" /> Captured in the Action Taken Report (ATR).</p>
+                                <p className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-brand-700"><FileText size={11} className="shrink-0" /> Captured in the Action Taken Report (ATR).</p>
                               )}
                               {v === 'invalid' && (
-                                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-mitigated-700"><AlertTriangle size={11} className="shrink-0" />{st.decision === 'approve' && !st.implementation ? 'Select an implementation status.' : 'A comment is required for this decision.'}</p>
+                                <p className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-mitigated-700"><AlertTriangle size={11} className="shrink-0" />{st.decision === 'approve' && !st.implementation ? 'Select an implementation status.' : 'A comment is required for this decision.'}</p>
                               )}
                             </div>
                           )}
@@ -3265,7 +3265,7 @@ export function BulkReviewDrawer({
         })}
 
         {pendingCount > 0 && (
-          <p className="mt-4 text-[11.5px] text-ink-500 leading-snug">
+          <p className="mt-4 text-[0.71875rem] text-ink-500 leading-snug">
             {pendingCount} undecided plan{pendingCount === 1 ? '' : 's'} will stay pending — you can submit the decided ones now and return to the rest later.
           </p>
         )}
@@ -3274,21 +3274,21 @@ export function BulkReviewDrawer({
         {/* Step 2 · Confirm — a reviewable summary table of every decision. */}
         {stepIdx === 1 && (
           <div>
-            <div className="mb-4 rounded-[12px] border border-canvas-border bg-[#FAFAFB] p-3.5">
-              <div className="text-[12.5px] font-semibold text-ink-800 mb-1">Confirm your review</div>
-              <p className="text-[11.5px] text-ink-500 leading-snug">
+            <div className="mb-4 rounded-lg border border-canvas-border bg-[#FAFAFB] p-3.5">
+              <div className="text-[0.78125rem] font-semibold text-ink-800 mb-1">Confirm your review</div>
+              <p className="text-[0.71875rem] text-ink-500 leading-snug">
                 Submitting records {decidedValid.length} decision{decidedValid.length === 1 ? '' : 's'} across {reviewedCaseCount} case{reviewedCaseCount === 1 ? '' : 's'}.{pendingCount > 0 ? ` ${pendingCount} undecided plan${pendingCount === 1 ? '' : 's'} stay pending.` : ''} Review and Submit, or go Back to change anything.
               </p>
             </div>
             <SectionLabel>Decisions ({decidedValid.length})</SectionLabel>
-            <div className="border border-canvas-border rounded-[12px] overflow-hidden">
-              <table className="w-full text-[12.5px]">
+            <div className="border border-canvas-border rounded-lg overflow-hidden">
+              <table className="w-full text-[0.78125rem]">
                 <thead>
                   <tr className="bg-[#FAFAFB] border-b border-canvas-border text-left text-ink-500 uppercase tracking-wider">
-                    <th className="px-4 py-2.5 font-medium text-[10.5px]">Action Plan</th>
-                    <th className="px-4 py-2.5 font-medium text-[10.5px]">Decision</th>
-                    <th className="px-4 py-2.5 font-medium text-[10.5px] text-center">Cases</th>
-                    <th className="px-4 py-2.5 font-medium text-[10.5px]">Comment</th>
+                    <th className="px-4 py-2.5 font-medium text-[0.65625rem]">Action Plan</th>
+                    <th className="px-4 py-2.5 font-medium text-[0.65625rem]">Decision</th>
+                    <th className="px-4 py-2.5 font-medium text-[0.65625rem] text-center">Cases</th>
+                    <th className="px-4 py-2.5 font-medium text-[0.65625rem]">Comment</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3300,10 +3300,10 @@ export function BulkReviewDrawer({
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
                             {g.actionableId
-                              ? <span className="inline-flex items-center gap-0.5 font-mono font-semibold text-brand-700 text-[12px]"><Hash size={10} />{g.actionableId}</span>
+                              ? <span className="inline-flex items-center gap-0.5 font-mono font-semibold text-brand-700 text-[0.75rem]"><Hash size={10} />{g.actionableId}</span>
                               : <Pill className={CLASSIFICATION_STYLE[g.classification]}>{g.classification}</Pill>}
                           </div>
-                          <div className="text-[11px] text-ink-500 mt-0.5">{STAGE_META[g.stage].label} · {scopeCount(g)} case{scopeCount(g) === 1 ? '' : 's'}</div>
+                          <div className="text-[0.6875rem] text-ink-500 mt-0.5">{STAGE_META[g.stage].label} · {scopeCount(g)} case{scopeCount(g) === 1 ? '' : 's'}</div>
                         </td>
                         <td className="px-4 py-3">
                           <Pill className={approved ? 'bg-compliant-50 text-compliant-700' : 'bg-risk-50 text-risk-700'}>
@@ -3369,17 +3369,17 @@ function LinkedScopeModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[92vw] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[71] flex flex-col max-h-[82vh]"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[92vw] bg-canvas-elevated rounded-xl shadow-xl border border-canvas-border z-[71] flex flex-col max-h-[82vh]"
         role="dialog"
         aria-label="Choose linked exceptions"
       >
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full"><LinkIcon size={11} /> Linked</span>
-              <h2 className="font-display text-[18px] font-semibold text-ink-900 tracking-tight">Linked Exceptions</h2>
+              <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[0.65625rem] font-semibold bg-brand-50 text-brand-700 rounded-full"><LinkIcon size={11} /> Linked</span>
+              <h2 className="font-display text-[1.125rem] font-semibold text-ink-900 tracking-tight">Linked Exceptions</h2>
             </div>
-            <p className="text-[12.5px] text-ink-500 leading-snug">
+            <p className="text-[0.78125rem] text-ink-500 leading-snug">
               {actionableId && <span className="font-mono tabular-nums">ID: {actionableId} · </span>}{cases.length} linked cases · choose which this review applies to
             </p>
           </div>
@@ -3392,9 +3392,9 @@ function LinkedScopeModal({
           <button
             type="button"
             onClick={toggleAll}
-            className="inline-flex items-center gap-2 text-[12.5px] font-medium text-ink-700 cursor-pointer"
+            className="inline-flex items-center gap-2 text-[0.78125rem] font-medium text-ink-700 cursor-pointer"
           >
-            <span className={`w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0 ${
+            <span className={`w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0 ${
               allSelected ? 'bg-brand-600 border-brand-600 text-white' : count > 0 ? 'bg-brand-50 border-brand-300 text-brand-600' : 'bg-canvas-elevated border-canvas-border'
             }`}>
               {allSelected ? <Check size={12} strokeWidth={3} /> : count > 0 ? <span className="w-2 h-0.5 bg-brand-600 rounded" /> : null}
@@ -3404,7 +3404,7 @@ function LinkedScopeModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 pb-4">
-          <div className="border border-canvas-border rounded-[12px] divide-y divide-canvas-border overflow-hidden">
+          <div className="border border-canvas-border rounded-lg divide-y divide-canvas-border overflow-hidden">
             {cases.map((c) => {
               const checked = sel.has(c.id);
               return (
@@ -3414,15 +3414,15 @@ function LinkedScopeModal({
                   onClick={() => toggle(c.id)}
                   className="w-full flex items-center gap-3 px-4 py-3 text-left cursor-pointer hover:bg-paper-50/70 transition-colors"
                 >
-                  <span className={`w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0 ${checked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-canvas-elevated border-canvas-border'}`}>
+                  <span className={`w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0 ${checked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-canvas-elevated border-canvas-border'}`}>
                     {checked && <Check size={12} strokeWidth={3} />}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-mono font-medium text-brand-700 text-[12.5px]">{c.id}</span>
-                      {c.id === primary && <span className="text-[10px] font-semibold text-ink-500 bg-[#F4F2F7] rounded-full px-1.5 h-4 inline-flex items-center">Primary</span>}
+                      <span className="font-mono font-medium text-brand-700 text-[0.78125rem]">{c.id}</span>
+                      {c.id === primary && <span className="text-[0.625rem] font-semibold text-ink-500 bg-[#F4F2F7] rounded-full px-1.5 h-4 inline-flex items-center">Primary</span>}
                     </div>
-                    <div className="text-[12px] text-ink-600 truncate mt-0.5">{c.title}</div>
+                    <div className="text-[0.75rem] text-ink-600 truncate mt-0.5">{c.title}</div>
                   </div>
                   <Pill className="bg-mitigated-50 text-mitigated-700">{c.statusLabel}</Pill>
                 </button>
@@ -3432,13 +3432,13 @@ function LinkedScopeModal({
         </div>
 
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center gap-2">
-          <button onClick={onClose} className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer">
+          <button onClick={onClose} className="flex-1 h-10 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer">
             Cancel
           </button>
           <button
             onClick={() => count > 0 && onApply(cases.filter(c => sel.has(c.id)).map(c => c.id))}
             disabled={count === 0}
-            className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+            className={`flex-[2] h-10 text-[0.8125rem] font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 ${
               count > 0 ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
             }`}
           >
@@ -3525,17 +3525,17 @@ export function BulkScopeChooser({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] max-w-[92vw] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col max-h-[82vh]"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] max-w-[92vw] bg-canvas-elevated rounded-xl shadow-xl border border-canvas-border z-[60] flex flex-col max-h-[82vh]"
         role="dialog"
         aria-label="Choose cases for this bulk action"
       >
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[10.5px] font-semibold bg-brand-50 text-brand-700 rounded-full"><LinkIcon size={11} /> Bulk</span>
-              <h2 className="text-[19px] font-semibold text-ink-900 tracking-tight truncate">{actionLabel}</h2>
+              <span className="inline-flex items-center gap-1.5 h-5 px-2 text-[0.65625rem] font-semibold bg-brand-50 text-brand-700 rounded-full"><LinkIcon size={11} /> Bulk</span>
+              <h2 className="text-[1.1875rem] font-semibold text-ink-900 tracking-tight truncate">{actionLabel}</h2>
             </div>
-            <p className="text-[12.5px] text-ink-500 leading-snug">
+            <p className="text-[0.78125rem] text-ink-500 leading-snug">
               <span className="font-mono tabular-nums">ID: {groupId}</span> · {candidates.length} linked cases{groupTitle ? <> · <span className="text-ink-600">{groupTitle}</span></> : null}
             </p>
           </div>
@@ -3545,32 +3545,32 @@ export function BulkScopeChooser({
         </header>
 
         <div className="px-6 pt-4 pb-2">
-          <p className="text-[12.5px] text-ink-600 leading-relaxed mb-3">
+          <p className="text-[0.78125rem] text-ink-600 leading-relaxed mb-3">
             This case is part of a bulk action. Choose which linked cases this <span className="font-medium text-ink-800">{actionLabel.toLowerCase()}</span> applies to{commonClassification ? '.' : ' — review each case’s classification and submitted plan before you decide.'}
           </p>
 
           {/* Shared classification + plan — the group was classified together, so
               show it once here rather than repeating it on every linked case. */}
           {commonClassification && (
-            <div className="mb-3 rounded-[12px] border border-brand-100 bg-brand-50/60 p-3.5">
+            <div className="mb-3 rounded-lg border border-brand-100 bg-brand-50/60 p-3.5">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">Classification</span>
+                  <span className="text-[0.65625rem] font-semibold uppercase tracking-wider text-ink-500">Classification</span>
                   <Pill className={CLASSIFICATION_STYLE[commonClassification]}>{commonClassification}</Pill>
                 </div>
                 {sharedActionableId && (
-                  <span className="inline-flex items-center gap-1 font-mono font-semibold text-brand-700 text-[12px]">
+                  <span className="inline-flex items-center gap-1 font-mono font-semibold text-brand-700 text-[0.75rem]">
                     <Hash size={11} />{sharedActionableId}
                   </span>
                 )}
               </div>
               {sharedPlan && (
                 <div className="mt-2.5 flex items-center justify-between gap-3 flex-wrap">
-                  <p className="text-[11.5px] text-ink-600 leading-snug">The same management action plan applies to all linked cases.</p>
+                  <p className="text-[0.71875rem] text-ink-600 leading-snug">The same management action plan applies to all linked cases.</p>
                   <button
                     type="button"
                     onClick={() => setViewPlanId(commonPlanCaseId)}
-                    className="shrink-0 inline-flex items-center gap-1 text-[12px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
+                    className="shrink-0 inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
                   >
                     <FileText size={12} /> View Management Action Plan
                     <ExternalLink size={11} />
@@ -3583,9 +3583,9 @@ export function BulkScopeChooser({
           <button
             type="button"
             onClick={toggleAll}
-            className="inline-flex items-center gap-2 mb-1 text-[12.5px] font-medium text-ink-700 cursor-pointer"
+            className="inline-flex items-center gap-2 mb-1 text-[0.78125rem] font-medium text-ink-700 cursor-pointer"
           >
-            <span className={`w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0 ${
+            <span className={`w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0 ${
               allSelected ? 'bg-brand-600 border-brand-600 text-white' : count > 1 ? 'bg-brand-50 border-brand-300 text-brand-600' : 'bg-canvas-elevated border-canvas-border'
             }`}>
               {allSelected ? <Check size={12} strokeWidth={3} /> : count > 1 ? <span className="w-2 h-0.5 bg-brand-600 rounded" /> : null}
@@ -3595,7 +3595,7 @@ export function BulkScopeChooser({
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 pb-4">
-          <div className="border border-canvas-border rounded-[12px] divide-y divide-canvas-border overflow-hidden">
+          <div className="border border-canvas-border rounded-lg divide-y divide-canvas-border overflow-hidden">
             {candidates.map((c) => {
               const checked = selected.has(c.id) && c.eligible;
               const locked = c.isOpened; // opened is always on and cannot be toggled
@@ -3612,19 +3612,19 @@ export function BulkScopeChooser({
                         c.eligible ? (locked ? 'cursor-default' : 'cursor-pointer') : 'cursor-not-allowed'
                       }`}
                     >
-                      <span className={`w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0 ${
+                      <span className={`w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0 ${
                         checked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-canvas-elevated border-canvas-border'
                       }`}>
                         {checked && <Check size={12} strokeWidth={3} />}
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-mono font-medium text-brand-700 text-[12.5px]">{c.id}</span>
-                          {c.isOpened && <span className="text-[10px] font-semibold text-ink-500 bg-[#F4F2F7] rounded-full px-1.5 h-4 inline-flex items-center">This case</span>}
-                          {!checked && c.eligible && !locked && <span className="text-[10px] font-semibold text-ink-400">Deselected</span>}
+                          <span className="font-mono font-medium text-brand-700 text-[0.78125rem]">{c.id}</span>
+                          {c.isOpened && <span className="text-[0.625rem] font-semibold text-ink-500 bg-[#F4F2F7] rounded-full px-1.5 h-4 inline-flex items-center">This case</span>}
+                          {!checked && c.eligible && !locked && <span className="text-[0.625rem] font-semibold text-ink-400">Deselected</span>}
                           {!commonClassification && <Pill className={CLASSIFICATION_STYLE[c.classification]}>{c.classification}</Pill>}
                         </div>
-                        <div className="text-[12px] text-ink-600 truncate mt-0.5">{c.title}</div>
+                        <div className="text-[0.75rem] text-ink-600 truncate mt-0.5">{c.title}</div>
                       </div>
                     </button>
                     <Pill className={c.eligible ? 'bg-mitigated-50 text-mitigated-700' : 'bg-[#EEEEF1] text-ink-500'}>{c.statusLabel}</Pill>
@@ -3634,7 +3634,7 @@ export function BulkScopeChooser({
                       <button
                         type="button"
                         onClick={() => setViewPlanId(c.id)}
-                        className="inline-flex items-center gap-1 text-[12px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
+                        className="inline-flex items-center gap-1 text-[0.75rem] font-medium text-brand-700 hover:text-brand-600 cursor-pointer"
                       >
                         <FileText size={12} /> View Management Action Plan
                         <ExternalLink size={11} />
@@ -3648,13 +3648,13 @@ export function BulkScopeChooser({
         </div>
 
         <footer className="shrink-0 px-6 py-4 border-t border-canvas-border flex items-center gap-2">
-          <button onClick={onClose} className="flex-1 h-10 text-[13px] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-[8px] hover:border-brand-200 transition-colors cursor-pointer">
+          <button onClick={onClose} className="flex-1 h-10 text-[0.8125rem] font-medium text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:border-brand-200 transition-colors cursor-pointer">
             Cancel
           </button>
           <button
             onClick={() => count > 0 && onConfirm(chosen.map(c => c.id))}
             disabled={count === 0}
-            className={`flex-[2] h-10 text-[13px] font-semibold rounded-[8px] transition-colors flex items-center justify-center gap-1.5 ${
+            className={`flex-[2] h-10 text-[0.8125rem] font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 ${
               count > 0 ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer' : 'bg-brand-600/50 text-white/80 cursor-not-allowed'
             }`}
           >
@@ -3702,14 +3702,14 @@ export function BulkActionGroupModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.98, y: 8 }}
         transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] max-w-[92vw] bg-canvas-elevated rounded-[16px] shadow-xl border border-canvas-border z-[60] flex flex-col max-h-[82vh]"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] max-w-[92vw] bg-canvas-elevated rounded-xl shadow-xl border border-canvas-border z-[60] flex flex-col max-h-[82vh]"
         role="dialog"
         aria-label="Bulk Action Group"
       >
         <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div>
-            <h2 className="text-[20px] font-semibold text-ink-900 tracking-tight">Bulk Action Group</h2>
-            <p className="text-[12.5px] text-ink-500 mt-0.5 font-mono tabular-nums">
+            <h2 className="text-[1.25rem] font-semibold text-ink-900 tracking-tight">Bulk Action Group</h2>
+            <p className="text-[0.78125rem] text-ink-500 mt-0.5 font-mono tabular-nums">
               ID: {bulk.id} · {cases.length} cases
             </p>
           </div>
@@ -3722,13 +3722,13 @@ export function BulkActionGroupModal({
           </button>
         </header>
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          <div className="border border-canvas-border rounded-[12px] overflow-hidden">
-            <table className="w-full text-[12.5px]">
+          <div className="border border-canvas-border rounded-lg overflow-hidden">
+            <table className="w-full text-[0.78125rem]">
               <thead>
                 <tr className="bg-[#FAFAFB] border-b border-canvas-border text-left text-ink-500 uppercase tracking-wider">
-                  <th className="px-4 py-3 font-medium text-[10.5px]">Exception ID</th>
-                  <th className="px-4 py-3 font-medium text-[10.5px]">Classification</th>
-                  <th className="px-4 py-3 font-medium text-[10.5px]">Action Review Status</th>
+                  <th className="px-4 py-3 font-medium text-[0.65625rem]">Exception ID</th>
+                  <th className="px-4 py-3 font-medium text-[0.65625rem]">Classification</th>
+                  <th className="px-4 py-3 font-medium text-[0.65625rem]">Action Review Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -3739,7 +3739,7 @@ export function BulkActionGroupModal({
                   return (
                     <tr key={c.id} className="border-b border-canvas-border last:border-b-0">
                       <td className="px-4 py-3 align-middle">
-                        <span className="font-mono font-medium text-brand-700 text-[12.5px]">{c.id}</span>
+                        <span className="font-mono font-medium text-brand-700 text-[0.78125rem]">{c.id}</span>
                       </td>
                       <td className="px-4 py-3 align-middle">
                         <Pill className={CLASSIFICATION_STYLE[c.classification]}>{c.classification}</Pill>

@@ -29,7 +29,7 @@ export default function UsageHeatmap({ data }: { data: UsageHeatmapData }) {
                 <div
                   key={h}
                   title={`${DAY_LABELS[dow]} ${fmtHour(h)} · ${v.toLocaleString('en-US')} action${v !== 1 ? 's' : ''}`}
-                  className="h-4 rounded-[3px]"
+                  className="h-4 rounded-xs"
                   style={{ backgroundColor: v === 0 ? 'rgba(106,18,205,0.04)' : `rgba(106,18,205,${0.08 + 0.72 * (v / max)})` }}
                 />
               ))}
@@ -51,7 +51,7 @@ export default function UsageHeatmap({ data }: { data: UsageHeatmapData }) {
       <div className="mt-3 flex items-center gap-1.5 text-[0.625rem] text-ink-400">
         Less
         {[0.08, 0.26, 0.44, 0.62, 0.8].map(a => (
-          <span key={a} className="w-3 h-3 rounded-[3px]" style={{ backgroundColor: `rgba(106,18,205,${a})` }} />
+          <span key={a} className="w-3 h-3 rounded-xs" style={{ backgroundColor: `rgba(106,18,205,${a})` }} />
         ))}
         More
       </div>

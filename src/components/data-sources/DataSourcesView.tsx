@@ -486,7 +486,7 @@ function SourceRow({
                 onToggleSelect(source.id, { shift: e.shiftKey });
               }
             }}
-            className={`absolute inset-0 m-auto w-4 h-4 rounded-[5px] border flex items-center justify-center transition-opacity duration-150 cursor-pointer ${
+            className={`absolute inset-0 m-auto w-4 h-4 rounded-sm border flex items-center justify-center transition-opacity duration-150 cursor-pointer ${
               selected
                 ? 'bg-brand-600 border-brand-600 text-white opacity-100'
                 : isSelecting
@@ -1519,7 +1519,7 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
         >
           <Plus size={14} />
           Add source
-          <kbd className="hidden sm:inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded bg-white/20 text-white/95 font-mono text-[10px] leading-none">
+          <kbd className="hidden sm:inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded bg-white/20 text-white/95 font-mono text-[0.625rem] leading-none">
             N
           </kbd>
         </button>
