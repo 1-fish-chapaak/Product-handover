@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import { seedIcfrEngagement, type SeedMeta } from './mockData';
+import { requiredDatasetsFor, seedIcfrEngagement, type SeedMeta } from './mockData';
 import { validationQA, validationSummary, validationTable } from './helpers';
 import type {
-  Attestation, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
-  EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, HandoffTask, IcfrEngagement,
-  MaterialityRules, OperatingStep, Override, Population, RacmReview, Role, Sampling, TestResult, TrackConclusion,
+  Assertion, Attestation, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
+  EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
+  MaterialityRules, Nature, OperatingStep, Override, Population, RacmReview, Role, RunControlOutcome, RunRecord,
+  Sampling, TestResult, TrackConclusion,
 } from './types';
 
 let _uid = 0;
@@ -14,13 +15,31 @@ type ExecDraft = { controlId: string; track: 'design' | 'operating'; kind: ExecK
 const short = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 import { ROLE_LABEL } from './types';
 
-// The four primary tabs — mirrors how other engagements are laid out.
-export type SoxTab = 'overview' | 'racm' | 'risks' | 'controls';
-// 'overview' | 'racm' | 'risks' | 'register'(=Control Library) are the tab roots; the rest are drill-ins.
-type View = 'overview' | 'racm' | 'racm-editor' | 'risks' | 'register' | 'dossier' | 'deficiencies' | 'scope' | 'setup';
+// The five primary tabs — mirrors how other engagements are laid out.
+export type SoxTab = 'overview' | 'racm' | 'risks' | 'controls' | 'runs';
+// 'overview' | 'racm'(card) | 'racm-list'(matrix) | 'risks' | 'register'(=Control Library) | 'runs'
+// are root-level views; the rest are drill-ins reached from them.
+type View = 'overview' | 'racm' | 'racm-list' | 'racm-editor' | 'risks' | 'register' | 'runs' | 'dossier' | 'deficiencies' | 'scope';
 export interface RacmEditorMeta { name: string; process?: string }
 
-const TAB_ROOT: Record<SoxTab, View> = { overview: 'overview', racm: 'racm', risks: 'risks', controls: 'register' };
+const TAB_ROOT: Record<SoxTab, View> = { overview: 'overview', racm: 'racm', risks: 'risks', controls: 'register', runs: 'runs' };
+
+/** What a drill-in can return to — everything except the drill-ins themselves. */
+const RETURNABLE: View[] = ['overview', 'racm', 'racm-list', 'risks', 'register', 'runs', 'deficiencies', 'scope'];
+
+/** The create-control form's payload — everything else on the Control is derived. */
+export interface NewControlDraft {
+  description: string;
+  process: string;
+  subProcess: string;
+  riskId: string;
+  riskDescription: string;
+  nature: Nature;
+  frequency: Frequency;
+  owner: string;
+  isKey: boolean;
+  assertions: Assertion[];
+}
 
 interface IcfrCtx {
   eng: IcfrEngagement;
@@ -30,9 +49,11 @@ interface IcfrCtx {
   selectedControlId: string | null;
   racmEditor: RacmEditorMeta | null;
   me: string;
+  racmProcess: string | null;
   setRole: (r: Role) => void;
   setTab: (t: SoxTab) => void;
   setView: (v: View) => void;
+  openRacmMatrix: (process: string) => void;
   openRacmEditor: (meta: RacmEditorMeta) => void;
   openControl: (id: string) => void;
   back: () => void;
@@ -90,9 +111,9 @@ interface IcfrCtx {
   setExceptionStatus: (id: string, status: ExceptionStatus) => void;
   recordRetest: (id: string, result: 'Pass' | 'Fail') => void;
   signOffException: (id: string) => void;
-  togglePeriod: () => void;
-  rollForward: () => void;
-  createEngagement: (eng: IcfrEngagement) => void;
+  // create control + engagement-level sign-off
+  addControl: (draft: NewControlDraft) => string;
+  signOffEngagement: (step: 'preparer' | 'reviewer') => void;
 }
 
 const Ctx = createContext<IcfrCtx | null>(null);
@@ -110,6 +131,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const [view, setView] = useState<View>('overview');
   const [selectedControlId, setSelectedControlId] = useState<string | null>(null);
   const [racmEditor, setRacmEditor] = useState<RacmEditorMeta | null>(null);
+  // Where the open drill-in (dossier / racm-editor) should return to — e.g. the
+  // RACM matrix ('racm-list'), not the tab root card.
+  const [returnView, setReturnView] = useState<View | null>(null);
+  // Which business process's RACM the matrix view shows — one RACM per process.
+  const [racmProcess, setRacmProcess] = useState<string | null>(null);
 
   const me = `You · ${ROLE_LABEL[role]}`;
 
@@ -133,6 +159,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setTabState(t);
     setView(TAB_ROOT[t]);
     setSelectedControlId(null);
+    setReturnView(null);
   }, []);
 
   const changeRole = useCallback((r: Role) => {
@@ -142,12 +169,28 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setSelectedControlId(null);
   }, []);
 
-  // Open a RACM in the full Excel editor (the Process-Hub experience), kept under the RACM tab.
-  const openRacmEditor = useCallback((meta: RacmEditorMeta) => { setRacmEditor(meta); setTabState('racm'); setView('racm-editor'); }, []);
+  // Open one business process's RACM as the full risks & controls matrix.
+  const openRacmMatrix = useCallback((process: string) => {
+    setRacmProcess(process); setTabState('racm'); setView('racm-list');
+  }, []);
 
-  const openControl = useCallback((id: string) => { setSelectedControlId(id); setView('dossier'); }, []);
-  // Drill-ins return to the active tab's root, so the tab bar stays in context.
-  const back = useCallback(() => { setView(TAB_ROOT[tab]); setSelectedControlId(null); }, [tab]);
+  // Open a RACM in the full Excel editor (the Process-Hub experience), kept under the RACM tab.
+  const openRacmEditor = useCallback((meta: RacmEditorMeta) => {
+    setReturnView(RETURNABLE.includes(view) ? view : null);
+    setRacmEditor(meta); setTabState('racm'); setView('racm-editor');
+  }, [view]);
+
+  const openControl = useCallback((id: string) => {
+    setReturnView(RETURNABLE.includes(view) ? view : null);
+    setSelectedControlId(id); setView('dossier');
+  }, [view]);
+  // Drill-ins return to where they were opened from (e.g. the RACM matrix),
+  // falling back to the active tab's root so the tab bar stays in context.
+  const back = useCallback(() => {
+    setView(returnView ?? TAB_ROOT[tab]);
+    setSelectedControlId(null);
+    setReturnView(null);
+  }, [tab, returnView]);
 
   // ── design track ──────────────────────────────────────────────────────────────
   const setDocStatus = useCallback<IcfrCtx['setDocStatus']>((controlId, docId, status) => {
@@ -223,10 +266,37 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => s.id === stepId ? fn(s) : s) } }));
   }, [patchControl]);
 
+  // Append one run record to the registry the Runs tab reads. `make` runs against
+  // fresh post-action state (queued after the action's setEng), like pushExec.
+  const pushRun = useCallback((make: (prev: IcfrEngagement) => Omit<RunRecord, 'id' | 'by' | 'role' | 'at'> | null) => {
+    setEng(prev => {
+      const draft = make(prev);
+      if (!draft) return prev;
+      const run: RunRecord = { id: uid('run'), by: me, role, at: 'just now', ...draft };
+      return { ...prev, runs: [run, ...prev.runs] };
+    });
+  }, [me, role]);
+
+  const controlOutcome = (c: Control): RunControlOutcome => ({
+    controlId: c.id, wpRef: c.wpRef, description: c.description,
+    outcome: c.design.points.some(p => p.result === 'Fail') || c.operating.steps.some(s => s.result === 'Fail') ? 'Ineffective' : 'Effective',
+    checks: c.design.points.length + c.operating.steps.length,
+  });
+
   const pullStepRun = useCallback<IcfrCtx['pullStepRun']>((controlId, stepId) => {
     patchStep(controlId, stepId, s => ({ ...s, workflowRunRef: 'run · just now · 0 exceptions', result: s.result === 'Not tested' ? 'Pass' : s.result }));
     pushExec(prev => { const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(st => st.id === stepId); return s ? { controlId, track: 'operating', kind: 'pull-run', verb: 'pulled a workflow run', target: s.code, result: s.result } : null; });
-  }, [patchStep, pushExec]);
+    pushRun(prev => {
+      const c = prev.controls.find(cc => cc.id === controlId);
+      const s = c?.operating.steps.find(st => st.id === stepId);
+      if (!c || !s) return null;
+      return {
+        kind: 'workflow-run', label: `Workflow run — ${s.workflowName ?? s.code}`,
+        detail: `${c.wpRef} · ${s.code} · ${s.workflowRunRef ?? 'run · just now'}`,
+        controls: [{ controlId: c.id, wpRef: c.wpRef, description: c.description, outcome: s.result === 'Fail' ? 'Ineffective' : 'Effective', checks: 1 }],
+      };
+    });
+  }, [patchStep, pushExec, pushRun]);
 
   const attestStep = useCallback<IcfrCtx['attestStep']>((controlId, stepId, note, result) => {
     patchStep(controlId, stepId, s => {
@@ -276,14 +346,33 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       return { ...s, result: res, workflowRunRef: 'Ask IRA · validated · just now', validation: { result: res, qa: validationQA(s.description, willFail), summary: validationSummary(s.description, willFail), table: validationTable(willFail), fileName: s.inputFile?.name, at: 'just now' } };
     });
     pushExec(prev => { const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(st => st.id === stepId); return s ? { controlId, track: 'operating', kind: 'validate', verb: 'validated against file', target: s.code, result: s.result } : null; });
-  }, [patchStep, pushExec]);
+    pushRun(prev => {
+      const c = prev.controls.find(cc => cc.id === controlId);
+      const s = c?.operating.steps.find(st => st.id === stepId);
+      if (!c || !s) return null;
+      return {
+        kind: 'ai-validation', label: `AI validation — ${c.wpRef} · ${s.code}`,
+        detail: s.inputFile ? `Checked against ${s.inputFile.name}` : 'Checked against attached evidence',
+        controls: [{ controlId: c.id, wpRef: c.wpRef, description: c.description, outcome: s.result === 'Fail' ? 'Ineffective' : 'Effective', checks: 1 }],
+      };
+    });
+  }, [patchStep, pushExec, pushRun]);
   const testAllAttributes = useCallback<IcfrCtx['testAllAttributes']>((controlId) => {
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => {
       const res: TestResult = s.result === 'Fail' || s.override?.result === 'Fail' ? 'Fail' : 'Pass';
       return { ...s, result: res, workflowRunRef: s.workflowName ? (s.workflowRunRef ?? 'run · just now · 0 exceptions') : s.workflowRunRef };
     }) } }));
     pushExec(prev => { const steps = prev.controls.find(cc => cc.id === controlId)?.operating.steps; return steps && steps.length ? { controlId, track: 'operating', kind: 'test-all', verb: 'tested all attributes', target: `${steps.length} attribute${steps.length === 1 ? '' : 's'}`, result: steps.some(s => s.result === 'Fail') ? 'Fail' : 'Pass' } : null; });
-  }, [patchControl, pushExec]);
+    pushRun(prev => {
+      const c = prev.controls.find(cc => cc.id === controlId);
+      if (!c || !c.operating.steps.length) return null;
+      return {
+        kind: 'control-test', label: `Control test — ${c.wpRef}`,
+        detail: `${c.operating.steps.length} operating attribute${c.operating.steps.length === 1 ? '' : 's'} tested`,
+        controls: [controlOutcome(c)],
+      };
+    });
+  }, [patchControl, pushExec, pushRun]);
 
   const concludeOperating = useCallback<IcfrCtx['concludeOperating']>((controlId, conclusion) => {
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, conclusion, testedBy: me, testedAt: 'just now' } }));
@@ -341,7 +430,17 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           operating: steps.length ? { ...c.operating, steps, conclusion: opConcl, override: undefined, testedBy: me, testedAt: 'just now' } : c.operating,
         };
       });
-      return { ...prev, controls, executions: [...execs, ...prev.executions] };
+      // one run record for the whole bulk run — the Runs tab's registry entry
+      const tested = controls.filter(c => ids.has(c.id));
+      const outcomes = tested.map(controlOutcome);
+      const datasets = Array.from(new Set(tested.flatMap(c => requiredDatasetsFor(c).map(d => d.name))));
+      const run: RunRecord = {
+        id: uid('run'), kind: 'bulk-test',
+        label: `Bulk test — ${outcomes.length} control${outcomes.length === 1 ? '' : 's'}`,
+        detail: `${outcomes.reduce((n, o) => n + o.checks, 0)} checks · ${datasets.length} dataset${datasets.length === 1 ? '' : 's'}`,
+        controls: outcomes, datasets, by: me, role, at: 'just now',
+      };
+      return { ...prev, controls, executions: [...execs, ...prev.executions], runs: [run, ...prev.runs] };
     });
   }, [me, role]);
 
@@ -421,29 +520,54 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, signoff: { by: me, at: 'just now' }, status: 'Closed' } : d) }));
   }, [me]);
 
-  const togglePeriod = useCallback(() => {
-    setEng(prev => ({ ...prev, period: prev.period === 'Interim' ? 'Year-end' : 'Interim' }));
-  }, []);
+  // Create a control from the focused form — W/P ref and ID continue the
+  // process's existing numbering; the control lands ready to test.
+  const addControl = useCallback<IcfrCtx['addControl']>((draft) => {
+    const inProc = eng.controls.filter(c => c.process === draft.process);
+    const wpPrefix = inProc[0]?.wpRef.split('-')[0]
+      ?? (draft.process.split(/\s+/).map(w => w[0]?.toUpperCase() ?? '').join('').slice(0, 2) || 'C');
+    const nums = eng.controls
+      .filter(c => c.wpRef.startsWith(`${wpPrefix}-`))
+      .map(c => parseInt(c.wpRef.slice(wpPrefix.length + 1), 10))
+      .filter(n => !Number.isNaN(n));
+    const next = (nums.length ? Math.max(...nums) : 0) + 1;
+    const wpRef = `${wpPrefix}-${String(next).padStart(2, '0')}`;
+    const idBase = inProc[0]?.id.replace(/-\d+$/, '') ?? `${wpPrefix}-C`;
+    let id = `${idBase}-${String(next).padStart(2, '0')}`;
+    if (eng.controls.some(c => c.id === id)) id = uid(idBase);
+    const control: Control = {
+      id, wpRef, description: draft.description, process: draft.process,
+      subProcess: draft.subProcess.trim() || 'General',
+      nature: draft.nature, type: 'Preventive', frequency: draft.frequency,
+      isKey: draft.isKey, precision: draft.description, owner: draft.owner,
+      riskId: draft.riskId, riskDescription: draft.riskDescription,
+      assertions: draft.assertions.length ? draft.assertions : ['Accuracy'],
+      design: {
+        documents: [
+          { id: uid('dd'), kind: 'Process narrative', name: 'Process narrative — to provide', status: 'Missing' },
+          { id: uid('dd'), kind: 'Control description', name: 'Control description — to provide', status: 'Missing' },
+        ],
+        points: [], conclusion: 'Not tested', testedBy: null, testedAt: null,
+      },
+      operating: { method: 'Manual', steps: [], conclusion: 'Not tested', testedBy: null, testedAt: null },
+    };
+    setEng(prev => ({ ...prev, controls: [...prev.controls, control] }));
+    return id;
+  }, [eng.controls]);
 
-  const rollForward = useCallback(() => {
+  // Preparer signs first, reviewer countersigns — names come from the engagement record.
+  const signOffEngagement = useCallback<IcfrCtx['signOffEngagement']>((step) => {
     setEng(prev => ({
       ...prev,
-      period: 'Year-end',
-      controls: prev.controls.map(c => {
-        // design carries forward; operating re-tests unless automated + benchmarkable
-        if (c.nature === 'Automated') return c;
-        return { ...c, operating: { ...c.operating, conclusion: 'Not tested', override: undefined, testedBy: null, testedAt: null, steps: c.operating.steps.map(s => ({ ...s, result: 'Not tested', override: undefined })) } };
-      }),
+      signoff: step === 'preparer'
+        ? { ...prev.signoff, preparer: { by: prev.preparer, at: 'just now' } }
+        : { ...prev.signoff, reviewer: { by: prev.reviewer, at: 'just now' } },
     }));
   }, []);
 
-  const createEngagement = useCallback<IcfrCtx['createEngagement']>((newEng) => {
-    setEng(newEng); setSelectedControlId(null); setTabState('controls'); setView('register');
-  }, []);
-
   const value = useMemo<IcfrCtx>(() => ({
-    eng, role, tab, view, selectedControlId, racmEditor, me,
-    setRole: changeRole, setTab, setView, openRacmEditor, openControl, back,
+    eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess,
+    setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, back,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
     addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
@@ -452,8 +576,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException,
-    togglePeriod, rollForward, createEngagement,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, changeRole, setTab, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, togglePeriod, rollForward, createEngagement]);
+    addControl, signOffEngagement,
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, addControl, signOffEngagement]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

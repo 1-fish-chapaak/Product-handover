@@ -273,9 +273,37 @@ export interface ExecutionEvent {
   at: string;
 }
 
+// ─── Runs (execution registry — the Runs tab) ────────────────────────────────────
+// One record per run: a bulk test across controls, a single control's test-all, a
+// workflow run pulled for an attribute, or an AI validation against a file. The
+// per-control `executions` trail above stays the fine-grained audit log.
+export type RunKind = 'bulk-test' | 'control-test' | 'workflow-run' | 'ai-validation';
+export interface RunControlOutcome {
+  controlId: string;
+  wpRef: string;
+  description: string;
+  outcome: 'Effective' | 'Ineffective';
+  checks: number;
+}
+export interface RunRecord {
+  id: string;
+  kind: RunKind;
+  label: string;            // headline, e.g. 'Bulk test — 12 controls'
+  detail?: string;          // supporting line — datasets, attribute code, run ref
+  controls: RunControlOutcome[];
+  datasets?: string[];      // unique datasets the run executed against
+  by: string;
+  role: Role;
+  at: string;
+}
+
+// ─── Engagement sign-off — preparer signs, reviewer countersigns, engagement locks ─
+export interface SignoffEntry { by: string; at: string }
+export interface EngagementSignoff { preparer?: SignoffEntry; reviewer?: SignoffEntry }
+
 export interface IcfrEngagement {
   id: string; code: string; name: string; entity: string; framework: string;
-  periodStart: string; periodEnd: string; period: 'Interim' | 'Year-end';
+  periodStart: string; periodEnd: string;
   materiality: number; performanceMateriality: number; preparer: string; reviewer: string;
   rules: MaterialityRules;
   accounts: SignificantAccount[];
@@ -284,6 +312,8 @@ export interface IcfrEngagement {
   tasks: HandoffTask[];
   discussions: Discussion[];
   executions: ExecutionEvent[];
+  runs: RunRecord[];
+  signoff: EngagementSignoff;
 }
 
 export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'Policy / SOP'];

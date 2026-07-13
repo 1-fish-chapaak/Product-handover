@@ -2,7 +2,7 @@ import { validationQA } from './helpers';
 import type {
   Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, Deficiency, Discussion, DocStatus,
   EvidenceFile, ExecKind, ExecutionEvent, HandoffTask, IcfrEngagement, Nature, OperatingStep, OperatingTrack,
-  RacmReview, Role, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
+  RacmReview, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -410,9 +410,37 @@ const EXECUTIONS: ExecutionEvent[] = [
   ex('P2P-C-01', 'design', 'receive-doc', 'provided', 'R. Khanna · Risk Owner', 'risk-owner', '6d', 'Walkthrough'),
 ];
 
+// ── run history — the Runs tab's seed; outcomes/checks derive from the control seed ──
+const runOutcome = (id: string, outcome: RunControlOutcome['outcome']): RunControlOutcome => {
+  const c = DETAILED.find(x => x.id === id)!;
+  return { controlId: c.id, wpRef: c.wpRef, description: c.description, outcome, checks: c.design.points.length + c.operating.steps.length };
+};
+// Newest first — the store prepends, so the seed matches that order.
+const RUNS: RunRecord[] = [
+  {
+    id: 'run-s3', kind: 'control-test', label: 'Control test — all attributes',
+    detail: 'Design considerations & operating attributes tested from the control page',
+    controls: [runOutcome('P2P-C-04', 'Ineffective')],
+    by: 'A. Mehta · Auditor', role: 'auditor', at: '3d ago',
+  },
+  {
+    id: 'run-s2', kind: 'workflow-run', label: 'Workflow run — Approver-segregation check',
+    detail: 'run #4821 · 0 conflicts',
+    controls: [runOutcome('P2P-C-01', 'Effective')],
+    by: 'A. Mehta · Auditor', role: 'auditor', at: '4d ago',
+  },
+  {
+    id: 'run-s1', kind: 'bulk-test', label: 'Bulk test — 2 controls',
+    detail: 'Scoping run across PO approval and vendor master controls',
+    controls: [runOutcome('P2P-C-01', 'Effective'), runOutcome('P2P-C-02', 'Effective')],
+    datasets: ['PO release log (ME2N)', 'Vendor master snapshot'],
+    by: 'A. Mehta · Auditor', role: 'auditor', at: '6d ago',
+  },
+];
+
 const ENGAGEMENT: IcfrEngagement = {
   id: 'eng-1', code: 'ICFR-26', name: 'FY26 ICFR — Air India Express', entity: 'Air India Express Ltd', framework: 'COSO 2013 / SOX 404',
-  periodStart: '01 Apr 2025', periodEnd: '31 Mar 2026', period: 'Interim',
+  periodStart: '01 Apr 2025', periodEnd: '31 Mar 2026',
   materiality: 5_000_000, performanceMateriality: 3_750_000, preparer: 'A. Mehta · Auditor', reviewer: 'J. Fernandes · Audit Manager',
   rules: { clearlyTrivial: 250_000, sdBandPct: 20, aggregate: true, autoRoute: true, mwIndicators: [] },
   accounts: ACCOUNTS,
@@ -421,6 +449,8 @@ const ENGAGEMENT: IcfrEngagement = {
   tasks: TASKS,
   discussions: DISCUSSIONS,
   executions: EXECUTIONS,
+  runs: RUNS,
+  signoff: {},
 };
 
 /** Identity carried in from the app-level Engagement record (engagements.ts). */
@@ -450,7 +480,6 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     id: meta.id,
     code: meta.code ?? base.code,
     name: meta.name ?? base.name,
-    period: 'Interim',
     periodStart: meta.periodStart ?? base.periodStart,
     periodEnd: meta.periodEnd ?? base.periodEnd,
     preparer: meta.owner ? `${meta.owner} · Auditor` : base.preparer,
@@ -459,6 +488,8 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     tasks: [],
     discussions: [],
     executions: [],
+    runs: [],
+    signoff: {},
   };
 }
 
@@ -475,4 +506,3 @@ export function racmTemplate(process: string): Control[] {
   }));
 }
 
-export const TEMPLATE_ACCOUNTS = ACCOUNTS;

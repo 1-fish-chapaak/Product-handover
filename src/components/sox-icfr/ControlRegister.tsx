@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   Search, Plus, FileSpreadsheet, Layers, Rows3, MessageSquare,
-  Star, RefreshCw, ListFilter, FileText, X, Send, LayoutGrid, Table2, FlaskConical,
+  Star, ListFilter, FileText, X, Send, LayoutGrid, Table2, FlaskConical,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import {
@@ -10,6 +10,7 @@ import {
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
 import BulkTestModal from './BulkTestModal';
+import NewControlPanel from './NewControlPanel';
 import { downloadIcfrWorkingPaper } from './icfrWorkingPaper';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
@@ -40,10 +41,15 @@ function CardTrack({ label, res, started }: { label: string; res: ReturnType<typ
   );
 }
 
-function ControlCard({ c, discN, onOpen }: { c: Control; discN: number; onOpen: () => void }) {
+function ControlCard({ c, discN, onOpen, selectable, selected, onToggle }: { c: Control; discN: number; onOpen: () => void; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
   return (
-    <button className="ac-card" onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter') onOpen(); }} aria-label={`Open ${c.id} — ${c.description}`}>
+    <div role="button" tabIndex={0} className={cn('ac-card text-left', selected && 'ring-2 ring-brand-200 border-brand-300')}
+      onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter') onOpen(); }} aria-label={`Open ${c.id} — ${c.description}`}>
       <div className="flex items-center gap-2">
+        {selectable && (
+          <input type="checkbox" checked={!!selected} onClick={e => e.stopPropagation()} onChange={onToggle}
+            className="cursor-pointer accent-brand-600 shrink-0" aria-label={`Select ${c.id}`} />
+        )}
         <span className="ac-eyebrow"><span className="dot" style={{ background: spineColor(c.process) }} /><span className="lbl">{c.process}</span></span>
         <span className="ml-auto inline-flex items-center gap-2 shrink-0">
           {c.isKey && <Star size={11} className="text-mitigated-500 fill-mitigated-100" />}
@@ -59,7 +65,7 @@ function ControlCard({ c, discN, onOpen }: { c: Control; discN: number; onOpen: 
         <CardTrack label="Operating" res={trackResult(c.operating)} started={operatingStarted(c)} />
       </div>
       <div className="mt-3"><ConclusionPill c={controlConclusion(c)} /></div>
-    </button>
+    </div>
   );
 }
 
@@ -81,8 +87,9 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
 }
 
 export default function ControlRegister() {
-  const { eng, role, openControl, setView, rollForward, requestDesignDocs } = useIcfr();
+  const { eng, role, openControl, requestDesignDocs } = useIcfr();
   const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
+  const [creating, setCreating] = useState(false);
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
@@ -135,15 +142,14 @@ export default function ControlRegister() {
         </div>
         <div className="flex items-center gap-1.5">
           <button onClick={() => downloadIcfrWorkingPaper(eng)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>
-          {role === 'auditor' && <button onClick={rollForward} title="Roll forward to year-end" aria-label="Roll forward to year-end" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RefreshCw size={15} /></button>}
           {role === 'auditor' && (
             <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
               title={sel.size ? `Bulk test the ${sel.size} selected controls` : 'Bulk test all controls in view'}
               className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
-              <FlaskConical size={14} /> Bulk test{sel.size > 0 && <span className="tabular-nums text-brand-700">({sel.size})</span>}
+              <FlaskConical size={14} /> {sel.size > 0 ? <>Bulk test <span className="tabular-nums text-brand-700">({sel.size})</span></> : <>Bulk test all <span className="tabular-nums text-ink-400">({filtered.length})</span></>}
             </button>
           )}
-          {role === 'auditor' && <button onClick={() => setView('setup')} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New</button>}
+          {role === 'auditor' && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
         </div>
       </div>
 
@@ -198,7 +204,10 @@ export default function ControlRegister() {
                 </div>
               )}
               <div className="card-grid">
-                {g.rows.map(c => <ControlCard key={c.id} c={c} discN={openDiscussionCount(eng, c.id)} onOpen={() => openControl(c.id)} />)}
+                {g.rows.map(c => (
+                  <ControlCard key={c.id} c={c} discN={openDiscussionCount(eng, c.id)} onOpen={() => openControl(c.id)}
+                    selectable={role === 'auditor'} selected={sel.has(c.id)} onToggle={() => toggle(c.id)} />
+                ))}
               </div>
             </div>
           ))}
@@ -281,6 +290,9 @@ export default function ControlRegister() {
 
       {/* bulk test — compile files → attach unique datasets → execute */}
       {bulkTestIds && <BulkTestModal controlIds={bulkTestIds} onClose={() => setBulkTestIds(null)} />}
+
+      {/* create control — the focused form */}
+      {creating && <NewControlPanel onClose={() => setCreating(false)} />}
     </div>
   );
 }

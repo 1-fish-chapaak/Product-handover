@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Check, CheckCircle2, ChevronRight, Database, FileSpreadsheet, FlaskConical,
+  ArrowRight, Check, CheckCircle2, ChevronRight, Database, FileSpreadsheet, FlaskConical,
   Loader2, Paperclip, Star, UploadCloud, X, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
@@ -45,7 +45,7 @@ const FORMAT_TONE: Record<RequiredDataset['format'], string> = {
 };
 
 export default function BulkTestModal({ controlIds, onClose }: { controlIds: string[]; onClose: () => void }) {
-  const { eng, bulkTestControls } = useIcfr();
+  const { eng, bulkTestControls, setTab } = useIcfr();
   const { addToast } = useToast();
 
   const [step, setStep] = useState<Step>(1);
@@ -85,13 +85,21 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
   const totalChecks = active.reduce((n, c) => n + checksOf(c), 0);
   const estMinutes = Math.max(1, Math.round(totalChecks * 2.5 / 60));
 
+  // Same order as the library: groups in library order, rows sorted by W/P reference.
   const groups = useMemo(() => {
     const map = new Map<string, Control[]>();
     for (const c of selected) { if (!map.has(c.process)) map.set(c.process, []); map.get(c.process)!.push(c); }
-    return Array.from(map, ([key, rows]) => ({ key, rows }));
+    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => a.wpRef.localeCompare(b.wpRef)) }));
   }, [selected]);
 
   const toggleControl = (id: string) => setExcluded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  // Group toggle — all in → drop the whole group; otherwise bring the whole group in.
+  const toggleGroup = (rows: Control[]) => setExcluded(prev => {
+    const n = new Set(prev);
+    const allIn = rows.every(c => !n.has(c.id));
+    rows.forEach(c => { if (allIn) n.add(c.id); else n.delete(c.id); });
+    return n;
+  });
 
   const compile = () => {
     setCompiling(true);
@@ -180,7 +188,11 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
               <p className="text-[12px] text-ink-500 mb-3">Each control's design considerations and operating attributes will be tested against its evidence. Untick anything you want to leave out of this run.</p>
               {groups.map(g => (
                 <div key={g.key} className="mb-4">
-                  <div className="text-[11px] font-bold uppercase tracking-wide text-ink-400 mb-1.5">{g.key} · {g.rows.filter(c => !excluded.has(c.id)).length}/{g.rows.length}</div>
+                  <label className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-ink-400 mb-1.5 cursor-pointer w-fit">
+                    <input type="checkbox" checked={g.rows.every(c => !excluded.has(c.id))} onChange={() => toggleGroup(g.rows)}
+                      className="cursor-pointer accent-brand-600" aria-label={`Select all in ${g.key}`} />
+                    {g.key} · {g.rows.filter(c => !excluded.has(c.id)).length}/{g.rows.length}
+                  </label>
                   <div className="space-y-1.5">
                     {g.rows.map(c => (
                       <label key={c.id} className={cn('flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors', excluded.has(c.id) ? 'border-canvas-border opacity-50' : 'border-canvas-border hover:border-brand-200 bg-canvas-elevated')}>
@@ -326,9 +338,14 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
             </button>
           )}
           {finished && (
-            <button onClick={onClose} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[12.5px] font-semibold hover:bg-compliant-700 transition-colors cursor-pointer">
-              <Check size={14} /> Done
-            </button>
+            <>
+              <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 transition-colors cursor-pointer">
+                Done
+              </button>
+              <button onClick={() => { onClose(); setTab('runs'); }} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+                View run <ArrowRight size={14} />
+              </button>
+            </>
           )}
         </div>
       </div>

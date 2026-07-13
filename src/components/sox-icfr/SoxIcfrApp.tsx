@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, ShieldCheck, RefreshCw } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, ShieldCheck } from 'lucide-react';
 import './register.css';
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import { findEngagement } from '../../data/engagements';
@@ -7,12 +7,12 @@ import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { IcfrProvider, useIcfr, type SoxTab } from './store';
 import { RoleSwitcher } from './parts';
 import Overview from './Overview';
-import Racm from './Racm';
+import Racm, { RacmLanding } from './Racm';
 import RiskLibrary from './RiskLibrary';
 import ControlRegister from './ControlRegister';
 import ControlDossier from './ControlDossier';
+import RunsView from './RunsView';
 import { DeficienciesView, ScopeView } from './extraViews';
-import SetupWizard from './SetupWizard';
 import RacmFullPageEditor from '../audit/RacmFullPageEditor';
 
 const SOX_TABS: TabDef[] = [
@@ -20,10 +20,12 @@ const SOX_TABS: TabDef[] = [
   { id: 'racm', label: 'RACM' },
   { id: 'risks', label: 'Risk Library' },
   { id: 'controls', label: 'Control Library' },
+  { id: 'runs', label: 'Runs' },
 ];
 
 function Inner({ onBack }: { onBack?: () => void }) {
-  const { eng, role, tab, view, racmEditor, setRole, setTab, togglePeriod, back } = useIcfr();
+  const { eng, role, tab, view, racmEditor, setRole, setTab, back } = useIcfr();
+  const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
 
   const topBar = (
     <div className="sticky top-0 z-30 bg-canvas/85 backdrop-blur border-b border-canvas-border shrink-0">
@@ -34,7 +36,11 @@ function Inner({ onBack }: { onBack?: () => void }) {
             <span className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center"><ShieldCheck size={16} className="text-white" /></span>
             <span className="font-mono text-[12px] font-semibold text-ink-700">{eng.code}</span>
             <span className="text-[13px] font-semibold text-ink-900 truncate">{eng.name}</span>
-            <button onClick={togglePeriod} title="Switch period — Interim ⇄ Year-end (roll-forward)" className="text-[11px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 px-2 h-5 inline-flex items-center gap-1 rounded-full cursor-pointer transition-colors">{eng.period}<RefreshCw size={10} /></button>
+            {concluded && (
+              <span title={`Signed off — ${eng.signoff.preparer!.by}, countersigned ${eng.signoff.reviewer!.by}`} className="text-[11px] font-semibold text-compliant-700 bg-compliant-50 px-2 h-5 inline-flex items-center gap-1 rounded-full">
+                <BadgeCheck size={11} /> Concluded
+              </span>
+            )}
           </span>
         </div>
         {/* The switcher is a demo affordance — it previews the other persona
@@ -53,21 +59,21 @@ function Inner({ onBack }: { onBack?: () => void }) {
       <div className="sox-book-ui h-full flex flex-col bg-canvas">
         {topBar}
         <div className="flex-1 min-h-0">
-          <RacmFullPageEditor onBack={back} backLabel="Back to RACM" racmName={racmEditor?.name} racmId={`sox-racm-${eng.id}`} processLabel={racmEditor?.process} />
+          <RacmFullPageEditor onBack={back} backLabel="Back to RACM" racmName={racmEditor?.name} racmId={`sox-racm-${eng.id}-${(racmEditor?.process ?? 'all').replace(/\s+/g, '-').toLowerCase()}`} processLabel={racmEditor?.process} />
         </div>
       </div>
     );
   }
 
-  // The four tabs are the primary nav; everything else is a drill-in reached from them.
-  const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register';
+  // The five tabs are the primary nav; everything else is a drill-in reached from them.
+  const isRoot = view === 'overview' || view === 'racm' || view === 'racm-list' || view === 'risks' || view === 'register' || view === 'runs';
   const body = view === 'dossier' ? <ControlDossier />
     : view === 'deficiencies' ? <DeficienciesView />
     : view === 'scope' ? <ScopeView />
-    : view === 'setup' ? <SetupWizard />
     : tab === 'overview' ? <Overview />
-    : tab === 'racm' ? <Racm />
+    : tab === 'racm' ? (view === 'racm-list' ? <Racm /> : <RacmLanding />)
     : tab === 'risks' ? <RiskLibrary />
+    : tab === 'runs' ? <RunsView />
     : <ControlRegister />;
 
   return (
