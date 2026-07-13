@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { requiredDatasetsFor, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { icfrConclusion, isControlLocked, isEngagementLocked, trackResult, validationQA, validationSummary, validationTable } from './helpers';
+import { formatINR, icfrConclusion, isControlLocked, isEngagementLocked, previewRegrades, trackResult, validationQA, validationSummary, validationTable, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
   EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
-  MaterialityRules, Nature, OperatingStep, Override, Population, RacmReview, Role, RunControlOutcome, RunRecord,
+  MaterialityRules, Nature, OperatingStep, Override, Population, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord,
   Sampling, TestResult, TrackConclusion,
 } from './types';
 
@@ -105,6 +105,7 @@ interface IcfrCtx {
   requestDesignDocs: (controlIds: string[]) => void;
   // materiality rules
   updateRules: (patch: Partial<MaterialityRules>) => void;
+  applyRules: (patch: RulesPatch, reason: string) => void;
   updateMateriality: (patch: { materiality?: number; performanceMateriality?: number }) => void;
   // deficiencies / exception lifecycle
   updateDeficiency: (id: string, patch: Partial<Deficiency>) => void;
@@ -567,6 +568,35 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const updateMateriality = useCallback<IcfrCtx['updateMateriality']>((patch) => {
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, ...patch }));
   }, []);
+  // The guarded path for changing the ground rules mid-engagement: applies the
+  // patch, records who/what/why and every exception whose grade moved.
+  const applyRules = useCallback<IcfrCtx['applyRules']>((patch, reason) => {
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const fmtVal = (field: string, v: number) => field === 'SD band' ? `${v}%` : formatINR(v);
+      const fields: { field: string; from: number; to: number | undefined }[] = [
+        { field: 'Overall materiality', from: prev.materiality, to: patch.materiality },
+        { field: 'Performance materiality', from: prev.performanceMateriality, to: patch.performanceMateriality },
+        { field: 'Clearly-trivial threshold', from: prev.rules.clearlyTrivial, to: patch.clearlyTrivial },
+        { field: 'SD band', from: prev.rules.sdBandPct, to: patch.sdBandPct },
+      ];
+      const changes = fields
+        .filter(f => f.to !== undefined && f.to !== f.from)
+        .map(f => ({ field: f.field, from: fmtVal(f.field, f.from), to: fmtVal(f.field, f.to!) }));
+      if (!changes.length) return prev;
+      const entry: RulesChangeEntry = {
+        id: uid('rc'), changes, regraded: previewRegrades(prev, patch),
+        reason, by: me, at: 'just now',
+      };
+      return {
+        ...prev,
+        materiality: patch.materiality ?? prev.materiality,
+        performanceMateriality: patch.performanceMateriality ?? prev.performanceMateriality,
+        rules: { ...prev.rules, clearlyTrivial: patch.clearlyTrivial ?? prev.rules.clearlyTrivial, sdBandPct: patch.sdBandPct ?? prev.rules.sdBandPct },
+        rulesLog: [entry, ...prev.rulesLog],
+      };
+    });
+  }, [me]);
   const setExceptionStatus = useCallback<IcfrCtx['setExceptionStatus']>((id, status) => {
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, status } : d) }));
   }, []);
@@ -668,9 +698,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
-    updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException,
+    updateRules, applyRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException,
     addControl, signOffEngagement, reopenControl,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, addControl, signOffEngagement, reopenControl]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, setSampling, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, addControl, signOffEngagement, reopenControl]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

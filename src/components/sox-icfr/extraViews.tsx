@@ -1,10 +1,12 @@
-import { ArrowLeft, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, XCircle, Sliders, GitMerge, Route } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowLeft, ArrowRight, History, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, X, XCircle, Sliders, GitMerge, Route } from 'lucide-react';
 import { useIcfr } from './store';
-import { assessSeverity, computeSeverity, formatINR, isClearlyTrivial } from './helpers';
+import { assessSeverity, computeSeverity, formatINR, isClearlyTrivial, isEngagementLocked, previewRegrades, type RulesPatch } from './helpers';
 import { SeverityPill } from './parts';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
-import { MW_INDICATOR_CATALOGUE, type ExceptionStatus } from './types';
+import { MW_INDICATOR_CATALOGUE, type ExceptionStatus, type IcfrEngagement } from './types';
 
 const fmt = (n: number) => formatINR(n);
 const fmtFull = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
@@ -15,18 +17,29 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
 
 // ─── Materiality & scope — the ground rules ──────────────────────────────────────
 export function ScopeView() {
-  const { eng, back, updateRules, updateMateriality } = useIcfr();
-  const M = eng.materiality; const r = eng.rules;
-  const pm = eng.performanceMateriality;
-  const ctt = r.clearlyTrivial;
-  const sd = M * r.sdBandPct / 100;
+  const { eng, role, back, updateRules, applyRules } = useIcfr();
+  const r = eng.rules;
+  // The four grading thresholds edit as a DRAFT — nothing hits the engagement
+  // until it's reviewed and applied (mid-engagement changes re-grade exceptions).
+  const saved = { M: eng.materiality, pm: eng.performanceMateriality, ctt: r.clearlyTrivial, band: r.sdBandPct };
+  const [draft, setDraft] = useState(saved);
+  const [reviewing, setReviewing] = useState(false);
+  useEffect(() => { setDraft({ M: eng.materiality, pm: eng.performanceMateriality, ctt: eng.rules.clearlyTrivial, band: eng.rules.sdBandPct }); }, [eng.materiality, eng.performanceMateriality, eng.rules.clearlyTrivial, eng.rules.sdBandPct]);
+  const dirty = draft.M !== saved.M || draft.pm !== saved.pm || draft.ctt !== saved.ctt || draft.band !== saved.band;
+  const canEditRules = role === 'auditor' && !isEngagementLocked(eng);
+  const patch: RulesPatch = { materiality: draft.M, performanceMateriality: draft.pm, clearlyTrivial: draft.ctt, sdBandPct: draft.band };
+
+  const M = draft.M;
+  const pm = draft.pm;
+  const ctt = draft.ctt;
+  const sd = M * draft.band / 100;
   const pmPct = M ? Math.round((pm / M) * 100) : 0;
   const cttPct = M ? Math.round((ctt / M) * 100) : 0;
 
   const LADDER: { label: string; band: string; tone: string }[] = [
     { label: 'Clearly trivial', band: `≤ ${fmtFull(ctt)}`, tone: 'text-ink-500 bg-paper-50 border-canvas-border' },
     { label: 'Deficiency', band: `> ${fmtFull(ctt)} and < ${fmtFull(sd)}`, tone: 'text-mitigated-700 bg-mitigated-50/50 border-mitigated-200' },
-    { label: 'Significant deficiency', band: `≥ ${fmtFull(sd)}  ·  ${r.sdBandPct}% of materiality`, tone: 'text-high-700 bg-high-50/50 border-high-200' },
+    { label: 'Significant deficiency', band: `≥ ${fmtFull(sd)}  ·  ${draft.band}% of materiality`, tone: 'text-high-700 bg-high-50/50 border-high-200' },
     { label: 'Material weakness', band: `≥ ${fmtFull(M)}  or any MW indicator`, tone: 'text-risk-700 bg-risk-50/50 border-risk-200' },
   ];
 
@@ -38,14 +51,25 @@ export function ScopeView() {
         <p className="text-[13px] text-ink-500 mt-0.5">The ground rules that drive how every exception is evaluated, sized, and routed. Set them once — they apply across all controls.</p>
       </div>
 
-      {/* materiality */}
+      {/* materiality — draft edits; nothing applies until reviewed */}
       <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5">
         <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><Target size={15} className="text-brand-600" /> Materiality</h2>
         <div className="grid grid-cols-3 gap-4">
-          <Money label="Overall materiality" value={M} onChange={v => updateMateriality({ materiality: v })} hint="The financial-statement materiality benchmark." />
-          <Money label="Performance materiality" value={pm} onChange={v => updateMateriality({ performanceMateriality: v })} hint={`${pmPct}% of overall — the testing threshold.`} />
-          <Money label="Clearly-trivial threshold" value={ctt} onChange={v => updateRules({ clearlyTrivial: v })} hint={`${cttPct}% of overall — below this, logged but not evaluated.`} />
+          <Money label="Overall materiality" value={M} disabled={!canEditRules} onChange={v => setDraft(d => ({ ...d, M: v }))} hint="The financial-statement materiality benchmark." />
+          <Money label="Performance materiality" value={pm} disabled={!canEditRules} onChange={v => setDraft(d => ({ ...d, pm: v }))} hint={`${pmPct}% of overall — the testing threshold.`} />
+          <Money label="Clearly-trivial threshold" value={ctt} disabled={!canEditRules} onChange={v => setDraft(d => ({ ...d, ctt: v }))} hint={`${cttPct}% of overall — below this, logged but not evaluated.`} />
         </div>
+        {dirty && (
+          <div className="mt-4 rounded-xl border border-high-200 bg-high-50/50 px-4 py-3 flex items-center gap-3 flex-wrap">
+            <AlertTriangle size={15} className="text-high-700 shrink-0" />
+            <div className="flex-1 min-w-[220px]">
+              <div className="text-[12.5px] font-semibold text-ink-800">You're changing the ground rules mid-engagement</div>
+              <div className="text-[11.5px] text-ink-500">Nothing is saved yet. Review which exceptions would change grade, record why, then apply.</div>
+            </div>
+            <button onClick={() => setReviewing(true)} className="h-8 px-3.5 rounded-lg bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5">Review &amp; apply <ArrowRight size={13} /></button>
+            <button onClick={() => setDraft(saved)} className="h-8 px-3 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Discard</button>
+          </div>
+        )}
       </section>
 
       {/* severity ladder */}
@@ -53,7 +77,7 @@ export function ScopeView() {
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
           <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Scale size={15} className="text-brand-600" /> Exception severity ladder</h2>
           <label className="inline-flex items-center gap-2 text-[12px] text-ink-600"><Sliders size={13} /> Significant-deficiency band
-            <input type="number" min={1} max={100} value={r.sdBandPct} onChange={e => updateRules({ sdBandPct: Math.max(1, Math.min(100, +e.target.value || 0)) })} className="h-8 w-16 px-2 rounded-lg border border-canvas-border text-[12.5px] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
+            <input type="number" min={1} max={100} value={draft.band} disabled={!canEditRules} onChange={e => setDraft(d => ({ ...d, band: Math.max(1, Math.min(100, +e.target.value || 0)) }))} className="h-8 w-16 px-2 rounded-lg border border-canvas-border text-[12.5px] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50" />
             <span className="text-ink-400">% of materiality</span>
           </label>
         </div>
@@ -97,6 +121,37 @@ export function ScopeView() {
         </div>
       </section>
 
+      {/* ground-rules change history — the audit trail for mid-engagement edits */}
+      {eng.rulesLog.length > 0 && (
+        <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5">
+          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><History size={15} className="text-brand-600" /> Ground-rules change history</h2>
+          <div className="space-y-2.5">
+            {eng.rulesLog.map(entry => (
+              <div key={entry.id} className="rounded-xl border border-canvas-border bg-paper-50/40 px-4 py-3">
+                <div className="flex items-center gap-2 flex-wrap text-[12px]">
+                  {entry.changes.map(c => (
+                    <span key={c.field} className="inline-flex items-center gap-1.5 text-ink-700"><b className="font-semibold">{c.field}</b> {c.from} <ArrowRight size={11} className="text-ink-400" /> <b className="font-semibold">{c.to}</b></span>
+                  ))}
+                  <span className="ml-auto text-[11.5px] text-ink-400">{entry.by} · {entry.at}</span>
+                </div>
+                <div className="text-[12px] text-ink-500 mt-1 italic">“{entry.reason}”</div>
+                <div className="text-[11.5px] mt-1.5">
+                  {entry.regraded.length === 0 ? <span className="text-ink-400">No exception changed grade.</span> : (
+                    <span className="inline-flex items-center gap-2 flex-wrap">
+                      {entry.regraded.map(rg => (
+                        <span key={rg.defId} className="inline-flex items-center gap-1 text-ink-600"><span className="font-mono font-semibold">{rg.defId}</span> {rg.from} <ArrowRight size={10} className="text-ink-400" /> <b className="font-semibold">{rg.to}</b></span>
+                      ))}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {reviewing && <RulesReviewModal eng={eng} patch={patch} onClose={() => setReviewing(false)} onApply={reason => { applyRules(patch, reason); setReviewing(false); }} />}
+
       {/* significant accounts */}
       <section className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
         <header className="px-4 py-3 border-b border-canvas-border flex items-center justify-between"><h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><ShieldCheck size={15} className="text-brand-600" /> Significant accounts &amp; disclosures</h2><span className="text-[11.5px] text-ink-400">{eng.accounts.filter(a => a.inScope).length} in scope</span></header>
@@ -118,15 +173,72 @@ export function ScopeView() {
   );
 }
 
-function Money({ label, value, onChange, hint }: { label: string; value: number; onChange: (v: number) => void; hint: string }) {
+function Money({ label, value, onChange, hint, disabled }: { label: string; value: number; onChange: (v: number) => void; hint: string; disabled?: boolean }) {
   return (
     <div>
       <div className="text-[11px] font-semibold text-ink-500 mb-1.5">{label}</div>
       <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-ink-400 pointer-events-none">₹</span>
-        <input type="number" min={0} value={value} onChange={e => onChange(Math.max(0, +e.target.value || 0))} className="w-full h-10 pl-7 pr-3 rounded-lg border border-canvas-border text-[13px] tabular-nums text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+        <input type="number" min={0} value={value} disabled={disabled} onChange={e => onChange(Math.max(0, +e.target.value || 0))} className="w-full h-10 pl-7 pr-3 rounded-lg border border-canvas-border text-[13px] tabular-nums text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50 disabled:cursor-not-allowed" />
       </div>
       <div className="text-[11px] text-ink-400 mt-1">{hint}</div>
     </div>
+  );
+}
+
+// The gate on mid-engagement ground-rule changes: show exactly what changes and
+// which exceptions re-grade, demand a reason, then apply — one logged entry.
+function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagement; patch: RulesPatch; onClose: () => void; onApply: (reason: string) => void }) {
+  const [reason, setReason] = useState('');
+  const fmtVal = (field: string, v: number) => field === 'SD band' ? `${v}%` : fmt(v);
+  const fields: { field: string; from: number; to: number }[] = [
+    { field: 'Overall materiality', from: eng.materiality, to: patch.materiality ?? eng.materiality },
+    { field: 'Performance materiality', from: eng.performanceMateriality, to: patch.performanceMateriality ?? eng.performanceMateriality },
+    { field: 'Clearly-trivial threshold', from: eng.rules.clearlyTrivial, to: patch.clearlyTrivial ?? eng.rules.clearlyTrivial },
+    { field: 'SD band', from: eng.rules.sdBandPct, to: patch.sdBandPct ?? eng.rules.sdBandPct },
+  ];
+  const changes = fields.filter(f => f.from !== f.to);
+  const regrades = previewRegrades(eng, patch);
+  return createPortal(
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal max-w-[560px]" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border">
+          <h3 className="text-[14px] font-bold text-ink-900 inline-flex items-center gap-2"><Scale size={15} className="text-brand-600" /> Changing the ground rules</h3>
+          <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="space-y-1.5">
+            {changes.map(c => (
+              <div key={c.field} className="flex items-center gap-2 text-[13px]">
+                <span className="text-ink-500 w-[190px]">{c.field}</span>
+                <span className="tabular-nums text-ink-600">{fmtVal(c.field, c.from)}</span>
+                <ArrowRight size={12} className="text-ink-400" />
+                <span className="tabular-nums font-semibold text-ink-900">{fmtVal(c.field, c.to)}</span>
+              </div>
+            ))}
+          </div>
+          <div className={cn('rounded-xl border px-4 py-3', regrades.length ? 'border-high-200 bg-high-50/40' : 'border-canvas-border bg-paper-50/40')}>
+            <div className="text-[12px] font-semibold text-ink-800 mb-1.5">{regrades.length ? `${regrades.length} open exception${regrades.length === 1 ? '' : 's'} would change grade` : 'No open exception changes grade'}</div>
+            {regrades.map(rg => (
+              <div key={rg.defId} className="flex items-center gap-2 text-[12.5px] text-ink-700">
+                <span className="font-mono font-semibold">{rg.defId}</span>
+                <SeverityPill s={rg.from} /> <ArrowRight size={12} className="text-ink-400" /> <SeverityPill s={rg.to} />
+              </div>
+            ))}
+          </div>
+          <div>
+            <div className="text-[11.5px] font-semibold text-ink-600 mb-1.5">Why is this changing mid-engagement? <span className="text-ink-400 font-normal">— recorded in the change history</span></div>
+            <textarea autoFocus value={reason} onChange={e => setReason(e.target.value)} rows={2} placeholder="e.g. Revised benchmark after the Q2 forecast update"
+              className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50 resize-none" />
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border">
+          <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Cancel</button>
+          <button disabled={!reason.trim()} onClick={() => onApply(reason.trim())}
+            className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Apply new ground rules</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

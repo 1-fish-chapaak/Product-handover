@@ -41,6 +41,23 @@ export function assessSeverity(d: Deficiency, eng: IcfrEngagement): SeverityAsse
   return { raw, final: raw, capped: false };
 }
 
+// ─── Ground-rules change preview ──────────────────────────────────────────────────
+// What would re-grade if the materiality rule set changed? Used by the review
+// modal before applying, and by the store to record the actual re-grades.
+export interface RulesPatch { materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number }
+export function previewRegrades(eng: IcfrEngagement, patch: RulesPatch): { defId: string; from: Severity; to: Severity }[] {
+  const next: IcfrEngagement = {
+    ...eng,
+    materiality: patch.materiality ?? eng.materiality,
+    performanceMateriality: patch.performanceMateriality ?? eng.performanceMateriality,
+    rules: { ...eng.rules, clearlyTrivial: patch.clearlyTrivial ?? eng.rules.clearlyTrivial, sdBandPct: patch.sdBandPct ?? eng.rules.sdBandPct },
+  };
+  return eng.deficiencies
+    .filter(d => d.status !== 'Closed')
+    .map(d => ({ defId: d.id, from: assessSeverity(d, eng).final, to: assessSeverity(d, next).final }))
+    .filter(x => x.from !== x.to);
+}
+
 // ─── Engagement-level ICFR conclusion ────────────────────────────────────────────
 // An open material weakness at period end forces "not effective" — sign-off stays
 // possible, but the conclusion recorded is adverse (handbook: open MW ⇒ disclosure).

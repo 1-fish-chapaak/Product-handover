@@ -300,6 +300,17 @@ export interface RunRecord {
   at: string;
 }
 
+// ─── Ground-rules change log — materiality is set before testing; a mid-engagement
+// change is warned, previewed (which exceptions re-grade), and recorded here. ──────
+export interface RulesChangeEntry {
+  id: string;
+  changes: { field: string; from: string; to: string }[];
+  regraded: { defId: string; from: Severity; to: Severity }[];
+  reason: string;
+  by: string;
+  at: string;
+}
+
 // ─── Engagement sign-off — preparer signs, reviewer countersigns, engagement locks ─
 export interface SignoffEntry { by: string; at: string }
 // icfrConclusion is stamped at each signature from live state: open MW ⇒ 'Not effective'.
@@ -318,6 +329,7 @@ export interface IcfrEngagement {
   executions: ExecutionEvent[];
   runs: RunRecord[];
   signoff: EngagementSignoff;
+  rulesLog: RulesChangeEntry[];
 }
 
 export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'Policy / SOP'];

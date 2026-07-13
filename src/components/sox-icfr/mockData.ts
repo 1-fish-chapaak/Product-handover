@@ -451,6 +451,7 @@ const ENGAGEMENT: IcfrEngagement = {
   executions: EXECUTIONS,
   runs: RUNS,
   signoff: {},
+  rulesLog: [],
 };
 
 /** Identity carried in from the app-level Engagement record (engagements.ts). */
@@ -490,6 +491,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     executions: [],
     runs: [],
     signoff: {},
+    rulesLog: [],
   };
 }
 
