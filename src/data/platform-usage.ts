@@ -1,14 +1,38 @@
 /**
- * Platform Usage — seeded adoption metrics + live-session fold-in.
+ * Platform Usage — derived entirely from the platform's real records.
  *
- * A deterministic 90-day usage history (seeded PRNG, so numbers survive
- * reloads) that the Platform Usage view renders, plus helpers that fold the
- * current session's real audit-log events into today's bucket — so actions
- * you take right now show up in today's numbers. Same demo-data contract as
- * the Audit Log seeds: no backend, but internally consistent.
+ * There is no synthetic history here. Every number on the Platform Usage page
+ * traces back to something the platform actually stores:
+ *
+ *   · actions / activeUsers / downloads / byModule  ← the audit log (AuditLog[])
+ *   · reports                                       ← GENERATED_REPORTS + ATR_LIBRARY
+ *   · aiQueries                                     ← CHAT_HISTORY (saved conversations)
+ *
+ * ## The anchor
+ *
+ * Without a backend the seeded records are fixed in the past (the newest audit
+ * event is Apr 2026). Measuring "last 30 days" against wall-clock time would
+ * therefore render every tile as 0. Instead day-offset 0 is the **anchor**: the
+ * most recent real record in the data set. Windows run backwards from there and
+ * the page labels itself "Data as of <anchor>".
+ *
+ * Events logged during *this session* are folded into the anchor bucket, so an
+ * action you take right now still shows up. The anchor itself never moves —
+ * otherwise a single click would slide the whole window and empty it.
+ *
+ * ## Known gaps (real, not hidden)
+ *
+ * Nothing on the platform writes an audit event for Ask IRA or the Concierge
+ * tools, so per-member AI attribution is unavailable: `UserUsageRow.aiQueries`
+ * counts Ask IRA log events, which is 0 until those flows call `logEvent`.
+ * Platform-wide AI volume comes from CHAT_HISTORY instead. Report and chat
+ * records carry a date but no clock time, so they are excluded from the
+ * weekday×hour rhythm heatmap, whose total is therefore ≤ the action total.
  */
 
 import type { AdminUser, AuditLog } from '../context/AdminDataContext';
+import { GENERATED_REPORTS, CHAT_HISTORY } from './mockData';
+import { ATR_LIBRARY } from './atrLibrary';
 
 /* ── Modules the breakdown reports on ── */
 export const USAGE_MODULES = [
@@ -23,19 +47,7 @@ export const USAGE_MODULES = [
 ] as const;
 export type UsageModule = (typeof USAGE_MODULES)[number];
 
-/** Relative share of daily activity each module gets in the seed. */
-const MODULE_WEIGHTS: Record<UsageModule, number> = {
-  'Ask IRA': 0.24,
-  'Engagements': 0.16,
-  'Reports': 0.14,
-  'Workflows': 0.13,
-  'Dashboards': 0.10,
-  'Knowledge Hub': 0.09,
-  'Risk & Controls': 0.09,
-  'Admin': 0.05,
-};
-
-/** Map an AuditLog.module string onto a usage bucket (live fold-in). */
+/** Map an AuditLog.module string onto a usage bucket. */
 export function usageModuleFor(logModule: string): UsageModule {
   switch (logModule) {
     // Concierge tools count as AI usage — the PRD defines AI queries as
@@ -52,180 +64,223 @@ export function usageModuleFor(logModule: string): UsageModule {
   }
 }
 
+/** One real audit event, reduced to what the usage page needs. */
+export interface UsageEntry {
+  user: string;
+  action: AuditLog['action'];
+  entity: string;
+  module: UsageModule;
+  /** Clock hour 0–23, or null when the record carries only a date. */
+  hour: number | null;
+  description: string;
+  id: string;
+}
+
 export interface UsageDay {
-  /** Days ago: 0 = today, 89 = oldest. */
+  /** Days before the anchor: 0 = the anchor day, 89 = 90 days earlier. */
   dayOffset: number;
-  /** People who did anything that day. */
+  /** People who did anything that day (distinct audit-log actors). */
   activeUsers: number;
-  /** Total logged actions across the platform. */
+  /** Audit-logged actions that day. */
   actions: number;
-  /** Ask IRA / Concierge queries (subset of actions). */
-  aiQueries: number;
-  /** Reports generated that day (subset of actions). */
+  /** Conversations started that day (CHAT_HISTORY — saved chat records). */
+  aiConversations: number;
+  /** Messages exchanged in those conversations. */
+  aiMessages: number;
+  /** Ask IRA / Concierge audit events that day: questions asked + tool runs.
+   *  Disjoint from `aiConversations` — saved chats predate event logging. */
+  aiEvents: number;
+  /** Reports + ATRs generated that day (the report registries). */
   reports: number;
-  /** Files downloaded / exported that day (subset of actions). */
+  /** Export events that day. */
   downloads: number;
   byModule: Record<UsageModule, number>;
-}
-
-/* ── Deterministic PRNG (mulberry32) — same numbers on every reload ── */
-function mulberry32(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** Small string hash — stable per-user seed from an email. */
-function hashStr(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
+  /** The audit events themselves, so every drill-down stays real. */
+  entries: UsageEntry[];
 }
 
 /** Longest visible range (the 90-day chip). */
 export const USAGE_RANGE_DAYS = 90;
-/** Seed length — twice the longest range, so every visible window has a full
+/** Series length — twice the longest range, so every visible window has a full
  *  equal-length prior window for period-over-period deltas. */
-export const USAGE_SEED_DAYS = 180;
+export const USAGE_SERIES_DAYS = 180;
 
-/** The seeded daily series, oldest → today. Built once at module init. */
-export const USAGE_DAYS: UsageDay[] = (() => {
-  const rnd = mulberry32(0x1ea7f00d);
-  const days: UsageDay[] = [];
-  // Today's real weekday anchors the weekday/weekend rhythm.
-  const todayDow = new Date().getDay();
-  for (let offset = USAGE_SEED_DAYS - 1; offset >= 0; offset--) {
-    const dow = ((todayDow - (offset % 7)) + 7) % 7;
-    const weekend = dow === 0 || dow === 6;
-    // Gentle adoption ramp: older days run at ~60% of current volume.
-    const ramp = 0.6 + 0.4 * ((USAGE_SEED_DAYS - offset) / USAGE_SEED_DAYS);
-    const base = weekend ? 14 + rnd() * 14 : 70 + rnd() * 70;
-    const actions = Math.round(base * ramp);
-    const activeUsers = weekend
-      ? 1 + Math.floor(rnd() * 3)
-      : 4 + Math.floor(rnd() * 5);
-    const aiQueries = Math.round(actions * (0.24 + rnd() * 0.12));
-    const reports = Math.round(actions * (0.05 + rnd() * 0.05));
-    const downloads = Math.round(actions * (0.06 + rnd() * 0.06));
-    const byModule = {} as Record<UsageModule, number>;
-    let assigned = 0;
-    USAGE_MODULES.forEach((m, i) => {
-      if (i === USAGE_MODULES.length - 1) {
-        byModule[m] = Math.max(0, actions - assigned);
-        return;
-      }
-      const jitter = 0.75 + rnd() * 0.5;
-      const n = Math.min(actions - assigned, Math.round(actions * MODULE_WEIGHTS[m] * jitter));
-      byModule[m] = Math.max(0, n);
-      assigned += byModule[m];
-    });
-    days.push({ dayOffset: offset, activeUsers, actions, aiQueries, reports, downloads, byModule });
-  }
-  return days;
-})();
+const DAY_MS = 86400000;
 
-/** Axis label for a day offset (e.g. "Jun 12"). */
-export function usageDayLabel(offset: number): string {
-  const d = new Date(Date.now() - offset * 86400000);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * Live fold-in — today's real session events on top of the seed
+/* ── Date parsing for the registry records ─────────────────────────────────
+ * Audit logs:  '2026-04-19 10:30:50'
+ * Reports:     'Mar 20, 2026'  |  'Mar 22, 2026, 16:40'
+ * Chats:       'Mar 20, 2026'
  * ────────────────────────────────────────────────────────────────────────── */
 
-function todayStamp(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+/** Midnight-normalised day key for any of the above formats. Null if unparseable. */
+function dayStart(value: string): number | null {
+  if (!value) return null;
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return Date.UTC(+iso[1], +iso[2] - 1, +iso[3]);
+  // 'Mar 22, 2026, 16:40' → drop the trailing clock time before parsing.
+  const d = new Date(value.replace(/,\s*\d{1,2}:\d{2}.*$/, ''));
+  if (isNaN(d.getTime())) return null;
+  return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-/** Logs produced today (the seeds are dated months back, so today = live). */
+/** Clock hour from an audit-log timestamp; null for date-only records. */
+function hourOf(timestamp: string): number | null {
+  const m = timestamp.match(/\s(\d{2}):\d{2}/);
+  return m ? Number(m[1]) : null;
+}
+
+function todayStartUtc(): number {
+  const n = new Date();
+  return Date.UTC(n.getFullYear(), n.getMonth(), n.getDate());
+}
+
+/** Every report the registries know about, as (dayKey) stamps. */
+function reportDayKeys(): number[] {
+  return [
+    ...GENERATED_REPORTS.map(r => dayStart(r.generatedAt)),
+    ...ATR_LIBRARY.map(a => dayStart(a.generatedAt)),
+  ].filter((v): v is number => v !== null);
+}
+
+/** Every saved conversation, as (dayKey, messages) pairs. */
+function chatDayKeys(): { key: number; messages: number }[] {
+  return CHAT_HISTORY
+    .map(c => ({ key: dayStart(c.timestamp), messages: c.messages }))
+    .filter((v): v is { key: number; messages: number } => v.key !== null);
+}
+
+/**
+ * The anchor: the newest record that predates today. Live session events are
+ * deliberately excluded so a single click can't slide the window and empty it.
+ */
+export function usageAnchor(logs: AuditLog[]): number {
+  const today = todayStartUtc();
+  const candidates = [
+    ...logs.map(l => dayStart(l.timestamp)).filter((v): v is number => v !== null && v < today),
+    ...reportDayKeys(),
+    ...chatDayKeys().map(c => c.key),
+  ];
+  return candidates.length > 0 ? Math.max(...candidates) : today;
+}
+
+/** Human label for the anchor, e.g. "Apr 19, 2026". */
+export function usageAnchorLabel(logs: AuditLog[]): string {
+  return new Date(usageAnchor(logs)).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+  });
+}
+
+/** Logs produced today — the current session's live events. */
 export function liveLogsToday(logs: AuditLog[]): AuditLog[] {
-  const today = todayStamp();
-  return logs.filter(l => l.timestamp.startsWith(today));
+  const today = todayStartUtc();
+  return logs.filter(l => {
+    const k = dayStart(l.timestamp);
+    return k !== null && k === today;
+  });
 }
 
-/** A live event that counts as an AI query: a question asked or a tool run in
- *  the Ask IRA bucket — not exports/renames of chat artifacts. */
-function isAiQuery(l: AuditLog): boolean {
-  return usageModuleFor(l.module) === 'Ask IRA' && (l.action === 'Create' || l.action === 'Run');
+function emptyByModule(): Record<UsageModule, number> {
+  const m = {} as Record<UsageModule, number>;
+  USAGE_MODULES.forEach(k => { m[k] = 0; });
+  return m;
 }
 
-/** The seeded series with today's live events folded into the newest bucket. */
+/**
+ * The real daily series, oldest → anchor. Live events (dated today) are folded
+ * into the anchor bucket so this session's work is visible immediately.
+ */
 export function usageDaysWithLive(logs: AuditLog[]): UsageDay[] {
-  const live = liveLogsToday(logs);
-  if (live.length === 0) return USAGE_DAYS;
-  return USAGE_DAYS.map(day => {
-    if (day.dayOffset !== 0) return day;
-    const byModule = { ...day.byModule };
-    live.forEach(l => { byModule[usageModuleFor(l.module)] += 1; });
-    const liveUsers = new Set(live.map(l => l.user));
-    return {
-      ...day,
-      actions: day.actions + live.length,
-      activeUsers: Math.max(day.activeUsers, liveUsers.size),
-      aiQueries: day.aiQueries + live.filter(isAiQuery).length,
-      // A report counts as generated only on a Create — downloading or
-      // sharing one is not a new report.
-      reports: day.reports + live.filter(l => l.action === 'Create' && l.entity === 'Report').length,
-      downloads: day.downloads + live.filter(l => l.action === 'Export').length,
-      byModule,
-    };
+  const anchor = usageAnchor(logs);
+  const today = todayStartUtc();
+
+  const days: UsageDay[] = [];
+  for (let offset = USAGE_SERIES_DAYS - 1; offset >= 0; offset--) {
+    days.push({
+      dayOffset: offset,
+      activeUsers: 0, actions: 0, aiConversations: 0, aiMessages: 0, aiEvents: 0,
+      reports: 0, downloads: 0,
+      byModule: emptyByModule(),
+      entries: [],
+    });
+  }
+  const byOffset = new Map<number, UsageDay>(days.map(d => [d.dayOffset, d]));
+
+  /** Offset of a day key relative to the anchor; live (today) collapses to 0. */
+  const offsetFor = (key: number): number | null => {
+    if (key >= today) return 0;                       // this session's events
+    const off = Math.round((anchor - key) / DAY_MS);
+    return off >= 0 && off < USAGE_SERIES_DAYS ? off : null;
+  };
+
+  // 1. Audit events — actions, actors, modules, downloads.
+  for (const l of logs) {
+    const key = dayStart(l.timestamp);
+    if (key === null) continue;
+    const off = offsetFor(key);
+    if (off === null) continue;
+    const day = byOffset.get(off)!;
+    const module = usageModuleFor(l.module);
+    day.entries.push({
+      id: l.id, user: l.user, action: l.action, entity: l.entity,
+      module, hour: hourOf(l.timestamp), description: l.description,
+    });
+    day.actions += 1;
+    day.byModule[module] += 1;
+    if (l.action === 'Export') day.downloads += 1;
+  }
+
+  // 2. Reports — the registries are the source of truth, not the log.
+  for (const key of reportDayKeys()) {
+    const off = offsetFor(key);
+    if (off !== null) byOffset.get(off)!.reports += 1;
+  }
+
+  // 3. Saved conversations — CHAT_HISTORY. These predate event logging, so
+  //    they carry no per-user attribution.
+  for (const { key, messages } of chatDayKeys()) {
+    const off = offsetFor(key);
+    if (off === null) continue;
+    const day = byOffset.get(off)!;
+    day.aiConversations += 1;
+    day.aiMessages += messages;
+  }
+
+  // 4. Distinct actors + AI events per day.
+  for (const day of days) {
+    day.activeUsers = new Set(day.entries.map(e => e.user)).size;
+    day.aiEvents = day.entries.filter(isAiEntry).length;
+  }
+
+  return days;
+}
+
+/** Axis label for a day offset, measured back from the anchor. `logs` is
+ *  required: without it the anchor would silently fall back to today and every
+ *  axis label would be wrong. */
+export function usageDayLabel(offset: number, logs: AuditLog[]): string {
+  const anchor = usageAnchor(logs);
+  return new Date(anchor - offset * DAY_MS).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', timeZone: 'UTC',
   });
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * Per-user usage — deterministic per person, scaled to the selected range
+ * Per-user rows — counted straight off the audit events
  * ────────────────────────────────────────────────────────────────────────── */
-
-export interface UserUsage {
-  /** Share of total platform activity this person accounts for (0–1). */
-  share: number;
-  /** Fraction of their actions that are AI queries. */
-  aiRatio: number;
-  /** Fraction of their actions that are downloads/exports. */
-  dlRatio: number;
-  topModule: UsageModule;
-}
-
-/** Stable per-user usage profile keyed off the email. Invited users (who have
- *  never signed in) get zero; suspended/locked/inactive users run at a
- *  fraction, since their activity stopped partway through the window. */
-export function userUsageProfile(user: Pick<AdminUser, 'email' | 'status'>): UserUsage {
-  if (user.status === 'Invited') {
-    return { share: 0, aiRatio: 0, dlRatio: 0, topModule: 'Ask IRA' };
-  }
-  const rnd = mulberry32(hashStr(user.email.toLowerCase()));
-  const raw = 0.3 + rnd() * 0.7;
-  const damp = user.status === 'Active' ? 1 : 0.25;
-  const topModule = USAGE_MODULES[Math.floor(rnd() * (USAGE_MODULES.length - 1))];
-  return {
-    share: raw * damp,
-    aiRatio: 0.15 + rnd() * 0.3,
-    dlRatio: 0.05 + rnd() * 0.1,
-    topModule,
-  };
-}
 
 export interface UserUsageRow {
   user: AdminUser;
   actions: number;
+  /** Ask IRA / Concierge log events. 0 until those flows write to the log. */
   aiQueries: number;
   downloads: number;
   topModule: UsageModule;
+  moduleCounts: Record<UsageModule, number>;
 }
 
 /** Days since the user's last login, from the display string ('Today, 09:14',
- *  'Yesterday', 'Apr 20', 'Never'). Used to zero out people who weren't around
- *  in the selected range. */
+ *  'Yesterday', 'Apr 20', 'Never'). */
 export function lastLoginOffsetDays(lastLogin: string): number {
   if (!lastLogin || lastLogin === 'Never') return Infinity;
   if (lastLogin.startsWith('Today')) return 0;
@@ -233,16 +288,41 @@ export function lastLoginOffsetDays(lastLogin: string): number {
   const d = new Date(`${lastLogin} ${new Date().getFullYear()}`);
   if (isNaN(d.getTime())) return Infinity;
   if (d.getTime() > Date.now()) d.setFullYear(d.getFullYear() - 1);
-  return Math.floor((Date.now() - d.getTime()) / 86400000);
+  return Math.floor((Date.now() - d.getTime()) / DAY_MS);
 }
 
-/** The one activity-window predicate: a member counts as active in a window
- *  when their last login falls inside it (Invited users have never signed in).
- *  Shared by the KPI totals, the per-user rows, and the seat buckets so the
- *  three surfaces can never disagree. */
-function activeInWindow(user: Pick<AdminUser, 'lastLogin' | 'status'>, windowStartOffset: number, windowLen: number): boolean {
-  if (user.status === 'Invited') return false;
-  return lastLoginOffsetDays(user.lastLogin) <= windowStartOffset + windowLen;
+/**
+ * An AI event is a question asked (chat send → Create/Query) or a tool run
+ * (Concierge → Run/<tool>). Deliberately NOT every Create in the AI bucket:
+ * a tool logs both a `Run` and a `Create` for the artifact it produced, so
+ * counting all Creates would double-count one action and read a RACM
+ * generation as a question.
+ */
+function isAiEntry(e: UsageEntry): boolean {
+  if (e.module !== 'Ask IRA') return false;
+  return e.action === 'Run' || (e.action === 'Create' && e.entity === 'Query');
+}
+
+/** Per-user rows for a window, counted from that window's real events. */
+export function userUsageRows(users: AdminUser[], days: UsageDay[]): UserUsageRow[] {
+  const entries = days.flatMap(d => d.entries);
+  return users.map(user => {
+    const mine = entries.filter(e => e.user === user.name);
+    const moduleCounts = emptyByModule();
+    mine.forEach(e => { moduleCounts[e.module] += 1; });
+    const topModule = USAGE_MODULES.reduce(
+      (best, m) => (moduleCounts[m] > moduleCounts[best] ? m : best),
+      USAGE_MODULES[0],
+    );
+    return {
+      user,
+      actions: mine.length,
+      aiQueries: mine.filter(isAiEntry).length,
+      downloads: mine.filter(e => e.action === 'Export').length,
+      topModule,
+      moduleCounts,
+    };
+  });
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -252,19 +332,31 @@ function activeInWindow(user: Pick<AdminUser, 'lastLogin' | 'status'>, windowSta
 export interface UsageTotals {
   activeUsers: number;
   actions: number;
-  aiQueries: number;
+  /** Saved conversations started in the window. */
+  aiConversations: number;
+  /** Questions asked + tool runs, from the audit log. */
+  aiEvents: number;
+  /** Everything AI in the window — the headline figure. */
+  aiActivity: number;
   reports: number;
   downloads: number;
 }
 
-/** Totals for one window of the series. `windowStartOffset` is how many days
- *  ago the window ends (0 = a window ending today; `rangeDays` = the window
- *  immediately before it). */
-export function usageWindowTotals(days: UsageDay[], users: AdminUser[], windowStartOffset: number): UsageTotals {
+/** Totals for one window. `activeUsers` counts distinct known members who
+ *  actually did something — not everyone whose last login happens to fall in
+ *  range, and never the 'Unknown' actor from a failed login. */
+export function usageWindowTotals(days: UsageDay[], users: AdminUser[]): UsageTotals {
+  const known = new Set(users.map(u => u.name));
+  const actors = new Set<string>();
+  days.forEach(d => d.entries.forEach(e => { if (known.has(e.user)) actors.add(e.user); }));
+  const aiConversations = days.reduce((s, d) => s + d.aiConversations, 0);
+  const aiEvents = days.reduce((s, d) => s + d.aiEvents, 0);
   return {
-    activeUsers: users.filter(u => activeInWindow(u, windowStartOffset, days.length)).length,
+    activeUsers: actors.size,
     actions: days.reduce((s, d) => s + d.actions, 0),
-    aiQueries: days.reduce((s, d) => s + d.aiQueries, 0),
+    aiConversations,
+    aiEvents,
+    aiActivity: aiConversations + aiEvents,
     reports: days.reduce((s, d) => s + d.reports, 0),
     downloads: days.reduce((s, d) => s + d.downloads, 0),
   };
@@ -276,41 +368,8 @@ export function usageDeltaPct(current: number, prior: number): number | null {
   return Math.round(((current - prior) / prior) * 100);
 }
 
-/** Per-user rows for a window: each person's share of the window total, plus
- *  their live events from this session counted one-for-one. Pass a non-zero
- *  `windowStartOffset` (and empty logs) to compute a prior window — live
- *  events only exist today, so they never belong to a past window. */
-export function userUsageRows(users: AdminUser[], days: UsageDay[], logs: AuditLog[], windowStartOffset = 0): UserUsageRow[] {
-  const totalActions = days.reduce((s, d) => s + d.actions, 0);
-  const profiles = users.map(u => ({ u, p: userUsageProfile(u) }));
-  const shareSum = profiles.reduce((s, x) => s + x.p.share, 0) || 1;
-  const live = liveLogsToday(logs);
-  const liveByUser = new Map<string, AuditLog[]>();
-  live.forEach(l => {
-    const arr = liveByUser.get(l.user) ?? [];
-    arr.push(l);
-    liveByUser.set(l.user, arr);
-  });
-  const rangeDays = days.length;
-  return profiles.map(({ u, p }) => {
-    // Someone whose last login predates the whole window did nothing in it —
-    // same predicate as usageWindowTotals, so the KPI and the table agree.
-    const inRange = activeInWindow(u, windowStartOffset, rangeDays);
-    const seeded = inRange ? Math.round(totalActions * (p.share / shareSum)) : 0;
-    const mine = liveByUser.get(u.name) ?? [];
-    return {
-      user: u,
-      actions: seeded + mine.length,
-      aiQueries: Math.round(seeded * p.aiRatio) + mine.filter(isAiQuery).length,
-      downloads: Math.round(seeded * p.dlRatio) + mine.filter(l => l.action === 'Export').length,
-      topModule: p.topModule,
-    };
-  });
-}
-
 /* ──────────────────────────────────────────────────────────────────────────
- * Downloads & exports — every download button funnels through logEvent, so
- * "who downloaded what" is derivable: seeded history + live Export events.
+ * Downloads & exports — real Export events
  * ────────────────────────────────────────────────────────────────────────── */
 
 export type DownloadFormat = 'PDF' | 'CSV' | 'XLSX' | 'DOCX' | 'PPTX' | 'HTML' | 'TXT' | 'JSON';
@@ -320,93 +379,67 @@ export interface DownloadEvent {
   user: string;
   item: string;
   format: DownloadFormat;
-  /** Days ago; 0 = today. */
   dayOffset: number;
-  /** Display time (HH:MM) for the row. */
   time: string;
   /** True when this came from a real logEvent in the current session. */
   live: boolean;
 }
 
-/** The artifacts people pull out of a GRC platform — the seed catalog. */
-const DOWNLOAD_CATALOG: { item: string; format: DownloadFormat }[] = [
-  { item: 'SOX Compliance Report', format: 'PDF' },
-  { item: 'P2P RACM matrix', format: 'XLSX' },
-  { item: 'Audit log', format: 'CSV' },
-  { item: 'Q2 exceptions summary', format: 'DOCX' },
-  { item: 'Vendor risk dashboard data', format: 'CSV' },
-  { item: 'ITGC control library', format: 'XLSX' },
-  { item: 'IA engagement report', format: 'PDF' },
-  { item: 'Workflow run output', format: 'CSV' },
-];
-
-/** Pull the artifact name + format out of an Export log's description.
- *  Export events come from every download button on the platform, so the
- *  phrasing varies: 'Exported audit log as CSV (12 events)', 'Downloaded
- *  ATR "…" as Word', 'Generated C-01-Working-Paper.pdf'. */
 const FORMAT_ALIASES: Record<string, DownloadFormat> = {
   PDF: 'PDF', CSV: 'CSV', XLSX: 'XLSX', DOCX: 'DOCX', PPTX: 'PPTX',
   HTML: 'HTML', TXT: 'TXT', JSON: 'JSON', WORD: 'DOCX', EXCEL: 'XLSX', POWERPOINT: 'PPTX',
 };
-function parseExportLog(l: AuditLog): { item: string; format: DownloadFormat } {
-  const m = l.description.match(/(?:Exported|Downloaded|Generated) (.+?) (?:as |\()(\w+)/i);
+
+/** Pull the artifact name + format out of an Export log's description. */
+function parseExportLog(description: string, entity: string): { item: string; format: DownloadFormat } {
+  const m = description.match(/(?:Exported|Downloaded|Generated) (.+?) (?:as |\()(\w+)/i);
   const format = m ? FORMAT_ALIASES[m[2].toUpperCase()] : undefined;
   if (m && format) {
     const item = m[1];
     return { item: item.charAt(0).toUpperCase() + item.slice(1), format };
   }
-  return { item: l.entity, format: 'CSV' };
+  return { item: entity, format: 'CSV' };
 }
 
-/** Latest downloads, newest first: real session Export events on top, then a
- *  deterministic seeded history assigned to the most-active members. */
-export function recentDownloads(rows: UserUsageRow[], logs: AuditLog[], limit = 6): DownloadEvent[] {
-  const liveEvents: DownloadEvent[] = liveLogsToday(logs)
-    .filter(l => l.action === 'Export')
-    .map(l => ({
-      id: l.id,
-      user: l.user,
-      ...parseExportLog(l),
-      dayOffset: 0,
-      time: l.timestamp.split(' ')[1]?.slice(0, 5) ?? '',
-      live: true,
-    }));
-  const downloaders = [...rows].filter(r => r.downloads > 0).sort((a, b) => b.downloads - a.downloads);
-  const rnd = mulberry32(0xd07a10ad);
-  const seeded: DownloadEvent[] = downloaders.length === 0 ? [] : DOWNLOAD_CATALOG.map((c, i) => ({
-    id: `dl-seed-${i}`,
-    user: downloaders[Math.floor(rnd() * downloaders.length)].user.name,
-    item: c.item,
-    format: c.format,
-    dayOffset: i === 0 ? 0 : Math.min(1 + Math.floor(rnd() * 6), USAGE_RANGE_DAYS),
-    time: `${String(9 + Math.floor(rnd() * 8)).padStart(2, '0')}:${String(Math.floor(rnd() * 60)).padStart(2, '0')}`,
-    live: false,
-  })).sort((a, b) => a.dayOffset - b.dayOffset);
-  return [...liveEvents, ...seeded].slice(0, limit);
+/** Every Export event in the window, newest first. */
+export function recentDownloads(days: UsageDay[], limit = 6): DownloadEvent[] {
+  return eventsNewestFirst(days, e => e.action === 'Export')
+    .map(({ e, dayOffset }) => ({
+      id: e.id,
+      user: e.user,
+      ...parseExportLog(e.description, e.entity),
+      dayOffset,
+      time: e.hour === null ? '' : `${String(e.hour).padStart(2, '0')}:00`,
+      live: dayOffset === 0,
+    }))
+    .slice(0, limit);
 }
 
-/** Split a download total across formats (largest-remainder, sums exactly). */
-export function downloadFormatSplit(total: number): { format: DownloadFormat; count: number }[] {
-  const weights: { format: DownloadFormat; w: number }[] = [
-    { format: 'PDF', w: 0.38 },
-    { format: 'CSV', w: 0.27 },
-    { format: 'XLSX', w: 0.22 },
-    { format: 'DOCX', w: 0.13 },
-  ];
-  const raw = weights.map(x => x.w * total);
-  const floors = raw.map(v => Math.floor(v));
-  let remainder = total - floors.reduce((s, f) => s + f, 0);
-  const order = raw.map((v, i) => ({ i, frac: v - floors[i] })).sort((a, b) => b.frac - a.frac);
-  for (const { i } of order) {
-    if (remainder <= 0) break;
-    floors[i] += 1;
-    remainder -= 1;
-  }
-  return weights.map((x, i) => ({ format: x.format, count: floors[i] }));
+/** Real format mix across the window's Export events. */
+export function downloadFormatSplit(days: UsageDay[]): { format: DownloadFormat; count: number }[] {
+  const counts = new Map<DownloadFormat, number>();
+  days.forEach(d => d.entries.forEach(e => {
+    if (e.action !== 'Export') return;
+    const { format } = parseExportLog(e.description, e.entity);
+    counts.set(format, (counts.get(format) ?? 0) + 1);
+  }));
+  return [...counts.entries()]
+    .map(([format, count]) => ({ format, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+/** Flatten a window's entries newest-first, keeping each one's day offset. */
+function eventsNewestFirst(
+  days: UsageDay[],
+  predicate: (e: UsageEntry) => boolean,
+): { e: UsageEntry; dayOffset: number }[] {
+  const out: { e: UsageEntry; dayOffset: number }[] = [];
+  days.forEach(d => d.entries.forEach(e => { if (predicate(e)) out.push({ e, dayOffset: d.dayOffset }); }));
+  return out.sort((a, b) => a.dayOffset - b.dayOffset || (b.e.hour ?? 0) - (a.e.hour ?? 0));
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * Drill-down series — deterministic per member, reconciled to their row
+ * Drill-downs — all counted from the same entries
  * ────────────────────────────────────────────────────────────────────────── */
 
 export interface UserDayPoint {
@@ -415,67 +448,38 @@ export interface UserDayPoint {
   aiQueries: number;
 }
 
-/** A member's daily activity across the visible window. Jittered per person
- *  but normalized (largest-remainder rounding) so the series sums exactly to
- *  the row's action count — the drawer always reconciles with the table. */
+/** A member's real daily activity across the window. */
 export function userDailySeries(row: UserUsageRow, days: UsageDay[]): UserDayPoint[] {
-  const total = row.actions;
-  if (total <= 0) return days.map(d => ({ dayOffset: d.dayOffset, actions: 0, aiQueries: 0 }));
-  const rnd = mulberry32(hashStr(row.user.email.toLowerCase() + ':daily'));
-  const weights = days.map(d => Math.max(0.05, d.actions) * (0.6 + rnd() * 0.8));
-  const wSum = weights.reduce((s, w) => s + w, 0) || 1;
-  const raw = weights.map(w => (w / wSum) * total);
-  const floors = raw.map(v => Math.floor(v));
-  let remainder = total - floors.reduce((s, f) => s + f, 0);
-  const byFraction = raw
-    .map((v, i) => ({ i, frac: v - floors[i] }))
-    .sort((a, b) => b.frac - a.frac);
-  for (const { i } of byFraction) {
-    if (remainder <= 0) break;
-    floors[i] += 1;
-    remainder -= 1;
-  }
-  const aiRatio = row.aiQueries / total;
-  return days.map((d, i) => ({
-    dayOffset: d.dayOffset,
-    actions: floors[i],
-    aiQueries: Math.round(floors[i] * aiRatio),
-  }));
+  return days.map(d => {
+    const mine = d.entries.filter(e => e.user === row.user.name);
+    return {
+      dayOffset: d.dayOffset,
+      actions: mine.length,
+      aiQueries: mine.filter(isAiEntry).length,
+    };
+  });
 }
 
-/** A member's activity split across all 8 modules, scaled to their row total.
- *  Their table `topModule` is forced to rank first for consistency. */
+/** A member's activity split across the modules they actually touched. */
 export function fullUserModuleMix(row: UserUsageRow): { module: UsageModule; count: number }[] {
-  if (row.actions <= 0) return [];
-  const rnd = mulberry32(hashStr(row.user.email.toLowerCase() + ':mix'));
-  const weights = USAGE_MODULES.map(m => ({ module: m, w: 0.2 + rnd() * 0.8 }));
-  const maxW = Math.max(...weights.map(x => x.w));
-  weights.forEach(x => { if (x.module === row.topModule) x.w = maxW * 1.3; });
-  const wSum = weights.reduce((s, x) => s + x.w, 0);
-  return weights
-    .map(x => ({ module: x.module, count: Math.round((x.w / wSum) * row.actions) }))
+  return USAGE_MODULES
+    .map(module => ({ module, count: row.moduleCounts[module] }))
+    .filter(x => x.count > 0)
     .sort((a, b) => b.count - a.count);
 }
 
-/** The drawer's ranked module list — top 4 of the full mix. */
+/** The drawer's ranked module list — top 4. */
 export function userModuleMix(row: UserUsageRow): { module: UsageModule; count: number }[] {
   return fullUserModuleMix(row).slice(0, 4);
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
- * Module drill-down
- * ────────────────────────────────────────────────────────────────────────── */
-
-/** One module's daily counts over a window (for the drill-down trend). */
 export function moduleDailySeries(module: UsageModule, days: UsageDay[]): { dayOffset: number; count: number }[] {
   return days.map(d => ({ dayOffset: d.dayOffset, count: d.byModule[module] }));
 }
 
-/** The members who use a module most, from the same per-user mix the member
- *  drawer shows — the two drill-downs can never disagree. */
 export function moduleTopUsers(module: UsageModule, rows: UserUsageRow[], top = 3): { name: string; email: string; count: number }[] {
   return rows
-    .map(r => ({ r, count: fullUserModuleMix(r).find(m => m.module === module)?.count ?? 0 }))
+    .map(r => ({ r, count: r.moduleCounts[module] }))
     .filter(x => x.count > 0)
     .sort((a, b) => b.count - a.count)
     .slice(0, top)
@@ -489,10 +493,6 @@ export function moduleTopUsers(module: UsageModule, rows: UserUsageRow[], top = 
 export type EngagementSegment = 'Power' | 'Core' | 'Casual' | 'Dormant';
 export const ENGAGEMENT_SEGMENTS: EngagementSegment[] = ['Power', 'Core', 'Casual', 'Dormant'];
 
-/** Display names — plain words, not analytics jargon. "No activity" (rather
- *  than "Dormant") also keeps the segment from being confused with the
- *  Members card's "No sign-in 30+ days" bucket — they measure different
- *  things and their counts legitimately differ. */
 export const SEGMENT_LABELS: Record<EngagementSegment, string> = {
   Power: 'Heavy',
   Core: 'Regular',
@@ -500,42 +500,57 @@ export const SEGMENT_LABELS: Record<EngagementSegment, string> = {
   Dormant: 'No activity',
 };
 
-/** Mean actions across members who did anything — the segment baseline. */
 export function activeMeanActions(rows: UserUsageRow[]): number {
   const active = rows.filter(r => r.actions > 0);
   if (active.length === 0) return 0;
   return active.reduce((s, r) => s + r.actions, 0) / active.length;
 }
 
-/** Segment a member relative to the active mean: Power ≥ 1.4x, Casual < 0.6x,
- *  Core in between, Dormant = nothing in the window. */
 export function segmentFor(row: UserUsageRow, activeMean: number): EngagementSegment {
-  if (row.actions === 0) return 'Dormant';
-  if (activeMean > 0 && row.actions >= activeMean * 1.4) return 'Power';
-  if (activeMean > 0 && row.actions < activeMean * 0.6) return 'Casual';
-  return 'Core';
+  if (row.actions <= 0) return 'Dormant';
+  if (activeMean <= 0) return 'Casual';
+  if (row.actions >= activeMean * 1.5) return 'Power';
+  if (row.actions >= activeMean * 0.5) return 'Core';
+  return 'Casual';
 }
 
-/** Share of active members who used AI in the window (0-100). */
+/** Concierge / Ask IRA tool runs in the window (audit `Run` events). */
+export function aiToolRuns(days: UsageDay[]): number {
+  return days.reduce(
+    (s, d) => s + d.entries.filter(e => e.module === 'Ask IRA' && e.action === 'Run').length,
+    0,
+  );
+}
+
+/** Questions asked of Ask IRA in the window (chat sends → `Create` / `Query`). */
+export function aiQuestions(days: UsageDay[]): number {
+  return days.reduce(
+    (s, d) => s + d.entries.filter(e => e.module === 'Ask IRA' && e.action === 'Create' && e.entity === 'Query').length,
+    0,
+  );
+}
+
+/** Share of active members whose activity includes an AI event. */
 export function aiAdoptionPct(rows: UserUsageRow[]): number {
   const active = rows.filter(r => r.actions > 0);
   if (active.length === 0) return 0;
   return Math.round((active.filter(r => r.aiQueries > 0).length / active.length) * 100);
 }
 
-/** Statistical outlier days: actions above mean + 2 standard deviations.
- *  Each spike carries how many times "typical" it ran and which module drove
- *  it — the passive anomaly-detection layer of the page. */
+/* ──────────────────────────────────────────────────────────────────────────
+ * Spikes & concentration
+ * ────────────────────────────────────────────────────────────────────────── */
+
 export interface UsageSpike {
   dayOffset: number;
   actions: number;
-  /** Multiple of the window's mean day (e.g. 2.1). */
   ratio: number;
   topModule: UsageModule;
 }
 
 export function usageSpikes(days: UsageDay[]): UsageSpike[] {
-  if (days.length < 7) return [];
+  const active = days.filter(d => d.actions > 0);
+  if (active.length < 3) return [];
   const mean = days.reduce((s, d) => s + d.actions, 0) / days.length;
   if (mean <= 0) return [];
   const variance = days.reduce((s, d) => s + (d.actions - mean) ** 2, 0) / days.length;
@@ -551,9 +566,7 @@ export function usageSpikes(days: UsageDay[]): UsageSpike[] {
     .sort((a, b) => b.actions - a.actions);
 }
 
-/** How concentrated usage is: the share of all member activity that the top N
- *  members account for (0-100). High = the platform depends on a few people.
- *  Null when nobody did anything. */
+/** Share of all member activity the top N members account for (0-100). */
 export function activityConcentration(rows: UserUsageRow[], topN = 3): number | null {
   const total = rows.reduce((s, r) => s + r.actions, 0);
   if (total === 0) return null;
@@ -563,10 +576,7 @@ export function activityConcentration(rows: UserUsageRow[], topN = 3): number | 
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * What got created — workflows, dashboards, RACMs, engagements and reports
- * built in the window. Seeded counts derive from each module's daily series;
- * real Create events from this session (logged by the create flows across the
- * platform) are counted one-for-one on top.
+ * What got created / run / shared — real Create, Run and Share events
  * ────────────────────────────────────────────────────────────────────────── */
 
 export interface CreationKind {
@@ -574,32 +584,16 @@ export interface CreationKind {
   label: string;
   /** AuditLog.entity values that count as this kind (with action 'Create'). */
   entities: string[];
-  module: UsageModule;
-  /** Fraction of the module's daily actions that are creations (seed only). */
-  share: number;
 }
 
 export const CREATION_KINDS: CreationKind[] = [
-  { key: 'workflows', label: 'Workflows', entities: ['Workflow'], module: 'Workflows', share: 0.07 },
-  { key: 'dashboards', label: 'Dashboards', entities: ['Dashboard'], module: 'Dashboards', share: 0.06 },
-  { key: 'racms', label: 'RACMs', entities: ['RACM'], module: 'Risk & Controls', share: 0.05 },
-  { key: 'engagements', label: 'Engagements', entities: ['Engagement'], module: 'Engagements', share: 0.04 },
-  // Reports reuse the day series' `reports` count, so the card and the
-  // Reports KPI always show the same number.
-  { key: 'reports', label: 'Reports', entities: ['Report'], module: 'Reports', share: 0 },
+  { key: 'workflows', label: 'Workflows', entities: ['Workflow'] },
+  { key: 'dashboards', label: 'Dashboards', entities: ['Dashboard'] },
+  { key: 'racms', label: 'RACMs', entities: ['RACM', 'RACM Mapping'] },
+  { key: 'engagements', label: 'Engagements', entities: ['Engagement'] },
+  // Reports come from the registries, so this card and the Reports KPI agree.
+  { key: 'reports', label: 'Reports', entities: ['Report'] },
 ];
-
-/** Seeded creations of one kind on one day — deterministic per (kind, day). */
-function seededCreations(kind: CreationKind, day: UsageDay): number {
-  if (kind.key === 'reports') return day.reports;
-  const rnd = mulberry32(hashStr(`create:${kind.key}:${day.dayOffset}`));
-  return Math.round(day.byModule[kind.module] * kind.share * (0.7 + rnd() * 0.6));
-}
-
-/** Today's real Create events for a kind. */
-function liveCreates(kind: CreationKind, logs: AuditLog[]): AuditLog[] {
-  return liveLogsToday(logs).filter(l => l.action === 'Create' && kind.entities.includes(l.entity));
-}
 
 export interface CreationTotal {
   kind: CreationKind;
@@ -607,99 +601,53 @@ export interface CreationTotal {
   deltaPct: number | null;
 }
 
-/** Per-kind created counts for the window with prior-window deltas. Live
- *  events only exist today, so they only ever land in the current window.
- *  Reports skip the live add — `usageDaysWithLive` already folds live report
- *  events into today's `reports`, and this reuses that number. */
-export function creationTotals(days: UsageDay[], priorDays: UsageDay[], logs: AuditLog[]): CreationTotal[] {
+function createdCount(kind: CreationKind, days: UsageDay[]): number {
+  if (kind.key === 'reports') return days.reduce((s, d) => s + d.reports, 0);
+  return days.reduce(
+    (s, d) => s + d.entries.filter(e => e.action === 'Create' && kind.entities.includes(e.entity)).length,
+    0,
+  );
+}
+
+export function creationTotals(days: UsageDay[], priorDays: UsageDay[]): CreationTotal[] {
   return CREATION_KINDS.map(kind => {
-    const seeded = days.reduce((s, d) => s + seededCreations(kind, d), 0);
-    const prior = priorDays.reduce((s, d) => s + seededCreations(kind, d), 0);
-    const live = kind.key === 'reports' ? 0 : liveCreates(kind, logs).length;
-    return { kind, count: seeded + live, deltaPct: usageDeltaPct(seeded + live, prior) };
+    const count = createdCount(kind, days);
+    return { kind, count, deltaPct: usageDeltaPct(count, createdCount(kind, priorDays)) };
   });
 }
 
 export interface CreationEvent {
   id: string;
   user: string;
-  /** What was created, e.g. 'workflow "Duplicate vendor payments"'. */
   item: string;
   kindLabel: string;
-  /** Days ago; 0 = today. */
   dayOffset: number;
-  /** Display time (HH:MM) for live rows. */
   time: string;
-  /** True when this came from a real logEvent in the current session. */
   live: boolean;
 }
 
-/** The artifacts people build on a GRC platform — the seed catalog. */
-const CREATION_CATALOG: { item: string; kind: CreationKind['key'] }[] = [
-  { item: 'workflow "Duplicate vendor payments"', kind: 'workflows' },
-  { item: 'Vendor risk dashboard', kind: 'dashboards' },
-  { item: 'O2C revenue RACM', kind: 'racms' },
-  { item: 'engagement "FY26 Q1 SOX Walkthrough"', kind: 'engagements' },
-  { item: 'IA engagement report', kind: 'reports' },
-  { item: 'workflow "Three-way match exceptions"', kind: 'workflows' },
-  { item: 'ITGC compliance dashboard', kind: 'dashboards' },
-  { item: 'SOX compliance report', kind: 'reports' },
-];
-
-/** Latest creations, newest first: real session Create events on top, then a
- *  deterministic seeded history assigned to the most-active members. */
-export function recentCreations(rows: UserUsageRow[], logs: AuditLog[], limit = 6): CreationEvent[] {
+export function recentCreations(days: UsageDay[], limit = 6): CreationEvent[] {
   const labelByEntity = new Map<string, string>();
   CREATION_KINDS.forEach(k => k.entities.forEach(e => labelByEntity.set(e, k.label)));
-  const liveEvents: CreationEvent[] = liveLogsToday(logs)
-    .filter(l => l.action === 'Create' && labelByEntity.has(l.entity))
-    .map(l => ({
-      id: l.id,
-      user: l.user,
-      item: l.description.replace(/^Created /, ''),
-      kindLabel: labelByEntity.get(l.entity)!,
-      dayOffset: 0,
-      time: l.timestamp.split(' ')[1]?.slice(0, 5) ?? '',
-      live: true,
-    }));
-  const creators = [...rows].filter(r => r.actions > 0).sort((a, b) => b.actions - a.actions);
-  const rnd = mulberry32(0xc0ffee42);
-  const kindLabel = (key: CreationKind['key']) => CREATION_KINDS.find(k => k.key === key)!.label;
-  const seeded: CreationEvent[] = creators.length === 0 ? [] : CREATION_CATALOG.map((c, i) => ({
-    id: `cr-seed-${i}`,
-    user: creators[Math.floor(rnd() * creators.length)].user.name,
-    item: c.item,
-    kindLabel: kindLabel(c.kind),
-    dayOffset: i === 0 ? 0 : Math.min(1 + Math.floor(rnd() * 6), USAGE_RANGE_DAYS),
-    time: `${String(9 + Math.floor(rnd() * 8)).padStart(2, '0')}:${String(Math.floor(rnd() * 60)).padStart(2, '0')}`,
-    live: false,
-  })).sort((a, b) => a.dayOffset - b.dayOffset);
-  return [...liveEvents, ...seeded].slice(0, limit);
+  return eventsNewestFirst(days, e => e.action === 'Create' && labelByEntity.has(e.entity))
+    .map(({ e, dayOffset }) => ({
+      id: e.id,
+      user: e.user,
+      item: e.description.replace(/^Created /, ''),
+      kindLabel: labelByEntity.get(e.entity)!,
+      dayOffset,
+      time: e.hour === null ? '' : `${String(e.hour).padStart(2, '0')}:00`,
+      live: dayOffset === 0,
+    }))
+    .slice(0, limit);
 }
-
-/* ──────────────────────────────────────────────────────────────────────────
- * Workflow runs — executions across the platform (library, engagements,
- * AI tools). Seeded from each area's daily series; live Run events counted
- * one-for-one on top.
- * ────────────────────────────────────────────────────────────────────────── */
 
 export type RunArea = 'Workflow Library' | 'Engagements' | 'AI tools';
-export const RUN_AREAS: { area: RunArea; bucket: UsageModule; share: number }[] = [
-  { area: 'Workflow Library', bucket: 'Workflows', share: 0.30 },
-  { area: 'Engagements', bucket: 'Engagements', share: 0.10 },
-  { area: 'AI tools', bucket: 'Ask IRA', share: 0.08 },
-];
+export const RUN_AREAS: RunArea[] = ['Workflow Library', 'Engagements', 'AI tools'];
 
-function seededRuns(area: (typeof RUN_AREAS)[number], day: UsageDay): number {
-  const rnd = mulberry32(hashStr(`run:${area.area}:${day.dayOffset}`));
-  return Math.round(day.byModule[area.bucket] * area.share * (0.7 + rnd() * 0.6));
-}
-
-/** Which run area a live Run event belongs to, by its usage bucket. */
-function runAreaFor(l: AuditLog): RunArea {
-  const bucket = usageModuleFor(l.module);
-  if (bucket === 'Ask IRA') return 'AI tools';
-  if (bucket === 'Workflows') return 'Workflow Library';
+function runAreaFor(module: UsageModule): RunArea {
+  if (module === 'Ask IRA') return 'AI tools';
+  if (module === 'Workflows') return 'Workflow Library';
   return 'Engagements';
 }
 
@@ -709,21 +657,26 @@ export interface RunTotals {
   byArea: { area: RunArea; count: number }[];
 }
 
-export function workflowRunTotals(days: UsageDay[], priorDays: UsageDay[], logs: AuditLog[]): RunTotals {
-  const liveRuns = liveLogsToday(logs).filter(l => l.action === 'Run');
-  const byArea = RUN_AREAS.map(a => ({
-    area: a.area,
-    count: days.reduce((s, d) => s + seededRuns(a, d), 0) + liveRuns.filter(l => runAreaFor(l) === a.area).length,
+function runsIn(days: UsageDay[]): UsageEntry[] {
+  return days.flatMap(d => d.entries).filter(e => e.action === 'Run');
+}
+
+export function workflowRunTotals(days: UsageDay[], priorDays: UsageDay[]): RunTotals {
+  const runs = runsIn(days);
+  const byArea = RUN_AREAS.map(area => ({
+    area,
+    count: runs.filter(e => runAreaFor(e.module) === area).length,
   }));
-  const total = byArea.reduce((s, a) => s + a.count, 0);
-  const prior = RUN_AREAS.reduce((s, a) => s + priorDays.reduce((t, d) => t + seededRuns(a, d), 0), 0);
-  return { total, deltaPct: usageDeltaPct(total, prior), byArea };
+  return {
+    total: runs.length,
+    deltaPct: usageDeltaPct(runs.length, runsIn(priorDays).length),
+    byArea,
+  };
 }
 
 export interface RunEvent {
   id: string;
   user: string;
-  /** Verb-first phrase, e.g. 'ran workflow "Duplicate vendor payments"'. */
   item: string;
   area: RunArea;
   dayOffset: number;
@@ -731,66 +684,28 @@ export interface RunEvent {
   live: boolean;
 }
 
-const RUN_CATALOG: { item: string; area: RunArea }[] = [
-  { item: 'ran workflow "Duplicate vendor payments"', area: 'Workflow Library' },
-  { item: 'ran workflow "Three-way match exceptions"', area: 'Workflow Library' },
-  { item: 'executed an automation run for "P2P continuous monitoring"', area: 'Engagements' },
-  { item: 'ran a document forensic scan', area: 'AI tools' },
-  { item: 'ran workflow "Vendor master changes"', area: 'Workflow Library' },
-  { item: 'ran attribute testing on "Invoice approval"', area: 'Engagements' },
-  { item: 'extracted tables from 3 files', area: 'AI tools' },
-  { item: 'ran workflow "GL journal anomalies"', area: 'Workflow Library' },
-];
-
-/** Latest runs, newest first: live session Run events on top, then a
- *  deterministic seeded history assigned to the most-active members. */
-export function recentRuns(rows: UserUsageRow[], logs: AuditLog[], limit = 5): RunEvent[] {
-  const liveEvents: RunEvent[] = liveLogsToday(logs)
-    .filter(l => l.action === 'Run')
-    .map(l => ({
-      id: l.id,
-      user: l.user,
-      item: l.description.replace(/^./, c => c.toLowerCase()),
-      area: runAreaFor(l),
-      dayOffset: 0,
-      time: l.timestamp.split(' ')[1]?.slice(0, 5) ?? '',
-      live: true,
-    }));
-  const runners = [...rows].filter(r => r.actions > 0).sort((a, b) => b.actions - a.actions);
-  const rnd = mulberry32(0x5eedca11);
-  const seeded: RunEvent[] = runners.length === 0 ? [] : RUN_CATALOG.map((c, i) => ({
-    id: `run-seed-${i}`,
-    user: runners[Math.floor(rnd() * runners.length)].user.name,
-    item: c.item,
-    area: c.area,
-    dayOffset: i === 0 ? 0 : Math.min(1 + Math.floor(rnd() * 6), USAGE_RANGE_DAYS),
-    time: `${String(9 + Math.floor(rnd() * 8)).padStart(2, '0')}:${String(Math.floor(rnd() * 60)).padStart(2, '0')}`,
-    live: false,
-  })).sort((a, b) => a.dayOffset - b.dayOffset);
-  return [...liveEvents, ...seeded].slice(0, limit);
+export function recentRuns(days: UsageDay[], limit = 5): RunEvent[] {
+  return eventsNewestFirst(days, e => e.action === 'Run')
+    .map(({ e, dayOffset }) => ({
+      id: e.id,
+      user: e.user,
+      item: e.description.replace(/^./, c => c.toLowerCase()),
+      area: runAreaFor(e.module),
+      dayOffset,
+      time: e.hour === null ? '' : `${String(e.hour).padStart(2, '0')}:00`,
+      live: dayOffset === 0,
+    }))
+    .slice(0, limit);
 }
-
-/* ──────────────────────────────────────────────────────────────────────────
- * Sharing — invites and share links across the platform. Seeded as a small
- * slice of daily activity; live Share events counted one-for-one on top.
- * ────────────────────────────────────────────────────────────────────────── */
 
 export const SHARE_KINDS = ['Reports', 'Dashboards', 'RACMs', 'Workflows', 'Other'] as const;
 export type ShareKind = (typeof SHARE_KINDS)[number];
-const SHARE_WEIGHTS: Record<ShareKind, number> = {
-  Reports: 0.40, Dashboards: 0.25, RACMs: 0.15, Workflows: 0.12, Other: 0.08,
-};
 
-function seededSharesForDay(day: UsageDay): number {
-  const rnd = mulberry32(hashStr(`share:${day.dayOffset}`));
-  return Math.round(day.actions * 0.015 * (0.6 + rnd() * 0.8));
-}
-
-function shareKindFor(l: AuditLog): ShareKind {
-  switch (l.entity) {
+function shareKindFor(entity: string): ShareKind {
+  switch (entity) {
     case 'Report': return 'Reports';
     case 'Dashboard': return 'Dashboards';
-    case 'RACM': return 'RACMs';
+    case 'RACM': case 'RACM Mapping': return 'RACMs';
     case 'Workflow': return 'Workflows';
     default: return 'Other';
   }
@@ -802,32 +717,25 @@ export interface ShareTotals {
   byKind: { kind: ShareKind; count: number }[];
 }
 
-export function shareTotals(days: UsageDay[], priorDays: UsageDay[], logs: AuditLog[]): ShareTotals {
-  const seeded = days.reduce((s, d) => s + seededSharesForDay(d), 0);
-  const prior = priorDays.reduce((s, d) => s + seededSharesForDay(d), 0);
-  const liveShares = liveLogsToday(logs).filter(l => l.action === 'Share');
-  const total = seeded + liveShares.length;
-  // Largest-remainder split of the seeded total, then live events by entity.
-  const raw = SHARE_KINDS.map(k => SHARE_WEIGHTS[k] * seeded);
-  const floors = raw.map(v => Math.floor(v));
-  let remainder = seeded - floors.reduce((s, f) => s + f, 0);
-  const order = raw.map((v, i) => ({ i, frac: v - floors[i] })).sort((a, b) => b.frac - a.frac);
-  for (const { i } of order) {
-    if (remainder <= 0) break;
-    floors[i] += 1;
-    remainder -= 1;
-  }
-  const byKind = SHARE_KINDS.map((kind, i) => ({
-    kind,
-    count: floors[i] + liveShares.filter(l => shareKindFor(l) === kind).length,
-  }));
-  return { total, deltaPct: usageDeltaPct(total, prior), byKind };
+function sharesIn(days: UsageDay[]): UsageEntry[] {
+  return days.flatMap(d => d.entries).filter(e => e.action === 'Share');
+}
+
+export function shareTotals(days: UsageDay[], priorDays: UsageDay[]): ShareTotals {
+  const shares = sharesIn(days);
+  return {
+    total: shares.length,
+    deltaPct: usageDeltaPct(shares.length, sharesIn(priorDays).length),
+    byKind: SHARE_KINDS.map(kind => ({
+      kind,
+      count: shares.filter(e => shareKindFor(e.entity) === kind).length,
+    })),
+  };
 }
 
 export interface ShareEvent {
   id: string;
   user: string;
-  /** Verb-first phrase, e.g. 'shared SOX compliance report with 2 people'. */
   item: string;
   kind: ShareKind;
   dayOffset: number;
@@ -835,99 +743,58 @@ export interface ShareEvent {
   live: boolean;
 }
 
-const SHARE_CATALOG: { item: string; kind: ShareKind }[] = [
-  { item: 'shared the SOX compliance report with 2 people', kind: 'Reports' },
-  { item: 'shared the vendor risk dashboard with 4 people', kind: 'Dashboards' },
-  { item: 'copied a share link for the P2P RACM', kind: 'RACMs' },
-  { item: 'shared the IA engagement report with 1 person', kind: 'Reports' },
-  { item: 'shared a workflow run output with 3 people', kind: 'Workflows' },
-  { item: 'shared the ITGC compliance dashboard with 2 people', kind: 'Dashboards' },
-];
-
-/** Latest shares, newest first: live session Share events on top, then a
- *  deterministic seeded history assigned to the most-active members. */
-export function recentShares(rows: UserUsageRow[], logs: AuditLog[], limit = 5): ShareEvent[] {
-  const liveEvents: ShareEvent[] = liveLogsToday(logs)
-    .filter(l => l.action === 'Share')
-    .map(l => ({
-      id: l.id,
-      user: l.user,
-      item: l.description.replace(/^./, c => c.toLowerCase()),
-      kind: shareKindFor(l),
-      dayOffset: 0,
-      time: l.timestamp.split(' ')[1]?.slice(0, 5) ?? '',
-      live: true,
-    }));
-  const sharers = [...rows].filter(r => r.actions > 0).sort((a, b) => b.actions - a.actions);
-  const rnd = mulberry32(0x54a4e5);
-  const seeded: ShareEvent[] = sharers.length === 0 ? [] : SHARE_CATALOG.map((c, i) => ({
-    id: `share-seed-${i}`,
-    user: sharers[Math.floor(rnd() * sharers.length)].user.name,
-    item: c.item,
-    kind: c.kind,
-    dayOffset: i === 0 ? 0 : Math.min(1 + Math.floor(rnd() * 6), USAGE_RANGE_DAYS),
-    time: `${String(9 + Math.floor(rnd() * 8)).padStart(2, '0')}:${String(Math.floor(rnd() * 60)).padStart(2, '0')}`,
-    live: false,
-  })).sort((a, b) => a.dayOffset - b.dayOffset);
-  return [...liveEvents, ...seeded].slice(0, limit);
+export function recentShares(days: UsageDay[], limit = 5): ShareEvent[] {
+  return eventsNewestFirst(days, e => e.action === 'Share')
+    .map(({ e, dayOffset }) => ({
+      id: e.id,
+      user: e.user,
+      item: e.description.replace(/^./, c => c.toLowerCase()),
+      kind: shareKindFor(e.entity),
+      dayOffset,
+      time: e.hour === null ? '' : `${String(e.hour).padStart(2, '0')}:00`,
+      live: dayOffset === 0,
+    }))
+    .slice(0, limit);
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * Activity rhythm — weekday x hour heatmap
+ * Activity rhythm — weekday x hour heatmap, from real clock times only
  * ────────────────────────────────────────────────────────────────────────── */
 
-/** Working-hours intensity curve (24 slots): quiet nights, morning and
- *  afternoon peaks, a lunch dip. */
-const HOUR_CURVE = [
-  0.2, 0.1, 0.1, 0.1, 0.2, 0.4,   // 00-05
-  0.8, 1.5, 3.0, 5.0, 6.0, 5.5,   // 06-11
-  3.5, 4.5, 5.5, 6.0, 5.5, 4.5,   // 12-17
-  2.5, 1.5, 1.0, 0.8, 0.5, 0.3,   // 18-23
-];
-
-/** Weekday names in JS getDay() order — shared by the heatmap and highlights. */
 export const USAGE_DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export interface UsageHeatmapData {
   /** matrix[dow][hour], dow in JS getDay() order (0 = Sunday). */
   matrix: number[][];
   max: number;
-  /** Total across all cells — equals the window's action total. */
+  /** Cells summed. ≤ the window's action total: date-only records have no hour. */
   total: number;
+  /** Events with no clock time, therefore not placed on the grid. */
+  untimed: number;
 }
 
-/** Distribute each day's actions across 24 hours (deterministic jitter,
- *  largest-remainder rounding so the grid sums exactly to the window total)
- *  and accumulate by weekday. */
-export function usageHourlyMatrix(days: UsageDay[]): UsageHeatmapData {
+/** Real weekday × hour rhythm. Events without a clock time are reported
+ *  separately rather than smeared across the grid. */
+export function usageHourlyMatrix(days: UsageDay[], logs: AuditLog[]): UsageHeatmapData {
+  const anchor = usageAnchor(logs);
   const matrix = Array.from({ length: 7 }, () => Array<number>(24).fill(0));
-  const todayDow = new Date().getDay();
+  let untimed = 0;
+
   days.forEach(day => {
-    // Same weekday derivation as the seed, so weekends stay quiet here too.
-    const dow = ((todayDow - (day.dayOffset % 7)) + 7) % 7;
-    const rnd = mulberry32(hashStr('rhythm:' + day.dayOffset));
-    const weights = HOUR_CURVE.map(w => w * (0.7 + rnd() * 0.6));
-    const wSum = weights.reduce((s, w) => s + w, 0) || 1;
-    const raw = weights.map(w => (w / wSum) * day.actions);
-    const floors = raw.map(v => Math.floor(v));
-    let remainder = day.actions - floors.reduce((s, f) => s + f, 0);
-    const byFraction = raw
-      .map((v, i) => ({ i, frac: v - floors[i] }))
-      .sort((a, b) => b.frac - a.frac);
-    for (const { i } of byFraction) {
-      if (remainder <= 0) break;
-      floors[i] += 1;
-      remainder -= 1;
-    }
-    floors.forEach((n, h) => { matrix[dow][h] += n; });
+    const dow = new Date(anchor - day.dayOffset * DAY_MS).getUTCDay();
+    day.entries.forEach(e => {
+      if (e.hour === null) { untimed += 1; return; }
+      matrix[dow][e.hour] += 1;
+    });
   });
+
   const max = Math.max(1, ...matrix.flat());
   const total = matrix.flat().reduce((s, v) => s + v, 0);
-  return { matrix, max, total };
+  return { matrix, max, total, untimed };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * Seats & lifecycle
+ * Seats & lifecycle — from the member records
  * ────────────────────────────────────────────────────────────────────────── */
 
 export interface SeatBuckets {
@@ -939,12 +806,10 @@ export interface SeatBuckets {
   suspendedOrInactive: AdminUser[];
 }
 
-/** Seat-lifecycle buckets, derived with the same lastLogin parser as the
- *  table's Last Active column so the lists always agree. */
 export function seatBuckets(users: AdminUser[], rangeDays: number): SeatBuckets {
   return {
     total: users.length,
-    activeInRange: users.filter(u => activeInWindow(u, 0, rangeDays)),
+    activeInRange: users.filter(u => u.status !== 'Invited' && lastLoginOffsetDays(u.lastLogin) <= rangeDays),
     dormant: users.filter(u => u.status === 'Active' && lastLoginOffsetDays(u.lastLogin) > 30),
     invited: users.filter(u => u.status === 'Invited'),
     suspendedOrInactive: users.filter(u => u.status === 'Suspended' || u.status === 'Locked' || u.status === 'Inactive'),

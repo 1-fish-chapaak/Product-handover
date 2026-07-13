@@ -10,7 +10,7 @@ import type { LucideIcon } from 'lucide-react';
 
 export const fmt = (n: number) => n.toLocaleString('en-US');
 
-export const CARD = 'rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)]';
+export const CARD = 'rounded-lg border border-canvas-border bg-canvas-elevated';
 
 export function SectionCard({ icon: Icon, title, subtitle, right, className = '', children }: {
   icon: LucideIcon; title: string; subtitle?: string; right?: React.ReactNode; className?: string; children: React.ReactNode;
@@ -34,7 +34,7 @@ export function SectionCard({ icon: Icon, title, subtitle, right, className = ''
 export function PortfolioStat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'good' | 'bad' | 'neutral' }) {
   const color = tone === 'good' ? 'text-compliant-700' : tone === 'bad' ? 'text-risk-700' : 'text-ink-900';
   return (
-    <div className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3">
+    <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-4 py-3">
       <div className={`text-[1.375rem] font-bold tabular-nums leading-none ${color}`}>{value}</div>
       <div className="text-[0.6875rem] text-ink-600 font-medium mt-1.5 truncate">{label}</div>
       {sub && <div className="text-[0.625rem] text-ink-400 mt-0.5 truncate">{sub}</div>}

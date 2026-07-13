@@ -2,10 +2,10 @@
  * Section portfolios — cross-section aggregates for the Platform Usage page.
  *
  * Same idea as engagement-portfolio.ts, extended to every other platform
- * section: each derive* function folds that section's real seed data into
- * stats, composition breakdowns and ranked rows, so the usage page can show
- * an engagement-style read-only deep-dive per section. No actions here —
- * these are reporting shapes only.
+ * section: each derive* function folds that section's real records into stats,
+ * composition breakdowns and ranked rows, so the usage page can show an
+ * engagement-style read-only deep-dive per section. No actions here — these
+ * are reporting shapes only, and every number traces to a stored record.
  */
 
 import {
@@ -15,7 +15,7 @@ import {
 import { ATR_LIBRARY } from './atrLibrary';
 import { getRole } from './rbac';
 import { SEED as KH_SOURCES, type SourceType } from '../components/data-sources/sources';
-import type { UsageDay, UserUsageRow } from './platform-usage';
+import { aiToolRuns, aiQuestions, type UsageDay, type UserUsageRow } from './platform-usage';
 
 /* ── Generic shapes every section renders ────────────────────────────────── */
 
@@ -79,61 +79,71 @@ const CHIP_INFO = 'bg-evidence-50 text-evidence-700 border-evidence-100';
 
 /* ── Ask IRA — questions, tools and who leans on AI ──────────────────────── */
 
-/** Seeded mix of what AI activity is made of; live queries scale each slice. */
-const AI_TOOL_MIX: { label: string; share: number }[] = [
-  { label: 'Ask IRA chat', share: 0.46 },
-  { label: 'RACM Generator', share: 0.14 },
-  { label: 'Table Extractor', share: 0.12 },
-  { label: 'Insights & Anomaly', share: 0.11 },
-  { label: 'Speech Auditor', share: 0.09 },
-  { label: 'Medical Report Reader', share: 0.08 },
-];
-
+/**
+ * Ask IRA & AI tools — from the audit log and the saved conversations.
+ *
+ * Questions, tool runs and per-member attribution all come from real audit
+ * events (chat send → Create/Query; Concierge run → Run/<tool>). The seeded
+ * history predates that instrumentation, so "who uses AI most" is empty until
+ * someone actually uses AI in this session. The copy says so rather than
+ * inventing a ranking.
+ */
 export function deriveAskIraPortfolio(days: UsageDay[], rows: UserUsageRow[]): SectionPortfolio {
-  const questions = days.reduce((s, d) => s + d.aiQueries, 0);
-  const chats = Math.round(questions * 0.42);
-  const aiUsers = rows.filter(r => r.actions > 0 && r.aiQueries > 0);
+  const conversations = days.reduce((s, d) => s + d.aiConversations, 0);
+  const messages = days.reduce((s, d) => s + d.aiMessages, 0);
+  const toolRuns = aiToolRuns(days);
+  const questions = aiQuestions(days);
+  const aiUsers = rows.filter(r => r.aiQueries > 0);
   const active = rows.filter(r => r.actions > 0);
   const adoption = active.length > 0 ? Math.round((aiUsers.length / active.length) * 100) : 0;
-  const perUser = aiUsers.length > 0 ? Math.round(questions / aiUsers.length) : 0;
-  const toolRuns = Math.max(0, questions - Math.round(questions * AI_TOOL_MIX[0].share));
+  const perChat = conversations > 0 ? Math.round(messages / conversations) : 0;
 
-  const barItems: BarItem[] = AI_TOOL_MIX.map(t => ({
-    label: t.label,
-    value: Math.round(questions * t.share),
-    note: `${Math.round(t.share * 100)}%`,
-    color: BRAND,
-  }));
+  // Every saved conversation, longest first — real titles, real message counts.
+  const maxMsgs = Math.max(1, ...CHAT_HISTORY.map(c => c.messages));
+  const barItems: BarItem[] = [...CHAT_HISTORY]
+    .sort((a, b) => b.messages - a.messages)
+    .map(c => ({ label: c.title, value: c.messages, note: `${c.messages} messages`, color: BRAND }));
 
   const topUsers = [...aiUsers].sort((a, b) => b.aiQueries - a.aiQueries).slice(0, 8);
   const maxQ = Math.max(1, ...topUsers.map(u => u.aiQueries));
 
   return {
     stats: [
-      { label: 'Questions asked', value: fmt(questions), sub: 'in this period' },
-      { label: 'Chats started', value: fmt(chats), sub: `${CHAT_HISTORY.length} saved conversations` },
+      { label: 'Questions asked', value: fmt(questions), sub: 'sent to Ask IRA' },
       { label: 'Tool runs', value: fmt(toolRuns), sub: 'AI Concierge tools' },
-      { label: 'Members using AI', value: fmt(aiUsers.length), sub: `${adoption}% of active members`, tone: adoption >= 50 ? 'good' : 'neutral' },
-      { label: 'Questions per AI user', value: fmt(perUser), sub: 'average, this period' },
-      { label: 'AI-assisted reports', value: fmt(Math.round(questions * 0.09)), sub: 'drafted from chat answers' },
+      { label: 'Conversations', value: fmt(conversations), sub: `${messages} messages · ${perChat} each` },
+      { label: 'Saved conversations', value: fmt(CHAT_HISTORY.length), sub: 'in chat history' },
+      {
+        label: 'Members using AI',
+        value: aiUsers.length > 0 ? fmt(aiUsers.length) : '—',
+        sub: aiUsers.length > 0 ? `${adoption}% of active members` : 'no AI events in this window',
+      },
+      { label: 'Longest conversation', value: fmt(maxMsgs), sub: 'messages' },
     ],
-    bars: { title: 'By tool', items: barItems, note: 'Share of AI activity by entry point.' },
+    bars: {
+      title: 'Conversations',
+      items: barItems,
+      note: 'Every saved conversation, by length.',
+      variant: 'list',
+    },
     donut: {
       title: 'What AI time goes into',
       items: [
-        { name: 'Questions', value: Math.round(questions * 0.46), color: BRAND },
+        { name: 'Questions', value: questions, color: BRAND },
         { name: 'Tool runs', value: toolRuns, color: '#A366F0' },
-        { name: 'Report drafting', value: Math.round(questions * 0.09), color: INFO },
+        { name: 'Conversations', value: conversations, color: INFO },
       ],
     },
     rows: {
       title: 'Who uses AI most',
-      subtitle: 'Questions asked in this period',
+      subtitle: aiUsers.length > 0
+        ? 'AI events in this period'
+        : 'No AI events in this window — saved conversations predate event logging',
       items: topUsers.map(u => ({
         id: u.user.email,
         title: u.user.name,
         sub: getRole(u.user.roleId)?.name ?? '—',
-        bar: { label: 'Questions', value: u.aiQueries / maxQ * 100, note: `${fmt(u.aiQueries)} · ${questions > 0 ? Math.round((u.aiQueries / questions) * 100) : 0}%`, color: BRAND },
+        bar: { label: 'AI events', value: u.aiQueries / maxQ * 100, note: fmt(u.aiQueries), color: BRAND },
       })),
     },
   };

@@ -246,7 +246,7 @@ export default function UsagePlatformSections({ days, rows, rangeDays }: {
 
   const sections: { key: SectionKey; icon: LucideIcon; title: string; subtitle: string; stats: SectionStat[]; portfolio?: SectionPortfolio }[] = [
     { key: 'engagements', icon: ClipboardCheck, title: 'Engagements', subtitle: 'The whole book of work — controls, testing and findings across every engagement', stats: engStats },
-    { key: 'ask-ira', icon: Sparkles, title: 'Ask IRA & AI tools', subtitle: 'Questions, tool runs and who leans on AI', stats: askIra.stats, portfolio: askIra },
+    { key: 'ask-ira', icon: Sparkles, title: 'Ask IRA & AI tools', subtitle: 'Saved conversations and Concierge tool runs', stats: askIra.stats, portfolio: askIra },
     { key: 'reports', icon: FileBarChart, title: 'Reports', subtitle: 'The report book — generated, shared and Action Taken Reports', stats: reports.stats, portfolio: reports },
     { key: 'workflows', icon: Workflow, title: 'Workflows', subtitle: 'The automation library and how much it runs', stats: workflows.stats, portfolio: workflows },
     { key: 'risk-controls', icon: ShieldCheck, title: 'Risk & Controls', subtitle: 'The control environment — risks, controls, RACMs and coverage', stats: riskControls.stats, portfolio: riskControls },
@@ -278,7 +278,7 @@ export default function UsagePlatformSections({ days, rows, rangeDays }: {
             onClose={() => setOpen(null)}
           >
             {active.key === 'engagements'
-              ? <UsageEngagementsSection rangeDays={rangeDays} />
+              ? <UsageEngagementsSection />
               : active.portfolio && <SectionDetail portfolio={active.portfolio} />}
           </Modal>
         )}

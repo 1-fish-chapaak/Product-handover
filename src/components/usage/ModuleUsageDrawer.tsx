@@ -11,6 +11,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tool
 import { TrendingUp } from 'lucide-react';
 import Drawer from '../shared/Drawer';
 import { InitialsAvatar } from '../admin/AdminPrimitives';
+import { useAdminData } from '../../context/AdminDataContext';
 import {
   moduleDailySeries, moduleTopUsers, usageDayLabel, usageDeltaPct,
   type UsageModule, type UsageDay, type UserUsageRow,
@@ -33,13 +34,14 @@ export default function ModuleUsageDrawer({
   rangeDays: number;
   onClose: () => void;
 }) {
+  const { logs } = useAdminData();
   const series = moduleDailySeries(module, days);
   const total = series.reduce((s, p) => s + p.count, 0);
   const priorTotal = moduleDailySeries(module, priorDays).reduce((s, p) => s + p.count, 0);
   const deltaPct = usageDeltaPct(total, priorTotal);
   const share = totalActions > 0 ? Math.round((total / totalActions) * 100) : 0;
   const topUsers = moduleTopUsers(module, rows);
-  const chartData = series.map(p => ({ label: usageDayLabel(p.dayOffset), count: p.count }));
+  const chartData = series.map(p => ({ label: usageDayLabel(p.dayOffset, logs), count: p.count }));
   const tickInterval = rangeDays === 7 ? 0 : rangeDays === 30 ? 6 : 14;
 
   return (

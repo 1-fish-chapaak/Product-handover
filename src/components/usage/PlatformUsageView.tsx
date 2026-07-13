@@ -25,9 +25,11 @@ import { useCurrentUser } from '../../context/CurrentUserContext';
 import { getRole } from '../../data/rbac';
 import {
   USAGE_MODULES, usageDaysWithLive, userUsageRows, usageDayLabel,
+  usageAnchorLabel,
   usageWindowTotals, usageDeltaPct, seatBuckets, lastLoginOffsetDays,
   segmentFor, activeMeanActions, aiAdoptionPct, usageHourlyMatrix,
   activityConcentration, usageSpikes, recentDownloads, downloadFormatSplit,
+  aiQuestions, aiToolRuns,
   creationTotals, recentCreations, workflowRunTotals, recentRuns, shareTotals, recentShares,
   ENGAGEMENT_SEGMENTS, SEGMENT_LABELS,
   type UsageModule, type UserUsageRow, type EngagementSegment,
@@ -45,6 +47,7 @@ import ModuleUsageDrawer from './ModuleUsageDrawer';
 import TeamUsageDrawer from './TeamUsageDrawer';
 import UsageHeatmap from './UsageHeatmap';
 import UsagePlatformSections from './UsagePlatformSections';
+import { CARD } from './usageSectionPrimitives';
 
 type RangeDays = 7 | 30 | 90;
 const RANGES: { days: RangeDays; label: string }[] = [
@@ -163,9 +166,6 @@ const teamColumns: Column<TeamUsageRow>[] = [
     render: (r) => <span className="text-[0.75rem] font-mono tabular-nums text-ink-700">{r.lastActive}</span>,
   },
 ];
-
-/* Home's widget-card surface: hairline border + the soft double shadow. */
-const CARD = 'rounded-xl border border-canvas-border/70 bg-canvas-elevated shadow-[0_1px_2px_rgb(15_15_20_/_0.04),_0_4px_12px_rgb(15_15_20_/_0.03)]';
 
 /** Full day names (JS getDay() order) for the busiest-day sentence. */
 const FULL_DAYS = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
@@ -305,21 +305,24 @@ export default function PlatformUsageView() {
     setSearchQuery(''); setRoleFilter([]); setTeamFilter([]); setSegmentFilter(null);
   };
 
-  // Full 180-day series (live events folded into today), then the slices.
+  // Full 180-day real series, anchored on the newest record (live events fold
+  // into the anchor bucket), then the window slices.
   const allDays = useMemo(() => usageDaysWithLive(logs), [logs]);
+  const anchorLabel = useMemo(() => usageAnchorLabel(logs), [logs]);
   const days = useMemo(() => allDays.slice(-range), [allDays, range]);
   const priorDays = useMemo(() => allDays.slice(-2 * range, -range), [allDays, range]);
+  const questionsAsked = useMemo(() => aiQuestions(days), [days]);
+  const toolRuns = useMemo(() => aiToolRuns(days), [days]);
 
-  const totals = useMemo(() => usageWindowTotals(days, users, 0), [days, users]);
-  const priorTotals = useMemo(() => usageWindowTotals(priorDays, users, range), [priorDays, users, range]);
+  const totals = useMemo(() => usageWindowTotals(days, users), [days, users]);
+  const priorTotals = useMemo(() => usageWindowTotals(priorDays, users), [priorDays, users]);
 
-  const rawRows = useMemo(() => userUsageRows(users, days, logs), [users, days, logs]);
-  // Prior-window per-user rows (no live events — those only exist today).
+  const rawRows = useMemo(() => userUsageRows(users, days), [users, days]);
   const priorByEmail = useMemo(() => {
     const map = new Map<string, number>();
-    userUsageRows(users, priorDays, [], range).forEach(r => map.set(r.user.email, r.actions));
+    userUsageRows(users, priorDays).forEach(r => map.set(r.user.email, r.actions));
     return map;
-  }, [users, priorDays, range]);
+  }, [users, priorDays]);
   const activeMean = useMemo(() => activeMeanActions(rawRows), [rawRows]);
 
   const rows = useMemo<UsageRow[]>(() =>
@@ -340,17 +343,17 @@ export default function PlatformUsageView() {
   const stats: UsageStat[] = [
     { key: 'active', label: 'Active users', value: totals.activeUsers, icon: Users, hint: 'Members who did at least one thing in this period', deltaPct: usageDeltaPct(totals.activeUsers, priorTotals.activeUsers), trend: bucketize(days.map(d => d.activeUsers)) },
     { key: 'actions', label: 'Actions', value: fmt(totals.actions), icon: Activity, hint: 'Everything done on the platform in this period', deltaPct: usageDeltaPct(totals.actions, priorTotals.actions), trend: bucketize(days.map(d => d.actions)) },
-    { key: 'ai', label: 'AI queries', value: fmt(totals.aiQueries), icon: Sparkles, hint: 'Questions asked to Ask IRA and the AI tools', deltaPct: usageDeltaPct(totals.aiQueries, priorTotals.aiQueries), trend: bucketize(days.map(d => d.aiQueries)) },
-    { key: 'reports', label: 'Reports', value: fmt(totals.reports), icon: FileBarChart, hint: 'Reports generated in this period', deltaPct: usageDeltaPct(totals.reports, priorTotals.reports), trend: bucketize(days.map(d => d.reports)) },
+    { key: 'ai', label: 'AI activity', value: fmt(totals.aiActivity), icon: Sparkles, hint: 'Questions asked, Concierge tool runs, and conversations started in this period', deltaPct: usageDeltaPct(totals.aiActivity, priorTotals.aiActivity), trend: bucketize(days.map(d => d.aiEvents + d.aiConversations)) },
+    { key: 'reports', label: 'Reports', value: fmt(totals.reports), icon: FileBarChart, hint: 'Reports and ATRs generated in this period', deltaPct: usageDeltaPct(totals.reports, priorTotals.reports), trend: bucketize(days.map(d => d.reports)) },
   ];
 
   // Chart data — oldest → today; thin the axis labels so long ranges stay
   // legible. `prior` aligns the previous window position-by-position for the
   // compare overlay (day 1 of this window vs day 1 of the previous one).
   const chartData = days.map((d, i) => ({
-    label: usageDayLabel(d.dayOffset),
+    label: usageDayLabel(d.dayOffset, logs),
     actions: d.actions,
-    aiQueries: d.aiQueries,
+    aiQueries: d.aiEvents + d.aiConversations,
     prior: priorDays[i]?.actions ?? null,
   }));
   const tickInterval = range === 7 ? 0 : range === 30 ? 4 : 13;
@@ -378,30 +381,30 @@ export default function PlatformUsageView() {
   const concentration = useMemo(() => activityConcentration(rawRows), [rawRows]);
 
   const seats = useMemo(() => seatBuckets(users, range), [users, range]);
-  const heatmap = useMemo(() => usageHourlyMatrix(days), [days]);
+  const heatmap = useMemo(() => usageHourlyMatrix(days, logs), [days, logs]);
 
   // Downloads & exports — who is pulling data out of the platform.
   const downloadDelta = usageDeltaPct(totals.downloads, priorTotals.downloads);
-  const formatSplit = useMemo(() => downloadFormatSplit(totals.downloads), [totals.downloads]);
+  const formatSplit = useMemo(() => downloadFormatSplit(days), [days]);
   const formatMax = Math.max(1, ...formatSplit.map(f => f.count));
-  const recentDl = useMemo(() => recentDownloads(rawRows, logs), [rawRows, logs]);
+  const recentDl = useMemo(() => recentDownloads(days), [days]);
   const topDownloaders = useMemo(
     () => [...rows].sort((a, b) => b.downloads - a.downloads).slice(0, 3).filter(r => r.downloads > 0),
     [rows],
   );
 
   // What got created — artifacts built in the window (live Create events fold in).
-  const creations = useMemo(() => creationTotals(days, priorDays, logs), [days, priorDays, logs]);
+  const creations = useMemo(() => creationTotals(days, priorDays), [days, priorDays]);
   const creationMax = Math.max(1, ...creations.map(c => c.count));
-  const recentCr = useMemo(() => recentCreations(rawRows, logs), [rawRows, logs]);
+  const recentCr = useMemo(() => recentCreations(days), [days]);
 
   // Workflow runs + sharing — executions and share events (live folds in).
-  const runs = useMemo(() => workflowRunTotals(days, priorDays, logs), [days, priorDays, logs]);
+  const runs = useMemo(() => workflowRunTotals(days, priorDays), [days, priorDays]);
   const runAreaMax = Math.max(1, ...runs.byArea.map(a => a.count));
-  const recentRn = useMemo(() => recentRuns(rawRows, logs), [rawRows, logs]);
-  const shares = useMemo(() => shareTotals(days, priorDays, logs), [days, priorDays, logs]);
+  const recentRn = useMemo(() => recentRuns(days), [days]);
+  const shares = useMemo(() => shareTotals(days, priorDays), [days, priorDays]);
   const shareKindMax = Math.max(1, ...shares.byKind.map(k => k.count));
-  const recentSh = useMemo(() => recentShares(rawRows, logs), [rawRows, logs]);
+  const recentSh = useMemo(() => recentShares(days), [days]);
 
   // Adoption funnel — every stage a fraction of total seats.
   const funnel = useMemo(() => [
@@ -572,7 +575,7 @@ export default function PlatformUsageView() {
               onClick={exportCsv}
               disabled={exportCount === 0}
               title={exportCount === 0 ? 'Nothing to export' : hasAnyFilter ? `Export ${exportCount} filtered rows` : 'Export all rows'}
-              className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-canvas-border bg-canvas-elevated text-ink-700 text-[12px] font-medium hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 active:scale-[0.97] transition-[background-color,border-color,color,transform] duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-canvas-elevated disabled:hover:border-canvas-border disabled:hover:text-ink-700"
+              className="group inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-canvas-border bg-canvas-elevated text-ink-700 text-[0.75rem] font-medium hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 active:scale-[0.97] transition-[background-color,border-color,color,transform] duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-canvas-elevated disabled:hover:border-canvas-border disabled:hover:text-ink-700"
             >
               <Download size={13} className="transition-transform duration-200 group-hover:translate-y-0.5 group-active:translate-y-1" />
               Export CSV
@@ -605,7 +608,7 @@ export default function PlatformUsageView() {
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
           >
             <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">Platform Usage</h1>
-            <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">Who's using the platform, which modules they use, and how AI adoption is trending.</p>
+            <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">Who's using the platform, which modules they use, and what they produce.</p>
           </motion.div>
         </div>
       </div>
@@ -626,7 +629,7 @@ export default function PlatformUsageView() {
             ))}
           </div>
 
-          <UsageKpiRow stats={stats} rangeDays={range} />
+          <UsageKpiRow stats={stats} rangeDays={range} asOf={anchorLabel} />
 
           {/* Highlights — findings derived from the same aggregates below. */}
           <div className="mb-4">
@@ -640,7 +643,15 @@ export default function PlatformUsageView() {
                 )}
               </HighlightCard>
               <HighlightCard icon={Sparkles}>
-                <span className="font-semibold text-ink-900">{aiAdoption}%</span> of active members used AI in this range.
+                {/* Ask IRA writes no audit events, so 0% means "unmeasured",
+                    not "unused". Say that instead of implying nobody uses AI. */}
+                {aiAdoption > 0 ? (
+                  <><span className="font-semibold text-ink-900">{aiAdoption}%</span> of active members used AI in this range.</>
+                ) : totals.aiActivity > 0 ? (
+                  <><span className="font-semibold text-ink-900">{fmt(totals.aiActivity)}</span> AI {totals.aiActivity === 1 ? 'action' : 'actions'} in this range, none attributed to a current member.</>
+                ) : (
+                  <>No AI activity in this range.</>
+                )}
               </HighlightCard>
               <HighlightCard icon={UserMinus} tone={seats.dormant.length > 0 ? 'attention' : undefined}>
                 {seats.dormant.length > 0 ? (
@@ -709,7 +720,7 @@ export default function PlatformUsageView() {
                     {spikes.map(s => (
                       <ReferenceDot
                         key={s.dayOffset}
-                        x={usageDayLabel(s.dayOffset)}
+                        x={usageDayLabel(s.dayOffset, logs)}
                         y={s.actions}
                         r={3.5}
                         fill="#3D0A75"
@@ -722,7 +733,7 @@ export default function PlatformUsageView() {
                 {biggestSpike && (
                   <p className="mt-2 text-[0.6875rem] text-ink-500">
                     <span className="inline-block w-2 h-2 rounded-full align-middle mr-1.5" style={{ backgroundColor: '#3D0A75' }} />
-                    Unusual spike on <span className="font-semibold text-ink-700">{usageDayLabel(biggestSpike.dayOffset)}</span>: {biggestSpike.ratio}x a typical day, mostly <span className="font-semibold text-ink-700">{biggestSpike.topModule}</span>.
+                    Unusual spike on <span className="font-semibold text-ink-700">{usageDayLabel(biggestSpike.dayOffset, logs)}</span>: {biggestSpike.ratio}x a typical day, mostly <span className="font-semibold text-ink-700">{biggestSpike.topModule}</span>.
                   </p>
                 )}
               </div>
@@ -771,17 +782,17 @@ export default function PlatformUsageView() {
               <div className="flex flex-wrap items-start gap-6">
                 <div className="min-w-[240px]">
                   <div className="flex items-center gap-6">
-                    <div>
-                      <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(totals.aiQueries)}</div>
+                    <div title="Questions sent to Ask IRA, from the audit log">
+                      <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(questionsAsked)}</div>
                       <div className="text-[0.6875rem] text-ink-500 mt-1">Questions asked</div>
                     </div>
-                    <div>
-                      <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(Math.round(totals.aiQueries * 0.42))}</div>
-                      <div className="text-[0.6875rem] text-ink-500 mt-1">Chats started</div>
+                    <div title="AI Concierge tool runs, from the audit log">
+                      <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(toolRuns)}</div>
+                      <div className="text-[0.6875rem] text-ink-500 mt-1">Tool runs</div>
                     </div>
-                    <div>
-                      <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(Math.round(totals.reports * 0.6))}</div>
-                      <div className="text-[0.6875rem] text-ink-500 mt-1">AI-assisted reports</div>
+                    <div title="Saved conversations in chat history">
+                      <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(totals.aiConversations)}</div>
+                      <div className="text-[0.6875rem] text-ink-500 mt-1">Conversations</div>
                     </div>
                     <div title="Share of active members who asked the AI at least one question in this period">
                       <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{aiAdoption}%</div>

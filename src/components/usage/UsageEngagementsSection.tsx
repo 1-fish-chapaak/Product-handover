@@ -12,10 +12,10 @@ import { useMemo } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { ClipboardCheck, ShieldCheck, AlertTriangle, GitBranch } from 'lucide-react';
 import {
-  ResponsiveContainer, PieChart, Pie, Cell, Tooltip, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
+  ResponsiveContainer, PieChart, Pie, Cell, Tooltip,
 } from 'recharts';
 import {
-  deriveEngagementPortfolio, deriveFindingsTrend, ENG_TYPE_COLOR, ENG_STATUS_COLOR,
+  deriveEngagementPortfolio, ENG_TYPE_COLOR, ENG_STATUS_COLOR,
   type EngRow,
 } from '../../data/engagement-portfolio';
 import type { EngType } from '../../data/engagements';
@@ -28,9 +28,9 @@ const TYPE_CHIP: Record<EngType, string> = {
   'Automation': 'bg-high-50 text-high-700 border-high-100',
 };
 
-export default function UsageEngagementsSection({ rangeDays = 30 }: {
-  rangeDays?: number;
-}) {
+/** The engagement portfolio is current-state — controls, health and open-issue
+ *  counts as they stand — so it does not vary with the selected date range. */
+export default function UsageEngagementsSection() {
   const prefersReduced = useReducedMotion();
   const p = useMemo(() => deriveEngagementPortfolio(), []);
   const typeMax = Math.max(1, ...p.byType.map(t => t.controls));
@@ -38,8 +38,11 @@ export default function UsageEngagementsSection({ rangeDays = 30 }: {
   const processMax = Math.max(1, ...p.byProcess.map(pr => pr.controls));
 
   const statusData = p.byStatus.map(s => ({ name: s.status, value: s.count, color: ENG_STATUS_COLOR[s.status] }));
-  const findingsTrend = useMemo(() => deriveFindingsTrend(rangeDays, p.openFindings), [rangeDays, p.openFindings]);
-  const trendTick = rangeDays <= 7 ? 0 : 1;
+  const findingsByEngagement = useMemo(
+    () => p.rows.filter(r => r.openIssues > 0).sort((a, b) => b.openIssues - a.openIssues).slice(0, 8),
+    [p.rows],
+  );
+  const maxOpenIssues = Math.max(1, ...findingsByEngagement.map(r => r.openIssues));
 
   // Engagements ranked for the breakdown — in-flight first (most controls), then the rest.
   const rankedRows: EngRow[] = useMemo(() => {
@@ -127,39 +130,46 @@ export default function UsageEngagementsSection({ rangeDays = 30 }: {
         </div>
       </SectionCard>
 
-      {/* Findings over time + by process */}
+      {/* Where findings sit + by process */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        {/* Engagements record an open-issue count, not a per-finding history,
+            so this shows where findings sit today rather than a raised/resolved
+            trend the data cannot support. */}
         <SectionCard
           icon={AlertTriangle}
-          title="Findings over time"
-          subtitle={`Raised vs resolved · last ${rangeDays} days`}
+          title="Where findings sit"
+          subtitle="Open findings by engagement"
           className="lg:col-span-2"
-          right={
-            <div className="flex items-center gap-3 text-[0.6875rem] text-ink-500 shrink-0">
-              <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#B42318' }} />Raised</span>
-              <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#15803D' }} />Resolved</span>
-              <span className="inline-flex items-center gap-1.5"><span className="w-3 border-t-2 border-dashed" style={{ borderColor: '#6A12CD' }} />Open</span>
-            </div>
-          }
         >
-          <ResponsiveContainer width="100%" height={220}>
-            <ComposedChart data={findingsTrend} margin={{ top: 4, right: 6, left: -12, bottom: 0 }}>
-              <defs>
-                <linearGradient id="engFindingsRaised" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#B42318" stopOpacity={0.20} />
-                  <stop offset="100%" stopColor="#B42318" stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#EEEEF1" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6B5D82' }} tickLine={false} axisLine={{ stroke: '#E5E7EB' }} interval={trendTick} />
-              <YAxis tick={{ fontSize: 10, fill: '#6B5D82' }} tickLine={false} axisLine={false} width={40} allowDecimals={false} />
-              <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-              <Area type="monotone" dataKey="raised" name="Raised" stroke="#B42318" strokeWidth={2} fill="url(#engFindingsRaised)" />
-              <Line type="monotone" dataKey="resolved" name="Resolved" stroke="#15803D" strokeWidth={1.5} dot={false} />
-              <Line type="monotone" dataKey="open" name="Open" stroke="#6A12CD" strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
-          <p className="mt-1 text-[0.625rem] text-ink-400"><span className="font-semibold text-ink-600">{fmt(p.openFindings)}</span> findings open now across {fmt(p.needsAttention)} engagements.</p>
+          {findingsByEngagement.length > 0 ? (
+            <div className="space-y-3">
+              {findingsByEngagement.map((e, i) => (
+                <div key={e.id}>
+                  <div className="flex items-center justify-between mb-1 gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-medium text-ink-700 min-w-0">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: ENG_TYPE_COLOR[e.type] }} />
+                      <span className="truncate">{e.name}</span>
+                    </span>
+                    <span className="text-[0.6875rem] text-ink-500 tabular-nums shrink-0">
+                      <span className="font-semibold text-ink-800">{fmt(e.openIssues)}</span> open
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-canvas overflow-hidden">
+                    <motion.div
+                      className="h-full rounded-full"
+                      style={{ background: '#B42318' }}
+                      initial={prefersReduced ? false : { width: 0 }}
+                      animate={{ width: `${(e.openIssues / maxOpenIssues) * 100}%` }}
+                      transition={{ duration: 0.5, delay: 0.04 * i, ease: [0.2, 0, 0, 1] }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[0.8125rem] text-ink-400">No open findings across the portfolio.</p>
+          )}
+          <p className="mt-3 text-[0.625rem] text-ink-400"><span className="font-semibold text-ink-600">{fmt(p.openFindings)}</span> findings open now across {fmt(p.needsAttention)} engagements.</p>
         </SectionCard>
 
         <SectionCard icon={GitBranch} title="By process" subtitle="Controls in scope">

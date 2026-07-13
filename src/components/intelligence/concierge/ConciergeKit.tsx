@@ -9,7 +9,6 @@ import Drawer from '../../shared/Drawer';
 import { Button } from '../../shared/Button';
 import type { JobState, PickedFile, HistoryJob, ToolTab } from './types';
 import { useConciergeJob } from './useConciergeJob';
-import { useAuditLog } from '../../../context/AdminDataContext';
 
 let _seq = 0;
 const newId = () => `job-${Date.now()}-${_seq++}`;
@@ -61,7 +60,7 @@ export function ToolShell({
             className="relative z-10 min-w-0"
           >
             <div className="flex items-start justify-between gap-4">
-              <h1 className="font-display text-[30px] font-[420] tracking-tight text-ink-900 leading-[1.15]">
+              <h1 className="font-display text-[1.875rem] font-[420] tracking-tight text-ink-900 leading-[1.15]">
                 {title}
               </h1>
               {headerRight && <div className="shrink-0">{headerRight}</div>}
@@ -145,7 +144,7 @@ export function UploadZone({
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
         onDragLeave={() => setDrag(false)}
         onDrop={(e) => { e.preventDefault(); setDrag(false); add(e.dataTransfer.files); }}
-        className={`rounded-[14px] border-2 border-dashed p-8 text-center cursor-pointer transition-colors ${
+        className={`rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition-colors ${
           drag ? 'border-brand-400 bg-brand-50/50' : 'border-canvas-border hover:border-brand-300 bg-canvas-elevated'
         }`}
       >
@@ -256,7 +255,7 @@ function InsightPanel({ checking, tips }: { checking: string[]; tips: string[] }
   }, [tips.length]);
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-      <div className="rounded-[12px] border border-canvas-border bg-canvas-elevated p-4">
+      <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4">
         <p className="text-[0.75rem] font-semibold text-ink-700 mb-2">What we&apos;re checking</p>
         <ul className="space-y-1.5">
           {checking.map((c) => (
@@ -268,7 +267,7 @@ function InsightPanel({ checking, tips }: { checking: string[]; tips: string[] }
         </ul>
       </div>
       {tips.length > 0 && (
-        <div className="rounded-[12px] border border-canvas-border bg-brand-50/40 p-4">
+        <div className="rounded-lg border border-canvas-border bg-brand-50/40 p-4">
           <p className="text-[0.75rem] font-semibold text-brand-700 mb-2 inline-flex items-center gap-1.5">
             <Sparkles size={12} /> Did you know?
           </p>
@@ -321,7 +320,7 @@ export function ProgressPanel({
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="rounded-[14px] border border-brand-200 bg-canvas-elevated p-5 shadow-[0_12px_32px_rgba(106,18,205,0.06)]">
+      <div className="rounded-lg border border-brand-200 bg-canvas-elevated p-5 shadow-[0_12px_32px_rgba(106,18,205,0.06)]">
         <div className="flex items-center gap-2 mb-3">
           <Sparkles size={16} className="text-brand-600 animate-pulse" />
           <span className="text-[0.875rem] font-semibold text-ink-800 truncate">
@@ -430,14 +429,14 @@ export function JobHistory({
 }) {
   if (jobs.length === 0) {
     return (
-      <div className="rounded-[12px] border border-dashed border-canvas-border p-10 text-center">
+      <div className="rounded-lg border border-dashed border-canvas-border p-10 text-center">
         <Clock size={22} className="mx-auto text-ink-300 mb-2" />
         <p className="text-[0.875rem] text-ink-500">No jobs yet — run an analysis to see it here.</p>
       </div>
     );
   }
   return (
-    <div className="rounded-[12px] border border-canvas-border overflow-hidden">
+    <div className="rounded-lg border border-canvas-border overflow-hidden">
       <table className="w-full text-left">
         <thead className="bg-paper-50/70">
           <tr className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">
@@ -582,7 +581,6 @@ export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
     renderHistory,
   } = props;
 
-  const logEvent = useAuditLog();
   const [tab, setTab] = useState('tool');
   const [showHistory, setShowHistory] = useState(false);
   const [files, setFiles] = useState<PickedFile[]>([]);
@@ -595,6 +593,7 @@ export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
     messages,
     totalMs,
     buildResult: ({ files: f, options: o }) => buildResult(f, o),
+    toolName: title,
   });
 
   // Reflect completion into the History row created at start.
@@ -618,12 +617,7 @@ export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
       { id, files: files.map((f) => f.name), status: 'IN_PROGRESS', createdAt: 'Just now' },
       ...prev,
     ]);
-    logEvent({
-      action: 'Run',
-      description: `Ran ${title}`,
-      module: 'AI Concierge',
-      entity: title,
-    });
+    // The Run event is written by job.start() — see useConciergeJob.
     job.start({ files, options });
   };
 
@@ -639,12 +633,7 @@ export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
       { id, files: newFiles.map((f) => f.name), status: 'IN_PROGRESS', createdAt: 'Just now' },
       ...prev,
     ]);
-    logEvent({
-      action: 'Run',
-      description: `Ran ${title}`,
-      module: 'AI Concierge',
-      entity: title,
-    });
+    // The Run event is written by job.start() — see useConciergeJob.
     job.start({ files: newFiles, options: opts });
   };
   const finishNow = (newFiles: PickedFile[], extra?: Record<string, unknown>) => {
@@ -657,6 +646,9 @@ export function ConciergeFlow<R>(props: ConciergeFlowProps<R>) {
       { id, files: newFiles.map((f) => f.name), status: 'COMPLETED', createdAt: 'Just now', meta: historyMeta?.(result) ?? '' },
       ...prev,
     ]);
+    // Skips the staged animation, so job.start() never runs — log it here or
+    // an instant-complete tool run would go unrecorded.
+    job.logRun();
     job.complete(result);
   };
 

@@ -8,7 +8,7 @@
  */
 
 import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
-import { useCurrentUser } from './CurrentUserContext';
+import { useCurrentUser, DEMO_USERS } from './CurrentUserContext';
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Users & Teams — session-persistent admin records
@@ -46,9 +46,28 @@ const SEED_USERS: AdminUser[] = [
   { name: 'Chulbul Pandey', initials: 'CP', email: 'kuldeep.msvm@gmail.com', roleId: 'role-enabler', team: 'Management', status: 'Suspended', lastLogin: 'Mar 28' },
   { name: 'CS', initials: 'CS', email: 'cs@irame.ai', roleId: 'role-enabler', team: 'Engineering', status: 'Active', lastLogin: 'Today, 10:02' },
   { name: 'Kuldeep Pandey', initials: 'KP', email: 'kuldeep2.msvm@gmail.com', roleId: 'role-reviewer', team: '—', status: 'Inactive', lastLogin: 'Feb 14' },
+  // The signed-in identity (CurrentUserContext `u-admin`). Name and email must
+  // match it exactly: the audit log stamps `currentUser.name`, and Platform
+  // Usage attributes activity to a member by that name.
+  { name: 'Nilesh Anand', initials: 'NA', email: 'nilesh.anand@irame.ai', roleId: 'role-admin', team: 'Management', status: 'Active', lastLogin: 'Today, 09:05' },
   { name: 'Rahul Verma', initials: 'RV', email: 'rahul@irame.ai', roleId: 'role-viewer', team: 'IFC Team', status: 'Locked', lastLogin: 'Mar 05' },
   { name: 'Priya Singh', initials: 'PS', email: 'priya@irame.ai', roleId: 'role-risk', team: 'SOX Audit', status: 'Invited', lastLogin: 'Never' },
 ];
+
+// Two identity lists exist: DEMO_USERS (who you can sign in as) and SEED_USERS
+// (who appears in Admin › People). An identity missing from the member list
+// still writes audit events under its name, but nothing can attribute them —
+// its usage silently vanishes from Platform Usage. Fail loudly in dev.
+if (import.meta.env.DEV) {
+  const members = new Set(SEED_USERS.map(u => u.name));
+  const orphans = DEMO_USERS.filter(u => !members.has(u.name)).map(u => u.name);
+  if (orphans.length > 0) {
+    console.error(
+      `[AdminData] Signed-in identities absent from Admin › People: ${orphans.join(', ')}. ` +
+      'Their activity will never attribute to a member. Add them to SEED_USERS.',
+    );
+  }
+}
 
 function deriveTeams(users: AdminUser[]): AdminTeam[] {
   const map: Record<string, AdminUser[]> = {};

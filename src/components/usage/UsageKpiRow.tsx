@@ -81,7 +81,7 @@ function UsageKpiTile({ stat, index, rangeDays }: { stat: UsageStat; index: numb
       initial={prefersReducedMotion ? false : { opacity: 0, y: 10, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 18, mass: 0.7, delay: 0.06 + index * 0.07 }}
-      className="rounded-2xl p-4 border border-canvas-border/60 bg-canvas-elevated flex flex-col gap-2.5 transition-[box-shadow,border-color] duration-300 ease-out hover:border-brand-300 hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)]"
+      className="rounded-lg p-4 border border-canvas-border/60 bg-canvas-elevated flex flex-col gap-2.5 transition-[box-shadow,border-color] duration-300 ease-out hover:border-brand-300 hover:shadow-[0_0_0_1px_rgb(15_8_30_/_0.06),_0_12px_28px_rgb(15_8_30_/_0.08)]"
     >
       {/* Header — quiet icon + uppercase micro-label */}
       <div className="flex items-center gap-2">
@@ -103,7 +103,7 @@ function UsageKpiTile({ stat, index, rangeDays }: { stat: UsageStat; index: numb
   );
 }
 
-export default function UsageKpiRow({ stats, rangeDays }: { stats: UsageStat[]; rangeDays: number }) {
+export default function UsageKpiRow({ stats, rangeDays, asOf }: { stats: UsageStat[]; rangeDays: number; asOf?: string }) {
   return (
     <div className="mb-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -112,7 +112,9 @@ export default function UsageKpiRow({ stats, rangeDays }: { stats: UsageStat[]; 
         ))}
       </div>
       <p className="mt-1.5 text-[0.6875rem] text-ink-400">
-        Change compared with the previous {rangeDays} days.
+        {asOf
+          ? `The ${rangeDays} days up to ${asOf}, the most recent activity on record. Change compared with the ${rangeDays} days before that.`
+          : `Change compared with the previous ${rangeDays} days.`}
       </p>
     </div>
   );
