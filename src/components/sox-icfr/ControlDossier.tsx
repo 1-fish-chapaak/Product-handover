@@ -5,7 +5,7 @@ import {
   ArrowLeft, FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, Download, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
-  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History,
+  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, ShieldCheck, History,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import {
@@ -622,10 +622,11 @@ function VStep({ n, title, subtitle, status, locked, right, children, defaultOpe
 const ANCHORS: { id: DiscussionAnchor | 'all'; label: string }[] = [
   { id: 'all', label: 'All' }, { id: 'control', label: 'Control' }, { id: 'design', label: '① Design' }, { id: 'operating', label: '② Operating' },
 ];
-// the two hands on the working paper — auditor (purple/gavel) and risk owner (amber/check)
+// the hands on the working paper — auditor (purple/gavel), risk owner (amber/check), reviewer (green/shield)
 const EXEC_ROLE: Record<Role, { Icon: typeof Gavel; accent: string; chip: string; label: string }> = {
   auditor: { Icon: Gavel, accent: 'var(--color-brand-400)', chip: 'bg-brand-50 text-brand-700', label: 'Auditor' },
   'risk-owner': { Icon: UserCheck, accent: 'var(--color-mitigated-500)', chip: 'bg-mitigated-50 text-mitigated-700', label: 'Risk owner' },
+  reviewer: { Icon: ShieldCheck, accent: 'var(--color-compliant-500)', chip: 'bg-compliant-50 text-compliant-700', label: 'Reviewer' },
 };
 const TRACK_FILTERS = [{ id: 'all', label: 'All' }, { id: 'design', label: '① Design' }, { id: 'operating', label: '② Operating' }] as const;
 

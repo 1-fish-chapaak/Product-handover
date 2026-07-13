@@ -131,12 +131,12 @@ function Money({ label, value, onChange, hint }: { label: string; value: number;
 }
 
 // ─── Exceptions — the lifecycle ──────────────────────────────────────────────────
-const STAGES: ExceptionStatus[] = ['Identified', 'Remediation', 'Retest', 'Closed'];
-const STATUS_TONE: Record<ExceptionStatus, Tone> = { Identified: 'high', Remediation: 'mitigated', Retest: 'evidence', Closed: 'compliant' };
+const STAGES: ExceptionStatus[] = ['Identified', 'Remediation', 'Retest', 'Awaiting reviewer', 'Closed'];
+const STATUS_TONE: Record<ExceptionStatus, Tone> = { Identified: 'high', Remediation: 'mitigated', Retest: 'evidence', 'Awaiting reviewer': 'info', Closed: 'compliant' };
 const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
 
 export function DeficienciesView() {
-  const { eng, back, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException } = useIcfr();
+  const { eng, role, me, back, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException } = useIcfr();
   const M = eng.materiality; const rules = eng.rules;
 
   return (
@@ -145,7 +145,7 @@ export function DeficienciesView() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Exceptions</h1>
-          <p className="text-[13px] text-ink-500 mt-0.5">Severity is computed against materiality ({fmt(M)}); each exception runs the lifecycle — identify → remediate → retest → close.</p>
+          <p className="text-[13px] text-ink-500 mt-0.5">Severity is computed against materiality ({fmt(M)}); each exception runs the lifecycle — identify → remediate → retest → reviewer closes.</p>
         </div>
       </div>
 
@@ -250,11 +250,20 @@ export function DeficienciesView() {
                   {d.status === 'Identified' && <button onClick={() => setExceptionStatus(d.id, 'Remediation')} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Start remediation</button>}
                   {d.status === 'Remediation' && <button onClick={() => setExceptionStatus(d.id, 'Retest')} className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold hover:bg-evidence-700 cursor-pointer inline-flex items-center gap-1.5">Submit for retest</button>}
                   {d.status === 'Retest' && <>
-                    <button onClick={() => recordRetest(d.id, 'Pass')} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Retest passed — close</button>
+                    <button onClick={() => recordRetest(d.id, 'Pass')} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Retest passed — to reviewer</button>
                     <button onClick={() => recordRetest(d.id, 'Fail')} className="h-8 px-3 rounded-lg border border-risk-300 text-risk-700 text-[12px] font-semibold hover:bg-risk-50 cursor-pointer inline-flex items-center gap-1.5"><XCircle size={13} /> Retest failed</button>
                   </>}
-                  {d.status === 'Closed' && !d.signoff && <button onClick={() => signOffException(d.id)} className="h-8 px-3 rounded-lg border border-canvas-border text-ink-700 text-[12px] font-semibold hover:border-brand-300 hover:text-brand-700 cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Auditor sign-off</button>}
-                  {d.status === 'Closed' && d.signoff && <span className="text-[12px] font-semibold text-compliant-700 inline-flex items-center gap-1.5"><CheckCircle2 size={14} /> Closed &amp; signed off</span>}
+                  {/* four-eyes: only the reviewer hat closes, and never the person who ran the retest */}
+                  {d.status === 'Awaiting reviewer' && (
+                    role !== 'reviewer' ? (
+                      <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><ShieldCheck size={14} className="text-ink-400" /> Awaiting reviewer — only the reviewer closes{d.retest ? ` (retest ${d.retest.result} · ${d.retest.by})` : ''}</span>
+                    ) : d.retest && d.retest.by === me ? (
+                      <span className="text-[12px] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must close — you recorded this retest.</span>
+                    ) : (
+                      <button onClick={() => signOffException(d.id)} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Close — reviewer sign-off</button>
+                    )
+                  )}
+                  {d.status === 'Closed' && d.signoff && <span className="text-[12px] font-semibold text-compliant-700 inline-flex items-center gap-1.5"><CheckCircle2 size={14} /> Closed — signed off by {d.signoff.by}</span>}
                 </div>
               </div>
             );

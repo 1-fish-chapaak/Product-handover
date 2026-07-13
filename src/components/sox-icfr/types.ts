@@ -5,8 +5,10 @@
 // steps, manual override, and conclusion. The control conclusion rolls up from
 // both. Discussions are role-tagged threads anchored to a control or a track.
 
-export type Role = 'auditor' | 'risk-owner';
-export const ROLE_LABEL: Record<Role, string> = { auditor: 'Auditor', 'risk-owner': 'Risk Owner' };
+// Three hats, three lines: the owner remediates, the auditor tests, the reviewer
+// alone closes. One human may hold owner + reviewer; the auditor stays independent.
+export type Role = 'auditor' | 'risk-owner' | 'reviewer';
+export const ROLE_LABEL: Record<Role, string> = { auditor: 'Auditor', 'risk-owner': 'Risk Owner', reviewer: 'Reviewer' };
 
 export type Assertion =
   | 'Completeness' | 'Accuracy' | 'Existence / Occurrence'
@@ -232,7 +234,8 @@ export interface Deficiency {
   retest?: { result: 'Pass' | 'Fail'; at: string; by: string };
   signoff?: { by: string; at: string };
 }
-export type ExceptionStatus = 'Identified' | 'Remediation' | 'Retest' | 'Closed';
+// A passed retest parks at 'Awaiting reviewer' — only the reviewer closes (four-eyes).
+export type ExceptionStatus = 'Identified' | 'Remediation' | 'Retest' | 'Awaiting reviewer' | 'Closed';
 
 export interface SignificantAccount {
   id: string; name: string; balance: number; inScope: boolean; assertions: Assertion[];

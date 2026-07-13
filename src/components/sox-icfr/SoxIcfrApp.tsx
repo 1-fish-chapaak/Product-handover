@@ -95,10 +95,10 @@ function Inner({ onBack }: { onBack?: () => void }) {
 
 export default function SoxIcfrApp({ engagementId, onBack }: { engagementId?: string; onBack?: () => void }) {
   // The SOX persona follows the platform login: risk owners land in the
-  // Risk Owner view; everyone else — including signed-out — defaults to
-  // Auditor. The keyed provider re-seeds the persona if the login changes.
+  // Risk Owner view, reviewers in the Reviewer view; everyone else — including
+  // signed-out — defaults to Auditor. The keyed provider re-seeds on login change.
   const { currentUser } = useCurrentUser();
-  const initialRole = currentUser?.roleId === 'role-risk' ? 'risk-owner' : 'auditor';
+  const initialRole = currentUser?.roleId === 'role-risk' ? 'risk-owner' : currentUser?.roleId === 'role-reviewer' ? 'reviewer' : 'auditor';
   const eng = engagementId ? findEngagement(engagementId) : undefined;
   const seedMeta = eng ? { id: eng.id, code: eng.code, name: eng.name, process: eng.process, periodStart: eng.periodStart, periodEnd: eng.periodEnd, owner: eng.owner, materiality: eng.soxConfig?.overallMateriality, performanceMateriality: eng.soxConfig?.performanceMateriality, clearlyTrivial: eng.soxConfig?.clearlyTrivial, sdBandPct: eng.soxConfig?.sdBandPct } : undefined;
   return (

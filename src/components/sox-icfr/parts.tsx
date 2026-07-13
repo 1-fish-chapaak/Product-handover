@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Gavel, UserCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X } from 'lucide-react';
+import { Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X } from 'lucide-react';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
 import type { Conclusion, Court, Nature, Role, Severity, TestResult, TrackConclusion } from './types';
@@ -75,12 +75,12 @@ export function CourtBadge({ court, fromRole }: { court: Court; fromRole?: Role 
 }
 
 // ─── role switcher (demo affordance) ─────────────────────────────────────────────
-const ROLE_ICON: Record<Role, typeof Gavel> = { auditor: Gavel, 'risk-owner': UserCheck };
-const ROLE_NAME: Record<Role, string> = { auditor: 'Auditor', 'risk-owner': 'Risk Owner' };
+const ROLE_ICON: Record<Role, typeof Gavel> = { auditor: Gavel, 'risk-owner': UserCheck, reviewer: ShieldCheck };
+const ROLE_NAME: Record<Role, string> = { auditor: 'Auditor', 'risk-owner': 'Risk Owner', reviewer: 'Reviewer' };
 export function RoleSwitcher({ role, onChange }: { role: Role; onChange: (r: Role) => void }) {
   return (
     <div className="inline-flex items-center p-1 rounded-xl bg-paper-50 border border-canvas-border">
-      {(['auditor', 'risk-owner'] as Role[]).map(r => {
+      {(['auditor', 'risk-owner', 'reviewer'] as Role[]).map(r => {
         const Icon = ROLE_ICON[r];
         const active = role === r;
         return (

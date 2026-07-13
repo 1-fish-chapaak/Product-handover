@@ -513,12 +513,18 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const setExceptionStatus = useCallback<IcfrCtx['setExceptionStatus']>((id, status) => {
     setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, status } : d) }));
   }, []);
+  // A passed retest never closes itself — it parks at 'Awaiting reviewer'.
   const recordRetest = useCallback<IcfrCtx['recordRetest']>((id, result) => {
-    setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, retest: { result, at: 'just now', by: me }, status: result === 'Pass' ? 'Closed' : 'Remediation', remediation: { ...d.remediation, status: result === 'Pass' ? 'Done' : d.remediation.status } } : d) }));
+    setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, retest: { result, at: 'just now', by: me }, status: result === 'Pass' ? 'Awaiting reviewer' : 'Remediation', remediation: { ...d.remediation, status: result === 'Pass' ? 'Done' : d.remediation.status } } : d) }));
   }, [me]);
+  // Four-eyes: only the reviewer hat closes, and never the person who ran the retest.
   const signOffException = useCallback<IcfrCtx['signOffException']>((id) => {
-    setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, signoff: { by: me, at: 'just now' }, status: 'Closed' } : d) }));
-  }, [me]);
+    setEng(prev => ({ ...prev, deficiencies: prev.deficiencies.map(d => {
+      if (d.id !== id) return d;
+      if (role !== 'reviewer' || (d.retest && d.retest.by === me)) return d;
+      return { ...d, signoff: { by: me, at: 'just now' }, status: 'Closed' };
+    }) }));
+  }, [me, role]);
 
   // Create a control from the focused form — W/P ref and ID continue the
   // process's existing numbering; the control lands ready to test.
