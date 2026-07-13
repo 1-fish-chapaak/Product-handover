@@ -619,9 +619,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [me, role]);
 
+  // Evaluation is the auditor's lane — the owner never grades their own exception.
   const updateDeficiency = useCallback<IcfrCtx['updateDeficiency']>((id, patch) => {
+    if (role !== 'auditor') return;
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => (d.id === id ? { ...d, ...patch } : d)) }));
-  }, []);
+  }, [role]);
   const updateRules = useCallback<IcfrCtx['updateRules']>((patch) => {
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, rules: { ...prev.rules, ...patch } }));
   }, []);
@@ -657,13 +659,19 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       };
     });
   }, [me]);
+  // Lifecycle moves: reviewer only closes (below); submitting the fix for retest
+  // is the owner's declaration — the auditor can't call the owner's fix done.
   const setExceptionStatus = useCallback<IcfrCtx['setExceptionStatus']>((id, status) => {
+    if (role === 'reviewer') return;
+    if (status === 'Retest' && role !== 'risk-owner') return;
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, status } : d) }));
-  }, []);
-  // A passed retest never closes itself — it parks at 'Awaiting reviewer'.
+  }, [role]);
+  // A passed retest never closes itself — it parks at 'Awaiting reviewer'. Only
+  // the auditor records retest results; the owner never tests their own fix.
   const recordRetest = useCallback<IcfrCtx['recordRetest']>((id, result) => {
+    if (role !== 'auditor') return;
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, retest: { result, at: 'just now', by: me }, status: result === 'Pass' ? 'Awaiting reviewer' : 'Remediation', remediation: { ...d.remediation, status: result === 'Pass' ? 'Done' : d.remediation.status } } : d) }));
-  }, [me]);
+  }, [me, role]);
   // Four-eyes: only the reviewer hat closes, and never the person who ran the retest.
   const signOffException = useCallback<IcfrCtx['signOffException']>((id) => {
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => {

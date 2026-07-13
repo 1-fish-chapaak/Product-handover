@@ -386,6 +386,10 @@ const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
 export function DeficienciesView() {
   const { eng, role, me, back, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException } = useIcfr();
   const M = eng.materiality; const rules = eng.rules;
+  // three lines, three lanes: the owner remediates, the auditor evaluates &
+  // retests, the reviewer closes — each hat only sees its own actions.
+  const isAuditor = role === 'auditor';
+  const isOwner = role === 'risk-owner';
   // aggregation groups on offer: every group already in use plus each process name
   const groupOptions = Array.from(new Set([
     ...eng.deficiencies.map(d => d.aggregationGroup).filter((g): g is string => !!g),
@@ -398,7 +402,7 @@ export function DeficienciesView() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Exceptions</h1>
-          <p className="text-[13px] text-ink-500 mt-0.5">Severity is computed against materiality ({fmt(M)}); each exception runs the lifecycle — identify → remediate → retest → reviewer closes.</p>
+          <p className="text-[13px] text-ink-500 mt-0.5">Severity is computed against materiality ({fmt(M)}). Three lanes: the owner remediates, the auditor evaluates &amp; retests, the reviewer closes.</p>
         </div>
       </div>
 
@@ -473,55 +477,74 @@ export function DeficienciesView() {
                   ))}
                 </div>
 
-                {/* severity inputs */}
-                <div className="rounded-lg border border-canvas-border p-3 space-y-2.5">
-                  <div className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Severity inputs — recomputed live vs the ground rules</div>
-                  <div className="flex items-center gap-2 flex-wrap text-[12px]">
-                    <span className="text-ink-500 w-[120px]">Likelihood</span>
-                    {(['Remote', 'Reasonably possible', 'Probable'] as const).map(l => (
-                      <button key={l} onClick={() => updateDeficiency(d.id, { likelihood: l })} className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', d.likelihood === l ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{l}</button>
-                    ))}
+                {/* severity — the auditor evaluates; owner and reviewer read the grade */}
+                {isAuditor ? (
+                  <div className="rounded-lg border border-canvas-border p-3 space-y-2.5">
+                    <div className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Severity inputs — recomputed live vs the ground rules</div>
+                    <div className="flex items-center gap-2 flex-wrap text-[12px]">
+                      <span className="text-ink-500 w-[120px]">Likelihood</span>
+                      {(['Remote', 'Reasonably possible', 'Probable'] as const).map(l => (
+                        <button key={l} onClick={() => updateDeficiency(d.id, { likelihood: l })} className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', d.likelihood === l ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{l}</button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2 text-[12px]">
+                      <span className="text-ink-500 w-[120px]">Exposure ₹</span>
+                      <input type="number" value={d.magnitude} onChange={e => updateDeficiency(d.id, { magnitude: Number(e.target.value) || 0 })} className="h-8 w-44 px-2.5 rounded-md border border-canvas-border text-[12.5px] tabular-nums focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+                      <span className={cn('text-[11.5px]', material ? 'text-risk-700 font-semibold' : 'text-ink-400')}>{material ? '≥' : '<'} materiality {fmt(M)}{ct ? ' · clearly trivial' : ''}</span>
+                    </div>
+                    <p className="text-[10.5px] text-ink-400 pl-[128px] -mt-1">What <b className="font-semibold text-ink-500">could</b> have slipped through while the control was broken — not the error actually found.</p>
+                    <div className="flex items-start gap-2 text-[12px] flex-wrap">
+                      <span className="text-ink-500 w-[120px] mt-1">MW indicators</span>
+                      {MW_INDICATORS.map(ind => { const on = d.mwIndicators.includes(ind); return <button key={ind} onClick={() => updateDeficiency(d.id, { mwIndicators: on ? d.mwIndicators.filter(x => x !== ind) : [...d.mwIndicators, ind] })} className={cn('h-7 px-2.5 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors text-left', on ? 'bg-risk-50 border-risk-200 text-risk-700' : 'border-canvas-border text-ink-500 hover:bg-paper-50')}>{ind.length > 36 ? ind.slice(0, 34) + '…' : ind}</button>; })}
+                    </div>
+                    <div className="flex items-center gap-2 text-[12px] flex-wrap">
+                      <span className="text-ink-500 w-[120px]">Compensating control</span>
+                      <select value={d.compensatingControlId ?? ''} onChange={e => updateDeficiency(d.id, { compensatingControlId: e.target.value || undefined })} className="h-8 px-2.5 rounded-md border border-canvas-border text-[12px] bg-canvas-elevated cursor-pointer focus:outline-none focus:border-brand-300">
+                        <option value="">None</option>
+                        {eng.controls.filter(c => c.id !== d.controlId).slice(0, 30).map(c => <option key={c.id} value={c.id}>{c.id}</option>)}
+                      </select>
+                      {d.compensatingControlId && (
+                        assess.capped ? <span className="text-compliant-700 text-[11px] font-semibold">capping Material Weakness → Significant Deficiency — never clears the exception</span>
+                        : assess.capBlocked === 'not-effective' ? <span className="text-high-700 text-[11px] font-semibold">no cap — {d.compensatingControlId} isn't concluded effective in this engagement</span>
+                        : assess.capBlocked === 'mw-indicator' ? <span className="text-risk-700 text-[11px] font-semibold">no cap — MW indicators can't be argued down</span>
+                        : <span className="text-ink-400 text-[11px]">in place — the cap only rescues a Material Weakness grade, and never clears the exception</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-[12px] flex-wrap">
+                      <span className="text-ink-500 w-[120px]">Aggregation group</span>
+                      <select value={d.aggregationGroup ?? ''} onChange={e => updateDeficiency(d.id, { aggregationGroup: e.target.value || undefined })} className="h-8 px-2.5 rounded-md border border-canvas-border text-[12px] bg-canvas-elevated cursor-pointer focus:outline-none focus:border-brand-300">
+                        <option value="">Ungrouped</option>
+                        {groupOptions.map(g => <option key={g} value={g}>{g}</option>)}
+                      </select>
+                      <span className="text-ink-400 text-[11px]">minor deficiencies combine by commonality — account, process, or root cause</span>
+                    </div>
+                    <PrudentRow d={d} baseFinal={assessSeverity({ ...d, prudentOverride: undefined }, eng).final}
+                      onApply={(to, rationale) => updateDeficiency(d.id, { prudentOverride: { to, rationale, by: me, at: 'just now' } })}
+                      onClear={() => updateDeficiency(d.id, { prudentOverride: undefined })} />
+                    <p className="text-[12px] text-ink-600 pt-2 border-t border-canvas-border">
+                      → {d.likelihood} × {fmt(d.magnitude)} (vs {fmt(M)}){d.mwIndicators.length ? ' + MW indicator' : ''} ⇒ <span className={cn('font-bold', assess.capped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.raw}</span>
+                      {assess.capped && <> · capped by {d.compensatingControlId} (effective) ⇒ <span className={cn('font-bold', assess.bumped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.bumped ? 'Significant Deficiency' : assess.final}</span></>}
+                      {assess.bumped && <> · prudent-official ⇒ <span className="font-bold text-high-700">{assess.final}</span></>}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2 text-[12px]">
-                    <span className="text-ink-500 w-[120px]">Exposure ₹</span>
-                    <input type="number" value={d.magnitude} onChange={e => updateDeficiency(d.id, { magnitude: Number(e.target.value) || 0 })} className="h-8 w-44 px-2.5 rounded-md border border-canvas-border text-[12.5px] tabular-nums focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
-                    <span className={cn('text-[11.5px]', material ? 'text-risk-700 font-semibold' : 'text-ink-400')}>{material ? '≥' : '<'} materiality {fmt(M)}{ct ? ' · clearly trivial' : ''}</span>
+                ) : (
+                  <div className="rounded-lg border border-canvas-border bg-paper-50/30 p-3 space-y-1.5">
+                    <div className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Severity — evaluated by the auditor{isOwner ? '; your part is the remediation below' : ''}</div>
+                    <div className="grid gap-x-6 gap-y-1 text-[12px] sm:grid-cols-2">
+                      <span className="text-ink-700"><span className="text-ink-400">Likelihood</span> · {d.likelihood}</span>
+                      <span className="text-ink-700"><span className="text-ink-400">Exposure</span> · {fmt(d.magnitude)}{ct ? ' (clearly trivial)' : ''}</span>
+                      <span className="text-ink-700"><span className="text-ink-400">MW indicators</span> · {d.mwIndicators.length ? `${d.mwIndicators.length} in force` : 'None'}</span>
+                      <span className="text-ink-700"><span className="text-ink-400">Compensating control</span> · {d.compensatingControlId ?? 'None'}</span>
+                      <span className="text-ink-700"><span className="text-ink-400">Aggregation group</span> · {d.aggregationGroup ?? 'Ungrouped'}</span>
+                      {d.prudentOverride && <span className="text-high-700 font-medium">Prudent-official — raised to {d.prudentOverride.to}</span>}
+                    </div>
+                    <p className="text-[12px] text-ink-600 pt-2 border-t border-canvas-border">
+                      → {d.likelihood} × {fmt(d.magnitude)} (vs {fmt(M)}){d.mwIndicators.length ? ' + MW indicator' : ''} ⇒ <span className={cn('font-bold', assess.capped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.raw}</span>
+                      {assess.capped && <> · capped by {d.compensatingControlId} (effective) ⇒ <span className={cn('font-bold', assess.bumped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.bumped ? 'Significant Deficiency' : assess.final}</span></>}
+                      {assess.bumped && <> · prudent-official ⇒ <span className="font-bold text-high-700">{assess.final}</span></>}
+                    </p>
                   </div>
-                  <p className="text-[10.5px] text-ink-400 pl-[128px] -mt-1">What <b className="font-semibold text-ink-500">could</b> have slipped through while the control was broken — not the error actually found.</p>
-                  <div className="flex items-start gap-2 text-[12px] flex-wrap">
-                    <span className="text-ink-500 w-[120px] mt-1">MW indicators</span>
-                    {MW_INDICATORS.map(ind => { const on = d.mwIndicators.includes(ind); return <button key={ind} onClick={() => updateDeficiency(d.id, { mwIndicators: on ? d.mwIndicators.filter(x => x !== ind) : [...d.mwIndicators, ind] })} className={cn('h-7 px-2.5 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors text-left', on ? 'bg-risk-50 border-risk-200 text-risk-700' : 'border-canvas-border text-ink-500 hover:bg-paper-50')}>{ind.length > 36 ? ind.slice(0, 34) + '…' : ind}</button>; })}
-                  </div>
-                  <div className="flex items-center gap-2 text-[12px] flex-wrap">
-                    <span className="text-ink-500 w-[120px]">Compensating control</span>
-                    <select value={d.compensatingControlId ?? ''} onChange={e => updateDeficiency(d.id, { compensatingControlId: e.target.value || undefined })} className="h-8 px-2.5 rounded-md border border-canvas-border text-[12px] bg-canvas-elevated cursor-pointer focus:outline-none focus:border-brand-300">
-                      <option value="">None</option>
-                      {eng.controls.filter(c => c.id !== d.controlId).slice(0, 30).map(c => <option key={c.id} value={c.id}>{c.id}</option>)}
-                    </select>
-                    {d.compensatingControlId && (
-                      assess.capped ? <span className="text-compliant-700 text-[11px] font-semibold">capping Material Weakness → Significant Deficiency — never clears the exception</span>
-                      : assess.capBlocked === 'not-effective' ? <span className="text-high-700 text-[11px] font-semibold">no cap — {d.compensatingControlId} isn't concluded effective in this engagement</span>
-                      : assess.capBlocked === 'mw-indicator' ? <span className="text-risk-700 text-[11px] font-semibold">no cap — MW indicators can't be argued down</span>
-                      : <span className="text-ink-400 text-[11px]">in place — the cap only rescues a Material Weakness grade, and never clears the exception</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 text-[12px] flex-wrap">
-                    <span className="text-ink-500 w-[120px]">Aggregation group</span>
-                    <select value={d.aggregationGroup ?? ''} onChange={e => updateDeficiency(d.id, { aggregationGroup: e.target.value || undefined })} className="h-8 px-2.5 rounded-md border border-canvas-border text-[12px] bg-canvas-elevated cursor-pointer focus:outline-none focus:border-brand-300">
-                      <option value="">Ungrouped</option>
-                      {groupOptions.map(g => <option key={g} value={g}>{g}</option>)}
-                    </select>
-                    <span className="text-ink-400 text-[11px]">minor deficiencies combine by commonality — account, process, or root cause</span>
-                  </div>
-                  <PrudentRow d={d} baseFinal={assessSeverity({ ...d, prudentOverride: undefined }, eng).final}
-                    onApply={(to, rationale) => updateDeficiency(d.id, { prudentOverride: { to, rationale, by: me, at: 'just now' } })}
-                    onClear={() => updateDeficiency(d.id, { prudentOverride: undefined })} />
-                  <p className="text-[12px] text-ink-600 pt-2 border-t border-canvas-border">
-                    → {d.likelihood} × {fmt(d.magnitude)} (vs {fmt(M)}){d.mwIndicators.length ? ' + MW indicator' : ''} ⇒ <span className={cn('font-bold', assess.capped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.raw}</span>
-                    {assess.capped && <> · capped by {d.compensatingControlId} (effective) ⇒ <span className={cn('font-bold', assess.bumped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.bumped ? 'Significant Deficiency' : assess.final}</span></>}
-                    {assess.bumped && <> · prudent-official ⇒ <span className="font-bold text-high-700">{assess.final}</span></>}
-                  </p>
-                </div>
+                )}
 
                 {/* remediation + lifecycle actions */}
                 <div className="mt-3 rounded-lg border border-canvas-border bg-paper-50/50 px-3 py-2.5">
@@ -531,12 +554,24 @@ export function DeficienciesView() {
                 </div>
 
                 <div className="mt-3 flex items-center gap-2 flex-wrap">
-                  {d.status === 'Identified' && <button onClick={() => setExceptionStatus(d.id, 'Remediation')} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Start remediation</button>}
-                  {d.status === 'Remediation' && <button onClick={() => setExceptionStatus(d.id, 'Retest')} className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold hover:bg-evidence-700 cursor-pointer inline-flex items-center gap-1.5">Submit for retest</button>}
-                  {d.status === 'Retest' && <>
-                    <button onClick={() => recordRetest(d.id, 'Pass')} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Retest passed — to reviewer</button>
-                    <button onClick={() => recordRetest(d.id, 'Fail')} className="h-8 px-3 rounded-lg border border-risk-300 text-risk-700 text-[12px] font-semibold hover:bg-risk-50 cursor-pointer inline-flex items-center gap-1.5"><XCircle size={13} /> Retest failed</button>
-                  </>}
+                  {/* owner's lane: start remediation (auditor may route it too), then submit the fix for retest */}
+                  {d.status === 'Identified' && (
+                    role !== 'reviewer'
+                      ? <button onClick={() => setExceptionStatus(d.id, 'Remediation')} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Start remediation</button>
+                      : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><RotateCcw size={14} className="text-ink-400" /> Awaiting remediation — {d.remediation.owner}</span>
+                  )}
+                  {d.status === 'Remediation' && (
+                    isOwner
+                      ? <button onClick={() => setExceptionStatus(d.id, 'Retest')} title="Marks your fix as ready and hands it to the auditor" className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold hover:bg-evidence-700 cursor-pointer inline-flex items-center gap-1.5">Fixed — submit for retest</button>
+                      : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><RotateCcw size={14} className="text-ink-400" /> With {d.remediation.owner} for remediation — the owner submits it for retest</span>
+                  )}
+                  {/* auditor's lane: only the auditor records retest results — never the owner of the fix */}
+                  {d.status === 'Retest' && (
+                    isAuditor ? <>
+                      <button onClick={() => recordRetest(d.id, 'Pass')} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Retest passed — to reviewer</button>
+                      <button onClick={() => recordRetest(d.id, 'Fail')} className="h-8 px-3 rounded-lg border border-risk-300 text-risk-700 text-[12px] font-semibold hover:bg-risk-50 cursor-pointer inline-flex items-center gap-1.5"><XCircle size={13} /> Retest failed</button>
+                    </> : <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><CheckCircle2 size={14} className="text-ink-400" /> With the auditor for retest{isOwner ? ' — you never test your own fix' : ''}</span>
+                  )}
                   {/* four-eyes: only the reviewer hat closes, and never the person who ran the retest */}
                   {d.status === 'Awaiting reviewer' && (
                     role !== 'reviewer' ? (
