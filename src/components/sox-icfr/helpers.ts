@@ -25,20 +25,30 @@ export function severityOf(d: Deficiency, materiality: number, rules?: Materiali
 // when the chosen compensating control is itself concluded effective in this
 // engagement, never when an MW indicator is present, and it never clears the
 // exception — capBlocked says why a chosen control had no effect.
+export const SEVERITY_RANK: Record<Severity, number> = { Deficiency: 0, 'Significant Deficiency': 1, 'Material Weakness': 2 };
 export interface SeverityAssessment {
   raw: Severity;
   final: Severity;
   capped: boolean;
   capBlocked?: 'not-effective' | 'mw-indicator';
+  bumped?: boolean;   // prudent-official judgment raised the grade above the math
 }
 export function assessSeverity(d: Deficiency, eng: IcfrEngagement): SeverityAssessment {
   const raw = severityOf(d, eng.materiality, eng.rules);
-  if (!d.compensatingControlId) return { raw, final: raw, capped: false };
-  if (d.mwIndicators.length > 0) return { raw, final: raw, capped: false, capBlocked: 'mw-indicator' };
-  const cc = eng.controls.find(c => c.id === d.compensatingControlId);
-  if (!cc || controlConclusion(cc) !== 'Effective') return { raw, final: raw, capped: false, capBlocked: 'not-effective' };
-  if (raw === 'Material Weakness') return { raw, final: 'Significant Deficiency', capped: true };
-  return { raw, final: raw, capped: false };
+  let out: SeverityAssessment;
+  if (!d.compensatingControlId) out = { raw, final: raw, capped: false };
+  else if (d.mwIndicators.length > 0) out = { raw, final: raw, capped: false, capBlocked: 'mw-indicator' };
+  else {
+    const cc = eng.controls.find(c => c.id === d.compensatingControlId);
+    if (!cc || controlConclusion(cc) !== 'Effective') out = { raw, final: raw, capped: false, capBlocked: 'not-effective' };
+    else if (raw === 'Material Weakness') out = { raw, final: 'Significant Deficiency', capped: true };
+    else out = { raw, final: raw, capped: false };
+  }
+  // prudent-official: judgment argues UP only — applied after the cap, never below it
+  if (d.prudentOverride && SEVERITY_RANK[d.prudentOverride.to] > SEVERITY_RANK[out.final]) {
+    out = { ...out, final: d.prudentOverride.to, bumped: true };
+  }
+  return out;
 }
 
 // ─── Ground-rules change preview ──────────────────────────────────────────────────

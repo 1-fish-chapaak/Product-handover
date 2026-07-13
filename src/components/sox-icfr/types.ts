@@ -236,6 +236,9 @@ export interface Deficiency {
   status: ExceptionStatus;
   retest?: { result: 'Pass' | 'Fail'; at: string; by: string };
   signoff?: { by: string; at: string };
+  // Prudent-official judgment: severity can be argued UP (never down) with a
+  // recorded rationale — the handbook's judgment floor over the pure math.
+  prudentOverride?: { to: Severity; rationale: string; by: string; at: string };
 }
 // A passed retest parks at 'Awaiting reviewer' — only the reviewer closes (four-eyes).
 export type ExceptionStatus = 'Identified' | 'Remediation' | 'Retest' | 'Awaiting reviewer' | 'Closed';

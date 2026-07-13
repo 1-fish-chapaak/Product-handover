@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowRight, History, Target, ShieldCheck, AlertTriangle, RotateCcw, Scale, CheckCircle2, X, XCircle, Sliders, GitMerge, Route } from 'lucide-react';
 import { useIcfr } from './store';
-import { assessSeverity, computeSeverity, formatINR, isClearlyTrivial, isEngagementLocked, previewRegrades, type RulesPatch } from './helpers';
+import { assessSeverity, computeSeverity, formatINR, isClearlyTrivial, isEngagementLocked, previewRegrades, SEVERITY_RANK, type RulesPatch } from './helpers';
 import { SeverityPill } from './parts';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
-import { MW_INDICATOR_CATALOGUE, type ExceptionStatus, type IcfrEngagement } from './types';
+import { MW_INDICATOR_CATALOGUE, type Deficiency, type ExceptionStatus, type IcfrEngagement, type Severity } from './types';
 
 const fmt = (n: number) => formatINR(n);
 const fmtFull = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
@@ -242,6 +242,41 @@ function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagemen
   );
 }
 
+// Prudent-official override — judgment can raise the grade above the math, never
+// lower it, and always with a recorded rationale (the handbook's judgment floor).
+function PrudentRow({ d, baseFinal, onApply, onClear }: { d: Deficiency; baseFinal: Severity; onApply: (to: Severity, rationale: string) => void; onClear: () => void }) {
+  const [pending, setPending] = useState<Severity | null>(null);
+  const [note, setNote] = useState('');
+  const options = (['Significant Deficiency', 'Material Weakness'] as Severity[]).filter(s => SEVERITY_RANK[s] > SEVERITY_RANK[baseFinal]);
+  return (
+    <div className="flex items-start gap-2 text-[12px] flex-wrap">
+      <span className="text-ink-500 w-[120px] mt-1">Prudent official</span>
+      {d.prudentOverride ? (
+        <span className="text-[11.5px] text-high-700 inline-flex items-center gap-1.5 flex-wrap mt-1">
+          <b className="font-semibold">raised to {d.prudentOverride.to}</b> — “{d.prudentOverride.rationale}” <span className="text-ink-400">· {d.prudentOverride.by}</span>
+          <button onClick={onClear} className="text-ink-400 hover:text-ink-700 cursor-pointer inline-flex items-center gap-0.5"><RotateCcw size={10} /> undo</button>
+        </span>
+      ) : options.length === 0 ? (
+        <span className="text-[11.5px] text-ink-400 mt-1">already at the top of the ladder — nothing to raise</span>
+      ) : pending ? (
+        <span className="flex items-center gap-2 flex-1 min-w-[260px]">
+          <input autoFocus value={note} onChange={e => setNote(e.target.value)} placeholder={`Why would a prudent official call this ${pending === 'Material Weakness' ? 'a material weakness' : 'a significant deficiency'}?`}
+            className="h-8 flex-1 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] focus:outline-none focus:border-brand-300" />
+          <button disabled={!note.trim()} onClick={() => { onApply(pending, note.trim()); setPending(null); setNote(''); }} className="h-8 px-2.5 rounded-md bg-brand-600 text-white text-[11.5px] font-semibold disabled:opacity-40 cursor-pointer">Raise</button>
+          <button onClick={() => { setPending(null); setNote(''); }} className="h-8 px-2 rounded-md border border-canvas-border text-[11.5px] text-ink-600 cursor-pointer">Cancel</button>
+        </span>
+      ) : (
+        <>
+          {options.map(s => (
+            <button key={s} onClick={() => setPending(s)} className="h-7 px-2.5 rounded-md border border-canvas-border text-[11px] font-semibold text-ink-600 hover:border-high-300 hover:text-high-700 cursor-pointer transition-colors">Raise to {s}</button>
+          ))}
+          <span className="text-[10.5px] text-ink-400 mt-1.5">judgment goes up only — rationale recorded</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Exceptions — the lifecycle ──────────────────────────────────────────────────
 const STAGES: ExceptionStatus[] = ['Identified', 'Remediation', 'Retest', 'Awaiting reviewer', 'Closed'];
 const STATUS_TONE: Record<ExceptionStatus, Tone> = { Identified: 'high', Remediation: 'mitigated', Retest: 'evidence', 'Awaiting reviewer': 'info', Closed: 'compliant' };
@@ -364,9 +399,13 @@ export function DeficienciesView() {
                       : <span className="text-ink-400 text-[11px]">in place — the cap only rescues a Material Weakness grade, and never clears the exception</span>
                     )}
                   </div>
+                  <PrudentRow d={d} baseFinal={assessSeverity({ ...d, prudentOverride: undefined }, eng).final}
+                    onApply={(to, rationale) => updateDeficiency(d.id, { prudentOverride: { to, rationale, by: me, at: 'just now' } })}
+                    onClear={() => updateDeficiency(d.id, { prudentOverride: undefined })} />
                   <p className="text-[12px] text-ink-600 pt-2 border-t border-canvas-border">
                     → {d.likelihood} × {fmt(d.magnitude)} (vs {fmt(M)}){d.mwIndicators.length ? ' + MW indicator' : ''} ⇒ <span className={cn('font-bold', assess.capped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.raw}</span>
-                    {assess.capped && <> · capped by {d.compensatingControlId} (effective) ⇒ <span className="font-bold text-ink-800">{assess.final}</span></>}
+                    {assess.capped && <> · capped by {d.compensatingControlId} (effective) ⇒ <span className={cn('font-bold', assess.bumped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.bumped ? 'Significant Deficiency' : assess.final}</span></>}
+                    {assess.bumped && <> · prudent-official ⇒ <span className="font-bold text-high-700">{assess.final}</span></>}
                   </p>
                 </div>
 
