@@ -178,6 +178,10 @@ export interface Control {
   frequency: Frequency;
   isKey: boolean;
   precision: string;
+  // Management review control — precision must be structured: the rupee threshold
+  // at which the reviewer investigates, checked against performance materiality.
+  isMrc?: boolean;
+  mrcThreshold?: number;
   owner: string;
   riskId: string;
   riskDescription: string;

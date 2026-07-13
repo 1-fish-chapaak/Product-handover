@@ -234,6 +234,7 @@ const DETAILED: Control[] = [
   },
   {
     id: 'P2P-C-05', wpRef: 'P-05', description: 'Manual journals to AP control account are reviewed and approved by the Financial Controller.',
+    isMrc: true, mrcThreshold: 250_000,
     process: 'Procure to Pay', subProcess: 'Period close', nature: 'Manual', type: 'Detective', frequency: 'Monthly', isKey: true,
     precision: 'All manual AP journals are reviewed before posting; review evidenced by sign-off.',
     owner: 'D. Rao · Controller', riskId: 'R-19', riskDescription: 'Unauthorised or erroneous manual adjustments to AP.',
@@ -272,6 +273,7 @@ const DETAILED: Control[] = [
   },
   {
     id: 'P2P-C-07', wpRef: 'P-07', description: 'Aged GR/IR items are reviewed and cleared each month.',
+    isMrc: true,   // review control tagged, threshold not yet documented — surfaces the precision warning
     process: 'Procure to Pay', subProcess: 'Period close', nature: 'Manual', type: 'Detective', frequency: 'Monthly', isKey: false,
     precision: 'GR/IR entries open beyond 60 days are investigated and resolved.',
     owner: 'M. Nair · Accounts Payable', riskId: 'R-24', riskDescription: 'Unreconciled goods-received/invoice-received balances misstate liabilities.',

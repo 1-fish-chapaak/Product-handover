@@ -84,6 +84,7 @@ interface IcfrCtx {
   // operating track
   setPopulation: (controlId: string, population: Population) => void;
   validateIpe: (controlId: string) => void;
+  setMrc: (controlId: string, isMrc: boolean, threshold?: number) => void;
   setSampling: (controlId: string, sampling: Sampling) => void;
   extendSample: (controlId: string, extra: number) => void;
   setSampleResult: (controlId: string, stepId: string, sampleId: string, result: TestResult) => void;
@@ -307,6 +308,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // ── operating track ───────────────────────────────────────────────────────────
   const setPopulation = useCallback<IcfrCtx['setPopulation']>((controlId, population) => {
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, population } }));
+  }, [patchControl]);
+
+  // Tag / untag a management review control and keep its investigation threshold.
+  const setMrc = useCallback<IcfrCtx['setMrc']>((controlId, isMrc, threshold) => {
+    patchControl(controlId, c => ({ ...c, isMrc, mrcThreshold: isMrc ? (threshold ?? c.mrcThreshold) : undefined }));
   }, [patchControl]);
 
   // IPE check — the system report is only reliable once someone has validated it.
@@ -740,14 +746,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, back,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
     addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
-    setPopulation, validateIpe, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
+    setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, applyRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException,
     addControl, signOffEngagement, reopenControl,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, addControl, signOffEngagement, reopenControl]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, setExceptionStatus, recordRetest, signOffException, addControl, signOffEngagement, reopenControl]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

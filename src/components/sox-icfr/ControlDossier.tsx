@@ -11,6 +11,7 @@ import { useIcfr } from './store';
 import {
   controlConclusion, courtFor, designProgress, discussionsFor, operatingProgress, trackResult,
   pointResult, stepResult, isControlLocked, isEngagementLocked, sampleSizeGuide, failedItgcs, isItgcDependent,
+  formatINR as fmtINR,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp } from './parts';
 import { Pill } from '../shared/StatusBadge';
@@ -816,6 +817,40 @@ function ActivityRail({ control }: { control: Control }) {
 }
 
 // ── the dossier ──────────────────────────────────────────────────────────────────
+// Management-review-control structure on the leadsheet: tag + rupee threshold
+// at which the reviewer investigates, checked against performance materiality.
+function MrcLine({ control, canEdit, pm }: { control: Control; canEdit: boolean; pm: number }) {
+  const { setMrc } = useIcfr();
+  const t = control.mrcThreshold;
+  if (!control.isMrc) {
+    return canEdit ? (
+      <button onClick={() => setMrc(control.id, true)} className="mt-1.5 h-6 px-2 rounded-md border border-dashed border-canvas-border text-[10.5px] font-semibold text-ink-400 hover:text-brand-700 hover:border-brand-300 cursor-pointer transition-colors">
+        + Tag as management review control
+      </button>
+    ) : null;
+  }
+  const check = t == null
+    ? { cls: 'text-mitigated-700', msg: 'no investigation threshold documented — precision can’t be verified' }
+    : t > pm
+      ? { cls: 'text-risk-700', msg: `threshold exceeds performance materiality (${fmtINR(pm)}) — too coarse to catch a material error` }
+      : { cls: 'text-compliant-700', msg: `within performance materiality (${fmtINR(pm)})` };
+  return (
+    <div className="mt-1.5 flex items-center gap-2 text-[11px] flex-wrap">
+      <Pill tone="evidence">Management review control</Pill>
+      <span className="text-ink-500">investigates ≥</span>
+      {canEdit ? (
+        <span className="relative inline-flex items-center"><span className="absolute left-1.5 text-ink-400 text-[10.5px] pointer-events-none">₹</span>
+          <input type="number" min={0} value={t ?? ''} placeholder="—"
+            onChange={e => setMrc(control.id, true, e.target.value === '' ? undefined : Math.max(0, +e.target.value || 0))}
+            className="h-6 w-28 pl-4 pr-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[11px] tabular-nums focus:outline-none focus:border-brand-300" />
+        </span>
+      ) : <b className="font-semibold text-ink-700 tabular-nums">{t == null ? '—' : fmtINR(t)}</b>}
+      <span className={cn('font-medium', check.cls)}>{check.msg}</span>
+      {canEdit && <button onClick={() => setMrc(control.id, false)} className="text-ink-400 hover:text-ink-700 text-[10.5px] cursor-pointer">untag</button>}
+    </div>
+  );
+}
+
 // The freeze notice on a concluded control. Reopening is the auditor's move,
 // needs a reason, and lands in the activity trail; a countersigned engagement
 // is final — no way back in.
@@ -879,6 +914,7 @@ export default function ControlDossier() {
               </div>
               <h1 className="leadsheet-title text-[20px] text-ink-900 leading-snug max-w-[640px]">{control.description}</h1>
               <p className="text-[12.5px] text-ink-500 mt-1.5 max-w-[680px]"><b className="text-ink-700 font-semibold">Precision —</b> {control.precision}</p>
+              <MrcLine control={control} canEdit={canEdit} pm={eng.performanceMateriality} />
               <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 text-[11.5px] text-ink-500">
                 <span><span className="text-ink-400">Process</span> · {control.process} / {control.subProcess}</span>
                 <span className="inline-flex items-center gap-1"><span className="text-ink-400">Owner</span> · <b className="font-semibold text-ink-700">{control.owner}</b></span>
