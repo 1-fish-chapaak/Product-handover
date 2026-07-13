@@ -196,9 +196,9 @@ export default function Racm() {
         </div>
       </div>
 
-      {/* auditor-review summary — the approval state of the matrix at a glance */}
+      {/* pre-testing review summary — rows approved as ready-to-test, at a glance */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 mr-0.5">Auditor review</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 mr-0.5" title="Approving a row means the control as documented is ready to test — it is not a testing conclusion">Pre-testing review</span>
         {reviewChip('Approved', 'Approved', counts.approved, CheckCircle2, 'text-compliant-600')}
         {reviewChip('Remark', 'Remarks', counts.remarks, MessageSquareWarning, 'text-high-600')}
         {reviewChip('Pending', 'Pending', counts.pending, Circle, 'text-ink-400')}
@@ -226,7 +226,7 @@ export default function Racm() {
               <th style={{ width: 96 }}>Nature</th>
               <th style={{ width: 84 }}>① Design</th>
               <th style={{ width: 84 }}>② Operating</th>
-              <th style={{ width: 220 }}>Auditor review</th>
+              <th style={{ width: 220 }} title="Approving a row means the control as documented is ready to test">Pre-testing review</th>
               <th style={{ width: 76 }} />
             </tr>
           </thead>

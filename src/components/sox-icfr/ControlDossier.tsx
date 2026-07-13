@@ -470,10 +470,14 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
           </div>
           {d.documents.length === 0 ? <p className="text-[12px] text-ink-400 mb-5">No documents yet — add one or request data.</p> : (
             <div className="mb-5 space-y-1.5">
-              {d.documents.map(doc => (
-                <div key={doc.id} className="doc-row">
+              {/* walkthrough leads — one real transaction end-to-end is the core TOD evidence */}
+              {[...d.documents].sort((a, b) => (a.kind === 'Walkthrough' ? -1 : 0) - (b.kind === 'Walkthrough' ? -1 : 0)).map(doc => (
+                <div key={doc.id} className={cn('doc-row', doc.kind === 'Walkthrough' && 'ring-1 ring-brand-100 bg-brand-50/30 rounded-lg')}>
                   <FileCheck2 size={15} className={cn('shrink-0', DOC_TONE[doc.status])} />
-                  <div className="min-w-0 flex-1"><div className="text-[12px] font-semibold text-ink-800 truncate">{doc.kind}</div><div className="text-[11px] text-ink-400 truncate">{doc.name}{doc.uploadedBy ? ` · ${doc.uploadedBy}, ${doc.at}` : ''}</div></div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12px] font-semibold text-ink-800 truncate">{doc.kind}{doc.kind === 'Walkthrough' && <span className="ml-1.5 text-[9.5px] font-bold uppercase tracking-wide text-brand-700 bg-brand-50 border border-brand-200 rounded px-1 py-px">core evidence</span>}</div>
+                    <div className="text-[11px] text-ink-400 truncate">{doc.name}{doc.uploadedBy ? ` · ${doc.uploadedBy}, ${doc.at}` : ''}{doc.kind === 'Walkthrough' && doc.status !== 'Received' ? ' — one real transaction traced end-to-end; TOD leans on this' : ''}</div>
+                  </div>
                   <Pill tone={doc.status === 'Received' ? 'compliant' : doc.status === 'Requested' ? 'mitigated' : 'draft'}>{doc.status}</Pill>
                   {canEdit && <div className="flex items-center gap-1">
                     {doc.status !== 'Received' && <button onClick={() => setDocStatus(control.id, doc.id, 'Received')} className="h-7 px-2.5 text-[11.5px] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach</button>}

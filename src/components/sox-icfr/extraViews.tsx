@@ -285,6 +285,11 @@ const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
 export function DeficienciesView() {
   const { eng, role, me, back, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException } = useIcfr();
   const M = eng.materiality; const rules = eng.rules;
+  // aggregation groups on offer: every group already in use plus each process name
+  const groupOptions = Array.from(new Set([
+    ...eng.deficiencies.map(d => d.aggregationGroup).filter((g): g is string => !!g),
+    ...eng.controls.map(c => c.process),
+  ])).sort();
 
   return (
     <div className="space-y-4">
@@ -398,6 +403,14 @@ export function DeficienciesView() {
                       : assess.capBlocked === 'mw-indicator' ? <span className="text-risk-700 text-[11px] font-semibold">no cap — MW indicators can't be argued down</span>
                       : <span className="text-ink-400 text-[11px]">in place — the cap only rescues a Material Weakness grade, and never clears the exception</span>
                     )}
+                  </div>
+                  <div className="flex items-center gap-2 text-[12px] flex-wrap">
+                    <span className="text-ink-500 w-[120px]">Aggregation group</span>
+                    <select value={d.aggregationGroup ?? ''} onChange={e => updateDeficiency(d.id, { aggregationGroup: e.target.value || undefined })} className="h-8 px-2.5 rounded-md border border-canvas-border text-[12px] bg-canvas-elevated cursor-pointer focus:outline-none focus:border-brand-300">
+                      <option value="">Ungrouped</option>
+                      {groupOptions.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                    <span className="text-ink-400 text-[11px]">minor deficiencies combine by commonality — account, process, or root cause</span>
                   </div>
                   <PrudentRow d={d} baseFinal={assessSeverity({ ...d, prudentOverride: undefined }, eng).final}
                     onApply={(to, rationale) => updateDeficiency(d.id, { prudentOverride: { to, rationale, by: me, at: 'just now' } })}

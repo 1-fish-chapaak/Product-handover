@@ -164,7 +164,9 @@ export default function Overview() {
               );
             })}
           </div>
-          <div className="mt-3 text-[12px] text-ink-500">{stats.waitingOnOwner} control{stats.waitingOnOwner === 1 ? '' : 's'} waiting on the risk owner</div>
+          <button onClick={() => setTab('controls')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors text-left">
+            {stats.waitingOnOwner} control{stats.waitingOnOwner === 1 ? '' : 's'} waiting on the risk owner <ArrowRight size={13} />
+          </button>
         </div>
 
         {/* materiality */}
