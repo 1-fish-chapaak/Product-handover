@@ -228,6 +228,14 @@ export function openDiscussionCount(eng: IcfrEngagement, controlId: string): num
   return discussionsFor(eng, controlId).filter(d => !d.resolved).length;
 }
 
+// Parse a period-end label like 'Mar 2026' to the last moment of that month.
+export function periodEndDate(label: string): Date | null {
+  const parsed = Date.parse(`1 ${label}`);
+  if (Number.isNaN(parsed)) return null;
+  const d = new Date(parsed);
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+}
+
 export function formatINR(n: number): string {
   if (n >= 1e7) return `₹${(n / 1e7).toFixed(2)}Cr`;
   if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)}L`;

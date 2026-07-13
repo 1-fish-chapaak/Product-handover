@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 import {
-  AlertTriangle, BadgeCheck, CheckCircle2, Circle, Inbox, PenLine, Scale, ArrowRight, ShieldAlert, ShieldCheck, Upload, MessageSquare, FileWarning,
+  AlertTriangle, BadgeCheck, CheckCircle2, Circle, Hourglass, Inbox, PenLine, Scale, ArrowRight, ShieldAlert, ShieldCheck, Upload, MessageSquare, FileWarning,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
 import {
-  assessSeverity, controlConclusion, engagementProgress, formatINR, isClearlyTrivial, trackResult,
+  assessSeverity, controlConclusion, engagementProgress, formatINR, isClearlyTrivial, periodEndDate, trackResult,
 } from './helpers';
 import { cn } from '../../lib/cn';
 import RiskOwnerPortal from './RiskOwnerPortal';
@@ -189,6 +189,39 @@ export default function Overview() {
           <button onClick={() => setView('scope')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Materiality &amp; scope <ArrowRight size={13} /></button>
         </div>
       </div>
+
+      {/* year-end countdown — what must close before the opinion date */}
+      {!isConcluded && (() => {
+        const end = periodEndDate(eng.periodEnd);
+        const days = end ? Math.ceil((end.getTime() - Date.now()) / 86_400_000) : null;
+        const past = days !== null && days < 0;
+        const openOther = sev.open - sev.mwOpen;
+        const unconcluded = stats.total - concludedCount;
+        return (
+          <section className={cn('rounded-2xl border p-4', past || sev.mwOpen ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-canvas-elevated')}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Hourglass size={15} className={past || sev.mwOpen ? 'text-high-700' : 'text-brand-600'} />
+              <h2 className="text-[13px] font-bold text-ink-800">
+                {days === null ? `Year-end — ${eng.periodEnd}`
+                  : past ? `Period ended ${eng.periodEnd} — the opinion clock is running`
+                  : `${days} day${days === 1 ? '' : 's'} to year-end (${eng.periodEnd})`}
+              </h2>
+              <span className="text-[11.5px] text-ink-500">— what must close before the opinion date</span>
+            </div>
+            <div className="mt-2.5 flex items-center gap-x-5 gap-y-1.5 flex-wrap text-[12.5px]">
+              {sev.mwOpen > 0 && (
+                <span className="inline-flex items-center gap-1.5 font-semibold text-risk-700">
+                  <AlertTriangle size={13} /> {sev.mwOpen} material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'open past year-end ⇒' : 'open at year-end ⇒'} ICFR publicly ineffective
+                </span>
+              )}
+              {openOther > 0 && <span className="inline-flex items-center gap-1.5 text-ink-700"><Circle size={11} className="text-high-600" /> {openOther} exception{openOther === 1 ? '' : 's'} still in the lifecycle (remediate → retest → reviewer close)</span>}
+              {unconcluded > 0 && <span className="inline-flex items-center gap-1.5 text-ink-700"><Circle size={11} className="text-ink-400" /> {unconcluded} control{unconcluded === 1 ? '' : 's'} not concluded</span>}
+              <span className="inline-flex items-center gap-1.5 text-ink-500"><PenLine size={12} /> then: {so.preparer ? 'reviewer countersign' : 'preparer sign-off + reviewer countersign'}</span>
+              {sev.mwOpen === 0 && openOther === 0 && unconcluded === 0 && <span className="inline-flex items-center gap-1.5 font-semibold text-compliant-700"><CheckCircle2 size={13} /> Nothing outstanding — ready to conclude</span>}
+            </div>
+          </section>
+        );
+      })()}
 
       {/* engagement sign-off — the closure moment; unlocks when every control is concluded */}
       <section id="eng-signoff" className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
