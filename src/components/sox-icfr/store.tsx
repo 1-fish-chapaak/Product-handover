@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { requiredDatasetsFor, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { icfrConclusion, isControlLocked, isEngagementLocked, validationQA, validationSummary, validationTable } from './helpers';
+import { icfrConclusion, isControlLocked, isEngagementLocked, trackResult, validationQA, validationSummary, validationTable } from './helpers';
 import type {
   Assertion, Attestation, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
   EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -210,15 +210,51 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     patchControl(controlId, c => ({ ...c, design: { ...c.design, points: c.design.points.map(p => p.id === pointId ? { ...p, result } : p) } }));
   }, [patchControl]);
 
+  // An ineffective track never fizzles — it raises its exception automatically.
+  // Runs against post-action state (queued after the conclude/override setEng),
+  // no-ops unless the track actually reads Ineffective, and dedupes against an
+  // existing open exception for the same control + track. Severity starts at the
+  // floor until likelihood/magnitude are assessed on the exception card.
+  const raiseDeficiencyIfIneffective = useCallback((controlId: string, track: 'design' | 'operating') => {
+    setEng(prev => {
+      const c = prev.controls.find(x => x.id === controlId);
+      if (!c) return prev;
+      if (trackResult(track === 'design' ? c.design : c.operating) !== 'Ineffective') return prev;
+      if (prev.deficiencies.some(d => d.controlId === controlId && d.track === track && d.status !== 'Closed')) return prev;
+      const failed = track === 'design'
+        ? c.design.points.filter(p => (p.override?.result ?? p.result) === 'Fail').map(p => p.text)
+        : c.operating.steps.filter(s => (s.override?.result ?? s.result) === 'Fail').map(s => s.code);
+      const next = Math.max(0, ...prev.deficiencies.map(d => parseInt(d.id.replace(/\D/g, ''), 10) || 0)) + 1;
+      const def: Deficiency = {
+        id: `DEF-${String(next).padStart(3, '0')}`,
+        controlId, track,
+        description: failed.length
+          ? `${track === 'design' ? 'Design' : 'Operating'} concluded ineffective on ${c.wpRef} — failed: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? ` +${failed.length - 3} more` : ''}.`
+          : `${track === 'design' ? 'Design' : 'Operating'} concluded ineffective on ${c.wpRef}.`,
+        rootCause: 'To be assessed — capture why the control failed.',
+        likelihood: 'Reasonably possible',
+        magnitude: 0,
+        mwIndicators: [],
+        compensatingControlId: undefined,
+        aggregationGroup: c.process,
+        remediation: { action: 'To be agreed with the control owner.', date: null, owner: c.owner, status: 'Open' },
+        status: 'Identified',
+      };
+      return { ...prev, deficiencies: [def, ...prev.deficiencies] };
+    });
+  }, []);
+
   const concludeDesign = useCallback<IcfrCtx['concludeDesign']>((controlId, conclusion) => {
     patchControl(controlId, c => ({ ...c, design: { ...c.design, conclusion, testedBy: me, testedAt: 'just now' } }));
     if (conclusion !== 'Not tested') pushExec(() => ({ controlId, track: 'design', kind: 'conclude', verb: `concluded design ${conclusion.toLowerCase()}`, result: conclusion }));
-  }, [patchControl, me, pushExec]);
+    if (conclusion === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'design');
+  }, [patchControl, me, pushExec, raiseDeficiencyIfIneffective]);
 
   const overrideDesign = useCallback<IcfrCtx['overrideDesign']>((controlId, override) => {
     patchControl(controlId, c => ({ ...c, design: { ...c.design, override: override ?? undefined } }));
     if (override) pushExec(() => ({ controlId, track: 'design', kind: 'override', verb: 'overrode the design conclusion', result: override.result === 'Effective' ? 'Effective' : 'Ineffective' }));
-  }, [patchControl, pushExec]);
+    if (override?.result === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'design');
+  }, [patchControl, pushExec, raiseDeficiencyIfIneffective]);
 
   const addDesignDoc = useCallback<IcfrCtx['addDesignDoc']>((controlId, kind) => {
     patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: [...c.design.documents, { id: uid('dd'), kind, name: `${kind} — to provide`, status: 'Missing' } as DesignDoc] } }));
@@ -385,12 +421,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const concludeOperating = useCallback<IcfrCtx['concludeOperating']>((controlId, conclusion) => {
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, conclusion, testedBy: me, testedAt: 'just now' } }));
     if (conclusion !== 'Not tested') pushExec(() => ({ controlId, track: 'operating', kind: 'conclude', verb: `concluded operating ${conclusion.toLowerCase()}`, result: conclusion }));
-  }, [patchControl, me, pushExec]);
+    if (conclusion === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'operating');
+  }, [patchControl, me, pushExec, raiseDeficiencyIfIneffective]);
 
   const overrideOperating = useCallback<IcfrCtx['overrideOperating']>((controlId, override) => {
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, override: override ?? undefined } }));
     if (override) pushExec(() => ({ controlId, track: 'operating', kind: 'override', verb: 'overrode the operating conclusion', result: override.result === 'Effective' ? 'Effective' : 'Ineffective' }));
-  }, [patchControl, pushExec]);
+    if (override?.result === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'operating');
+  }, [patchControl, pushExec, raiseDeficiencyIfIneffective]);
 
   // ── RACM row review + bulk testing ────────────────────────────────────────────
   const approveRacmRows = useCallback<IcfrCtx['approveRacmRows']>((controlIds) => {
@@ -456,7 +494,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       };
       return { ...prev, controls, executions: [...execs, ...prev.executions], runs: [run, ...prev.runs] };
     });
-  }, [me, role]);
+    // a bulk run can conclude tracks ineffective — raise their exceptions too
+    controlIds.forEach(id => {
+      raiseDeficiencyIfIneffective(id, 'design');
+      raiseDeficiencyIfIneffective(id, 'operating');
+    });
+  }, [me, role, raiseDeficiencyIfIneffective]);
 
   // ── discussions ───────────────────────────────────────────────────────────────
   const addComment = useCallback<IcfrCtx['addComment']>((controlId, anchor, text) => {
