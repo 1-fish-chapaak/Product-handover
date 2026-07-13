@@ -299,7 +299,8 @@ export interface RunRecord {
 
 // ─── Engagement sign-off — preparer signs, reviewer countersigns, engagement locks ─
 export interface SignoffEntry { by: string; at: string }
-export interface EngagementSignoff { preparer?: SignoffEntry; reviewer?: SignoffEntry }
+// icfrConclusion is stamped at each signature from live state: open MW ⇒ 'Not effective'.
+export interface EngagementSignoff { preparer?: SignoffEntry; reviewer?: SignoffEntry; icfrConclusion?: 'Effective' | 'Not effective' }
 
 export interface IcfrEngagement {
   id: string; code: string; name: string; entity: string; framework: string;

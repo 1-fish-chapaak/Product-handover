@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { requiredDatasetsFor, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { validationQA, validationSummary, validationTable } from './helpers';
+import { icfrConclusion, validationQA, validationSummary, validationTable } from './helpers';
 import type {
   Assertion, Attestation, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
   EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -556,12 +556,16 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [eng.controls]);
 
   // Preparer signs first, reviewer countersigns — names come from the engagement record.
+  // Each signature stamps the ICFR conclusion as of that moment: open MW ⇒ not effective.
   const signOffEngagement = useCallback<IcfrCtx['signOffEngagement']>((step) => {
     setEng(prev => ({
       ...prev,
-      signoff: step === 'preparer'
-        ? { ...prev.signoff, preparer: { by: prev.preparer, at: 'just now' } }
-        : { ...prev.signoff, reviewer: { by: prev.reviewer, at: 'just now' } },
+      signoff: {
+        ...(step === 'preparer'
+          ? { ...prev.signoff, preparer: { by: prev.preparer, at: 'just now' } }
+          : { ...prev.signoff, reviewer: { by: prev.reviewer, at: 'just now' } }),
+        icfrConclusion: icfrConclusion(prev),
+      },
     }));
   }, []);
 

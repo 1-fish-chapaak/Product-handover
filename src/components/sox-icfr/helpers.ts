@@ -20,6 +20,16 @@ export function severityOf(d: Deficiency, materiality: number, rules?: Materiali
   return computeSeverity(d.likelihood, d.magnitude, materiality, d.mwIndicators, rules ? rules.sdBandPct / 100 : 0.2);
 }
 
+// ─── Engagement-level ICFR conclusion ────────────────────────────────────────────
+// An open material weakness at period end forces "not effective" — sign-off stays
+// possible, but the conclusion recorded is adverse (handbook: open MW ⇒ disclosure).
+export function openMaterialWeaknesses(eng: IcfrEngagement): Deficiency[] {
+  return eng.deficiencies.filter(d => d.status !== 'Closed' && severityOf(d, eng.materiality, eng.rules) === 'Material Weakness');
+}
+export function icfrConclusion(eng: IcfrEngagement): 'Effective' | 'Not effective' {
+  return openMaterialWeaknesses(eng).length ? 'Not effective' : 'Effective';
+}
+
 // ─── Track + control conclusions (override wins) ─────────────────────────────────
 
 export function trackResult(t: DesignTrack | OperatingTrack): TrackConclusion {

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import {
-  AlertTriangle, BadgeCheck, CheckCircle2, Circle, Inbox, PenLine, Scale, ArrowRight, ShieldCheck, Upload, MessageSquare, FileWarning,
+  AlertTriangle, BadgeCheck, CheckCircle2, Circle, Inbox, PenLine, Scale, ArrowRight, ShieldAlert, ShieldCheck, Upload, MessageSquare, FileWarning,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
@@ -41,15 +41,29 @@ export default function Overview() {
   const signoffReady = stats.total > 0 && concludedCount === stats.total;
   const so = eng.signoff;
   const isConcluded = !!(so.preparer && so.reviewer);
-  const signPreparer = () => { signOffEngagement('preparer'); addToast({ type: 'success', title: 'Signed off', message: `Prepared by ${eng.preparer} — over to the reviewer.` }); };
-  const signReviewer = () => { signOffEngagement('reviewer'); addToast({ type: 'success', title: 'Countersigned', message: 'The engagement is concluded.' }); };
 
   const sev = useMemo(() => {
     const c: Record<Severity, number> = { 'Material Weakness': 0, 'Significant Deficiency': 0, Deficiency: 0 };
-    let open = 0;
-    eng.deficiencies.forEach(d => { c[severityOf(d, M, eng.rules)] += 1; if (d.status !== 'Closed') open += 1; });
-    return { c, open, trivial: eng.deficiencies.filter(d => isClearlyTrivial(d.magnitude, eng.rules)).length };
+    let open = 0; let mwOpen = 0;
+    eng.deficiencies.forEach(d => {
+      const s = severityOf(d, M, eng.rules);
+      c[s] += 1;
+      if (d.status !== 'Closed') { open += 1; if (s === 'Material Weakness') mwOpen += 1; }
+    });
+    return { c, open, mwOpen, trivial: eng.deficiencies.filter(d => isClearlyTrivial(d.magnitude, eng.rules)).length };
   }, [eng.deficiencies, M, eng.rules]);
+
+  // An open MW never blocks signing — it flips what the signature concludes.
+  // Once signed, the stamped conclusion wins over the live derivation.
+  const signsEffective = so.icfrConclusion ? so.icfrConclusion !== 'Not effective' : sev.mwOpen === 0;
+  const signPreparer = () => {
+    signOffEngagement('preparer');
+    addToast({ type: signsEffective ? 'success' : 'warning', title: 'Signed off', message: signsEffective ? `Prepared by ${eng.preparer} — over to the reviewer.` : `Prepared by ${eng.preparer} as ICFR not effective — over to the reviewer.` });
+  };
+  const signReviewer = () => {
+    signOffEngagement('reviewer');
+    addToast({ type: signsEffective ? 'success' : 'warning', title: 'Countersigned', message: signsEffective ? 'The engagement is concluded — ICFR effective.' : 'The engagement is concluded — ICFR not effective (material weakness open).' });
+  };
 
   const openTasks = eng.tasks.filter(t => t.status === 'open');
   const handoffs: Record<TaskType, number> = {
@@ -181,6 +195,17 @@ export default function Overview() {
                   ? 'Every control is concluded — the engagement is ready for sign-off.'
                   : 'Unlocks when every control has a conclusion. The preparer signs first; the reviewer countersigns to conclude the engagement.'}
             </p>
+            {(signoffReady || !!so.preparer) && (
+              <div className={cn('inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-semibold',
+                signsEffective ? 'text-compliant-700 bg-compliant-50/50 border-compliant-200' : 'text-risk-700 bg-risk-50/50 border-risk-200')}>
+                {signsEffective ? <ShieldCheck size={13} /> : <ShieldAlert size={13} />}
+                {isConcluded
+                  ? (signsEffective ? 'Concluded — ICFR effective' : 'Concluded — ICFR not effective (material weakness open at period end)')
+                  : signsEffective
+                    ? 'ICFR effective — ready to sign'
+                    : `Signing concludes ICFR not effective — ${sev.mwOpen} material weakness${sev.mwOpen === 1 ? '' : 'es'} open`}
+              </div>
+            )}
             <div className="flex items-center gap-4 mt-2.5 flex-wrap text-[12px]">
               <span className={cn('inline-flex items-center gap-1.5 font-semibold', signoffReady ? 'text-compliant-700' : 'text-ink-500')}>
                 {signoffReady ? <CheckCircle2 size={13} /> : <Circle size={13} />} {concludedCount}/{stats.total} controls concluded
@@ -216,7 +241,7 @@ export default function Overview() {
               <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Then: reviewer countersign — {eng.reviewer}</span>
             )}
             {isConcluded && (
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-compliant-700"><BadgeCheck size={13} /> Concluded</span>
+              <span className={cn('inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide', signsEffective ? 'text-compliant-700' : 'text-ink-500')}><BadgeCheck size={13} /> Concluded</span>
             )}
           </div>
         </div>
