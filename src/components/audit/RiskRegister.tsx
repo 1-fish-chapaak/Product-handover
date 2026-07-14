@@ -34,6 +34,8 @@ import { addCreatedControl, useCreatedControls } from '../../data/createdControl
 import { useRiskControlLinks, addRiskControlLinks } from '../../data/riskControlLinksStore';
 import { getRiskRelationships, getControlRelationships } from '../../data/processHubJoins';
 import { BUSINESS_PROCESSES } from '../../data/mockData';
+import InsightGenerator, { AIRecommendsBadge } from '../shared/InsightGenerator';
+import { hasMaterialInsight } from '../../data/layeredInsights';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -408,6 +410,16 @@ function RiskDetailPage({
             </div>
           ))}
         </div>
+      </div>
+
+      {/* AI insight summary */}
+      <div className="mb-6">
+        <InsightGenerator
+          layer="risk"
+          subjectId={risk.id}
+          subjectLabel={risk.name}
+          priority={risk.priority}
+        />
       </div>
 
       {/* Stacked sections */}
@@ -1105,6 +1117,9 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             {identity}
+                            {hasMaterialInsight({ layer: 'risk', subjectId: risk.id, subjectLabel: risk.name, priority: risk.priority }) && (
+                              <AIRecommendsBadge className="shrink-0" />
+                            )}
                           </div>
                           <p title={risk.description} className="text-[0.8125rem] text-text leading-relaxed mt-2.5 max-w-[50ch] line-clamp-2">{risk.description || '—'}</p>
                         </div>
@@ -1125,6 +1140,9 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             {identity}
+                            {hasMaterialInsight({ layer: 'risk', subjectId: risk.id, subjectLabel: risk.name, priority: risk.priority }) && (
+                              <AIRecommendsBadge className="shrink-0" />
+                            )}
                             {p2pChip}
                             {categoryChip}
                             {priorityChip}

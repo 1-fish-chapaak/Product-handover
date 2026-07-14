@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import SmartTable from '../shared/SmartTable';
 import Orb from '../shared/Orb';
+import { AIRecommendsBadge } from '../shared/InsightGenerator';
+import { recBadge } from '../../data/layeredInsights';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
@@ -337,9 +339,16 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
             {
               key: 'name',
               label: 'Control Name',
-              render: (item) => (
-                <div className="text-text font-medium text-[0.75rem]">{String(item.name)}</div>
-              ),
+              render: (item) => {
+                const ctrl = item as unknown as ControlRow;
+                const b = recBadge({ layer: 'control', subjectId: String(ctrl.controlId ?? ctrl.id), subjectLabel: String(ctrl.name ?? ctrl.description ?? ''), status: '', isKey: ctrl.classification === 'Key' });
+                return (
+                  <div className="text-text font-medium text-[0.75rem]">
+                    {String(item.name)}
+                    {b ? <AIRecommendsBadge priority={b.topPriority} count={b.count} className="ml-2 align-middle" /> : null}
+                  </div>
+                );
+              },
             },
             {
               key: 'businessProcess',

@@ -15,6 +15,7 @@ import {
   PROCESS_INSIGHTS, ENTERPRISE_CONTEXT, PATTERN_META, SEVERITY_LABEL,
   displayConfidencePct, type MemoryInsight, type InsightSeverity,
 } from '../../data/insightMemory';
+import InsightGenerator from '../shared/InsightGenerator';
 
 const SEV_STYLE: Record<InsightSeverity, { pill: string; dot: string; rank: number }> = {
   high: { pill: 'bg-red-50 text-red-700', dot: 'bg-red-500', rank: 0 },
@@ -55,6 +56,15 @@ export default function EngagementInsightsRollup({ engagementName }: { engagemen
       transition={{ duration: 0.3 }}
       className="bg-white rounded-2xl border border-border-light p-5 mb-5"
     >
+      <div className="mb-5">
+        <InsightGenerator
+          layer="engagement"
+          subjectId={engagementName ?? 'engagement'}
+          subjectLabel={engagementName ?? 'this engagement'}
+          flagship
+        />
+      </div>
+
       {/* Header */}
       <div className="flex items-center gap-2.5 mb-4">
         <div className="p-2 rounded-lg bg-primary/10 shrink-0"><Brain size={16} className="text-primary" /></div>

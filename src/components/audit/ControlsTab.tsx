@@ -22,6 +22,9 @@ import { OWNER_NAMES, PEOPLE } from '../../data/grc-domain';
 import { useEngagementWorkspace } from './engagementWorkspace';
 import { useCan } from '../../context/CurrentUserContext';
 import ControlTestJourney from './ControlTestJourney';
+import InsightGenerator, { AIRecommendsBadge } from '../shared/InsightGenerator';
+import RecommendationsPanel, { type PanelRec } from '../shared/RecommendationsPanel';
+import { recBadge, actionableRecs } from '../../data/layeredInsights';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -285,6 +288,15 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
     });
   }, [controls, controlStatuses, keyOnly, subProcessFilter, frequencyFilter, selectedStatus, search]);
 
+  // ── AI recommendations across the filtered controls (deterministic — no LLM).
+  const controlPanelRecs = useMemo<PanelRec[]>(() =>
+    filteredControls.flatMap(c =>
+      actionableRecs({ layer: 'control', subjectId: c.controlId, subjectLabel: c.description, status: controlStatuses.get(c.controlId) ?? 'Not tested', isKey: c.isKey })
+        .map(r => ({ ...r, subjectLabel: c.controlId, subjectSub: c.description })),
+    ),
+    [filteredControls, controlStatuses],
+  );
+
   // ── KPI derivations — counts of the rolled-up control statuses.
   const kpis = useMemo(() => {
     let notTested = 0, inTest = 0, pass = 0, fail = 0;
@@ -519,6 +531,9 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
         </div>
       </div>
 
+      {/* ─── AI recommendations across these controls (visible, no generation) ─── */}
+      <RecommendationsPanel recs={controlPanelRecs} scopeLabel="these controls" className="mb-4" />
+
       {/* ─── Controls list ─── */}
       <div className="flex items-center justify-between mb-2.5">
         <span className="text-[0.75rem] font-semibold text-ink-600">{filteredControls.length} control{filteredControls.length === 1 ? '' : 's'}</span>
@@ -550,6 +565,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
         {filteredControls.map(c => {
           const status = controlStatuses.get(c.controlId) ?? 'Not tested';
           const expanded = expandedControlIds.has(c.controlId);
+          const aiRec = recBadge({ layer: 'control', subjectId: c.controlId, subjectLabel: c.description, status, isKey: c.isKey });
           return (
             <div
               key={c.controlId}
@@ -568,6 +584,9 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                   </span>
                 )}
                 {c.isKey && <span className="px-1.5 h-5 rounded text-[0.625rem] font-bold uppercase tracking-wide bg-brand-50 text-brand-700 border border-brand-100 inline-flex items-center shrink-0">Key</span>}
+                {aiRec && (
+                  <AIRecommendsBadge className="shrink-0" priority={aiRec.topPriority} count={aiRec.count} />
+                )}
                 <span className={`px-2 h-6 rounded-full text-[0.6875rem] font-semibold border inline-flex items-center gap-1.5 shrink-0 ${CONTROL_STATUS_CLS[status]}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${CONTROL_STATUS_DOT[status]}`} />{status}
                 </span>
@@ -584,6 +603,13 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                     className="overflow-hidden border-t border-canvas-border bg-canvas/40"
                   >
                     <div className="p-4 space-y-4">
+                      <InsightGenerator
+                        layer="control"
+                        subjectId={c.controlId}
+                        subjectLabel={c.description}
+                        status={status}
+                        isKey={c.isKey}
+                      />
                       <div className="flex items-center justify-between gap-3">
                         <h4 className="text-[0.75rem] font-bold uppercase tracking-wider text-ink-600">Attributes</h4>
                         <Gated permission="racm_edit" mode="disable" title="You don't have permission to test controls">
