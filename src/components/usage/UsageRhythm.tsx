@@ -27,18 +27,32 @@ const FULL_DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 
 const hourLabel = (h: number) => `${String(h).padStart(2, '0')}:00`;
 
-/** One row of the bar chart. The bar IS the hit target, and it carries its count. */
-function Bars({ data, max, ariaUnit }: {
+/**
+ * One row of the bar chart. The bar IS the hit target, and it carries its count.
+ *
+ * `annotate` decides how many bars print their number. Seven days can each carry
+ * one and still read. Twenty-four hours cannot: an hour with a single action
+ * draws a 2px bar under a full-size "1", so the labels end up louder than the
+ * data and the reader scans a row of digits instead of seeing the shape of the
+ * day. At that width only the peak is worth naming; the rest keep their number
+ * on hover and in the aria-label.
+ */
+function Bars({ data, max, ariaUnit, annotate = 'all' }: {
   data: { key: string; label: string; value: number; muted?: boolean; title: string }[];
   max: number;
   ariaUnit: string;
+  annotate?: 'all' | 'peak';
 }) {
   const prefersReduced = useReducedMotion();
   return (
     <div className="flex items-end gap-1 h-[104px]">
-      {data.map((d, i) => (
+      {data.map((d, i) => {
+        const shows = annotate === 'all' ? d.value > 0 : d.value === max && max > 0;
+        return (
         <div key={d.key} className="flex-1 min-w-0 flex flex-col items-center justify-end gap-1.5 h-full group">
-          <span className="text-[0.625rem] tabular-nums font-semibold text-ink-400 group-hover:text-ink-900 transition-colors">
+          <span className={`text-[0.625rem] tabular-nums font-semibold transition-colors ${
+            shows ? 'text-ink-500 group-hover:text-ink-900' : 'text-transparent group-hover:text-ink-900'
+          }`}>
             {d.value > 0 ? fmt(d.value) : ''}
           </span>
           <motion.div
@@ -52,7 +66,8 @@ function Bars({ data, max, ariaUnit }: {
             style={{ background: d.muted ? '#DCC9F5' : SERIES.primary, minHeight: 2 }}
           />
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -133,6 +148,7 @@ export default function UsageRhythm({ data }: { data: UsageHeatmapData }) {
         <Bars
           max={hourMax}
           ariaUnit="actions"
+          annotate="peak"
           data={byHour.map(h => ({
             key: String(h.hour),
             label: hourLabel(h.hour),
@@ -141,15 +157,17 @@ export default function UsageRhythm({ data }: { data: UsageHeatmapData }) {
             title: `${hourLabel(h.hour)}: ${fmt(h.total)} action${h.total === 1 ? '' : 's'}`,
           }))}
         />
+        {/* Every third hour, and written as a time. Bare "09" under a bar chart
+            reads as a value as easily as an hour. */}
         <div className="mt-2 grid" style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}>
           {byHour.map(h => (
-            <span key={h.hour} className="text-center text-[0.5625rem] text-ink-400 tabular-nums">
-              {h.hour % 3 === 0 ? String(h.hour).padStart(2, '0') : ''}
+            <span key={h.hour} className="text-center text-[0.5625rem] text-ink-400 tabular-nums whitespace-nowrap">
+              {h.hour % 3 === 0 ? hourLabel(h.hour) : ''}
             </span>
           ))}
         </div>
         <p className="mt-3 text-[0.625rem] text-ink-400">
-          Office hours (08:00–18:00) in full colour; nights and weekends muted.
+          Office hours (08:00 to 18:00) in full colour, nights muted. Hover a bar for its count.
         </p>
       </div>
     </div>

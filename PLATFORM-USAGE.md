@@ -28,7 +28,9 @@ No test asserts that parity yet. It is the thing most likely to drift back, so i
 
 ## The window
 
-One control at the top: 7, 30 or 90 days. Every number is shown against the same number for the period before it. Fifty downloads means nothing until you know last month was twelve.
+One control at the top: all time, today, 7, 30 or 90 days, or a custom range. Every number is shown against the same number for the period before it. Fifty downloads means nothing until you know last month was twelve.
+
+Each preset prints the dates it will actually hand you, because "last 30 days" is a promise about the calendar and this page does not keep it: the window counts back from the newest record, not from today. Pick "Last 30 days" in July and you get 23 March to 21 April. The label alone gives you nothing to catch that with, so the label is not alone.
 
 When there is no earlier period, we show no comparison at all. Not a zero, not a dash standing in for data. A made-up baseline is worse than none, because people act on it.
 
@@ -36,13 +38,17 @@ When there is no earlier period, we show no comparison at all. Not a zero, not a
 
 The window counts back from the newest activity, not from today.
 
-If it counted from today and nobody had signed in for a while, every number would read zero. That looks like the platform is dead, when really nobody logged in this month. So the page anchors to the newest real record, counts back from there, and says "Data as of" that date at the top.
+If it counted from today and nobody had signed in for a while, every number would read zero. That looks like the platform is dead, when really nobody logged in this month. So the page anchors to the newest real record and counts back from there.
 
-Work you do right now lands on that day immediately. The anchor itself does not move: if it jumped to today on every click, the window would slide with it and empty itself.
+That anchor is also a trap, so the page says both dates out loud. "Showing 30 days up to 21 Apr 2026" is true and still tells you nothing on its own, because you have no second date to measure it against. Next to it the page names today and how stale the records are: "Today is 14 Jul 2026, the newest record is 84 days old." One date is a fact; two dates are a finding.
+
+Work you do right now lands on the anchor day immediately. The anchor itself does not move: if it jumped to today on every click, the window would slide with it and empty itself.
 
 ## What is on the page
 
-Headline numbers, daily activity, most-used areas, per-section deep-dives, AI usage, members and seats, a day-by-hour grid, what got created, workflow runs, sharing, downloads, and a table of people and teams that exports to CSV.
+Headline numbers, what stands out, daily activity, most-used areas, per-section deep-dives, AI usage, members and seats, a day-by-hour grid, what got created, workflow runs, sharing, downloads, and a table of people and teams that exports to CSV.
+
+"What stands out" is four findings, and none of them is new data. Three restate an aggregate that is somewhere else on the page. The fourth is the share of all activity the top three members drive, and it is the only one you cannot get any other way: three people doing 70% of everything is exactly what a healthy-looking total hides, and no total, chart or table here can be read to reveal it. Every finding clicks through to its evidence, because a finding you cannot check is an assertion.
 
 Every number is built from single events, so you can click any of them and see the events behind it. The detail always adds back up to the number you clicked.
 
@@ -139,3 +145,4 @@ The one real overlap is the recent-activity feeds. They show the newest few even
 4. The "data as of" anchor is a workaround for having no backend. It should go once records persist.
 5. Should the page act, or only report? It tells you 3 invites are pending and sends you to Administration. Should it let you revoke from here?
 6. Per-person AI use is incomplete. Backfill, accept the gap, or stop reporting AI per person until it is reliable?
+7. Should an owner be able to turn per-person activity off? Today anyone with `ad_usage` sees every named member's activity, with no switch. Slack ships that switch. Not built, and not a bug until we decide it should exist.

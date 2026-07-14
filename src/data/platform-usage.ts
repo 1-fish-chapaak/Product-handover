@@ -252,11 +252,52 @@ export function usageAnchor(logs: AuditLog[]): number {
   return candidates.length > 0 ? Math.max(...candidates) : today;
 }
 
-/** Human label for the anchor, e.g. "Apr 19, 2026". */
-export function usageAnchorLabel(logs: AuditLog[]): string {
-  return new Date(usageAnchor(logs)).toLocaleDateString('en-US', {
+/** The page's one date spelling: "Apr 19, 2026". */
+export function usageDateLabel(ms: number): string {
+  return new Date(ms).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
   });
+}
+
+/** Human label for the anchor, e.g. "Apr 19, 2026". */
+export function usageAnchorLabel(logs: AuditLog[]): string {
+  return usageDateLabel(usageAnchor(logs));
+}
+
+/**
+ * How far behind wall-clock time the records are.
+ *
+ * Everything on this page is measured from the anchor — the newest real record —
+ * and NOT from today. When the two are the same day that distinction is
+ * invisible and harmless. When the records stop months back, it is a trap: the
+ * page says "the last 30 days" and means a window that closed in April, and an
+ * admin reading "seat use is 71%" has no way to know they are looking at a
+ * quarter-old number. So the gap gets stated out loud whenever there is one.
+ */
+export interface UsageStaleness {
+  /** Wall-clock today, e.g. "Jul 14, 2026". */
+  todayLabel: string;
+  /** Newest record, e.g. "Apr 21, 2026". */
+  anchorLabel: string;
+  /** Whole days between the two. 0 = the records are current. */
+  gapDays: number;
+  /** True once the gap is big enough that the reader must be told. */
+  stale: boolean;
+}
+
+/** A day or two behind is normal lag; two weeks is a different quarter's data. */
+export const STALE_AFTER_DAYS = 2;
+
+export function usageStaleness(logs: AuditLog[]): UsageStaleness {
+  const today = todayStartUtc();
+  const anchor = usageAnchor(logs);
+  const gapDays = Math.max(0, Math.round((today - anchor) / DAY_MS));
+  return {
+    todayLabel: usageDateLabel(today),
+    anchorLabel: usageDateLabel(anchor),
+    gapDays,
+    stale: gapDays >= STALE_AFTER_DAYS,
+  };
 }
 
 /** Logs produced today — the current session's live events. */
@@ -898,6 +939,9 @@ export const CREATION_KINDS: CreationKind[] = [
 export interface CreationTotal {
   kind: CreationKind;
   count: number;
+  /** The same count in the previous window — so a caller can total the deltas
+   *  rather than re-deriving them (a % of a % does not add up). */
+  prior: number;
   deltaPct: number | null;
 }
 
@@ -912,7 +956,8 @@ function createdCount(kind: CreationKind, days: UsageDay[]): number {
 export function creationTotals(days: UsageDay[], priorDays: UsageDay[]): CreationTotal[] {
   return CREATION_KINDS.map(kind => {
     const count = createdCount(kind, days);
-    return { kind, count, deltaPct: usageDeltaPct(count, createdCount(kind, priorDays)) };
+    const prior = createdCount(kind, priorDays);
+    return { kind, count, prior, deltaPct: usageDeltaPct(count, prior) };
   });
 }
 

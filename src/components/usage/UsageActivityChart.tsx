@@ -25,9 +25,15 @@ import { TooltipCard } from './usageChrome';
 import { GRID, SERIES, xAxisProps, yAxisProps, fmt } from './usageTokens';
 import { weekendSpans, type ActivityPoint } from './usageActivity';
 
-/** The rolling line is ink, not brand. Brand is already the bars; a dark neutral
- *  reads unambiguously as "drawn on top of" rather than "another series". */
-const ROLLING_STROKE = '#2C1B48';
+/** The rolling line is ink, not brand. Brand is already the bars; a neutral reads
+ *  unambiguously as "drawn on top of" rather than "another series".
+ *
+ *  Mid ink, not near-black. At #2C1B48 the average was the heaviest mark on the
+ *  chart, which inverts the hierarchy: it is a smoothing of the bars, so it must
+ *  not out-shout the bars it smooths. It still has to stay clearly apart from the
+ *  compare series (#9A8FAE, and dashed), so it keeps the darker end of the ink
+ *  ramp and stays solid. */
+const ROLLING_STROKE = '#5C5170';
 
 export default function UsageActivityChart({
   points, compareOn, height = 280,
@@ -133,7 +139,7 @@ export default function UsageActivityChart({
             dataKey="rolling"
             name="7-day average"
             stroke={ROLLING_STROKE}
-            strokeWidth={2}
+            strokeWidth={1.75}
             strokeLinecap="round"
             dot={false}
             connectNulls={false}

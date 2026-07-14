@@ -10,10 +10,12 @@ import { test, expect, usageTab } from './_helpers';
 const SHOTS = '/private/tmp/claude-501/-Users-nileshanand-Desktop-Product-handover/7f78790a-345e-41ac-a869-f53f64067555/scratchpad/usage';
 
 /** The range is now the platform's shared DateFilterPicker (presets + custom),
- *  not three inline chips — so a preset has to be picked from its popover. */
+ *  not three inline chips — so a preset has to be picked from its popover.
+ *  Each preset also prints the real dates it resolves to, so its accessible name
+ *  is "Last 30 days Mar 23 – Apr 21, 2026" — match on the label, not the whole. */
 async function setRange(page: import('@playwright/test').Page, preset: string) {
   await page.getByRole('button', { name: /^Date range:/ }).click();
-  await page.getByRole('button', { name: preset, exact: true }).click();
+  await page.getByRole('button', { name: new RegExp(`^${preset}\\b`) }).click();
   await page.waitForTimeout(900);
 }
 
@@ -31,9 +33,11 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
   test.setTimeout(120000);
   await openUsage(page);
 
-  // Header + KPI band
+  // Header + KPI band. There is no "People active" tile: the hero above owns
+  // seat usage, and owns it better (number + denominator + change + benchmark).
+  // The band starts at the work the seats produced.
   await expect(page.getByRole('heading', { name: 'Platform Usage' })).toBeVisible();
-  await expect(page.getByText('People active')).toBeVisible();
+  await expect(page.getByText('Work done')).toBeVisible();
 
   // The change is a sentence against a named baseline, not a bare percentage
   // chip: "Down 2 people from 14". A percent on a base of twelve is one person.
@@ -46,9 +50,25 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
   // The verdict is a share of paid seats, against the benchmark that gives it
   // meaning. It is a <section aria-label="Licence use">, not a heading, so match
   // the sentence rather than a role that isn't there.
-  await expect(page.getByText(/of your \d+ paid seats/)).toBeVisible();
-  await expect(page.getByText(/\d+ of \d+ people/).first()).toBeVisible();
-  await expect(page.getByText(/(Above|Below) the \d+% mark/)).toBeVisible();
+  // One sentence carries both forms of the number: "12 of your 17 paid seats".
+  // There used to be a second sentence ("12 of 17 people used it...") saying the
+  // same thing, and this asserted on it — 12 of 17 IS the percentage beside it.
+  // The verdict is measured on a FIXED week, not on the page's date filter — the
+  // 60% benchmark is a weekly-active-to-licence ratio, so it only means anything
+  // against a week. The card says "this week" out loud precisely because it does
+  // not follow the filter above it.
+  await expect(page.getByText(/\d+ of your \d+ paid seats did real work this week/)).toBeVisible();
+  // The verdict reads the chart out loud: which side of the benchmark, and which
+  // way it is moving. A line nobody interprets is decoration.
+  await expect(
+    page.getByText(/(Above|Below) the healthy mark for a paid licence, (and climbing|but falling|and holding steady|measured this week)\./),
+  ).toBeVisible();
+  // The delta only draws when it is non-zero (a "0 seats more" line is noise), so
+  // this asserts the RULE rather than its presence: if a delta is shown at all, it
+  // names what it counts and what it counts against. A bare "-2" is the vanity
+  // metric usageChrome's delta spec exists to forbid.
+  const bareDelta = page.locator('[aria-label="Licence use"]').getByText(/^[+−-]\d+$/);
+  await expect(bareDelta).toHaveCount(0);
   // Charts take noun titles; the sentence lives in the subtitle and the strip.
   await expect(page.getByRole('heading', { name: 'Actions per day' })).toBeVisible();
   await expect(page.getByText(/7-day average.*weekends/)).toBeVisible();
@@ -162,6 +182,36 @@ test('CSV export downloads the filtered set and shows a toast', async ({ page })
   const recentList = page.getByText('Recent downloads').locator('..');
   await expect(recentList.getByText('Nilesh Anand').first()).toBeVisible();
   await expect(recentList.getByText('Platform usage')).toBeVisible();
+});
+
+/**
+ * The licence verdict is judged against GitHub's 60% healthy weekly-active-to-
+ * licence ratio, which is DEFINED on a week. It used to be computed over whatever
+ * the date filter said, so the same tenant read 59% "below the mark" over one day
+ * and 88% "above" over ninety — the verdict was a function of the dropdown, not
+ * of the licence. It reads the last seven days now, whatever the filter says.
+ */
+test('the licence verdict does not move when the date range moves', async ({ page }) => {
+  await openUsage(page);
+
+  const read = async () => {
+    const t = (await page.locator('[aria-label="Licence use"]').innerText()).replace(/\s+/g, ' ');
+    return {
+      pct: t.match(/(\d+)%/)?.[1],
+      side: /Above the healthy mark/.test(t) ? 'above' : 'below',
+    };
+  };
+
+  const base = await read();
+  expect(base.pct, 'the verdict should report a percentage').toBeTruthy();
+
+  for (const preset of ['Today', 'Last 7 days', 'Last 90 days']) {
+    await setRange(page, preset);
+    await page.waitForTimeout(1200);
+    const now = await read();
+    expect(now.pct, `${preset}: the verdict changed with the date filter`).toBe(base.pct);
+    expect(now.side, `${preset}: the verdict flipped side with the date filter`).toBe(base.side);
+  }
 });
 
 test('depth: highlights, rhythm, module modal, segments, team modal', async ({ page }) => {
@@ -280,11 +330,14 @@ test('depth: highlights, rhythm, module modal, segments, team modal', async ({ p
       .or(page.locator('th', { hasText: 'Actions' })).first(),
   ).toBeVisible();
 
-  // Segment chips filter the member list (Abhinav is active today → never "No activity")
-  await page.getByRole('button', { name: /^No activity \(\d+\)$/ }).click();
+  // The segment chips are click-to-filter KPI cards now ("No activity: 5"), and
+  // there is no "All" chip — the active card toggles itself off. Abhinav is
+  // active today, so he can never sit behind "No activity".
+  const noActivityCard = page.getByRole('button', { name: /^No activity: \d+$/ });
+  await noActivityCard.click();
   await page.waitForTimeout(400);
   await expect(page.locator('tr', { hasText: 'Abhinav Sharma' })).not.toBeVisible();
-  await page.getByRole('button', { name: /^All \(\d+\)$/ }).click();
+  await noActivityCard.click(); // toggle the same saved selection back off
   await page.waitForTimeout(300);
   await expect(page.locator('tr', { hasText: 'Abhinav Sharma' }).first()).toBeVisible();
 
@@ -324,4 +377,66 @@ test('live audit events raise today\'s totals', async ({ page }) => {
   await page.waitForTimeout(800);
   const after = await kpi.getAttribute('aria-label');
   expect(after).not.toBe(before);
+});
+
+/**
+ * The three honesty gaps, closed.
+ *
+ * All of them come from the same root: the page's clock is the newest record,
+ * not today's date, and it used to keep that to itself.
+ */
+test('the page names today, dates its presets, and puts the top-3 share back on Overview', async ({ page }) => {
+  test.setTimeout(120000);
+  await openUsage(page);
+
+  // 1. The window says what it covers AND what today is, so the reader can see
+  //    the gap between them. "Showing 30 days up to Apr 21" alone reads as "the
+  //    last 30 days" and hides a three-month jump.
+  await expect(page.getByText(/Showing\s+30 days\s+up to/)).toBeVisible();
+  const staleNote = page.getByText(/Today is \w{3} \d{1,2}, \d{4}/);
+  await expect(staleNote).toBeVisible();
+  await expect(page.getByText(/the newest record is \d+ days old/)).toBeVisible();
+
+  // 2. The dates the window will actually hand back — measured from the anchor,
+  //    not from wall-clock today — are on the CLOSED trigger, not just inside the
+  //    popover. The trigger is the only part of this control most people read; a
+  //    shorthand there ("Last 30 days") looks complete, so nobody clicks to find
+  //    out it isn't.
+  const trigger = page.getByRole('button', { name: /^Date range:/ });
+  await expect(trigger).toContainText(/\w{3} \d{1,2} – \w{3} \d{1,2}, \d{4}/);
+  await expect(trigger).not.toContainText('Last 30 days');
+
+  // …and each preset in the popover prints its own dates too.
+  await trigger.click();
+  await page.waitForTimeout(300);
+  const thirty = page.getByRole('button', { name: /^Last 30 days\b/ });
+  await expect(thirty).toBeVisible();
+  // e.g. "Mar 23 – Apr 21, 2026"
+  await expect(thirty).toContainText(/\w{3} \d{1,2} – \w{3} \d{1,2}, \d{4}/);
+  const dated = await thirty.innerText();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+
+  // The dates the picker promised are the dates the page reports on: the end of
+  // the 30-day preset is the same day the window summary names.
+  // (Both the summary line and the KPI caption name that day, hence .first().)
+  const endDay = dated.match(/– (\w{3} \d{1,2}), \d{4}/)?.[1];
+  expect(endDay).toBeTruthy();
+  await expect(page.getByText(new RegExp(`up to\\s+${endDay}`)).first()).toBeVisible();
+
+  // 3. What stands out — the four findings, back on the tab an admin opens on.
+  await expect(page.getByText('What stands out')).toBeVisible();
+  await expect(page.getByText(/growing fastest|No area grew/)).toBeVisible();
+  await expect(page.getByText(/of active members used AI|No AI activity|none attributed/)).toBeVisible();
+  await expect(page.getByText(/signed in for 30\+ days|Everyone has signed in/)).toBeVisible();
+
+  // The one an admin cannot reach from anything else on the page.
+  const topThree = page.getByText(/Top 3 members drive \d+% of all activity/);
+  await expect(topThree).toBeVisible();
+
+  // And every finding clicks through to its evidence.
+  await topThree.click();
+  await page.waitForTimeout(900);
+  await expect(page.getByRole('button', { name: 'Export CSV' })).toBeVisible();
+  await expect(page.getByText('Who did the work, member by member')).toBeVisible();
 });

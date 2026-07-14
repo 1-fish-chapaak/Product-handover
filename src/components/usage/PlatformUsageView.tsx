@@ -29,7 +29,7 @@ import { useCurrentUser } from '../../context/CurrentUserContext';
 import { getRole } from '../../data/rbac';
 import {
   USAGE_MODULES, usageDaysWithLive, userUsageRows, usageDayLabel,
-  usageAnchorLabel, usageAnchor,
+  usageAnchorLabel, usageAnchor, usageStaleness,
   usageWindowTotals, usageDeltaPct, seatBuckets, lastLoginOffsetDays,
   segmentFor, activeMeanActions, aiAdoptionPct, usageHourlyMatrix,
   activityConcentration, usageSpikes, recentDownloads, downloadFormatSplit,
@@ -57,6 +57,7 @@ import UsageRhythm from './UsageRhythm';
 import UsageActivityChart from './UsageActivityChart';
 import { activityPoints, activityTakeaway } from './usageActivity';
 import UsageVerdict, { type VerdictInput } from './UsageVerdict';
+import UsageHighlights, { type HighlightsInput } from './UsageHighlights';
 import UsagePlatformSections from './UsagePlatformSections';
 import UsageAdoption from './UsageAdoption';
 import { Card, Band, Eyebrow, DeltaPill, Meter, RankedRow } from './usageChrome';
@@ -299,6 +300,12 @@ const TABS: { id: UsageTab; label: string; icon: LucideIcon }[] = [
 ];
 
 /** The subhead is the tab's promise — it changes with the tab, like KH's does. */
+/** The verdict's window. GitHub's 60% healthy mark is a weekly-active-to-licence
+ *  ratio, so the number judged against it has to be measured on a week. */
+const VERDICT_WINDOW_DAYS = 7;
+/** How many weeks of licence use the hero plots behind the number. */
+const VERDICT_TREND_WEEKS = 8;
+
 const TAB_SUBHEAD: Record<UsageTab, string> = {
   overview: "How much happened in this period, and when.",
   adoption: "Whether the licence is earning its keep. Which seats get used, and which sit idle.",
@@ -425,25 +432,33 @@ function SeatRow({ label, people, tone }: { label: string; people: AdminUser[]; 
 }
 
 /* ── An event in one of the "what happened" feeds. One spelling for all four. ── */
+/**
+ * One line of a feed: who, what, what kind, when.
+ *
+ * The kind chip used to be glued to the end of the sentence, so it landed at a
+ * different x on every row — five chips scattered across the middle of the card,
+ * which is exactly the thing a column exists to prevent. It now has a column of
+ * its own, right-aligned against the timestamp, so the rows scan.
+ */
 function FeedRow({ who, verb, what, chip, when, live }: {
   who: string; verb?: string; what: string; chip?: string; when: string; live: boolean;
 }) {
   return (
-    <div className="flex items-start gap-2.5 min-w-0 py-1.5">
+    <div className="flex items-center gap-3 min-w-0 py-2">
       <InitialsAvatar name={who} size={24} />
-      <div className="min-w-0 flex-1 leading-snug">
+      <div className="min-w-0 flex-1 leading-snug truncate">
         <span className="text-[0.75rem] font-semibold text-ink-900">{who}</span>
         {/* The verb is optional — some feeds carry it inside `what` ("ran the
             X workflow"). Either way the name needs a space after it. */}
         {verb ? <span className="text-[0.75rem] text-ink-400"> {verb} </span> : ' '}
         <span className="text-[0.75rem] text-ink-600">{what}</span>
-        {chip && (
-          <span className="ml-1.5 inline-flex items-center px-1.5 h-[1.125rem] rounded border border-canvas-border bg-canvas text-[0.5625rem] font-semibold text-ink-500 align-middle">
-            {chip}
-          </span>
-        )}
       </div>
-      <span className={`shrink-0 text-[0.6875rem] font-mono tabular-nums ${live ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>
+      {chip && (
+        <span className="shrink-0 inline-flex items-center justify-center px-1.5 h-[1.125rem] rounded border border-canvas-border bg-canvas text-[0.5625rem] font-semibold text-ink-500">
+          {chip}
+        </span>
+      )}
+      <span className={`shrink-0 w-[3.25rem] text-right text-[0.6875rem] font-mono tabular-nums ${live ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>
         {when}
       </span>
     </div>
@@ -501,6 +516,11 @@ export default function PlatformUsageView() {
   // into the anchor bucket), then the window slices.
   const allDays = useMemo(() => usageDaysWithLive(logs), [logs]);
   const anchorLabel = useMemo(() => usageAnchorLabel(logs), [logs]);
+  // How far behind wall-clock time the records are. Every window on this page is
+  // measured from the newest record, so when the records stop months back, "the
+  // last 30 days" is a window that closed months ago — and unless the page says
+  // what today is, nothing on it lets the reader notice.
+  const stale = useMemo(() => usageStaleness(logs), [logs]);
 
   // When an event happened, said honestly. The page is "as of" the anchor, not
   // wall-clock, so only what this session actually produced is "Today" —
@@ -510,6 +530,12 @@ export default function PlatformUsageView() {
   // The picker measures from the anchor, not wall-clock — otherwise "last 7
   // days" would land months after the newest record and read as empty.
   const anchorDate = useMemo(() => new Date(usageAnchor(logs)), [logs]);
+  // The oldest day in the series — what "All time" actually starts at, so the
+  // picker can say so instead of leaving that one preset undated.
+  const earliestDate = useMemo(() => {
+    const oldest = allDays[0]?.dayOffset ?? 0;
+    return new Date(usageAnchor(logs) - oldest * DAY_MS);
+  }, [allDays, logs]);
   const { days, priorDays, rangeDays: range } = useMemo(
     () => usageWindow(allDays, filter, anchorDate),
     [allDays, filter, anchorDate],
@@ -527,6 +553,31 @@ export default function PlatformUsageView() {
 
   const totals = useMemo(() => usageWindowTotals(days, users), [days, users]);
   const priorTotals = useMemo(() => usageWindowTotals(priorDays, users), [priorDays, users]);
+
+  /**
+   * The licence verdict is measured on a FIXED seven-day window, not on whatever
+   * the date filter happens to be set to.
+   *
+   * The benchmark it is judged against (60%) is GitHub's healthy weekly-active-
+   * to-licence ratio. It is defined on a week. Comparing it to an arbitrary
+   * window made the verdict a function of the dropdown: the same tenant read 59%
+   * "below the mark" over one day and 88% "above" over ninety, because over
+   * ninety days almost every seat signs in at least once. That is not licence
+   * health, it is the definition of a wider window.
+   *
+   * So the hero answers one fixed question — how many seats did real work THIS
+   * WEEK — and the date filter governs everything below it.
+   */
+  const weeklyVerdict = useMemo(() => {
+    const week = allDays.slice(-VERDICT_WINDOW_DAYS);
+    const priorWeek = allDays.slice(-2 * VERDICT_WINDOW_DAYS, -VERDICT_WINDOW_DAYS);
+    return {
+      windowDays: week.length,
+      active: usageWindowTotals(week, users).activeUsers,
+      priorActive: usageWindowTotals(priorWeek, users).activeUsers,
+    };
+  }, [allDays, users]);
+
 
   const rawRows = useMemo(() => userUsageRows(users, days), [users, days]);
   const priorByEmail = useMemo(() => {
@@ -554,6 +605,23 @@ export default function PlatformUsageView() {
   // Seats, and the module breakdown, are both read by the KPI band below, so
   // they are derived before it.
   const seats = useMemo(() => seatBuckets(users, range), [users, range]);
+
+  /** Licence use week by week, so the hero shows a direction and not just a dot. */
+  const weeklyTrend = useMemo(() => {
+    const out: { pct: number; active: number; weeksAgo: number }[] = [];
+    for (let i = VERDICT_TREND_WEEKS - 1; i >= 0; i--) {
+      const end = allDays.length - i * VERDICT_WINDOW_DAYS;
+      const slice = allDays.slice(Math.max(0, end - VERDICT_WINDOW_DAYS), end);
+      if (slice.length === 0) continue;
+      const active = usageWindowTotals(slice, users).activeUsers;
+      out.push({
+        active,
+        pct: seats.total > 0 ? Math.round((active / seats.total) * 100) : 0,
+        weeksAgo: i,
+      });
+    }
+    return out;
+  }, [allDays, users, seats.total]);
 
   // Module breakdown across the slice, ranked, with prior-window deltas.
   const moduleTotals = useMemo(() => {
@@ -585,7 +653,6 @@ export default function PlatformUsageView() {
      that counts as healthy. The old copy ("things done on the platform",
      "different people used the platform") restated the label in worse words
      instead of defining the metric, which is what made the numbers unreadable. */
-  const seatCount = seats.total;
   // aiEvents is a strict subset of actions (both are audit-log rows), so this
   // share is honest. aiActivity — which also counts saved chats, and those are
   // not audit actions — is NOT a subset, and dividing it by actions would be a
@@ -593,14 +660,12 @@ export default function PlatformUsageView() {
   const aiEventsTotal = useMemo(() => days.reduce((s, d) => s + d.aiEvents, 0), [days]);
   const aiSharePct = totals.actions > 0 ? Math.round((aiEventsTotal / totals.actions) * 100) : 0;
 
+  // No "People active" tile. The hero above already owns seat usage, and owns it
+  // better: it carries the number, the denominator, the change AND the benchmark
+  // that makes 71% mean something. A tile repeating "12 · of 17 licensed · Down
+  // 2 people from 14" ten centimetres below "71% of your 17 paid seats did real
+  // work, −2" is the same fact told twice, in a weaker voice.
   const stats: UsageStat[] = [
-    {
-      key: 'active', label: 'People active', value: totals.activeUsers,
-      of: `of ${seatCount} licensed`,
-      current: totals.activeUsers, prior: priorTotals.activeUsers, unit: 'people',
-      counts: 'Anyone who signed in and did at least one thing in this period.',
-      excludes: 'People who only have a seat, and people whose invite is still unaccepted.',
-    },
     {
       key: 'actions', label: 'Work done', value: fmt(totals.actions),
       of: `across ${moduleTotals.length} ${moduleTotals.length === 1 ? 'area' : 'areas'}`,
@@ -632,6 +697,49 @@ export default function PlatformUsageView() {
   const aiAdoption = useMemo(() => aiAdoptionPct(rawRows), [rawRows]);
   const concentration = useMemo(() => activityConcentration(rawRows), [rawRows]);
 
+  /* ── What stands out ─────────────────────────────────────────────────────
+     Four findings, none of them new data. Three restate an aggregate the page
+     shows elsewhere; the fourth — the top-3 share — is the one an admin cannot
+     assemble from anything else here, and it is the one that matters most,
+     because "3 people do 70% of everything" is precisely what a healthy-looking
+     total conceals. A ranking by volume (Top areas) does not surface the fastest
+     RISER either: an area can triple and still sit fourth.
+
+     The growth finding needs a floor. A module that went 1 → 4 is +300% and is
+     not a trend; below `GROWTH_FLOOR` actions the percentage is arithmetic on
+     noise, and the page would lead with it. */
+  const GROWTH_FLOOR = 10;
+  const highlights = useMemo<HighlightsInput>(() => {
+    const risen = moduleTotals
+      .filter(m => m.count >= GROWTH_FLOOR && typeof m.deltaPct === 'number' && m.deltaPct > 0)
+      .sort((a, b) => (b.deltaPct ?? 0) - (a.deltaPct ?? 0))[0];
+    return {
+      growing: risen ? { module: risen.module, deltaPct: risen.deltaPct as number } : null,
+      aiAdoptionPct: aiAdoption,
+      aiActivity: totals.aiActivity,
+      dormant: seats.dormant.length,
+      concentration,
+      topNames: [...rawRows]
+        .filter(r => r.actions > 0)
+        .sort((a, b) => b.actions - a.actions)
+        .slice(0, 3)
+        .map(r => r.user.name),
+    };
+  }, [moduleTotals, aiAdoption, totals.aiActivity, seats.dormant.length, concentration, rawRows]);
+
+  /* Every finding lands on its own evidence.
+
+     "No sign-in for 30+ days" goes to Adoption, not People: that claim is about
+     sign-in recency, and Adoption's "Where the seats sit" names exactly those
+     people. The People table's "No activity" segment is a DIFFERENT question —
+     zero actions inside the chosen window — and sending the reader there would
+     hand them a filtered count that disagrees with the number they clicked. */
+  const seeQuietSeats = () => setTab('adoption');
+  const seeTopMembers = () => {
+    setLens('users');
+    setTab('people');
+  };
+
   const heatmap = useMemo(() => usageHourlyMatrix(days, logs), [days, logs]);
 
   /* ── The Overview's three readings ────────────────────────────────────────
@@ -657,10 +765,12 @@ export default function PlatformUsageView() {
       ? Math.round(((first?.count ?? 0) + (second?.count ?? 0)) / totals.actions * 100)
       : 0;
     return {
-      rangeDays: range,
+      // Fixed weekly window, NOT `range` — see weeklyVerdict above.
+      rangeDays: weeklyVerdict.windowDays,
       seats: seats.total,
-      activeUsers: totals.activeUsers,
-      priorActiveUsers: priorTotals.activeUsers,
+      activeUsers: weeklyVerdict.active,
+      priorActiveUsers: weeklyVerdict.priorActive,
+      trend: weeklyTrend,
       // "Never signed in" is not the same as "invited": a suspended member who
       // never arrived is idle too. Count the seats that have produced nothing.
       neverSignedIn: users.filter(u => u.lastLogin === 'Never').length,
@@ -671,7 +781,7 @@ export default function PlatformUsageView() {
       topTwoShare,
       aiSharePct,
     };
-  }, [moduleTotals, totals, priorTotals, range, seats, users, aiSharePct]);
+  }, [moduleTotals, totals, weeklyVerdict, weeklyTrend, seats, users, aiSharePct]);
 
   // Downloads & exports — who is pulling data out of the platform.
   const downloadDelta = usageDeltaPct(totals.downloads, priorTotals.downloads);
@@ -684,8 +794,18 @@ export default function PlatformUsageView() {
   );
 
   // What got created — artifacts built in the window (live Create events fold in).
-  const creations = useMemo(() => creationTotals(days, priorDays), [days, priorDays]);
+  // Ranked, like every other breakdown on this page: the kinds were listed in
+  // catalog order, so the reader had to compare five bars to find the busiest.
+  const creations = useMemo(
+    () => [...creationTotals(days, priorDays)].sort((a, b) => b.count - a.count),
+    [days, priorDays],
+  );
   const creationMax = Math.max(1, ...creations.map(c => c.count));
+  const created = useMemo(() => {
+    const count = creations.reduce((s, c) => s + c.count, 0);
+    const prior = creations.reduce((s, c) => s + c.prior, 0);
+    return { count, deltaPct: usageDeltaPct(count, prior) };
+  }, [creations]);
   const recentCr = useMemo(() => recentCreations(days), [days]);
 
   // Workflow runs + sharing — executions and share events (live folds in).
@@ -1066,11 +1186,35 @@ export default function PlatformUsageView() {
             product-wide that slot holds an action (Create Risk, New Engagement,
             Add source), and the period is a filter, not an action. */}
         <div className="shrink-0 flex items-center justify-between gap-4 px-6 lg:px-12 xl:px-[124px] pb-1">
-          <span className="text-[0.8125rem] text-ink-500 min-w-0 truncate">
-            {range > 0
-              ? <>Showing <span className="font-semibold text-ink-800">{range} {range === 1 ? 'day' : 'days'}</span> {endsAtAnchor ? 'up to' : 'ending'} <span className="font-semibold text-ink-800">{endLabel}</span></>
-              : <>No days in this range — the records end {anchorLabel}</>}
-          </span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0 text-[0.8125rem]">
+            <span className="text-ink-500 min-w-0 truncate">
+              {range > 0
+                ? <>Showing <span className="font-semibold text-ink-800">{range} {range === 1 ? 'day' : 'days'}</span> {endsAtAnchor ? 'up to' : 'ending'} <span className="font-semibold text-ink-800">{endLabel}</span></>
+                : <>No days in this range — the records end {anchorLabel}</>}
+            </span>
+
+            {/* The trap this closes: the page's clock is the newest record, not
+                today's date. "Showing 30 days up to Apr 21" is true and still
+                tells the reader nothing, because they have no second date to
+                measure it against — they will read it as the last 30 days and
+                move on. Naming today beside it is the only thing on the page
+                that makes the three-month jump visible. */}
+            {stale.stale && (
+              <span
+                className="inline-flex items-center gap-1.5 text-mitigated-700 shrink-0"
+                title={`Every window on this page is measured back from the newest record (${stale.anchorLabel}), not from today. Nothing has been recorded since.`}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-mitigated-700 shrink-0" aria-hidden />
+                {/* One text node, not two flex children. The row's `gap-1.5` sits
+                    between every child, which put a space before the comma:
+                    "Jul 14, 2026 , and the newest record...". */}
+                <span>
+                  Today is <span className="font-semibold">{stale.todayLabel}</span>
+                  <span className="text-mitigated-700/80">, and the newest record is {stale.gapDays} days old</span>
+                </span>
+              </span>
+            )}
+          </div>
           <div className="shrink-0">
             <DateFilterPicker
               filter={filter}
@@ -1079,6 +1223,12 @@ export default function PlatformUsageView() {
               onClose={() => setDateOpen(false)}
               onApply={f => { setFilter(f); setDateOpen(false); }}
               today={anchorDate}
+              // The presets resolve against the anchor, so they must print the
+              // dates they will actually hand back. "Last 30 days" picked in July
+              // silently returns a window that closed in April; the label alone
+              // gives the reader nothing to catch that with.
+              showPresetDates
+              earliest={earliestDate}
               triggerRounded="rounded-lg"
               triggerHeight="h-9"
             />
@@ -1117,6 +1267,22 @@ export default function PlatformUsageView() {
             <UsageKpiRow stats={stats} rangeDays={range} asOf={endLabel} endsAtAnchor={endsAtAnchor} />
           )}
 
+          {/* What stands out. The KPI band says how much; this says what about it
+              is worth knowing — including the top-3 share, which is on no other
+              screen and which no total, chart or table on this page can be read
+              to reveal. Each card clicks through to its own evidence. */}
+          {tab === 'overview' && (
+          <Band title="What stands out" note="Click any finding to see it">
+            <UsageHighlights
+              h={highlights}
+              onOpenModule={setModalModule}
+              onSeeAi={() => setTab('adoption')}
+              onSeeQuiet={seeQuietSeats}
+              onSeeTop={seeTopMembers}
+            />
+          </Band>
+          )}
+
           {/* The trend. The title IS the reading of the chart — a chart titled
               with a noun ("Daily activity") makes the reader derive the finding
               themselves, which most readers simply will not do. */}
@@ -1126,7 +1292,7 @@ export default function PlatformUsageView() {
               <Card
                 rank="hero"
                 title="Actions per day"
-                subtitle="The dark line is a 7-day average. Shaded columns are weekends."
+                subtitle="The line is a 7-day average. Shaded columns are weekends."
                 right={
                   <div className="flex items-center gap-3">
                     {/* Every mark on the plot has a key. The legend used to name
@@ -1426,22 +1592,38 @@ export default function PlatformUsageView() {
                 className="lg:col-span-12"
               >
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-10 gap-y-6">
-                  <div className="lg:col-span-4 space-y-3.5">
-                    {creations.map((c, i) => (
-                      <Meter
-                        key={c.kind.key}
-                        label={c.kind.label}
-                        value={fmt(c.count)}
-                        pct={(c.count / creationMax) * 100}
-                        delta={c.deltaPct}
-                        compareLabel={compareLabel}
-                        index={i}
-                      />
-                    ))}
+                  {/* The card had no total — the one card on this tab without one,
+                      while Runs, Sharing and Exports all lead with theirs. The
+                      reader was left to add five bars up to answer the question the
+                      card's own title asks. */}
+                  <div className="lg:col-span-4">
+                    <CardFigure
+                      value={created.count}
+                      caption="Created in this period"
+                      delta={created.deltaPct}
+                      compareLabel={compareLabel}
+                    />
+                    <div className="mt-5 space-y-3.5">
+                      {creations.map((c, i) => (
+                        <Meter
+                          key={c.kind.key}
+                          label={c.kind.label}
+                          value={fmt(c.count)}
+                          pct={(c.count / creationMax) * 100}
+                          delta={c.deltaPct}
+                          compareLabel={compareLabel}
+                          index={i}
+                        />
+                      ))}
+                    </div>
                   </div>
 
-                  <div className="lg:col-span-8">
-                    <Eyebrow className="mb-2">Recently created</Eyebrow>
+                  {/* A rule, so the two halves stop floating in one wide field. */}
+                  <div className="lg:col-span-8 lg:border-l lg:border-canvas-border lg:pl-10">
+                    <div className="flex items-baseline justify-between gap-4 mb-2">
+                      <Eyebrow>Recently created</Eyebrow>
+                      <span className="text-[0.625rem] text-ink-400">Newest first</span>
+                    </div>
                     {recentCr.length > 0 ? (
                       <div className="divide-y divide-canvas-border">
                         {recentCr.map(cr => (
@@ -1649,7 +1831,7 @@ export default function PlatformUsageView() {
 
           <p className="mt-8 text-[0.6875rem] text-ink-400">
             Everything on this page is derived from the audit log and the live record set, as of {anchorLabel}.
-            Numbers move when work happens — they are not a snapshot taken at some other time.
+            Numbers move when work happens. They are not a snapshot taken at some other time.
           </p>
         </motion.div>
         </div>

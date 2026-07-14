@@ -52,7 +52,7 @@ export interface UsageStat extends Stat {
 function changeSentence(stat: UsageStat, compareLabel: string) {
   const { current, prior } = stat;
   if (prior === 0 && current === 0) return { text: 'None in either period', tone: 'flat' as const };
-  if (prior === 0) return { text: `New — none in the ${compareLabel}`, tone: 'up' as const };
+  if (prior === 0) return { text: `New, none in the ${compareLabel}`, tone: 'up' as const };
 
   const diff = current - prior;
   const tone = diff > 0 ? ('up' as const) : diff < 0 ? ('down' as const) : ('flat' as const);
@@ -86,10 +86,11 @@ function UsageKpiCell({ stat, index, compareLabel }: {
       initial={prefersReduced ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={prefersReduced ? { duration: 0 } : { duration: 0.3, delay: Math.min(index, 8) * 0.04, ease: KH_EASE }}
-      className="relative p-6 min-w-0"
+      className={`${CARD_BASE} relative p-5 min-w-0 hover:border-brand-200`}
     >
       <div className="flex items-center gap-2">
-        <h3 className="text-[0.75rem] font-semibold text-ink-500 uppercase tracking-wide truncate flex-1">
+        {/* 11px — DESIGN.md's "Uppercase eyebrow / KPI label" rank. */}
+        <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide truncate flex-1">
           {stat.label}
         </h3>
         <button
@@ -118,7 +119,10 @@ function UsageKpiCell({ stat, index, compareLabel }: {
         )}
       </div>
 
-      <div className="mt-4 text-[2.25rem] font-semibold leading-none tracking-[-0.03em] tabular-nums text-ink-900">
+      {/* 26px — DESIGN.md's KPI value. It was 36px, which is the display rank
+          the spec reserves for a page's one hero; this band has four of them,
+          and four heroes is no hero. */}
+      <div className="mt-3 text-[1.625rem] font-bold leading-none tracking-[-0.02em] tabular-nums text-ink-900">
         <KpiCountUp value={String(stat.value)} delay={120 + index * 70} />
       </div>
       {/* Reserved, so the change line lands on the same baseline in all four
@@ -139,7 +143,15 @@ export default function UsageKpiRow({ stats, rangeDays, asOf, endsAtAnchor = tru
   const compareLabel = `previous ${rangeDays} ${rangeDays === 1 ? 'day' : 'days'}`;
   return (
     <div>
-      <div className={`${CARD_BASE} grid grid-cols-2 xl:grid-cols-4 divide-x divide-y xl:divide-y-0 divide-canvas-border`}>
+      {/* Separate cards, not one card with hairlines through it. Every KPI band
+          on the platform — Admin, Dashboards, Engagement Library — is a gap grid
+          of separate bordered cards; a single divided slab is this page's own
+          invention and reads as a table, which is the one thing a headline band
+          must not do.
+
+          The column count follows the tile count, so dropping a tile closes the
+          row instead of leaving a hole in it. */}
+      <div className={`grid grid-cols-2 gap-4 ${stats.length === 3 ? 'xl:grid-cols-3' : 'xl:grid-cols-4'}`}>
         {stats.map((s, i) => (
           <UsageKpiCell key={s.key} stat={s} index={i} compareLabel={compareLabel} />
         ))}
