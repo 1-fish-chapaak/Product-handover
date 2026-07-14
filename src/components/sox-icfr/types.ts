@@ -239,7 +239,7 @@ export interface ReviewNote {
 // ─── Handoffs, deficiencies, scope, engagement ───────────────────────────────────
 
 export type TaskType = 'pbc' | 'query' | 'remediation';
-export type TaskStatus = 'open' | 'submitted' | 'cleared';
+export type TaskStatus = 'open' | 'cleared';
 export interface HandoffTask {
   id: string;
   type: TaskType;
@@ -308,7 +308,7 @@ export interface MaterialityRules {
 // so the auditor and the risk owner each see what the other ran on a control, and when.
 export type ExecKind =
   | 'validate' | 'test-all' | 'pull-run' | 'attest' | 'conclude'
-  | 'override' | 'request-docs' | 'receive-doc' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return';
+  | 'override' | 'request-docs' | 'receive-doc' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception';
 export interface ExecutionEvent {
   id: string;
   controlId: string;

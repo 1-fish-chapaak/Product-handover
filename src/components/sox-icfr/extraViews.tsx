@@ -55,9 +55,9 @@ export function ScopeView() {
       <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5">
         <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><Target size={15} className="text-brand-600" /> Materiality</h2>
         <div className="grid grid-cols-3 gap-4">
-          <Money label="Overall materiality" value={M} disabled={!canEditRules} onChange={v => setDraft(d => ({ ...d, M: v }))} hint="The financial-statement materiality benchmark." />
-          <Money label="Performance materiality" value={pm} disabled={!canEditRules} onChange={v => setDraft(d => ({ ...d, pm: v }))} hint={`${pmPct}% of overall — the testing threshold.`} />
-          <Money label="Clearly-trivial threshold" value={ctt} disabled={!canEditRules} onChange={v => setDraft(d => ({ ...d, ctt: v }))} hint={`${cttPct}% of overall — below this, logged but not evaluated.`} />
+          <Money label="Overall materiality" value={M} readOnly={!canEditRules} onChange={v => setDraft(d => ({ ...d, M: v }))} hint="The financial-statement materiality benchmark." />
+          <Money label="Performance materiality" value={pm} readOnly={!canEditRules} onChange={v => setDraft(d => ({ ...d, pm: v }))} hint={`${pmPct}% of overall — the testing threshold.`} />
+          <Money label="Clearly-trivial threshold" value={ctt} readOnly={!canEditRules} onChange={v => setDraft(d => ({ ...d, ctt: v }))} hint={`${cttPct}% of overall — below this, logged but not evaluated.`} />
         </div>
         {dirty && (
           <div className="mt-4 rounded-xl border border-high-200 bg-high-50/50 px-4 py-3 flex items-center gap-3 flex-wrap">
@@ -77,7 +77,9 @@ export function ScopeView() {
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
           <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Scale size={15} className="text-brand-600" /> Exception severity ladder</h2>
           <label className="inline-flex items-center gap-2 text-[12px] text-ink-600"><Sliders size={13} /> Significant-deficiency band
-            <input type="number" min={1} max={100} value={draft.band} disabled={!canEditRules} onChange={e => setDraft(d => ({ ...d, band: Math.max(1, Math.min(100, +e.target.value || 0)) }))} className="h-8 w-16 px-2 rounded-lg border border-canvas-border text-[12.5px] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50" />
+            {canEditRules
+              ? <input type="number" min={1} max={100} value={draft.band} onChange={e => setDraft(d => ({ ...d, band: Math.max(1, Math.min(100, +e.target.value || 0)) }))} className="h-8 w-16 px-2 rounded-lg border border-canvas-border text-[12.5px] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              : <b className="font-semibold tabular-nums text-ink-800">{draft.band}</b>}
             <span className="text-ink-400">% of materiality</span>
           </label>
         </div>
@@ -96,11 +98,11 @@ export function ScopeView() {
       <section className="grid grid-cols-2 gap-4">
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex items-start justify-between gap-3">
           <div><div className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><GitMerge size={14} className="text-brand-600" /> Aggregation</div><p className="text-[12px] text-ink-500 mt-1">Combine individually-minor deficiencies by commonality and evaluate them together.</p></div>
-          <Toggle on={r.aggregate} onChange={v => updateRules({ aggregate: v })} label="Aggregation" />
+          {canEditRules ? <Toggle on={r.aggregate} onChange={v => updateRules({ aggregate: v })} label="Aggregation" /> : <Pill tone={r.aggregate ? 'compliant' : 'draft'}>{r.aggregate ? 'On' : 'Off'}</Pill>}
         </div>
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex items-start justify-between gap-3">
           <div><div className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Route size={14} className="text-brand-600" /> Auto-routing</div><p className="text-[12px] text-ink-500 mt-1">Route an exception to the owner (remediation) or the auditor (sign-off) by computed severity.</p></div>
-          <Toggle on={r.autoRoute} onChange={v => updateRules({ autoRoute: v })} label="Auto-routing" />
+          {canEditRules ? <Toggle on={r.autoRoute} onChange={v => updateRules({ autoRoute: v })} label="Auto-routing" /> : <Pill tone={r.autoRoute ? 'compliant' : 'draft'}>{r.autoRoute ? 'On' : 'Off'}</Pill>}
         </div>
       </section>
 
@@ -111,6 +113,15 @@ export function ScopeView() {
         <div className="space-y-1.5">
           {MW_INDICATOR_CATALOGUE.map(ind => {
             const on = r.mwIndicators.includes(ind);
+            // readers see the in-force state as a plain row — never a live switch
+            if (!canEditRules) {
+              return (
+                <div key={ind} className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border', on ? 'border-risk-200 bg-risk-50/40' : 'border-canvas-border')}>
+                  <span className={cn('w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0', on ? 'bg-risk-600 border-risk-600 text-white' : 'border-ink-300')}>{on && <CheckCircle2 size={12} />}</span>
+                  <span className="text-[12.5px] text-ink-800">{ind}</span>
+                </div>
+              );
+            }
             return (
               <button key={ind} onClick={() => updateRules({ mwIndicators: on ? r.mwIndicators.filter(x => x !== ind) : [...r.mwIndicators, ind] })} className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-colors cursor-pointer', on ? 'border-risk-200 bg-risk-50/40' : 'border-canvas-border hover:border-ink-300')}>
                 <span className={cn('w-[18px] h-[18px] rounded-[5px] border flex items-center justify-center shrink-0', on ? 'bg-risk-600 border-risk-600 text-white' : 'border-ink-300')}>{on && <CheckCircle2 size={12} />}</span>
@@ -274,13 +285,19 @@ function AccountRow({ a, canEdit, onPatch }: { a: SignificantAccount; canEdit: b
   );
 }
 
-function Money({ label, value, onChange, hint, disabled }: { label: string; value: number; onChange: (v: number) => void; hint: string; disabled?: boolean }) {
+// Editors get the input; readers get plain text — a threshold is never a
+// disabled form control for someone who can't set it.
+function Money({ label, value, onChange, hint, readOnly }: { label: string; value: number; onChange: (v: number) => void; hint: string; readOnly?: boolean }) {
   return (
     <div>
       <div className="text-[11px] font-semibold text-ink-500 mb-1.5">{label}</div>
-      <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-ink-400 pointer-events-none">₹</span>
-        <input type="number" min={0} value={value} disabled={disabled} onChange={e => onChange(Math.max(0, +e.target.value || 0))} className="w-full h-10 pl-7 pr-3 rounded-lg border border-canvas-border text-[13px] tabular-nums text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50 disabled:cursor-not-allowed" />
-      </div>
+      {readOnly ? (
+        <div className="h-10 flex items-center text-[14px] font-semibold tabular-nums text-ink-800">{fmtFull(value)}</div>
+      ) : (
+        <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-ink-400 pointer-events-none">₹</span>
+          <input type="number" min={0} value={value} onChange={e => onChange(Math.max(0, +e.target.value || 0))} className="w-full h-10 pl-7 pr-3 rounded-lg border border-canvas-border text-[13px] tabular-nums text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+        </div>
+      )}
       <div className="text-[11px] text-ink-400 mt-1">{hint}</div>
     </div>
   );
@@ -607,7 +624,8 @@ export function DeficienciesView() {
                       {d.prudentOverride && <span className="text-high-700 font-medium">Prudent-official — raised to {d.prudentOverride.to}</span>}
                     </div>
                     <p className="text-[12px] text-ink-600 pt-2 border-t border-canvas-border">
-                      → {d.likelihood} × {fmt(d.magnitude)} (vs {fmt(M)}){d.mwIndicators.length ? ' + MW indicator' : ''} ⇒ <span className={cn('font-bold', assess.capped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.raw}</span>
+                      {/* the owner sees their classification, never the engagement's thresholds */}
+                      → {d.likelihood} × {fmt(d.magnitude)}{!isOwner && <> (vs {fmt(M)})</>}{d.mwIndicators.length ? ' + MW indicator' : ''} ⇒ <span className={cn('font-bold', assess.capped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.raw}</span>
                       {assess.capped && <> · capped by {d.compensatingControlId} (effective) ⇒ <span className={cn('font-bold', assess.bumped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.bumped ? 'Significant Deficiency' : assess.final}</span></>}
                       {assess.bumped && <> · prudent-official ⇒ <span className="font-bold text-high-700">{assess.final}</span></>}
                     </p>

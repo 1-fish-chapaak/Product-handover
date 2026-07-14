@@ -180,7 +180,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // controls, tasks and exceptions. The picker in the top bar switches personas.
   const [meOwner, setMeOwner] = useState('M. Nair · Accounts Payable');
 
-  const me = role === 'risk-owner' ? meOwner : `You · ${ROLE_LABEL[role]}`;
+  // Person-based identity: each hat acts as the engagement's named person, not a
+  // role label — so self-review guards compare people, and the trail reads real names.
+  const me = role === 'auditor' ? eng.preparer : role === 'reviewer' ? eng.reviewer : meOwner;
 
   // Every control mutation flows through here — a concluded control (or a
   // countersigned engagement) is frozen; reopenControl below is the only way back in.
@@ -285,9 +287,13 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         remediation: { action: 'To be agreed with the control owner.', date: null, owner: c.owner, status: 'Open' },
         status: 'Identified',
       };
-      return { ...prev, deficiencies: [def, ...prev.deficiencies] };
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId, track, kind: 'exception',
+        verb: `raised ${def.id} — severity to assess`, by: me, role, at: 'just now',
+      };
+      return { ...prev, deficiencies: [def, ...prev.deficiencies], executions: [event, ...prev.executions] };
     });
-  }, []);
+  }, [me, role]);
 
   const concludeDesign = useCallback<IcfrCtx['concludeDesign']>((controlId, conclusion) => {
     if (role !== 'auditor') return;
@@ -359,8 +365,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // Scoping front door — accounts are editable: in/out of scope, relevant
   // assertions, WCGW statements. Frozen once the engagement is countersigned.
   const updateAccount = useCallback<IcfrCtx['updateAccount']>((id, patch) => {
+    if (role !== 'auditor') return;
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, accounts: prev.accounts.map(a => a.id === id ? { ...a, ...patch } : a) }));
-  }, []);
+  }, [role]);
 
   // IPE check — the system report is only reliable once someone has validated it.
   const validateIpe = useCallback<IcfrCtx['validateIpe']>((controlId) => {
@@ -709,15 +716,19 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (role !== 'auditor') return;
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => (d.id === id ? { ...d, ...patch } : d)) }));
   }, [role]);
+  // The ground rules are the auditor's to set — everyone else reads them (at most).
   const updateRules = useCallback<IcfrCtx['updateRules']>((patch) => {
+    if (role !== 'auditor') return;
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, rules: { ...prev.rules, ...patch } }));
-  }, []);
+  }, [role]);
   const updateMateriality = useCallback<IcfrCtx['updateMateriality']>((patch) => {
+    if (role !== 'auditor') return;
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, ...patch }));
-  }, []);
+  }, [role]);
   // The guarded path for changing the ground rules mid-engagement: applies the
   // patch, records who/what/why and every exception whose grade moved.
   const applyRules = useCallback<IcfrCtx['applyRules']>((patch, reason) => {
+    if (role !== 'auditor') return;
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
       const fmtVal = (field: string, v: number) => field === 'SD band' ? `${v}%` : formatINR(v);
@@ -743,25 +754,53 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         rulesLog: [entry, ...prev.rulesLog],
       };
     });
-  }, [me]);
+  }, [me, role]);
   // Lifecycle moves: reviewer only closes (below); submitting the fix for retest
   // is the owner's declaration — the auditor can't call the owner's fix done.
   // Starting remediation marks the plan in progress; submitting marks it done.
   const setExceptionStatus = useCallback<IcfrCtx['setExceptionStatus']>((id, status) => {
     if (role === 'reviewer') return;
     if (status === 'Retest' && role !== 'risk-owner') return;
-    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => {
-      if (d.id !== id) return d;
-      const remStatus = status === 'Remediation' ? 'In progress' as const : status === 'Retest' ? 'Done' as const : d.remediation.status;
-      return { ...d, status, remediation: { ...d.remediation, status: remStatus } };
-    }) }));
-  }, [role]);
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      if (!target || target.status === status) return prev;
+      // every lifecycle move carries its actor + time into the shared trail
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
+        verb: status === 'Remediation' ? `started remediation on ${id}` : status === 'Retest' ? `submitted the fix for retest (${id})` : `moved ${id} to ${status.toLowerCase()}`,
+        by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        deficiencies: prev.deficiencies.map(d => {
+          if (d.id !== id) return d;
+          const remStatus = status === 'Remediation' ? 'In progress' as const : status === 'Retest' ? 'Done' as const : d.remediation.status;
+          return { ...d, status, remediation: { ...d.remediation, status: remStatus } };
+        }),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
   // A passed retest never closes itself — it parks at 'Awaiting reviewer'. Only
   // the auditor records retest results; the owner never tests their own fix.
   // A failed retest sends the plan back to In progress.
   const recordRetest = useCallback<IcfrCtx['recordRetest']>((id, result) => {
     if (role !== 'auditor') return;
-    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, retest: { result, at: 'just now', by: me }, status: result === 'Pass' ? 'Awaiting reviewer' : 'Remediation', remediation: { ...d.remediation, status: result === 'Pass' ? 'Done' : 'In progress' } } : d) }));
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      if (!target || target.status !== 'Retest') return prev;
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
+        verb: `recorded retest ${result.toLowerCase()} on ${id}`, result, by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, retest: { result, at: 'just now', by: me }, status: result === 'Pass' ? 'Awaiting reviewer' : 'Remediation', remediation: { ...d.remediation, status: result === 'Pass' ? 'Done' : 'In progress' } } : d),
+        executions: [event, ...prev.executions],
+      };
+    });
   }, [me, role]);
 
   // The remediation plan is the owner's commitment — the action on the root
@@ -785,11 +824,21 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [me, role]);
   // Four-eyes: only the reviewer hat closes, and never the person who ran the retest.
   const signOffException = useCallback<IcfrCtx['signOffException']>((id) => {
-    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => {
-      if (d.id !== id) return d;
-      if (role !== 'reviewer' || (d.retest && d.retest.by === me)) return d;
-      return { ...d, signoff: { by: me, at: 'just now' }, status: 'Closed' };
-    }) }));
+    if (role !== 'reviewer') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      if (!target || target.status !== 'Awaiting reviewer' || (target.retest && target.retest.by === me)) return prev;
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
+        verb: `closed ${id} — reviewer sign-off`, by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, signoff: { by: me, at: 'just now' }, status: 'Closed' } : d),
+        executions: [event, ...prev.executions],
+      };
+    });
   }, [me, role]);
 
   // The only way back into a concluded control: the auditor reopens it with a
@@ -830,6 +879,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (step === 'preparer' && target.wpSignoff?.preparer) return prev; // already signed
       if (step === 'reviewer' && (!target.wpSignoff?.preparer || target.wpSignoff.reviewer)) return prev; // countersign follows the preparer
       if (step === 'reviewer' && prev.reviewNotes.some(n => n.controlId === controlId && n.status !== 'Closed')) return prev; // notes must clear before the countersign
+      if (step === 'reviewer' && target.wpSignoff?.preparer?.by === me) return prev; // self-review guard: the paper's preparer never countersigns it
       const event: ExecutionEvent = {
         id: uid('ex'), controlId, track: 'operating', kind: 'wp-signoff',
         verb: step === 'preparer' ? 'signed off the working paper' : 'countersigned the working paper',
@@ -948,8 +998,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [eng]);
 
   const togglePeriod = useCallback(() => {
+    if (role !== 'auditor') return;   // the testing period is the auditor's dial
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, period: prev.period === 'Interim' ? 'Year-end' : 'Interim' }));
-  }, []);
+  }, [role]);
 
   const rollForward = useCallback(() => {
     setEng(prev => {
@@ -968,8 +1019,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
 
   // Preparer signs first, reviewer countersigns — names come from the engagement record.
   // Each signature stamps the ICFR conclusion as of that moment: open MW ⇒ not effective.
+  // Same-person guard: one human never holds both signatures on the opinion.
   const signOffEngagement = useCallback<IcfrCtx['signOffEngagement']>((step) => {
-    setEng(prev => ({
+    setEng(prev => (step === 'reviewer' && prev.reviewer === prev.preparer) ? prev : ({
       ...prev,
       signoff: {
         ...(step === 'preparer'

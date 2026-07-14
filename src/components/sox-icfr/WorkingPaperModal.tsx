@@ -77,14 +77,15 @@ function Block({ b }: { b: PaperBlock }) {
 
 /** This paper's own sign-off — state rows + the hat's action, in place. */
 function ControlSignoff({ eng, c }: { eng: IcfrEngagement; c: Control }) {
-  const { role, signOffControlWp } = useIcfr();
+  const { role, me, signOffControlWp } = useIcfr();
   const so = c.wpSignoff;
   const concluded = isControlLocked(c);
   const engLocked = isEngagementLocked(eng);
-  // pending review notes hold the countersign — same guard as the store
+  // pending review notes hold the countersign — same guard as the store —
+  // and the paper's preparer never countersigns their own work (four-eyes)
   const notesPending = eng.reviewNotes.filter(n => n.controlId === c.id && n.status !== 'Closed').length;
   const canSign = role === 'auditor' && concluded && !so?.preparer && !engLocked;
-  const canCounter = role === 'reviewer' && !!so?.preparer && !so?.reviewer && !engLocked && notesPending === 0;
+  const canCounter = role === 'reviewer' && !!so?.preparer && !so?.reviewer && !engLocked && notesPending === 0 && so?.preparer?.by !== me;
   return (
     <div className="rounded-xl border border-canvas-border bg-paper-50/40 p-3.5 space-y-2">
       <div className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400 inline-flex items-center gap-1.5"><PenLine size={12} /> {SIGNOFF_TITLE}</div>

@@ -892,7 +892,7 @@ function ActivityRail({ control }: { control: Control }) {
 // ── the dossier ──────────────────────────────────────────────────────────────────
 // Management-review-control structure on the leadsheet: tag + rupee threshold
 // at which the reviewer investigates, checked against performance materiality.
-function MrcLine({ control, canEdit, pm }: { control: Control; canEdit: boolean; pm: number }) {
+function MrcLine({ control, canEdit, pm, revealPm }: { control: Control; canEdit: boolean; pm: number; revealPm: boolean }) {
   const { setMrc } = useIcfr();
   const t = control.mrcThreshold;
   if (!control.isMrc) {
@@ -902,11 +902,12 @@ function MrcLine({ control, canEdit, pm }: { control: Control; canEdit: boolean;
       </button>
     ) : null;
   }
+  // the owner sees the verdict on their threshold, never the materiality figure behind it
   const check = t == null
     ? { cls: 'text-mitigated-700', msg: 'no investigation threshold documented — precision can’t be verified' }
     : t > pm
-      ? { cls: 'text-risk-700', msg: `threshold exceeds performance materiality (${fmtINR(pm)}) — too coarse to catch a material error` }
-      : { cls: 'text-compliant-700', msg: `within performance materiality (${fmtINR(pm)})` };
+      ? { cls: 'text-risk-700', msg: revealPm ? `threshold exceeds performance materiality (${fmtINR(pm)}) — too coarse to catch a material error` : 'threshold is above the precision bar — too coarse to catch a material error' }
+      : { cls: 'text-compliant-700', msg: revealPm ? `within performance materiality (${fmtINR(pm)})` : 'within the precision bar' };
   return (
     <div className="mt-1.5 flex items-center gap-2 text-[11px] flex-wrap">
       <Pill tone="evidence">Management review control</Pill>
@@ -970,24 +971,29 @@ function LockBanner({ engLocked, role, control, onReopen, onOpenPaper }: { engLo
 // them here for exactly this choice: countersign to make it final, or return it.
 // Pending review notes hold the countersign: resolve & verify first.
 function ReviewerGate({ control, notesPending, onCountersign, onReturn }: { control: Control; notesPending: number; onCountersign: () => void; onReturn: (reason: string) => void }) {
+  const { me } = useIcfr();
   const { addToast } = useToast();
   const [returning, setReturning] = useState(false);
   const [reason, setReason] = useState('');
   const signedBy = control.wpSignoff?.preparer;
+  // self-review guard — the paper's preparer never countersigns their own work
+  const selfReview = signedBy?.by === me;
   return (
     <div className="mb-5 rounded-xl border border-evidence-200 bg-evidence-50/40 px-4 py-3">
       <div className="flex items-center gap-2.5 flex-wrap">
         <ShieldCheck size={14} className="text-evidence-700 shrink-0" />
         <span className="text-[12.5px] font-semibold text-ink-800">In your court — concluded, signed by {signedBy?.by ?? 'the preparer'}.</span>
         <span className="text-[12px] text-ink-500">
-          {notesPending > 0
-            ? <>{notesPending} review note{notesPending === 1 ? '' : 's'} to clear — the countersign unlocks once they're resolved and verified (Notes rail).</>
-            : 'Review the evidence below, then countersign or return with a note.'}
+          {selfReview
+            ? <span className="font-semibold text-high-700">You signed this paper — a different person must countersign it.</span>
+            : notesPending > 0
+              ? <>{notesPending} review note{notesPending === 1 ? '' : 's'} to clear — the countersign unlocks once they're resolved and verified (Notes rail).</>
+              : 'Review the evidence below, then countersign or return with a note.'}
         </span>
         <span className="ml-auto flex items-center gap-2">
-          <button disabled={notesPending > 0} title={notesPending > 0 ? `${notesPending} review note${notesPending === 1 ? '' : 's'} must close first` : undefined}
+          {!selfReview && <button disabled={notesPending > 0} title={notesPending > 0 ? `${notesPending} review note${notesPending === 1 ? '' : 's'} must close first` : undefined}
             onClick={() => { onCountersign(); addToast({ type: 'success', title: 'Countersigned', message: `${control.wpRef} is signed off — the paper is final.` }); }}
-            className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5"><PenLine size={13} /> Countersign &amp; sign off</button>
+            className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5"><PenLine size={13} /> Countersign &amp; sign off</button>}
           <button onClick={() => setReturning(o => !o)} className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[12px] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><CornerDownRight size={13} /> Return to auditor</button>
         </span>
       </div>
@@ -1052,7 +1058,7 @@ export default function ControlDossier() {
               </div>
               <h1 className="leadsheet-title text-[20px] text-ink-900 leading-snug max-w-[640px]">{control.description}</h1>
               <p className="text-[12.5px] text-ink-500 mt-1.5 max-w-[680px]"><b className="text-ink-700 font-semibold">Precision —</b> {control.precision}</p>
-              <MrcLine control={control} canEdit={canEdit} pm={eng.performanceMateriality} />
+              <MrcLine control={control} canEdit={canEdit} pm={eng.performanceMateriality} revealPm={role !== 'risk-owner'} />
               <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 text-[11.5px] text-ink-500">
                 <span><span className="text-ink-400">Process</span> · {control.process} / {control.subProcess}</span>
                 <span className="inline-flex items-center gap-1"><span className="text-ink-400">Owner</span> · <b className="font-semibold text-ink-700">{control.owner}</b></span>

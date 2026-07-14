@@ -4,7 +4,7 @@ import {
   Bell, CheckCircle2, ClipboardList, Clock, FileText, MessageSquareWarning, Table2, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
-import { controlConclusion, isOwnerTask, testDueInDays, testsDueNow, trackResult } from './helpers';
+import { controlConclusion, isAwaitingReview, isOwnerTask, testDueInDays, testsDueNow, trackResult } from './helpers';
 import { cn } from '../../lib/cn';
 
 /**
@@ -33,7 +33,7 @@ const KIND_META: Record<Item['kind'], { Icon: typeof Bell; cls: string }> = {
 };
 
 export default function NotificationsBell() {
-  const { eng, role, meOwner, openControl, setTab } = useIcfr();
+  const { eng, role, meOwner, openControl, setTab, setView } = useIcfr();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -124,6 +124,35 @@ export default function NotificationsBell() {
       }
     }
 
+    // ── the reviewer's court, mirrored from the queue — papers, notes, closes ────
+    if (role === 'reviewer') {
+      const papers = eng.controls.filter(isAwaitingReview);
+      if (papers.length) {
+        out.push({
+          id: 'rev-papers', kind: 'review',
+          title: `${papers.length} paper${papers.length === 1 ? '' : 's'} awaiting your countersign`,
+          detail: 'Open the reviewer queue — countersign each paper or return it with a note.',
+          onOpen: () => { setOpen(false); setTab('overview'); },
+        });
+      }
+      for (const n of eng.reviewNotes.filter(x => x.status === 'Resolved')) {
+        out.push({
+          id: `note-${n.id}`, kind: 'remark',
+          title: `Verify resolution · ${n.controlId}`,
+          detail: n.resolution?.text ?? n.text,
+          onOpen: () => go(n.controlId),
+        });
+      }
+      for (const d of eng.deficiencies.filter(x => x.status === 'Awaiting reviewer')) {
+        out.push({
+          id: `close-${d.id}`, kind: 'exception',
+          title: `${d.id} · retest passed — yours to close`,
+          detail: d.description,
+          onOpen: () => { setOpen(false); setView('deficiencies'); },
+        });
+      }
+    }
+
     if (role === 'auditor') {
       const pending = eng.controls.filter(c => !c.racmReview).length;
       if (pending > 0) {
@@ -145,7 +174,7 @@ export default function NotificationsBell() {
       }
     }
     return out;
-  }, [eng, role, meOwner, openControl, setTab]);
+  }, [eng, role, meOwner, openControl, setTab, setView]);
 
   const urgent = items.filter(i => i.kind === 'ineffective').length;
 
@@ -170,7 +199,7 @@ export default function NotificationsBell() {
             <div className="px-4 py-3 border-b border-canvas-border flex items-center justify-between">
               <div>
                 <div className="text-[13px] font-semibold text-ink-900">Notifications</div>
-                <div className="text-[11px] text-ink-400 mt-0.5">Pending assignment &amp; review · viewing as {role === 'auditor' ? 'Auditor' : 'Risk Owner'}</div>
+                <div className="text-[11px] text-ink-400 mt-0.5">Pending assignment &amp; review · viewing as {role === 'auditor' ? 'Auditor' : role === 'reviewer' ? 'Reviewer' : 'Risk Owner'}</div>
               </div>
               {urgent > 0 && <span className="text-[10.5px] font-bold text-risk-700 bg-risk-50 border border-risk-200 rounded-full px-2 h-5 inline-flex items-center">{urgent} ineffective</span>}
             </div>
