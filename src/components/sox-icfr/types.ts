@@ -24,7 +24,7 @@ export type TrackConclusion = 'Effective' | 'Ineffective' | 'Not tested';
 export type TrackStatus = 'Not started' | 'In progress' | 'Concluded';
 export type Conclusion = 'Effective' | 'Ineffective' | 'In progress' | 'Not started';
 
-export type Court = 'auditor' | 'risk-owner' | 'none';
+export type Court = 'auditor' | 'risk-owner' | 'reviewer' | 'none';
 export type Likelihood = 'Remote' | 'Reasonably possible' | 'Probable';
 export type Severity = 'Deficiency' | 'Significant Deficiency' | 'Material Weakness';
 
@@ -196,6 +196,9 @@ export interface Control {
    *  once the control is concluded; the reviewer countersigns. Separate from the
    *  engagement-level opinion sign-off. */
   wpSignoff?: { preparer?: SignoffEntry; reviewer?: SignoffEntry };
+  /** The reviewer sent the concluded paper back instead of countersigning —
+   *  conclusions cleared, note recorded; cleared when the auditor re-concludes. */
+  reviewReturn?: { reason: string; by: string; at: string };
 }
 
 // ─── Discussions (role-tagged threads) ──────────────────────────────────────────
@@ -288,7 +291,7 @@ export interface MaterialityRules {
 // so the auditor and the risk owner each see what the other ran on a control, and when.
 export type ExecKind =
   | 'validate' | 'test-all' | 'pull-run' | 'attest' | 'conclude'
-  | 'override' | 'request-docs' | 'receive-doc' | 'population' | 'sample' | 'reopen' | 'wp-signoff';
+  | 'override' | 'request-docs' | 'receive-doc' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return';
 export interface ExecutionEvent {
   id: string;
   controlId: string;

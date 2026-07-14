@@ -57,7 +57,8 @@ export default function RiskOwnerPortal() {
                     <span className="block text-[11px] text-ink-400 mt-0.5">{c.frequency} · {c.process}</span>
                   </span>
                   <span className={cn('text-[11px] font-semibold rounded-full px-2 h-5 inline-flex items-center shrink-0', dd < 0 ? 'text-risk-700 bg-risk-50' : 'text-mitigated-700 bg-mitigated-50')}>{testDueLabel(dd)}</span>
-                  <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 shrink-0">Run test <ArrowRight size={12} /></span>
+                  {/* D1 — the owner doesn't run tests; their move is attesting & evidencing */}
+                  <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 shrink-0">Attest &amp; evidence <ArrowRight size={12} /></span>
                 </button>
               );
             })}

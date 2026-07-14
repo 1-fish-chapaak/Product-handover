@@ -64,12 +64,14 @@ export function Stamp({ result, size = 'sm', animate = true }: { result: 'Effect
 const COURT: Record<Court, { tone: Tone; label: string; Icon: typeof Gavel }> = {
   auditor: { tone: 'info', label: 'Your court', Icon: Gavel },
   'risk-owner': { tone: 'mitigated', label: 'Risk owner', Icon: UserCheck },
+  reviewer: { tone: 'evidence', label: 'Reviewer', Icon: ShieldCheck },
   none: { tone: 'compliant', label: 'Closed', Icon: CheckCircle2 },
 };
 export function CourtBadge({ court, fromRole }: { court: Court; fromRole?: Role }) {
   const c = COURT[court];
   const label = court === 'auditor' && fromRole && fromRole !== 'auditor' ? 'Auditor'
     : court === 'risk-owner' && fromRole === 'risk-owner' ? 'You'
+    : court === 'reviewer' && fromRole === 'reviewer' ? 'Your court'
     : c.label;
   return <span className="inline-flex items-center gap-1"><c.Icon size={12} className="text-ink-400" /><Pill tone={c.tone}>{label}</Pill></span>;
 }

@@ -138,6 +138,16 @@ export function isEngagementLocked(eng: IcfrEngagement): boolean {
   return !!(eng.signoff.preparer && eng.signoff.reviewer);
 }
 
+// ─── Review gate — concluded is not final until the reviewer countersigns ────────
+// The paper travels: conclude → preparer signs (auditor) → reviewer countersigns.
+export function isControlFinal(c: Control): boolean {
+  return isControlLocked(c) && !!c.wpSignoff?.reviewer;
+}
+/** Concluded and preparer-signed — sitting in the reviewer's court. */
+export function isAwaitingReview(c: Control): boolean {
+  return isControlLocked(c) && !!c.wpSignoff?.preparer && !c.wpSignoff?.reviewer;
+}
+
 // ─── Track progress ──────────────────────────────────────────────────────────────
 
 import type { DesignPoint, OperatingStep, TestResult, ValidationQA, ValidationTable } from './types';
@@ -227,8 +237,12 @@ export function operatingProgress(c: Control) {
 export function courtFor(c: Control, tasks: HandoffTask[]): Court {
   if (tasks.some(t => t.controlId === c.id && t.assigneeRole === 'risk-owner' && t.status === 'open')) return 'risk-owner';
   const concl = controlConclusion(c);
-  // A concluded control is closed out (no separate reviewer court on this platform).
-  if (concl === 'Effective' || concl === 'Ineffective') return 'none';
+  // Concluded isn't closed: the paper still travels auditor (sign) → reviewer
+  // (countersign). Only a countersigned paper leaves every court.
+  if (concl === 'Effective' || concl === 'Ineffective') {
+    if (c.wpSignoff?.reviewer) return 'none';
+    return c.wpSignoff?.preparer ? 'reviewer' : 'auditor';
+  }
   return 'auditor';
 }
 
@@ -293,6 +307,8 @@ export function engagementProgress(eng: IcfrEngagement) {
     ineffective: concl.filter(x => x === 'Ineffective').length,
     inProgress: concl.filter(x => x === 'In progress').length,
     waitingOnOwner: cs.filter(c => courtFor(c, eng.tasks) === 'risk-owner').length,
+    awaitingReview: cs.filter(isAwaitingReview).length,
+    reviewed: cs.filter(isControlFinal).length,
   };
 }
 

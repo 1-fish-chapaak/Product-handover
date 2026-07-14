@@ -39,13 +39,13 @@ test('notification bell shows pending items per persona', async ({ page }) => {
   await page.getByRole('button', { name: 'Open Procure to Pay RACM' }).click();
   await page.waitForTimeout(600);
   await expect(page.locator('tr', { hasText: 'Ineffective' }).first()).toBeVisible();
-  // the risk owner has the same bulk-test entry points as the auditor
-  await expect(page.getByRole('button', { name: /^Bulk test/ })).toBeVisible();
+  // D1 — testing left the risk owner's lane: no bulk-test entries, uploads stay
+  await expect(page.getByRole('button', { name: /^Bulk test/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Upload RACM / SOP' })).toBeVisible();
   const checks = page.locator('tbody input[type=checkbox]');
   await checks.nth(0).click();
-  await expect(page.getByRole('button', { name: 'Test controls' })).toBeVisible();
-  // ...but approving rows stays with the auditor
+  await expect(page.getByRole('button', { name: 'Test controls' })).toHaveCount(0);
+  // ...and approving rows stays with the auditor
   await expect(page.getByRole('button', { name: 'Approve rows' })).toHaveCount(0);
 });
 
@@ -60,8 +60,9 @@ test('risk owner overview task opens the control', async ({ page }) => {
   await page.getByRole('button', { name: 'Risk Owner', exact: true }).click();
   await page.waitForTimeout(600);
   // regular testing: every control carries a due date; today's tests lead the inbox
+  // (D1 — the owner's move on a due test is attesting & evidencing, not running it)
   await expect(page.getByText('Control tests due today')).toBeVisible();
-  await page.getByText('Run test').first().click();
+  await page.getByText('Attest & evidence').first().click();
   await page.waitForTimeout(700);
   await expect(page.getByText('Test of Design', { exact: false }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Back', exact: true }).click();

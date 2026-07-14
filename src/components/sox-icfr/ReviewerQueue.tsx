@@ -1,16 +1,18 @@
-import { ArrowRight, CheckCircle2, PenLine, ShieldCheck } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ClipboardCheck, PenLine, ShieldCheck } from 'lucide-react';
 import { useIcfr } from './store';
-import { assessSeverity } from './helpers';
-import { SeverityPill } from './parts';
+import { assessSeverity, controlConclusion, isAwaitingReview } from './helpers';
+import { SeverityPill, Stamp } from './parts';
 
-// The reviewer's desk — everything waiting on the reviewer hat, and nothing else.
-// Rendered only in the Reviewer role, mirroring how RiskOwnerPortal is owner-only.
+// The reviewer's desk — everything waiting on the reviewer hat, and nothing else:
+// concluded papers to countersign, retest-passed exceptions to close, and the
+// engagement countersign. Rendered only in the Reviewer role, mirroring RiskOwnerPortal.
 export default function ReviewerQueue() {
-  const { eng, me, setView } = useIcfr();
+  const { eng, me, setView, openControl } = useIcfr();
+  const papers = eng.controls.filter(isAwaitingReview);
   const awaiting = eng.deficiencies.filter(d => d.status === 'Awaiting reviewer');
   const so = eng.signoff;
   const readyToCountersign = !!so.preparer && !so.reviewer;
-  const count = awaiting.length + (readyToCountersign ? 1 : 0);
+  const count = papers.length + awaiting.length + (readyToCountersign ? 1 : 0);
 
   return (
     <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
@@ -21,10 +23,25 @@ export default function ReviewerQueue() {
 
       {count === 0 ? (
         <div className="flex items-center gap-2.5 rounded-lg border border-canvas-border bg-paper-50/40 px-3.5 py-3 text-[12.5px] text-ink-500">
-          <CheckCircle2 size={15} className="text-compliant-700 shrink-0" /> Nothing waiting on you — exceptions land here when a retest passes, and the countersign once the preparer signs.
+          <CheckCircle2 size={15} className="text-compliant-700 shrink-0" /> Nothing waiting on you — concluded papers land here for countersign, exceptions when a retest passes, and the engagement countersign once the preparer signs.
         </div>
       ) : (
         <div className="space-y-2">
+          {papers.map(c => (
+            <button key={c.id} onClick={() => openControl(c.id)}
+              className="w-full flex items-center gap-3 rounded-xl border border-canvas-border bg-canvas-elevated p-3 text-left hover:border-brand-300 transition-colors cursor-pointer">
+              <div className="w-9 h-9 rounded-lg bg-evidence-50 text-evidence-700 flex items-center justify-center shrink-0"><ClipboardCheck size={16} /></div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-[11.5px] font-semibold text-ink-600">{c.wpRef}</span>
+                  <Stamp result={controlConclusion(c) === 'Ineffective' ? 'Ineffective' : 'Effective'} animate={false} />
+                </div>
+                <div className="text-[13px] text-ink-800 truncate mt-0.5">{c.description}</div>
+                <div className="text-[11.5px] text-ink-400 mt-0.5">Signed by {c.wpSignoff?.preparer?.by ?? '—'} · {c.wpSignoff?.preparer?.at ?? ''} — countersign or return</div>
+              </div>
+              <ArrowRight size={15} className="text-ink-300 shrink-0" />
+            </button>
+          ))}
           {awaiting.map(d => {
             const mine = !!d.retest && d.retest.by === me;
             return (

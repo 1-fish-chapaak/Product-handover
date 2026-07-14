@@ -154,6 +154,8 @@ const DETAILED: Control[] = [
     owner: 'R. Khanna · Master Data', riskId: 'R-12', riskDescription: 'Fraudulent or erroneous payments to fictitious or altered vendor bank accounts.',
     assertions: ['Existence / Occurrence', 'Rights & Obligations'],
     racmReview: approved(),
+    // fully through the review gate — signed and countersigned, the paper is final
+    wpSignoff: { preparer: { by: 'A. Mehta · Auditor', at: '17 Apr' }, reviewer: { by: REVIEWER, at: '18 Apr' } },
     design: designTrack('Effective', [
       doc('Process narrative', 'P2P vendor-master narrative v3.pdf', 'Received'),
       doc('Flowchart', 'Vendor onboarding flowchart.pdf', 'Received'),
@@ -219,6 +221,8 @@ const DETAILED: Control[] = [
     owner: 'M. Nair · Accounts Payable', riskId: 'R-06', riskDescription: 'Duplicate payments to vendors.',
     assertions: ['Existence / Occurrence', 'Accuracy'],
     racmReview: approved(),
+    // concluded ineffective, paper signed — sitting in the reviewer's court
+    wpSignoff: { preparer: { by: 'A. Mehta · Auditor', at: '16 Apr' } },
     design: designTrack('Effective', [
       doc('Process narrative', 'Duplicate-block narrative.pdf', 'Received'),
       doc('Control description', 'SAP duplicate-check config.pdf', 'Received'),
@@ -350,6 +354,13 @@ function generate(): Control[] {
         assertions: ['Accuracy', 'Existence / Occurrence'],
         // review spread: fully-tested rows approved, one recurring remark pattern, rest pending
         racmReview: pat <= 1 ? approved('18 Apr') : pat === 3 ? remark('Precision statement is generic — state the threshold, the reviewer and the evidence retained.', '18 Apr') : undefined,
+        // paper sign-off spread: most concluded rows are countersigned; every other
+        // pat-6 row is signed but still waits on the reviewer (feeds the queue)
+        wpSignoff: design === 'Effective' && operating === 'Effective'
+          ? (pat === 6 && idx % 2 === 0
+            ? { preparer: { by: 'A. Mehta · Auditor', at: '18 Apr' } }
+            : { preparer: { by: 'A. Mehta · Auditor', at: '18 Apr' }, reviewer: { by: REVIEWER, at: '19 Apr' } })
+          : undefined,
         design: designTrack(design, docs, points),
         operating: op,
       });

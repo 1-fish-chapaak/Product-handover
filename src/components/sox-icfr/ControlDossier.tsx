@@ -5,7 +5,7 @@ import {
   ArrowLeft, FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, Download, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
-  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, ShieldCheck, History,
+  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, ShieldCheck, History, PenLine,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import {
@@ -275,7 +275,9 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
 }
 
 // ── operating attribute — its own workflow and/or self-attestation ────────────────
-function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
+// canEdit = auditor's testing actions; canAttest = the owner's (or auditor's)
+// self-attestation voice — the one first-line pen that survives D1.
+function AttributeRow({ control, step, canEdit, canAttest, testing }: { control: Control; step: OperatingStep; canEdit: boolean; canAttest: boolean; testing: boolean }) {
   const { me, setStepResult, setSampleResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
   // this attribute tested against each drawn sample — the handbook grain
   const samp = control.operating.sampling;
@@ -396,7 +398,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
 
         <div className="rounded-lg border border-canvas-border px-3 py-2.5">
           <div className="flex items-center gap-2 text-[11px] font-bold text-ink-600"><Hand size={12} /> Self-attestation <span className="font-normal text-ink-400">· manual pass / fail</span>
-            {canEdit && <span className="ml-auto"><Toggle on={attestOn} onChange={v => toggleStepAttest(control.id, step.id, v)} label="Toggle self-attestation" /></span>}
+            {canAttest && <span className="ml-auto"><Toggle on={attestOn} onChange={v => toggleStepAttest(control.id, step.id, v)} label="Toggle self-attestation" /></span>}
           </div>
           {attestOn && <>
             {att?.result && (
@@ -407,7 +409,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
             )}
             {att?.note && <p className="text-[12px] text-ink-700 mt-1.5 italic">“{att.note}”</p>}
             {att && att.evidence.length > 0 && <div className="flex flex-wrap gap-1.5 mt-2">{att.evidence.map(f => <span key={f.id} className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-ink-600 bg-paper-50 border border-canvas-border rounded-md px-1.5 h-[20px]"><Paperclip size={9} />{f.name}</span>)}</div>}
-            {canEdit && (
+            {canAttest && (
               <div className="mt-2">
                 <textarea value={noteDraft} onChange={e => setNoteDraft(e.target.value)} rows={2} placeholder="Describe how this attribute is satisfied — recorded with your attestation." className="w-full text-[12px] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
@@ -434,7 +436,9 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
 }
 
 // ── design section (TOD) ──────────────────────────────────────────────────────────
-function DesignSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
+// canEdit = the auditor's testing pen; canContribute adds the owner's evidence
+// lane — attaching the requested documents is theirs even though testing isn't.
+function DesignSection({ control, canEdit, canContribute }: { control: Control; canEdit: boolean; canContribute: boolean }) {
   const { setDocStatus, addDesignDoc, removeDesignDoc, addDesignPoint, validateDesignPoint } = useIcfr();
   const d = control.design; const prog = designProgress(control);
   const [modal, setModal] = useState(false);
@@ -479,9 +483,9 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                     <div className="text-[11px] text-ink-400 truncate">{doc.name}{doc.uploadedBy ? ` · ${doc.uploadedBy}, ${doc.at}` : ''}{doc.kind === 'Walkthrough' && doc.status !== 'Received' ? ' — one real transaction traced end-to-end; TOD leans on this' : ''}</div>
                   </div>
                   <Pill tone={doc.status === 'Received' ? 'compliant' : doc.status === 'Requested' ? 'mitigated' : 'draft'}>{doc.status}</Pill>
-                  {canEdit && <div className="flex items-center gap-1">
+                  {canContribute && <div className="flex items-center gap-1">
                     {doc.status !== 'Received' && <button onClick={() => setDocStatus(control.id, doc.id, 'Received')} className="h-7 px-2.5 text-[11.5px] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach</button>}
-                    <button onClick={() => removeDesignDoc(control.id, doc.id)} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
+                    {canEdit && <button onClick={() => removeDesignDoc(control.id, doc.id)} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>}
                   </div>}
                 </div>
               ))}
@@ -516,7 +520,8 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
 }
 
 // ── operating section (TOE) — locked until design effective ───────────────────────
-function OperatingSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
+// canAttest carries the owner's self-attestation lane through to each attribute.
+function OperatingSection({ control, canEdit, canAttest, locked }: { control: Control; canEdit: boolean; canAttest: boolean; locked: boolean }) {
   const { eng, me, setPopulation, validateIpe, setSampling, extendSample, addAttribute, testAllAttributes } = useIcfr();
   const o = control.operating; const prog = operatingProgress(control);
   const anyFail = o.steps.some(s => stepResult(s) === 'Fail');
@@ -644,7 +649,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
           {canEdit && <button onClick={() => setAddingAttr(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-700 cursor-pointer"><Plus size={13} /> Add the first attribute</button>}
         </EmptyState>
       ) : (
-        <div className="space-y-3 mb-1">{o.steps.map(s => <AttributeRow key={s.id} control={control} step={s} canEdit={canEdit} testing={testing && stepResult(s) === 'Not tested'} />)}</div>
+        <div className="space-y-3 mb-1">{o.steps.map(s => <AttributeRow key={s.id} control={control} step={s} canEdit={canEdit} canAttest={canAttest} testing={testing && stepResult(s) === 'Not tested'} />)}</div>
       )}
 
       {o.steps.length > 0 && <ConcludeFooter control={control} which="operating" suggestion={suggestion} canEdit={canEdit} />}
@@ -855,24 +860,33 @@ function MrcLine({ control, canEdit, pm }: { control: Control; canEdit: boolean;
   );
 }
 
-// The freeze notice on a concluded control. Reopening is the auditor's move,
-// needs a reason, and lands in the activity trail; a countersigned engagement
-// is final — no way back in.
-function LockBanner({ engLocked, role, onReopen }: { engLocked: boolean; role: Role; onReopen: (reason: string) => void }) {
+// The freeze notice on a concluded control — headline follows the paper's journey
+// (frozen → signed, with the reviewer → countersigned/final). Reopening is the
+// auditor's move, needs a reason, and lands in the activity trail; a countersigned
+// engagement is final — no way back in.
+function LockBanner({ engLocked, role, control, onReopen, onOpenPaper }: { engLocked: boolean; role: Role; control: Control; onReopen: (reason: string) => void; onOpenPaper: () => void }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
+  const so = control.wpSignoff;
+  const headline = engLocked ? 'Engagement concluded — locked for good.'
+    : so?.reviewer ? 'Concluded & countersigned — this paper is final.'
+    : so?.preparer ? 'Concluded — with the reviewer for countersign.'
+    : 'Concluded — this control is locked.';
+  const sub = engLocked ? 'Signed and countersigned; the record is final.'
+    : so?.reviewer ? `Countersigned by ${so.reviewer.by} · ${so.reviewer.at}.`
+    : so?.preparer ? `Signed by ${so.preparer.by} — the reviewer countersigns or returns it.`
+    : 'Results and evidence are frozen — the preparer signs the working paper next.';
   return (
     <div className="mb-5 rounded-xl border border-mitigated-200 bg-mitigated-50/40 px-4 py-3">
       <div className="flex items-center gap-2.5 flex-wrap">
         <Lock size={14} className="text-mitigated-700 shrink-0" />
-        <span className="text-[12.5px] font-semibold text-ink-800">
-          {engLocked ? 'Engagement concluded — locked for good.' : 'Concluded — this control is locked.'}
-        </span>
-        <span className="text-[12px] text-ink-500">
-          {engLocked ? 'Signed and countersigned; the record is final.' : 'Results and evidence are frozen.'}
-        </span>
-        {!engLocked && role === 'auditor' && !open && (
-          <button onClick={() => setOpen(true)} className="ml-auto h-8 px-3 rounded-lg border border-mitigated-300 text-mitigated-700 text-[12px] font-semibold hover:bg-mitigated-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen control</button>
+        <span className="text-[12.5px] font-semibold text-ink-800">{headline}</span>
+        <span className="text-[12px] text-ink-500">{sub}</span>
+        {!engLocked && role === 'auditor' && (
+          <span className="ml-auto flex items-center gap-2">
+            {!so?.preparer && <button onClick={onOpenPaper} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><PenLine size={13} /> Sign working paper</button>}
+            {!open && <button onClick={() => setOpen(true)} className="h-8 px-3 rounded-lg border border-mitigated-300 text-mitigated-700 text-[12px] font-semibold hover:bg-mitigated-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen control</button>}
+          </span>
         )}
       </div>
       {open && (
@@ -888,17 +902,65 @@ function LockBanner({ engLocked, role, onReopen }: { engLocked: boolean; role: R
   );
 }
 
+// The reviewer's desk on a concluded, preparer-signed paper — the queue routes
+// them here for exactly this choice: countersign to make it final, or return it.
+function ReviewerGate({ control, onCountersign, onReturn }: { control: Control; onCountersign: () => void; onReturn: (reason: string) => void }) {
+  const { addToast } = useToast();
+  const [returning, setReturning] = useState(false);
+  const [reason, setReason] = useState('');
+  const signedBy = control.wpSignoff?.preparer;
+  return (
+    <div className="mb-5 rounded-xl border border-evidence-200 bg-evidence-50/40 px-4 py-3">
+      <div className="flex items-center gap-2.5 flex-wrap">
+        <ShieldCheck size={14} className="text-evidence-700 shrink-0" />
+        <span className="text-[12.5px] font-semibold text-ink-800">In your court — concluded, signed by {signedBy?.by ?? 'the preparer'}.</span>
+        <span className="text-[12px] text-ink-500">Review the evidence below, then countersign or return with a note.</span>
+        <span className="ml-auto flex items-center gap-2">
+          <button onClick={() => { onCountersign(); addToast({ type: 'success', title: 'Countersigned', message: `${control.wpRef} is signed off — the paper is final.` }); }}
+            className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold hover:bg-evidence-700 cursor-pointer inline-flex items-center gap-1.5"><PenLine size={13} /> Countersign &amp; sign off</button>
+          <button onClick={() => setReturning(o => !o)} className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[12px] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><CornerDownRight size={13} /> Return to auditor</button>
+        </span>
+      </div>
+      {returning && (
+        <div className="flex items-center gap-2 mt-2.5">
+          <input autoFocus value={reason} onChange={e => setReason(e.target.value)} placeholder="What needs rework? — recorded on the dossier and in the trail"
+            className="h-9 flex-1 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+          <button disabled={!reason.trim()} onClick={() => { onReturn(reason.trim()); addToast({ type: 'warning', title: 'Returned to the auditor', message: 'Conclusions cleared — your note rides on the dossier.' }); }}
+            className="h-9 px-3.5 rounded-lg bg-high-600 text-white text-[12px] font-semibold enabled:hover:bg-high-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Return</button>
+          <button onClick={() => { setReturning(false); setReason(''); }} className="h-9 px-3 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Cancel</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The reviewer's return note rides on the reopened dossier until the auditor re-concludes.
+function ReturnedBanner({ ret }: { ret: NonNullable<Control['reviewReturn']> }) {
+  return (
+    <div className="mb-5 rounded-xl border border-high-200 bg-high-50/50 px-4 py-3 flex items-start gap-2.5">
+      <CornerDownRight size={15} className="text-high-700 shrink-0 mt-0.5" />
+      <div>
+        <div className="text-[12.5px] font-semibold text-ink-800">Returned by the reviewer — “{ret.reason}”</div>
+        <div className="text-[11.5px] text-ink-500">{ret.by} · {ret.at} — rework the flagged areas and conclude again; the paper then goes back for countersign.</div>
+      </div>
+    </div>
+  );
+}
+
 export default function ControlDossier() {
-  const { eng, role, selectedControlId, back, setView, reopenControl } = useIcfr();
+  const { eng, role, selectedControlId, back, setView, reopenControl, signOffControlWp, returnControl } = useIcfr();
   // preview-before-download for the working paper (sign-off travels with it)
   const [wpPreview, setWpPreview] = useState(false);
   const control = eng.controls.find(c => c.id === selectedControlId);
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Back to register</button></div>;
-  // Both personas can execute TOD and TOE — until the control concludes. A concluded
+  // Three pens on one paper: the auditor tests (canEdit), the owner contributes
+  // evidence — documents and attestations (canContribute) — and the reviewer only
+  // reads until the control concludes, then countersigns or returns it. A concluded
   // control (or a countersigned engagement) is frozen; reopening requires a reason.
   const engLocked = isEngagementLocked(eng);
   const controlLocked = isControlLocked(control);
-  const canEdit = (role === 'auditor' || role === 'risk-owner') && !controlLocked && !engLocked;
+  const canEdit = role === 'auditor' && !controlLocked && !engLocked;
+  const canContribute = (role === 'auditor' || role === 'risk-owner') && !controlLocked && !engLocked;
   const concl = controlConclusion(control);
   const designResult = trackResult(control.design);
   const opResult = trackResult(control.operating);
@@ -942,25 +1004,28 @@ export default function ControlDossier() {
             <span className="text-[11.5px] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> Operating {toeLocked ? 'locked' : opResult}</span>
             <div className="ml-auto flex items-center gap-2">
               <button onClick={() => setWpPreview(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Download size={13} /> Working paper</button>
-              <span className="text-[11px] text-ink-400 inline-flex items-center gap-1">Auditor &amp; risk owner both test · every run is logged in History</span>
+              <span className="text-[11px] text-ink-400 inline-flex items-center gap-1">Auditor tests · owner attests &amp; uploads · reviewer signs off — every run is logged in History</span>
             </div>
           </div>
         </div>
       </motion.div>
 
       {(controlLocked || engLocked) && (
-        <LockBanner engLocked={engLocked} role={role} onReopen={reason => reopenControl(control.id, reason)} />
+        role === 'reviewer' && !engLocked && !!control.wpSignoff?.preparer && !control.wpSignoff?.reviewer
+          ? <ReviewerGate control={control} onCountersign={() => signOffControlWp(control.id, 'reviewer')} onReturn={reason => returnControl(control.id, reason)} />
+          : <LockBanner engLocked={engLocked} role={role} control={control} onReopen={reason => reopenControl(control.id, reason)} onOpenPaper={() => setWpPreview(true)} />
       )}
+      {!controlLocked && !engLocked && control.reviewReturn && <ReturnedBanner ret={control.reviewReturn} />}
 
       {/* stepper + discussion */}
       <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
         <motion.div className="vstepper" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } } }}>
           <VStep n={1} title="Test of design" subtitle="Is the control designed to prevent or detect the risk? Grounded in the documents and walkthrough — each consideration validated by a workflow." status={designResult}>
-            <DesignSection control={control} canEdit={canEdit} />
+            <DesignSection control={control} canEdit={canEdit} canContribute={canContribute} />
           </VStep>
           <VStep n={2} title="Test of operating effectiveness" subtitle="Did the control operate as designed across the period? Each attribute is evidenced on its own — by its workflow, or self-attested." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
             right={toeLocked ? <span className="text-[11px] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks after design</span> : undefined}>
-            <OperatingSection control={control} canEdit={canEdit} locked={toeLocked} />
+            <OperatingSection control={control} canEdit={canEdit} canAttest={canContribute} locked={toeLocked} />
           </VStep>
           {concl === 'Ineffective' && (
             <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }} className="ml-[54px] rounded-xl border border-risk-200 bg-risk-50/40 p-4 mt-1">

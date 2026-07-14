@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import { CheckCircle2, Circle, Download, FileSpreadsheet, PenLine, X } from 'lucide-react';
-import { controlConclusion, icfrConclusion, isControlLocked, isEngagementLocked, openMaterialWeaknesses } from './helpers';
+import { controlConclusion, icfrConclusion, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses } from './helpers';
 import { buildControlPaper, downloadControlWorkingPaper, downloadIcfrWorkingPaper, SIGNOFF_TITLE, type PaperBlock } from './icfrWorkingPaper';
 import { useIcfr } from './store';
 import { cn } from '../../lib/cn';
@@ -122,8 +122,9 @@ function EngagementSignoff({ eng }: { eng: IcfrEngagement }) {
   const stamped = !!so.icfrConclusion;
   const effective = conclusion !== 'Not effective';
   const mwOpen = openMaterialWeaknesses(eng).length;
-  const concluded = eng.controls.filter(isControlLocked).length;
-  const ready = eng.controls.length > 0 && concluded === eng.controls.length;
+  // same gate as Overview: every paper concluded AND countersigned by the reviewer
+  const reviewed = eng.controls.filter(isControlFinal).length;
+  const ready = eng.controls.length > 0 && reviewed === eng.controls.length;
   const canSign = role === 'auditor' && ready && !so.preparer;
   const canCounter = role === 'reviewer' && !!so.preparer && !so.reviewer;
   return (
@@ -138,7 +139,7 @@ function EngagementSignoff({ eng }: { eng: IcfrEngagement }) {
             className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Sign off as preparer</button>
         )}
         {role === 'auditor' && !ready && !so.preparer && (
-          <span className="ml-auto shrink-0 text-[10.5px] text-ink-400">{concluded}/{eng.controls.length} controls concluded — sign-off unlocks when all conclude</span>
+          <span className="ml-auto shrink-0 text-[10.5px] text-ink-400">{reviewed}/{eng.controls.length} papers countersigned — sign-off unlocks when every paper is reviewed</span>
         )}
       </div>
       <div className="flex items-center gap-2 text-[12.5px]">

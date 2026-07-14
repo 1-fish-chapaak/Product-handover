@@ -140,6 +140,8 @@ interface IcfrCtx {
   reopenControl: (controlId: string, reason: string) => void;
   // per-working-paper sign-off — auditor signs a concluded control's paper, reviewer countersigns
   signOffControlWp: (controlId: string, step: 'preparer' | 'reviewer') => void;
+  // the reviewer's other verb — send the concluded paper back with a note instead of countersigning
+  returnControl: (controlId: string, reason: string) => void;
   // testing period — interim vs year-end, and the roll-forward that moves between them
   togglePeriod: () => void;
   rollForward: () => void;
@@ -229,14 +231,18 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [tab, returnView]);
 
   // ── design track ──────────────────────────────────────────────────────────────
+  // D1 role gates: testing is the auditor's pen alone. The owner contributes
+  // evidence — documents and attestations — and the reviewer only reads & signs.
   const setDocStatus = useCallback<IcfrCtx['setDocStatus']>((controlId, docId, status) => {
+    if (role === 'reviewer') return;   // owner uploads, auditor can attach on their behalf
     patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: c.design.documents.map(d => d.id === docId ? { ...d, status, uploadedBy: status === 'Received' ? 'Risk Owner' : d.uploadedBy, at: status === 'Received' ? 'just now' : d.at } : d) } }));
     if (status === 'Received') pushExec(prev => { const d = prev.controls.find(c => c.id === controlId)?.design.documents.find(dd => dd.id === docId); return d ? { controlId, track: 'design', kind: 'receive-doc', verb: 'marked received', target: d.kind } : null; });
-  }, [patchControl, pushExec]);
+  }, [patchControl, pushExec, role]);
 
   const setDesignPoint = useCallback<IcfrCtx['setDesignPoint']>((controlId, pointId, result) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, design: { ...c.design, points: c.design.points.map(p => p.id === pointId ? { ...p, result } : p) } }));
-  }, [patchControl]);
+  }, [patchControl, role]);
 
   // An ineffective track never fizzles — it raises its exception automatically.
   // Runs against post-action state (queued after the conclude/override setEng),
@@ -273,41 +279,51 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, []);
 
   const concludeDesign = useCallback<IcfrCtx['concludeDesign']>((controlId, conclusion) => {
-    patchControl(controlId, c => ({ ...c, design: { ...c.design, conclusion, testedBy: me, testedAt: 'just now' } }));
+    if (role !== 'auditor') return;
+    // re-concluding clears a reviewer's return note — the rework happened
+    patchControl(controlId, c => ({ ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, design: { ...c.design, conclusion, testedBy: me, testedAt: 'just now' } }));
     if (conclusion !== 'Not tested') pushExec(() => ({ controlId, track: 'design', kind: 'conclude', verb: `concluded design ${conclusion.toLowerCase()}`, result: conclusion }));
     if (conclusion === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'design');
-  }, [patchControl, me, pushExec, raiseDeficiencyIfIneffective]);
+  }, [patchControl, me, role, pushExec, raiseDeficiencyIfIneffective]);
 
   const overrideDesign = useCallback<IcfrCtx['overrideDesign']>((controlId, override) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, design: { ...c.design, override: override ?? undefined } }));
     if (override) pushExec(() => ({ controlId, track: 'design', kind: 'override', verb: 'overrode the design conclusion', result: override.result === 'Effective' ? 'Effective' : 'Ineffective' }));
     if (override?.result === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'design');
-  }, [patchControl, pushExec, raiseDeficiencyIfIneffective]);
+  }, [patchControl, role, pushExec, raiseDeficiencyIfIneffective]);
 
   const addDesignDoc = useCallback<IcfrCtx['addDesignDoc']>((controlId, kind) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: [...c.design.documents, { id: uid('dd'), kind, name: `${kind} — to provide`, status: 'Missing' } as DesignDoc] } }));
-  }, [patchControl]);
+  }, [patchControl, role]);
   const removeDesignDoc = useCallback<IcfrCtx['removeDesignDoc']>((controlId, docId) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, design: { ...c.design, documents: c.design.documents.filter(d => d.id !== docId) } }));
-  }, [patchControl]);
+  }, [patchControl, role]);
   const addDesignPoint = useCallback<IcfrCtx['addDesignPoint']>((controlId, text) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, design: { ...c.design, points: [...c.design.points, { id: uid('dp'), text, result: 'Not tested', workflowId: uid('wf-tod'), workflowName: 'Design walkthrough check' } as DesignPoint] } }));
-  }, [patchControl]);
+  }, [patchControl, role]);
   const removeDesignPoint = useCallback<IcfrCtx['removeDesignPoint']>((controlId, pointId) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, design: { ...c.design, points: c.design.points.filter(p => p.id !== pointId) } }));
-  }, [patchControl]);
+  }, [patchControl, role]);
   const validateDesignPoint = useCallback<IcfrCtx['validateDesignPoint']>((controlId, pointId) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, design: { ...c.design, points: c.design.points.map(p => {
       if (p.id !== pointId) return p;
       const willFail = (p.override ? p.override.result : p.result) === 'Fail';
       return { ...p, result: willFail ? 'Fail' : 'Pass', override: undefined, workflowRunRef: 'run · validated · just now', validation: { qa: validationQA(p.text, willFail), at: 'just now' } };
     }) } }));
     pushExec(prev => { const p = prev.controls.find(c => c.id === controlId)?.design.points.find(pt => pt.id === pointId); return p ? { controlId, track: 'design', kind: 'validate', verb: 'validated', target: short(p.text), result: p.result } : null; });
-  }, [patchControl, pushExec]);
+  }, [patchControl, pushExec, role]);
   const overrideDesignPoint = useCallback<IcfrCtx['overrideDesignPoint']>((controlId, pointId, override) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, design: { ...c.design, points: c.design.points.map(p => p.id === pointId ? { ...p, override: override ?? undefined } : p) } }));
-  }, [patchControl]);
+  }, [patchControl, role]);
   const requestDataByEmail = useCallback<IcfrCtx['requestDataByEmail']>((controlId, docIds, emails) => {
+    if (role !== 'auditor') return;
     setEng(prev => {
       const ctrl = prev.controls.find(c => c.id === controlId);
       const kinds = ctrl ? ctrl.design.documents.filter(d => docIds.includes(d.id)).map(d => d.kind) : [];
@@ -315,17 +331,19 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       return { ...prev, controls: prev.controls.map(c => c.id === controlId ? { ...c, design: { ...c.design, documents: c.design.documents.map(d => docIds.includes(d.id) ? { ...d, status: 'Requested' as DocStatus } : d) } } : c), tasks: [...prev.tasks, task] };
     });
     pushExec(() => ({ controlId, track: 'design', kind: 'request-docs', verb: `requested ${docIds.length} design document${docIds.length === 1 ? '' : 's'}` }));
-  }, [me, pushExec]);
+  }, [me, pushExec, role]);
 
   // ── operating track ───────────────────────────────────────────────────────────
   const setPopulation = useCallback<IcfrCtx['setPopulation']>((controlId, population) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, population } }));
-  }, [patchControl]);
+  }, [patchControl, role]);
 
   // Tag / untag a management review control and keep its investigation threshold.
   const setMrc = useCallback<IcfrCtx['setMrc']>((controlId, isMrc, threshold) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, isMrc, mrcThreshold: isMrc ? (threshold ?? c.mrcThreshold) : undefined }));
-  }, [patchControl]);
+  }, [patchControl, role]);
 
   // Scoping front door — accounts are editable: in/out of scope, relevant
   // assertions, WCGW statements. Frozen once the engagement is countersigned.
@@ -335,16 +353,19 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
 
   // IPE check — the system report is only reliable once someone has validated it.
   const validateIpe = useCallback<IcfrCtx['validateIpe']>((controlId) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => c.operating.population ? ({ ...c, operating: { ...c.operating, population: { ...c.operating.population, ipeValidated: { by: me, at: 'just now' } } } }) : c);
     pushExec(() => ({ controlId, track: 'operating', kind: 'population', verb: 'validated the population (IPE) — completeness & accuracy' }));
-  }, [patchControl, me, pushExec]);
+  }, [patchControl, me, pushExec, role]);
 
   const setSampling = useCallback<IcfrCtx['setSampling']>((controlId, sampling) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, sampling } }));
-  }, [patchControl]);
+  }, [patchControl, role]);
 
   // Any failure means extend the sample — never "small miss, ignore" (handbook).
   const extendSample = useCallback<IcfrCtx['extendSample']>((controlId, extra) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => {
       const s = c.operating.sampling;
       if (!s) return c;
@@ -352,15 +373,17 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       return { ...c, operating: { ...c.operating, sampling: { ...s, size: s.size + extra, samples: [...s.samples, ...added], basis: `${s.size + extra} items — extended +${extra} after a failure (a miss is never ignored).` } } };
     });
     pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: `extended the sample by ${extra} after a failure`, target: `+${extra} items` }));
-  }, [patchControl, pushExec]);
+  }, [patchControl, pushExec, role]);
 
   const setStepResult = useCallback<IcfrCtx['setStepResult']>((controlId, stepId, result) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => s.id === stepId ? stampSamples(c, { ...s, result }, result) : s) } }));
-  }, [patchControl]);
+  }, [patchControl, role]);
 
   // Record one attribute's result against ONE drawn sample; the attribute's own
   // result derives from its samples (any fail ⇒ Fail, all pass ⇒ Pass).
   const setSampleResult = useCallback<IcfrCtx['setSampleResult']>((controlId, stepId, sampleId, result) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => {
       const samp = c.operating.sampling;
       if (!samp) return c;
@@ -372,11 +395,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         return { ...s, sampleResults: m, result: derived };
       }) } };
     });
-  }, [patchControl]);
+  }, [patchControl, role]);
 
   const overrideStep = useCallback<IcfrCtx['overrideStep']>((controlId, stepId, override) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => s.id === stepId ? { ...s, override: override ?? undefined } : s) } }));
-  }, [patchControl]);
+  }, [patchControl, role]);
 
   const patchStep = useCallback((controlId: string, stepId: string, fn: (s: OperatingStep, c: Control) => OperatingStep) => {
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => s.id === stepId ? fn(s, c) : s) } }));
@@ -400,6 +424,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   });
 
   const pullStepRun = useCallback<IcfrCtx['pullStepRun']>((controlId, stepId) => {
+    if (role !== 'auditor') return;
     patchStep(controlId, stepId, (s, c) => {
       const res = s.result === 'Not tested' ? 'Pass' : s.result;
       return stampSamples(c, { ...s, workflowRunRef: `${wfRunRef(controlId + s.id, res === 'Fail')} · just now`, result: res }, res);
@@ -415,9 +440,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         controls: [{ controlId: c.id, wpRef: c.wpRef, description: c.description, outcome: s.result === 'Fail' ? 'Ineffective' : 'Effective', checks: 1 }],
       };
     });
-  }, [patchStep, pushExec, pushRun]);
+  }, [patchStep, pushExec, pushRun, role]);
 
+  // Self-attestation stays a first-line voice — owner or auditor, never the reviewer.
   const attestStep = useCallback<IcfrCtx['attestStep']>((controlId, stepId, note, result) => {
+    if (role === 'reviewer') return;
     patchStep(controlId, stepId, (s, c) => {
       const att: Attestation = { result, note, by: me, role, at: 'just now', evidence: s.attestation?.evidence ?? [] };
       return stampSamples(c, { ...s, attestEnabled: true, attestation: att, result }, result);   // a manual attestation IS the attribute's result
@@ -426,6 +453,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [patchStep, me, role, pushExec]);
 
   const addStepEvidence = useCallback<IcfrCtx['addStepEvidence']>((controlId, stepId, fileName) => {
+    if (role === 'reviewer') return;
     patchStep(controlId, stepId, s => {
       const ev: EvidenceFile = { id: uid('f'), name: fileName, kind: fileName.endsWith('.xlsx') ? 'XLSX' : 'PDF', uploadedBy: me, uploadedAt: 'just now' };
       const att: Attestation = s.attestation ?? { note: '', by: me, role, at: 'just now', evidence: [] };
@@ -434,31 +462,39 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [patchStep, me, role]);
 
   const setStepInputFile = useCallback<IcfrCtx['setStepInputFile']>((controlId, stepId, fileName) => {
+    if (role !== 'auditor') return;
     patchStep(controlId, stepId, s => ({ ...s, inputFile: { id: uid('f'), name: fileName, kind: fileName.endsWith('.xlsx') ? 'XLSX' : fileName.endsWith('.csv') ? 'CSV' : 'PDF', uploadedBy: me, uploadedAt: 'just now' } }));
-  }, [patchStep, me]);
+  }, [patchStep, me, role]);
 
   const addAttribute = useCallback<IcfrCtx['addAttribute']>((controlId, description) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => {
       const step: OperatingStep = { id: uid('os'), code: `${c.wpRef}.${c.operating.steps.length + 1}`, description, assertion: 'Accuracy', precision: 'Per item', procedures: ['Inspection'], result: 'Not tested' };
       return { ...c, operating: { ...c.operating, steps: [...c.operating.steps, step] } };
     });
-  }, [patchControl]);
+  }, [patchControl, role]);
   const removeAttribute = useCallback<IcfrCtx['removeAttribute']>((controlId, stepId) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.filter(s => s.id !== stepId) } }));
-  }, [patchControl]);
+  }, [patchControl, role]);
   const mapStepWorkflow = useCallback<IcfrCtx['mapStepWorkflow']>((controlId, stepId, name) => {
+    if (role !== 'auditor') return;
     patchStep(controlId, stepId, s => ({ ...s, evidenceMode: 'workflow', workflowId: uid('wf'), workflowName: name, workflowRunRef: undefined }));
-  }, [patchStep]);
+  }, [patchStep, role]);
   const setStepEvidenceMode = useCallback<IcfrCtx['setStepEvidenceMode']>((controlId, stepId, mode) => {
+    if (role !== 'auditor') return;
     patchStep(controlId, stepId, s => ({ ...s, evidenceMode: mode }));
-  }, [patchStep]);
+  }, [patchStep, role]);
   const toggleStepAttest = useCallback<IcfrCtx['toggleStepAttest']>((controlId, stepId, enabled) => {
+    if (role === 'reviewer') return;
     patchStep(controlId, stepId, s => ({ ...s, attestEnabled: enabled }));
-  }, [patchStep]);
+  }, [patchStep, role]);
   const toggleStepAI = useCallback<IcfrCtx['toggleStepAI']>((controlId, stepId, on) => {
+    if (role !== 'auditor') return;
     patchStep(controlId, stepId, s => ({ ...s, aiValidation: on }));
-  }, [patchStep]);
+  }, [patchStep, role]);
   const runStepValidation = useCallback<IcfrCtx['runStepValidation']>((controlId, stepId) => {
+    if (role !== 'auditor') return;
     patchStep(controlId, stepId, (s, c) => {
       const willFail = (s.override ? s.override.result : s.result) === 'Fail';
       const res: TestResult = willFail ? 'Fail' : 'Pass';
@@ -475,8 +511,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         controls: [{ controlId: c.id, wpRef: c.wpRef, description: c.description, outcome: s.result === 'Fail' ? 'Ineffective' : 'Effective', checks: 1 }],
       };
     });
-  }, [patchStep, pushExec, pushRun]);
+  }, [patchStep, pushExec, pushRun, role]);
   const testAllAttributes = useCallback<IcfrCtx['testAllAttributes']>((controlId) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => {
       const fail = s.result === 'Fail' || s.override?.result === 'Fail';
       const res: TestResult = fail ? 'Fail' : 'Pass';
@@ -497,19 +534,22 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         controls: [controlOutcome(c)],
       };
     });
-  }, [patchControl, pushExec, pushRun]);
+  }, [patchControl, pushExec, pushRun, role]);
 
   const concludeOperating = useCallback<IcfrCtx['concludeOperating']>((controlId, conclusion) => {
-    patchControl(controlId, c => ({ ...c, operating: { ...c.operating, conclusion, testedBy: me, testedAt: 'just now' } }));
+    if (role !== 'auditor') return;
+    // re-concluding clears a reviewer's return note — the rework happened
+    patchControl(controlId, c => ({ ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, operating: { ...c.operating, conclusion, testedBy: me, testedAt: 'just now' } }));
     if (conclusion !== 'Not tested') pushExec(() => ({ controlId, track: 'operating', kind: 'conclude', verb: `concluded operating ${conclusion.toLowerCase()}`, result: conclusion }));
     if (conclusion === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'operating');
-  }, [patchControl, me, pushExec, raiseDeficiencyIfIneffective]);
+  }, [patchControl, me, role, pushExec, raiseDeficiencyIfIneffective]);
 
   const overrideOperating = useCallback<IcfrCtx['overrideOperating']>((controlId, override) => {
+    if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, override: override ?? undefined } }));
     if (override) pushExec(() => ({ controlId, track: 'operating', kind: 'override', verb: 'overrode the operating conclusion', result: override.result === 'Effective' ? 'Effective' : 'Ineffective' }));
     if (override?.result === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'operating');
-  }, [patchControl, pushExec, raiseDeficiencyIfIneffective]);
+  }, [patchControl, role, pushExec, raiseDeficiencyIfIneffective]);
 
   // ── RACM row review + bulk testing ────────────────────────────────────────────
   const approveRacmRows = useCallback<IcfrCtx['approveRacmRows']>((controlIds) => {
@@ -529,6 +569,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // test every operating attribute (an existing Fail / overridden Fail stays Fail),
   // then conclude each track from its results. One trail entry per control.
   const bulkTestControls = useCallback<IcfrCtx['bulkTestControls']>((controlIds) => {
+    if (role !== 'auditor') return;
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
       // concluded controls are frozen — a bulk run silently skips them
@@ -634,6 +675,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [me]);
 
   const requestDesignDocs = useCallback<IcfrCtx['requestDesignDocs']>((controlIds) => {
+    if (role !== 'auditor') return;
     setEng(prev => {
       const ids = new Set(controlIds);
       const newTasks: HandoffTask[] = [];
@@ -794,6 +836,34 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [me, role]);
 
+  // Return instead of countersign: both track conclusions clear (results stay,
+  // like a reopen), signatures void, and the reviewer's note lands on the dossier
+  // — the control walks back into the auditor's court until it re-concludes.
+  const returnControl = useCallback<IcfrCtx['returnControl']>((controlId, reason) => {
+    if (role !== 'reviewer') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.controls.find(c => c.id === controlId);
+      if (!target || !isControlLocked(target) || target.wpSignoff?.reviewer) return prev;
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId, track: 'operating', kind: 'review-return',
+        verb: 'returned the control to the auditor', target: reason ? short(reason, 80) : undefined,
+        by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        controls: prev.controls.map(c => c.id === controlId ? {
+          ...c,
+          design: { ...c.design, conclusion: 'Not tested', override: undefined, testedBy: null, testedAt: null },
+          operating: { ...c.operating, conclusion: 'Not tested', override: undefined, testedBy: null, testedAt: null },
+          wpSignoff: undefined,
+          reviewReturn: { reason, by: me, at: 'just now' },
+        } : c),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
   // Create a control from the focused form — W/P ref and ID continue the
   // process's existing numbering; the control lands ready to test.
   const addControl = useCallback<IcfrCtx['addControl']>((draft) => {
@@ -874,9 +944,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence,
-    addControl, signOffEngagement, reopenControl, signOffControlWp,
+    addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl,
     togglePeriod, rollForward,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, togglePeriod, rollForward]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, togglePeriod, rollForward]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

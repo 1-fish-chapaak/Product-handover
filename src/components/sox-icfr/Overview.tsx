@@ -37,9 +37,10 @@ export default function Overview() {
   const M = eng.materiality;
   const isOwner = role === 'risk-owner';
 
-  // sign-off readiness — unlocks once every control has a conclusion
+  // sign-off readiness — every control concluded AND its paper countersigned;
+  // the reviewer's per-paper gate feeds the engagement-level one.
   const concludedCount = stats.effective + stats.ineffective;
-  const signoffReady = stats.total > 0 && concludedCount === stats.total;
+  const signoffReady = stats.total > 0 && stats.reviewed === stats.total;
   const so = eng.signoff;
   const isConcluded = !!(so.preparer && so.reviewer);
 
@@ -95,6 +96,7 @@ export default function Overview() {
     { k: 'Operating concluded', v: `${stats.operatingDone}/${stats.total}`, t: 'text-evidence-700' },
     { k: 'Effective', v: stats.effective, t: 'text-compliant-700' },
     { k: 'Ineffective', v: stats.ineffective, t: 'text-risk-700' },
+    { k: 'Awaiting review', v: stats.awaitingReview, t: 'text-evidence-700' },
     { k: 'Waiting on owner', v: stats.waitingOnOwner, t: 'text-mitigated-700' },
   ];
 
@@ -116,7 +118,7 @@ export default function Overview() {
       {role === 'reviewer' && <ReviewerQueue />}
 
       {/* progress rail */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {tiles.map(s => (
           <div key={s.k} className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3">
             <div className={cn('text-[20px] font-bold tabular-nums', s.t)}>{s.v}</div>
@@ -216,8 +218,9 @@ export default function Overview() {
               )}
               {openOther > 0 && <span className="inline-flex items-center gap-1.5 text-ink-700"><Circle size={11} className="text-high-600" /> {openOther} exception{openOther === 1 ? '' : 's'} still in the lifecycle (remediate → retest → reviewer close)</span>}
               {unconcluded > 0 && <span className="inline-flex items-center gap-1.5 text-ink-700"><Circle size={11} className="text-ink-400" /> {unconcluded} control{unconcluded === 1 ? '' : 's'} not concluded</span>}
+              {stats.total - stats.reviewed - unconcluded > 0 && <span className="inline-flex items-center gap-1.5 text-ink-700"><Circle size={11} className="text-evidence-600" /> {stats.total - stats.reviewed - unconcluded} paper{stats.total - stats.reviewed - unconcluded === 1 ? '' : 's'} awaiting sign-off / countersign</span>}
               <span className="inline-flex items-center gap-1.5 text-ink-500"><PenLine size={12} /> then: {so.preparer ? 'reviewer countersign' : 'preparer sign-off + reviewer countersign'}</span>
-              {sev.mwOpen === 0 && openOther === 0 && unconcluded === 0 && <span className="inline-flex items-center gap-1.5 font-semibold text-compliant-700"><CheckCircle2 size={13} /> Nothing outstanding — ready to conclude</span>}
+              {sev.mwOpen === 0 && openOther === 0 && unconcluded === 0 && stats.reviewed === stats.total && <span className="inline-flex items-center gap-1.5 font-semibold text-compliant-700"><CheckCircle2 size={13} /> Nothing outstanding — ready to conclude</span>}
             </div>
           </section>
         );
@@ -232,8 +235,8 @@ export default function Overview() {
               {isConcluded
                 ? 'Signed and countersigned — this engagement is concluded.'
                 : signoffReady
-                  ? 'Every control is concluded — the engagement is ready for sign-off.'
-                  : 'Unlocks when every control has a conclusion. The preparer signs first; the reviewer countersigns to conclude the engagement.'}
+                  ? 'Every control is concluded and countersigned — the engagement is ready for sign-off.'
+                  : 'Unlocks when every control is concluded and its working paper countersigned by the reviewer. The preparer signs first; the reviewer countersigns to conclude the engagement.'}
             </p>
             {(signoffReady || !!so.preparer) && (
               <div className={cn('inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-semibold',
@@ -248,7 +251,7 @@ export default function Overview() {
             )}
             <div className="flex items-center gap-4 mt-2.5 flex-wrap text-[12px]">
               <span className={cn('inline-flex items-center gap-1.5 font-semibold', signoffReady ? 'text-compliant-700' : 'text-ink-500')}>
-                {signoffReady ? <CheckCircle2 size={13} /> : <Circle size={13} />} {concludedCount}/{stats.total} controls concluded
+                {signoffReady ? <CheckCircle2 size={13} /> : <Circle size={13} />} {concludedCount}/{stats.total} concluded · {stats.reviewed}/{stats.total} countersigned
               </span>
               <span className="inline-flex items-center gap-1.5 text-ink-500">
                 <AlertTriangle size={12} className={sev.open ? 'text-high-600' : 'text-ink-300'} /> {sev.open} exception{sev.open === 1 ? '' : 's'} open
