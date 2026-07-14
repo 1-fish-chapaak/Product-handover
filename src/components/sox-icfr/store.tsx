@@ -138,6 +138,8 @@ interface IcfrCtx {
   signOffEngagement: (step: 'preparer' | 'reviewer') => void;
   // unlock a concluded control — auditor only, reason required, logged in the trail
   reopenControl: (controlId: string, reason: string) => void;
+  // per-working-paper sign-off — auditor signs a concluded control's paper, reviewer countersigns
+  signOffControlWp: (controlId: string, step: 'preparer' | 'reviewer') => void;
   // testing period — interim vs year-end, and the roll-forward that moves between them
   togglePeriod: () => void;
   rollForward: () => void;
@@ -756,6 +758,36 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           ...c,
           design: { ...c.design, conclusion: 'Not tested', override: undefined, testedBy: null, testedAt: null },
           operating: { ...c.operating, conclusion: 'Not tested', override: undefined, testedBy: null, testedAt: null },
+          wpSignoff: undefined, // a reopened control's paper is no longer the signed one
+        } : c),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
+  // Per-working-paper sign-off: the auditor signs a control's paper once that
+  // control is concluded; the reviewer countersigns after. Reopening clears both.
+  const signOffControlWp = useCallback<IcfrCtx['signOffControlWp']>((controlId, step) => {
+    if (step === 'preparer' && role !== 'auditor') return;
+    if (step === 'reviewer' && role !== 'reviewer') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.controls.find(c => c.id === controlId);
+      if (!target || !isControlLocked(target)) return prev;               // only a concluded control's paper can be signed
+      if (step === 'preparer' && target.wpSignoff?.preparer) return prev; // already signed
+      if (step === 'reviewer' && (!target.wpSignoff?.preparer || target.wpSignoff.reviewer)) return prev; // countersign follows the preparer
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId, track: 'operating', kind: 'wp-signoff',
+        verb: step === 'preparer' ? 'signed off the working paper' : 'countersigned the working paper',
+        by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        controls: prev.controls.map(c => c.id === controlId ? {
+          ...c,
+          wpSignoff: step === 'preparer'
+            ? { ...c.wpSignoff, preparer: { by: me, at: 'just now' } }
+            : { ...c.wpSignoff, reviewer: { by: me, at: 'just now' } },
         } : c),
         executions: [event, ...prev.executions],
       };
@@ -842,9 +874,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence,
-    addControl, signOffEngagement, reopenControl,
+    addControl, signOffEngagement, reopenControl, signOffControlWp,
     togglePeriod, rollForward,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, togglePeriod, rollForward]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, togglePeriod, rollForward]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -192,6 +192,10 @@ export interface Control {
   racmReview?: RacmReview;
   design: DesignTrack;
   operating: OperatingTrack;
+  /** Audit-side sign-off on THIS working paper — the preparer (auditor hat) signs
+   *  once the control is concluded; the reviewer countersigns. Separate from the
+   *  engagement-level opinion sign-off. */
+  wpSignoff?: { preparer?: SignoffEntry; reviewer?: SignoffEntry };
 }
 
 // ─── Discussions (role-tagged threads) ──────────────────────────────────────────
@@ -284,7 +288,7 @@ export interface MaterialityRules {
 // so the auditor and the risk owner each see what the other ran on a control, and when.
 export type ExecKind =
   | 'validate' | 'test-all' | 'pull-run' | 'attest' | 'conclude'
-  | 'override' | 'request-docs' | 'receive-doc' | 'population' | 'sample' | 'reopen';
+  | 'override' | 'request-docs' | 'receive-doc' | 'population' | 'sample' | 'reopen' | 'wp-signoff';
 export interface ExecutionEvent {
   id: string;
   controlId: string;
