@@ -16,7 +16,7 @@ import { PlanSection, type ExecutorParameters } from '../concierge-workflow-buil
 import ExecutorColumnMapping from './ExecutorColumnMapping';
 import SlotFunctionTag from './SlotFunctionTag';
 import ArtifactPanel from '../artifacts/ArtifactPanel';
-import WorkflowMemoryPanel, { RowMemoryMarker, GoldenRecordPlanCard, SourceDriftBanner } from './WorkflowMemoryPanel';
+import { RowMemoryMarker, GoldenRecordPlanCard, SourceDriftBanner } from './WorkflowMemoryPanel';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { seedAlignments } from '../concierge-workflow-builder/mockApi';
 import type {
@@ -33,6 +33,7 @@ import { DATA_SOURCES } from '../../data/mockData';
 import { useCan } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
 import WorkflowOutputInsight, { type OutputInsight } from './WorkflowOutputInsight';
+import WorkflowFollowUpInsights from './WorkflowFollowUpInsights';
 import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
 
 interface WorkflowExecutorProps {
@@ -2863,15 +2864,6 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     </button>
                   </div>
 
-                  {/* What memory knows — cross-workflow correlation + output
-                      compare, shown beneath the output and its actions as
-                      supporting context. The source-drift conflict is resolved
-                      earlier on the confirm-mapping screen (before approve &
-                      run), so it's suppressed here rather than gating the output. */}
-                  <div className="mb-5">
-                    <WorkflowMemoryPanel showSourceDrift={false} />
-                  </div>
-
                   {/* Follow-up — the primary next step off the results, sitting
                       directly under the run's action buttons. */}
                   {onFollowUp && (
@@ -2936,10 +2928,14 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     </motion.div>
                   )}
 
-                  {/* (Compare-vs-last-run + cross-workflow correlation now render
-                      via WorkflowMemoryPanel above — the redesigned canonical
-                      memory surface — so the older follow-up cards are retired
-                      here to avoid showing the same two insights twice.) */}
+                  {/* Ira looked beyond this run — the two AI-insight cards
+                      (a. compare with previous output, b. cross-workflow
+                      correlation), after the follow-up composer. Each card's
+                      "what to do next" seeds that composer. */}
+                  <div className="mt-5">
+                    <WorkflowFollowUpInsights onAction={submitFollowUp} />
+                  </div>
+
                 </motion.section>
               )}
             </AnimatePresence>
