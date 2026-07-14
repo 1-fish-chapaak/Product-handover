@@ -154,22 +154,52 @@ export function validationQA(text: string, fail: boolean): ValidationQA[] {
   ];
 }
 
-/** Plain-language summary the AI returns after checking the uploaded file. */
-export function validationSummary(text: string, fail: boolean): string {
-  return fail
-    ? `The uploaded file does not fully support “${text}”. 1 of 3 sampled items breaks the control — the required approval/threshold could not be evidenced for that item, so the attribute is concluded Fail. Item-level results are in the table below.`
-    : `The uploaded file supports “${text}”. All 3 sampled items met the control — the required approval and threshold were present and within policy on each. No exceptions found, so the attribute is concluded Pass.`;
+// ── deterministic "real" results — every run reads like an actual test, and two
+//    different attributes never return the same numbers/documents ───────────────
+const hnum = (s: string): number => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
+const SAMPLE_VENDORS = [
+  'Indian Oil Skytanking', 'Boeing Distribution Services', 'TajSATS Air Catering', 'Menzies Aviation',
+  'Collins Aerospace', 'Amadeus IT Group', 'Lufthansa Technik', 'Shell MRPL Aviation Fuels',
+];
+const TIERS = ['Tier 2 (S. Iyer)', 'Tier 3 (Head of Procurement)', 'Tier 4 (Supply Chain Director)'];
+const lakh = (n: number) => `₹${(n / 1e5).toFixed(1)}L`;
+
+/** A realistic workflow run reference — run number, population, exceptions. */
+export function wfRunRef(key: string, fail: boolean): string {
+  const h = hnum(key);
+  const run = 4800 + (h % 900);
+  const items = 120 + ((h >>> 3) % 480);
+  const ex = fail ? 1 + ((h >>> 7) % 5) : 0;
+  return `run #${run} · ${items} items checked · ${ex} exception${ex === 1 ? '' : 's'}`;
 }
-/** A small per-item evidence table to accompany the summary — real procurement documents. */
-export function validationTable(fail: boolean): ValidationTable {
-  return {
-    columns: ['Document', 'Vendor', 'Approval', 'Result'],
-    rows: [
-      ['PO 4500012847', 'Indian Oil Skytanking', 'Approved — Tier 3 (S. Iyer)', 'Pass'],
-      ['PO 4500012861', 'TajSATS Air Catering', 'Approved — Tier 2 (S. Iyer)', 'Pass'],
-      ['PO 4500012898', 'Boeing Distribution Services', fail ? 'No approver at required tier' : 'Approved — Tier 4 (Supply Chain Director)', fail ? 'Fail' : 'Pass'],
-    ],
-  };
+
+/** Plain-language summary the AI returns after checking the uploaded file. */
+export function validationSummary(text: string, fail: boolean, key = text): string {
+  const h = hnum(key);
+  const n = [15, 25, 25, 40][h % 4]!;
+  const ex = 1 + ((h >>> 5) % 3);
+  const po = `45000${12840 + (h % 25) * 7}`;
+  const vendor = SAMPLE_VENDORS[h % SAMPLE_VENDORS.length]!;
+  return fail
+    ? `Tested ${n} sampled items against “${text}”. ${ex} exception${ex === 1 ? '' : 's'} found — PO ${po} (${vendor}) could not evidence the required approval/threshold, so the attribute is concluded Fail. Item-level results are in the table below.`
+    : `Tested ${n} sampled items against “${text}”. All ${n} met the control — required approvals present and amounts within policy on each. No exceptions, so the attribute is concluded Pass.`;
+}
+
+/** A per-item evidence table to accompany the summary — real procurement documents. */
+export function validationTable(fail: boolean, key = 'seed'): ValidationTable {
+  const h = hnum(key);
+  const rows = Array.from({ length: 4 }, (_, i) => {
+    const hi = h + i * 137;
+    const isFailRow = fail && i === 3;
+    return [
+      `PO 45000${12840 + ((hi >>> 2) % 25) * 7}`,
+      SAMPLE_VENDORS[hi % SAMPLE_VENDORS.length]!,
+      isFailRow ? 'No approver at required tier' : `Approved — ${TIERS[hi % TIERS.length]!}`,
+      lakh((((hi >>> 4) % 60) + 8) * 100_000),
+      isFailRow ? 'Fail' : 'Pass',
+    ];
+  });
+  return { columns: ['Document', 'Vendor', 'Approval', 'Amount', 'Result'], rows };
 }
 
 export function designProgress(c: Control) {
@@ -200,6 +230,54 @@ export function courtFor(c: Control, tasks: HandoffTask[]): Court {
   // A concluded control is closed out (no separate reviewer court on this platform).
   if (concl === 'Effective' || concl === 'Ineffective') return 'none';
   return 'auditor';
+}
+
+// ─── Test schedule — every control carries a next-test due date ──────────────────
+// Regular testing is the tool's heartbeat for the risk owner: each control is due
+// on its frequency cycle. Concluding the operating track pushes the date out to
+// the next cycle; an untested control can be due today or overdue.
+
+import type { Frequency } from './types';
+const CYCLE_DAYS: Record<Frequency, number> = { Daily: 1, Weekly: 7, Monthly: 30, Quarterly: 90, Annual: 365, Recurring: 7, 'Ad-hoc': 30 };
+
+/** A concluded control (Effective or Ineffective) is off the due schedule —
+ *  effective ones wait for the next cycle, ineffective ones for remediation. */
+export function isConcluded(c: Control): boolean {
+  const x = controlConclusion(c);
+  return x === 'Effective' || x === 'Ineffective';
+}
+
+export function testDueInDays(c: Control): number {
+  const cycle = CYCLE_DAYS[c.frequency];
+  let h = 0; for (let i = 0; i < c.id.length; i++) h = (h * 31 + c.id.charCodeAt(i)) >>> 0;
+  // concluded (or operating already tested) → next cycle, never "due now"
+  if (isConcluded(c) || trackResult(c.operating) !== 'Not tested') return Math.max(1, cycle - (h % Math.max(1, Math.floor(cycle / 3))));
+  if (c.testDueInDays != null) return c.testDueInDays;
+  return (h % (cycle + 4)) - 3;
+}
+
+export function testDueLabel(d: number): string {
+  if (d < 0) return `Overdue ${-d}d`;
+  if (d === 0) return 'Due today';
+  if (d === 1) return 'Due tomorrow';
+  return `Due in ${d}d`;
+}
+
+/** Row display — concluded controls read as scheduled/parked, never as due. */
+export function testDueDisplay(c: Control): { label: string; cls: string } {
+  const concl = controlConclusion(c);
+  if (concl === 'Ineffective') return { label: 'Retest after remediation', cls: 'text-risk-700' };
+  const d = testDueInDays(c);
+  if (concl === 'Effective') return { label: `Next test in ${d}d`, cls: '' };
+  if (d < 0) return { label: `Overdue ${-d}d`, cls: 'text-risk-700 font-semibold' };
+  if (d === 0) return { label: 'Due today', cls: 'text-mitigated-700 font-semibold' };
+  return { label: testDueLabel(d), cls: '' };
+}
+
+export function isTestDueNow(c: Control): boolean { return !isConcluded(c) && testDueInDays(c) <= 0; }
+
+export function testsDueNow(controls: Control[]): Control[] {
+  return controls.filter(isTestDueNow).sort((a, b) => testDueInDays(a) - testDueInDays(b));
 }
 
 // ─── Engagement progress ─────────────────────────────────────────────────────────

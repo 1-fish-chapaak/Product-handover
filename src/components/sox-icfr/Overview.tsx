@@ -102,7 +102,7 @@ export default function Overview() {
     <div className="space-y-5">
       <div>
         <h1 className="text-[22px] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>Overview</h1>
-        <p className="text-[13px] text-ink-500 mt-0.5">{eng.controls.length} controls · {eng.framework}</p>
+        <p className="text-[13px] text-ink-500 mt-0.5">{eng.controls.length} controls · {eng.framework} · {eng.period} period</p>
       </div>
 
       {/* Risk owner's actionable inbox leads — first-line owners act before they browse status. */}

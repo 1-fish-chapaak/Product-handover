@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { formatINR, icfrConclusion, isControlLocked, isEngagementLocked, previewRegrades, trackResult, validationQA, validationSummary, validationTable, type RulesPatch } from './helpers';
+import { formatINR, icfrConclusion, isControlLocked, isEngagementLocked, previewRegrades, trackResult, validationQA, validationSummary, validationTable, wfRunRef, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus,
   EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -111,6 +111,9 @@ interface IcfrCtx {
   remarkRacmRow: (controlId: string, remark: string) => void;
   clearRacmReview: (controlId: string) => void;
   bulkTestControls: (controlIds: string[]) => void;
+  // RACM / SOP source documents uploaded on the RACM page
+  racmDocs: EvidenceFile[];
+  addRacmDoc: (fileName: string) => void;
   // discussions
   addComment: (controlId: string, anchor: DiscussionAnchor, text: string) => void;
   resolveDiscussion: (discussionId: string, resolved: boolean) => void;
@@ -135,6 +138,9 @@ interface IcfrCtx {
   signOffEngagement: (step: 'preparer' | 'reviewer') => void;
   // unlock a concluded control — auditor only, reason required, logged in the trail
   reopenControl: (controlId: string, reason: string) => void;
+  // testing period — interim vs year-end, and the roll-forward that moves between them
+  togglePeriod: () => void;
+  rollForward: () => void;
 }
 
 const Ctx = createContext<IcfrCtx | null>(null);
@@ -157,6 +163,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const [returnView, setReturnView] = useState<View | null>(null);
   // Which business process's RACM the matrix view shows — one RACM per process.
   const [racmProcess, setRacmProcess] = useState<string | null>(null);
+  const [racmDocs, setRacmDocs] = useState<EvidenceFile[]>([]);
 
   const me = `You · ${ROLE_LABEL[role]}`;
 
@@ -391,7 +398,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   });
 
   const pullStepRun = useCallback<IcfrCtx['pullStepRun']>((controlId, stepId) => {
-    patchStep(controlId, stepId, (s, c) => { const res = s.result === 'Not tested' ? 'Pass' : s.result; return stampSamples(c, { ...s, workflowRunRef: 'run · just now · 0 exceptions', result: res }, res); });
+    patchStep(controlId, stepId, (s, c) => {
+      const res = s.result === 'Not tested' ? 'Pass' : s.result;
+      return stampSamples(c, { ...s, workflowRunRef: `${wfRunRef(controlId + s.id, res === 'Fail')} · just now`, result: res }, res);
+    });
     pushExec(prev => { const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(st => st.id === stepId); return s ? { controlId, track: 'operating', kind: 'pull-run', verb: 'pulled a workflow run', target: s.code, result: s.result } : null; });
     pushRun(prev => {
       const c = prev.controls.find(cc => cc.id === controlId);
@@ -450,7 +460,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     patchStep(controlId, stepId, (s, c) => {
       const willFail = (s.override ? s.override.result : s.result) === 'Fail';
       const res: TestResult = willFail ? 'Fail' : 'Pass';
-      return stampSamples(c, { ...s, result: res, workflowRunRef: 'Ask IRA · validated · just now', validation: { result: res, qa: validationQA(s.description, willFail), summary: validationSummary(s.description, willFail), table: validationTable(willFail), fileName: s.inputFile?.name, at: 'just now' } }, res);
+      return stampSamples(c, { ...s, result: res, workflowRunRef: 'Ask IRA · validated · just now', validation: { result: res, qa: validationQA(s.description, willFail), summary: validationSummary(s.description, willFail, controlId + s.id), table: validationTable(willFail, controlId + s.id), fileName: s.inputFile?.name, at: 'just now' } }, res);
     });
     pushExec(prev => { const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(st => st.id === stepId); return s ? { controlId, track: 'operating', kind: 'validate', verb: 'validated against file', target: s.code, result: s.result } : null; });
     pushRun(prev => {
@@ -466,8 +476,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [patchStep, pushExec, pushRun]);
   const testAllAttributes = useCallback<IcfrCtx['testAllAttributes']>((controlId) => {
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => {
-      const res: TestResult = s.result === 'Fail' || s.override?.result === 'Fail' ? 'Fail' : 'Pass';
-      return stampSamples(c, { ...s, result: res, workflowRunRef: s.workflowName ? (s.workflowRunRef ?? 'run · just now · 0 exceptions') : s.workflowRunRef }, res);
+      const fail = s.result === 'Fail' || s.override?.result === 'Fail';
+      const res: TestResult = fail ? 'Fail' : 'Pass';
+      const wantsValidation = s.aiValidation || s.evidenceMode === 'ai' || !!s.inputFile;
+      return stampSamples(c, {
+        ...s, result: res,
+        workflowRunRef: s.workflowName ? (s.workflowRunRef ?? `${wfRunRef(controlId + s.id, fail)} · just now`) : s.workflowRunRef,
+        validation: wantsValidation ? (s.validation ?? { result: res, qa: validationQA(s.description, fail), summary: validationSummary(s.description, fail, controlId + s.id), table: validationTable(fail, controlId + s.id), fileName: s.inputFile?.name, at: 'just now' }) : s.validation,
+      }, res);
     }) } }));
     pushExec(prev => { const steps = prev.controls.find(cc => cc.id === controlId)?.operating.steps; return steps && steps.length ? { controlId, track: 'operating', kind: 'test-all', verb: 'tested all attributes', target: `${steps.length} attribute${steps.length === 1 ? '' : 's'}`, result: steps.some(s => s.result === 'Fail') ? 'Fail' : 'Pass' } : null; });
     pushRun(prev => {
@@ -527,8 +543,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           return { ...p, result: (willFail ? 'Fail' : 'Pass') as TestResult, override: undefined, workflowRunRef: 'run · validated · just now', validation: { qa: validationQA(p.text, willFail), at: 'just now' } };
         });
         const steps = c.operating.steps.map(s => {
-          const res: TestResult = s.result === 'Fail' || s.override?.result === 'Fail' ? 'Fail' : 'Pass';
-          return stampSamples(c, { ...s, result: res, workflowRunRef: s.workflowName ? (s.workflowRunRef ?? 'run · just now · 0 exceptions') : s.workflowRunRef }, res);
+          const fail = s.result === 'Fail' || s.override?.result === 'Fail';
+          const res: TestResult = fail ? 'Fail' : 'Pass';
+          const wantsValidation = s.aiValidation || s.evidenceMode === 'ai' || !!s.inputFile;
+          return stampSamples(c, {
+            ...s, result: res,
+            workflowRunRef: s.workflowName ? (s.workflowRunRef ?? `${wfRunRef(c.id + s.id, fail)} · just now`) : s.workflowRunRef,
+            validation: wantsValidation ? (s.validation ?? { result: res, qa: validationQA(s.description, fail), summary: validationSummary(s.description, fail, c.id + s.id), table: validationTable(fail, c.id + s.id), fileName: s.inputFile?.name, at: 'just now' }) : s.validation,
+          }, res);
         });
         const designConcl: TrackConclusion = points.some(p => p.result === 'Fail') ? 'Ineffective' : 'Effective';
         const opConcl: TrackConclusion = steps.some(s => s.result === 'Fail') ? 'Ineffective' : 'Effective';
@@ -563,6 +585,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       raiseDeficiencyIfIneffective(id, 'operating');
     });
   }, [me, role, raiseDeficiencyIfIneffective]);
+
+  const addRacmDoc = useCallback<IcfrCtx['addRacmDoc']>((fileName) => {
+    const lower = fileName.toLowerCase();
+    const kind: EvidenceFile['kind'] = lower.endsWith('.csv') ? 'CSV' : lower.endsWith('.xlsx') || lower.endsWith('.xls') ? 'XLSX' : lower.endsWith('.png') || lower.endsWith('.jpg') ? 'IMG' : 'PDF';
+    setRacmDocs(prev => [{ id: uid('rd'), name: fileName, kind, uploadedBy: me, uploadedAt: 'just now' }, ...prev]);
+  }, [me]);
 
   // ── discussions ───────────────────────────────────────────────────────────────
   const addComment = useCallback<IcfrCtx['addComment']>((controlId, anchor, text) => {
@@ -770,6 +798,25 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     return id;
   }, [eng]);
 
+  const togglePeriod = useCallback(() => {
+    setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, period: prev.period === 'Interim' ? 'Year-end' : 'Interim' }));
+  }, []);
+
+  const rollForward = useCallback(() => {
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      return {
+        ...prev,
+        period: 'Year-end',
+        controls: prev.controls.map(c => {
+          // design carries forward; operating re-tests unless automated + benchmarkable
+          if (c.nature === 'Automated') return c;
+          return { ...c, operating: { ...c.operating, conclusion: 'Not tested', override: undefined, testedBy: null, testedAt: null, steps: c.operating.steps.map(s => ({ ...s, result: 'Not tested', override: undefined, sampleResults: undefined })) } };
+        }),
+      };
+    });
+  }, []);
+
   // Preparer signs first, reviewer countersigns — names come from the engagement record.
   // Each signature stamps the ICFR conclusion as of that moment: open MW ⇒ not effective.
   const signOffEngagement = useCallback<IcfrCtx['signOffEngagement']>((step) => {
@@ -791,12 +838,13 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
     setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
-    approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls,
+    approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence,
     addControl, signOffEngagement, reopenControl,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl]);
+    togglePeriod, rollForward,
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, togglePeriod, rollForward]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

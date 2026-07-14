@@ -92,13 +92,13 @@ export const MOCK_CONFIGURABLE_ENGAGEMENTS: ConfigurableEngagement[] = [
   // 3. Workflow Automation Project
   {
     id: 'ceng-003',
-    name: 'Air India Vendor Reconciliation',
+    name: 'Airline Group Vendor Reconciliation',
     patternType: EngagementPatternType.WORKFLOW_AUTOMATION_PROJECT,
     displayLabel: 'Project',
     description: 'Automated vendor reconciliation using hybrid data inputs, Q&A analysis, monthly scheduled runs, and exception case creation.',
     owner: 'Rohan Patel',
     businessProcess: 'Procure to Pay',
-    entityOrLocation: 'Air India — Finance',
+    entityOrLocation: 'Airline Group — Finance',
     status: EngagementStatus.ACTIVE,
     stage: 'Ready to Run',
     plannedStartDate: '2026-04-15',

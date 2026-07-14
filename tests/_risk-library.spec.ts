@@ -10,7 +10,7 @@ test('risk library tab shows heatmaps and register', async ({ page }) => {
   await page.goto('/');
   await page.locator('[title="Engagements"]').first().click();
   await page.waitForTimeout(800);
-  await page.getByText('FY26 ICFR — Air India Express').first().click();
+  await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
   await page.waitForTimeout(1000);
   await page.getByRole('button', { name: 'Risk Library', exact: true }).first().click();
   await page.waitForTimeout(800);

@@ -7,14 +7,14 @@ import { test, expect } from './_helpers';
  * and bulk approval from the selection bar. The finished bulk run hands off to
  * the Runs tab registry.
  */
-test('Air India engagement RACM shows per-process matrix with approvals + bulk test', async ({ page }) => {
+test('Airline Group engagement RACM shows per-process matrix with approvals + bulk test', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto('/');
   // open Engagements from nav (collapsed sidebar → title attr)
   await page.locator('[title="Engagements"]').first().click();
   await page.waitForTimeout(800);
-  // open the Air India ICFR engagement
-  await page.getByText('FY26 ICFR — Air India Express').first().click();
+  // open the Airline Group ICFR engagement
+  await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
   await page.waitForTimeout(1000);
   // RACM tab — lands on one RACM document card per business process
   await page.getByRole('button', { name: 'RACM', exact: true }).first().click().catch(async () => {

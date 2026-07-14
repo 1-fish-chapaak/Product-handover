@@ -186,6 +186,9 @@ export interface Control {
   riskId: string;
   riskDescription: string;
   assertions: Assertion[];
+  /** Days until the next scheduled test — 0 = due today, negative = overdue.
+   *  Optional: when absent it is derived from the control's frequency. */
+  testDueInDays?: number;
   racmReview?: RacmReview;
   design: DesignTrack;
   operating: OperatingTrack;
@@ -337,7 +340,7 @@ export interface EngagementSignoff { preparer?: SignoffEntry; reviewer?: Signoff
 
 export interface IcfrEngagement {
   id: string; code: string; name: string; entity: string; framework: string;
-  periodStart: string; periodEnd: string;
+  periodStart: string; periodEnd: string; period: 'Interim' | 'Year-end';
   materiality: number; performanceMateriality: number; preparer: string; reviewer: string;
   rules: MaterialityRules;
   accounts: SignificantAccount[];
