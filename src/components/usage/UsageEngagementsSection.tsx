@@ -19,7 +19,9 @@ import {
   type EngRow,
 } from '../../data/engagement-portfolio';
 import type { EngType } from '../../data/engagements';
-import { fmt, SectionCard, PortfolioStat } from './usageSectionPrimitives';
+import { SectionCard, PortfolioStat } from './usageSectionPrimitives';
+import { Eyebrow } from './usageChrome';
+import { fmt } from './usageTokens';
 
 const TYPE_CHIP: Record<EngType, string> = {
   'SOX / ICFR': 'bg-brand-50 text-brand-700 border-brand-100',
@@ -71,7 +73,7 @@ export default function UsageEngagementsSection() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* By type — controls with effective overlay, per engagement type */}
           <div className="lg:col-span-2">
-            <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">By type</div>
+            <Eyebrow className="mb-3">By type</Eyebrow>
             <div className="space-y-3">
               {p.byType.map((t, i) => (
                 <div key={t.type}>
@@ -104,7 +106,7 @@ export default function UsageEngagementsSection() {
 
           {/* By status donut */}
           <div>
-            <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-3">By status</div>
+            <Eyebrow className="mb-3">By status</Eyebrow>
             <div className="flex items-center gap-4">
               <div className="w-[112px] h-[112px] shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
@@ -131,7 +133,7 @@ export default function UsageEngagementsSection() {
       </SectionCard>
 
       {/* Where findings sit + by process */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Engagements record an open-issue count, not a per-finding history,
             so this shows where findings sit today rather than a raised/resolved
             trend the data cannot support. */}
@@ -201,7 +203,7 @@ export default function UsageEngagementsSection() {
         subtitle="In-flight work first"
       >
         <div className="space-y-1">
-          {rankedRows.map((r, i) => {
+          {rankedRows.map((r) => {
             const testedPct = r.controls > 0 ? Math.round((r.effective / r.controls) * 100) : 0;
             return (
               <div

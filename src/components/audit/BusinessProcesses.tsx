@@ -21,6 +21,7 @@ import { useCan } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import RacmListTable, { RACM_SEED_DATA } from './RacmListTable';
+import { P2P_RACM_READY_RACMS, P2P_RACM_READY_IDS } from '../../data/racmRegistry';
 import { LinkWorkflowToControlDrawer, type ControlWorkflow } from './RacmMappingWorkspace';
 import SopDetailDrawer, { DEFAULT_SOP_SECTIONS } from './SopDetailDrawer';
 import { BulkExecuteModal } from '../workflow/BulkExecuteModal';
@@ -56,18 +57,9 @@ import DesignControlAddModal from './DesignControlAddModal';
 // ControlLibraryView no longer embedded — replaced by ControlDesignTab
 // WorkflowLibraryView no longer used — replaced by WorkflowGovernanceTab
 
-// RACMs surfaced in the P2P RACM tab so the list mirrors the "RACM Ready" SOPs in
-// the SOP section — each shares its source SOP's name (sop-102/104/105). Injected
-// through the RacmListTable `extraRacms` prop (NOT the global RACM_SEED_DATA), so
-// Audit Planning and every other RACM consumer stay untouched. Badge state is a
-// deliberate mix: Sample SOP + Agrawal Metals read as fully Ready (Active · Ready),
-// while Testing RACM is mapped but still Workflow Missing.
-const P2P_RACM_READY_RACMS: import('./RacmListTable').RacmEntry[] = [
-  { id: 'RACM-102', name: 'Sample SOP', version: 'v1.0', createdAt: 'May 28, 2026', updatedAt: 'Jun 6, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 6, controls: 16, mappedRisks: 6, unmappedRisks: 0, keyControls: 4, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
-  { id: 'RACM-104', name: 'Testing RACM (4)_RACM', version: 'v1.0', createdAt: 'May 12, 2026', updatedAt: 'May 30, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 8, controls: 20, mappedRisks: 8, unmappedRisks: 0, keyControls: 5, workflowCoverage: 80, attributesCoverage: 100, isValidated: false, linkedToEngagement: false },
-  { id: 'RACM-105', name: 'Agrawal Metals - Part 1 - Fixed Assets - SOP', version: 'v1.0', createdAt: 'Apr 30, 2026', updatedAt: 'May 25, 2026', process: 'P2P', framework: 'SOX ICFR', risks: 7, controls: 19, mappedRisks: 7, unmappedRisks: 0, keyControls: 5, workflowCoverage: 100, attributesCoverage: 100, isValidated: true, linkedToEngagement: false },
-];
-const P2P_RACM_READY_IDS = new Set(P2P_RACM_READY_RACMS.map(r => r.id));
+// The P2P "RACM Ready" matrices (mirroring the P2P SOP list) now live in
+// src/data/racmRegistry.ts, so Platform Usage counts the same RACMs this tab
+// renders instead of an older, disagreeing array. Imported at the top.
 
 // A new-tab deep link into the BP detail (?view=bp-detail&bp=&section=&risk=/racm=)
 // is captured once at module load. The BP detail strips its own ?section= on its

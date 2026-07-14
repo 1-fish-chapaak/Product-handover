@@ -1,4 +1,4 @@
-import { test, expect } from './_helpers';
+import { test, expect, usageTab } from './_helpers';
 import fs from 'node:fs';
 
 /**
@@ -19,6 +19,8 @@ test('every section deep-dive modal renders', async ({ page }) => {
   await page.waitForTimeout(700);
   await page.getByRole('button', { name: /^Platform Usage/i }).first().click();
   await page.waitForTimeout(2500);
+  // The deep-dive tiles live on the Sections tab now.
+  await usageTab(page, 'Sections');
 
   const tiles = page.getByRole('button', { name: /— open details$/i });
   const names = await tiles.evaluateAll(els =>

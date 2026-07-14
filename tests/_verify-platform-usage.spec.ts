@@ -5,7 +5,7 @@
  * with the table; teams lens aggregates; CSV export downloads + audit-logs;
  * live audit events land in today's numbers.
  */
-import { test, expect } from './_helpers';
+import { test, expect, usageTab } from './_helpers';
 
 const SHOTS = '/private/tmp/claude-501/-Users-nileshanand-Desktop-Product-handover/7f78790a-345e-41ac-a869-f53f64067555/scratchpad/usage';
 
@@ -33,41 +33,57 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
 
   // Header + KPI band
   await expect(page.getByRole('heading', { name: 'Platform Usage' })).toBeVisible();
-  await expect(page.getByText('Active users')).toBeVisible();
+  await expect(page.getByText('People active')).toBeVisible();
 
-  // Delta chips + footnote (30d default). The footnote names the anchor — the
-  // page is "as of" the newest record, not wall-clock.
-  await expect(page.getByText(/^[+-]\d+%$/).first()).toBeVisible();
-  await expect(page.getByText(/The 30 days up to .*the change vs the 30 days before that\./)).toBeVisible();
+  // The change is a sentence against a named baseline, not a bare percentage
+  // chip: "Down 2 people from 14". A percent on a base of twelve is one person.
+  await expect(page.getByText(/(Up|Down|Same as|New this period)/).first()).toBeVisible();
+  await expect(page.getByText(/The 30 days up to .*Each change is against the 30 days before that\./)).toBeVisible();
 
-  // Cards
-  await expect(page.getByText('Daily activity')).toBeVisible();
-  await expect(page.getByText('Most-used areas')).toBeVisible();
+  // Overview leads with the verdict, then the trend and the module ranking.
+  // Chart titles are takeaway SENTENCES now, not nouns — assert on what they
+  // must always contain, not on a fixed string that moves with the data.
+  // The verdict is a share of paid seats, against the benchmark that gives it
+  // meaning. It is a <section aria-label="Licence use">, not a heading, so match
+  // the sentence rather than a role that isn't there.
+  await expect(page.getByText(/of your \d+ paid seats/)).toBeVisible();
+  await expect(page.getByText(/\d+ of \d+ people/).first()).toBeVisible();
+  await expect(page.getByText(/(Above|Below) the \d+% mark/)).toBeVisible();
+  // Charts take noun titles; the sentence lives in the subtitle and the strip.
+  await expect(page.getByRole('heading', { name: 'Actions per day' })).toBeVisible();
+  await expect(page.getByText(/7-day average.*weekends/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Top areas' })).toBeVisible();
+
+  // ...and Adoption carries AI and the seat buckets.
+  await usageTab(page, 'Adoption');
   await expect(page.getByText('No sign-in 30+ days')).toBeVisible();
-  await expect(page.getByText('Top AI users')).toBeVisible();
+  await expect(page.getByText('Who leans on it most')).toBeVisible();
+  await usageTab(page, 'Overview');
 
   // Range switch changes the Actions KPI and keeps deltas (proves 180d seed)
-  const actionsKpi = page.locator('[aria-label*="Actions"]').first();
+  const actionsKpi = page.locator('[aria-label^="Work done"]').first();
   const before = await actionsKpi.getAttribute('aria-label');
   await setRange(page, 'Last 90 days');
   await page.waitForTimeout(900);
   const after = await actionsKpi.getAttribute('aria-label');
   expect(after).not.toBe(before);
-  await expect(page.getByText(/^[+-]\d+%$/).first()).toBeVisible();
-  await expect(page.getByText(/The 90 days up to .*the change vs the 90 days before that\./)).toBeVisible();
+  await expect(page.getByText(/The 90 days up to .*Each change is against the 90 days before that\./)).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/v2-90d.png` });
 
   await setRange(page, 'Last 7 days');
   await page.waitForTimeout(900);
-  await expect(page.getByText(/^[+-]\d+%$/).first()).toBeVisible();
+  await expect(page.getByText(/(Up|Down|Same as|New this period)/).first()).toBeVisible();
 
   // Seats: seeded Invited users are Ajay 14110008 + Priya Singh
+  await usageTab(page, 'Adoption');
   await expect(page.getByText('Invited, not joined yet')).toBeVisible();
 
-  // Table search filters rows
+  // Table search filters rows. The period filter sits above the tabs and scopes
+  // all of them, so switching range here still applies on People.
   await setRange(page, 'Last 30 days');
+  await usageTab(page, 'People');
   await page.waitForTimeout(600);
-  await page.getByPlaceholder('Search members...').fill('ayushi');
+  await page.getByPlaceholder('Search by name or email...').fill('ayushi');
   await page.waitForTimeout(400);
   await expect(page.locator('tr', { hasText: 'Ayushi Narang' }).first()).toBeVisible();
   await expect(page.locator('tr', { hasText: 'Abhinav Sharma' })).not.toBeVisible();
@@ -79,6 +95,7 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
 test('member modal reconciles with the table row and links to Admin', async ({ page }) => {
   test.setTimeout(120000);
   await openUsage(page);
+  await usageTab(page, 'People');
 
   // Read Abhinav's Actions cell, then open his modal
   const row = page.locator('tr', { hasText: 'Abhinav Sharma' }).first();
@@ -110,12 +127,15 @@ test('member modal reconciles with the table row and links to Admin', async ({ p
 test('teams lens aggregates and hides user-only filters', async ({ page }) => {
   test.setTimeout(120000);
   await openUsage(page);
+  await usageTab(page, 'People');
 
   await page.getByRole('button', { name: 'Teams' }).click();
   await page.waitForTimeout(600);
   await expect(page.getByText('SOX Audit').first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Role' })).not.toBeVisible();
-  await page.getByPlaceholder('Search teams...').fill('IFC');
+  // The Teams search now matches a team name OR anyone in it (as Administration's
+  // does), so the placeholder says both.
+  await page.getByPlaceholder('Search teams or members...').fill('IFC');
   await page.waitForTimeout(400);
   await expect(page.locator('tbody tr', { hasText: 'IFC Team' })).toBeVisible();
   await expect(page.locator('tbody tr', { hasText: 'SOX Audit' })).toHaveCount(0);
@@ -125,6 +145,7 @@ test('teams lens aggregates and hides user-only filters', async ({ page }) => {
 test('CSV export downloads the filtered set and shows a toast', async ({ page }) => {
   test.setTimeout(120000);
   await openUsage(page);
+  await usageTab(page, 'People');
 
   const dl = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export CSV' }).click();
@@ -133,6 +154,7 @@ test('CSV export downloads the filtered set and shows a toast', async ({ page })
   await expect(page.getByText(/Exported \d+ members as CSV/)).toBeVisible();
 
   // The export lands in Exports & downloads as a live event by the current user
+  await usageTab(page, 'Output');
   await expect(page.getByText('Exports & downloads')).toBeVisible();
   await expect(page.getByText('Top downloaders')).toBeVisible();
   // Nilesh can appear more than once here — the seeded history gives him
@@ -146,18 +168,22 @@ test('depth: highlights, rhythm, module modal, segments, team modal', async ({ p
   test.setTimeout(120000);
   await openUsage(page);
 
-  // Highlights strip + activity rhythm heatmap
-  await expect(page.getByText('Highlights')).toBeVisible();
-  await expect(page.getByText(/of active members used AI in this range/)).toBeVisible();
-  await expect(page.getByText(/Top 3 members account for/)).toBeVisible();
-  await expect(page.getByText('When people are active')).toBeVisible();
+  // The verdict panel now carries the findings the four highlight cards used to
+  // (fastest-growing area, AI share, dormant seats), in prose, above the fold.
+  // The one finding that rides alongside the verdict, and only when it fires.
+  // The seed leaves seats idle, so it does.
+  await expect(page.getByText(/seats? (is|are) idle/)).toBeVisible();
 
-  // Business framing: seat utilization + read-only findings
-  await expect(page.getByText('Seats used this period.')).toBeVisible();
+  // Business framing: the seat funnel, the working-pattern heatmap and the
+  // read-only findings all live on Adoption — every one is a licence question.
+  await usageTab(page, 'Adoption');
+  // Band and Card carry the same title, so take the first.
+  await expect(page.getByText('When the work happens').first()).toBeVisible();
+  await expect(page.getByText('Every stage as a share of the seats you pay for.')).toBeVisible();
   await expect(page.getByText('Worth checking')).toBeVisible();
 
-  // Per-section deep-dives — one tile per platform section, detail in a modal
-  await expect(page.getByText('Section deep-dives')).toBeVisible();
+  // Per-section deep-dives — one tile per platform section, detail in a modal.
+  await usageTab(page, 'Sections');
   // Ask IRA (the chat) and AI Concierge (the toolkit) are separate sections —
   // a question you type and a tool you run are different products.
   for (const s of ['Engagements', 'Ask IRA', 'AI Concierge', 'Reports', 'Workflows', 'Risk & Controls', 'Knowledge Hub', 'Dashboards']) {
@@ -181,7 +207,8 @@ test('depth: highlights, rhythm, module modal, segments, team modal', async ({ p
   const conciergeModal = page.getByRole('dialog', { name: 'AI Concierge' });
   await expect(conciergeModal).toBeVisible();
   await expect(conciergeModal.getByText('Tool runs').first()).toBeVisible();
-  await expect(conciergeModal.getByText('RACM Generator')).toBeVisible();
+  // Named twice — once in the toolkit ranking, once in the run-mix legend.
+  await expect(conciergeModal.getByText('RACM Generator').first()).toBeVisible();
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
   await expect(conciergeModal).not.toBeVisible();
@@ -201,23 +228,33 @@ test('depth: highlights, rhythm, module modal, segments, team modal', async ({ p
   await page.waitForTimeout(400);
 
   // Adoption funnel stages
+  await usageTab(page, 'Adoption');
   await expect(page.getByText('Signed in ever')).toBeVisible();
   await expect(page.getByText('Used AI this period')).toBeVisible();
 
-  // Compare-with-previous-period overlay toggles a legend entry
-  await expect(page.getByText('Previous period', { exact: true })).not.toBeVisible();
-  await page.getByRole('button', { name: 'Compare' }).click();
+  // Compare-with-previous-period draws a second line on the trend chart. The
+  // legend names only the two bar segments now — the compare series is keyed by
+  // the toggle's pressed state, so assert on that and on the line appearing,
+  // not on legend text that no longer exists.
+  await usageTab(page, 'Overview');
+  const compareBtn = page.getByRole('button', { name: 'Compare' });
+  const lines = page.locator('.recharts-line');
+  await expect(compareBtn).toHaveAttribute('aria-pressed', 'false');
+  const baseLines = await lines.count(); // the 7-day average line
+
+  await compareBtn.click();
   await page.waitForTimeout(500);
-  await expect(page.getByText('Previous period', { exact: true })).toBeVisible();
+  await expect(compareBtn).toHaveAttribute('aria-pressed', 'true');
+  await expect(lines).toHaveCount(baseLines + 1); // + the previous-period line
   await page.screenshot({ path: `${SHOTS}/v6-compare.png` });
-  await page.getByRole('button', { name: 'Compare' }).click();
+
+  await compareBtn.click();
   await page.waitForTimeout(300);
-  await expect(page.getByText('Previous period', { exact: true })).not.toBeVisible();
+  await expect(compareBtn).toHaveAttribute('aria-pressed', 'false');
+  await expect(lines).toHaveCount(baseLines);
 
-  // Trend column in the member table
-  await expect(page.getByRole('columnheader', { name: 'Trend' }).or(page.locator('th', { hasText: 'Trend' }))).toBeVisible();
-
-  // Module drill-down: the breakdown rows are buttons whose name includes counts
+  // Module drill-down: the breakdown rows are buttons whose name includes counts.
+  // Most-used areas is on Overview, where we already are.
   await page.getByRole('button', { name: /Ask IRA \d/ }).click();
   await page.waitForTimeout(600);
   const moduleModal = page.getByRole('dialog', { name: 'Ask IRA usage' });
@@ -227,6 +264,21 @@ test('depth: highlights, rhythm, module modal, segments, team modal', async ({ p
   await page.screenshot({ path: `${SHOTS}/v3-module-modal.png` });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
+
+  // The member table and its segment chips live on People.
+  await usageTab(page, 'People');
+
+  // The standalone Trend column is gone — the change now rides inside the
+  // Actions cell as a delta pill, and the column that took its place is
+  // Engagement (the segment). Assert both, so neither can quietly disappear.
+  await expect(
+    page.getByRole('columnheader', { name: 'Engagement' })
+      .or(page.locator('th', { hasText: 'Engagement' })).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('columnheader', { name: 'Actions' })
+      .or(page.locator('th', { hasText: 'Actions' })).first(),
+  ).toBeVisible();
 
   // Segment chips filter the member list (Abhinav is active today → never "No activity")
   await page.getByRole('button', { name: /^No activity \(\d+\)$/ }).click();
@@ -253,7 +305,7 @@ test('live audit events raise today\'s totals', async ({ page }) => {
   await openUsage(page);
   await setRange(page, 'Last 90 days');
   await page.waitForTimeout(800);
-  const kpi = page.locator('[aria-label*="Actions"]').first();
+  const kpi = page.locator('[aria-label^="Work done"]').first();
   const before = await kpi.getAttribute('aria-label');
 
   // Produce a real audit event with one click: Audit Log > Export CSV logs an

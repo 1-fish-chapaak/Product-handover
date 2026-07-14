@@ -9,6 +9,7 @@
 
 import Modal from '../shared/Modal';
 import { InitialsAvatar } from '../admin/AdminPrimitives';
+import { Eyebrow } from './usageChrome';
 import { getRole } from '../../data/rbac';
 import type { UserUsageRow } from '../../data/platform-usage';
 
@@ -48,7 +49,7 @@ export default function TeamUsageModal({
 
       {/* Members ranked by activity */}
       <div className="py-5">
-        <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2.5">Members</div>
+        <Eyebrow className="mb-2.5">Members</Eyebrow>
         <div className="space-y-3">
           {sorted.map(m => (
             <div key={m.user.email} className="flex items-center gap-2.5">

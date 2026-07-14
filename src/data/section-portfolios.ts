@@ -9,22 +9,22 @@
  */
 
 import {
-  RACMS, SOPS, BUSINESS_PROCESSES, WORKFLOWS,
+  SOPS, BUSINESS_PROCESSES, WORKFLOWS,
   SHARED_REPORTS, CHAT_HISTORY,
 } from './mockData';
 import { ENGAGEMENTS } from './engagements';
 import { ENGAGEMENT_EXCEPTIONS, type Severity } from './engagement-exceptions';
-import { processCoverage, racmsForProcess } from './processCoverage';
+import { processCoverage, processRisks, processControls, racmsForProcess } from './processCoverage';
+import { PROCESS_HUB_RACMS } from './racmRegistry';
 import { ATR_LIBRARY } from './atrLibrary';
 import { reportKind, type GeneratedReport } from '../components/reports/reportShared';
-import { CONCIERGE_TOOLS } from './conciergeTools';
 import { MY_DASHBOARDS, SHARED_DASHBOARDS, countByTag, type Dashboard } from './dashboards';
 import { SEED_ROLES } from './rbac';
 import { WORKSPACES } from './workspaces';
 import { CONTROL_LIBRARY } from './controlLibrary';
 import { SEED_RISKS as RISK_REGISTER, type RiskPriority } from './riskRegister';
 import { type DataSource, type SourceType } from '../components/data-sources/sources';
-import { aiToolRuns, aiQuestions, conciergeRunners, askIraAskers, workspaceUsage, type UsageDay, type UserUsageRow } from './platform-usage';
+import { aiQuestions, askIraAskers, workspaceUsage, type UsageDay, type UserUsageRow } from './platform-usage';
 import type { AdminUser } from '../context/AdminDataContext';
 
 /* ── Generic shapes every section renders ────────────────────────────────── */
@@ -91,9 +91,9 @@ const CHIP_INFO = 'bg-evidence-50 text-evidence-700 border-evidence-100';
 
 /**
  * Ask IRA — the chat surface only. Concierge tool runs used to be mixed in
- * here; they now live in deriveConciergePortfolio, because a question you type
- * and a tool you run are different products and lumping their counts together
- * left nobody able to say which number meant what.
+ * here; they now live in UsageConciergeSection, because a question you type and
+ * a tool you run are different products and lumping their counts together left
+ * nobody able to say which number meant what.
  *
  * Questions and per-member attribution come from real audit events (chat send →
  * Create/Query). The seeded history predates that instrumentation, so "who asks
@@ -159,73 +159,13 @@ export function deriveAskIraPortfolio(days: UsageDay[], rows: UserUsageRow[]): S
   };
 }
 
-/* ── AI Concierge — the tools, kept apart from the chat ──────────────────── */
-
-/**
- * The Concierge is its own product: a rack of tools you run, not a chat you
- * talk to. It used to be folded into the Ask IRA tile, where "43 questions,
- * 16 tool runs, 5 conversations" sat side by side and nothing told you which
- * number belonged to which surface.
+/* ── AI Concierge — the tools ────────────────────────────────────────────────
  *
- * Runs come from the audit log (`Run` events in the AI Concierge module). The
- * seeded history logs those with a generic `Concierge Tool` entity — the tool's
- * name only appears in the description — so this reports runs and who ran them,
- * and does not pretend to a per-tool ranking it cannot prove. Live runs do
- * carry the tool name, so that becomes possible once real usage accrues.
- */
-export function deriveConciergePortfolio(days: UsageDay[], rows: UserUsageRow[]): SectionPortfolio {
-  const runs = aiToolRuns(days);
-  const runners = conciergeRunners(days);
-  const active = rows.filter(r => r.actions > 0);
-  const adoption = active.length > 0 ? Math.round((runners.length / active.length) * 100) : 0;
-  const perRunner = runners.length > 0 ? Math.round(runs / runners.length) : 0;
-
-  const topRunners = runners.slice(0, 8);
-  const maxRuns = Math.max(1, ...topRunners.map(u => u.count));
-
-  return {
-    stats: [
-      { label: 'Tool runs', value: fmt(runs), sub: 'in this period' },
-      { label: 'Tools available', value: fmt(CONCIERGE_TOOLS.length), sub: 'on the Concierge page' },
-      {
-        label: 'Members running tools',
-        value: runners.length > 0 ? fmt(runners.length) : '—',
-        sub: runners.length > 0 ? `${adoption}% of active members` : 'no tool runs in this window',
-      },
-      { label: 'Runs per member', value: fmt(perRunner), sub: 'among those who ran one' },
-    ],
-    bars: {
-      title: 'The toolkit',
-      items: CONCIERGE_TOOLS.map(t => ({
-        label: t.title,
-        value: 1,
-        note: t.tags.map(g => g.label).join(' · '),
-        color: BRAND,
-      })),
-      note: 'Every tool on the AI Concierge page.',
-      variant: 'list',
-    },
-    donut: {
-      title: 'Who runs the tools',
-      items: topRunners.slice(0, 5).map((u, i) => ({
-        name: u.user,
-        value: u.count,
-        color: [BRAND, INFO, GOOD, WARN, MUTED][i],
-      })),
-    },
-    rows: {
-      title: 'Who runs tools most',
-      subtitle: runners.length > 0
-        ? 'Concierge tool runs in this period'
-        : 'No tool runs in this window',
-      items: topRunners.map(u => ({
-        id: u.user,
-        title: u.user,
-        bar: { label: 'Runs', value: (u.count / maxRuns) * 100, note: fmt(u.count), color: BRAND },
-      })),
-    },
-  };
-}
+ * Not here. The Concierge is a rack of tools you run, and its section has to
+ * rank the toolkit and drill into a single tool — a shape the generic
+ * stats/bars/donut portfolio cannot carry. It lives in UsageConciergeSection,
+ * counted off `conciergeToolUsage` in platform-usage.ts.
+ * ────────────────────────────────────────────────────────────────────────── */
 
 /* ── Reports — the report book: generated, shared, ATRs ──────────────────── */
 
@@ -315,7 +255,7 @@ export function deriveReportsPortfolio(reports: GeneratedReport[]): SectionPortf
     bars: {
       title: 'By kind',
       items: byKind,
-      note: 'Classified the way the Reports page classifies them — by framework, not by the label on the card. Sharing is a separate axis: a shared report is still SOX or Internal Audit.',
+      note: 'Classified the way the Reports page classifies them: by framework, not by the label on the card. Sharing is a separate axis, so a shared report is still SOX or Internal Audit.',
     },
     donut: {
       title: 'Report mix',
@@ -469,7 +409,12 @@ export function deriveRiskControlsPortfolio(): SectionPortfolio {
         color: bp?.color ?? BRAND,
         risks: risks.length,
         controls: controls.length,
-        mappedPct: risks.length > 0 ? Math.round((mapped / risks.length) * 100) : 100,
+        // A process with no risks on the register has no coverage to report. This
+        // used to fall back to 100, so S2C — which has never had a risk assessed —
+        // read "100% of risks mapped": a clean bill of health for a process nobody
+        // has looked at. Zero risks is missing information, not full coverage, so
+        // it is null here and the row says so in words.
+        mappedPct: risks.length > 0 ? Math.round((mapped / risks.length) * 100) : null,
       };
     })
     .sort((a, b) => b.controls - a.controls || b.risks - a.risks);
@@ -482,7 +427,9 @@ export function deriveRiskControlsPortfolio(): SectionPortfolio {
       { label: 'Controls in the library', value: fmt(CONTROL_LIBRARY.length), sub: `${keyControls} key controls` },
       { label: 'Automated controls', value: fmt(automated), sub: `${itDependent} IT-dependent · ${manual} manual` },
       { label: 'Missing a workflow', value: fmt(missingWorkflow), sub: 'no workflow linked yet', tone: missingWorkflow > 0 ? 'bad' : 'good' },
-      { label: 'RACMs', value: fmt(RACMS.length), sub: `${RACMS.filter(r => r.status === 'active').length} active` },
+      // The same registry the Process Hub tile counts, so the two tiles on this
+      // page cannot report a different number of RACMs.
+      { label: 'RACMs', value: fmt(PROCESS_HUB_RACMS.length), sub: `${PROCESS_HUB_RACMS.filter(r => r.isValidated).length} validated` },
     ],
     bars: { title: 'Risks by priority', items: byPriority, note: 'Bar length = risks · filled = mapped to a control.' },
     donut: {
@@ -501,10 +448,18 @@ export function deriveRiskControlsPortfolio(): SectionPortfolio {
         title: p.name,
         chip: { label: p.abbr, className: CHIP_BRAND },
         sub: `${p.risks} risk${p.risks === 1 ? '' : 's'} · ${p.controls} control${p.controls === 1 ? '' : 's'}`,
-        bar: { label: 'Controls', value: (p.controls / maxProcessControls) * 100, fillPct: p.mappedPct, note: `${p.controls} controls · ${p.mappedPct}% of risks mapped`, color: p.color },
-        right: p.mappedPct >= 70
-          ? { text: `${p.mappedPct}% mapped`, tone: 'good' as const }
-          : { text: `${p.mappedPct}% mapped`, tone: 'muted' as const },
+        bar: {
+          label: 'Controls',
+          value: (p.controls / maxProcessControls) * 100,
+          fillPct: p.mappedPct ?? 0,
+          note: p.mappedPct === null
+            ? `${p.controls} control${p.controls === 1 ? '' : 's'} · no risks to map them to`
+            : `${p.controls} control${p.controls === 1 ? '' : 's'} · ${p.mappedPct}% of risks mapped`,
+          color: p.color,
+        },
+        right: p.mappedPct === null
+          ? { text: 'No risks captured', tone: 'bad' as const }
+          : { text: `${p.mappedPct}% mapped`, tone: p.mappedPct >= 70 ? 'good' as const : 'muted' as const },
       })),
     },
   };
@@ -605,58 +560,105 @@ export function deriveKnowledgePortfolio(sources: DataSource[], rangeDays: numbe
  * a process sitting with no SOP — the thing that stalls everything downstream —
  * was invisible to an admin.
  *
- * Straight off the Process Hub's own registries (BUSINESS_PROCESSES, SOPS,
- * RACMS), and — importantly — its own arithmetic. Coverage is computed with
- * processCoverage(), the rule the Process Hub cards use ("percent of risks with
- * at least one linked control"), not the `coverage` field sitting on the process
- * record. That field is stale: it claims P2P is 72% covered and R2R 85%, while
- * the screen the admin is looking at says 67% and 50%.
+ * Every number here is counted off the records the Process Hub itself renders,
+ * never the summary fields carried on the BUSINESS_PROCESSES record. Those
+ * fields are stale in every direction, and each one put a different number on
+ * this page than the screen one click away:
+ *
+ *   field           says            Process Hub actually shows
+ *   bp.risks        P2P 9, R2R 11   6 and 2 (the risk register, filtered)
+ *   bp.controls     P2P 24, R2R 31  6 and 1 (controls mapped to those risks)
+ *   bp.coverage     P2P 72%, R2R 85%   67% and 50%
+ *   bp.sops         P2P 2, R2R 3    7 and 2 (the SOP list)
+ *
+ * Summing bp.controls claimed 73 controls mapped across the platform; the
+ * records hold 25. So risks, controls, coverage and RACM counts all come from
+ * processCoverage.ts — the Process Hub's own rules — and SOPs are counted off
+ * the SOP list.
+ *
+ * The two SOPs whose RACM generation failed are surfaced rather than folded into
+ * a "processed" count: a failed SOP is a process that silently stopped halfway,
+ * and it is the one thing on this tile an admin can actually go fix.
  */
 export function deriveProcessHubPortfolio(): SectionPortfolio {
   const withCoverage = BUSINESS_PROCESSES.map(bp => ({
     ...bp,
     sopCount: SOPS.filter(s => s.bpId === bp.id).length,
-    racmCount: racmsForProcess(bp.id),
+    racmCount: racmsForProcess(bp.abbr),
+    riskCount: processRisks(bp.id).length,
+    controlCount: processControls(bp.id).length,
     cover: processCoverage(bp.id),
   }));
 
   const mapped = withCoverage.filter(bp => bp.sopCount > 0);
   const unmapped = withCoverage.filter(bp => bp.sopCount === 0);
-  const activeRacms = RACMS.filter(r => r.status === 'active').length;
-  const draftRacms = RACMS.filter(r => r.status === 'draft').length;
+
+  // RACMs, counted off the registry the Hub's RACM tab renders. Some sit against
+  // a framework (ITGC) rather than one of the four business processes, so the
+  // per-process counts do not have to add up to the total — say so rather than
+  // let the two numbers look broken.
+  const totalRacms = PROCESS_HUB_RACMS.length;
+  const racmsOnProcesses = withCoverage.reduce((s, bp) => s + bp.racmCount, 0);
+  const offProcessRacms = totalRacms - racmsOnProcesses;
+
   const processedSops = SOPS.filter(s => s.status === 'processed').length;
-  const totalControls = BUSINESS_PROCESSES.reduce((s, bp) => s + bp.controls, 0);
+  const failedSops = SOPS.filter(s => s.status === 'failed').length;
+
+  const totalControls = withCoverage.reduce((s, bp) => s + bp.controlCount, 0);
+  const totalRisks = withCoverage.reduce((s, bp) => s + bp.riskCount, 0);
   const covered = mapped.length > 0
     ? Math.round(mapped.reduce((s, bp) => s + bp.cover, 0) / mapped.length)
     : 0;
 
-  const maxControls = Math.max(1, ...BUSINESS_PROCESSES.map(bp => bp.controls));
+  const maxControls = Math.max(1, ...withCoverage.map(bp => bp.controlCount));
 
   return {
     stats: [
       { label: 'Business processes', value: fmt(BUSINESS_PROCESSES.length), sub: `${mapped.length} with an SOP` },
       { label: 'Processes with no SOP', value: fmt(unmapped.length), sub: unmapped.map(bp => bp.abbr).join(' · ') || 'all mapped', tone: unmapped.length > 0 ? 'bad' : 'good' },
-      { label: 'SOPs uploaded', value: fmt(SOPS.length), sub: `${processedSops} processed` },
-      { label: 'RACMs', value: fmt(RACMS.length), sub: `${activeRacms} active · ${draftRacms} draft` },
-      { label: 'Controls mapped', value: fmt(totalControls), sub: 'across every process' },
+      // `tone` colours the value, so it may only carry a tone when the value
+      // itself is the bad thing. "10 SOPs uploaded" in red would read as "10 is
+      // a problem" — it isn't; the two that failed are. So when SOPs have failed,
+      // the failure IS the stat, and the upload total moves into its sub.
+      failedSops > 0
+        ? {
+            label: 'SOPs that failed',
+            value: fmt(failedSops),
+            sub: `of ${SOPS.length} uploaded · no RACM produced`,
+            tone: 'bad' as const,
+          }
+        : {
+            label: 'SOPs uploaded',
+            value: fmt(SOPS.length),
+            sub: `all ${processedSops} made a RACM`,
+            tone: 'good' as const,
+          },
+      {
+        label: 'RACMs',
+        value: fmt(totalRacms),
+        sub: offProcessRacms > 0
+          ? `${racmsOnProcesses} on a process · ${offProcessRacms} on a framework`
+          : 'all on a business process',
+      },
+      { label: 'Risks captured', value: fmt(totalRisks), sub: `${totalControls} control${totalControls === 1 ? '' : 's'} mapped to them` },
       { label: 'Average coverage', value: `${covered}%`, sub: 'risks with a control mapped', tone: covered >= 70 ? 'good' : 'neutral' },
     ],
     bars: {
       title: 'Controls by process',
       items: withCoverage.map(bp => ({
         label: bp.name,
-        value: bp.controls,
+        value: bp.controlCount,
         fillPct: bp.cover,
         note: bp.sopCount === 0 ? 'No SOP yet' : `${bp.cover}% covered`,
         color: bp.sopCount === 0 ? MUTED : bp.color,
       })),
-      note: 'Bar length = controls · filled = coverage. A process with no SOP has nothing behind it yet.',
+      note: 'Bar length = controls mapped · filled = coverage. A process with no SOP has nothing behind it yet.',
     },
     donut: {
-      title: 'RACM status',
+      title: 'SOP → RACM',
       items: [
-        { name: 'Active', value: activeRacms, color: GOOD },
-        { name: 'Draft', value: draftRacms, color: WARN },
+        { name: 'Made a RACM', value: processedSops, color: GOOD },
+        { name: 'Generation failed', value: failedSops, color: BAD },
       ].filter(s => s.value > 0),
     },
     rows: {
@@ -666,8 +668,8 @@ export function deriveProcessHubPortfolio(): SectionPortfolio {
         id: bp.id,
         title: bp.name,
         chip: { label: bp.abbr, className: CHIP_BRAND },
-        sub: `${bp.sopCount} SOP${bp.sopCount === 1 ? '' : 's'} · ${bp.risks} risk${bp.risks === 1 ? '' : 's'} · ${bp.racmCount} RACM${bp.racmCount === 1 ? '' : 's'}`,
-        bar: { label: 'Controls', value: (bp.controls / maxControls) * 100, fillPct: bp.cover, note: `${bp.controls} controls`, color: bp.color },
+        sub: `${bp.sopCount} SOP${bp.sopCount === 1 ? '' : 's'} · ${bp.riskCount} risk${bp.riskCount === 1 ? '' : 's'} · ${bp.racmCount} RACM${bp.racmCount === 1 ? '' : 's'}`,
+        bar: { label: 'Controls', value: (bp.controlCount / maxControls) * 100, fillPct: bp.cover, note: `${bp.controlCount} control${bp.controlCount === 1 ? '' : 's'}`, color: bp.color },
         right: bp.sopCount === 0
           ? { text: 'Not mapped', tone: 'bad' as const }
           : { text: `${bp.cover}% covered`, tone: bp.cover >= 70 ? 'good' as const : 'muted' as const },

@@ -1,4 +1,4 @@
-import { test, expect } from './_helpers';
+import { test, expect, usageTab } from './_helpers';
 
 /**
  * Platform Usage reads the live Knowledge Hub catalog, not a snapshot: change
@@ -26,7 +26,11 @@ test('Knowledge Hub stat tracks the live catalog', async ({ page }) => {
 
   await page.getByRole('button', { name: /^Platform Usage/i }).first().click();
   await page.waitForTimeout(2500);
+  // The Knowledge Hub tile lives on the Sections tab now.
+  await usageTab(page, 'Sections');
   const usage = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
-  expect(usage, 'usage must report the same 2 sources, not a stale seed').toMatch(/2 Sources connected/);
-  expect(usage, 'and 0 folders, since neither source is a folder').toMatch(/0 Folders indexed/);
+  // The tile is a definition list — label first, then the figure ("Sources
+  // connected 2"), not the other way round.
+  expect(usage, 'usage must report the same 2 sources, not a stale seed').toMatch(/Sources connected 2/);
+  expect(usage, 'and 0 folders, since neither source is a folder').toMatch(/Folders indexed 0/);
 });

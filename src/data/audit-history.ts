@@ -46,6 +46,7 @@ import {
   WORKFLOWS as WORKFLOW_RECORDS, DATA_SOURCES, GENERATED_REPORTS,
 } from './mockData';
 import { SEED as KH_ITEMS } from '../components/data-sources/sources';
+import { CONCIERGE_TOOLS } from './conciergeTools';
 import { WORKSPACES, DEFAULT_WORKSPACE } from './workspaces';
 
 type SeedLog = Omit<AuditLog, 'id'>;
@@ -178,10 +179,46 @@ const QUESTIONS = [
   'explain the exceptions raised by the three-way match',
 ] as const;
 
-const TOOLS = [
-  'RACM generator', 'control tester', 'evidence summariser',
-  'exception triager', 'risk drafter', 'walkthrough builder',
-] as const;
+/**
+ * How much each AI Concierge tool actually gets run, and on what.
+ *
+ * The catalog is the source of truth for *which* tools exist (conciergeTools.ts);
+ * this is the source of truth for how hard each one is worked. Attention is never
+ * uniform: the RACM Generator is the reason most people open the Concierge at all,
+ * and the Medical Report Reader ships for an insurance vertical this workspace
+ * doesn't audit — nobody has ever run it. Omitted from this map ⇒ zero runs, and
+ * the page reports that as an unused tool rather than inventing a number.
+ *
+ * Weights sum to 3 — the weight the single generic Concierge template used to
+ * carry in the `ai` bucket — so splitting one template into seven changes which
+ * tool an event names, not how many AI events there are.
+ *
+ * The old template logged every run under one 'Concierge Tool' entity with the
+ * tool's name buried in prose, and named tools ('evidence summariser', 'risk
+ * drafter') the platform doesn't even ship. Platform Usage therefore could not
+ * say which tool anyone used. The entity is now the tool's real title, so runs
+ * join back to the catalog by name — the same rule the dashboards follow.
+ */
+const TOOL_ATTENTION: Record<string, number> = {
+  'RACM Generator': 1.0,
+  'Document Forensics': 0.7,
+  'Table Extractor': 0.5,
+  'Insights & Anomaly Report': 0.4,
+  'Image Analytics': 0.25,
+  'Speech Auditor': 0.15,
+  // 'Medical Report Reader' — shipped, never run in this workspace.
+};
+
+/** What each tool is plausibly pointed at, so a run reads like a real one. */
+const TOOL_TARGET: Record<string, () => string> = {
+  'RACM Generator': () => `the ${pick(PROCESSES)} SOP`,
+  'Document Forensics': () => `a vendor invoice pack for ${pick(PROCESSES)}`,
+  'Table Extractor': () => `a bank statement for ${pick(PROCESSES)}`,
+  'Insights & Anomaly Report': () => `the ${pick(PROCESSES)} ledger extract`,
+  'Image Analytics': () => `site photos filed against ${pick(PROCESSES)}`,
+  'Speech Auditor': () => `a recorded ${pick(PROCESSES)} walkthrough call`,
+  'Medical Report Reader': () => 'a claim file',
+};
 
 const DOC_FORMATS = ['PDF', 'DOCX', 'PPTX'] as const;
 
@@ -210,7 +247,18 @@ interface Template {
 const TEMPLATES: Record<Bucket, Template[]> = {
   ai: [
     { action: 'Create', module: 'Ask IRA', entity: 'Query', weight: 6, text: () => `Asked Ask IRA: ${pick(QUESTIONS)}` },
-    { action: 'Run', module: 'AI Concierge', entity: 'Concierge Tool', weight: 3, text: () => `Ran the ${pick(TOOLS)} on ${pick(PROCESSES)}` },
+    // One template per tool the Concierge actually ships, so the run says which
+    // tool it was. A tool with no attention weight gets no template at all —
+    // that absence is what makes "never run" true rather than merely unproven.
+    ...CONCIERGE_TOOLS
+      .filter(t => (TOOL_ATTENTION[t.title] ?? 0) > 0)
+      .map((t): Template => ({
+        action: 'Run',
+        module: 'AI Concierge',
+        entity: t.title,
+        weight: TOOL_ATTENTION[t.title],
+        text: () => `Ran ${t.title} on ${TOOL_TARGET[t.title]?.() ?? pick(PROCESSES)}`,
+      })),
     // A Create that isn't a Query: counted as activity, not as a question asked.
     { action: 'Create', module: 'Ask IRA', entity: 'Insight', weight: 1, text: () => `Saved an Ask IRA answer into "${pick(REPORTS)}"` },
   ],

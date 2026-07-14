@@ -31,6 +31,7 @@ import type { View } from '../../hooks/useAppState';
 import { useCan } from '../../context/CurrentUserContext';
 import type { PermissionKey } from '../../data/rbac';
 import { RISKS, CONTROLS, ENGAGEMENTS, ENGAGEMENT_CONTROLS, DEFICIENCIES, WORKFLOWS, GRC_EXCEPTIONS, DATA_SOURCES, BUSINESS_PROCESSES, GENERATED_REPORTS } from '../../data/mockData';
+import { processCoverage, processRisks, processControls } from '../../data/processCoverage';
 import { QUERY_SESSIONS } from '../../data/queryHistory';
 import { SeverityBadge } from '../shared/StatusBadge';
 import type { PlatformNotification, NotificationCategory } from '../../data/notifications';
@@ -2226,8 +2227,21 @@ function ConnectedSourcesSection({ setView, rangeDays }: { setView: Props['setVi
 
 // ─── Business process coverage ──────────────────────────────────────────────
 
-function BusinessProcessesSection({ setView, rangeDays, setSelectedBP }: { setView: Props['setView']; rangeDays: number | null; setSelectedBP: Props['setSelectedBP'] }) {
-  const scale = scaleForRange(rangeDays);
+/** "1 control", "6 controls" — R2R really does hold exactly one. */
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * Coverage, risks and controls come off the records (data/processCoverage.ts) —
+ * the same rules the Process Hub and Platform Usage use, so all three screens
+ * report one number per process.
+ *
+ * They are deliberately NOT scaled by the date range. A process's risks and
+ * controls are standing inventory, not activity inside a window: P2P does not
+ * hold fewer risks because you picked "last 7 days". The old code scaled the
+ * (already stale) `bp.risks`/`bp.controls` fields, so this card could show a
+ * different risk count than the process's own page for two separate reasons.
+ */
+function BusinessProcessesSection({ setView, setSelectedBP }: { setView: Props['setView']; setSelectedBP: Props['setSelectedBP'] }) {
   return (
     <div className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-canvas-border/60 shrink-0">
@@ -2252,20 +2266,20 @@ function BusinessProcessesSection({ setView, rangeDays, setSelectedBP }: { setVi
               >
                 {bp.abbr}
               </span>
-              <span className="text-xs tabular-nums font-semibold" style={{ color: bp.color }}>{bp.coverage}%</span>
+              <span className="text-xs tabular-nums font-semibold" style={{ color: bp.color }}>{processCoverage(bp.id)}%</span>
             </div>
             <div className="text-[0.75rem] font-medium text-ink-900 truncate">{bp.name}</div>
             <div className="mt-1.5 h-1 rounded-full bg-canvas-border/40 overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${bp.coverage}%` }}
+                animate={{ width: `${processCoverage(bp.id)}%` }}
                 transition={{ delay: 0.3, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                 className="h-full rounded-full"
                 style={{ backgroundColor: bp.color }}
               />
             </div>
             <div className="text-xs text-ink-500 mt-1.5 tabular-nums">
-              {Math.round(bp.risks * scale)} risks · {Math.round(bp.controls * scale)} controls
+              {plural(processRisks(bp.id).length, 'risk')} · {plural(processControls(bp.id).length, 'control')}
             </div>
           </button>
         ))}
@@ -4282,7 +4296,7 @@ export default function HomeView({
       case 'exceptions':    return <OpenExceptionsSection setView={setView} rangeDays={rangeDays} />;
       case 'workflows':     return <TopWorkflowsSection setView={setView} rangeDays={rangeDays} setSelectedWorkflow={setSelectedWorkflow} />;
       case 'sources':       return <ConnectedSourcesSection setView={setView} rangeDays={rangeDays} />;
-      case 'processes':     return <BusinessProcessesSection setView={setView} rangeDays={rangeDays} setSelectedBP={setSelectedBP} />;
+      case 'processes':     return <BusinessProcessesSection setView={setView} setSelectedBP={setSelectedBP} />;
       case 'reports-list':  return <RecentReportsSection setView={setView} rangeDays={rangeDays} isPinned={pinnedStore.isPinned} togglePin={pinnedStore.toggle} />;
       case 'concierge':     return <ConciergeSection setView={setView} rangeDays={rangeDays} onLaunchWorkflowBuilder={onLaunchWorkflowBuilder} />;
       case 'calendar':      return <AuditCalendarSection setView={setView} rangeDays={rangeDays} openAuditExecution={openAuditExecution} />;

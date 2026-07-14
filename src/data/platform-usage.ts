@@ -40,6 +40,7 @@
 import type { AdminUser, AuditLog } from '../context/AdminDataContext';
 import { GENERATED_REPORTS, CHAT_HISTORY } from './mockData';
 import { ATR_LIBRARY } from './atrLibrary';
+import { CONCIERGE_TOOLS } from './conciergeTools';
 import { WORKSPACES, type Workspace } from './workspaces';
 
 /* ── Modules the breakdown reports on ──
@@ -690,6 +691,80 @@ function tallyByUser(days: UsageDay[], match: (e: UsageEntry) => boolean) {
 /** Who ran Concierge tools in the window, busiest first. */
 export function conciergeRunners(days: UsageDay[]): { user: string; count: number }[] {
   return tallyByUser(days, isConciergeRun);
+}
+
+/* ── The toolkit, tool by tool ──────────────────────────────────────────────
+ *
+ * A Concierge run names the tool it ran in its `entity` — the seeded history and
+ * the live logger (useConciergeJob) both write the tool's catalog title there —
+ * so runs join back to CONCIERGE_TOOLS by name, exactly as dashboard events do.
+ * Every tool in the catalog is returned, including the ones nobody has ever run:
+ * a tool sitting at zero is the finding, and dropping it would hide it. */
+
+/** One run of one tool, with the day it happened on. */
+export interface ConciergeRun {
+  entry: UsageEntry;
+  dayOffset: number;
+}
+
+export interface ConciergeToolUsage {
+  id: string;
+  title: string;
+  description: string;
+  tags: string[];
+  runs: number;
+  /** Share of every Concierge run in the window, 0–100. */
+  share: number;
+  /** Who ran it, busiest first. */
+  runners: { user: string; count: number }[];
+  /** Day offset of the most recent run — 0 is the anchor. Null when never run. */
+  lastRunOffset: number | null;
+  /** Runs per day across the window, oldest first — chart-ready. */
+  series: { dayOffset: number; count: number }[];
+  /** The runs themselves, newest first. */
+  recent: ConciergeRun[];
+}
+
+export function conciergeToolUsage(days: UsageDay[]): ConciergeToolUsage[] {
+  const totalRuns = aiToolRuns(days);
+  // Entity → tool. Matched on the lowercased title so a stray capital in a log
+  // line can't orphan a run into an unattributable bucket.
+  const byName = new Map(CONCIERGE_TOOLS.map(t => [t.title.toLowerCase(), t]));
+
+  const runsByTool = new Map<string, ConciergeRun[]>(CONCIERGE_TOOLS.map(t => [t.id, []]));
+  days.forEach(d => d.entries.filter(isConciergeRun).forEach(e => {
+    const tool = byName.get(e.entity.toLowerCase());
+    if (tool) runsByTool.get(tool.id)!.push({ entry: e, dayOffset: d.dayOffset });
+  }));
+
+  return CONCIERGE_TOOLS
+    .map(tool => {
+      const runs = runsByTool.get(tool.id)!;
+      const byUser = new Map<string, number>();
+      runs.forEach(r => byUser.set(r.entry.user, (byUser.get(r.entry.user) ?? 0) + 1));
+
+      return {
+        id: tool.id,
+        title: tool.title,
+        description: tool.description,
+        tags: tool.tags.map(t => t.label),
+        runs: runs.length,
+        share: totalRuns > 0 ? Math.round((runs.length / totalRuns) * 100) : 0,
+        runners: [...byUser.entries()]
+          .map(([user, count]) => ({ user, count }))
+          .sort((a, b) => b.count - a.count || a.user.localeCompare(b.user)),
+        // Offsets count backwards, so the smallest is the newest.
+        lastRunOffset: runs.length > 0 ? Math.min(...runs.map(r => r.dayOffset)) : null,
+        series: days.map(d => ({
+          dayOffset: d.dayOffset,
+          count: runs.filter(r => r.dayOffset === d.dayOffset).length,
+        })),
+        recent: [...runs].sort(
+          (a, b) => a.dayOffset - b.dayOffset || (b.entry.hour ?? 0) - (a.entry.hour ?? 0),
+        ),
+      };
+    })
+    .sort((a, b) => b.runs - a.runs || a.title.localeCompare(b.title));
 }
 
 /** Members who asked Ask IRA a question in the window, busiest first. */

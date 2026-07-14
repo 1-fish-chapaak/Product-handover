@@ -12,6 +12,7 @@ import { ResponsiveContainer, AreaChart, Area } from 'recharts';
 import Modal from '../shared/Modal';
 import { StatusBadge, ActionBadge } from '../shared/StatusBadge';
 import { InitialsAvatar } from '../admin/AdminPrimitives';
+import { Eyebrow } from './usageChrome';
 import { getRole } from '../../data/rbac';
 import type { AuditLog } from '../../context/AdminDataContext';
 import {
@@ -21,8 +22,9 @@ import {
 
 const fmt = (n: number) => n.toLocaleString('en-US');
 
+/** The page's one micro-label. Was a local re-spelling at tracking-[0.14em]. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2.5">{children}</div>;
+  return <Eyebrow className="mb-2.5">{children}</Eyebrow>;
 }
 
 export default function UserUsageModal({

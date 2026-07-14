@@ -138,14 +138,23 @@
   --z-toast:   300;
 }
 
-/* ── Scrollbars (subtle, brand-tinted) ── */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-canvas-border) transparent;
+/* ── Scrollbars (subtle, brand-tinted) ──
+   Chrome ignores every ::-webkit-scrollbar rule on an element that also sets
+   scrollbar-width/scrollbar-color, and falls back to its own ~11px `thin` bar.
+   So the standard properties are fenced off to Firefox, which is the only
+   engine without ::-webkit-scrollbar. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-canvas-border) transparent;
+  }
 }
-*::-webkit-scrollbar { width: 5px; height: 5px; }
+/* -webkit-appearance: none is load-bearing — without it macOS Chrome/Safari keep
+   the native overlay scrollbar and ignore the width below. */
+*::-webkit-scrollbar { -webkit-appearance: none; width: 5px; height: 5px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb { background: var(--color-canvas-border); border-radius: 3px; }
+*::-webkit-scrollbar-corner { background: transparent; }
 
 ::selection {
   background: var(--color-brand-50);
@@ -652,9 +661,11 @@ button.no-focus-ring:focus,
 /* Table preview scroll — a thin, always-visible classic scrollbar so a wide
    spreadsheet reads as scrollable from the first render (no macOS overlay that
    only pops up on hover, and no fade obscuring the right-hand columns). */
-.kh-table-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-canvas-border) transparent;
+@supports not selector(::-webkit-scrollbar) {
+  .kh-table-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-canvas-border) transparent;
+  }
 }
 .kh-table-scroll::-webkit-scrollbar {
   -webkit-appearance: none;

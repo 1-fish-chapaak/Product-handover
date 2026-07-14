@@ -220,7 +220,15 @@ export default function SmartTable<T extends Record<string, unknown>>({
               )}
             </div>
           )}
-          {headerExtra && <div className="flex items-center gap-2">{headerExtra}</div>}
+          {/* When the caller opted out of the built-in search it owns the whole
+              toolbar row, so the slot has to span it — otherwise the wrapper is
+              content-sized and a `w-full` / `ml-auto` inside it resolves against
+              its own width and no-ops, which is why the search-left ·
+              filters-right toolbars (§7.11.1) all clumped to the left. Tables
+              that keep the built-in search are unaffected. */}
+          {headerExtra && (
+            <div className={`flex items-center gap-2 ${searchable ? '' : 'flex-1 min-w-0'}`}>{headerExtra}</div>
+          )}
           {paginated && !hideResultCount && (
             <div className="text-[0.75rem] text-text-muted shrink-0">
               {sorted.length} result{sorted.length !== 1 ? 's' : ''}
