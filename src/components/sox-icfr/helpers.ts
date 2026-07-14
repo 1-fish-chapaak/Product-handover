@@ -1,6 +1,6 @@
 import type {
   Conclusion, Control, Court, Deficiency, DesignTrack, HandoffTask, IcfrEngagement,
-  Likelihood, MaterialityRules, OperatingTrack, Role, Severity, TrackConclusion,
+  Likelihood, MaterialityRules, OperatingTrack, ReviewNote, Role, Severity, TrackConclusion,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
@@ -148,6 +148,15 @@ export function isAwaitingReview(c: Control): boolean {
   return isControlLocked(c) && !!c.wpSignoff?.preparer && !c.wpSignoff?.reviewer;
 }
 
+// ─── Review notes — the formal raise → resolve → verify channel ──────────────────
+export function reviewNotesFor(eng: IcfrEngagement, controlId: string): ReviewNote[] {
+  return eng.reviewNotes.filter(n => n.controlId === controlId);
+}
+/** Notes that still block this paper's countersign (anything not Closed). */
+export function pendingReviewNoteCount(eng: IcfrEngagement, controlId: string): number {
+  return eng.reviewNotes.filter(n => n.controlId === controlId && n.status !== 'Closed').length;
+}
+
 // ─── Track progress ──────────────────────────────────────────────────────────────
 
 import type { DesignPoint, OperatingStep, TestResult, ValidationQA, ValidationTable } from './types';
@@ -234,8 +243,12 @@ export function operatingProgress(c: Control) {
 
 // ─── Baton — whose court ─────────────────────────────────────────────────────────
 
-export function courtFor(c: Control, tasks: HandoffTask[]): Court {
+export function courtFor(c: Control, tasks: HandoffTask[], notes: ReviewNote[] = []): Court {
   if (tasks.some(t => t.controlId === c.id && t.assigneeRole === 'risk-owner' && t.status === 'open')) return 'risk-owner';
+  // Review notes move the baton with them: an open note waits on the auditor's
+  // resolution; a resolved one waits on the reviewer's verification.
+  if (notes.some(n => n.controlId === c.id && n.status === 'Open')) return 'auditor';
+  if (notes.some(n => n.controlId === c.id && n.status === 'Resolved')) return 'reviewer';
   const concl = controlConclusion(c);
   // Concluded isn't closed: the paper still travels auditor (sign) → reviewer
   // (countersign). Only a countersigned paper leaves every court.
@@ -306,7 +319,7 @@ export function engagementProgress(eng: IcfrEngagement) {
     effective: concl.filter(x => x === 'Effective').length,
     ineffective: concl.filter(x => x === 'Ineffective').length,
     inProgress: concl.filter(x => x === 'In progress').length,
-    waitingOnOwner: cs.filter(c => courtFor(c, eng.tasks) === 'risk-owner').length,
+    waitingOnOwner: cs.filter(c => courtFor(c, eng.tasks, eng.reviewNotes) === 'risk-owner').length,
     awaitingReview: cs.filter(isAwaitingReview).length,
     reviewed: cs.filter(isControlFinal).length,
   };

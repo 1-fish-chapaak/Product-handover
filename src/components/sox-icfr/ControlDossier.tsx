@@ -5,13 +5,13 @@ import {
   ArrowLeft, FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, Download, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
-  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, ShieldCheck, History, PenLine,
+  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, ShieldCheck, History, PenLine, StickyNote,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import {
   controlConclusion, courtFor, designProgress, discussionsFor, operatingProgress, trackResult,
   pointResult, stepResult, isControlLocked, isEngagementLocked, sampleSizeGuide, failedItgcs, isItgcDependent,
-  formatINR as fmtINR,
+  formatINR as fmtINR, pendingReviewNoteCount, reviewNotesFor,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, TrackPill, Tickmark, Stamp } from './parts';
 import { Pill } from '../shared/StatusBadge';
@@ -807,20 +807,84 @@ function DiscussionPane({ control }: { control: Control }) {
   );
 }
 
-// right rail — the collaboration surfaces: what was done (History) and what was said (Discussion)
+// ── review notes rail — the formal channel: raise → resolve → verify ──────────────
+// Discussions stay the informal back-and-forth; a note is the reviewer's tracked
+// challenge that blocks the paper's countersign until resolved AND verified.
+function ReviewNotesPane({ control }: { control: Control }) {
+  const { eng, role, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote } = useIcfr();
+  const notes = reviewNotesFor(eng, control.id);
+  const [draft, setDraft] = useState('');
+  const [respondingTo, setRespondingTo] = useState<string | null>(null);
+  const [resp, setResp] = useState('');
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+        {notes.length === 0 && <div className="text-center text-[12px] text-ink-400 py-10 px-4">No review notes on this paper.<br />The reviewer raises them here, the auditor resolves, the reviewer verifies — a paper can't be countersigned with a note open.</div>}
+        {notes.map(n => (
+          <div key={n.id} className="rounded-xl border border-canvas-border bg-canvas-elevated p-3">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Pill tone={n.status === 'Open' ? 'high' : n.status === 'Resolved' ? 'evidence' : 'compliant'}>{n.status === 'Resolved' ? 'Awaiting verification' : n.status}</Pill>
+              <span className="ml-auto text-[10.5px] text-ink-400">{n.raisedAt}</span>
+            </div>
+            <p className="text-[12px] text-ink-800 leading-snug">{n.text}</p>
+            <div className="text-[10.5px] text-ink-400 mt-1">Raised by <b className="text-ink-600 font-semibold">{n.raisedBy}</b></div>
+            {n.resolution && (
+              <div className="mt-2 pl-2.5 border-l-2 border-evidence-200">
+                <p className="text-[12px] text-ink-700 leading-snug">{n.resolution.text}</p>
+                <div className="text-[10.5px] text-ink-400 mt-0.5">Resolved by <b className="text-ink-600 font-semibold">{n.resolution.by}</b> · {n.resolution.at}</div>
+              </div>
+            )}
+            {n.verified && <div className="text-[10.5px] text-compliant-700 mt-1.5 inline-flex items-center gap-1"><CheckCircle2 size={11} /> Verified &amp; closed — {n.verified.by} · {n.verified.at}</div>}
+            {role === 'auditor' && n.status === 'Open' && (
+              respondingTo === n.id ? (
+                <div className="mt-2">
+                  <textarea autoFocus value={resp} onChange={e => setResp(e.target.value)} rows={2} placeholder="What was done about this? — recorded as the resolution" className="w-full text-[12px] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+                  <div className="flex justify-end gap-2 mt-1.5">
+                    <button onClick={() => { setRespondingTo(null); setResp(''); }} className="h-7 px-2.5 text-[12px] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer">Cancel</button>
+                    <button disabled={!resp.trim()} onClick={() => { resolveReviewNote(n.id, resp.trim()); setRespondingTo(null); setResp(''); }} className="h-7 px-3 text-[12px] font-semibold rounded-lg bg-brand-600 text-white disabled:opacity-40 enabled:hover:bg-brand-700 cursor-pointer">Resolve</button>
+                  </div>
+                </div>
+              ) : <button onClick={() => setRespondingTo(n.id)} className="mt-2 h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer inline-flex items-center gap-1"><CornerDownRight size={11} /> Resolve with response</button>
+            )}
+            {role === 'reviewer' && n.status === 'Resolved' && (
+              <div className="flex items-center gap-2 mt-2">
+                <button onClick={() => verifyReviewNote(n.id)} className="h-7 px-2.5 rounded-md bg-compliant-600 text-white text-[11.5px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1"><CheckCircle2 size={11} /> Verify &amp; close</button>
+                <button onClick={() => reopenReviewNote(n.id)} className="h-7 px-2.5 rounded-md border border-high-300 text-high-700 text-[11.5px] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1"><RotateCcw size={11} /> Reopen</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {role === 'reviewer' && (
+        <div className="p-3 border-t border-canvas-border">
+          <div className="text-[10.5px] text-ink-400 mb-1.5">A note blocks this paper's countersign until it is resolved and verified.</div>
+          <div className="flex items-end gap-2">
+            <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={2} placeholder="Raise a review note — what should the auditor address?" className="flex-1 text-[12px] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+            <button disabled={!draft.trim()} onClick={() => { raiseReviewNote(control.id, draft.trim()); setDraft(''); }} aria-label="Raise review note" className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-lg bg-brand-600 text-white disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={15} /></button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// right rail — the collaboration surfaces: what was done (History), what was said
+// (Discussion), and what the reviewer formally challenged (Notes)
 function ActivityRail({ control }: { control: Control }) {
   const { eng } = useIcfr();
-  const [pane, setPane] = useState<'history' | 'discussion'>('history');
+  const [pane, setPane] = useState<'history' | 'discussion' | 'notes'>('history');
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
   const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
+  const pendingNotes = pendingReviewNoteCount(eng, control.id);
   const tabCls = (on: boolean) => cn('flex-1 h-8 rounded-lg text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer', on ? 'bg-canvas-elevated text-brand-700 shadow-[0_1px_4px_-1px_rgba(15,8,30,0.18)] ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800');
   return (
     <aside className="panel sticky top-20 self-start max-h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex items-center gap-1 p-1 m-3 mb-2 rounded-xl bg-paper-50 border border-canvas-border">
         <button onClick={() => setPane('history')} className={tabCls(pane === 'history')}><History size={13} /> History{execCount > 0 && <span className="text-[10px] tabular-nums opacity-70">{execCount}</span>}</button>
         <button onClick={() => setPane('discussion')} className={tabCls(pane === 'discussion')}><MessageSquare size={13} /> Discussion{openDisc > 0 && <span className="text-[10px] tabular-nums opacity-70">{openDisc}</span>}</button>
+        <button onClick={() => setPane('notes')} className={tabCls(pane === 'notes')}><StickyNote size={13} /> Notes{pendingNotes > 0 && <span className="text-[10px] tabular-nums opacity-70">{pendingNotes}</span>}</button>
       </div>
-      {pane === 'history' ? <ExecutionTrail control={control} /> : <DiscussionPane control={control} />}
+      {pane === 'history' ? <ExecutionTrail control={control} /> : pane === 'discussion' ? <DiscussionPane control={control} /> : <ReviewNotesPane control={control} />}
     </aside>
   );
 }
@@ -904,7 +968,8 @@ function LockBanner({ engLocked, role, control, onReopen, onOpenPaper }: { engLo
 
 // The reviewer's desk on a concluded, preparer-signed paper — the queue routes
 // them here for exactly this choice: countersign to make it final, or return it.
-function ReviewerGate({ control, onCountersign, onReturn }: { control: Control; onCountersign: () => void; onReturn: (reason: string) => void }) {
+// Pending review notes hold the countersign: resolve & verify first.
+function ReviewerGate({ control, notesPending, onCountersign, onReturn }: { control: Control; notesPending: number; onCountersign: () => void; onReturn: (reason: string) => void }) {
   const { addToast } = useToast();
   const [returning, setReturning] = useState(false);
   const [reason, setReason] = useState('');
@@ -914,10 +979,15 @@ function ReviewerGate({ control, onCountersign, onReturn }: { control: Control; 
       <div className="flex items-center gap-2.5 flex-wrap">
         <ShieldCheck size={14} className="text-evidence-700 shrink-0" />
         <span className="text-[12.5px] font-semibold text-ink-800">In your court — concluded, signed by {signedBy?.by ?? 'the preparer'}.</span>
-        <span className="text-[12px] text-ink-500">Review the evidence below, then countersign or return with a note.</span>
+        <span className="text-[12px] text-ink-500">
+          {notesPending > 0
+            ? <>{notesPending} review note{notesPending === 1 ? '' : 's'} to clear — the countersign unlocks once they're resolved and verified (Notes rail).</>
+            : 'Review the evidence below, then countersign or return with a note.'}
+        </span>
         <span className="ml-auto flex items-center gap-2">
-          <button onClick={() => { onCountersign(); addToast({ type: 'success', title: 'Countersigned', message: `${control.wpRef} is signed off — the paper is final.` }); }}
-            className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold hover:bg-evidence-700 cursor-pointer inline-flex items-center gap-1.5"><PenLine size={13} /> Countersign &amp; sign off</button>
+          <button disabled={notesPending > 0} title={notesPending > 0 ? `${notesPending} review note${notesPending === 1 ? '' : 's'} must close first` : undefined}
+            onClick={() => { onCountersign(); addToast({ type: 'success', title: 'Countersigned', message: `${control.wpRef} is signed off — the paper is final.` }); }}
+            className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[12px] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5"><PenLine size={13} /> Countersign &amp; sign off</button>
           <button onClick={() => setReturning(o => !o)} className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[12px] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><CornerDownRight size={13} /> Return to auditor</button>
         </span>
       </div>
@@ -992,7 +1062,7 @@ export default function ControlDossier() {
             </div>
             <div className="shrink-0 flex flex-col items-end gap-2">
               <div className="leadsheet-stamp">W/P<br />{control.wpRef}</div>
-              <CourtBadge court={courtFor(control, eng.tasks)} fromRole={role} />
+              <CourtBadge court={courtFor(control, eng.tasks, eng.reviewNotes)} fromRole={role} />
             </div>
           </div>
           <div className="flex items-center gap-3 mt-3.5 pt-3 border-t border-canvas-border flex-wrap">
@@ -1012,7 +1082,7 @@ export default function ControlDossier() {
 
       {(controlLocked || engLocked) && (
         role === 'reviewer' && !engLocked && !!control.wpSignoff?.preparer && !control.wpSignoff?.reviewer
-          ? <ReviewerGate control={control} onCountersign={() => signOffControlWp(control.id, 'reviewer')} onReturn={reason => returnControl(control.id, reason)} />
+          ? <ReviewerGate control={control} notesPending={pendingReviewNoteCount(eng, control.id)} onCountersign={() => signOffControlWp(control.id, 'reviewer')} onReturn={reason => returnControl(control.id, reason)} />
           : <LockBanner engLocked={engLocked} role={role} control={control} onReopen={reason => reopenControl(control.id, reason)} onOpenPaper={() => setWpPreview(true)} />
       )}
       {!controlLocked && !engLocked && control.reviewReturn && <ReturnedBanner ret={control.reviewReturn} />}

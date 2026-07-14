@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
 import {
   Search, Plus, FileSpreadsheet, Layers, Rows3, MessageSquare,
-  Star, ListFilter, FileText, X, Send, LayoutGrid, Table2, FlaskConical, RefreshCw,
+  Star, ListFilter, FileText, X, Send, LayoutGrid, Table2, FlaskConical, RefreshCw, StickyNote,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import {
   controlConclusion, courtFor, designProgress, designStarted, engagementProgress, isEngagementLocked, openDiscussionCount,
-  operatingProgress, operatingStarted, isTestDueNow, testDueDisplay, testsDueNow, trackResult,
+  operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
 import BulkTestModal from './BulkTestModal';
@@ -42,7 +42,7 @@ function CardTrack({ label, res, started }: { label: string; res: ReturnType<typ
   );
 }
 
-function ControlCard({ c, discN, onOpen, selectable, selected, onToggle }: { c: Control; discN: number; onOpen: () => void; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
+function ControlCard({ c, discN, noteN, onOpen, selectable, selected, onToggle }: { c: Control; discN: number; noteN: number; onOpen: () => void; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
   return (
     <div role="button" tabIndex={0} className={cn('ac-card text-left', selected && 'ring-2 ring-brand-200 border-brand-300')}
       onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter') onOpen(); }} aria-label={`Open ${c.id} — ${c.description}`}>
@@ -55,6 +55,7 @@ function ControlCard({ c, discN, onOpen, selectable, selected, onToggle }: { c: 
         <span className="ml-auto inline-flex items-center gap-2 shrink-0">
           {c.isKey && <Star size={11} className="text-mitigated-500 fill-mitigated-100" />}
           {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-brand-700"><MessageSquare size={9} />{discN}</span>}
+          {noteN > 0 && <span title={`${noteN} review note${noteN === 1 ? '' : 's'} pending`} className="inline-flex items-center gap-0.5 text-[10px] font-bold text-high-700"><StickyNote size={9} />{noteN}</span>}
           <span className="font-mono text-[10.5px] text-ink-400">{c.wpRef}</span>
         </span>
       </div>
@@ -116,7 +117,7 @@ export default function ControlRegister() {
       if (term && !(`${c.id} ${c.wpRef} ${c.description} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       const concl = controlConclusion(c);
       if (savedView === 'due' && !isTestDueNow(c)) return false;
-      if (savedView === 'court' && courtFor(c, eng.tasks) !== role) return false;
+      if (savedView === 'court' && courtFor(c, eng.tasks, eng.reviewNotes) !== role) return false;
       if (savedView === 'design' && trackResult(c.design) !== 'Not tested') return false;
       if (savedView === 'operating' && trackResult(c.operating) !== 'Not tested') return false;
       if (savedView === 'exceptions' && concl !== 'Ineffective') return false;
@@ -213,7 +214,7 @@ export default function ControlRegister() {
               )}
               <div className="card-grid">
                 {g.rows.map(c => (
-                  <ControlCard key={c.id} c={c} discN={openDiscussionCount(eng, c.id)} onOpen={() => openControl(c.id)}
+                  <ControlCard key={c.id} c={c} discN={openDiscussionCount(eng, c.id)} noteN={pendingReviewNoteCount(eng, c.id)} onOpen={() => openControl(c.id)}
                     selectable={role === 'auditor'} selected={sel.has(c.id)} onToggle={() => toggle(c.id)} />
                 ))}
               </div>
@@ -253,6 +254,7 @@ export default function ControlRegister() {
                 {g.rows.map(c => {
                   const dp = designProgress(c); const op = operatingProgress(c);
                   const discN = openDiscussionCount(eng, c.id);
+                  const noteN = pendingReviewNoteCount(eng, c.id);
                   return (
                     <tr key={c.id} className={cn('reg-row', sel.has(c.id) && 'sel')} onClick={() => openControl(c.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') openControl(c.id); }} role="button" aria-label={`Open ${c.id} — ${c.description}`}>
                       <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>
@@ -262,6 +264,7 @@ export default function ControlRegister() {
                           {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
                           <span className="font-semibold text-ink-900 text-[12.5px] truncate max-w-[420px]">{c.description}</span>
                           {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[10.5px] font-bold text-brand-700 bg-brand-50 px-1.5 h-[17px] rounded-full"><MessageSquare size={9} />{discN}</span>}
+                          {noteN > 0 && <span title={`${noteN} review note${noteN === 1 ? '' : 's'} pending`} className="inline-flex items-center gap-0.5 text-[10.5px] font-bold text-high-700 bg-high-50 px-1.5 h-[17px] rounded-full"><StickyNote size={9} />{noteN}</span>}
                         </div>
                         <div className="text-[11px] text-ink-400 mt-0.5">
                           {c.id} · {c.subProcess} · {c.owner} ·{' '}
@@ -272,7 +275,7 @@ export default function ControlRegister() {
                       <td><TrackCell result={trackResult(c.design)} a={dp.docsReceived} b={dp.docsTotal} label={`${dp.docsReceived}/${dp.docsTotal} docs`} /></td>
                       <td><TrackCell result={trackResult(c.operating)} a={op.passed} b={op.total} label={`${op.tested}/${op.total} · ${c.operating.method === 'Automated' ? 'auto' : 'manual'}`} /></td>
                       <td><ConclusionPill c={controlConclusion(c)} /></td>
-                      <td><CourtBadge court={courtFor(c, eng.tasks)} fromRole={role} /></td>
+                      <td><CourtBadge court={courtFor(c, eng.tasks, eng.reviewNotes)} fromRole={role} /></td>
                     </tr>
                   );
                 })}

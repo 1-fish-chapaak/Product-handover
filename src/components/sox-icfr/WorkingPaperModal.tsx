@@ -81,8 +81,10 @@ function ControlSignoff({ eng, c }: { eng: IcfrEngagement; c: Control }) {
   const so = c.wpSignoff;
   const concluded = isControlLocked(c);
   const engLocked = isEngagementLocked(eng);
+  // pending review notes hold the countersign — same guard as the store
+  const notesPending = eng.reviewNotes.filter(n => n.controlId === c.id && n.status !== 'Closed').length;
   const canSign = role === 'auditor' && concluded && !so?.preparer && !engLocked;
-  const canCounter = role === 'reviewer' && !!so?.preparer && !so?.reviewer && !engLocked;
+  const canCounter = role === 'reviewer' && !!so?.preparer && !so?.reviewer && !engLocked && notesPending === 0;
   return (
     <div className="rounded-xl border border-canvas-border bg-paper-50/40 p-3.5 space-y-2">
       <div className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400 inline-flex items-center gap-1.5"><PenLine size={12} /> {SIGNOFF_TITLE}</div>
@@ -108,6 +110,9 @@ function ControlSignoff({ eng, c }: { eng: IcfrEngagement; c: Control }) {
         )}
         {role === 'reviewer' && !so?.preparer && (
           <span className="ml-auto shrink-0 text-[10.5px] text-ink-400">waits for the preparer's signature</span>
+        )}
+        {role === 'reviewer' && !!so?.preparer && !so?.reviewer && notesPending > 0 && (
+          <span className="ml-auto shrink-0 text-[10.5px] text-ink-400">{notesPending} review note{notesPending === 1 ? '' : 's'} must close before the countersign</span>
         )}
       </div>
     </div>

@@ -19,9 +19,10 @@ test('reviewer queue lists concluded papers; countersign makes them final', asyn
   await openSox(page);
   await page.getByRole('button', { name: 'Reviewer', exact: true }).click();
   await page.waitForTimeout(600);
-  // the queue now carries concluded, preparer-signed papers
+  // the queue now carries concluded, preparer-signed papers — pick one without
+  // pending review notes (those hold the countersign; see _sox-review-notes.spec)
   await expect(page.getByText('Reviewer queue')).toBeVisible();
-  const paperRow = page.getByText(/countersign or return/).first();
+  const paperRow = page.locator('button', { hasText: 'countersign or return' }).filter({ hasNotText: 'review note' }).first();
   await expect(paperRow).toBeVisible();
   // open the paper — the reviewer gate offers countersign / return; no test pens
   await paperRow.click();
@@ -39,7 +40,7 @@ test('return-with-note clears conclusions and lands the note on the dossier', as
   await openSox(page);
   await page.getByRole('button', { name: 'Reviewer', exact: true }).click();
   await page.waitForTimeout(600);
-  await page.getByText(/countersign or return/).first().click();
+  await page.locator('button', { hasText: 'countersign or return' }).filter({ hasNotText: 'review note' }).first().click();
   await page.waitForTimeout(700);
   await page.getByRole('button', { name: 'Return to auditor' }).click();
   await page.getByPlaceholder(/What needs rework/).fill('Sampling basis is thin — extend to the handbook size.');

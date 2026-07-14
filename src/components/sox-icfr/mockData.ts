@@ -2,7 +2,7 @@ import { validationQA } from './helpers';
 import type {
   Assertion, Attestation, Control, DesignDoc, DesignPoint, DesignTrack, Deficiency, Discussion, DocStatus,
   EvidenceFile, ExecKind, ExecutionEvent, HandoffTask, IcfrEngagement, Nature, OperatingStep, OperatingTrack,
-  RacmReview, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
+  RacmReview, ReviewNote, Role, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -398,6 +398,16 @@ const DEFICIENCIES: Deficiency[] = [
   { id: 'DEF-002', controlId: 'P2P-C-05', track: 'design', description: 'Manual AP journal review occurs after posting, so the control cannot prevent an erroneous or unauthorised posting.', rootCause: 'Review step placed post-posting in the process design.', likelihood: 'Reasonably possible', magnitude: 640_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP close', remediation: { action: 'Move review to a pre-posting hold.', date: null, owner: 'D. Rao · Controller', status: 'Open' }, status: 'Identified' },
 ];
 
+// ── review notes — one at each lifecycle stage, so every hat sees its move ───────
+const REVIEW_NOTES: ReviewNote[] = [
+  // open — blocks P2P-C-04's countersign until the auditor responds and the reviewer verifies
+  { id: 'rn-1', controlId: 'P2P-C-04', text: 'The paper concludes on reference-variant duplicates but doesn’t evidence which variants were in the sample — attach the variant list behind D2.', raisedBy: REVIEWER, raisedAt: '2d', status: 'Open' },
+  // resolved — waiting on the reviewer's verification (R2R-C-03 sits in the queue)
+  { id: 'rn-2', controlId: 'R2R-C-03', text: 'Elimination entries are agreed, but the paper doesn’t show the out-of-balance items over the ₹1L threshold were investigated.', raisedBy: REVIEWER, raisedAt: '3d', status: 'Resolved', resolution: { text: 'Added the intercompany break report — all 3 items over threshold traced to timing differences, cleared in Apr close.', by: 'A. Mehta · Auditor', at: '1d' } },
+  // closed — the full raise → resolve → verify history on the final P2P-C-01 paper
+  { id: 'rn-3', controlId: 'P2P-C-01', text: 'Confirm the approver-segregation check covers emergency changes routed outside SAP.', raisedBy: REVIEWER, raisedAt: '6d', status: 'Closed', resolution: { text: 'Emergency changes land in the same vendor-master change log — run #4821 covers them; noted in the walkthrough.', by: 'A. Mehta · Auditor', at: '5d' }, verified: { by: REVIEWER, at: '5d' } },
+];
+
 const ACCOUNTS: SignificantAccount[] = [
   { id: 'a1', name: 'Accounts Payable', balance: 184_000_000, inScope: true, assertions: ['Completeness', 'Accuracy', 'Cut-off'], process: 'Procure to Pay',
     wcgw: ['Invoices are recorded twice or against the wrong PO', 'Liabilities at period end are incomplete (unrecorded GRNs)'] },
@@ -468,6 +478,7 @@ const ENGAGEMENT: IcfrEngagement = {
   deficiencies: DEFICIENCIES,
   tasks: TASKS,
   discussions: DISCUSSIONS,
+  reviewNotes: REVIEW_NOTES,
   executions: EXECUTIONS,
   runs: RUNS,
   signoff: {},
@@ -508,6 +519,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     deficiencies: [],
     tasks: [],
     discussions: [],
+    reviewNotes: [],
     executions: [],
     runs: [],
     signoff: {},

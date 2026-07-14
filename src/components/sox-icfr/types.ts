@@ -219,6 +219,23 @@ export interface Discussion {
   comments: DiscussionComment[];
 }
 
+// ─── Review notes — the reviewer's formal channel on a working paper ─────────────
+// Lifecycle: the reviewer raises → the auditor resolves with a response → the
+// reviewer verifies & closes (or reopens). Role gates keep it four-eyes: the
+// raiser never resolves their own note, the resolver never verifies. A note that
+// isn't Closed blocks the paper's countersign. Discussions stay the informal channel.
+export type ReviewNoteStatus = 'Open' | 'Resolved' | 'Closed';
+export interface ReviewNote {
+  id: string;
+  controlId: string;
+  text: string;                                        // what the reviewer challenged
+  raisedBy: string;
+  raisedAt: string;
+  status: ReviewNoteStatus;
+  resolution?: { text: string; by: string; at: string };  // the auditor's response
+  verified?: { by: string; at: string };                   // the reviewer's close
+}
+
 // ─── Handoffs, deficiencies, scope, engagement ───────────────────────────────────
 
 export type TaskType = 'pbc' | 'query' | 'remediation';
@@ -355,6 +372,7 @@ export interface IcfrEngagement {
   deficiencies: Deficiency[];
   tasks: HandoffTask[];
   discussions: Discussion[];
+  reviewNotes: ReviewNote[];
   executions: ExecutionEvent[];
   runs: RunRecord[];
   signoff: EngagementSignoff;

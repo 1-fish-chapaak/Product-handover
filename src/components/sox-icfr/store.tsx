@@ -142,6 +142,11 @@ interface IcfrCtx {
   signOffControlWp: (controlId: string, step: 'preparer' | 'reviewer') => void;
   // the reviewer's other verb — send the concluded paper back with a note instead of countersigning
   returnControl: (controlId: string, reason: string) => void;
+  // review notes — the formal channel: reviewer raises, auditor resolves, reviewer verifies/reopens
+  raiseReviewNote: (controlId: string, text: string) => void;
+  resolveReviewNote: (noteId: string, response: string) => void;
+  verifyReviewNote: (noteId: string) => void;
+  reopenReviewNote: (noteId: string) => void;
   // testing period — interim vs year-end, and the roll-forward that moves between them
   togglePeriod: () => void;
   rollForward: () => void;
@@ -818,6 +823,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (!target || !isControlLocked(target)) return prev;               // only a concluded control's paper can be signed
       if (step === 'preparer' && target.wpSignoff?.preparer) return prev; // already signed
       if (step === 'reviewer' && (!target.wpSignoff?.preparer || target.wpSignoff.reviewer)) return prev; // countersign follows the preparer
+      if (step === 'reviewer' && prev.reviewNotes.some(n => n.controlId === controlId && n.status !== 'Closed')) return prev; // notes must clear before the countersign
       const event: ExecutionEvent = {
         id: uid('ex'), controlId, track: 'operating', kind: 'wp-signoff',
         verb: step === 'preparer' ? 'signed off the working paper' : 'countersigned the working paper',
@@ -863,6 +869,41 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       };
     });
   }, [me, role]);
+
+  // ── review notes — raise (reviewer) → resolve (auditor) → verify/reopen (reviewer).
+  // The role gates ARE the four-eyes: the raiser can't resolve their own note, and
+  // the resolver can't verify it. Each stage stamps its own actor + time.
+  const raiseReviewNote = useCallback<IcfrCtx['raiseReviewNote']>((controlId, text) => {
+    if (role !== 'reviewer') return;
+    setEng(prev => isEngagementLocked(prev) ? prev : ({
+      ...prev,
+      reviewNotes: [{ id: uid('rn'), controlId, text, raisedBy: me, raisedAt: 'just now', status: 'Open' as const }, ...prev.reviewNotes],
+    }));
+  }, [me, role]);
+  const resolveReviewNote = useCallback<IcfrCtx['resolveReviewNote']>((noteId, response) => {
+    if (role !== 'auditor') return;
+    setEng(prev => isEngagementLocked(prev) ? prev : ({
+      ...prev,
+      reviewNotes: prev.reviewNotes.map(n => n.id === noteId && n.status === 'Open'
+        ? { ...n, status: 'Resolved' as const, resolution: { text: response, by: me, at: 'just now' } } : n),
+    }));
+  }, [me, role]);
+  const verifyReviewNote = useCallback<IcfrCtx['verifyReviewNote']>((noteId) => {
+    if (role !== 'reviewer') return;
+    setEng(prev => isEngagementLocked(prev) ? prev : ({
+      ...prev,
+      reviewNotes: prev.reviewNotes.map(n => n.id === noteId && n.status === 'Resolved'
+        ? { ...n, status: 'Closed' as const, verified: { by: me, at: 'just now' } } : n),
+    }));
+  }, [me, role]);
+  const reopenReviewNote = useCallback<IcfrCtx['reopenReviewNote']>((noteId) => {
+    if (role !== 'reviewer') return;
+    setEng(prev => isEngagementLocked(prev) ? prev : ({
+      ...prev,
+      reviewNotes: prev.reviewNotes.map(n => n.id === noteId && n.status === 'Resolved'
+        ? { ...n, status: 'Open' as const } : n),
+    }));
+  }, [role]);
 
   // Create a control from the focused form — W/P ref and ID continue the
   // process's existing numbering; the control lands ready to test.
@@ -945,8 +986,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence,
     addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl,
+    raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
     togglePeriod, rollForward,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, togglePeriod, rollForward]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote, togglePeriod, rollForward]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

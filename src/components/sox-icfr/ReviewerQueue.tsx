@@ -1,18 +1,19 @@
-import { ArrowRight, CheckCircle2, ClipboardCheck, PenLine, ShieldCheck } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ClipboardCheck, PenLine, ShieldCheck, StickyNote } from 'lucide-react';
 import { useIcfr } from './store';
-import { assessSeverity, controlConclusion, isAwaitingReview } from './helpers';
+import { assessSeverity, controlConclusion, isAwaitingReview, pendingReviewNoteCount } from './helpers';
 import { SeverityPill, Stamp } from './parts';
 
 // The reviewer's desk — everything waiting on the reviewer hat, and nothing else:
-// concluded papers to countersign, retest-passed exceptions to close, and the
-// engagement countersign. Rendered only in the Reviewer role, mirroring RiskOwnerPortal.
+// concluded papers to countersign, resolved notes to verify, retest-passed
+// exceptions to close, and the engagement countersign. Reviewer role only.
 export default function ReviewerQueue() {
   const { eng, me, setView, openControl } = useIcfr();
   const papers = eng.controls.filter(isAwaitingReview);
+  const notesToVerify = eng.reviewNotes.filter(n => n.status === 'Resolved');
   const awaiting = eng.deficiencies.filter(d => d.status === 'Awaiting reviewer');
   const so = eng.signoff;
   const readyToCountersign = !!so.preparer && !so.reviewer;
-  const count = papers.length + awaiting.length + (readyToCountersign ? 1 : 0);
+  const count = papers.length + notesToVerify.length + awaiting.length + (readyToCountersign ? 1 : 0);
 
   return (
     <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
@@ -23,25 +24,49 @@ export default function ReviewerQueue() {
 
       {count === 0 ? (
         <div className="flex items-center gap-2.5 rounded-lg border border-canvas-border bg-paper-50/40 px-3.5 py-3 text-[12.5px] text-ink-500">
-          <CheckCircle2 size={15} className="text-compliant-700 shrink-0" /> Nothing waiting on you — concluded papers land here for countersign, exceptions when a retest passes, and the engagement countersign once the preparer signs.
+          <CheckCircle2 size={15} className="text-compliant-700 shrink-0" /> Nothing waiting on you — concluded papers land here for countersign, resolved notes for verification, exceptions when a retest passes, and the engagement countersign once the preparer signs.
         </div>
       ) : (
         <div className="space-y-2">
-          {papers.map(c => (
-            <button key={c.id} onClick={() => openControl(c.id)}
-              className="w-full flex items-center gap-3 rounded-xl border border-canvas-border bg-canvas-elevated p-3 text-left hover:border-brand-300 transition-colors cursor-pointer">
-              <div className="w-9 h-9 rounded-lg bg-evidence-50 text-evidence-700 flex items-center justify-center shrink-0"><ClipboardCheck size={16} /></div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-mono text-[11.5px] font-semibold text-ink-600">{c.wpRef}</span>
-                  <Stamp result={controlConclusion(c) === 'Ineffective' ? 'Ineffective' : 'Effective'} animate={false} />
+          {papers.map(c => {
+            const noteN = pendingReviewNoteCount(eng, c.id);
+            return (
+              <button key={c.id} onClick={() => openControl(c.id)}
+                className="w-full flex items-center gap-3 rounded-xl border border-canvas-border bg-canvas-elevated p-3 text-left hover:border-brand-300 transition-colors cursor-pointer">
+                <div className="w-9 h-9 rounded-lg bg-evidence-50 text-evidence-700 flex items-center justify-center shrink-0"><ClipboardCheck size={16} /></div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-[11.5px] font-semibold text-ink-600">{c.wpRef}</span>
+                    <Stamp result={controlConclusion(c) === 'Ineffective' ? 'Ineffective' : 'Effective'} animate={false} />
+                  </div>
+                  <div className="text-[13px] text-ink-800 truncate mt-0.5">{c.description}</div>
+                  <div className="text-[11.5px] text-ink-400 mt-0.5">
+                    Signed by {c.wpSignoff?.preparer?.by ?? '—'} · {c.wpSignoff?.preparer?.at ?? ''} — countersign or return
+                    {noteN > 0 && <span className="text-high-700 font-semibold"> · {noteN} review note{noteN === 1 ? '' : 's'} to clear</span>}
+                  </div>
                 </div>
-                <div className="text-[13px] text-ink-800 truncate mt-0.5">{c.description}</div>
-                <div className="text-[11.5px] text-ink-400 mt-0.5">Signed by {c.wpSignoff?.preparer?.by ?? '—'} · {c.wpSignoff?.preparer?.at ?? ''} — countersign or return</div>
-              </div>
-              <ArrowRight size={15} className="text-ink-300 shrink-0" />
-            </button>
-          ))}
+                <ArrowRight size={15} className="text-ink-300 shrink-0" />
+              </button>
+            );
+          })}
+          {notesToVerify.map(n => {
+            const c = eng.controls.find(x => x.id === n.controlId);
+            return (
+              <button key={n.id} onClick={() => openControl(n.controlId)}
+                className="w-full flex items-center gap-3 rounded-xl border border-canvas-border bg-canvas-elevated p-3 text-left hover:border-brand-300 transition-colors cursor-pointer">
+                <div className="w-9 h-9 rounded-lg bg-high-50 text-high-700 flex items-center justify-center shrink-0"><StickyNote size={16} /></div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-[11.5px] font-semibold text-ink-600">{c?.wpRef ?? n.controlId}</span>
+                    <span className="text-[10.5px] font-bold uppercase tracking-wide text-evidence-700">Verify resolution</span>
+                  </div>
+                  <div className="text-[13px] text-ink-800 truncate mt-0.5">{n.text}</div>
+                  <div className="text-[11.5px] text-ink-400 mt-0.5">Resolved by {n.resolution?.by ?? '—'} · {n.resolution?.at ?? ''} — verify &amp; close, or reopen</div>
+                </div>
+                <ArrowRight size={15} className="text-ink-300 shrink-0" />
+              </button>
+            );
+          })}
           {awaiting.map(d => {
             const mine = !!d.retest && d.retest.by === me;
             return (
