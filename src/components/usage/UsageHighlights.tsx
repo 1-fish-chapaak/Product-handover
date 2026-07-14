@@ -132,19 +132,19 @@ export default function UsageHighlights({ h, onOpenModule, onSeeAi, onSeeQuiet, 
       <Highlight
         icon={Sparkles}
         index={1}
-        eyebrow="AI adoption"
+        eyebrow="Using the AI"
         // 0% adoption with AI actions on the board means "we cannot attribute
         // them to a current member", not "nobody uses AI". Show the true one.
         figure={h.aiAdoptionPct > 0 ? `${h.aiAdoptionPct}%` : h.aiActivity > 0 ? fmt(h.aiActivity) : '0'}
-        ariaLabel="AI adoption"
+        ariaLabel="Share of active people using AI"
         onClick={onSeeAi}
       >
         {h.aiAdoptionPct > 0 ? (
-          <>of active members used AI in this period.</>
+          <>of the people working in the platform used AI.</>
         ) : h.aiActivity > 0 ? (
-          <>AI {h.aiActivity === 1 ? 'action' : 'actions'} this period, none attributed to a current member.</>
+          <>AI {h.aiActivity === 1 ? 'action' : 'actions'} this period, none we can trace to a current member.</>
         ) : (
-          <>No AI activity in this period.</>
+          <>Nobody used the AI in this period.</>
         )}
       </Highlight>
 
@@ -167,15 +167,16 @@ export default function UsageHighlights({ h, onOpenModule, onSeeAi, onSeeQuiet, 
       <Highlight
         icon={Users}
         index={3}
-        eyebrow="Top 3 share"
+        eyebrow="Carried by 3 people"
         figure={typeof h.concentration === 'number' ? `${h.concentration}%` : '—'}
         attention={concentrated}
-        ariaLabel="Share of activity driven by the top 3 members"
+        ariaLabel="Share of the work done by the busiest three people"
         onClick={onSeeTop}
       >
         {typeof h.concentration === 'number' ? (
           <>
-            of all activity{concentrated ? ', so adoption is shallow beyond them' : ''}.
+            of all the work is done by these three
+            {concentrated ? '. Hardly anyone else has taken it up' : ''}.
             {h.topNames.length > 0 && (
               <span className="block mt-0.5 text-ink-400 truncate">{h.topNames.join(', ')}</span>
             )}

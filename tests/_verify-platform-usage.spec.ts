@@ -50,8 +50,47 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
   await expect(page.getByText(/from \d/).first()).toBeVisible();
   await expect(page.getByText(/The 30 days up to .*Each change is against the 30 days before that\./)).toBeVisible();
 
+  // Four headline numbers (REQ-2.1–2.4), and "People active" is one of them —
+  // "how many people" is the question the page exists to answer.
+  await expect(page.getByText('People active')).toBeVisible();
+
+  // Every tile carries the days behind its number (REQ-2.5), and the ONE tile
+  // whose bars do not add up to its headline says so on its face (REQ-2.6):
+  // a person active on three days is 1 user and 3 bars.
+  await expect(page.getByText(/adding up to/).first()).toBeVisible();
+  // The bars are not broken; what they count is people-per-day, and a person who
+  // works on three days is counted on all three. The tile says that rather than
+  // apologising for its own chart.
+  await expect(page.getByText(/Somebody active on three days appears on all three/)).toBeVisible();
+
   // Charts take noun titles; the sentence lives in the subtitle and the strip.
   await expect(page.getByRole('heading', { name: 'Actions per day' })).toBeVisible();
+
+  // AI is NOT stacked into those bars. It is a tenth of the work, so on the main
+  // chart's scale it was a flat blue crust you could not read a day off — the
+  // exact failure REQ-4.2 predicts. It gets its own strip, its own scale, and it
+  // prints what that scale tops out at.
+  await expect(page.getByText('AI actions per day')).toBeVisible();
+  await expect(page.getByText(/Own scale · peak/)).toBeVisible();
+
+  /* REQ-4.4 — the odd days are MARKED, and this test exists because the detector
+     was, for two versions, arithmetically incapable of firing.
+
+     It took mean + 2σ across every day on the calendar. A GRC team barely works
+     weekends, so the series is `22 28 25 25 21 · 3 3 · 19 21 …` — the weekend
+     troughs are a second population, not noise around a mean, and mixing them in
+     inflated σ to 8.6 and pushed the bar to 35 actions. The busiest day the
+     platform has is 29. It could not fire, for any day that can physically occur.
+
+     Judged against days of its OWN KIND it fires twice on the seed: a Tuesday at
+     29 (1.3× a normal weekday), and — the one no global threshold could ever have
+     found — a Sunday at 8, which is 2.6× a normal weekend and means somebody
+     worked the weekend. */
+  await expect(page.getByText(/A ring marks a day well above normal/)).toBeVisible();
+  await expect(page.getByText(/for that kind of day/)).toBeVisible();
+  await expect(page.getByText(/times a normal day, mostly in/)).toBeVisible();
+  // The legend only grows this key when the mark is actually on the plot.
+  await expect(page.getByText('An odd day')).toBeVisible();
 
   // The verdict, on the tab that asks the question. It is a
   // <section aria-label="Licence use">, not a heading, so match the sentence
@@ -65,12 +104,12 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
   // 60% benchmark is a weekly-active-to-licence ratio, so it only means anything
   // against a week. The card says "this week" out loud precisely because it does
   // not follow the filter above it.
-  await usageTab(page, 'Adoption');
+  await usageTab(page, 'Seats');
   await expect(page.getByText(/\d+ of your \d+ paid seats did real work this week/)).toBeVisible();
   // The verdict reads the chart out loud: which side of the benchmark, and which
   // way it is moving. A chart nobody interprets is decoration.
   await expect(
-    page.getByText(/(Above|Below) the healthy mark for a paid licence, (and climbing|but falling|and holding steady|measured this week)\./),
+    page.getByText(/(Above|Below) the \d+% that counts as healthy for a paid licence, (and climbing|but falling|and holding steady|measured this week)\./),
   ).toBeVisible();
   // The delta only draws when it is non-zero (a "0 seats more" line is noise), so
   // this asserts the RULE rather than its presence: if a delta is shown at all, it
@@ -79,12 +118,35 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
   const bareDelta = page.locator('[aria-label="Licence use"]').getByText(/^[+−-]\d+$/);
   await expect(bareDelta).toHaveCount(0);
   await usageTab(page, 'Overview');
-  await expect(page.getByText(/7-day average.*weekends/)).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Top areas' })).toBeVisible();
+  await expect(page.getByText(/7-day average.*weekend/)).toBeVisible();
 
-  // ...and Adoption carries AI and the seat buckets.
-  await usageTab(page, 'Adoption');
+  // The AREAS tab now owns every view of an area: the scatter (which KIND of used
+  // each one is), the ranking (which is busiest), and the twelve cards (what is
+  // inside). Those were three tabs, and the twelve areas were rendered three
+  // times with no way to see any two at once.
+  await usageTab(page, 'Areas');
+  await expect(page.getByRole('heading', { name: 'How many people use each area, and how hard' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Busiest areas' })).toBeVisible();
+
+  // And one area has ONE detail. Open it from the RANKING — not from a card —
+  // and you land on the same modal a section card opens: usage first, then the
+  // register behind it. Two routes, one destination. They used to be two
+  // different modals.
+  // A ranked row's accessible name carries its count ("Engagements 87 17%"); the
+  // scatter dot beside it is named "Engagements, Core — … — open this area". The
+  // digit is what tells them apart, so anchor on it.
+  await page.getByRole('button', { name: /^Engagements \d/ }).first().click();
+  await page.waitForTimeout(900);
+  await expect(page.getByText('Share of all activity')).toBeVisible();
+  await expect(page.getByText('Who works in here')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500);
+
+  // Seats does the licence arithmetic (the seat buckets); People puts names to it
+  // (the AI card, the concentration curve, the member table). One question per tab.
+  await usageTab(page, 'Seats');
   await expect(page.getByText('No sign-in 30+ days')).toBeVisible();
+  await usageTab(page, 'People');
   await expect(page.getByText('Who leans on it most')).toBeVisible();
   await usageTab(page, 'Overview');
 
@@ -103,7 +165,7 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
   await expect(page.getByText(/(Up|Down|Same as|New this period)/).first()).toBeVisible();
 
   // Seats: seeded Invited users are Ajay 14110008 + Priya Singh
-  await usageTab(page, 'Adoption');
+  await usageTab(page, 'Seats');
   await expect(page.getByText('Invited, not joined yet')).toBeVisible();
 
   // Table search filters rows. The period filter sits above the tabs and scopes
@@ -125,19 +187,31 @@ test('member modal reconciles with the table row and links to Admin', async ({ p
   await openUsage(page);
   await usageTab(page, 'People');
 
-  // Read Abhinav's Actions cell, then open his modal
+  /* Read Abhinav's ACTIONS cell, then open his modal.
+
+     This used to take `td` index 4 and call it the Actions column. Index 4 is
+     Last active. It passed anyway, because Last active printed "Today, 16:14" and
+     the modal printed the same string, so the assertion was true for a reason
+     that had nothing to do with what it claimed to check — and it broke the day
+     the column stopped printing the clock time.
+
+     Index 5 is Actions. Its cell carries the count and a delta pill ("70 +1%"),
+     so take the count off the front: that number is the one the modal has to
+     agree with, and agreeing with it is the whole point of the test. */
   const row = page.locator('tr', { hasText: 'Abhinav Sharma' }).first();
   await row.scrollIntoViewIfNeeded();
-  const cellText = await row.locator('td').nth(4).innerText(); // Actions column
+  const actionsCell = await row.locator('td').nth(5).innerText();
+  const actionCount = (actionsCell.match(/\d[\d,]*/) ?? [''])[0];
+  expect(actionCount, 'the Actions cell should carry a count').not.toBe('');
   await row.click();
   await page.waitForTimeout(600);
 
   const modal = page.getByRole('dialog', { name: 'Abhinav Sharma' });
   await expect(modal).toBeVisible();
-  await expect(modal.getByText('Module mix')).toBeVisible();
+  await expect(modal.getByText('Where they worked')).toBeVisible();
   await expect(modal.getByText('This session', { exact: true })).toBeVisible();
-  // Consistency: modal Actions stat equals the table cell
-  await expect(modal.getByText(cellText.trim(), { exact: true }).first()).toBeVisible();
+  // Consistency: the modal's Actions stat equals the table cell it was opened from.
+  await expect(modal.getByText(actionCount, { exact: true }).first()).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/v2-modal.png` });
 
   // Esc closes
@@ -183,13 +257,27 @@ test('CSV export downloads the filtered set and shows a toast', async ({ page })
 
   // The export lands in Exports & downloads as a live event by the current user
   await usageTab(page, 'Output');
-  await expect(page.getByText('Exports & downloads')).toBeVisible();
+  await expect(page.getByText('Downloads').first()).toBeVisible();
   await expect(page.getByText('Top downloaders')).toBeVisible();
   // Nilesh can appear more than once here — the seeded history gives him
   // downloads of his own, and this export adds a live one on top.
   const recentList = page.getByText('Recent downloads').locator('..');
   await expect(recentList.getByText('Nilesh Anand').first()).toBeVisible();
   await expect(recentList.getByText('Platform usage')).toBeVisible();
+
+  /* Output has a TIME AXIS now — it was the only tab without one.
+     Four totals and four change chips is a two-point comparison, and a two-point
+     comparison cannot tell steady production from one enormous Tuesday followed
+     by three silent weeks. Those are the same number and different facts.
+
+     Each of the four cards carries its own strip, on its own scale, printing what
+     that scale tops out at — the same contract the AI strip follows, because 84
+     downloads and 24 creations on one shared axis would flatten the smaller
+     series into a row of stubs. */
+  const strips = page.getByText('Day by day');
+  expect(await strips.count(), 'every output card carries its own trend').toBeGreaterThanOrEqual(4);
+  const scales = page.getByText(/Own scale · peak/);
+  expect(await scales.count(), 'a strip with its own scale must print that scale').toBeGreaterThanOrEqual(4);
 });
 
 /**
@@ -204,13 +292,13 @@ test('the licence verdict does not move when the date range moves', async ({ pag
   // The verdict lives on Adoption now, not Overview — it is a licence question,
   // and Adoption is the tab that asks it. The date filter is shared across all
   // five tabs, so what this test checks is unchanged.
-  await usageTab(page, 'Adoption');
+  await usageTab(page, 'Seats');
 
   const read = async () => {
     const t = (await page.locator('[aria-label="Licence use"]').innerText()).replace(/\s+/g, ' ');
     return {
       pct: t.match(/(\d+)%/)?.[1],
-      side: /Above the healthy mark/.test(t) ? 'above' : 'below',
+      side: /Above the \d+% that counts as healthy/.test(t) ? 'above' : 'below',
     };
   };
 
@@ -230,21 +318,44 @@ test('depth: highlights, rhythm, module modal, segments, team modal', async ({ p
   test.setTimeout(120000);
   await openUsage(page);
 
-  // Business framing: the licence verdict, the seat funnel, the working-pattern
-  // charts and the read-only findings all live on Adoption — every one of them
-  // is a licence question, and none of them is what Overview is for.
-  await usageTab(page, 'Adoption');
+  // The working rhythm is a weekday × hour GRID, and it lives on Overview
+  // (PRD §5: "the busiest 6 areas, and a grid showing which hours of the week
+  // people work"). It is not a licence question, so it does not interrupt
+  // Adoption's argument — and Overview is the tab that has the room for it.
+  //
+  // The grid, not two bar charts. "Tuesday is busiest" plus "09:00 is busiest"
+  // does not imply "Tuesday at 09:00 is busy" — only the joint cell can say so,
+  // and the marginals are exactly what throws it away.
+  await expect(page.getByText('When people are working').first()).toBeVisible();
+  await expect(page.getByText(/busiest hour of the week is/)).toBeVisible();
+
+  // Business framing: the licence verdict, the seat funnel and the read-only
+  // findings all live on Adoption — every one of them is a licence question,
+  // and none of them is what Overview is for.
+  await usageTab(page, 'Seats');
 
   // The one finding that rides under the verdict, and only when it fires. The
   // seed leaves seats idle, so it does.
   await expect(page.getByText(/seats? (is|are) idle/)).toBeVisible();
 
-  await expect(page.getByText('When the work happens').first()).toBeVisible();
-  await expect(page.getByText('Every stage as a share of the seats you pay for.')).toBeVisible();
+  await expect(page.getByText('Each stage as a share of the seats you pay for.')).toBeVisible();
   await expect(page.getByText('Worth checking')).toBeVisible();
 
+  // The engagement matrix is the breadth × frequency scatter (REQ-5.5–5.7), so
+  // the four quadrant names have to be on it. A ranked bar cannot tell Set-up
+  // from Shelfware, and an admin must do opposite things about them.
+  //
+  // It lives on AREAS, not here: which areas to fix or drop is a product
+  // decision, and which seats to reclaim is a licence decision. Same admin,
+  // different day.
+  await usageTab(page, 'Areas');
+  await expect(page.getByText('Which areas earn their keep')).toBeVisible();
+  for (const q of ['Everyday', 'Specialist', 'Set up once', 'Barely used']) {
+    await expect(page.getByText(q, { exact: false }).first()).toBeVisible();
+  }
+
   // Per-section deep-dives — one tile per platform section, detail in a modal.
-  await usageTab(page, 'Sections');
+  await usageTab(page, 'Areas');
   // Ask IRA (the chat) and AI Concierge (the toolkit) are separate sections —
   // a question you type and a tool you run are different products.
   for (const s of ['Engagements', 'Ask IRA', 'AI Concierge', 'Reports', 'Workflows', 'Risk & Controls', 'Knowledge Hub', 'Dashboards']) {
@@ -289,7 +400,7 @@ test('depth: highlights, rhythm, module modal, segments, team modal', async ({ p
   await page.waitForTimeout(400);
 
   // Adoption funnel stages
-  await usageTab(page, 'Adoption');
+  await usageTab(page, 'Seats');
   await expect(page.getByText('Signed in ever')).toBeVisible();
   await expect(page.getByText('Used AI this period')).toBeVisible();
 
@@ -314,15 +425,28 @@ test('depth: highlights, rhythm, module modal, segments, team modal', async ({ p
   await expect(compareBtn).toHaveAttribute('aria-pressed', 'false');
   await expect(lines).toHaveCount(baseLines);
 
-  // Module drill-down: the breakdown rows are buttons whose name includes counts.
-  // Most-used areas is on Overview, where we already are.
-  await page.getByRole('button', { name: /Ask IRA \d/ }).click();
-  await page.waitForTimeout(600);
-  const moduleModal = page.getByRole('dialog', { name: 'Ask IRA usage' });
-  await expect(moduleModal).toBeVisible();
-  await expect(moduleModal.getByText('Top members')).toBeVisible();
-  await expect(moduleModal.getByText('Share of all activity')).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/v3-module-modal.png` });
+  /* Area drill-down. The ranking lives on AREAS now, and it opens the SAME modal
+     the section card opens.
+
+     This used to open a modal of its own — "Ask IRA usage", with its own layout —
+     while the Ask IRA card on the Sections tab opened a different one, with the
+     register in it. One area, two pop-ups, and no screen where you could see both
+     halves of the answer: this area is busy, but is it producing anything?
+
+     So the assertion is no longer "a usage modal exists". It is "the usage AND
+     the register are in the same modal". */
+  await usageTab(page, 'Areas');
+  await page.getByRole('button', { name: /^Ask IRA \d/ }).first().click();
+  await page.waitForTimeout(800);
+  const areaModal = page.getByRole('dialog').first();
+  await expect(areaModal).toBeVisible();
+  // The usage half (REQ-9.2).
+  await expect(areaModal.getByText('Share of all activity')).toBeVisible();
+  await expect(areaModal.getByText('Who works in here')).toBeVisible();
+  await expect(areaModal.getByText('Day by day')).toBeVisible();
+  // The register half (REQ-7.13–7.16), in the same modal.
+  await expect(areaModal.getByText(/Conversations|Questions asked/).first()).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/v3-area-modal.png` });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
 
@@ -333,8 +457,8 @@ test('depth: highlights, rhythm, module modal, segments, team modal', async ({ p
   // Actions cell as a delta pill, and the column that took its place is
   // Engagement (the segment). Assert both, so neither can quietly disappear.
   await expect(
-    page.getByRole('columnheader', { name: 'Engagement' })
-      .or(page.locator('th', { hasText: 'Engagement' })).first(),
+    page.getByRole('columnheader', { name: 'Usage' })
+      .or(page.locator('th', { hasText: 'Usage' })).first(),
   ).toBeVisible();
   await expect(
     page.getByRole('columnheader', { name: 'Actions' })
@@ -443,18 +567,36 @@ test('the page names today, dates its presets, and puts the top-3 share back on 
   // old prose. The findings themselves are unchanged.
   await expect(page.getByText('What stands out')).toBeVisible();
   await expect(page.getByText('Fastest growing')).toBeVisible();
-  await expect(page.getByText(/of active members used AI|No AI activity|none attributed/)).toBeVisible();
+  await expect(page.getByText(/of the people working in the platform used AI|Nobody used the AI|none we can trace/)).toBeVisible();
   await expect(page.getByText(/signed in for 30\+ days|Everyone has signed in/)).toBeVisible();
 
   // The one an admin cannot reach from anything else on the page.
-  const topThree = page.getByRole('button', { name: /Share of activity driven by the top 3 members/ });
+  const topThree = page.getByRole('button', { name: /Share of the work done by the busiest three people/ });
   await expect(topThree).toBeVisible();
   await expect(topThree).toContainText(/\d+%/);
-  await expect(topThree).toContainText('of all activity');
+  await expect(topThree).toContainText('of all the work');
 
-  // And every finding clicks through to its evidence.
+  /* And every finding clicks through to its evidence — which now lands on SEATS,
+     where the member table lives alongside the licence argument it is evidence
+     for.
+
+     The top-3 share also finally has a CHART. It is the one finding on this page
+     an admin cannot assemble from anything else — a healthy total hides it by
+     construction — and until now it was a number in a small card with no picture.
+     The Lorenz curve draws the gap between what happens and what an even spread
+     would look like, and marks the top 3 on it. */
+  // Read the finding's number BEFORE clicking: the click leaves Overview, and the
+  // card goes with it.
+  const finding = await topThree.textContent();
+  const pct = (finding ?? '').match(/(\d+)%/)?.[1];
+
   await topThree.click();
   await page.waitForTimeout(900);
   await expect(page.getByRole('button', { name: 'Export CSV' })).toBeVisible();
-  await expect(page.getByText('Who did the work, member by member')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /leans on its busiest people/ })).toBeVisible();
+  await expect(page.getByText(/what an even split would look like/)).toBeVisible();
+
+  // The chart and the finding are the same number, drawn and said, so they can
+  // never disagree — the curve is fed the very percentage the card prints.
+  await expect(page.getByText(new RegExp(`${pct}%\\s*of all the work`))).toBeVisible();
 });

@@ -16,7 +16,7 @@
  * plot. That is what these primitives encode.
  */
 
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { ArrowUpRight, type LucideIcon } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
@@ -32,10 +32,15 @@ import { CARD_BASE, DONUT_SHADES, ICON_TILE, ICON_TILE_BRAND, KH_EASE, fmt } fro
 
 type Rank = 'hero' | 'primary' | 'compact';
 
+/* DESIGN.md §5 puts a card's internal padding at 16px, with 24/28px reserved for
+   AI response prose. This page had drifted to 20/24/28, which is the AI prose
+   rank applied to an analytics grid: it cost roughly a card's worth of height per
+   band and pushed the fifth thing on every tab below the fold. Back on spec, and
+   the rank now scales 16 → 20 → 24 rather than 20 → 24 → 28. */
 const RANK_PAD: Record<Rank, string> = {
-  hero: 'p-6 lg:p-7',
-  primary: 'p-5 lg:p-6',
-  compact: 'p-5',
+  hero: 'p-5 lg:p-6',
+  primary: 'p-4 lg:p-5',
+  compact: 'p-4',
 };
 
 const RANK_TITLE: Record<Rank, string> = {
@@ -68,7 +73,7 @@ export function Card({
   return (
     <section className={`${CARD_BASE} ${RANK_PAD[rank]} flex flex-col ${className}`}>
       {title && (
-        <header className="flex items-start justify-between gap-4 mb-5">
+        <header className="flex items-start justify-between gap-4 mb-4">
           <div className="flex items-start gap-3 min-w-0">
             {Icon && (
               <div className={`${ICON_TILE} ${ICON_TILE_BRAND}`}>
@@ -289,14 +294,101 @@ export function Meter({
   );
 }
 
-/* ── Sparkline ─────────────────────────────────────────────────────────────
-   Twelve-ish points, no axis, no scale, no labels — so it is only ever allowed
-   to say ONE thing: the shape of the direction. It rides beside a number that
-   carries the magnitude, never on its own.
+/* ── Trend bars ────────────────────────────────────────────────────────────
+   The page's one small-multiple mark: a distribution, drawn as bars from a zero
+   baseline, beside the number those bars add up to.
 
-   Hand-drawn SVG rather than a Recharts instance: a section grid renders twelve
-   of these, and twelve ResponsiveContainers with their own resize observers is
-   a measurable amount of layout work to say "it went up a bit". */
+   THIS REPLACED THE SPARKLINE, and it is the same argument in both places it is
+   used (the KPI band, and the twelve area cards). A sparkline is normalised to
+   its own maximum and has no baseline, so it cannot be checked against anything:
+   a 2-action change and a 200-action change draw the identical curve, and the
+   area under it adds up to nothing. It is a shape that LOOKS like data.
+
+   A bar's length is a quantity. So these bars literally are the number printed
+   beside them, split by day — which is a claim a reader can verify, and the
+   reason the KPI band can say "the 30 days, adding up to 525" and mean it.
+
+   Hand-drawn divs rather than a Recharts instance: the area grid renders twelve
+   of these, and twelve ResponsiveContainers with their own resize observers is a
+   lot of layout work to say "it went up a bit". */
+
+export function TrendBars({
+  series, total, additive = true, height = 'h-8', delay = 0, ariaLabel, maxBars = 40,
+}: {
+  /** One value per bucket, oldest first. */
+  series: number[];
+  /** What the bars add up to — printed by the caller, verified by the reader. */
+  total: number;
+  /** False only where the bars genuinely cannot sum to the headline (active
+   *  users: one person over three days is 1 user and 3 bars). The caller then
+   *  has to say so on the card. */
+  additive?: boolean;
+  height?: string;
+  delay?: number;
+  ariaLabel?: string;
+  /**
+   * The most bars this mark is allowed to draw. Above it, adjacent days are
+   * SUMMED into buckets.
+   *
+   * A bar needs a width to be a bar. Thirty days inside the 64px strip at the
+   * foot of an area card gives each day about two pixels, and two pixels with a
+   * gap either side is not a column — it is a speck, and twelve cards of specks
+   * is visual noise that no reader can take a value off. Bucketing is the honest
+   * fix rather than dropping days: SUMS still add up to the total, so the mark
+   * keeps the one property that made bars the right choice over a sparkline.
+   */
+  maxBars?: number;
+}) {
+  const prefersReduced = useReducedMotion();
+
+  const bars = useMemo(() => {
+    if (series.length <= maxBars) return series;
+    const size = Math.ceil(series.length / maxBars);
+    const out: number[] = [];
+    for (let i = 0; i < series.length; i += size) {
+      out.push(series.slice(i, i + size).reduce((s, v) => s + v, 0));
+    }
+    return out;
+  }, [series, maxBars]);
+
+  if (bars.length < 2) return null;
+  const max = Math.max(...bars, 1);
+
+  return (
+    <div
+      className={`flex items-end gap-px ${height}`}
+      role="img"
+      aria-label={
+        ariaLabel ??
+        (additive
+          ? `Day by day, adding up to ${fmt(total)}.`
+          : `Day by day. These do not add up to ${fmt(total)}.`)
+      }
+    >
+      {bars.map((v, i) => (
+        <motion.div
+          key={i}
+          // No corner radius: these bars are a few pixels wide, and the smallest
+          // radius on the scale would round them into lozenges and cost the flat
+          // cap that makes a row of them read as a distribution.
+          className="flex-1 min-w-0"
+          style={{ background: v > 0 ? '#6A12CD' : 'rgba(15, 7, 32, 0.055)' }}
+          initial={prefersReduced ? false : { height: 0 }}
+          animate={{ height: `${v > 0 ? Math.max(8, (v / max) * 100) : 4}%` }}
+          transition={
+            prefersReduced
+              ? { duration: 0 }
+              : { duration: 0.45, delay: delay + Math.min(i, 40) * 0.008, ease: KH_EASE }
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ── Sparkline ─────────────────────────────────────────────────────────────
+   Kept for surfaces outside this page that still import it. Nothing on Platform
+   Usage draws one any more — see `TrendBars` above for why. */
 
 export function Sparkline({
   points, color = '#6A12CD', width = 72, height = 24, className = '', ariaLabel,
@@ -655,12 +747,11 @@ export function Band({ title, note, children }: {
   children: ReactNode;
 }) {
   return (
-    // 40px between sections against 16px within them. The whole page used to run
-    // on one gap, so it read as a single undifferentiated column of boxes with
-    // nothing telling the eye where one idea ended and the next began. Rhythm is
-    // the cheapest hierarchy there is: separation between groups has to be
-    // clearly bigger than separation inside them, or there are no groups.
-    <section className="pt-10 first:pt-0">
+    // 32px between sections against 16px within them. Rhythm is the cheapest
+    // hierarchy there is: separation between groups has to be clearly bigger than
+    // separation inside them, or there are no groups. 2:1 does that and still
+    // fits more on a screen than the 40px this used to run on.
+    <section className="pt-8 first:pt-0">
       {/* The Knowledge Hub's bucket header: sentence case, 14px, ink-800.
           It used to be an 11px uppercase eyebrow in ink-400 — which is the
           Hub's *in-card* label rank, so the page was announcing its section
@@ -675,7 +766,7 @@ export function Band({ title, note, children }: {
           its subhead have already said it twice, and a third restatement is
           noise. */}
       {(title || note) && (
-        <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex items-center justify-between gap-4 mb-3">
           {title
             ? <div className="text-[0.875rem] font-medium text-ink-800">{title}</div>
             : <span />}

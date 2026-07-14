@@ -1,23 +1,30 @@
 /**
- * Platform Usage — the KPI strip.
+ * Platform Usage — the KPI strip (PRD §6.2).
  *
- * One card, four cells, hairlines between them.
- *
- * Each cell is now THREE things: a label, a number, and what the number did.
- * That's it. The previous version also carried an icon tile, a denominator, a
- * sparkline, and two date labels under the sparkline — so the row alone was
- * about forty elements, and the four numbers a reader actually came for were
- * buried in their own supporting cast.
- *
- * The sparklines went first and they were the biggest win. A 34px curve with no
- * axis and no scale, drawn per-tile so each is normalised to its own maximum,
- * cannot be read: it makes a 2-person change and a 200-action change look
- * identical. It was decoration pretending to be data. The trend belongs in the
- * chart below, which has axes.
+ * Four cells: the value, a plain caption, the change against a named baseline,
+ * and a small trend.
  *
  *   ACTIONS                    ⓘ
- *   525                              ← 36px. The thing you came for.
+ *   525                              ← the thing you came for
  *   Up 8% from 487                   ← what it did, against a named baseline
+ *   ▁▃▂▅▃▇▄▂▅▃▆▄                     ← the days it was made of
+ *
+ * WHY THE TREND IS BARS, NOT A SPARKLINE. This row carried a sparkline once and
+ * it was removed for a good reason: a 34px curve, normalised per-tile to its own
+ * maximum, makes a 2-person change and a 200-action change look identical. It
+ * was decoration pretending to be data.
+ *
+ * The fix is not to leave the trend out — REQ-2.1–2.6 ask for it, and a headline
+ * with no shape behind it hides the difference between a steady 525 and a 525
+ * that was one enormous Tuesday. The fix is to draw a mark that is honest at this
+ * size: BARS FROM A ZERO BASELINE. A bar's length is a quantity, so the bars for
+ * Actions, AI and Reports literally add up to the number above them (REQ-2.5) —
+ * they are the number, drawn. That is a thing a reader can check, and it is why
+ * the curve failed: an area under a normalised curve adds up to nothing.
+ *
+ * Active users is the exception, and it says so on its own face (REQ-2.6): one
+ * person working three days is 1 active user but 3 bars. The tile that cannot
+ * honour the sum rule is the one tile that admits it.
  *
  * The ⓘ stays, because "what counts and what doesn't" is the one piece of
  * supporting text that turns a number from a mystery into a fact.
@@ -28,7 +35,8 @@ import { motion, useReducedMotion } from 'motion/react';
 import { ArrowUpRight, Info } from 'lucide-react';
 import { KpiCountUp } from '../shared/KpiTile';
 import type { Stat } from '../admin/adminTokens';
-import { CARD_BASE, KH_EASE } from './usageTokens';
+import { TrendBars } from './usageChrome';
+import { CARD_BASE, KH_EASE, fmt } from './usageTokens';
 
 /** Below this, a percentage change is noise — say it in whole units instead. */
 const SMALL_BASE = 30;
@@ -46,7 +54,29 @@ export interface UsageStat extends Stat {
   counts: string;
   /** What does NOT count. The line that stops the number being a mystery. */
   excludes?: string;
+  /** One value per day in the window, oldest first. Drawn as bars under the number. */
+  series?: number[];
+  /**
+   * Whether the bars sum to the headline (REQ-2.5). True for Actions, AI and
+   * Reports. FALSE for Active users, where a person active on three days is one
+   * user and three bars — and the tile prints that caveat rather than quietly
+   * showing a mark that does not reconcile (REQ-2.6).
+   */
+  additive?: boolean;
 }
+
+/**
+ * The trend, drawn as bars from a zero baseline.
+ *
+ * Scaled to the series' own maximum, which is the same normalisation the old
+ * sparkline used — but a bar carries its own baseline, so a reader is never
+ * invited to compare the HEIGHT across tiles the way a curve's slope invites.
+ * The bars answer one question, the one they can answer honestly: how was this
+ * number distributed across the days that made it.
+ */
+/* The mark itself lives in `usageChrome` as `TrendBars`, because the twelve area
+   cards draw it too — and the whole point of the argument above is that the page
+   should not hold two opinions about how to draw a distribution. */
 
 /**
  * The change, said the way a person would say it — and split in two, because it
@@ -108,7 +138,7 @@ function UsageKpiCell({ stat, index, compareLabel }: {
       initial={prefersReduced ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={prefersReduced ? { duration: 0 } : { duration: 0.3, delay: Math.min(index, 8) * 0.04, ease: KH_EASE }}
-      className={`${CARD_BASE} relative p-5 min-w-0 hover:border-brand-200`}
+      className={`${CARD_BASE} relative p-4 min-w-0 hover:border-brand-200`}
     >
       <div className="flex items-center gap-2">
         {/* 11px — DESIGN.md's "Uppercase eyebrow / KPI label" rank. */}
@@ -156,7 +186,13 @@ function UsageKpiCell({ stat, index, compareLabel }: {
           whether or not the metric has a denominator to print. */}
       <p className="mt-2 h-5 text-[0.8125rem] text-ink-500 truncate">{stat.of ?? ''}</p>
 
-      <p className="mt-2.5 flex items-center gap-2 min-w-0">
+      {/* Wraps, never truncates. Four tiles in a 1,280px window are ~200px wide,
+          and "Down 2 people from 14" does not fit on one line there — it came out
+          as "Down 2 people f…", which cuts off the baseline and leaves the chip
+          asserting a change against nothing. The baseline is the half of this
+          line that makes the other half mean anything; it drops to a second row
+          rather than be clipped. */}
+      <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
         <span className={`shrink-0 inline-flex items-center gap-1 h-[1.375rem] px-2 rounded-full text-[0.75rem] font-semibold ${chipTone}`}>
           {change.tone !== 'flat' && (
             <ArrowUpRight
@@ -168,8 +204,38 @@ function UsageKpiCell({ stat, index, compareLabel }: {
           )}
           {change.chip}
         </span>
-        {change.from && <span className="text-[0.75rem] text-ink-400 truncate">{change.from}</span>}
+        {change.from && <span className="text-[0.75rem] text-ink-400">{change.from}</span>}
       </p>
+
+      {stat.series && stat.series.length > 1 && (
+        <>
+          {/* The shared mark, in a wrapper that owns the spacing — the component
+              itself must stay layout-neutral, because the twelve area cards drop
+              it into a 64px slot with no top margin at all. */}
+          <div className="mt-3">
+            <TrendBars
+              series={stat.series}
+              additive={stat.additive ?? true}
+              total={stat.current}
+              delay={0.2 + index * 0.05}
+            />
+          </div>
+          {/* REQ-2.6. The one tile whose bars do not reconcile with its headline
+              is the one tile that has to say so, on its face, not in a tooltip
+              nobody opens. Every other tile stays silent, and its silence is the
+              claim: these bars ARE the number.
+
+              The wording matters. It used to read "Days don't add up", which
+              sounds like the page apologising for a broken chart. The bars are
+              correct. What they count is people-per-day, and a person who works
+              on three days is counted on all three. Say that instead. */}
+          <p className="mt-1.5 text-[0.625rem] text-ink-400 leading-snug">
+            {stat.additive === false
+              ? 'One bar per day. Somebody active on three days appears on all three'
+              : `The ${stat.series.length} days behind the number, adding up to ${fmt(stat.current)}`}
+          </p>
+        </>
+      )}
     </motion.div>
   );
 }
@@ -191,7 +257,7 @@ export default function UsageKpiRow({ stats, rangeDays, asOf, endsAtAnchor = tru
 
           The column count follows the tile count, so dropping a tile closes the
           row instead of leaving a hole in it. */}
-      <div className={`grid grid-cols-2 gap-4 ${stats.length === 3 ? 'xl:grid-cols-3' : 'xl:grid-cols-4'}`}>
+      <div className={`grid grid-cols-2 gap-4 ${stats.length === 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`}>
         {stats.map((s, i) => (
           <UsageKpiCell key={s.key} stat={s} index={i} compareLabel={compareLabel} />
         ))}

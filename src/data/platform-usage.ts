@@ -626,7 +626,19 @@ function eventsNewestFirst(
 ): { e: UsageEntry; dayOffset: number }[] {
   const out: { e: UsageEntry; dayOffset: number }[] = [];
   days.forEach(d => d.entries.forEach(e => { if (predicate(e)) out.push({ e, dayOffset: d.dayOffset }); }));
-  return out.sort((a, b) => a.dayOffset - b.dayOffset || (b.e.hour ?? 0) - (a.e.hour ?? 0));
+  /* LIVE FIRST, and it has to be explicit.
+     Every feed on this page promises that work you do right now appears at the
+     top of it. Sorting by (day, hour) alone does not keep that promise: a session
+     event folds into the ANCHOR day, so it ties with the seeded events already
+     there, and the tie is then broken by clock hour. The seeded anchor-day events
+     run to 16:00-18:00, so exporting at 09:00 put your own export below all of
+     them — and with the feed capped at six rows it fell off the list entirely.
+     The bug hid in plain sight because it depends on the hour you happen to be
+     working: the same click appears at the top at 19:00 and vanishes at 09:00. */
+  return out.sort((a, b) =>
+    Number(b.e.live) - Number(a.e.live)
+    || a.dayOffset - b.dayOffset
+    || (b.e.hour ?? 0) - (a.e.hour ?? 0));
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -889,21 +901,115 @@ export interface UsageSpike {
   topModule: UsageModule;
 }
 
-export function usageSpikes(days: UsageDay[]): UsageSpike[] {
-  const active = days.filter(d => d.actions > 0);
-  if (active.length < 3) return [];
-  const mean = days.reduce((s, d) => s + d.actions, 0) / days.length;
-  if (mean <= 0) return [];
-  const variance = days.reduce((s, d) => s + (d.actions - mean) ** 2, 0) / days.length;
-  const threshold = mean + 2 * Math.sqrt(variance);
+/**
+ * What counts as an "odd day" in this window (PRD §7.1: "a day well above the
+ * normal level for that window").
+ *
+ * THE NORMAL LEVEL IS THE LEVEL OF A WORKING DAY. The mean and the standard
+ * deviation are taken over days on which work actually happened — not over every
+ * day on the calendar.
+ *
+ * This was the bug that made the whole feature dead. A GRC team works weekdays,
+ * so roughly two days in seven are zero. Counting those zeros as VARIANCE is
+ * counting the weekend as if it were surprising, and it inflates sigma enormously:
+ * on the seeded tenant it took sigma from 1.5 to 11.3, which pushed the threshold
+ * from 28 actions to 41 — while the busiest day the platform actually has is 32.
+ * The detector could not fire. Not "did not" — could not, arithmetically, for any
+ * possible day.
+ *
+ * The weekly cycle is exactly the seasonality the 7-day rolling average on the
+ * chart exists to cancel, and the weekend shading exists to explain. It is not
+ * signal, and it must not be fed into a test for signal.
+ *
+ * Exported so `usageSpikes` (which lists the odd days) and `activityPoints`
+ * (which marks them on the chart) compute the SAME threshold. They used to each
+ * carry their own copy of this arithmetic, which is the standard way two parts of
+ * a page end up disagreeing about which day was strange.
+ */
+interface DayStats { threshold: number; mean: number }
+
+const dayStats = (subset: UsageDay[]): DayStats | null => {
+  // Under three days of a kind there is no distribution to speak of, and the
+  // biggest of three is not an anomaly — it is just the biggest of three.
+  if (subset.length < 3) return null;
+  const mean = subset.reduce((s, d) => s + d.actions, 0) / subset.length;
+  if (mean <= 0) return null;
+  const variance = subset.reduce((s, d) => s + (d.actions - mean) ** 2, 0) / subset.length;
+  return { threshold: mean + 2 * Math.sqrt(variance), mean };
+};
+
+/**
+ * The odd-day test (PRD §7.1: "a day well above the normal level for that
+ * window").
+ *
+ * A DAY IS ODD RELATIVE TO ITS OWN KIND OF DAY. Weekdays are judged against
+ * weekdays, weekends against weekends.
+ *
+ * This is the third version of this function, and the first that can actually
+ * fire. The story is worth keeping, because both failures were the same mistake:
+ *
+ *   1. The original took mean + 2σ across every day on the calendar. A GRC team
+ *      barely works weekends, so the real 30-day series looks like
+ *      `22 28 25 25 21 · 3 3 · 19 21 25 23 20 · 3 0 · …`. Those weekend troughs
+ *      are not noise around a mean — they are a SECOND POPULATION, and mixing
+ *      them in inflates σ to 8.6 and pushes the bar to 35 actions. The busiest
+ *      day the platform has is 29. The detector could not fire. Not "did not" —
+ *      could not, for any day that can physically occur.
+ *   2. The first fix dropped days with zero actions, on the theory the weekends
+ *      were zeros. They are not: they are 2, 3, 4, 8. That removed exactly one
+ *      day out of thirty and left the bar at 35. Still dead.
+ *
+ * The weekly cycle is seasonality, and this page already knows it: the chart
+ * shades the weekends to explain the dips, and lays a 7-day rolling average over
+ * the bars precisely to cancel it. The spike test was the one place still
+ * pretending Tuesday and Sunday were samples of the same thing.
+ *
+ * Judged properly, a weekday of 29 against a weekday normal of ~23 IS odd — and
+ * so is a Saturday of 8 against a weekend normal of ~3, which no global threshold
+ * could ever have surfaced and which is exactly the out-of-hours signal an auditor
+ * cares about.
+ */
+export function oddDayTest(days: UsageDay[], logs: AuditLog[]) {
+  const anchor = usageAnchor(logs);
+  // Walked back from the same anchor the chart's weekend shading uses, with the
+  // same local `getDay()` — so a day the chart shades as a weekend is a day this
+  // test judges as one. Two spellings of "is it the weekend" is how a ring ends
+  // up on a bar the shading says is a Tuesday.
+  const isWeekend = (d: UsageDay) => {
+    const dow = new Date(anchor - d.dayOffset * DAY_MS).getDay();
+    return dow === 0 || dow === 6;
+  };
+
+  const weekend = dayStats(days.filter(isWeekend));
+  const weekday = dayStats(days.filter(d => !isWeekend(d)));
+  const statsFor = (d: UsageDay) => (isWeekend(d) ? weekend : weekday);
+
+  return {
+    isOdd: (d: UsageDay) => {
+      const s = statsFor(d);
+      return s !== null && d.actions > s.threshold;
+    },
+    /** What a normal day of THIS day's kind looks like — the ratio's denominator. */
+    normalFor: (d: UsageDay) => statsFor(d)?.mean ?? 0,
+  };
+}
+
+export function usageSpikes(days: UsageDay[], logs: AuditLog[]): UsageSpike[] {
+  const test = oddDayTest(days, logs);
   return days
-    .filter(d => d.actions > threshold)
-    .map(d => ({
-      dayOffset: d.dayOffset,
-      actions: d.actions,
-      ratio: Math.round((d.actions / mean) * 10) / 10,
-      topModule: USAGE_MODULES.reduce((best, m) => (d.byModule[m] > d.byModule[best] ? m : best), USAGE_MODULES[0]),
-    }))
+    .filter(test.isOdd)
+    .map(d => {
+      const normal = test.normalFor(d);
+      return {
+        dayOffset: d.dayOffset,
+        actions: d.actions,
+        // "1.3x a normal day" — where a normal day means a normal day OF THIS KIND.
+        // Measured against a blended weekday/weekend mean, a busy Tuesday looks
+        // more extreme than it is, and a worked Saturday looks like nothing.
+        ratio: normal > 0 ? Math.round((d.actions / normal) * 10) / 10 : 0,
+        topModule: USAGE_MODULES.reduce((best, m) => (d.byModule[m] > d.byModule[best] ? m : best), USAGE_MODULES[0]),
+      };
+    })
     .sort((a, b) => b.actions - a.actions);
 }
 
@@ -1316,11 +1422,25 @@ export interface MatrixPoint {
   quadrant: MatrixQuadrant;
 }
 
+/* Plain names, not the analytics ones.
+   These four boxes are Amplitude's engagement matrix, and its vocabulary is
+   "core / power / onboarding / shelfware". The reader here is an audit lead, not
+   a product analyst: "shelfware" is the single most important box on the chart
+   and it is a word they have no reason to know. Every label is now what the box
+   actually means, said in the words someone would use out loud. */
 export const QUADRANT_LABEL: Record<MatrixQuadrant, string> = {
-  core: 'Core — broad and heavily used',
-  power: 'Power — a few people lean on it hard',
-  onboarding: 'Set-up — most people touch it once',
-  shelfware: 'Shelfware — improve it or drop it',
+  core: 'Everyday: most people use it, and use it a lot',
+  power: 'Specialist: a few people lean on it hard',
+  onboarding: 'Set up once: most people touch it and move on',
+  shelfware: 'Barely used: few people, and not much',
+};
+
+/** The one-word name for each box, for the legend and the axes. */
+export const QUADRANT_NAME: Record<MatrixQuadrant, string> = {
+  core: 'Everyday',
+  power: 'Specialist',
+  onboarding: 'Set up once',
+  shelfware: 'Barely used',
 };
 
 /**

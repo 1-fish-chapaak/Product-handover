@@ -110,7 +110,7 @@ export default function UserUsageModal({
       {/* Module mix */}
       {mix.length > 0 && (
         <div className="py-5 border-b border-canvas-border">
-          <SectionLabel>Module mix</SectionLabel>
+          <SectionLabel>Where they worked</SectionLabel>
           <div className="space-y-3">
             {mix.map(({ module, count }) => (
               <div key={module}>

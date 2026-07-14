@@ -1,29 +1,22 @@
 /**
- * Platform Usage — module drill-down modal.
+ * Platform Usage — the area drill-down, for an area with no section behind it.
  *
- * One module's story over the selected range: total + delta vs the prior
- * window, share of platform activity, daily trend, and its top members. Top
- * members come from the same per-user mix the member modal renders, so the
- * two drill-downs always agree.
+ * Every real area of the product now opens ONE modal: the section modal, which
+ * carries this usage panel at the top and that area's inventory underneath. Two
+ * pop-ups for one area — usage from Top areas, inventory from Sections — was the
+ * page telling you about Reports in two places and never both at once.
+ *
+ * This modal survives for exactly one case: 'Other', the bucket an unrecognised
+ * module string falls into. 'Other' has usage (it is real activity) and no
+ * inventory (there is no register behind a name nothing maps), so the usage panel
+ * IS the whole story. It is also the case that should be rare by design — 'Other'
+ * filling up means a screen forgot to register itself, and the point of the
+ * bucket is that this becomes visible instead of silently inflating a real area.
  */
 
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { TrendingUp } from 'lucide-react';
 import Modal from '../shared/Modal';
-import { InitialsAvatar } from '../admin/AdminPrimitives';
-import { Eyebrow } from './usageChrome';
-import { useAdminData } from '../../context/AdminDataContext';
-import {
-  moduleDailySeries, moduleTopUsers, usageDayLabel, usageDeltaPct,
-  type UsageModule, type UsageDay, type UserUsageRow,
-} from '../../data/platform-usage';
-
-const fmt = (n: number) => n.toLocaleString('en-US');
-
-/** The page's one micro-label. Was a local re-spelling at tracking-[0.14em]. */
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <Eyebrow className="mb-2.5">{children}</Eyebrow>;
-}
+import ModuleUsagePanel from './ModuleUsagePanel';
+import type { UsageModule, UsageDay, UserUsageRow } from '../../data/platform-usage';
 
 export default function ModuleUsageModal({
   module, days, priorDays, totalActions, rows, rangeDays, onClose,
@@ -36,86 +29,22 @@ export default function ModuleUsageModal({
   rangeDays: number;
   onClose: () => void;
 }) {
-  const { logs } = useAdminData();
-  const series = moduleDailySeries(module, days);
-  const total = series.reduce((s, p) => s + p.count, 0);
-  const priorTotal = moduleDailySeries(module, priorDays).reduce((s, p) => s + p.count, 0);
-  const deltaPct = usageDeltaPct(total, priorTotal);
-  const share = totalActions > 0 ? Math.round((total / totalActions) * 100) : 0;
-  const topUsers = moduleTopUsers(module, rows);
-  const chartData = series.map(p => ({ label: usageDayLabel(p.dayOffset, logs), count: p.count }));
-  const tickInterval = rangeDays === 7 ? 0 : rangeDays === 30 ? 6 : 14;
-
   return (
     <Modal
       title={module}
-      subtitle={`Module usage · last ${rangeDays} days`}
+      subtitle={`Activity in the last ${rangeDays} days. This area has no register behind it.`}
       width="max-w-[560px]"
       onClose={onClose}
       ariaLabel={`${module} usage`}
     >
-      {/* Totals */}
-      <div className="flex items-center gap-6 pb-5 border-b border-canvas-border">
-        <div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-[1.5rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(total)}</span>
-            {typeof deltaPct === 'number' && deltaPct !== 0 && (
-              <span
-                title={`vs previous ${rangeDays} days`}
-                className={`inline-flex items-center gap-1 text-[0.6875rem] font-semibold px-1.5 py-0.5 rounded-full tabular-nums ${
-                  deltaPct > 0 ? 'text-compliant-700 bg-compliant-50' : 'text-mitigated-700 bg-mitigated-50'
-                }`}
-              >
-                <TrendingUp size={10} strokeWidth={2.5} className={deltaPct > 0 ? '' : 'rotate-180'} />
-                {deltaPct > 0 ? '+' : ''}{deltaPct}%
-              </span>
-            )}
-          </div>
-          <div className="text-[0.6875rem] text-ink-500 mt-1">Actions</div>
-        </div>
-        <div>
-          <div className="text-[1.5rem] font-bold text-ink-900 tabular-nums leading-none">{share}%</div>
-          <div className="text-[0.6875rem] text-ink-500 mt-1">Share of all activity</div>
-        </div>
-      </div>
-
-      {/* Trend */}
-      <div className="py-5 border-b border-canvas-border">
-        <SectionLabel>Daily trend</SectionLabel>
-        <ResponsiveContainer width="100%" height={140}>
-          <AreaChart data={chartData} margin={{ top: 4, right: 0, left: -16, bottom: 0 }}>
-            <defs>
-              <linearGradient id="moduleModalFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#6A12CD" stopOpacity={0.2} />
-                <stop offset="100%" stopColor="#6A12CD" stopOpacity={0.02} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#EEEEF1" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#6B5D82' }} tickLine={false} axisLine={{ stroke: '#E5E7EB' }} interval={tickInterval} />
-            <YAxis tick={{ fontSize: 9, fill: '#6B5D82' }} tickLine={false} axisLine={false} width={36} />
-            <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} cursor={{ stroke: 'rgba(106,18,205,0.25)' }} />
-            <Area type="monotone" dataKey="count" name="Actions" stroke="#6A12CD" strokeWidth={1.5} fill="url(#moduleModalFill)" />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Top members */}
-      <div className="py-5">
-        <SectionLabel>Top members</SectionLabel>
-        {topUsers.length > 0 ? (
-          <div className="space-y-2.5">
-            {topUsers.map(u => (
-              <div key={u.email} className="flex items-center gap-2.5">
-                <InitialsAvatar name={u.name} size={26} />
-                <span className="text-[0.8125rem] font-medium text-ink-800 truncate">{u.name}</span>
-                <span className="ml-auto text-[0.8125rem] text-ink-500 tabular-nums">{fmt(u.count)}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-[0.8125rem] text-ink-400">No activity in this range.</p>
-        )}
-      </div>
+      <ModuleUsagePanel
+        module={module}
+        days={days}
+        priorDays={priorDays}
+        totalActions={totalActions}
+        rows={rows}
+        rangeDays={rangeDays}
+      />
     </Modal>
   );
 }

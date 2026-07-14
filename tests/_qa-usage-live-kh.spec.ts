@@ -27,7 +27,7 @@ test('Knowledge Hub stat tracks the live catalog', async ({ page }) => {
   await page.getByRole('button', { name: /^Platform Usage/i }).first().click();
   await page.waitForTimeout(2500);
   // The Knowledge Hub tile lives on the Sections tab now.
-  await usageTab(page, 'Sections');
+  await usageTab(page, 'Areas');
   const usage = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
   // The tile is a definition list — label first, then the figure ("Sources
   // connected 2"), not the other way round.

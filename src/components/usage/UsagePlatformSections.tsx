@@ -18,10 +18,12 @@ import {
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import Modal from '../shared/Modal';
 import { PortfolioStat } from './usageSectionPrimitives';
-import { Eyebrow, Sparkline, Tile, TooltipCard } from './usageChrome';
+import { Eyebrow, TrendBars, Tile, TooltipCard } from './usageChrome';
 import { DONUT_SHADES, ICON_TILE, ICON_TILE_BRAND, fmt } from './usageTokens';
 import UsageEngagementsSection from './UsageEngagementsSection';
 import UsageConciergeSection from './UsageConciergeSection';
+import ModuleUsagePanel from './ModuleUsagePanel';
+import { SECTION_MODULE, type SectionKey } from './usageSectionMap';
 import { deriveEngagementPortfolio } from '../../data/engagement-portfolio';
 import { useKnowledgeSources } from '../../hooks/useKnowledgeSources';
 import { useGeneratedReports } from '../../hooks/useGeneratedReports';
@@ -278,8 +280,23 @@ const STAT_TONE: Record<'good' | 'bad' | 'neutral', string> = {
   neutral: 'text-ink-900',
 };
 
-function SectionTile({ icon: Icon, title, hint, stats, index, activity, actions, onOpen }: {
+function SectionTile({ icon: Icon, title, hint, stats, scope, index, activity, actions, onOpen }: {
   icon: LucideIcon; title: string; hint: string; stats: SectionStat[]; index: number;
+  /**
+   * Whether the date filter governs THIS CARD'S three numbers.
+   *
+   * It governs some and not others, and that is correct: PRD §6.7 requires these
+   * counts to match the screen that owns them ("if the Control Library says 14,
+   * this page says 14"), and a register is a stock — it has no "last 30 days"
+   * reading. But REQ-1.1 also promises "one date control runs every number on
+   * every tab", and the two rules collide precisely here.
+   *
+   * The collision is only harmful while it is INVISIBLE. An admin who moves the
+   * date range and watches Ask IRA change while Reports sits still has been shown
+   * a broken page — not because a number is wrong, but because nothing on screen
+   * told them which numbers were ever going to move. So every card says.
+   */
+  scope: 'period' | 'all-time';
   /** The section's daily action count across the window, for the sparkline. */
   activity: number[];
   /** What those days add up to. The sparkline has no axis, so it carries no magnitude. */
@@ -290,7 +307,13 @@ function SectionTile({ icon: Icon, title, hint, stats, index, activity, actions,
     <Tile
       onClick={onOpen}
       index={index}
-      ariaLabel={`${title} — open details`}
+      /* The "open details" SUFFIX is a contract, not prose: both
+         _qa-usage-modals and _qa-usage-consistency find every tile with
+         `button[aria-label$="open details"]`. The scope goes in front of it so a
+         screen-reader user hears which clock the figures run on. An aria-label
+         overrides the button's inner content, so the visible chip alone would not
+         reach them. */
+      ariaLabel={`${title}, figures ${scope === 'period' ? 'for the selected period' : 'all time'}, open details`}
       className="p-5 flex flex-col"
     >
       {/* The description sits with the title it describes. It used to be marooned
@@ -314,7 +337,28 @@ function SectionTile({ icon: Icon, title, hint, stats, index, activity, actions,
           against the same right edge, so the card reads top to bottom and the
           twelve tiles read as one column of numbers rather than twelve posters.
           No figure is repeated from the title above it. */}
-      <dl className="mt-auto pt-4 divide-y divide-canvas-border/70">
+      {/* Which clock these three numbers run on. One word, and it is the word
+          that stops the tab contradicting the rest of the page: "Reports in the
+          library · all time · 23" cannot be mistaken for the Overview headline
+          "Reports produced · 7", once the card says which is which. */}
+      <div className="mt-auto pt-4 flex items-center justify-end">
+        <span
+          title={
+            scope === 'period'
+              ? 'These figures follow the date range at the top of the page.'
+              : 'A live total from the register that owns it, so it matches that screen exactly. It does not change with the date range. The activity line below does.'
+          }
+          className={`inline-flex items-center h-[1.125rem] px-1.5 rounded border text-[0.5625rem] font-semibold uppercase tracking-wide ${
+            scope === 'period'
+              ? 'border-brand-200 bg-brand-50 text-brand-700'
+              : 'border-canvas-border bg-canvas text-ink-400'
+          }`}
+        >
+          {scope === 'period' ? 'This period' : 'All time'}
+        </span>
+      </div>
+
+      <dl className="pt-2 divide-y divide-canvas-border/70">
         {stats.slice(0, 3).map(s => (
           <div key={s.label} className="flex items-baseline justify-between gap-3 py-2 first:pt-0 last:pb-0">
             {/* The label stays verbatim even when it echoes the title above it
@@ -331,9 +375,16 @@ function SectionTile({ icon: Icon, title, hint, stats, index, activity, actions,
       </dl>
 
       {/* The one thing twelve tiles of static counts could never say: whether the
-          section is going anywhere. A sparkline has no axis and no scale, so it
-          is only ever allowed to carry the SHAPE — the magnitude is the number
-          printed beside it, and the detail is one click away. */}
+          area is going anywhere.
+
+          These were sparklines. They are now the same summing BARS the KPI band
+          uses, and the change is not cosmetic — it is the page finally telling
+          the truth in both places at once. A sparkline is normalised to its own
+          maximum and has no baseline, so the identical curve is drawn whether the
+          area moved by 2 actions or 200, and nothing under it adds up to the
+          number printed beside it. The bars ARE that number, split across the
+          window. Keeping curves here while arguing for bars on the KPI row was
+          the page holding two opinions about the same mark. */}
       <div className="mt-4 pt-3 border-t border-canvas-border flex items-center justify-between gap-3">
         <span className="text-[0.625rem] font-medium text-ink-400 truncate">
           {actions > 0
@@ -341,12 +392,19 @@ function SectionTile({ icon: Icon, title, hint, stats, index, activity, actions,
             : 'No activity this period'}
         </span>
         {actions > 0 && activity.length > 1 && (
-          <Sparkline
-            points={activity}
-            width={64}
-            height={20}
-            ariaLabel={`${title} activity across the period`}
-          />
+          // 96px and twelve buckets, not 64px and thirty days. At the old size
+          // each day got about two pixels, so twelve cards carried twelve strips
+          // of specks; bucketed, every bar is a column you can actually see, and
+          // the sums still add up to the count printed beside them.
+          <div className="w-24 shrink-0">
+            <TrendBars
+              series={activity}
+              total={actions}
+              height="h-6"
+              maxBars={12}
+              ariaLabel={`${title}: ${fmt(actions)} actions across the period`}
+            />
+          </div>
         )}
       </div>
     </Tile>
@@ -371,10 +429,8 @@ function sparkSeries(days: UsageDay[], module: UsageModule): number[] {
   return out;
 }
 
-type SectionKey =
-  | 'engagements' | 'planning' | 'exceptions' | 'process-hub'
-  | 'ask-ira' | 'concierge' | 'reports' | 'workflows'
-  | 'risk-controls' | 'knowledge' | 'dashboards' | 'admin';
+/* `SectionKey`, `SECTION_MODULE` and `MODULE_SECTION` live in `usageSectionMap.ts`
+   — a components file may not also export constants (Fast Refresh). */
 
 /**
  * Every tile on this grid is one bucket of the audit log, so each one can carry
@@ -383,27 +439,27 @@ type SectionKey =
  * access" is logged as `Admin`) and a silent mismatch would draw a flat line
  * instead of failing.
  */
-const SECTION_MODULE: Record<SectionKey, UsageModule> = {
-  engagements: 'Engagements',
-  planning: 'Audit Planning',
-  exceptions: 'Exceptions',
-  'process-hub': 'Process Hub',
-  'ask-ira': 'Ask IRA',
-  concierge: 'AI Concierge',
-  reports: 'Reports',
-  workflows: 'Workflows',
-  'risk-controls': 'Risk & Controls',
-  knowledge: 'Knowledge Hub',
-  dashboards: 'Dashboards',
-  admin: 'Admin',
-};
-
-export default function UsagePlatformSections({ days, rows, rangeDays }: {
+export default function UsagePlatformSections({
+  days, rows, rangeDays, priorDays, totalActions, open: openProp, onOpenChange,
+}: {
   days: UsageDay[];
   rows: UserUsageRow[];
   rangeDays: number;
+  /** The window before this one — the usage panel's delta baseline. */
+  priorDays: UsageDay[];
+  /** All actions in the window, so each area can state its share of the whole. */
+  totalActions: number;
+  /**
+   * Which section is open. Optional: pass it (with `onOpenChange`) when something
+   * OUTSIDE the grid — the scatter, the Top-areas list — has to open a section's
+   * detail. Left out, the grid owns the state itself and behaves as it always did.
+   */
+  open?: SectionKey | null;
+  onOpenChange?: (key: SectionKey | null) => void;
 }) {
-  const [open, setOpen] = useState<SectionKey | null>(null);
+  const [openLocal, setOpenLocal] = useState<SectionKey | null>(null);
+  const open = openProp !== undefined ? openProp : openLocal;
+  const setOpen = onOpenChange ?? setOpenLocal;
 
   // The Knowledge Hub's catalog is live — a user can add or delete a source and
   // the Hub reflects it immediately. Read the same store so this page does too,
@@ -449,19 +505,37 @@ export default function UsagePlatformSections({ days, rows, rangeDays }: {
     { label: 'Members running tools', value: String(conciergeRunners(days).length) },
   ];
 
-  const sections: { key: SectionKey; icon: LucideIcon; title: string; subtitle: string; stats: SectionStat[]; portfolio?: SectionPortfolio }[] = [
-    { key: 'engagements', icon: ClipboardCheck, title: 'Engagements', subtitle: 'Audits under way, and what testing has found', stats: engStats },
-    { key: 'planning', icon: Calendar, title: 'Audit Planning', subtitle: 'What is scheduled, and who runs it', stats: planning.stats, portfolio: planning },
-    { key: 'exceptions', icon: Inbox, title: 'Exceptions', subtitle: 'Flagged by a workflow, waiting on a person', stats: exceptions.stats, portfolio: exceptions },
-    { key: 'process-hub', icon: Layers, title: 'Process Hub', subtitle: 'The SOPs and RACMs behind each business process', stats: processHub.stats, portfolio: processHub },
-    { key: 'ask-ira', icon: Sparkles, title: 'Ask IRA', subtitle: 'What people ask the assistant', stats: askIra.stats, portfolio: askIra },
-    { key: 'concierge', icon: Wand2, title: 'AI Concierge', subtitle: 'Which AI tool gets run, and who runs it', stats: conciergeStats },
-    { key: 'reports', icon: FileBarChart, title: 'Reports', subtitle: 'What got generated, and what came of it', stats: reports.stats, portfolio: reports },
-    { key: 'workflows', icon: Workflow, title: 'Workflows', subtitle: 'How much the automations actually run', stats: workflows.stats, portfolio: workflows },
-    { key: 'risk-controls', icon: ShieldCheck, title: 'Risk & Controls', subtitle: 'How much of the register is controlled', stats: riskControls.stats, portfolio: riskControls },
-    { key: 'knowledge', icon: Database, title: 'Knowledge Hub', subtitle: 'Where the platform gets its data', stats: knowledge.stats, portfolio: knowledge },
-    { key: 'dashboards', icon: LayoutDashboard, title: 'Dashboards', subtitle: 'What the team keeps an eye on', stats: dashboards.stats, portfolio: dashboards },
-    { key: 'admin', icon: ShieldUser, title: 'Admin & access', subtitle: 'Workspaces, teams, and who can change what', stats: admin.stats, portfolio: admin },
+  /* `scope` is not a style choice — it is the literal truth about each derive
+     call above. A section is 'period' if and only if its portfolio is a function
+     of `days`; everything else reads a live register and cannot move with the
+     date picker. Get this wrong in either direction and the card lies. */
+  const sections: { key: SectionKey; icon: LucideIcon; title: string; subtitle: string; stats: SectionStat[]; scope: 'period' | 'all-time'; portfolio?: SectionPortfolio }[] = [
+    // Registers. deriveEngagementPortfolio/AuditPlanning/Exceptions/ProcessHub/
+    // Reports/Workflows/RiskControls take no `days` — they are the owning
+    // screen's totals, which is exactly what §6.7 demands of them.
+    { key: 'engagements', icon: ClipboardCheck, title: 'Engagements', subtitle: 'Audits under way, and what testing has found', stats: engStats, scope: 'all-time' },
+    { key: 'planning', icon: Calendar, title: 'Audit Planning', subtitle: 'What is scheduled, and who runs it', stats: planning.stats, scope: 'all-time', portfolio: planning },
+    /* "Exceptions" is the domain word; "My Queue" is the word on the nav item a
+       user actually clicks. An admin looking for how much My Queue gets used
+       would not have found that phrase anywhere on this page. This page reports
+       on other screens, so it has to speak their names — the card keeps the
+       domain word as its title (the module, the chip and the ranking all use it)
+       and names the screen in the line underneath, where it is findable. */
+    { key: 'exceptions', icon: Inbox, title: 'Exceptions', subtitle: 'The rows behind My Queue: flagged by a workflow, waiting on a person', stats: exceptions.stats, scope: 'all-time', portfolio: exceptions },
+    { key: 'process-hub', icon: Layers, title: 'Process Hub', subtitle: 'The SOPs and RACMs behind each business process', stats: processHub.stats, scope: 'all-time', portfolio: processHub },
+    // Activity. These four ARE functions of `days`, and they move with the range.
+    { key: 'ask-ira', icon: Sparkles, title: 'Ask IRA', subtitle: 'What people ask the assistant', stats: askIra.stats, scope: 'period', portfolio: askIra },
+    { key: 'concierge', icon: Wand2, title: 'AI Concierge', subtitle: 'Which AI tool gets run, and who runs it', stats: conciergeStats, scope: 'period' },
+    { key: 'reports', icon: FileBarChart, title: 'Reports', subtitle: 'The report book, and what is in it', stats: reports.stats, scope: 'all-time', portfolio: reports },
+    { key: 'workflows', icon: Workflow, title: 'Workflows', subtitle: 'How much the automations actually run', stats: workflows.stats, scope: 'all-time', portfolio: workflows },
+    { key: 'risk-controls', icon: ShieldCheck, title: 'Risk & Controls', subtitle: 'How much of the register is controlled', stats: riskControls.stats, scope: 'all-time', portfolio: riskControls },
+    // Knowledge Hub reads the live source list, but one of its three figures
+    // ("Added in this period") is windowed on rangeDays. A card whose figures
+    // run on two clocks has to be called by the one a reader would otherwise be
+    // fooled by: the register. The windowed line names its own window.
+    { key: 'knowledge', icon: Database, title: 'Knowledge Hub', subtitle: 'Where the platform gets its data', stats: knowledge.stats, scope: 'all-time', portfolio: knowledge },
+    { key: 'dashboards', icon: LayoutDashboard, title: 'Dashboards', subtitle: 'What the team keeps an eye on', stats: dashboards.stats, scope: 'period', portfolio: dashboards },
+    { key: 'admin', icon: ShieldUser, title: 'Admin & access', subtitle: 'Workspaces, teams, and who can change what', stats: admin.stats, scope: 'period', portfolio: admin },
   ];
 
   const active = sections.find(s => s.key === open) ?? null;
@@ -483,7 +557,29 @@ export default function UsagePlatformSections({ days, rows, rangeDays }: {
 
   return (
     <div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {/* Said once, at the top, and then again on every card.
+
+          This tab is the one place on the page where the date range does not run
+          every number, and it cannot: §6.7 requires these counts to match the
+          register that owns them ("if the Control Library says 14, this page says
+          14"), and a register has no last-30-days reading. That is a deliberate
+          exception to REQ-1.1, and an exception nobody is told about is
+          indistinguishable from a bug — an admin moves the range, watches Ask IRA
+          move and Reports sit still, and stops trusting the page. */}
+      <p className="mb-4 text-[0.75rem] text-ink-500 leading-relaxed">
+        Cards marked <span className="font-semibold text-brand-700">This period</span> follow the date range above.
+        Cards marked <span className="font-semibold text-ink-600">All time</span> are live totals taken from the
+        screen that owns them, so they match the Control Library, the Risk Register and the report book exactly, and
+        they do not move with the range. The activity line at the foot of every card is always the period.
+      </p>
+
+      {/* Three across, never four. At four the tile is ~250px wide inside a
+          1440px window, and every section whose name is longer than "Reports"
+          truncated in its own header — "Risk & Contr…", "Knowledge …", "Admin &
+          acc…" — with the one-line description clipped under it. A card that
+          cannot print its own title has stopped being a card and become a puzzle.
+          Twelve tiles land as a clean 3 × 4. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {sections.map((s, i) => (
           <SectionTile
             key={s.key}
@@ -491,6 +587,7 @@ export default function UsagePlatformSections({ days, rows, rangeDays }: {
             title={s.title}
             hint={s.subtitle}
             stats={s.stats}
+            scope={s.scope}
             index={i}
             activity={trends[s.key].series}
             actions={trends[s.key].total}
@@ -508,6 +605,26 @@ export default function UsagePlatformSections({ days, rows, rangeDays }: {
             width="max-w-5xl"
             onClose={() => setOpen(null)}
           >
+            {/* ONE detail per area: how much it was USED, then what is IN it.
+                These were two separate modals — usage if you arrived from Top
+                areas, inventory if you arrived from a section card — so the page
+                could tell you Reports was busy, or that the library holds 23
+                reports, but never both, and never answered the question those two
+                facts exist to answer together: is this area producing anything?
+
+                Usage leads, because usage is what this page is for. The register
+                underneath is the context. */}
+            <div className="pb-6 mb-6 border-b border-canvas-border">
+              <ModuleUsagePanel
+                module={SECTION_MODULE[active.key]}
+                days={days}
+                priorDays={priorDays}
+                totalActions={totalActions}
+                rows={rows}
+                rangeDays={rangeDays}
+              />
+            </div>
+
             {active.key === 'engagements' ? (
               <UsageEngagementsSection />
             ) : active.key === 'concierge' ? (

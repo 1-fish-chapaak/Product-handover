@@ -46,7 +46,19 @@ Work you do right now lands on the anchor day immediately. The anchor itself doe
 
 ## What is on the page
 
-Headline numbers, what stands out, daily activity, most-used areas, per-section deep-dives, AI usage, members and seats, a day-by-hour grid, what got created, workflow runs, sharing, downloads, and a table of people and teams that exports to CSV.
+Five tabs. One question each, in the order the person reading actually asks them.
+
+| Tab | The question |
+| --- | --- |
+| Overview | Is anyone using this? |
+| Seats | Are we paying for seats nobody uses? |
+| People | Who is doing the work, and who has gone quiet? |
+| Areas | Which parts of the product get used, and which sit idle? |
+| Output | What did we get out of it? |
+
+The reader is an audit lead, not an analyst. They will not carry a question in their head across a tab switch, so no tab needs another tab to finish its own point. Seats used to carry People as well, seven bands deep: the licence verdict, the seat bands, the funnel, the recommendations, and then the whole member table underneath. Two questions on one tab is a page inside a page, and the second question always loses.
+
+Between them the tabs hold the headline numbers, what stands out, daily activity, most-used areas, per-section deep-dives, AI usage, members and seats, a day-by-hour grid, what got created, workflow runs, sharing, downloads, and a table of people and teams that exports to CSV.
 
 "What stands out" is four findings, and none of them is new data. Three restate an aggregate that is somewhere else on the page. The fourth is the share of all activity the top three members drive, and it is the only one you cannot get any other way: three people doing 70% of everything is exactly what a healthy-looking total hides, and no total, chart or table here can be read to reveal it. Every finding clicks through to its evidence, because a finding you cannot check is an assertion.
 

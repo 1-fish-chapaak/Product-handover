@@ -51,7 +51,7 @@ test('usage tiles agree with the modules they report on', async ({ page }) => {
   // layout happened to put first decided the answer. The tiles are where the
   // page states these numbers, so read them there.
   await nav('Platform Usage');
-  await usageTab(page, 'Sections');
+  await usageTab(page, 'Areas');
   const usage = (await page.locator('button[aria-label$="open details"]').allInnerTexts())
     .join(' ').replace(/\s+/g, ' ').trim();
   // The tile states each figure as "<label> <value>": the stat rows are a

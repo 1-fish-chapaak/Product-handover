@@ -50,9 +50,8 @@ export const test = base.extend({
  */
 export async function usageTab(
   page: Page,
-  name: 'Overview' | 'Adoption' | 'Output' | 'Sections' | 'People',
+  name: 'Overview' | 'Seats' | 'People' | 'Areas' | 'Output',
 ) {
-  // The People tab carries a count badge, so match on the leading label only.
   await page.getByRole('button', { name: new RegExp(`^${name}\\b`) }).first().click();
   await page.waitForTimeout(1000);
 }

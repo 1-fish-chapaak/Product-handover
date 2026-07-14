@@ -20,8 +20,8 @@ import { useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Users, User, UserCheck, UserX, Activity, Sparkles, Download,
-  CalendarClock, ListChecks, PackagePlus, Play, Share2,
-  Gauge, LayoutGrid, ChevronRight,
+  CalendarClock, ListChecks, PackagePlus, Play, Share2, TrendingUp,
+  Gauge, LayoutGrid, Grid2x2,
   type LucideIcon,
 } from 'lucide-react';
 import { useAdminData, useAuditLog, type AdminUser } from '../../context/AdminDataContext';
@@ -54,14 +54,18 @@ import UserUsageModal from './UserUsageModal';
 import ModuleUsageModal from './ModuleUsageModal';
 import TeamUsageModal from './TeamUsageModal';
 import UsageRhythm from './UsageRhythm';
-import UsageActivityChart from './UsageActivityChart';
+import UsageActivityChart, { UsageAiStrip } from './UsageActivityChart';
 import { activityPoints, activityTakeaway } from './usageActivity';
 import UsageVerdict, { type VerdictInput } from './UsageVerdict';
 import UsageHighlights, { type HighlightsInput } from './UsageHighlights';
 import UsagePlatformSections from './UsagePlatformSections';
+import UsageMatrix from './UsageMatrix';
+import { MODULE_SECTION, type SectionKey } from './usageSectionMap';
 import UsageAdoption from './UsageAdoption';
+import UsageConcentration from './UsageConcentration';
+import UsageMiniTrend from './UsageMiniTrend';
 import { Card, Band, Donut, Eyebrow, DeltaPill, Legend, Meter, RankedRow } from './usageChrome';
-import { KH_EASE, SERIES, fmt } from './usageTokens';
+import { KH_EASE, MUTED, SERIES, fmt } from './usageTokens';
 
 const DAY_MS = 86400000;
 
@@ -179,19 +183,42 @@ const userColumns = (compareLabel: string): Column<UsageRow>[] => [
     ),
   },
   {
-    key: 'segment', label: 'Engagement', sortable: true, width: '9%',
+    key: 'segment', label: 'Usage', sortable: true, width: '8%',
     render: (r) => <Pill tone={SEGMENT_TONE[r.segment]}>{SEGMENT_LABELS[r.segment]}</Pill>,
   },
-  { key: 'roleName', label: 'Role', sortable: true, width: '9%', render: (r) => <span className="text-[0.8125rem] text-ink-700 truncate">{r.roleName}</span> },
+  /* `truncate` is `overflow:hidden` + `text-overflow:ellipsis`, and neither does
+     anything to an INLINE box. These two cells were spans, so "System Admin" and
+     "SOX Audit" did not ellipse at the cell edge — they simply overflowed it and
+     ran into each other, which is what made the table look broken at 1512px.
+     A block box truncates. It also needs the width to be honest: Role and Team
+     hold the longest free text in the table and were the two narrowest columns
+     on it. */
   {
-    key: 'team', label: 'Team', sortable: true, width: '10%',
-    render: (r) => r.team === '—'
-      ? <span className="text-[0.8125rem] text-ink-400">{UNASSIGNED}</span>
-      : <span className="text-[0.8125rem] text-ink-700 truncate">{r.team}</span>,
+    key: 'roleName', label: 'Role', sortable: true, width: '13%',
+    render: (r) => <span className="block truncate text-[0.8125rem] text-ink-700" title={r.roleName}>{r.roleName}</span>,
   },
   {
-    key: 'lastLogin', label: 'Last Active', sortable: true, width: '9%',
-    render: (r) => <span className={`text-[0.75rem] font-mono tabular-nums ${r.lastLogin === 'Never' ? 'italic text-ink-400' : 'text-ink-700'}`}>{r.lastLogin}</span>,
+    key: 'team', label: 'Team', sortable: true, width: '12%',
+    render: (r) => r.team === '—'
+      ? <span className="block truncate text-[0.8125rem] text-ink-400">{UNASSIGNED}</span>
+      : <span className="block truncate text-[0.8125rem] text-ink-700" title={r.team}>{r.team}</span>,
+  },
+  /* The DAY, not the day and the clock time. The stored value is "Today, 16:14",
+     and the minute somebody last signed in is not a fact this page is for: it is
+     an adoption surface, and "Today" is the whole answer. Printing the time cost
+     the column half its width again, which is width Role and Team needed to stop
+     truncating — so the clock was pushing real content off the table to say
+     something nobody came here to read. It stays on hover, and in the CSV. */
+  {
+    key: 'lastLogin', label: 'Last active', sortable: true, width: '8%',
+    render: (r) => (
+      <span
+        title={r.lastLogin}
+        className={`block truncate text-[0.75rem] tabular-nums ${r.lastLogin === 'Never' ? 'italic text-ink-400' : 'text-ink-700'}`}
+      >
+        {r.lastLogin.split(',')[0]}
+      </span>
+    ),
   },
   {
     // Actions and Trend were two columns saying one thing: the trend IS the
@@ -207,8 +234,12 @@ const userColumns = (compareLabel: string): Column<UsageRow>[] => [
       </div>
     ),
   },
+  /* "AI use", not "AI actions". A right-aligned count column has to be wide
+     enough for its own HEADER, not just its digits, and "AI actions" plus a sort
+     arrow did not fit in 9% of the table — it wrapped onto two lines and dragged
+     the whole header row down with it. The shorter label fits on one. */
   {
-    key: 'aiQueries', label: 'AI Queries', sortable: true, width: '9%', align: 'right',
+    key: 'aiQueries', label: 'AI use', sortable: true, width: '7%', align: 'right',
     render: (r) => r.aiQueries === 0 ? <Blank /> : <span className="text-[0.8125rem] text-ink-700 tabular-nums">{fmt(r.aiQueries)}</span>,
   },
   {
@@ -220,7 +251,7 @@ const userColumns = (compareLabel: string): Column<UsageRow>[] => [
     // and inside a Pill inside an 11% cell of a `table-fixed` layout it was
     // clipped mid-word on every row that had it — a chip that cannot print its
     // own label is worse than no chip.
-    key: 'topModule', label: 'Top Module', sortable: true, width: '14%',
+    key: 'topModule', label: 'Top area', sortable: true, width: '12%',
     render: (r) => r.actions === 0 ? <Blank /> : <Pill tone="draft">{r.topModule}</Pill>,
   },
 ];
@@ -264,15 +295,15 @@ const teamColumns: Column<TeamUsageRow>[] = [
     ),
   },
   {
-    key: 'actions', label: 'Actions', sortable: true, width: '12%', align: 'right',
+    key: 'actions', label: 'Actions', sortable: true, width: '11%', align: 'right',
     render: (r) => <span className="text-[0.8125rem] font-semibold text-ink-900 tabular-nums">{fmt(r.actions)}</span>,
   },
   {
-    key: 'aiQueries', label: 'AI Queries', sortable: true, width: '12%', align: 'right',
+    key: 'aiQueries', label: 'AI actions', sortable: true, width: '12%', align: 'right',
     render: (r) => r.aiQueries === 0 ? <Blank /> : <span className="text-[0.8125rem] text-ink-700 tabular-nums">{fmt(r.aiQueries)}</span>,
   },
   {
-    key: 'topModule', label: 'Top Module', sortable: true, width: '14%',
+    key: 'topModule', label: 'Top area', sortable: true, width: '12%',
     render: (r) => r.actions === 0 ? <Blank /> : <Pill tone="draft">{r.topModule}</Pill>,
   },
   {
@@ -293,29 +324,52 @@ const teamColumns: Column<TeamUsageRow>[] = [
    The period filter sits above the tabs and scopes all of them, so the numbers
    still agree across the whole surface. */
 
-type UsageTab = 'overview' | 'adoption' | 'output' | 'sections' | 'people';
+/* ── The five tabs ─────────────────────────────────────────────────────────
+   One tab, one question, in the order the person reading actually asks them.
+   The reader is an audit lead, not an analyst: they will not hold a question in
+   their head across a tab switch, so no tab may need another tab to finish its
+   own point.
+
+     Overview  — is anyone using this?
+     Seats     — are we paying for seats nobody uses?
+     People    — who is doing the work?
+     Areas     — which parts of the product get used?
+     Output    — what did we get out of it?
+
+   Seats used to carry People as well: the licence verdict, the seat bands, the
+   funnel, the recommendations AND the full member table, seven bands deep. Two
+   questions stacked on one tab is a page inside a page, and the second question
+   always loses. They are separate tabs now, and neither lost a card. */
+type UsageTab = 'overview' | 'seats' | 'people' | 'areas' | 'output';
 
 const TABS: { id: UsageTab; label: string; icon: LucideIcon }[] = [
   { id: 'overview', label: 'Overview', icon: Activity },
-  { id: 'adoption', label: 'Adoption', icon: Gauge },
-  { id: 'output', label: 'Output', icon: PackagePlus },
-  { id: 'sections', label: 'Sections', icon: LayoutGrid },
+  { id: 'seats', label: 'Seats', icon: Gauge },
   { id: 'people', label: 'People', icon: Users },
+  // "Areas", not "Sections". The tab is named after the thing it is about, the
+  // twelve areas of the product, rather than after the twelve cards it happens
+  // to be built from. It holds every view of an area the page has: the map (the
+  // scatter), the ranking (busiest areas), and the detail (the cards).
+  { id: 'areas', label: 'Areas', icon: LayoutGrid },
+  { id: 'output', label: 'Output', icon: PackagePlus },
 ];
 
-/** The subhead is the tab's promise — it changes with the tab, like KH's does. */
 /** The verdict's window. GitHub's 60% healthy mark is a weekly-active-to-licence
  *  ratio, so the number judged against it has to be measured on a week. */
 const VERDICT_WINDOW_DAYS = 7;
 /** How many weeks of licence use the hero plots behind the number. */
 const VERDICT_TREND_WEEKS = 8;
 
+/* The subhead is the tab's question, asked in the words the reader would use.
+   It used to be a description of the contents ("What got created, run, shared
+   and exported"), which tells a reader what they are about to look at but not
+   why they would want to. A question tells them both. */
 const TAB_SUBHEAD: Record<UsageTab, string> = {
-  overview: "How much happened in this period, and when.",
-  adoption: "Whether the licence is earning its keep. Which seats get used, and which sit idle.",
-  output: "What got created, run, shared and exported.",
-  sections: "Every section of the platform, with its own numbers. Open one for the detail.",
-  people: "Who did the work, member by member and team by team. Open a row for the breakdown.",
+  overview: 'Is anyone using this? How much work happened, and when.',
+  seats: 'Are you paying for seats nobody uses?',
+  people: 'Who is doing the work, and who has gone quiet?',
+  areas: 'Which parts of the product get used, and which sit idle?',
+  output: 'What the team built, ran, shared and downloaded.',
 };
 
 /**
@@ -508,7 +562,33 @@ export default function PlatformUsageView() {
   const [modalEmail, setModalEmail] = useState<string | null>(null);
   const [modalModule, setModalModule] = useState<UsageModule | null>(null);
   const [modalTeam, setModalTeam] = useState<string | null>(null);
+  const [openSection, setOpenSection] = useState<SectionKey | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** The member table, so the verdict's "See who" can scroll to it in-tab. */
+  const memberTableRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Open an area's detail. ONE detail per area, wherever you clicked from.
+   *
+   * The page had two: a usage modal (from Top areas) and an inventory modal (from
+   * a section card), for the same twelve things. Now every route — a dot on the
+   * scatter, a row in the ranking, the "fastest growing" finding on Overview —
+   * lands on the same modal, which carries usage first and the register under it.
+   *
+   * 'Other' is the exception, and it has to be: it is the bucket an unrecognised
+   * module string falls into, so there is no register behind it and no section
+   * card for it. It keeps the standalone usage modal, which for that area is the
+   * whole truth rather than half of it.
+   */
+  const openArea = (module: UsageModule) => {
+    const section = MODULE_SECTION[module];
+    if (section) {
+      setTab('areas');
+      setOpenSection(section);
+    } else {
+      setModalModule(module);
+    }
+  };
 
   // Switching lens resets the toolbar so filters never apply invisibly.
   const setLens = (l: Lens) => {
@@ -664,29 +744,51 @@ export default function PlatformUsageView() {
   const aiEventsTotal = useMemo(() => days.reduce((s, d) => s + d.aiEvents, 0), [days]);
   const aiSharePct = totals.actions > 0 ? Math.round((aiEventsTotal / totals.actions) * 100) : 0;
 
-  // No "People active" tile. The hero above already owns seat usage, and owns it
-  // better: it carries the number, the denominator, the change AND the benchmark
-  // that makes 71% mean something. A tile repeating "12 · of 17 licensed · Down
-  // 2 people from 14" ten centimetres below "71% of your 17 paid seats did real
-  // work, −2" is the same fact told twice, in a weaker voice.
+  /* The four headline numbers (REQ-2.1–2.4), each with the days that made it.
+     Active users is back, and it leads: "how many people" is the question the
+     page exists to answer, and the tab's own subhead promises "how much happened
+     in this period". The licence verdict on Adoption asks a different question of
+     the same seats — what share of what you PAY FOR did real work this week — on
+     a fixed weekly window against a benchmark. This tile is the window you chose,
+     with no benchmark. They are not the same fact told twice; the one thing they
+     must not do is disagree, and they don't: both count a person as active only
+     if they did real work.
+
+     `series` is the per-day breakdown drawn under each number. For Actions, AI
+     and Reports the bars sum to the headline exactly (REQ-2.5). For Active users
+     they cannot — a person working three days is one user and three bars — and
+     that tile prints the caveat (REQ-2.6). */
   const stats: UsageStat[] = [
+    {
+      key: 'active', label: 'People active', value: fmt(totals.activeUsers),
+      of: `of ${seats.total} licensed`,
+      current: totals.activeUsers, prior: priorTotals.activeUsers, unit: 'people',
+      series: days.map(d => d.activeUsers),
+      // The one metric on the row whose bars are not its number. Said on the tile.
+      additive: false,
+      counts: 'Anyone who did at least one piece of real work in this period.',
+      excludes: 'Signing in and doing nothing. A sign-in is not use.',
+    },
     {
       key: 'actions', label: 'Work done', value: fmt(totals.actions),
       of: `across ${moduleTotals.length} ${moduleTotals.length === 1 ? 'area' : 'areas'}`,
       current: totals.actions, prior: priorTotals.actions, unit: 'actions',
-      counts: 'Every recorded step of real work — testing a control, raising a finding, running a workflow, generating a report.',
-      excludes: 'Signing in, and simply opening a page without changing anything.',
+      series: days.map(d => d.actions),
+      counts: 'Every recorded step of real work: testing a control, raising a finding, running a workflow, generating a report.',
+      excludes: 'Signing in, and opening a page without changing anything.',
     },
     {
       key: 'ai', label: 'AI-assisted work', value: `${aiSharePct}%`,
       of: `${fmt(aiEventsTotal)} of ${fmt(totals.actions)}`,
       current: aiEventsTotal, prior: priorDays.reduce((s, d) => s + d.aiEvents, 0), unit: 'AI actions',
+      series: days.map(d => d.aiEvents),
       counts: 'Work where someone asked Ask IRA a question or ran an AI Concierge tool.',
       excludes: `Opening the AI panel without asking anything. Saved conversations are counted separately (${fmt(totals.aiConversations)} in this period).`,
     },
     {
       key: 'reports', label: 'Reports produced', value: fmt(totals.reports),
       current: totals.reports, prior: priorTotals.reports, unit: 'reports',
+      series: days.map(d => d.reports),
       counts: 'Finished reports and Action Taken Reports generated in this period.',
       excludes: 'Drafts, and reports that were only opened or shared.',
     },
@@ -694,7 +796,9 @@ export default function PlatformUsageView() {
 
 
   // Anomaly detection — days above mean + 2 standard deviations.
-  const spikes = useMemo(() => usageSpikes(days), [days]);
+  // `logs` gives the anchor, which gives the weekday — an odd day is odd for its
+  // own KIND of day (see `oddDayTest`), and without that this test cannot fire at all.
+  const spikes = useMemo(() => usageSpikes(days, logs), [days, logs]);
   const biggestSpike = spikes[0];
 
   const topAiUsers = [...rows].sort((a, b) => b.aiQueries - a.aiQueries).slice(0, 5).filter(r => r.aiQueries > 0);
@@ -720,7 +824,10 @@ export default function PlatformUsageView() {
     return {
       growing: risen ? { module: risen.module, deltaPct: risen.deltaPct as number } : null,
       aiAdoptionPct: aiAdoption,
-      aiActivity: totals.aiActivity,
+      // AI *actions*, not aiActivity. This card's fallback copy calls the number
+      // "AI actions this period" — so it has to BE the AI actions, not the AI
+      // actions plus the saved conversations, which are not actions at all.
+      aiActivity: aiEventsTotal,
       dormant: seats.dormant.length,
       concentration,
       topNames: [...rawRows]
@@ -729,16 +836,17 @@ export default function PlatformUsageView() {
         .slice(0, 3)
         .map(r => r.user.name),
     };
-  }, [moduleTotals, aiAdoption, totals.aiActivity, seats.dormant.length, concentration, rawRows]);
+  }, [moduleTotals, aiAdoption, aiEventsTotal, seats.dormant.length, concentration, rawRows]);
 
-  /* Every finding lands on its own evidence.
+  /* Every finding lands on the tab that holds its evidence.
 
-     "No sign-in for 30+ days" goes to Adoption, not People: that claim is about
-     sign-in recency, and Adoption's "Where the seats sit" names exactly those
-     people. The People table's "No activity" segment is a DIFFERENT question —
-     zero actions inside the chosen window — and sending the reader there would
-     hand them a filtered count that disagrees with the number they clicked. */
-  const seeQuietSeats = () => setTab('adoption');
+     The two people-shaped findings are still different claims, and they must not
+     be conflated. "No sign-in for 30+ days" is about sign-in RECENCY, and it is
+     answered by Seats, under "Where the seats sit", which names exactly those
+     people. The member table's "No activity" segment asks a different question,
+     zero actions inside the chosen window, so a reader sent from one to the other
+     would get a filtered count that disagrees with the number they clicked. */
+  const seeQuietSeats = () => setTab('seats');
   const seeTopMembers = () => {
     setLens('users');
     setTab('people');
@@ -811,6 +919,34 @@ export default function PlatformUsageView() {
   }, [creations]);
   const recentCr = useMemo(() => recentCreations(days), [days]);
 
+  /* Output, day by day.
+   *
+   * The Output tab had no time axis anywhere on it: four totals, four change
+   * chips, four feeds. A change chip is a two-point comparison — it cannot tell
+   * steady production from one enormous Tuesday followed by three silent weeks,
+   * and those are the same number and completely different facts.
+   *
+   * Each series is derived by running the SAME aggregator the card's headline
+   * uses over a single day, so a strip can never drift from the total above it:
+   * the bars are the number, split by day. (Thirty days × three reducers is
+   * nothing — and correctness here is worth more than a bespoke fast path that
+   * could disagree with the headline.)
+   */
+  const outputSeries = useMemo(() => days.map(d => {
+    const label = usageDayLabel(d.dayOffset, logs);
+    const one = [d];
+    return {
+      label,
+      created: creationTotals(one, []).reduce((s, c) => s + c.count, 0),
+      runs: workflowRunTotals(one, []).total,
+      shares: shareTotals(one, []).total,
+      downloads: d.downloads,
+    };
+  }), [days, logs]);
+
+  const seriesFor = (key: 'created' | 'runs' | 'shares' | 'downloads') =>
+    outputSeries.map(p => ({ label: p.label, value: p[key] }));
+
   // Workflow runs + sharing — executions and share events (live folds in).
   const runs = useMemo(() => workflowRunTotals(days, priorDays), [days, priorDays]);
   const runAreaMax = Math.max(1, ...runs.byArea.map(a => a.count));
@@ -835,7 +971,7 @@ export default function PlatformUsageView() {
     if (seats.invited.length > 0) {
       steps.push({
         key: 'invites',
-        text: `${seats.invited.length} invite${seats.invited.length !== 1 ? 's' : ''} still pending — those seats are paid for but unused.`,
+        text: `${seats.invited.length} invite${seats.invited.length !== 1 ? 's' : ''} still pending. You are paying for those seats and nobody is using them.`,
       });
     }
     if (seats.dormant.length > 0) {
@@ -850,13 +986,13 @@ export default function PlatformUsageView() {
     if (typeof concentration === 'number' && concentration >= 60) {
       steps.push({
         key: 'concentration',
-        text: `Top 3 members drive ${concentration}% of all activity — adoption is shallow beyond them.`,
+        text: `The busiest 3 people do ${concentration}% of all the work. Hardly anyone else has taken it up.`,
       });
     }
     if (aiAdoption < 50 && totals.activeUsers > 0) {
       steps.push({
         key: 'ai',
-        text: `Only ${aiAdoption}% of active members use AI — the rest are missing the fastest way to work.`,
+        text: `Only ${aiAdoption}% of the people working in the platform have tried the AI. The rest are doing it the long way.`,
       });
     }
     return steps.slice(0, 3);
@@ -1024,8 +1160,8 @@ export default function PlatformUsageView() {
     // things a spreadsheet can hold that a cell can't: the email and the members
     // behind a team's avatar stack.
     const headers = lens === 'users'
-      ? ['Member', 'Email', 'Engagement', 'Role', 'Team', 'Last Active', 'Actions', `Trend vs ${compareLabel}`, 'AI Queries', 'Downloads', 'Top Module']
-      : ['Team', 'Members', 'Member Names', 'Actions', 'AI Queries', 'Top Module', 'Last Active'];
+      ? ['Member', 'Email', 'Usage', 'Role', 'Team', 'Last active', 'Actions', `Trend vs ${compareLabel}`, 'AI actions', 'Downloads', 'Top area']
+      : ['Team', 'Members', 'Member Names', 'Actions', 'AI actions', 'Top area', 'Last Active'];
     const body = lens === 'users'
       ? filteredRows.map(r => [
           r.name, r.email, SEGMENT_LABELS[r.segment], r.roleName, teamLabel(r.team), r.lastLogin, r.actions,
@@ -1078,7 +1214,7 @@ export default function PlatformUsageView() {
         {lens === 'users' && (
           <>
             <ColumnFilter
-              variant="button" label="Engagement" options={segmentOptions}
+              variant="button" label="Usage" options={segmentOptions}
               value={segmentFilter} onChange={setSegmentFilter} align="end" selectIndicator="checkbox"
               // The chips carried their counts on their face; the dropdown carries
               // them on each row, so nothing was lost in the trade.
@@ -1193,7 +1329,7 @@ export default function PlatformUsageView() {
             <span className="text-ink-500 min-w-0 truncate">
               {range > 0
                 ? <>Showing <span className="font-semibold text-ink-800">{range} {range === 1 ? 'day' : 'days'}</span> {endsAtAnchor ? 'up to' : 'ending'} <span className="font-semibold text-ink-800">{endLabel}</span></>
-                : <>No days in this range — the records end {anchorLabel}</>}
+                : <>No days in this range. The records end {anchorLabel}</>}
             </span>
 
             {/* The trap this closes: the page's clock is the newest record, not
@@ -1274,8 +1410,11 @@ export default function PlatformUsageView() {
           <Band title="What stands out" note="Click any finding to see it">
             <UsageHighlights
               h={highlights}
-              onOpenModule={setModalModule}
-              onSeeAi={() => setTab('adoption')}
+              // The "fastest growing area" finding lands on that area's detail —
+              // the same one the scatter and the ranking open. It used to open a
+              // second, different modal.
+              onOpenModule={openArea}
+              onSeeAi={() => setTab('people')}
               onSeeQuiet={seeQuietSeats}
               onSeeTop={seeTopMembers}
             />
@@ -1291,20 +1430,21 @@ export default function PlatformUsageView() {
               <Card
                 rank="hero"
                 title="Actions per day"
-                subtitle="The line is a 7-day average. Shaded columns are weekends."
+                subtitle="The line is a 7-day average, so it rides through the weekend dips instead of following them."
                 right={
                   <div className="flex items-center gap-4">
-                    {/* Two keys, plus a third only when it is on the plot. The
-                        7-day line and the weekend bands are already named in the
-                        subtitle; keying them there too would be the chart
-                        explaining itself twice. The compare series is NOT named
-                        anywhere else, and it is a grey dashed line — the one mark
-                        on this chart that is unreadable without a key. */}
+                    {/* Every mark on the plot gets a key. The weekend used to be a
+                        grey band BEHIND the bars, explained only in the subtitle;
+                        it is now the pale column itself, so it can carry a legend
+                        key like any other mark. */}
                     <div className="hidden lg:block">
                       <Legend
                         keys={[
-                          { color: SERIES.primary, label: 'Everything else' },
-                          { color: SERIES.secondary, label: 'AI was involved' },
+                          { color: SERIES.primary, label: 'Weekday' },
+                          { color: MUTED.primary, label: 'Weekend' },
+                          ...(spikes.length > 0
+                            ? [{ color: SERIES.attention, label: 'An odd day' }]
+                            : []),
                           ...(compareOn
                             ? [{ color: SERIES.compare, label: 'Last period', dashed: true }]
                             : []),
@@ -1317,11 +1457,26 @@ export default function PlatformUsageView() {
                   </div>
                 }
               >
-                <UsageActivityChart points={activityData} compareOn={compareOn} height={280} />
+                <UsageActivityChart points={activityData} compareOn={compareOn} height={260} />
 
+                {/* REQ-4.2. AI on its own scale, sharing the dates above. Stacked
+                    into those bars it was a flat blue crust nobody could read a
+                    day off; here the shape is finally visible. */}
+                <div className="mt-5 pt-5 border-t border-canvas-border">
+                  <UsageAiStrip points={activityData} />
+                </div>
+
+                {/* "for that kind of day" is the whole fix, so the copy has to say
+                    it. A ring on a Sunday with 8 actions looks absurd next to a
+                    Tuesday with 29 — until you know a normal Sunday is 3, and that
+                    somebody working a weekend is the more unusual event of the two.
+                    A reader told only "above normal" would read the Sunday ring as
+                    a bug. */}
                 {biggestSpike && (
-                  <p className="mt-4 pt-4 border-t border-canvas-border text-[0.75rem] text-ink-500">
-                    Busiest single day was <span className="font-semibold text-ink-700">{usageDayLabel(biggestSpike.dayOffset, logs)}</span>, at {biggestSpike.ratio}× a normal day, mostly <span className="font-semibold text-ink-700">{biggestSpike.topModule}</span>.
+                  <p className="mt-5 pt-4 border-t border-canvas-border text-[0.75rem] text-ink-500">
+                    A ring marks a day well above normal <span className="font-medium text-ink-600">for that kind of day</span>. Weekdays are judged against weekdays, and weekends against weekends.
+                    {' '}The biggest was <span className="font-semibold text-ink-700">{usageDayLabel(biggestSpike.dayOffset, logs)}</span>, at {biggestSpike.ratio} times a normal day, mostly in <span className="font-semibold text-ink-700">{biggestSpike.topModule}</span>.
+                    {spikes.length > 1 && <> {spikes.length - 1} other {spikes.length === 2 ? 'day stands' : 'days stand'} out too.</>}
                   </p>
                 )}
 
@@ -1330,78 +1485,155 @@ export default function PlatformUsageView() {
           </Band>
           )}
 
-          {/* Where the work lands, and when. Two cards of roughly equal height —
-              nothing here stretches to fill a neighbour. */}
-          {/* Top areas, full width. The "when the work happens" card that used to
-              sit beside it — seven day-bars and twenty-four hour-bars, each with
-              its own number and its own label — was ninety-odd elements on its
-              own, and answered a question ("Tuesdays, mid-morning") that changes
-              no decision an admin makes. It has moved to Adoption, where the
-              working-pattern question actually belongs. */}
+          {/* Where the work lands, and when — the two halves of the same
+              question, side by side, exactly as PRD §5 lays the tab out: "Then
+              the busiest 6 areas, and a grid showing which hours of the week
+              people work."
+
+              The hours grid spent a while on Adoption. That was wrong twice over:
+              it is not a licence question, so it interrupted the renewal argument
+              (verdict → seats → areas → funnel) to talk about Tuesdays; and it
+              left Overview — the tab everyone lands on — with two visuals and a
+              screen and a half of dead space under them. */}
+          {/* Overview keeps WHEN the work happens. WHERE it happens — the areas —
+              now lives on the Areas tab in one piece, instead of being previewed
+              here, plotted on Adoption, and detailed on Sections. */}
           {tab === 'overview' && (
-          <Band title="Where the work happens">
+          <Band title="When the work happens">
             <Card
-              title="Top areas"
-              subtitle="Click any area to see who used it and what they did."
+              icon={CalendarClock}
+              title="When people are working"
+              subtitle="Each square is one hour of one weekday. The darker it is, the busier that hour was."
             >
-              <div className="space-y-1">
-                {topModules.map(({ module, count }, i) => (
-                  <RankedRow
-                    key={module}
-                    label={module}
-                    count={count}
-                    share={totals.actions > 0 ? Math.round((count / totals.actions) * 100) : 0}
-                    pct={(count / moduleMax) * 100}
-                    index={i}
-                    onClick={() => setModalModule(module)}
-                  />
-                ))}
-              </div>
-              {restModules > 0 && (
-                <div className="mt-5 pt-4 border-t border-canvas-border">
-                  <button
-                    type="button"
-                    onClick={() => setTab('sections')}
-                    className="inline-flex items-center gap-1 text-[0.8125rem] font-medium text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
-                  >
-                    View all {moduleTotals.length} areas
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              )}
+              <UsageRhythm data={heatmap} />
             </Card>
           </Band>
           )}
 
-          {/* The answer, before the evidence — and on the tab that asks the
-              question. An admin wondering whether to renew arrives with one
-              question, "is the licence worth it", and it has a single number for
-              an answer: the share of paid seats that did real work. Nothing here
-              is new data; it is the page's own numbers, said out loud, with the
-              one button that acts on them. */}
-          {tab === 'adoption' && (
+          {/* The answer, before the evidence, on the tab that asks the question.
+              Someone wondering whether to renew arrives with one question, "is
+              the licence worth it", and it has a single number for an answer: the
+              share of paid seats that did real work. Nothing here is new data. It
+              is the page's own numbers, said out loud. */}
+          {tab === 'seats' && (
             <div className="mb-4">
-              <UsageVerdict v={verdict} onSeeWho={() => setTab('people')} />
+              {/* "See who" crosses to People, and that is the one crossing the
+                  page allows. Seats does the licence arithmetic; People puts
+                  names to it. The button is a drill-down into the answer, not a
+                  tab borrowing another tab to finish its own argument. */}
+              <UsageVerdict
+                v={verdict}
+                onSeeWho={() => {
+                  setLens('users');
+                  setTab('people');
+                }}
+              />
             </div>
           )}
 
-          {/* The evidence under the verdict: which seats get used, and which
-              areas earn their keep. */}
-          {tab === 'adoption' && (
-          <Band title="Seats and areas" note="Is the licence earning its keep">
-            <UsageAdoption days={days} users={users} />
+          {/* The evidence under the verdict. Both cards ask a seat question, so
+              they sit side by side:
+
+                · How often does each seat get used? The days-worked bands. This
+                  finds the seats you could take back.
+                · How far does a seat get? The funnel, from paying for it to using
+                  it as a habit. This finds where people fall away.
+
+              The other half of "how the work is spread", who carries it, is a
+              question about people rather than about licences, so it leads the
+              People tab instead. */}
+          {tab === 'seats' && (
+          <Band title="How much each seat gets used">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+              <UsageAdoption days={days} users={users} className="xl:col-span-7" />
+
+              {/* The seat funnel. The drop-off between stages is the entire point
+                  of the chart, so it is the loudest thing on it. */}
+              <Card
+                icon={Users}
+                title="From paying for a seat to using it"
+                subtitle="Each stage as a share of the seats you pay for."
+                className="xl:col-span-5"
+              >
+                {/* Labels ride above the track, never inside the fill: a fill
+                    that reaches 100% would otherwise put ink on brand purple,
+                    and one that reaches 20% would put white on an empty track.
+                    The drop-off between stages is the point of the chart, so it
+                    is the only red on the page. */}
+                <div>
+                  {funnel.map((stage, i) => {
+                    const pct = seats.total > 0 ? Math.round((stage.count / seats.total) * 100) : 0;
+                    const prev = i > 0 ? funnel[i - 1] : null;
+                    const lost = prev ? prev.count - stage.count : 0;
+                    return (
+                      <div key={stage.label}>
+                        {prev && (
+                          <div className="flex items-center justify-end py-1.5">
+                            {lost > 0 ? (
+                              <span className="text-[0.625rem] font-semibold text-risk-700 tabular-nums">
+                                {/* Name the thing that drops off. "−1 drops off here"
+                                    left the reader supplying the noun themselves. */}
+                                −{lost} {lost === 1 ? 'seat drops off here' : 'seats drop off here'}
+                              </span>
+                            ) : (
+                              <span className="text-[0.625rem] text-ink-300">nobody drops off</span>
+                            )}
+                          </div>
+                        )}
+                        {/* The last stage is the one that matters, the seats that
+                            reached the habit, so it is the only one at full
+                            strength. The stages above it are the funnel it came
+                            through, and they read as the lighter step of the same
+                            hue rather than as four equal claims. */}
+                        <Meter
+                          index={i}
+                          title={stage.hint}
+                          tone={i === funnel.length - 1 ? 'brand' : 'muted'}
+                          label={stage.label}
+                          value={stage.count}
+                          note={<span>{pct}%</span>}
+                          pct={pct}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-5 pt-4 border-t border-canvas-border">
+                  <Eyebrow className="mb-2">Where the seats sit</Eyebrow>
+                  <SeatRow label="Active this period" people={seats.activeInRange} />
+                  <SeatRow label="No sign-in 30+ days" people={seats.dormant} tone="attention" />
+                  <SeatRow label="Invited, not joined yet" people={seats.invited} tone="attention" />
+                  <SeatRow label="Suspended or inactive" people={seats.suspendedOrInactive} />
+                </div>
+              </Card>
+            </div>
           </Band>
           )}
 
-          {/* AI + the seat funnel. */}
-          {tab === 'adoption' && (
-          <Band title="AI and the seat funnel">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* PEOPLE — who carries the work, and how much of it is AI.
+              Concentration leads, because it is the one finding on this page an
+              admin cannot get from any other screen: if three people do 70% of
+              everything, the total still looks healthy, and no chart, table or
+              number anywhere else can be read to reveal it. */}
+          {tab === 'people' && (
+          <Band title="How the work is shared out">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+              <Card
+                icon={TrendingUp}
+                title="How much the team leans on its busiest people"
+                subtitle="Everyone ranked by how much they did, adding up as you go."
+                className="xl:col-span-5"
+                bodyClassName="flex flex-col"
+              >
+                <UsageConcentration rows={rawRows} topShare={concentration} />
+              </Card>
+
               <Card
                 icon={Sparkles}
-                title="AI usage"
-                subtitle="Ask IRA is the chat; the AI Concierge is the toolkit. A question you type and a tool you run are different products, so they are counted separately and never added up."
-                className="lg:col-span-8"
+                title="Who uses the AI"
+                subtitle="Ask IRA is the chat. The AI Concierge is the toolkit. A question you type and a tool you run are different things, so they are counted separately and never added up."
+                className="xl:col-span-7"
                 bodyClassName="flex flex-col"
               >
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-5">
@@ -1427,13 +1659,34 @@ export default function PlatformUsageView() {
                   </div>
                 </div>
 
-                {/* What the four numbers add up to, in one sentence. AI is a
-                    share of the work, not a separate universe — say what share. */}
+                {/* What the numbers add up to, in one sentence.
+
+                    THE SHARE IS `aiEvents`, NOT `aiActivity`. This card used to
+                    divide aiActivity (AI events PLUS saved conversations) by
+                    actions, and print the result as "AI was involved in 12% of
+                    everything done on the platform". The KPI band, ten
+                    centimetres above, printed 11% for the same claim — because it
+                    divides aiEvents by actions.
+
+                    11% and 12% are not two facts. They are one fact, computed two
+                    ways, and the page has no way to tell a reader which one is
+                    the AI number. Worse, the 12% was the wrong one: a saved
+                    conversation is NOT an audit action, so it is not in the
+                    denominator. Dividing it by actions is a share of a whole that
+                    does not contain it — a number that can, in principle, exceed
+                    100%.
+
+                    One definition: AI's share of the work is the AI ACTIONS over
+                    all actions. Conversations are real, and they are counted —
+                    but they are counted as themselves, in the tile beside this. */}
                 <p className="mt-5 text-[0.75rem] text-ink-600 leading-relaxed">
-                  {totals.actions > 0 && totals.aiActivity > 0 ? (
+                  {totals.actions > 0 && aiEventsTotal > 0 ? (
                     <>
-                      AI was involved in <span className="font-semibold text-ink-900">{Math.round((totals.aiActivity / totals.actions) * 100)}%</span> of
-                      everything done on the platform this period — <span className="font-semibold text-ink-900">{fmt(totals.aiActivity)}</span> of {fmt(totals.actions)} actions.
+                      AI was involved in <span className="font-semibold text-ink-900">{aiSharePct}%</span> of
+                      everything done on the platform this period: <span className="font-semibold text-ink-900">{fmt(aiEventsTotal)}</span> of {fmt(totals.actions)} actions.
+                      {totals.aiConversations > 0 && (
+                        <> The {fmt(totals.aiConversations)} saved conversation{totals.aiConversations === 1 ? '' : 's'} above {totals.aiConversations === 1 ? 'is' : 'are'} not counted as work, so {totals.aiConversations === 1 ? 'it is' : 'they are'} kept separate and never added into this share.</>
+                      )}
                     </>
                   ) : (
                     <>No AI activity was recorded in this period.</>
@@ -1468,7 +1721,14 @@ export default function PlatformUsageView() {
                               value={fmt(u.aiQueries)}
                               note={
                                 <span>
-                                  {totals.aiActivity > 0 ? Math.round((u.aiQueries / totals.aiActivity) * 100) : 0}%
+                                  {/* Share of the AI ACTIONS, not of aiActivity.
+                                      `aiQueries` is a per-user count of AI events;
+                                      dividing it by a total that also carries
+                                      saved conversations gave every name a share
+                                      of a whole it is not part of, so the five
+                                      shares could never add up to the ranking they
+                                      sit in. */}
+                                  {aiEventsTotal > 0 ? Math.round((u.aiQueries / aiEventsTotal) * 100) : 0}%
                                 </span>
                               }
                               pct={(u.aiQueries / topAiUsers[0].aiQueries) * 100}
@@ -1480,103 +1740,21 @@ export default function PlatformUsageView() {
                   </div>
                 )}
               </Card>
-
-              {/* The seat funnel. The drop-off between stages is the entire point
-                  of the chart, so it is the loudest thing on it. */}
-              <Card
-                icon={Users}
-                title="From seat to habit"
-                subtitle="Every stage as a share of the seats you pay for."
-                className="lg:col-span-4"
-              >
-                {/* Labels ride above the track, never inside the fill: a fill
-                    that reaches 100% would otherwise put ink on brand purple,
-                    and one that reaches 20% would put white on an empty track.
-                    The drop-off between stages is the point of the chart, so it
-                    is the only red on the page. */}
-                <div>
-                  {funnel.map((stage, i) => {
-                    const pct = seats.total > 0 ? Math.round((stage.count / seats.total) * 100) : 0;
-                    const prev = i > 0 ? funnel[i - 1] : null;
-                    const lost = prev ? prev.count - stage.count : 0;
-                    return (
-                      <div key={stage.label}>
-                        {prev && (
-                          <div className="flex items-center justify-end py-1.5">
-                            {lost > 0 ? (
-                              <span className="text-[0.625rem] font-semibold text-risk-700 tabular-nums">
-                                {/* Name the thing that drops off. "−1 drops off here"
-                                    left the reader supplying the noun themselves. */}
-                                −{lost} {lost === 1 ? 'seat drops off here' : 'seats drop off here'}
-                              </span>
-                            ) : (
-                              <span className="text-[0.625rem] text-ink-300">nobody drops off</span>
-                            )}
-                          </div>
-                        )}
-                        {/* The last stage is the one that matters — the seats that
-                            reached the habit — so it is the only one at full
-                            strength; the stages above it are the funnel it came
-                            through, and they read as the lighter step of the same
-                            hue rather than as four equal claims. */}
-                        <Meter
-                          index={i}
-                          title={stage.hint}
-                          tone={i === funnel.length - 1 ? 'brand' : 'muted'}
-                          label={stage.label}
-                          value={stage.count}
-                          note={<span>{pct}%</span>}
-                          pct={pct}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-5 pt-4 border-t border-canvas-border">
-                  <Eyebrow className="mb-2">Where the seats sit</Eyebrow>
-                  <SeatRow label="Active this period" people={seats.activeInRange} />
-                  <SeatRow label="No sign-in 30+ days" people={seats.dormant} tone="attention" />
-                  <SeatRow label="Invited, not joined yet" people={seats.invited} tone="attention" />
-                  <SeatRow label="Suspended or inactive" people={seats.suspendedOrInactive} />
-                </div>
-              </Card>
             </div>
           </Band>
           )}
 
-          {/* When the team works — a working-pattern question, so it lives with
-              the other licence-and-behaviour questions, but at the FOOT of them:
-              it is the one card on this tab that changes no renewal decision, and
-              it was sitting between the seat curve and the seat funnel, cutting
-              the licence argument in half to talk about Tuesdays.
-
-              The band takes no title: it holds exactly one card, and that card's
-              own header already says "When the work happens". The heading and the
-              card title were the same six words, twenty pixels apart. */}
-          {tab === 'adoption' && (
-          <Band>
-            <Card
-              icon={CalendarClock}
-              title="When the work happens"
-              subtitle="Which days the team works, and which hours."
-            >
-              <UsageRhythm data={heatmap} />
-            </Card>
-          </Band>
-          )}
-
-          {/* Worth checking — pending invites, dormant seats, shallow adoption.
-              Every one of these is a licence question, so it belongs on Adoption,
-              not Overview. On Overview it sat next to the highlights and repeated
-              them verbatim: "3 members haven't signed in for 30+ days" was on the
-              same screen twice. */}
-          {tab === 'adoption' && (
+          {/* Worth checking: pending invites, quiet seats, shallow adoption.
+              Every one of these is a licence question, so it closes the Seats
+              tab. It cannot go on Overview, where it would sit beside the
+              highlights and repeat them word for word: "2 members have not signed
+              in for 30+ days" would be on the same screen twice. */}
+          {tab === 'seats' && (
           <Band>
             <Card
               icon={ListChecks}
               title="Worth checking"
-              subtitle="What this period's numbers imply. Acting on them lives in Administration."
+              subtitle="What these numbers suggest you look at. To act on any of it, go to Administration."
             >
               {nextSteps.length > 0 ? (
                 <ul className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-3.5">
@@ -1602,8 +1780,8 @@ export default function PlatformUsageView() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
               <Card
                 icon={PackagePlus}
-                title="What got created"
-                subtitle="Workflows, dashboards, RACMs, engagements and reports built in this period"
+                title="What the team built"
+                subtitle="Workflows, dashboards, RACMs, engagements and reports made in this period"
                 className="lg:col-span-12"
               >
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-10 gap-y-6">
@@ -1618,6 +1796,9 @@ export default function PlatformUsageView() {
                       delta={created.deltaPct}
                       compareLabel={compareLabel}
                     />
+                    <div className="mt-4">
+                      <UsageMiniTrend points={seriesFor('created')} name="Things created" />
+                    </div>
                     <div className="mt-5 space-y-3.5">
                       {creations.map((c, i) => (
                         <Meter
@@ -1652,10 +1833,18 @@ export default function PlatformUsageView() {
                 </div>
               </Card>
 
-              <Card icon={Play} title="Workflow runs" subtitle="Executions across the platform" className="lg:col-span-6">
+              <Card icon={Play} title="Workflow runs" subtitle="Every time somebody ran a workflow, and where" className="lg:col-span-6">
                 <CardFigure value={runs.total} caption="Runs in this period" delta={runs.deltaPct} compareLabel={compareLabel} />
+                <div className="mt-4">
+                  <UsageMiniTrend points={seriesFor('runs')} name="Workflow runs" />
+                </div>
+                {/* An area with nothing in it is not a bar of zero — it is not a
+                    row (REQ-4.7, §8.2). "AI tools · 0" with a 1.5% stub of a bar
+                    beside it was the page breaking its own rule: a mark that says
+                    "almost none" where the truth is "none at all". Sharing below
+                    already filters the same way; Runs did not. */}
                 <div className="mt-5 space-y-3.5">
-                  {runs.byArea.map((a, i) => (
+                  {runs.byArea.filter(a => a.count > 0).map((a, i) => (
                     <Meter key={a.area} label={a.area} value={fmt(a.count)} pct={(a.count / runAreaMax) * 100} index={i} />
                   ))}
                 </div>
@@ -1675,6 +1864,9 @@ export default function PlatformUsageView() {
 
               <Card icon={Share2} title="Sharing" subtitle="Invites and share links sent" className="lg:col-span-6">
                 <CardFigure value={shares.total} caption="Shares in this period" delta={shares.deltaPct} compareLabel={compareLabel} />
+                <div className="mt-4">
+                  <UsageMiniTrend points={seriesFor('shares')} name="Shares" />
+                </div>
                 <div className="mt-5 space-y-3.5">
                   {shares.byKind.filter(k => k.count > 0).map((k, i) => (
                     <Meter key={k.kind} label={k.kind} value={fmt(k.count)} pct={(k.count / shareKindMax) * 100} index={i} />
@@ -1696,13 +1888,16 @@ export default function PlatformUsageView() {
 
               <Card
                 icon={Download}
-                title="Exports & downloads"
-                subtitle="Every download button on the platform, and who used it"
+                title="Downloads"
+                subtitle="What left the platform as a file, and who took it"
                 className="lg:col-span-12"
               >
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-10 gap-y-6">
                   <div className="lg:col-span-4">
                     <CardFigure value={totals.downloads} caption="Files downloaded in this period" delta={downloadDelta} compareLabel={compareLabel} />
+                    <div className="mt-4">
+                      <UsageMiniTrend points={seriesFor('downloads')} name="Files downloaded" />
+                    </div>
                     {/* The one genuine part-to-whole on the page: every download
                         is exactly one format, and the formats add up to the
                         figure above. A ranked bar would answer "which format
@@ -1754,22 +1949,86 @@ export default function PlatformUsageView() {
           </Band>
           )}
 
-          {/* Per-section deep-dives — compact tiles, full detail opens in a modal */}
-          {tab === 'sections' && (
-          <Band>
-            <UsagePlatformSections days={days} rows={rawRows} rangeDays={range} />
-          </Band>
+          {/* ── AREAS ────────────────────────────────────────────────────────
+              Everything the page knows about an area, in one place, in the order
+              a decision gets made:
+
+                1. WHERE does each area sit — the scatter. Broad and heavy, or
+                   narrow and idle. This is the map, and its dots are clickable.
+                2. WHICH ones lead — the ranking. The scatter answers "what kind
+                   of used is it"; it cannot answer "which is busiest", because
+                   volume is not on either axis.
+                3. WHAT is inside each one — the twelve cards.
+
+              These were three tabs' worth of the same twelve entities. An admin
+              looking at "Dashboards is shelfware" had to leave the chart, find
+              the Dashboards card on another tab, and open it — carrying the
+              finding in their head across a tab switch. Now the dot IS the door. */}
+          {tab === 'areas' && (
+          <>
+            <Band title="Which areas earn their keep" note="Click any area for its detail">
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+                <Card
+                  icon={Grid2x2}
+                  title="How many people use each area, and how hard"
+                  subtitle="The dashed lines are the middle of this platform, not a target. Anything in the bottom-left box is being paid for and barely touched."
+                  className="xl:col-span-7"
+                >
+                  <UsageMatrix days={days} users={users} onSelect={openArea} />
+                </Card>
+
+                <Card
+                  title="Busiest areas"
+                  subtitle="Ranked by how much work happened in each. The chart beside this cannot show that, because volume is on neither of its axes."
+                  className="xl:col-span-5"
+                >
+                  <div className="space-y-1">
+                    {topModules.map(({ module, count }, i) => (
+                      <RankedRow
+                        key={module}
+                        label={module}
+                        count={count}
+                        share={totals.actions > 0 ? Math.round((count / totals.actions) * 100) : 0}
+                        pct={(count / moduleMax) * 100}
+                        index={i}
+                        onClick={() => openArea(module)}
+                      />
+                    ))}
+                  </div>
+                  {restModules > 0 && (
+                    <p className="mt-5 pt-4 border-t border-canvas-border text-[0.75rem] text-ink-400">
+                      The other {restModules} {restModules === 1 ? 'area is' : 'areas are'} in the cards below.
+                    </p>
+                  )}
+                </Card>
+              </div>
+            </Band>
+
+            <Band title="Every area in detail">
+              <UsagePlatformSections
+                days={days}
+                rows={rawRows}
+                rangeDays={range}
+                priorDays={priorDays}
+                totalActions={totals.actions}
+                open={openSection}
+                onOpenChange={setOpenSection}
+              />
+            </Band>
+          </>
           )}
 
-          {/* The drill surface — who, exactly.
+          {/* Everyone, by name. This is the People tab's whole point, and the
+              reason it is no longer the last band of a seven-band Seats tab: a
+              reader looking for a person had to scroll past the licence verdict,
+              the seat bands and the funnel to reach the one thing they came for.
 
               Administration's skeleton end to end (§7.11.1): the lens switch and
               the one action on the left/right of a header row, then the KPI band,
-              then the table with search-left · filters-right inside its card.
-              This tab used to open on a bare chip row above an unbanded table —
-              the only people surface on the platform that did. */}
+              then the table with search-left, filters-right inside its card. */}
           {tab === 'people' && (
-          <Band>
+          <Band title="Everyone, by name" note="Open a row for the full breakdown">
+          <div ref={memberTableRef} className="scroll-mt-4">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <UsageLensSwitch lens={lens} onSelect={setLens} />
               {can('ad_usage_export') && (
@@ -1852,6 +2111,7 @@ export default function PlatformUsageView() {
                 }
               />
             )}
+          </div>
           </Band>
           )}
 

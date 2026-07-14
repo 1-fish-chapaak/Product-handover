@@ -117,8 +117,12 @@ export default function UsageVerdict({ v, onSeeWho }: {
           {/* What the arc means, in people. The window IS named here, and it has
               to be: this card deliberately does not follow the date filter above
               it. The header can say "Showing 90 days" while this says "this week",
-              and without the words that looks like a bug rather than the point. */}
+              and without the words that looks like a bug rather than the point.
+              The chip makes it impossible to miss. */}
           <div className="min-w-0 sm:w-[22rem]">
+          <span className="inline-flex items-center h-[1.125rem] px-1.5 mb-2 rounded border border-canvas-border bg-canvas text-[0.5625rem] font-semibold uppercase tracking-wide text-ink-500">
+            Always the last 7 days
+          </span>
           <p className="text-[1.0625rem] text-ink-700 leading-snug">
             <strong className="font-semibold text-ink-900">
               {v.activeUsers} of your {v.seats} paid seats
@@ -128,7 +132,7 @@ export default function UsageVerdict({ v, onSeeWho }: {
 
           <p className="mt-2.5 text-[0.875rem] text-ink-600">
             <span className={`font-semibold ${healthy ? 'text-compliant-700' : 'text-mitigated-700'}`}>
-              {healthy ? 'Above' : 'Below'} the healthy mark
+              {healthy ? 'Above' : 'Below'} the {HEALTHY_SEAT_USE}% that counts as healthy
             </span>{' '}
             for a paid licence, {trendWord}.
           </p>

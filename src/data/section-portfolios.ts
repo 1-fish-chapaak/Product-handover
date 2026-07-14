@@ -245,7 +245,14 @@ export function deriveReportsPortfolio(reports: GeneratedReport[]): SectionPortf
 
   return {
     stats: [
-      { label: 'Reports generated', value: fmt(reports.length), sub: `${sox.length} SOX · ${ia.length} internal audit · ${bulk.length} bulk` },
+      /* "Reports in the library", not "Reports generated".
+         This is the whole report book — every report that exists, ever. The
+         Overview KPI "Reports produced" and the Output card both count the
+         reports made INSIDE the date window, and in the seeded tenant that is 7
+         against this 23. Two flow verbs ("generated", "produced"), one of them
+         attached to a stock number, is how a page ends up appearing to
+         contradict itself. A stock number gets a stock noun. */
+      { label: 'Reports in the library', value: fmt(reports.length), sub: `${sox.length} SOX · ${ia.length} internal audit · ${bulk.length} bulk` },
       { label: 'SOX / ICFR', value: fmt(sox.length), sub: 'on the SOX framework' },
       { label: 'Action Taken Reports', value: fmt(atrCount), sub: atrFrozen > 0 ? `${atrFrozen} frozen` : 'in the ATR library' },
       { label: 'Shared reports', value: fmt(SHARED_REPORTS.length), sub: sharedSox > 0 ? `${sharedSox} of them SOX` : 'sent to other teams' },
@@ -317,7 +324,10 @@ export function deriveWorkflowsPortfolio(): SectionPortfolio {
   return {
     stats: [
       { label: 'Workflows in library', value: fmt(WORKFLOWS.length), sub: `${types.length} categories` },
-      { label: 'Total runs', value: fmt(totalRuns), sub: 'all workflows' },
+      // Lifetime runs, off the workflow records. The Output tab counts the runs
+      // inside the date window (67 against this 167) — so this one says which it
+      // is on its face rather than leaving the reader to reconcile them.
+      { label: 'Runs, all time', value: fmt(totalRuns), sub: 'every run ever recorded' },
       { label: 'Most-run workflow', value: fmt(mostRun?.runs ?? 0), sub: mostRun?.name ?? '—' },
       { label: 'Runs per workflow', value: fmt(Math.round(totalRuns / Math.max(1, WORKFLOWS.length))), sub: 'average' },
       { label: 'Active workflows', value: fmt(WORKFLOWS.filter(w => w.status === 'active').length), sub: 'of the library', tone: 'good' },

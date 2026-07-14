@@ -41,10 +41,13 @@ test('Process Hub coverage matches Platform Usage', async ({ page }) => {
   console.log('\n=== PROCESS HUB CARDS ===\n' + JSON.stringify(card, null, 2));
 
   await nav('Platform Usage');
-  // The section tiles live on the Sections tab — the page opens on Overview.
-  await page.getByRole('button', { name: 'Sections', exact: true }).first().click();
+  // The section tiles live on the Areas tab — the page opens on Overview.
+  await page.getByRole('button', { name: 'Areas', exact: true }).first().click();
   await page.waitForTimeout(1200);
-  await page.getByRole('button', { name: /Process Hub — open details/i }).first().click();
+  // Each tile now declares which clock its figures run on ("Process Hub, figures
+  // all time — open details"), because Areas mixes registers with windowed
+  // activity and an unmarked mix reads as a broken page.
+  await page.getByRole('button', { name: /Process Hub.* — open details/i }).first().click();
   await page.waitForTimeout(1500);
   const modal = await text();
   console.log('\n=== USAGE PROCESS HUB TILE ===\n' + modal.slice(modal.indexOf('Business processes') - 40, modal.indexOf('Business processes') + 520));

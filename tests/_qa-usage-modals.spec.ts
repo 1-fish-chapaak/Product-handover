@@ -20,16 +20,16 @@ test('every section deep-dive modal renders', async ({ page }) => {
   await page.getByRole('button', { name: /^Platform Usage/i }).first().click();
   await page.waitForTimeout(2500);
   // The deep-dive tiles live on the Sections tab now.
-  await usageTab(page, 'Sections');
+  await usageTab(page, 'Areas');
 
-  const tiles = page.getByRole('button', { name: /— open details$/i });
+  const tiles = page.getByRole('button', { name: /, open details$/i });
   const names = await tiles.evaluateAll(els =>
-    els.map(el => el.getAttribute('aria-label')!.replace(/ — open details$/i, '')));
+    els.map(el => el.getAttribute('aria-label')!.replace(/, open details$/i, '')));
   expect(names.length, 'section tiles found').toBeGreaterThan(0);
   console.log(`\nsections: ${names.join(', ')}`);
 
   for (const name of names) {
-    await page.getByRole('button', { name: `${name} — open details` }).first().click();
+    await page.getByRole('button', { name: `${name}, open details` }).first().click();
     await page.waitForTimeout(1300);
 
     const body = await page.locator('body').innerText();

@@ -34,16 +34,20 @@ export default function UsageHeatmap({ data }: { data: UsageHeatmapData }) {
 
   return (
     <div>
-      {/* Cells are 28px tall, not 18px. Two reasons: an 18px cell is under the
-          20px minimum hit area for a hover target, and at 18px the grid only
-          filled two-thirds of its card — the rest was dead white. */}
-      <div className="space-y-1">
+      {/* A heat SURFACE, not a row of tiles.
+          The cells are ~37px wide (a 24-column grid across the card) and were
+          28px tall with 4px gutters all round, which is a chequerboard: the eye
+          reads seven rows of separate lozenges rather than one continuous field,
+          and a heatmap only works if the field is continuous enough for a dark
+          patch to emerge from it. 24px tall on a 2px gutter keeps every cell over
+          the 20px hover minimum and lets Tuesday morning read as a block. */}
+      <div className="space-y-[2px]">
         {ROW_ORDER.map(dow => (
           <div key={dow} className="flex items-center gap-1">
             <span className="w-8 shrink-0 pr-1.5 text-right text-[0.625rem] font-medium text-ink-400">
               {DAY_LABELS[dow]}
             </span>
-            <div className="flex-1 grid gap-1" style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}>
+            <div className="flex-1 grid gap-[2px]" style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}>
               {matrix[dow].map((v, h) => (
                 <div
                   key={h}
@@ -51,7 +55,7 @@ export default function UsageHeatmap({ data }: { data: UsageHeatmapData }) {
                   role="img"
                   aria-label={`${DAY_LABELS[dow]} ${fmtHour(h)}: ${v.toLocaleString('en-US')} action${v !== 1 ? 's' : ''}`}
                   title={`${DAY_LABELS[dow]} ${fmtHour(h)} · ${v.toLocaleString('en-US')} action${v !== 1 ? 's' : ''}`}
-                  className="h-7 rounded-xs transition-transform duration-150 hover:scale-[1.12] focus-visible:scale-[1.12]"
+                  className="h-6 rounded-[3px] transition-transform duration-150 hover:scale-[1.12] focus-visible:scale-[1.12]"
                   style={{ backgroundColor: cellColor(v, max) }}
                 />
               ))}
@@ -60,7 +64,7 @@ export default function UsageHeatmap({ data }: { data: UsageHeatmapData }) {
         ))}
 
         {/* Hour axis — every fourth hour, so the labels never collide. */}
-        <div className="flex items-center gap-1 pt-1">
+        <div className="flex items-center gap-1 pt-1.5">
           <span className="w-8 shrink-0" />
           <div className="flex-1 grid" style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}>
             {Array.from({ length: 24 }, (_, h) => (

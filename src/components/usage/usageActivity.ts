@@ -23,7 +23,7 @@
  */
 
 import type { AuditLog } from '../../context/AdminDataContext';
-import { usageAnchor, usageDayLabel, type UsageDay } from '../../data/platform-usage';
+import { usageAnchor, usageDayLabel, oddDayTest, type UsageDay } from '../../data/platform-usage';
 import { fmt } from './usageTokens';
 
 const DAY_MS = 86400000;
@@ -45,6 +45,16 @@ export interface ActivityPoint {
   weekend: boolean;
   /** The previous window's total at the same position, for the compare overlay. */
   prior: number | null;
+  /**
+   * An "odd day" (PRD §7.1): above mean + 2 standard deviations for days OF ITS
+   * OWN KIND — weekdays judged against weekdays, weekends against weekends.
+   *
+   * Marked ON the plot, because a spike the reader has to find themselves is a
+   * spike the chart failed to report. It runs the same `oddDayTest` that
+   * `usageSpikes()` runs, so the rings and the sentence under the chart cannot
+   * disagree about which day was strange.
+   */
+  spike: boolean;
 }
 
 /**
@@ -60,6 +70,13 @@ export function activityPoints(days: UsageDay[], priorDays: UsageDay[], logs: Au
   // The weekday is walked back from the anchor, the same anchor the axis labels
   // are built from — so the shading always lines up with the dates it shades.
   const anchor = usageAnchor(logs);
+
+  /* The odd-day test, from the ONE function that defines it. This module used to
+     carry its own copy of the arithmetic, and the copy was wrong in exactly the
+     way the original was — it judged a Sunday against a Tuesday. Sharing the test
+     means the rings on the chart and the sentence underneath cannot disagree about
+     which day was strange. See `oddDayTest` for why this is day-type aware. */
+  const odd = oddDayTest(days, logs);
 
   return days.map((d, i) => {
     const total = d.actions;
@@ -82,8 +99,22 @@ export function activityPoints(days: UsageDay[], priorDays: UsageDay[], logs: Au
       rolling: rolling === null ? null : Math.round(rolling * 10) / 10,
       weekend: dow === 0 || dow === 6,
       prior: priorDays[i]?.actions ?? null,
+      // Judged against days of its own kind. `oddDayTest` marks nothing when a
+      // window has fewer than three days of that kind, which is honest: the
+      // biggest of three days is not an anomaly, it is just the biggest.
+      spike: odd.isOdd(d),
     };
   });
+}
+
+/** The AI strip's own peak — printed on the strip, because a chart with its own
+ *  scale has to say what that scale tops out at or the height means nothing. */
+export function aiPeak(points: ActivityPoint[]): { value: number; label: string } | null {
+  const top = points.reduce<ActivityPoint | null>(
+    (best, p) => (p.ai > 0 && (!best || p.ai > best.ai) ? p : best),
+    null,
+  );
+  return top ? { value: top.ai, label: top.label } : null;
 }
 
 /** Contiguous weekend runs, as [startLabel, endLabel] pairs, for the shading. */

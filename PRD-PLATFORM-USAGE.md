@@ -23,9 +23,11 @@ So the person who set up the workspace and invited the team cannot answer the on
 
 ## How it should work
 
-The page answers three questions in order: is the platform being used at all, is adoption broad or carried by a few people, and what should the admin do about it. Everything else supports those.
+Five tabs, one question each, in the order the reader asks them: is anyone using this (Overview), are we paying for seats nobody uses (Seats), who is doing the work (People), which parts of the product get used (Areas), what did we get out of it (Output).
 
-One page, one range control (7 / 30 / 90 days) that applies to everything below it.
+The reader is an audit lead, not an analyst, and the vocabulary follows: no "shelfware", no "power users", no "adoption funnel". Every label says what the thing means in the words someone would use out loud. A tab may not need another tab to finish its own argument, which is why Seats and People are separate: the licence arithmetic and the names behind it are two questions, and stacking them made a page inside a page.
+
+One range control (7 / 30 / 90 days) sits above the tabs and applies to everything below it.
 
 | Metric | Definition | Comparison |
 |---|---|---|

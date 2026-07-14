@@ -123,7 +123,7 @@ function ToolRow({ tool, max, index, onOpen, logs }: {
       type="button"
       onClick={onOpen}
       data-tool={tool.id}
-      aria-label={`${tool.title} — open breakdown`}
+      aria-label={`${tool.title}, open breakdown`}
       className="group w-full text-left px-2.5 py-3 rounded-lg flex items-center gap-3 cursor-pointer transition-colors hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
     >
       {/* Rank. The list is sorted by runs, and a reader shouldn't have to infer
@@ -287,9 +287,9 @@ function ToolDetail({ tool, rangeDays, onBack }: {
       {tool.runs === 0 ? (
         <Band title={`No runs in the last ${rangeDays} days`}>
           <p className="text-[0.8125rem] text-ink-500 leading-relaxed max-w-2xl">
-            {tool.title} is live on the AI Concierge page and anyone with Concierge access can open
-            it — the platform simply recorded no run of it in this window. Widen the range at the
-            top of the page to see whether it has ever been run.
+            {tool.title} is live on the AI Concierge page, and anyone with Concierge access can open
+            it. Nobody ran it in this period. Widen the range at the top of the page to see whether
+            it has ever been run.
           </p>
         </Band>
       ) : (
@@ -525,8 +525,8 @@ export default function UsageConciergeSection({ days, rows, rangeDays }: {
           ))}
         </div>
         <p className="mt-3 text-[0.625rem] text-ink-400">
-          Bar length = runs in the window. A tool with no bar was not run in it — widen the range
-          to see whether it has ever been run.
+          The bar is how many times the tool was run in this period. A tool with no bar was not run
+          at all. Widen the range to see whether it has ever been run.
         </p>
       </Band>
 
@@ -614,7 +614,7 @@ export default function UsageConciergeSection({ days, rows, rangeDays }: {
           )}
           {unused.length > 0 && (
             <p className="mt-4 text-[0.6875rem] text-ink-400 leading-relaxed">
-              {`${unused.map(t => t.title).join(', ')} — no runs in this window, so ${unused.length === 1 ? 'it takes' : 'they take'} no share of the mix.`}
+              {`${unused.map(t => t.title).join(', ')}: nobody ran ${unused.length === 1 ? 'it' : 'them'} in this period, so ${unused.length === 1 ? 'it takes' : 'they take'} no share of the mix.`}
             </p>
           )}
         </Band>
