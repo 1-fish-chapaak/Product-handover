@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useIcfr } from './store';
 import {
-  controlConclusion, courtFor, designProgress, designStarted, engagementProgress, isEngagementLocked, openDiscussionCount,
+  controlConclusion, courtFor, designProgress, designStarted, isAwaitingReview, isEngagementLocked, openDiscussionCount,
   operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
@@ -92,7 +92,7 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
 }
 
 export default function ControlRegister() {
-  const { eng, role, openControl, requestDesignDocs, rollForward } = useIcfr();
+  const { eng, role, meOwner, openControl, requestDesignDocs, rollForward } = useIcfr();
   const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
   const [creating, setCreating] = useState(false);
   // preview-before-download for the consolidated working paper
@@ -106,12 +106,21 @@ export default function ControlRegister() {
   const [layout, setLayout] = useState<'cards' | 'table'>('cards');
   const [sel, setSel] = useState<Set<string>>(new Set());
 
-  const stats = engagementProgress(eng);
-  const processes = useMemo(() => ['All', ...Array.from(new Set(eng.controls.map(c => c.process)))], [eng.controls]);
+  // Person-lane: the owner's register is their own controls, never the engagement's.
+  const scoped = useMemo(
+    () => (role === 'risk-owner' ? eng.controls.filter(c => c.owner === meOwner) : eng.controls),
+    [eng.controls, role, meOwner],
+  );
+  const stats = useMemo(() => ({
+    effective: scoped.filter(c => controlConclusion(c) === 'Effective').length,
+    awaitingReview: scoped.filter(isAwaitingReview).length,
+    waitingOnOwner: scoped.filter(c => courtFor(c, eng.tasks, eng.reviewNotes) === 'risk-owner').length,
+  }), [scoped, eng.tasks, eng.reviewNotes]);
+  const processes = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.process)))], [scoped]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
-    return eng.controls.filter(c => {
+    return scoped.filter(c => {
       if (process !== 'All' && c.process !== process) return false;
       if (nature !== 'All' && c.nature !== nature) return false;
       if (term && !(`${c.id} ${c.wpRef} ${c.description} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
@@ -124,7 +133,7 @@ export default function ControlRegister() {
       if (savedView === 'key' && !c.isKey) return false;
       return true;
     });
-  }, [eng.controls, eng.tasks, q, process, nature, savedView, role]);
+  }, [scoped, eng.tasks, eng.reviewNotes, q, process, nature, savedView, role]);
 
   const groups = useMemo(() => {
     if (!grouped) return [{ key: '', rows: filtered }];
@@ -146,10 +155,11 @@ export default function ControlRegister() {
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
           <h1 className="text-[22px] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>Control library</h1>
-          <p className="text-[13px] text-ink-500 mt-0.5">{eng.controls.length} controls · <span className="font-semibold text-mitigated-700">{testsDueNow(eng.controls).length} tests due now</span> · {stats.effective} effective · {stats.awaitingReview} awaiting review · {stats.waitingOnOwner} waiting on owner</p>
+          <p className="text-[13px] text-ink-500 mt-0.5">{scoped.length} controls{role === 'risk-owner' ? ' in your name' : ''} · <span className="font-semibold text-mitigated-700">{testsDueNow(scoped).length} tests due now</span> · {stats.effective} effective · {stats.awaitingReview} awaiting review · {stats.waitingOnOwner} waiting on owner</p>
         </div>
         <div className="flex items-center gap-1.5">
-          <button onClick={() => setWpPreview(true)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>
+          {/* the consolidated paper carries materiality & the opinion — audit-side only */}
+          {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>}
           {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={rollForward} title="Roll forward to year-end" aria-label="Roll forward to year-end" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RefreshCw size={15} /></button>}
           {role === 'auditor' && !isEngagementLocked(eng) && (
             <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
@@ -288,7 +298,7 @@ export default function ControlRegister() {
         </table>
       </div>
       )}
-      <div className="mt-3 text-[11.5px] text-ink-400">Showing {filtered.length} of {eng.controls.length} controls</div>
+      <div className="mt-3 text-[11.5px] text-ink-400">Showing {filtered.length} of {scoped.length} controls</div>
 
       {/* bulk bar */}
       {sel.size > 0 && (

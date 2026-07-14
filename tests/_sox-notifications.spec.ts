@@ -32,21 +32,12 @@ test('notification bell shows pending items per persona', async ({ page }) => {
   await page.waitForTimeout(700);
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page.waitForTimeout(500);
-  // the RACM row itself carries the auditor's Ineffective pill for the risk owner
-  // (RACM tab lands on one card per process — the ineffective rows live in P2P)
-  await page.locator('.sox-book-ui').getByRole('button', { name: 'RACM', exact: true }).first().click();
-  await page.waitForTimeout(700);
-  await page.getByRole('button', { name: 'Open Procure to Pay RACM' }).click();
-  await page.waitForTimeout(600);
-  await expect(page.locator('tr', { hasText: 'Ineffective' }).first()).toBeVisible();
-  // D1 — testing left the risk owner's lane: no bulk-test entries, uploads stay
-  await expect(page.getByRole('button', { name: /^Bulk test/ })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Upload RACM / SOP' })).toBeVisible();
-  const checks = page.locator('tbody input[type=checkbox]');
-  await checks.nth(0).click();
-  await expect(page.getByRole('button', { name: 'Test controls' })).toHaveCount(0);
-  // ...and approving rows stays with the auditor
-  await expect(page.getByRole('button', { name: 'Approve rows' })).toHaveCount(0);
+  // Phase 3 — the owner's SOX is a to-do list: the audit-side tabs are gone
+  const soxNav = page.locator('.sox-book-ui');
+  await expect(soxNav.getByRole('button', { name: 'RACM', exact: true })).toHaveCount(0);
+  await expect(soxNav.getByRole('button', { name: 'Risk Library', exact: true })).toHaveCount(0);
+  await expect(soxNav.getByRole('button', { name: 'Runs', exact: true })).toHaveCount(0);
+  await expect(soxNav.getByRole('button', { name: 'Control Library', exact: true })).toBeVisible();
 });
 
 /** Risk owner's overview task card deep-links to the control's TOD / TOE. */

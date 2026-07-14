@@ -5,7 +5,7 @@ import { useCurrentUser } from '../../context/CurrentUserContext';
 import { findEngagement } from '../../data/engagements';
 import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { IcfrProvider, useIcfr, type SoxTab } from './store';
-import { RoleSwitcher } from './parts';
+import { OwnerPicker, RoleSwitcher } from './parts';
 import NotificationsBell from './NotificationsBell';
 import Overview from './Overview';
 import Racm, { RacmLanding } from './Racm';
@@ -25,8 +25,12 @@ const SOX_TABS: TabDef[] = [
 ];
 
 function Inner({ onBack }: { onBack?: () => void }) {
-  const { eng, role, tab, view, racmEditor, setRole, setTab, togglePeriod, back } = useIcfr();
+  const { eng, role, tab, view, racmEditor, meOwner, setMeOwner, setRole, setTab, togglePeriod, back } = useIcfr();
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
+  // The owner's SOX is a to-do list, not a workspace: just their inbox (Overview)
+  // and their controls. RACM, Risk Library and Runs are audit-side surfaces.
+  const tabs = role === 'risk-owner' ? SOX_TABS.filter(t => t.id === 'overview' || t.id === 'controls') : SOX_TABS;
+  const owners = Array.from(new Set(eng.controls.map(c => c.owner))).sort();
 
   const topBar = (
     <div className="sticky top-0 z-30 bg-canvas/85 backdrop-blur border-b border-canvas-border shrink-0">
@@ -51,6 +55,7 @@ function Inner({ onBack }: { onBack?: () => void }) {
           <NotificationsBell />
           <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Viewing as</span>
           <RoleSwitcher role={role} onChange={setRole} />
+          {role === 'risk-owner' && <OwnerPicker owner={meOwner} options={owners} onChange={setMeOwner} />}
         </div>
       </div>
     </div>
@@ -84,7 +89,7 @@ function Inner({ onBack }: { onBack?: () => void }) {
       {topBar}
       <div className="max-w-[1320px] mx-auto px-6 py-6">
         {isRoot && (
-          <EngagementTabBar tabs={SOX_TABS} activeTab={tab} onSelect={(id) => setTab(id as SoxTab)} storageKey={`sox-${eng.id}`} size="md" />
+          <EngagementTabBar tabs={tabs} activeTab={tab} onSelect={(id) => setTab(id as SoxTab)} storageKey={`sox-${eng.id}`} size="md" />
         )}
         <AnimatePresence mode="wait">
           <motion.div key={`${role}-${tab}-${view}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>

@@ -328,6 +328,11 @@ export function engagementProgress(eng: IcfrEngagement) {
 export function tasksForRole(eng: IcfrEngagement, role: Role): HandoffTask[] {
   return eng.tasks.filter(t => t.assigneeRole === role && t.status === 'open');
 }
+/** Person-lane match: a task is this owner's if it names them, or rides a control they own. */
+export function isOwnerTask(eng: IcfrEngagement, t: HandoffTask, owner: string): boolean {
+  return t.assigneeRole === 'risk-owner'
+    && (t.assignee === owner || eng.controls.find(c => c.id === t.controlId)?.owner === owner);
+}
 export function discussionsFor(eng: IcfrEngagement, controlId: string) {
   return eng.discussions.filter(d => d.controlId === controlId);
 }

@@ -1,5 +1,6 @@
-import { motion } from 'motion/react';
-import { Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X } from 'lucide-react';
+import { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X, ChevronDown } from 'lucide-react';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
 import type { Conclusion, Court, Nature, Role, Severity, TestResult, TrackConclusion } from './types';
@@ -92,6 +93,38 @@ export function RoleSwitcher({ role, onChange }: { role: Role; onChange: (r: Rol
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// ─── owner persona picker — which first-line hat "You" wears in owner mode ───────
+// The demo switcher's second level: person-lane, not role-lane. Only rendered
+// while Viewing as Risk Owner; every owner surface scopes to this name.
+export function OwnerPicker({ owner, options, onChange }: { owner: string; options: string[]; onChange: (o: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const short = owner.split(' · ')[0];
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(o => !o)} aria-label="Owner persona" title={`Acting as ${owner}`}
+        className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12px] font-semibold text-ink-700 hover:border-mitigated-300 hover:text-mitigated-700 transition-colors cursor-pointer">
+        <UserCheck size={13} className="text-mitigated-600" /> as {short}<ChevronDown size={12} className="text-ink-400" />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+              className="absolute right-0 mt-1.5 z-20 w-64 max-h-72 overflow-y-auto rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_16px_40px_-16px_rgba(15,8,30,.4)] p-1">
+              {options.map(o => (
+                <button key={o} onClick={() => { onChange(o); setOpen(false); }}
+                  className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-[12.5px] hover:bg-paper-50 cursor-pointer flex items-center gap-2', o === owner ? 'text-mitigated-700 font-semibold' : 'text-ink-700')}>
+                  {o === owner ? <Check size={12} /> : <span className="w-3" />}{o}
+                </button>
+              ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

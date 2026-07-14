@@ -1,7 +1,7 @@
 import { Upload, CheckCircle2, MessageSquare, Clock, FileWarning, Inbox, ArrowRight, FlaskConical } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useIcfr } from './store';
-import { testDueInDays, testDueLabel, testsDueNow } from './helpers';
+import { isOwnerTask, testDueInDays, testDueLabel, testsDueNow } from './helpers';
 import { cn } from '../../lib/cn';
 import type { HandoffTask, TaskType } from './types';
 
@@ -12,9 +12,10 @@ const TASK_META: Record<TaskType, { label: string; Icon: typeof Upload; tone: st
 };
 
 export default function RiskOwnerPortal() {
-  const { eng, submitTask, openControl, setTab } = useIcfr();
+  const { eng, meOwner, submitTask, openControl, setTab } = useIcfr();
   const { addToast } = useToast();
-  const mine = eng.tasks.filter(t => t.assigneeRole === 'risk-owner');
+  // person-lane: only this persona's tasks and controls — never the whole engagement
+  const mine = eng.tasks.filter(t => isOwnerTask(eng, t, meOwner));
   const dueNow = (t: HandoffTask) => t.overdue || /today/i.test(t.dueLabel);
   // due-today / overdue tasks lead the inbox
   const open = mine.filter(t => t.status === 'open').sort((a, b) => Number(dueNow(b)) - Number(dueNow(a)));
@@ -25,7 +26,7 @@ export default function RiskOwnerPortal() {
     addToast({ type: 'success', title: 'Sent to the audit team', message: t.type === 'remediation' ? 'Marked remediated — they’ll re-test.' : 'Submitted — we’ll let you know if more is needed.' });
   };
 
-  const dueTests = testsDueNow(eng.controls);
+  const dueTests = testsDueNow(eng.controls.filter(c => c.owner === meOwner));
 
   return (
     <div className="max-w-[760px] mx-auto space-y-5">

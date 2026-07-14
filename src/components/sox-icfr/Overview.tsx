@@ -5,7 +5,7 @@ import {
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
 import {
-  assessSeverity, controlConclusion, engagementProgress, formatINR, isClearlyTrivial, periodEndDate, trackResult,
+  assessSeverity, controlConclusion, engagementProgress, formatINR, isClearlyTrivial, periodEndDate, testsDueNow, trackResult,
 } from './helpers';
 import { cn } from '../../lib/cn';
 import RiskOwnerPortal from './RiskOwnerPortal';
@@ -31,11 +31,15 @@ const HANDOFF_META: Record<TaskType, { label: string; Icon: typeof Upload; tone:
 };
 
 export default function Overview() {
-  const { eng, role, setView, setTab, signOffEngagement } = useIcfr();
+  const { eng, role, meOwner, setView, setTab, signOffEngagement } = useIcfr();
   const { addToast } = useToast();
   const stats = engagementProgress(eng);
   const M = eng.materiality;
   const isOwner = role === 'risk-owner';
+  // The owner's overview is their court only — engagement-wide dashboards,
+  // materiality and the sign-off chain are audit-side surfaces.
+  const myControls = isOwner ? eng.controls.filter(c => c.owner === meOwner) : [];
+  const myDefs = isOwner ? eng.deficiencies.filter(d => eng.controls.find(c => c.id === d.controlId)?.owner === meOwner) : [];
 
   // sign-off readiness — every control concluded AND its paper countersigned;
   // the reviewer's per-paper gate feeds the engagement-level one.
@@ -104,7 +108,9 @@ export default function Overview() {
     <div className="space-y-5">
       <div>
         <h1 className="text-[22px] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>Overview</h1>
-        <p className="text-[13px] text-ink-500 mt-0.5">{eng.controls.length} controls · {eng.framework} · {eng.period} period</p>
+        <p className="text-[13px] text-ink-500 mt-0.5">
+          {isOwner ? <>{myControls.length} controls in your name ({meOwner}) · {eng.period} period</> : <>{eng.controls.length} controls · {eng.framework} · {eng.period} period</>}
+        </p>
       </div>
 
       {/* Risk owner's actionable inbox leads — first-line owners act before they browse status. */}
@@ -117,18 +123,51 @@ export default function Overview() {
       {/* Reviewer's desk — only the reviewer hat sees it; the other two get nothing extra. */}
       {role === 'reviewer' && <ReviewerQueue />}
 
+      {/* Owner mode stops here-ish: their controls and their exceptions, nothing engagement-wide. */}
+      {isOwner && (() => {
+        const eff = myControls.filter(c => controlConclusion(c) === 'Effective').length;
+        const ineff = myControls.filter(c => controlConclusion(c) === 'Ineffective').length;
+        const due = testsDueNow(myControls).length;
+        const openDefs = myDefs.filter(d => d.status !== 'Closed');
+        const inRem = openDefs.filter(d => d.status === 'Identified' || d.status === 'Remediation').length;
+        const inRetest = openDefs.filter(d => d.status === 'Retest').length;
+        return (
+          <div className="grid sm:grid-cols-2 gap-4">
+            <button onClick={() => setTab('controls')} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 transition-colors cursor-pointer">
+              <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><ShieldCheck size={15} className="text-brand-600" /> My controls</h2>
+              <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5 text-[12.5px] text-ink-600">
+                <span><b className="text-[17px] font-bold tabular-nums text-ink-900">{myControls.length}</b> total</span>
+                <span><b className="font-bold text-compliant-700">{eff}</b> effective</span>
+                {ineff > 0 && <span><b className="font-bold text-risk-700">{ineff}</b> ineffective</span>}
+                {due > 0 && <span><b className="font-bold text-mitigated-700">{due}</b> due now</span>}
+              </div>
+              <span className="mt-2.5 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700">Open my controls <ArrowRight size={13} /></span>
+            </button>
+            <button onClick={() => setView('deficiencies')} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 transition-colors cursor-pointer">
+              <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> My exceptions</h2>
+              <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5 text-[12.5px] text-ink-600">
+                <span><b className="text-[17px] font-bold tabular-nums text-ink-900">{openDefs.length}</b> open</span>
+                {inRem > 0 && <span><b className="font-bold text-high-700">{inRem}</b> on you to remediate</span>}
+                {inRetest > 0 && <span><b className="font-bold text-evidence-700">{inRetest}</b> with the auditor</span>}
+              </div>
+              <span className="mt-2.5 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700">Manage my exceptions <ArrowRight size={13} /></span>
+            </button>
+          </div>
+        );
+      })()}
+
       {/* progress rail */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {!isOwner && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {tiles.map(s => (
           <div key={s.k} className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3">
             <div className={cn('text-[20px] font-bold tabular-nums', s.t)}>{s.v}</div>
             <div className="text-[11.5px] text-ink-500 font-medium mt-0.5">{s.k}</div>
           </div>
         ))}
-      </div>
+      </div>}
 
-      {/* exceptions · handoffs · materiality */}
-      <div className="grid md:grid-cols-3 gap-4">
+      {/* exceptions · handoffs · materiality — engagement-wide, audit-side only */}
+      {!isOwner && <div className="grid md:grid-cols-3 gap-4">
         {/* exceptions */}
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
@@ -190,10 +229,10 @@ export default function Overview() {
           </div>
           <button onClick={() => setView('scope')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Materiality &amp; scope <ArrowRight size={13} /></button>
         </div>
-      </div>
+      </div>}
 
       {/* year-end countdown — what must close before the opinion date */}
-      {!isConcluded && (() => {
+      {!isOwner && !isConcluded && (() => {
         const end = periodEndDate(eng.periodEnd);
         const days = end ? Math.ceil((end.getTime() - Date.now()) / 86_400_000) : null;
         const past = days !== null && days < 0;
@@ -226,8 +265,8 @@ export default function Overview() {
         );
       })()}
 
-      {/* engagement sign-off — the closure moment; unlocks when every control is concluded */}
-      <section id="eng-signoff" className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
+      {/* engagement sign-off — the closure moment; audit-side (preparer + reviewer) only */}
+      {!isOwner && <section id="eng-signoff" className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0 flex-1">
             <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><PenLine size={15} className="text-brand-600" /> Engagement sign-off</h2>
@@ -289,10 +328,10 @@ export default function Overview() {
             )}
           </div>
         </div>
-      </section>
+      </section>}
 
-      {/* by process */}
-      <section>
+      {/* by process — the engagement-wide rollup, audit-side only */}
+      {!isOwner && <section>
         <h2 className="text-[12px] font-semibold text-ink-500 uppercase tracking-wide mb-2.5 inline-flex items-center gap-1.5"><ShieldCheck size={13} /> By process</h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {processes.map(p => {
@@ -320,7 +359,7 @@ export default function Overview() {
             );
           })}
         </div>
-      </section>
+      </section>}
     </div>
   );
 }

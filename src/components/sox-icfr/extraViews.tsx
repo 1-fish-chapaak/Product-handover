@@ -443,12 +443,14 @@ const STATUS_TONE: Record<ExceptionStatus, Tone> = { Identified: 'high', Remedia
 const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
 
 export function DeficienciesView() {
-  const { eng, role, me, back, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence } = useIcfr();
+  const { eng, role, me, meOwner, back, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence } = useIcfr();
   const M = eng.materiality; const rules = eng.rules;
   // three lines, three lanes: the owner remediates, the auditor evaluates &
   // retests, the reviewer closes — each hat only sees its own actions.
   const isAuditor = role === 'auditor';
   const isOwner = role === 'risk-owner';
+  // person-lane: the owner sees only exceptions riding their own controls
+  const defs = isOwner ? eng.deficiencies.filter(d => eng.controls.find(c => c.id === d.controlId)?.owner === meOwner) : eng.deficiencies;
   // aggregation groups on offer: every group already in use plus each process name
   const groupOptions = Array.from(new Set([
     ...eng.deficiencies.map(d => d.aggregationGroup).filter((g): g is string => !!g),
@@ -460,13 +462,18 @@ export function DeficienciesView() {
       <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Back</button>
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Exceptions</h1>
-          <p className="text-[13px] text-ink-500 mt-0.5">Severity is computed against materiality ({fmt(M)}). Three lanes: the owner remediates, the auditor evaluates &amp; retests, the reviewer closes.</p>
+          <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>{isOwner ? 'My exceptions' : 'Exceptions'}</h1>
+          <p className="text-[13px] text-ink-500 mt-0.5">
+            {isOwner
+              ? 'Exceptions on your controls — commit the plan, execute the fix, and submit for retest. The auditor evaluates severity; the reviewer closes.'
+              : <>Severity is computed against materiality ({fmt(M)}). Three lanes: the owner remediates, the auditor evaluates &amp; retests, the reviewer closes.</>}
+          </p>
         </div>
       </div>
 
-      {/* aggregation — clearly-trivial items are logged but never aggregated (5% rule) */}
-      {rules.aggregate && (() => {
+      {/* aggregation — engagement-wide math, audit-side only; clearly-trivial items
+          are logged but never aggregated (5% rule) */}
+      {rules.aggregate && !isOwner && (() => {
         const LRANK: Record<string, number> = { Remote: 0, 'Reasonably possible': 1, Probable: 2 };
         const LBYR = ['Remote', 'Reasonably possible', 'Probable'] as const;
         const groups = new Map<string, typeof eng.deficiencies>();
@@ -500,11 +507,11 @@ export function DeficienciesView() {
         );
       })()}
 
-      {eng.deficiencies.length === 0 ? (
-        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-12 text-center text-ink-500">No exceptions — all tested controls effective.</div>
+      {defs.length === 0 ? (
+        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-12 text-center text-ink-500">{isOwner ? 'No exceptions on your controls.' : 'No exceptions — all tested controls effective.'}</div>
       ) : (
         <div className="space-y-3">
-          {eng.deficiencies.map(d => {
+          {defs.map(d => {
             const ct = isClearlyTrivial(d.magnitude, rules);
             const assess = assessSeverity(d, eng);
             const sev = assess.final;

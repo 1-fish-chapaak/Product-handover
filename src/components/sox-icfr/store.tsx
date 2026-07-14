@@ -60,6 +60,9 @@ interface IcfrCtx {
   selectedControlId: string | null;
   racmEditor: RacmEditorMeta | null;
   me: string;
+  // which first-line persona "You" wears in owner mode — drives all owner scoping
+  meOwner: string;
+  setMeOwner: (owner: string) => void;
   racmProcess: string | null;
   setRole: (r: Role) => void;
   setTab: (t: SoxTab) => void;
@@ -173,8 +176,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // Which business process's RACM the matrix view shows — one RACM per process.
   const [racmProcess, setRacmProcess] = useState<string | null>(null);
   const [racmDocs, setRacmDocs] = useState<EvidenceFile[]>([]);
+  // Owner mode is a person-lane, not a role-lane: "mine" = this named owner's
+  // controls, tasks and exceptions. The picker in the top bar switches personas.
+  const [meOwner, setMeOwner] = useState('M. Nair · Accounts Payable');
 
-  const me = `You · ${ROLE_LABEL[role]}`;
+  const me = role === 'risk-owner' ? meOwner : `You · ${ROLE_LABEL[role]}`;
 
   // Every control mutation flows through here — a concluded control (or a
   // countersigned engagement) is frozen; reopenControl below is the only way back in.
@@ -975,7 +981,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, []);
 
   const value = useMemo<IcfrCtx>(() => ({
-    eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess,
+    eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, setMeOwner, racmProcess,
     setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, back,
     setDocStatus, setDesignPoint, concludeDesign, overrideDesign,
     addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail,
@@ -988,7 +994,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
     togglePeriod, rollForward,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote, togglePeriod, rollForward]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, back, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, removeDesignDoc, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, requestDataByEmail, setPopulation, validateIpe, setMrc, setSampling, extendSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, racmDocs, addRacmDoc, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, updateDeficiency, updateAccount, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence, addControl, signOffEngagement, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote, togglePeriod, rollForward]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

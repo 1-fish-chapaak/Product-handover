@@ -4,7 +4,7 @@ import {
   Bell, CheckCircle2, ClipboardList, Clock, FileText, MessageSquareWarning, Table2, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
-import { controlConclusion, testDueInDays, testsDueNow, trackResult } from './helpers';
+import { controlConclusion, isOwnerTask, testDueInDays, testsDueNow, trackResult } from './helpers';
 import { cn } from '../../lib/cn';
 
 /**
@@ -33,7 +33,7 @@ const KIND_META: Record<Item['kind'], { Icon: typeof Bell; cls: string }> = {
 };
 
 export default function NotificationsBell() {
-  const { eng, role, openControl, setTab } = useIcfr();
+  const { eng, role, meOwner, openControl, setTab } = useIcfr();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -50,9 +50,11 @@ export default function NotificationsBell() {
     const out: Item[] = [];
     const go = (controlId: string) => { setOpen(false); openControl(controlId); };
 
-    // ── the auditor's verdicts — shown to the risk owner first, unmissable ──────
+    // ── the auditor's verdicts — shown to the risk owner first, unmissable.
+    //    Person-lane: only this persona's controls, tasks and rows. ───────────────
     if (role === 'risk-owner') {
       for (const c of eng.controls) {
+        if (c.owner !== meOwner) continue;
         if (controlConclusion(c) !== 'Ineffective') continue;
         const track = trackResult(c.design) === 'Ineffective' ? 'design' : 'operating';
         const who = (track === 'design' ? c.design.testedBy : c.operating.testedBy) ?? 'Auditor';
@@ -67,7 +69,8 @@ export default function NotificationsBell() {
 
     // ── open tasks assigned to me — due today / overdue jump the queue and land
     //    right after the verdicts; clicking goes to the control's TOD / TOE ───────
-    const myTasks = eng.tasks.filter(t => t.status === 'open' && t.assigneeRole === role);
+    const myTasks = eng.tasks.filter(t => t.status === 'open'
+      && (role === 'risk-owner' ? isOwnerTask(eng, t, meOwner) : t.assigneeRole === role));
     const isDueNow = (t: typeof myTasks[number]) => t.overdue || /today/i.test(t.dueLabel);
     for (const t of myTasks.filter(isDueNow)) {
       out.push({
@@ -80,7 +83,7 @@ export default function NotificationsBell() {
     // ── control tests due — every control has a due date on its testing cycle.
     //    Regular testing is how the risk owner lives in the tool, so due tests
     //    are first-class notifications, not just document requests. ─────────────
-    const dueTests = testsDueNow(eng.controls);
+    const dueTests = testsDueNow(role === 'risk-owner' ? eng.controls.filter(c => c.owner === meOwner) : eng.controls);
     for (const c of dueTests.slice(0, 5)) {
       const dd = testDueInDays(c);
       out.push({
@@ -111,7 +114,7 @@ export default function NotificationsBell() {
     // ── the auditor's remarks on my rows ────────────────────────────────────────
     if (role === 'risk-owner') {
       for (const c of eng.controls) {
-        if (c.racmReview?.status !== 'Remark') continue;
+        if (c.owner !== meOwner || c.racmReview?.status !== 'Remark') continue;
         out.push({
           id: `rem-${c.id}`, kind: 'remark',
           title: `Auditor remark on ${c.wpRef}`,
@@ -142,7 +145,7 @@ export default function NotificationsBell() {
       }
     }
     return out;
-  }, [eng.controls, eng.tasks, eng.deficiencies, role, openControl, setTab]);
+  }, [eng, role, meOwner, openControl, setTab]);
 
   const urgent = items.filter(i => i.kind === 'ineffective').length;
 
