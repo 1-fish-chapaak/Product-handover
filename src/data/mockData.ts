@@ -16,11 +16,11 @@ export const SOPS = [
   { id: "sop-004", bpId: "r2r", name: "Financial Close SOP", version: "v3.0", by: "Karan Mehta", at: "Dec 15, 2025", racmId: "RACM-004", risks: 11, controls: 31, status: "processed" },
   { id: "sop-005", bpId: "r2r", name: "GL Reconciliation SOP", version: "v1.2", by: "Sneha Desai", at: "Jan 10, 2026", racmId: "RACM-005", risks: 5, controls: 15, status: "processed" },
   // Process Hub · P2P SOP list (sourced from the SOP section screenshot)
-  { id: "sop-101", bpId: "p2p", name: "memory", version: "v1.0", by: "Kuldeep Pandey", at: "May 5, 2026", racmId: "RACM-101", risks: 0, controls: 0, status: "failed" },
-  { id: "sop-102", bpId: "p2p", name: "Sample SOP", version: "v1.0", by: "Kuldeep Pandey", at: "May 6, 2026", racmId: "RACM-102", risks: 6, controls: 16, status: "processed" },
-  { id: "sop-103", bpId: "p2p", name: "Sample Flow Chart SOP", version: "v1.0", by: "Kuldeep Pandey", at: "May 6, 2026", racmId: "RACM-103", risks: 0, controls: 0, status: "failed" },
+  { id: "sop-101", bpId: "p2p", name: "memory", version: "v1.0", by: "Sameer Joshi", at: "May 5, 2026", racmId: "RACM-101", risks: 0, controls: 0, status: "failed" },
+  { id: "sop-102", bpId: "p2p", name: "Sample SOP", version: "v1.0", by: "Sameer Joshi", at: "May 6, 2026", racmId: "RACM-102", risks: 6, controls: 16, status: "processed" },
+  { id: "sop-103", bpId: "p2p", name: "Sample Flow Chart SOP", version: "v1.0", by: "Sameer Joshi", at: "May 6, 2026", racmId: "RACM-103", risks: 0, controls: 0, status: "failed" },
   { id: "sop-104", bpId: "p2p", name: "Testing RACM (4)_RACM", version: "v1.0", by: "Superadmin", at: "May 6, 2026", racmId: "RACM-104", risks: 8, controls: 20, status: "processed" },
-  { id: "sop-105", bpId: "p2p", name: "Agrawal Metals - Part 1 - Fixed Assets - SOP", version: "v1.0", by: "Kuldeep Pandey", at: "May 11, 2026", racmId: "RACM-105", risks: 7, controls: 19, status: "processed" },
+  { id: "sop-105", bpId: "p2p", name: "Agrawal Metals - Part 1 - Fixed Assets - SOP", version: "v1.0", by: "Sameer Joshi", at: "May 11, 2026", racmId: "RACM-105", risks: 7, controls: 19, status: "processed" },
 ];
 
 // ─── RACMs ───
@@ -33,9 +33,9 @@ export const RACMS = [
   // S2C is the "from scratch" demo process — no seed RACM/risks/SOP so its tabs show empty states.
   { id: "RACM-007", bpId: "o2c", name: "FY26 O2C · Order to Cash", fw: "SOX", status: "active", owner: "Neha Joshi", lastRun: "Mar 21, 2026", sopId: "sop-003" },
   // RACMs generated from the P2P SOP-list "RACM Ready" SOPs — each shares its SOP's name.
-  { id: "RACM-102", bpId: "p2p", name: "Sample SOP", fw: "SOX", status: "active", owner: "Kuldeep Pandey", lastRun: "May 6, 2026", sopId: "sop-102" },
+  { id: "RACM-102", bpId: "p2p", name: "Sample SOP", fw: "SOX", status: "active", owner: "Sameer Joshi", lastRun: "May 6, 2026", sopId: "sop-102" },
   { id: "RACM-104", bpId: "p2p", name: "Testing RACM (4)_RACM", fw: "SOX", status: "active", owner: "Superadmin", lastRun: "May 6, 2026", sopId: "sop-104" },
-  { id: "RACM-105", bpId: "p2p", name: "Agrawal Metals - Part 1 - Fixed Assets - SOP", fw: "SOX", status: "active", owner: "Kuldeep Pandey", lastRun: "May 11, 2026", sopId: "sop-105" },
+  { id: "RACM-105", bpId: "p2p", name: "Agrawal Metals - Part 1 - Fixed Assets - SOP", fw: "SOX", status: "active", owner: "Sameer Joshi", lastRun: "May 11, 2026", sopId: "sop-105" },
 ];
 
 // ─── Risks ───

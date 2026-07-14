@@ -53,14 +53,14 @@ const lastLoginOf = (name: string) => LAST_ACTIVE[name] ?? 'Never';
 const SEED_USERS: AdminUser[] = [
   { name: 'Abhinav Sharma', initials: 'AS', email: 'abhinav@irame.ai', roleId: 'role-admin', team: 'SOX Audit', status: 'Active', lastLogin: lastLoginOf('Abhinav Sharma') },
   { name: 'Aditya Thakur', initials: 'AT', email: 'aditya.thakur@irame.ai', roleId: 'role-auditor', team: 'SOX Audit', status: 'Active', lastLogin: lastLoginOf('Aditya Thakur') },
-  { name: 'AI', initials: 'AI', email: 'ai@irame.ai', roleId: 'role-viewer', team: 'Engineering', status: 'Active', lastLogin: lastLoginOf('AI') },
-  { name: 'Ajay 14110008', initials: 'AJ', email: 'ajay.aj@btech2014.iitgn.ac.in', roleId: 'role-enabler', team: 'IFC Team', status: 'Invited', lastLogin: lastLoginOf('Ajay 14110008') },
-  { name: 'ajay mudhai', initials: 'AM', email: 'ajay@irame.ai', roleId: 'role-enabler', team: 'IFC Team', status: 'Active', lastLogin: lastLoginOf('ajay mudhai') },
+  { name: 'Ishaan Verma', initials: 'IV', email: 'ishaan.verma@irame.ai', roleId: 'role-viewer', team: 'Engineering', status: 'Active', lastLogin: lastLoginOf('Ishaan Verma') },
+  { name: 'Ajay Prasad', initials: 'AP', email: 'ajay.prasad@irame.ai', roleId: 'role-enabler', team: 'IFC Team', status: 'Invited', lastLogin: lastLoginOf('Ajay Prasad') },
+  { name: 'Meera Nair', initials: 'MN', email: 'meera.nair@irame.ai', roleId: 'role-enabler', team: 'IFC Team', status: 'Active', lastLogin: lastLoginOf('Meera Nair') },
   { name: 'Ajay Mudhai', initials: 'AM', email: 'ajaym@irame.ai', roleId: 'role-admin', team: 'Management', status: 'Active', lastLogin: lastLoginOf('Ajay Mudhai') },
   { name: 'Ayushi Narang', initials: 'AN', email: 'ayushi.narang@irame.ai', roleId: 'role-enabler', team: 'SOX Audit', status: 'Active', lastLogin: lastLoginOf('Ayushi Narang') },
-  { name: 'Chulbul Pandey', initials: 'CP', email: 'kuldeep.msvm@gmail.com', roleId: 'role-enabler', team: 'Management', status: 'Suspended', lastLogin: lastLoginOf('Chulbul Pandey') },
-  { name: 'CS', initials: 'CS', email: 'cs@irame.ai', roleId: 'role-enabler', team: 'Engineering', status: 'Active', lastLogin: lastLoginOf('CS') },
-  { name: 'Kuldeep Pandey', initials: 'KP', email: 'kuldeep2.msvm@gmail.com', roleId: 'role-reviewer', team: '—', status: 'Inactive', lastLogin: lastLoginOf('Kuldeep Pandey') },
+  { name: 'Farah Khan', initials: 'FK', email: 'farah.khan@irame.ai', roleId: 'role-enabler', team: 'Management', status: 'Suspended', lastLogin: lastLoginOf('Farah Khan') },
+  { name: 'Rohan Desai', initials: 'RD', email: 'rohan.desai@irame.ai', roleId: 'role-enabler', team: 'Engineering', status: 'Active', lastLogin: lastLoginOf('Rohan Desai') },
+  { name: 'Sameer Joshi', initials: 'SJ', email: 'sameer.joshi@irame.ai', roleId: 'role-reviewer', team: '—', status: 'Inactive', lastLogin: lastLoginOf('Sameer Joshi') },
   // The signed-in identity (CurrentUserContext `u-admin`). Name and email must
   // match it exactly: the audit log stamps `currentUser.name`, and Platform
   // Usage attributes activity to a member by that name.

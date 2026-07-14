@@ -331,9 +331,9 @@ const TEMPLATES: Record<Bucket, Template[]> = {
 
   admin: [
     { action: 'Create', module: 'Admin', entity: 'Role', weight: 1, text: () => `Created role "${pick(['Reviewer (read-only)', 'Control Owner', 'External Auditor', 'Process Lead'])}" with ${between(4, 14)} permissions` },
-    { action: 'Update', module: 'Admin', entity: 'User', weight: 2, text: () => `Changed "${pick(['Chulbul Pandey', 'Rahul Verma', 'CS', 'Kuldeep Pandey'])}" to ${pick(['Auditor', 'Viewer', 'Enabler', 'Reviewer'])}` },
+    { action: 'Update', module: 'Admin', entity: 'User', weight: 2, text: () => `Changed "${pick(['Farah Khan', 'Rahul Verma', 'Rohan Desai', 'Sameer Joshi'])}" to ${pick(['Auditor', 'Viewer', 'Enabler', 'Reviewer'])}` },
     { action: 'Export', module: 'Admin', entity: 'Audit Log', weight: 1, text: () => `Exported Audit log as CSV (${between(80, 320)} events)` },
-    { action: 'Create', module: 'Admin', entity: 'Invitation', weight: 1, text: () => `Invited "${pick(['priya.singh@irame.ai', 'ajay.aj@btech2014.iitgn.ac.in'])}" as ${pick(['Risk Owner', 'Enabler'])}` },
+    { action: 'Create', module: 'Admin', entity: 'Invitation', weight: 1, text: () => `Invited "${pick(['priya.singh@irame.ai', 'ajay.prasad@irame.ai'])}" as ${pick(['Risk Owner', 'Enabler'])}` },
     { action: 'Update', module: 'Admin', entity: 'Settings', weight: 1, text: () => `Updated the session timeout policy to ${pick(['30', '60', '120'])} minutes` },
   ],
 };
@@ -411,11 +411,11 @@ const PERSONAS: Persona[] = [
     // Still an Active account, but nobody has touched it since mid-March — the
     // near-duplicate of 'Ajay Mudhai'. This is the dormant paid seat the page
     // is meant to surface, and it's a real one rather than a decorative zero.
-    name: 'ajay mudhai', weight: 1.0, activeUntil: '2026-03-12',
+    name: 'Meera Nair', weight: 1.0, activeUntil: '2026-03-12',
     mix: { knowledge: 34, workflows: 30, risk: 20, ai: 16 },
   },
   {
-    name: 'CS', weight: 0.9,
+    name: 'Rohan Desai', weight: 0.9,
     mix: { workflows: 40, dashboards: 26, knowledge: 20, ai: 14 },
   },
 
@@ -425,19 +425,19 @@ const PERSONAS: Persona[] = [
     mix: { reports: 55, dashboards: 30, knowledge: 15 },
   },
   {
-    name: 'AI', weight: 0.35, readOnly: true,
+    name: 'Ishaan Verma', weight: 0.35, readOnly: true,
     mix: { reports: 50, dashboards: 30, knowledge: 20 },
   },
 
   // ── Lapsed: history stops the day their access did ──
   {
     // Suspended 28 Mar.
-    name: 'Chulbul Pandey', weight: 0.8, activeUntil: '2026-03-28',
+    name: 'Farah Khan', weight: 0.8, activeUntil: '2026-03-28',
     mix: { risk: 40, reports: 30, knowledge: 30 },
   },
   {
     // Went inactive 14 Feb.
-    name: 'Kuldeep Pandey', weight: 0.7, activeUntil: '2026-02-14',
+    name: 'Sameer Joshi', weight: 0.7, activeUntil: '2026-02-14',
     mix: { reports: 40, engagements: 35, risk: 25 },
   },
   {
@@ -446,7 +446,7 @@ const PERSONAS: Persona[] = [
     mix: { reports: 60, dashboards: 40 },
   },
 
-  // Ajay 14110008 and Priya Singh are invited but have never signed in — they
+  // Ajay Prasad and Priya Singh are invited but have never signed in — they
   // produce nothing, which is exactly what makes them show up as unused seats.
 ];
 
