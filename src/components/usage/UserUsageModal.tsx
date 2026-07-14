@@ -118,7 +118,7 @@ export default function UserUsageModal({
                   <span className="text-[0.75rem] font-medium text-ink-700">{module}</span>
                   <span className="text-[0.75rem] text-ink-500 tabular-nums">{fmt(count)}</span>
                 </div>
-                <div className="h-1.5 rounded-full bg-brand-50 overflow-hidden">
+                <div className="h-1.5 rounded-full bg-brand-100/70 overflow-hidden">
                   <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.max(3, (count / mixMax) * 100)}%` }} />
                 </div>
               </div>

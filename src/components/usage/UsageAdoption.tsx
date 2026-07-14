@@ -19,7 +19,6 @@
  */
 
 import { useMemo } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
 import { Gauge, Grid2x2, Info } from 'lucide-react';
 import type { AdminUser } from '../../context/AdminDataContext';
 import {
@@ -27,12 +26,12 @@ import {
   type UsageDay,
 } from '../../data/platform-usage';
 import { InitialsAvatar } from '../admin/AdminPrimitives';
-import { Card, Eyebrow } from './usageChrome';
+import { Card, Eyebrow, Meter, RadialGauge } from './usageChrome';
+import { SERIES } from './usageTokens';
 
 /* The one colour that carries an action. Validated against the brand at
  * ΔE 136.6 (protan) — see the dataviz palette check. */
-const ATTENTION = '#B45309';
-const BRAND = '#6A12CD';
+const ATTENTION = SERIES.attention;
 
 /** The card every panel on this tab wears. */
 function Panel({ icon, title, subtitle, children, className = '' }: {
@@ -52,7 +51,6 @@ function Panel({ icon, title, subtitle, children, className = '' }: {
 /* ── The power-user curve ─────────────────────────────────────────────────── */
 
 function PowerCurvePanel({ days, users }: { days: UsageDay[]; users: AdminUser[] }) {
-  const prefersReduced = useReducedMotion();
   const curve = useMemo(() => powerCurve(days, users), [days, users]);
   const licence = useMemo(() => licenceUse(days, users), [days, users]);
 
@@ -79,22 +77,26 @@ function PowerCurvePanel({ days, users }: { days: UsageDay[]; users: AdminUser[]
       title="How often each seat is used"
       subtitle={`Days of real work in the last ${curve.windowDays}`}
     >
-      {/* Licence utilisation — the headline the admin is here for. */}
-      <div className="flex items-baseline gap-2 mb-2">
-        <span className="text-[1.875rem] font-semibold tracking-[-0.02em] text-ink-900 tabular-nums leading-none">
-          {licence.pct}%
-        </span>
-        <span className="text-[0.75rem] text-ink-500">
-          of {licence.total} seats did real work
-        </span>
-      </div>
-      <div className="h-2 rounded-full bg-ink-900/[0.06] overflow-hidden mb-7">
-        <motion.div
-          className="h-full rounded-full bg-brand-600"
-          initial={prefersReduced ? false : { width: 0 }}
-          animate={{ width: `${Math.max(2, licence.pct)}%` }}
-          transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 30 }}
-        />
+      {/* Licence utilisation — the headline the admin is here for. The ring is
+          the same mark the Overview's hero wears, one rank down: this is the
+          same question ("do the seats get used") asked over the page's own
+          window rather than over the fixed week the benchmark is defined on, so
+          it gets the same shape and a smaller size. */}
+      <div className="flex items-center gap-5 mb-7">
+        <RadialGauge pct={licence.pct} healthy size={96}>
+          <span className="text-[1.375rem] font-semibold leading-none tracking-[-0.02em] text-ink-900">
+            {licence.pct}%
+          </span>
+        </RadialGauge>
+        <div className="min-w-0">
+          <p className="text-[0.875rem] text-ink-700 leading-snug">
+            <strong className="font-semibold text-ink-900">{licence.used} of {licence.total} seats</strong> did real
+            work in this period.
+          </p>
+          <p className="mt-1.5 text-[0.75rem] text-ink-400">
+            The bands below split those seats by how many days they showed up.
+          </p>
+        </div>
       </div>
 
       {/* Seven buckets over seventeen seats is the 24x7 heatmap's mistake again:
@@ -105,34 +107,30 @@ function PowerCurvePanel({ days, users }: { days: UsageDay[]; users: AdminUser[]
 
           Horizontal, because these are counts of one thing against a shared
           baseline, and because the bar next to its name needs no axis. */}
-      <div className="space-y-2.5">
+      <div className="space-y-3">
         {bands.map((band, i) => {
           const n = band.seats.length;
           const share = licence.total > 0 ? Math.round((n / licence.total) * 100) : 0;
           return (
-            <div key={band.label} title={n === 0 ? `${band.label}: nobody` : `${band.label}: ${band.seats.map(s => s.name).join(', ')}`}>
-              <div className="flex items-baseline justify-between gap-3 mb-1">
-                <span className={`text-[0.75rem] truncate min-w-0 ${band.attention && n > 0 ? 'font-semibold text-ink-900' : 'font-medium text-ink-700'}`}>
+            <Meter
+              key={band.label}
+              index={i}
+              tone={band.attention && n > 0 ? 'attention' : 'brand'}
+              title={n === 0 ? `${band.label}: nobody` : `${band.label}: ${band.seats.map(s => s.name).join(', ')}`}
+              label={
+                <span className={band.attention && n > 0 ? 'font-semibold text-ink-900' : undefined}>
                   {band.label}
                 </span>
-                <span className="text-[0.6875rem] tabular-nums shrink-0 text-ink-400">
-                  <span className={`font-semibold ${n === 0 ? 'text-ink-300' : 'text-ink-800'}`}>{n}</span>
-                  <span> {n === 1 ? 'seat' : 'seats'}</span>
+              }
+              value={n}
+              note={
+                <span className="text-ink-400">
+                  {n === 1 ? 'seat' : 'seats'}
                   {n > 0 && <span className="ml-1.5 text-ink-300">{share}%</span>}
                 </span>
-              </div>
-              <div className="h-2 rounded-full bg-ink-900/[0.06] overflow-hidden">
-                {n > 0 && (
-                  <motion.div
-                    className="h-full rounded-full"
-                    style={{ background: band.attention ? ATTENTION : BRAND }}
-                    initial={prefersReduced ? false : { width: 0 }}
-                    animate={{ width: `${Math.max(2, (n / bandMax) * 100)}%` }}
-                    transition={prefersReduced ? { duration: 0 } : { duration: 0.5, delay: 0.05 * i, ease: [0.22, 1, 0.36, 1] }}
-                  />
-                )}
-              </div>
-            </div>
+              }
+              pct={(n / bandMax) * 100}
+            />
           );
         })}
       </div>
@@ -183,7 +181,6 @@ function PowerCurvePanel({ days, users }: { days: UsageDay[]; users: AdminUser[]
 /* ── The engagement matrix ────────────────────────────────────────────────── */
 
 function MatrixPanel({ days, users }: { days: UsageDay[]; users: AdminUser[] }) {
-  const prefersReduced = useReducedMotion();
   const { points } = useMemo(() => engagementMatrix(days, users), [days, users]);
 
   const shelfware = points.filter(p => p.quadrant === 'shelfware');
@@ -210,35 +207,29 @@ function MatrixPanel({ days, users }: { days: UsageDay[]; users: AdminUser[] }) 
           A ranked bar says the same thing in one direction. Frequency has not
           been dropped, it is printed on the row: a number you can read beats an
           axis you have to decode. */}
-      <div className="space-y-2.5">
+      {/* One track width for every row, so the bars share a baseline and the
+          ranking is legible at a glance. */}
+      <div className="space-y-3">
         {ranked.map((p, i) => {
           const isShelf = p.quadrant === 'shelfware';
           return (
-            <div key={p.module}>
-              <div className="flex items-baseline justify-between gap-3 mb-1">
-                <span className={`text-[0.75rem] truncate min-w-0 ${isShelf ? 'font-semibold text-ink-900' : 'font-medium text-ink-700'}`}>
-                  {p.module}
-                </span>
-                <span className="text-[0.6875rem] tabular-nums shrink-0 text-ink-400">
-                  <span className="font-semibold text-ink-800">{p.users}</span>
-                  <span> of {users.length} seats</span>
+            <Meter
+              key={p.module}
+              index={i}
+              tone={isShelf ? 'attention' : 'brand'}
+              label={
+                <span className={isShelf ? 'font-semibold text-ink-900' : undefined}>{p.module}</span>
+              }
+              value={p.users}
+              note={
+                <span className="text-ink-400">
+                  of {users.length} seats
                   <span className="mx-1.5 text-ink-300">|</span>
-                  <span className="font-semibold text-ink-800">{p.frequency}</span>
-                  <span> each</span>
+                  <span className="font-semibold text-ink-800">{p.frequency}</span> each
                 </span>
-              </div>
-              {/* One track width for every row, so the bars share a baseline and
-                  the ranking is legible at a glance. */}
-              <div className="h-2 rounded-full bg-ink-900/[0.06] overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ background: isShelf ? ATTENTION : BRAND }}
-                  initial={prefersReduced ? false : { width: 0 }}
-                  animate={{ width: `${Math.max(2, p.breadth)}%` }}
-                  transition={prefersReduced ? { duration: 0 } : { duration: 0.5, delay: 0.03 * i, ease: [0.22, 1, 0.36, 1] }}
-                />
-              </div>
-            </div>
+              }
+              pct={p.breadth}
+            />
           );
         })}
       </div>

@@ -1,19 +1,26 @@
 /**
  * Platform Usage — the chrome layer.
  *
- * Every card, tooltip, meter, delta chip and ranked row on this page is built
- * from exactly one of these. The page used to hand-roll each of them at the
- * call site (six different progress-bar spellings, five delta chips, Recharts'
- * default tooltip), which is why it read as an admin panel rather than a
- * product surface.
+ * Every card, tooltip, meter, delta chip, legend key, sparkline and ranked row
+ * on this page is built from exactly one of these. The page used to hand-roll
+ * each of them at the call site (six different progress-bar spellings, five
+ * delta chips, Recharts' default tooltip), which is why it read as an admin
+ * panel rather than a product surface.
  *
  * Tokens (colours, axis props, the card outline) live in `usageTokens.ts`.
+ *
+ * The page is flat by rule — DESIGN.md §4 puts borders before shadows and keeps
+ * cards flat at rest — so the polish has to be carried by the marks themselves:
+ * capped bar ends, a lighter step of the fill's own ramp behind every meter, a
+ * gap in the surface colour between touching fills, and a hover layer on every
+ * plot. That is what these primitives encode.
  */
 
 import type { ReactNode } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { ArrowUpRight, type LucideIcon } from 'lucide-react';
-import { CARD_BASE, ICON_TILE, ICON_TILE_BRAND, KH_EASE, fmt } from './usageTokens';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { CARD_BASE, DONUT_SHADES, ICON_TILE, ICON_TILE_BRAND, KH_EASE, fmt } from './usageTokens';
 
 /* ── Card ──────────────────────────────────────────────────────────────────
    One shell, three ranks. Padding scales with rank — uniform p-4 everywhere is
@@ -181,12 +188,64 @@ export function DeltaPill({ pct, compareLabel, size = 'md' }: {
   );
 }
 
+/* ── Legend ────────────────────────────────────────────────────────────────
+   Two or more series always carry one. Identity comes from the mark beside the
+   text, never from the text's own colour: a light hue is illegible as type, and
+   colour-coded labels are the first thing to fail under CVD. */
+
+export type LegendKey = {
+  color: string;
+  label: string;
+  /** A dashed key for a chrome series (the previous period) — not a solid one. */
+  dashed?: boolean;
+};
+
+export function Legend({ keys, className = '' }: { keys: LegendKey[]; className?: string }) {
+  return (
+    <div className={`flex flex-wrap items-center gap-x-4 gap-y-1.5 ${className}`}>
+      {keys.map(k => (
+        <span key={k.label} className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-600">
+          {k.dashed ? (
+            <svg width="14" height="3" aria-hidden className="shrink-0">
+              <line
+                x1="0" y1="1.5" x2="14" y2="1.5"
+                stroke={k.color} strokeWidth="2" strokeDasharray="3 2" strokeLinecap="round"
+              />
+            </svg>
+          ) : (
+            <span className="h-[3px] w-3.5 rounded-full shrink-0" style={{ background: k.color }} />
+          )}
+          {k.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /* ── Meter ─────────────────────────────────────────────────────────────────
    The bullet bar. Replaces every hand-rolled `h-1 rounded-full bg-brand-50` on
-   the page — there were six spellings of it, at four different heights. */
+   the page — there were six spellings of it, at four different heights.
+
+   The track is a LIGHTER STEP OF THE FILL'S OWN RAMP, not a grey wash: state
+   then reads across the whole bar rather than only across the part that is
+   filled, and an empty meter still says which hue it belongs to. */
+
+const METER_FILL = {
+  brand: 'bg-brand-600',
+  muted: 'bg-brand-300',
+  attention: 'bg-mitigated-700',
+} as const;
+
+const METER_TRACK = {
+  brand: 'bg-brand-100/70',
+  muted: 'bg-brand-100/70',
+  attention: 'bg-mitigated-700/[0.14]',
+} as const;
+
+export type MeterTone = keyof typeof METER_FILL;
 
 export function Meter({
-  label, value, note, pct, tone = 'brand', delta, compareLabel, index = 0,
+  label, value, note, pct, tone = 'brand', delta, compareLabel, index = 0, title,
 }: {
   label: ReactNode;
   /** The number that gets read. */
@@ -195,16 +254,15 @@ export function Meter({
   note?: ReactNode;
   /** Fill, 0–100. */
   pct: number;
-  tone?: 'brand' | 'muted' | 'attention';
+  tone?: MeterTone;
   delta?: number | null;
   compareLabel?: string;
   index?: number;
+  title?: string;
 }) {
   const prefersReduced = useReducedMotion();
-  const fill =
-    tone === 'attention' ? 'bg-mitigated-700' : tone === 'muted' ? 'bg-brand-300' : 'bg-brand-600';
   return (
-    <div>
+    <div title={title}>
       <div className="flex items-baseline justify-between gap-2 mb-1.5">
         <span className="text-[0.75rem] font-medium text-ink-600 truncate min-w-0">{label}</span>
         <span className="shrink-0 inline-flex items-baseline gap-1.5 text-[0.75rem] text-ink-400 tabular-nums">
@@ -215,9 +273,9 @@ export function Meter({
           )}
         </span>
       </div>
-      <div className="h-1.5 rounded-full bg-ink-900/[0.06] overflow-hidden">
+      <div className={`h-1.5 rounded-full overflow-hidden ${METER_TRACK[tone]}`}>
         <motion.div
-          className={`h-full rounded-full ${fill}`}
+          className={`h-full rounded-full ${METER_FILL[tone]}`}
           initial={prefersReduced ? false : { width: 0 }}
           animate={{ width: `${Math.max(1.5, Math.min(100, pct))}%` }}
           transition={
@@ -226,6 +284,267 @@ export function Meter({
               : { type: 'spring', stiffness: 260, damping: 30, delay: 0.04 * index }
           }
         />
+      </div>
+    </div>
+  );
+}
+
+/* ── Sparkline ─────────────────────────────────────────────────────────────
+   Twelve-ish points, no axis, no scale, no labels — so it is only ever allowed
+   to say ONE thing: the shape of the direction. It rides beside a number that
+   carries the magnitude, never on its own.
+
+   Hand-drawn SVG rather than a Recharts instance: a section grid renders twelve
+   of these, and twelve ResponsiveContainers with their own resize observers is
+   a measurable amount of layout work to say "it went up a bit". */
+
+export function Sparkline({
+  points, color = '#6A12CD', width = 72, height = 24, className = '', ariaLabel,
+}: {
+  points: number[];
+  color?: string;
+  width?: number;
+  height?: number;
+  className?: string;
+  ariaLabel?: string;
+}) {
+  const prefersReduced = useReducedMotion();
+  if (points.length < 2) return null;
+
+  const max = Math.max(...points);
+  const min = Math.min(...points);
+  const span = max - min || 1;
+  const pad = 2;
+  const w = width - pad * 2;
+  const h = height - pad * 2;
+
+  const xy = points.map((p, i) => {
+    const x = pad + (i / (points.length - 1)) * w;
+    const y = pad + h - ((p - min) / span) * h;
+    return [x, y] as const;
+  });
+
+  /* A smoothed path, not a polyline. Fourteen daily counts joined by straight
+     segments across 64px is a saw — the eye reads the zig-zag as the signal and
+     the direction, which is the only thing this mark is allowed to say, gets
+     lost in it. A Catmull-Rom spline converted to cubic béziers keeps every
+     point exactly where it is (it interpolates, it does not approximate) and
+     just rounds the corners between them. */
+  const line = xy
+    .map(([x, y], i) => {
+      if (i === 0) return `M${x.toFixed(1)},${y.toFixed(1)}`;
+      const [x0, y0] = xy[i - 1];
+      const [xPrev, yPrev] = xy[i - 2] ?? xy[i - 1];
+      const [xNext, yNext] = xy[i + 1] ?? xy[i];
+      const c1x = x0 + (x - xPrev) / 6;
+      const c1y = y0 + (y - yPrev) / 6;
+      const c2x = x - (xNext - x0) / 6;
+      const c2y = y - (yNext - y0) / 6;
+      return `C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  const area = `${line} L${xy[xy.length - 1][0].toFixed(1)},${height} L${xy[0][0].toFixed(1)},${height} Z`;
+  const gid = `spark-${color.replace('#', '')}-${points.length}-${Math.round(max)}`;
+  const [lastX, lastY] = xy[xy.length - 1];
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      className={`shrink-0 overflow-visible ${className}`}
+      role="img"
+      aria-label={ariaLabel ?? 'Trend'}
+    >
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.16} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${gid})`} />
+      <motion.path
+        d={line}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        initial={prefersReduced ? false : { pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={prefersReduced ? { duration: 0 } : { duration: 0.6, ease: KH_EASE }}
+      />
+      {/* The end-dot carries a ring in the surface colour, so it stays legible
+          where it lands on the line it terminates. */}
+      <circle cx={lastX} cy={lastY} r={2.5} fill={color} stroke="#FFFFFF" strokeWidth={1.5} />
+    </svg>
+  );
+}
+
+/* ── Radial gauge ──────────────────────────────────────────────────────────
+   A share of a whole, against the level that counts as healthy. The benchmark
+   is drawn ON the arc as a tick, because a benchmark printed beside a number is
+   a fact the reader has to apply themselves — on the arc it is a place the fill
+   either reaches or does not. */
+
+export function RadialGauge({
+  pct, benchmark, size = 132, healthy, children,
+}: {
+  pct: number;
+  /** 0–100. Drawn as a tick on the track. */
+  benchmark?: number;
+  size?: number;
+  /** Whether `pct` clears the mark — decides the fill hue. */
+  healthy: boolean;
+  /** What sits in the middle of the ring. */
+  children?: ReactNode;
+}) {
+  const prefersReduced = useReducedMotion();
+  const stroke = 10;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(100, pct));
+  const fill = healthy ? '#6A12CD' : '#B45309';
+
+  // The tick, in the same rotated frame as the arc (12 o'clock = 0%).
+  const tickAngle = typeof benchmark === 'number' ? (benchmark / 100) * 2 * Math.PI - Math.PI / 2 : null;
+  const cx = size / 2;
+  const cy = size / 2;
+
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90" aria-hidden>
+        <circle
+          cx={cx} cy={cy} r={r}
+          fill="none"
+          stroke={healthy ? '#EDDEFE' : 'rgba(180,83,9,0.16)'}
+          strokeWidth={stroke}
+        />
+        <motion.circle
+          cx={cx} cy={cy} r={r}
+          fill="none"
+          stroke={fill}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={c}
+          initial={prefersReduced ? false : { strokeDashoffset: c }}
+          animate={{ strokeDashoffset: c - (clamped / 100) * c }}
+          transition={prefersReduced ? { duration: 0 } : { duration: 0.9, ease: KH_EASE }}
+        />
+      </svg>
+      {tickAngle !== null && (
+        <svg width={size} height={size} className="absolute inset-0" aria-hidden>
+          <line
+            x1={cx + Math.cos(tickAngle) * (r - stroke / 2 - 1)}
+            y1={cy + Math.sin(tickAngle) * (r - stroke / 2 - 1)}
+            x2={cx + Math.cos(tickAngle) * (r + stroke / 2 + 1)}
+            y2={cy + Math.sin(tickAngle) * (r + stroke / 2 + 1)}
+            stroke="#0F0720"
+            strokeOpacity={0.45}
+            strokeWidth={1.5}
+            strokeLinecap="round"
+          />
+        </svg>
+      )}
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ── Donut ─────────────────────────────────────────────────────────────────
+   Part-to-whole, and ONLY part-to-whole: the slices have to be shares of one
+   number, and that number goes in the hole. Anything else — a ranking, a
+   comparison across periods — is a bar, because an angle is the hardest thing
+   on a chart for a person to compare and the only thing a donut is good at is
+   "this slice is about a third".
+
+   The slices are steps of ONE hue, light to dark (DONUT_SHADES, in usageTokens),
+   not four unrelated colours. Four hues would read as four different KINDS of
+   thing and pull the eye to whichever slice happened to land on red. */
+
+export function Donut({ items, total, totalLabel, size = 128 }: {
+  items: { name: string; value: number }[];
+  /** The number in the hole. Passed in, not summed here — a card may want to put
+   *  a different whole in the middle than the slices happen to add up to. */
+  total: number;
+  totalLabel: string;
+  size?: number;
+}) {
+  const prefersReduced = useReducedMotion();
+  const shaded = items.map((d, i) => ({ ...d, color: DONUT_SHADES[i % DONUT_SHADES.length] }));
+  const ring = Math.round(size * 0.13);
+
+  return (
+    <div className="flex items-center gap-5">
+      <div className="relative shrink-0" style={{ width: size, height: size }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={shaded}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              innerRadius={size / 2 - ring}
+              outerRadius={size / 2 - 2}
+              // The 2° pad and the 4px corner are the surface gap, in polar form:
+              // white separating touching marks, so neighbouring steps of one hue
+              // stay distinct without a stroke drawn round them.
+              paddingAngle={2}
+              cornerRadius={4}
+              strokeWidth={0}
+              isAnimationActive={!prefersReduced}
+              animationDuration={700}
+            >
+              {shaded.map(s => <Cell key={s.name} fill={s.color} />)}
+            </Pie>
+            <Tooltip
+              isAnimationActive={false}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              content={({ active, payload }: any) => {
+                if (!active || !payload?.length) return null;
+                const p = payload[0];
+                const value = Number(p.value);
+                const share = total > 0 ? Math.round((value / total) * 100) : 0;
+                return (
+                  <TooltipCard
+                    title={String(p.name)}
+                    rows={[{ color: p.payload.color, name: totalLabel, value }]}
+                    footer={<>{share}% of {fmt(total)}</>}
+                  />
+                );
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+        {/* The centre of a donut is the one place the total belongs. */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <span className="text-[1.125rem] font-semibold tracking-[-0.02em] text-ink-900 leading-none">
+            {fmt(total)}
+          </span>
+          <span className="mt-1 text-[0.5625rem] font-medium text-ink-400 uppercase tracking-[0.1em]">
+            {totalLabel}
+          </span>
+        </div>
+      </div>
+
+      {/* The legend carries the values, so no slice needs a label on it — a
+          number printed on a 30° wedge is a number that gets clipped. */}
+      <div className="space-y-1.5 min-w-0 flex-1">
+        {shaded.map(s => (
+          <div key={s.name} className="flex items-center gap-2 text-[0.6875rem]">
+            <span className="h-[3px] w-3.5 rounded-full shrink-0" style={{ background: s.color }} />
+            <span className="text-ink-500 truncate">{s.name}</span>
+            <span className="ml-auto shrink-0 tabular-nums">
+              <span className="font-semibold text-ink-900">{fmt(s.value)}</span>
+              <span className="ml-1.5 text-ink-400">
+                {total > 0 ? Math.round((s.value / total) * 100) : 0}%
+              </span>
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -240,6 +559,7 @@ interface TooltipRow {
   color: string;
   name: string;
   value: number;
+  dashed?: boolean;
 }
 
 export function TooltipCard({ title, rows, footer }: {
@@ -255,7 +575,13 @@ export function TooltipCard({ title, rows, footer }: {
           <div key={r.name} className="flex items-center gap-2.5">
             {/* A line key, not a filled box: at tooltip density a box is
                 data-weight ink doing a label's job. */}
-            <span className="h-[3px] w-3.5 rounded-full shrink-0" style={{ background: r.color }} />
+            {r.dashed ? (
+              <svg width="14" height="3" aria-hidden className="shrink-0">
+                <line x1="0" y1="1.5" x2="14" y2="1.5" stroke={r.color} strokeWidth="2" strokeDasharray="3 2" />
+              </svg>
+            ) : (
+              <span className="h-[3px] w-3.5 rounded-full shrink-0" style={{ background: r.color }} />
+            )}
             <span className="text-[0.75rem] text-ink-500 mr-3">{r.name}</span>
             <span className="ml-auto text-[0.8125rem] font-semibold text-ink-900 tabular-nums">
               {fmt(r.value)}
@@ -297,7 +623,7 @@ export function RankedRow({ label, count, share, pct, onClick, index = 0, active
           {typeof share === 'number' && <span className="ml-1.5">{share}%</span>}
         </span>
       </div>
-      <div className="h-1.5 rounded-full bg-ink-900/[0.06] overflow-hidden">
+      <div className="h-1.5 rounded-full bg-brand-100/70 overflow-hidden">
         <motion.div
           className="h-full rounded-full bg-brand-600 group-hover:bg-brand-500 transition-colors"
           initial={prefersReduced ? false : { width: 0 }}

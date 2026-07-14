@@ -18,8 +18,8 @@ import {
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import Modal from '../shared/Modal';
 import { PortfolioStat } from './usageSectionPrimitives';
-import { Eyebrow, Tile, TooltipCard } from './usageChrome';
-import { ICON_TILE, ICON_TILE_BRAND } from './usageTokens';
+import { Eyebrow, Sparkline, Tile, TooltipCard } from './usageChrome';
+import { DONUT_SHADES, ICON_TILE, ICON_TILE_BRAND, fmt } from './usageTokens';
 import UsageEngagementsSection from './UsageEngagementsSection';
 import UsageConciergeSection from './UsageConciergeSection';
 import { deriveEngagementPortfolio } from '../../data/engagement-portfolio';
@@ -34,7 +34,7 @@ import {
 } from '../../data/section-portfolios';
 import {
   aiToolRuns, conciergeRunners, conciergeToolUsage,
-  type UsageDay, type UserUsageRow,
+  type UsageDay, type UsageModule, type UserUsageRow,
 } from '../../data/platform-usage';
 
 const RIGHT_TONE = {
@@ -71,10 +71,10 @@ function RankedRowLine({ row }: { row: RankedRow }) {
                 so they need a shared baseline to be read against each other. One
                 hue, too — the row already wears a chip naming its kind, so tinting
                 the bar to match is the same fact told twice. */}
-            <div className="h-2 rounded-full bg-ink-900/[0.06] overflow-hidden relative">
+            <div className="h-2 rounded-full bg-brand-100/70 overflow-hidden relative">
               {typeof row.bar.fillPct === 'number' ? (
                 <div
-                  className="absolute inset-y-0 left-0 rounded-full bg-brand-100"
+                  className="absolute inset-y-0 left-0 rounded-full bg-brand-200"
                   style={{ width: `${Math.max(2, Math.min(100, row.bar.value))}%` }}
                 >
                   <div className="h-full rounded-full bg-brand-600" style={{ width: `${row.bar.fillPct}%` }} />
@@ -98,12 +98,10 @@ function RankedRowLine({ row }: { row: RankedRow }) {
   );
 }
 
-/**
- * A donut's slices are parts of one whole, so they are shades of one hue rather
- * than four unrelated ones. Green/blue/amber segments read as four different
- * *kinds* of thing and pull the eye to whichever slice happens to be red.
- */
-const DONUT_SHADES = ['#6A12CD', '#8B4FD8', '#A87BE4', '#C4A2EE', '#EDE4FA'];
+/* A donut's slices are parts of one whole, so they are shades of one hue rather
+   than four unrelated ones — the shared ramp, from `usageTokens`. It used to be
+   a second copy of the same list declared here, which is exactly how two donuts
+   on one product end up two different colours. */
 
 /** The full deep-dive body rendered inside the section modal. */
 function SectionDetail({ portfolio }: { portfolio: SectionPortfolio }) {
@@ -158,10 +156,14 @@ function SectionDetail({ portfolio }: { portfolio: SectionPortfolio }) {
                       baseline and can actually be compared. Previously the track
                       itself was the bar, which meant each row started from a
                       different-length container. */}
-                  <div className="h-2 rounded-full bg-ink-900/[0.06] overflow-hidden relative">
+                  {/* The track is a lighter step of the fill's own ramp, not a
+                      grey wash — the same rule the page's shared `Meter` follows,
+                      so a bar inside a modal and a bar on the page behind it are
+                      the same object. */}
+                  <div className="h-2 rounded-full bg-brand-100/70 overflow-hidden relative">
                     {typeof b.fillPct === 'number' ? (
                       <div
-                        className="absolute inset-y-0 left-0 rounded-full bg-brand-100"
+                        className="absolute inset-y-0 left-0 rounded-full bg-brand-200"
                         style={{ width: `${Math.max(2, (b.value / barMax) * 100)}%` }}
                       >
                         <motion.div
@@ -276,10 +278,14 @@ const STAT_TONE: Record<'good' | 'bad' | 'neutral', string> = {
   neutral: 'text-ink-900',
 };
 
-function SectionTile({ icon: Icon, title, hint, stats, index, onOpen }: {
-  icon: LucideIcon; title: string; hint: string; stats: SectionStat[]; index: number; onOpen: () => void;
+function SectionTile({ icon: Icon, title, hint, stats, index, activity, actions, onOpen }: {
+  icon: LucideIcon; title: string; hint: string; stats: SectionStat[]; index: number;
+  /** The section's daily action count across the window, for the sparkline. */
+  activity: number[];
+  /** What those days add up to. The sparkline has no axis, so it carries no magnitude. */
+  actions: number;
+  onOpen: () => void;
 }) {
-  
   return (
     <Tile
       onClick={onOpen}
@@ -323,14 +329,74 @@ function SectionTile({ icon: Icon, title, hint, stats, index, onOpen }: {
           </div>
         ))}
       </dl>
+
+      {/* The one thing twelve tiles of static counts could never say: whether the
+          section is going anywhere. A sparkline has no axis and no scale, so it
+          is only ever allowed to carry the SHAPE — the magnitude is the number
+          printed beside it, and the detail is one click away. */}
+      <div className="mt-4 pt-3 border-t border-canvas-border flex items-center justify-between gap-3">
+        <span className="text-[0.625rem] font-medium text-ink-400 truncate">
+          {actions > 0
+            ? `${fmt(actions)} action${actions === 1 ? '' : 's'} this period`
+            : 'No activity this period'}
+        </span>
+        {actions > 0 && activity.length > 1 && (
+          <Sparkline
+            points={activity}
+            width={64}
+            height={20}
+            ariaLabel={`${title} activity across the period`}
+          />
+        )}
+      </div>
     </Tile>
   );
+}
+
+/**
+ * The window's daily counts for one module, bucketed down to a length a 64px
+ * sparkline can actually draw. Ninety days across 64 pixels is under a pixel a
+ * day: the line stops being a trend and becomes a texture.
+ */
+const SPARK_POINTS = 14;
+
+function sparkSeries(days: UsageDay[], module: UsageModule): number[] {
+  const daily = days.map(d => d.byModule[module] ?? 0);
+  if (daily.length <= SPARK_POINTS) return daily;
+  const size = Math.ceil(daily.length / SPARK_POINTS);
+  const out: number[] = [];
+  for (let i = 0; i < daily.length; i += size) {
+    out.push(daily.slice(i, i + size).reduce((s, v) => s + v, 0));
+  }
+  return out;
 }
 
 type SectionKey =
   | 'engagements' | 'planning' | 'exceptions' | 'process-hub'
   | 'ask-ira' | 'concierge' | 'reports' | 'workflows'
   | 'risk-controls' | 'knowledge' | 'dashboards' | 'admin';
+
+/**
+ * Every tile on this grid is one bucket of the audit log, so each one can carry
+ * its own slice of the same series the Overview charts. The map is explicit
+ * rather than derived from the title, because two of them differ ("Admin &
+ * access" is logged as `Admin`) and a silent mismatch would draw a flat line
+ * instead of failing.
+ */
+const SECTION_MODULE: Record<SectionKey, UsageModule> = {
+  engagements: 'Engagements',
+  planning: 'Audit Planning',
+  exceptions: 'Exceptions',
+  'process-hub': 'Process Hub',
+  'ask-ira': 'Ask IRA',
+  concierge: 'AI Concierge',
+  reports: 'Reports',
+  workflows: 'Workflows',
+  'risk-controls': 'Risk & Controls',
+  knowledge: 'Knowledge Hub',
+  dashboards: 'Dashboards',
+  admin: 'Admin',
+};
 
 export default function UsagePlatformSections({ days, rows, rangeDays }: {
   days: UsageDay[];
@@ -400,11 +466,36 @@ export default function UsagePlatformSections({ days, rows, rangeDays }: {
 
   const active = sections.find(s => s.key === open) ?? null;
 
+  // One pass over the window per section, memoised on the window itself: the
+  // grid re-renders on every hover of every tile, and twelve reductions over
+  // ninety days is not work to redo for a border colour.
+  const trends = useMemo(() => {
+    const out = {} as Record<SectionKey, { series: number[]; total: number }>;
+    (Object.keys(SECTION_MODULE) as SectionKey[]).forEach(key => {
+      const module = SECTION_MODULE[key];
+      out[key] = {
+        series: sparkSeries(days, module),
+        total: days.reduce((s, d) => s + (d.byModule[module] ?? 0), 0),
+      };
+    });
+    return out;
+  }, [days]);
+
   return (
     <div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {sections.map((s, i) => (
-          <SectionTile key={s.key} icon={s.icon} title={s.title} hint={s.subtitle} stats={s.stats} index={i} onOpen={() => setOpen(s.key)} />
+          <SectionTile
+            key={s.key}
+            icon={s.icon}
+            title={s.title}
+            hint={s.subtitle}
+            stats={s.stats}
+            index={i}
+            activity={trends[s.key].series}
+            actions={trends[s.key].total}
+            onOpen={() => setOpen(s.key)}
+          />
         ))}
       </div>
 

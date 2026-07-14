@@ -425,14 +425,21 @@ test('the page names today, dates its presets, and puts the top-3 share back on 
   await expect(page.getByText(new RegExp(`up to\\s+${endDay}`)).first()).toBeVisible();
 
   // 3. What stands out — the four findings, back on the tab an admin opens on.
+  //
+  // Each finding is now a FIGURE under a named eyebrow ("FASTEST GROWING / +30%
+  // / Engagements, on the period before") rather than a paragraph with a number
+  // bolded inside it, so these match the label and the supporting line, not the
+  // old prose. The findings themselves are unchanged.
   await expect(page.getByText('What stands out')).toBeVisible();
-  await expect(page.getByText(/growing fastest|No area grew/)).toBeVisible();
+  await expect(page.getByText('Fastest growing')).toBeVisible();
   await expect(page.getByText(/of active members used AI|No AI activity|none attributed/)).toBeVisible();
   await expect(page.getByText(/signed in for 30\+ days|Everyone has signed in/)).toBeVisible();
 
   // The one an admin cannot reach from anything else on the page.
-  const topThree = page.getByText(/Top 3 members drive \d+% of all activity/);
+  const topThree = page.getByRole('button', { name: /Share of activity driven by the top 3 members/ });
   await expect(topThree).toBeVisible();
+  await expect(topThree).toContainText(/\d+%/);
+  await expect(topThree).toContainText('of all activity');
 
   // And every finding clicks through to its evidence.
   await topThree.click();

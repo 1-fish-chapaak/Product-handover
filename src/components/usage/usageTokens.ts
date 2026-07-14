@@ -11,10 +11,14 @@
  *     delta), never as decoration.
  *   · A second series gets a different hue, not a lighter step of the first — a
  *     lightness step reads as "less of the same thing", not "a different thing".
- *     The pair is validated for colour-vision deficiency (ΔE 34.7 deutan).
+ *     The pair is validated for colour-vision deficiency (ΔE 34.7 deutan), and
+ *     the three real series pass the full six-check palette validator.
  *   · Grid is a solid hairline, horizontal only, lighter than the card border.
  *     Dashed grids read as thresholds; they are not.
- *   · Borders before shadows (DESIGN.md §4). Cards are flat at rest.
+ *   · Borders before shadows (DESIGN.md §4). Cards are flat at rest, so the
+ *     page's polish has to come from the marks themselves: capped bar ends,
+ *     surface gaps between touching fills, gradient washes under lines, and a
+ *     hover layer on every plot. Not from drop shadows.
  */
 
 /* ── Series palette ───────────────────────────────────────────────────────── */
@@ -23,8 +27,13 @@ export const SERIES = {
   primary: '#6A12CD',
   /** The second, genuinely-different measure (AI). Evidence blue, from the system ramp. */
   secondary: '#0284C7',
-  /** The previous period. A comparison is chrome, not a series — it stays grey. */
-  compare: '#9A8FAE',
+  /**
+   * The previous period. A comparison is chrome, not a series — it stays
+   * achromatic, and it is always drawn DASHED, which is the secondary encoding
+   * that lets it be grey. It was #9A8FAE, which sits at 2.96:1 on white: under
+   * the 3:1 floor a mark needs to be seen at all. This step clears it.
+   */
+  compare: '#6B5D82',
   /** The one colour that carries an action. */
   attention: '#B45309',
   positive: '#15803D',
@@ -33,6 +42,26 @@ export const SERIES = {
 
 /** Sequential ramp — one hue, light → dark. For ordered buckets and heat cells. */
 export const RAMP = ['#EDE4FA', '#DCC9F5', '#C4A2EE', '#A87BE4', '#8B4FD8', '#7628CF', '#6A12CD'];
+
+/**
+ * The donut's slices: the same ramp, run dark → light, because a donut's slices
+ * are ordered by size and the eye should read the biggest one first.
+ *
+ * Steps of ONE hue, never four unrelated ones. A rainbow donut reads as four
+ * different KINDS of thing and drags the eye to whichever slice landed on red —
+ * these are shares of a single whole, and the colour should say so.
+ */
+export const DONUT_SHADES = ['#6A12CD', '#8B4FD8', '#A87BE4', '#C4A2EE', '#DCC9F5', '#EDE4FA'];
+
+/**
+ * The recessive step of a series — an off-hours bar, a weekend column, the
+ * unfilled remainder of a meter. One hue, one step: "less of the same thing",
+ * which is exactly what it means here.
+ */
+export const MUTED = {
+  primary: '#DCC9F5',
+  track: 'rgba(15, 7, 32, 0.055)',
+} as const;
 
 /* ── Chart chrome ─────────────────────────────────────────────────────────── */
 
@@ -46,6 +75,21 @@ export const CROSSHAIR = {
   strokeWidth: 1,
   strokeDasharray: '4 4',
 } as const;
+
+/** The hover wash behind a hovered column. Wider than the bar, so it reads as
+ *  "this slot", not as a second series stacked behind the first. */
+export const HOVER_FILL = 'rgba(106, 18, 205, 0.05)';
+
+/** The surface gap that separates touching marks — a stacked segment from the
+ *  one under it, an adjacent bar from its neighbour. White doing the work a
+ *  stroke would otherwise do badly (a stroke is data-weight ink that is not
+ *  data). Recharts draws this as a stroke in the surface colour. */
+export const SURFACE_GAP = { stroke: '#FFFFFF', strokeWidth: 2 } as const;
+
+/** Bars are capped, never full-slot: the leftover band is air. */
+export const BAR_SIZE = 22;
+/** 4px rounded data-end, square at the baseline. */
+export const BAR_RADIUS: [number, number, number, number] = [4, 4, 0, 0];
 
 export const fmt = (n: number) => n.toLocaleString('en-US');
 
@@ -101,3 +145,12 @@ export const ICON_TILE_BRAND = 'bg-brand-50 text-brand-700';
 /** The Hub's entry curve. Every fade-up on that page uses it; so does this one
  *  now, so the two surfaces settle at the same rate. */
 export const KH_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
+/**
+ * The one number a card leads with. Proportional figures, not tabular: at
+ * display size `tabular-nums` gives every digit the width of a zero, and "121"
+ * comes out visibly loose. Tabular is for COLUMNS of numbers that have to align
+ * down the page (table cells, axis ticks) — not for a headline.
+ */
+export const FIGURE = 'text-[1.75rem] font-semibold tracking-[-0.02em] text-ink-900 leading-none';
+export const FIGURE_SM = 'text-[1.375rem] font-semibold tracking-[-0.02em] text-ink-900 leading-none';

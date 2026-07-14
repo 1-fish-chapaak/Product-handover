@@ -14,6 +14,11 @@
  *
  * Bars keep the days. The rolling line carries the trend. The shading explains
  * the dips. Nothing is smoothed away and nothing is invented.
+ *
+ * The marks follow the house dataviz spec: columns capped at 22px so the band's
+ * leftover is air, a 4px rounded cap at the data end and square at the baseline,
+ * and a 2px gap in the surface colour between the two stacked segments — white
+ * doing the separating that a stroke would otherwise do badly.
  */
 
 import { useMemo } from 'react';
@@ -22,7 +27,9 @@ import {
   CartesianGrid, Tooltip, ReferenceArea,
 } from 'recharts';
 import { TooltipCard } from './usageChrome';
-import { GRID, SERIES, xAxisProps, yAxisProps, fmt } from './usageTokens';
+import {
+  GRID, SERIES, HOVER_FILL, BAR_SIZE, BAR_RADIUS, xAxisProps, yAxisProps, fmt,
+} from './usageTokens';
 import { weekendSpans, type ActivityPoint } from './usageActivity';
 
 /** The rolling line is ink, not brand. Brand is already the bars; a neutral reads
@@ -31,8 +38,8 @@ import { weekendSpans, type ActivityPoint } from './usageActivity';
  *  Mid ink, not near-black. At #2C1B48 the average was the heaviest mark on the
  *  chart, which inverts the hierarchy: it is a smoothing of the bars, so it must
  *  not out-shout the bars it smooths. It still has to stay clearly apart from the
- *  compare series (#9A8FAE, and dashed), so it keeps the darker end of the ink
- *  ramp and stays solid. */
+ *  compare series (grey, and dashed), so it keeps the darker end of the ink ramp
+ *  and stays solid. */
 const ROLLING_STROKE = '#5C5170';
 
 export default function UsageActivityChart({
@@ -49,7 +56,7 @@ export default function UsageActivityChart({
   const tip = ({ active, label }: any) => {
     const p = byLabel.get(String(label));
     if (!active || !p) return null;
-    const rows: { color: string; name: string; value: number }[] = [
+    const rows: { color: string; name: string; value: number; dashed?: boolean }[] = [
       { color: SERIES.secondary, name: 'AI was involved', value: p.ai },
       { color: SERIES.primary, name: 'Everything else', value: p.rest },
     ];
@@ -57,7 +64,7 @@ export default function UsageActivityChart({
       rows.push({ color: ROLLING_STROKE, name: '7-day average', value: Math.round(p.rolling) });
     }
     if (compareOn && typeof p.prior === 'number') {
-      rows.push({ color: SERIES.compare, name: 'Same day, last period', value: p.prior });
+      rows.push({ color: SERIES.compare, name: 'Same day, last period', value: p.prior, dashed: true });
     }
     const share = p.total > 0 ? Math.round((p.ai / p.total) * 100) : 0;
     return (
@@ -79,11 +86,24 @@ export default function UsageActivityChart({
         <ComposedChart
           data={points}
           margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-          // 30 slots across ~1,000px is ~33px each; a 28px cap leaves a ~5px gap,
-          // which sits inside the 20–40% gap-to-bar band that reads as a chart.
-          // The weekly version was at ~470% — that is why it looked broken.
-          barCategoryGap="22%"
+          // 30 slots across ~1,000px is ~33px each; a 22px cap leaves ~11px of
+          // air, which sits inside the 20–40% gap-to-bar band that reads as a
+          // chart. The weekly version was at ~470% — that is why it looked broken.
+          barCategoryGap="24%"
         >
+          <defs>
+            {/* A gradient down the column, not a flat slab. Two steps of one hue:
+                it reads as one mark with a light source, never as two values. */}
+            <linearGradient id="usage-bar-primary" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#7B2BDB" />
+              <stop offset="100%" stopColor="#6A12CD" />
+            </linearGradient>
+            <linearGradient id="usage-bar-secondary" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#0EA5E9" />
+              <stop offset="100%" stopColor="#0284C7" />
+            </linearGradient>
+          </defs>
+
           {/* Weekends first, so the bars paint over them. This is the honest way
               to say "the dip is Saturday" — it explains the trough instead of
               smoothing it out of existence. */}
@@ -93,9 +113,9 @@ export default function UsageActivityChart({
               x1={x1}
               x2={x2}
               // 3.5% ink is the textbook figure, but against this canvas it was
-              // invisible — a band nobody can see explains nothing. 5.5% still
+              // invisible — a band nobody can see explains nothing. 5% still
               // sits well under the bars and is actually legible.
-              fill="rgba(15,7,32,0.055)"
+              fill="rgba(15,7,32,0.05)"
               strokeOpacity={0}
               ifOverflow="extendDomain"
             />
@@ -104,19 +124,32 @@ export default function UsageActivityChart({
           <CartesianGrid vertical={false} stroke={GRID} />
           <XAxis dataKey="label" {...xAxisProps} interval="preserveStartEnd" minTickGap={40} />
           <YAxis {...yAxisProps} allowDecimals={false} />
-          <Tooltip cursor={{ fill: 'rgba(15,7,32,0.05)' }} content={tip} isAnimationActive={false} />
+          {/* The hover wash is brand-tinted and slot-wide, so it reads as "this
+              day" rather than as a grey box behind the bar. */}
+          <Tooltip cursor={{ fill: HOVER_FILL }} content={tip} isAnimationActive={false} />
 
           {/* Two segments only, so both have a fixed baseline and both are
               readable. AI sits at the bottom: a segment floating on a moving
-              baseline cannot be compared bar to bar. */}
-          <Bar dataKey="ai" name="AI was involved" stackId="a" fill={SERIES.secondary} maxBarSize={28} />
+              baseline cannot be compared bar to bar.
+
+              `rest` carries a 2px stroke in the surface colour — that stroke's
+              bottom edge IS the gap between the two segments. */}
+          <Bar
+            dataKey="ai"
+            name="AI was involved"
+            stackId="a"
+            fill="url(#usage-bar-secondary)"
+            maxBarSize={BAR_SIZE}
+          />
           <Bar
             dataKey="rest"
             name="Everything else"
             stackId="a"
-            fill={SERIES.primary}
-            radius={[2, 2, 0, 0]}
-            maxBarSize={28}
+            fill="url(#usage-bar-primary)"
+            radius={BAR_RADIUS}
+            maxBarSize={BAR_SIZE}
+            stroke="#FFFFFF"
+            strokeWidth={2}
           />
 
           {compareOn && (
@@ -139,8 +172,9 @@ export default function UsageActivityChart({
             dataKey="rolling"
             name="7-day average"
             stroke={ROLLING_STROKE}
-            strokeWidth={1.75}
+            strokeWidth={2}
             strokeLinecap="round"
+            strokeLinejoin="round"
             dot={false}
             connectNulls={false}
             isAnimationActive={false}

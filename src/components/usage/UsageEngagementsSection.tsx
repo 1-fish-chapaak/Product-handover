@@ -88,7 +88,7 @@ export default function UsageEngagementsSection() {
                       {t.findings > 0 && <span className="text-risk-600 ml-2">{t.findings} findings</span>}
                     </span>
                   </div>
-                  <div className="h-2.5 rounded-full bg-canvas overflow-hidden relative" style={{ width: `${Math.max(8, (t.controls / typeMax) * 100)}%` }}>
+                  <div className="h-2.5 rounded-full bg-brand-100/70 overflow-hidden relative" style={{ width: `${Math.max(8, (t.controls / typeMax) * 100)}%` }}>
                     <div className="absolute inset-0 rounded-full opacity-25" style={{ background: ENG_TYPE_COLOR[t.type] }} />
                     <motion.div
                       className="h-full rounded-full relative"
@@ -156,7 +156,7 @@ export default function UsageEngagementsSection() {
                       <span className="font-semibold text-ink-800">{fmt(e.openIssues)}</span> open
                     </span>
                   </div>
-                  <div className="h-2 rounded-full bg-canvas overflow-hidden">
+                  <div className="h-2 rounded-full bg-brand-100/70 overflow-hidden">
                     <motion.div
                       className="h-full rounded-full"
                       style={{ background: '#B42318' }}
@@ -182,7 +182,7 @@ export default function UsageEngagementsSection() {
                   <span className="text-[0.75rem] font-medium text-ink-700">{pr.process}</span>
                   <span className="text-[0.6875rem] text-ink-500 tabular-nums"><span className="font-semibold text-ink-800">{fmt(pr.controls)}</span> · {pr.count} eng{pr.count === 1 ? '' : 's'}</span>
                 </div>
-                <div className="h-2 rounded-full bg-canvas overflow-hidden">
+                <div className="h-2 rounded-full bg-brand-100/70 overflow-hidden">
                   <motion.div
                     className="h-full rounded-full bg-brand-500"
                     initial={prefersReduced ? false : { width: 0 }}
@@ -227,7 +227,7 @@ export default function UsageEngagementsSection() {
                     <span className="text-[0.625rem] text-ink-400">Controls</span>
                     <span className="text-[0.6875rem] text-ink-500 tabular-nums"><span className="font-semibold text-ink-800">{fmt(r.effective)}</span>/{fmt(r.controls)} effective · {testedPct}%</span>
                   </div>
-                  <div className="h-2 rounded-full bg-canvas overflow-hidden" style={{ width: `${Math.max(6, (r.controls / controlsMax) * 100)}%` }}>
+                  <div className="h-2 rounded-full bg-brand-100/70 overflow-hidden" style={{ width: `${Math.max(6, (r.controls / controlsMax) * 100)}%` }}>
                     <div className="h-full rounded-full" style={{ width: `${testedPct}%`, background: ENG_TYPE_COLOR[r.type] }} />
                   </div>
                 </div>

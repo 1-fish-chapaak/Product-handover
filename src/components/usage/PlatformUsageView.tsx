@@ -60,7 +60,7 @@ import UsageVerdict, { type VerdictInput } from './UsageVerdict';
 import UsageHighlights, { type HighlightsInput } from './UsageHighlights';
 import UsagePlatformSections from './UsagePlatformSections';
 import UsageAdoption from './UsageAdoption';
-import { Card, Band, Eyebrow, DeltaPill, Meter, RankedRow } from './usageChrome';
+import { Card, Band, Donut, Eyebrow, DeltaPill, Legend, Meter, RankedRow } from './usageChrome';
 import { KH_EASE, SERIES, fmt } from './usageTokens';
 
 const DAY_MS = 86400000;
@@ -182,7 +182,7 @@ const userColumns = (compareLabel: string): Column<UsageRow>[] => [
     key: 'segment', label: 'Engagement', sortable: true, width: '9%',
     render: (r) => <Pill tone={SEGMENT_TONE[r.segment]}>{SEGMENT_LABELS[r.segment]}</Pill>,
   },
-  { key: 'roleName', label: 'Role', sortable: true, width: '10%', render: (r) => <span className="text-[0.8125rem] text-ink-700 truncate">{r.roleName}</span> },
+  { key: 'roleName', label: 'Role', sortable: true, width: '9%', render: (r) => <span className="text-[0.8125rem] text-ink-700 truncate">{r.roleName}</span> },
   {
     key: 'team', label: 'Team', sortable: true, width: '10%',
     render: (r) => r.team === '—'
@@ -190,7 +190,7 @@ const userColumns = (compareLabel: string): Column<UsageRow>[] => [
       : <span className="text-[0.8125rem] text-ink-700 truncate">{r.team}</span>,
   },
   {
-    key: 'lastLogin', label: 'Last Active', sortable: true, width: '10%',
+    key: 'lastLogin', label: 'Last Active', sortable: true, width: '9%',
     render: (r) => <span className={`text-[0.75rem] font-mono tabular-nums ${r.lastLogin === 'Never' ? 'italic text-ink-400' : 'text-ink-700'}`}>{r.lastLogin}</span>,
   },
   {
@@ -208,7 +208,7 @@ const userColumns = (compareLabel: string): Column<UsageRow>[] => [
     ),
   },
   {
-    key: 'aiQueries', label: 'AI Queries', sortable: true, width: '10%', align: 'right',
+    key: 'aiQueries', label: 'AI Queries', sortable: true, width: '9%', align: 'right',
     render: (r) => r.aiQueries === 0 ? <Blank /> : <span className="text-[0.8125rem] text-ink-700 tabular-nums">{fmt(r.aiQueries)}</span>,
   },
   {
@@ -216,7 +216,11 @@ const userColumns = (compareLabel: string): Column<UsageRow>[] => [
     render: (r) => r.downloads === 0 ? <Blank /> : <span className="text-[0.8125rem] text-ink-700 tabular-nums">{fmt(r.downloads)}</span>,
   },
   {
-    key: 'topModule', label: 'Top Module', sortable: true, width: '11%',
+    // 14%, not 11%. The longest module name the platform has is "Knowledge Hub",
+    // and inside a Pill inside an 11% cell of a `table-fixed` layout it was
+    // clipped mid-word on every row that had it — a chip that cannot print its
+    // own label is worse than no chip.
+    key: 'topModule', label: 'Top Module', sortable: true, width: '14%',
     render: (r) => r.actions === 0 ? <Blank /> : <Pill tone="draft">{r.topModule}</Pill>,
   },
 ];
@@ -786,7 +790,6 @@ export default function PlatformUsageView() {
   // Downloads & exports — who is pulling data out of the platform.
   const downloadDelta = usageDeltaPct(totals.downloads, priorTotals.downloads);
   const formatSplit = useMemo(() => downloadFormatSplit(days), [days]);
-  const formatMax = Math.max(1, ...formatSplit.map(f => f.count));
   const recentDl = useMemo(() => recentDownloads(days), [days]);
   const topDownloaders = useMemo(
     () => [...rows].sort((a, b) => b.downloads - a.downloads).slice(0, 3).filter(r => r.downloads > 0),
@@ -1294,20 +1297,23 @@ export default function PlatformUsageView() {
                 title="Actions per day"
                 subtitle="The line is a 7-day average. Shaded columns are weekends."
                 right={
-                  <div className="flex items-center gap-3">
-                    {/* Every mark on the plot has a key. The legend used to name
-                        only the two bar segments, while the subtitle promised a
-                        7-day line and weekend shading that nothing identified. */}
-                    {/* Two keys, not five. The 7-day line and the weekend bands
-                        are already named in the subtitle; keying them again is the
-                        chart explaining itself twice. */}
-                    <div className="hidden lg:flex items-center gap-4 text-[0.75rem] text-ink-600">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="h-2.5 w-2.5 rounded-xs" style={{ backgroundColor: SERIES.primary }} />Everything else
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="h-2.5 w-2.5 rounded-xs" style={{ backgroundColor: SERIES.secondary }} />AI was involved
-                      </span>
+                  <div className="flex items-center gap-4">
+                    {/* Two keys, plus a third only when it is on the plot. The
+                        7-day line and the weekend bands are already named in the
+                        subtitle; keying them there too would be the chart
+                        explaining itself twice. The compare series is NOT named
+                        anywhere else, and it is a grey dashed line — the one mark
+                        on this chart that is unreadable without a key. */}
+                    <div className="hidden lg:block">
+                      <Legend
+                        keys={[
+                          { color: SERIES.primary, label: 'Everything else' },
+                          { color: SERIES.secondary, label: 'AI was involved' },
+                          ...(compareOn
+                            ? [{ color: SERIES.compare, label: 'Last period', dashed: true }]
+                            : []),
+                        ]}
+                      />
                     </div>
                     <button className={presetChip(compareOn)} onClick={() => setCompareOn(c => !c)} aria-pressed={compareOn}>
                       Compare
@@ -1372,9 +1378,13 @@ export default function PlatformUsageView() {
           )}
 
           {/* When the team works — a working-pattern question, so it lives with
-              the other licence-and-behaviour questions. */}
+              the other licence-and-behaviour questions.
+
+              The band takes no title: it holds exactly one card, and that card's
+              own header already says "When the work happens". The heading and the
+              card title were the same six words, twenty pixels apart. */}
           {tab === 'adoption' && (
-          <Band title="When the work happens">
+          <Band>
             <Card
               icon={CalendarClock}
               title="When the work happens"
@@ -1453,29 +1463,25 @@ export default function PlatformUsageView() {
                     </div>
                     {/* Ranked, so rank it. Five names against five right-aligned
                         numerals was the one list on this page you had to read
-                        rather than see — every other ranking here carries a bar. */}
+                        rather than see — every other ranking here carries a bar,
+                        and now it is the same bar: the shared `Meter`, so this
+                        list cannot drift away from the six others. */}
                     <div className="space-y-3">
                       {topAiUsers.map((u, i) => (
                         <div key={u.email} className="flex items-center gap-2.5">
                           <InitialsAvatar name={u.name} size={24} />
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline justify-between gap-2 mb-1">
-                              <span className="text-[0.8125rem] font-medium text-ink-800 truncate">{u.name}</span>
-                              <span className="shrink-0 text-[0.75rem] text-ink-400 tabular-nums">
-                                <span className="font-semibold text-ink-900">{fmt(u.aiQueries)}</span>
-                                <span className="ml-1.5">
+                            <Meter
+                              index={i}
+                              label={<span className="text-ink-800">{u.name}</span>}
+                              value={fmt(u.aiQueries)}
+                              note={
+                                <span>
                                   {totals.aiActivity > 0 ? Math.round((u.aiQueries / totals.aiActivity) * 100) : 0}%
                                 </span>
-                              </span>
-                            </div>
-                            <div className="h-1.5 rounded-full bg-ink-900/[0.06] overflow-hidden">
-                              <motion.div
-                                className="h-full rounded-full bg-brand-600"
-                                initial={prefersReduced ? false : { width: 0 }}
-                                animate={{ width: `${Math.max(2, (u.aiQueries / topAiUsers[0].aiQueries) * 100)}%` }}
-                                transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 30, delay: 0.03 * i }}
-                              />
-                            </div>
+                              }
+                              pct={(u.aiQueries / topAiUsers[0].aiQueries) * 100}
+                            />
                           </div>
                         </div>
                       ))}
@@ -1517,23 +1523,20 @@ export default function PlatformUsageView() {
                             )}
                           </div>
                         )}
-                        <div title={stage.hint}>
-                          <div className="flex items-baseline justify-between gap-2 mb-1.5">
-                            <span className="text-[0.75rem] font-medium text-ink-700 truncate min-w-0">{stage.label}</span>
-                            <span className="shrink-0 text-[0.75rem] tabular-nums text-ink-400">
-                              <span className="font-semibold text-ink-900">{stage.count}</span>
-                              <span className="ml-1.5">{pct}%</span>
-                            </span>
-                          </div>
-                          <div className="h-2.5 rounded-full bg-ink-900/[0.06] overflow-hidden">
-                            <motion.div
-                              className={`h-full rounded-full ${i === funnel.length - 1 ? 'bg-brand-600' : 'bg-brand-400'}`}
-                              initial={prefersReduced ? false : { width: 0 }}
-                              animate={{ width: `${Math.max(2, pct)}%` }}
-                              transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 30, delay: i * 0.06 }}
-                            />
-                          </div>
-                        </div>
+                        {/* The last stage is the one that matters — the seats that
+                            reached the habit — so it is the only one at full
+                            strength; the stages above it are the funnel it came
+                            through, and they read as the lighter step of the same
+                            hue rather than as four equal claims. */}
+                        <Meter
+                          index={i}
+                          title={stage.hint}
+                          tone={i === funnel.length - 1 ? 'brand' : 'muted'}
+                          label={stage.label}
+                          value={stage.count}
+                          note={<span>{pct}%</span>}
+                          pct={pct}
+                        />
                       </div>
                     );
                   })}
@@ -1686,16 +1689,27 @@ export default function PlatformUsageView() {
                 className="lg:col-span-12"
               >
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-10 gap-y-6">
-                  <div className="lg:col-span-3">
+                  <div className="lg:col-span-4">
                     <CardFigure value={totals.downloads} caption="Files downloaded in this period" delta={downloadDelta} compareLabel={compareLabel} />
-                    <div className="mt-5 space-y-3.5">
-                      {formatSplit.map((f, i) => (
-                        <Meter key={f.format} label={f.format} value={fmt(f.count)} pct={(f.count / formatMax) * 100} index={i} />
-                      ))}
-                    </div>
+                    {/* The one genuine part-to-whole on the page: every download
+                        is exactly one format, and the formats add up to the
+                        figure above. A ranked bar would answer "which format
+                        leads" — which nobody asks. The question here is the shape
+                        of the mix, and that is what a donut is for. Everything
+                        else on this page stays a bar. */}
+                    {formatSplit.length > 0 && (
+                      <div className="mt-5">
+                        <Donut
+                          items={formatSplit.map(f => ({ name: f.format, value: f.count }))}
+                          total={totals.downloads}
+                          totalLabel="Files"
+                          size={118}
+                        />
+                      </div>
+                    )}
                   </div>
 
-                  <div className="lg:col-span-6">
+                  <div className="lg:col-span-5">
                     <Eyebrow className="mb-2">Recent downloads</Eyebrow>
                     {recentDl.length > 0 ? (
                       <div className="divide-y divide-canvas-border">

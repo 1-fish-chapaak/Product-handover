@@ -158,7 +158,7 @@ function ToolRow({ tool, max, index, onOpen, logs }: {
             <span className="ml-1.5">{tool.share}%</span>
           </span>
         </div>
-        <div className="h-1.5 rounded-full bg-ink-900/[0.06] overflow-hidden">
+        <div className="h-1.5 rounded-full bg-brand-100/70 overflow-hidden">
           {/* Nothing to draw at zero. An empty track says "none" without a stub
               bar pretending to be a value. */}
           {!unused && (
@@ -339,7 +339,7 @@ function ToolDetail({ tool, rangeDays, onBack }: {
                           <span className="ml-1.5">{Math.round((r.count / tool.runs) * 100)}%</span>
                         </span>
                       </div>
-                      <div className="h-1.5 rounded-full bg-ink-900/[0.06] overflow-hidden">
+                      <div className="h-1.5 rounded-full bg-brand-100/70 overflow-hidden">
                         <motion.div
                           className="h-full rounded-full bg-brand-600"
                           initial={prefersReduced ? false : { width: 0 }}
@@ -546,7 +546,7 @@ export default function UsageConciergeSection({ days, rows, rangeDays }: {
                           <span className="ml-1.5">{Math.round((r.count / Math.max(1, runs)) * 100)}%</span>
                         </span>
                       </div>
-                      <div className="h-1.5 rounded-full bg-ink-900/[0.06] overflow-hidden">
+                      <div className="h-1.5 rounded-full bg-brand-100/70 overflow-hidden">
                         <motion.div
                           className="h-full rounded-full bg-brand-600"
                           initial={prefersReduced ? false : { width: 0 }}

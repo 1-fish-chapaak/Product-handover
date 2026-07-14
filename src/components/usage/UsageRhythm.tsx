@@ -13,13 +13,23 @@
  * (7 bars and 24 bars, not 168 cells), and both are readable at a glance. So
  * that is what this draws. Nothing that was knowable from the grid is lost —
  * only the joint day×hour cells, which were never above the noise floor.
+ *
+ * Both are real charts now, not hand-rolled flex columns with numbers floating
+ * over them. That buys three things the divs could not: an axis (so a bar's
+ * height means something absolute, not just "taller than its neighbour"), a
+ * hover layer on every column, and one shared mark spec — 22px cap, 4px rounded
+ * data-end — with the rest of the page's charts.
  */
 
 import { useMemo } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import {
+  ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, LabelList,
+} from 'recharts';
 import { USAGE_DAY_LABELS as DAY_LABELS, type UsageHeatmapData } from '../../data/platform-usage';
-import { Eyebrow } from './usageChrome';
-import { SERIES, fmt } from './usageTokens';
+import { Eyebrow, TooltipCard } from './usageChrome';
+import {
+  SERIES, MUTED, GRID, HOVER_FILL, BAR_RADIUS, xAxisProps, yAxisProps, fmt,
+} from './usageTokens';
 
 /** Business-first order: Monday to Sunday. */
 const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -27,47 +37,87 @@ const FULL_DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 
 const hourLabel = (h: number) => `${String(h).padStart(2, '0')}:00`;
 
-/**
- * One row of the bar chart. The bar IS the hit target, and it carries its count.
- *
- * `annotate` decides how many bars print their number. Seven days can each carry
- * one and still read. Twenty-four hours cannot: an hour with a single action
- * draws a 2px bar under a full-size "1", so the labels end up louder than the
- * data and the reader scans a row of digits instead of seeing the shape of the
- * day. At that width only the peak is worth naming; the rest keep their number
- * on hover and in the aria-label.
- */
-function Bars({ data, max, ariaUnit, annotate = 'all' }: {
-  data: { key: string; label: string; value: number; muted?: boolean; title: string }[];
-  max: number;
-  ariaUnit: string;
-  annotate?: 'all' | 'peak';
-}) {
-  const prefersReduced = useReducedMotion();
+/** Office hours. Everything outside them is drawn in the recessive step — the
+ *  same hue, one shade lighter, which reads as "less of this thing" and not as
+ *  "a different thing". */
+const OFFICE_START = 8;
+const OFFICE_END = 18;
+
+interface Col {
+  key: string;
+  label: string;
+  /** The x-axis tick. */
+  tick: string;
+  value: number;
+  muted: boolean;
+}
+
+/** The value on the cap of the peak column, and nowhere else. A number on every
+ *  one of twenty-four columns is a row of digits the eye reads instead of the
+ *  shape it came for. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const peakLabel = (max: number) => ({ x, y, width, value }: any) => {
+  if (value !== max || max === 0) return <g />;
   return (
-    <div className="flex items-end gap-1 h-[104px]">
-      {data.map((d, i) => {
-        const shows = annotate === 'all' ? d.value > 0 : d.value === max && max > 0;
-        return (
-        <div key={d.key} className="flex-1 min-w-0 flex flex-col items-center justify-end gap-1.5 h-full group">
-          <span className={`text-[0.625rem] tabular-nums font-semibold transition-colors ${
-            shows ? 'text-ink-500 group-hover:text-ink-900' : 'text-transparent group-hover:text-ink-900'
-          }`}>
-            {d.value > 0 ? fmt(d.value) : ''}
-          </span>
-          <motion.div
-            role="img"
-            aria-label={`${d.label}: ${fmt(d.value)} ${ariaUnit}`}
-            title={d.title}
-            initial={prefersReduced ? false : { height: 0 }}
-            animate={{ height: `${max > 0 ? Math.max(1.5, (d.value / max) * 100) : 1.5}%` }}
-            transition={prefersReduced ? { duration: 0 } : { duration: 0.45, delay: i * 0.02, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full max-w-[36px] rounded-t-xs cursor-default transition-opacity hover:opacity-80"
-            style={{ background: d.muted ? '#DCC9F5' : SERIES.primary, minHeight: 2 }}
+    <text
+      x={x + width / 2}
+      y={y - 6}
+      textAnchor="middle"
+      className="fill-ink-500"
+      style={{ fontSize: 10, fontWeight: 600 }}
+    >
+      {fmt(value)}
+    </text>
+  );
+};
+
+function ColumnChart({ data, height, unit, interval, labelPeak }: {
+  data: Col[];
+  height: number;
+  unit: string;
+  /** X-tick interval. 0 = every column (seven days), 2 = every third (hours). */
+  interval: number;
+  labelPeak: boolean;
+}) {
+  const max = Math.max(0, ...data.map(d => d.value));
+  const byTick = useMemo(() => new Map(data.map(d => [d.tick, d])), [data]);
+
+  return (
+    <div style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 18, right: 4, left: 0, bottom: 0 }} barCategoryGap="26%">
+          <defs>
+            <linearGradient id="rhythm-on" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#7B2BDB" />
+              <stop offset="100%" stopColor={SERIES.primary} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid vertical={false} stroke={GRID} />
+          <XAxis dataKey="tick" {...xAxisProps} interval={interval} minTickGap={0} tickMargin={8} />
+          <YAxis {...yAxisProps} allowDecimals={false} width={36} />
+          <Tooltip
+            cursor={{ fill: HOVER_FILL }}
+            isAnimationActive={false}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            content={({ active, label }: any) => {
+              const d = byTick.get(String(label));
+              if (!active || !d) return null;
+              return (
+                <TooltipCard
+                  title={d.label}
+                  rows={[{ color: d.muted ? MUTED.primary : SERIES.primary, name: unit, value: d.value }]}
+                />
+              );
+            }}
           />
-        </div>
-        );
-      })}
+          <Bar dataKey="value" radius={BAR_RADIUS} maxBarSize={34} isAnimationActive animationDuration={600}>
+            {data.map(d => (
+              <Cell key={d.key} fill={d.muted ? MUTED.primary : 'url(#rhythm-on)'} />
+            ))}
+            {labelPeak && <LabelList dataKey="value" content={peakLabel(max)} />}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -91,8 +141,6 @@ export default function UsageRhythm({ data }: { data: UsageHeatmapData }) {
     [matrix],
   );
 
-  const dayMax = Math.max(1, ...byDay.map(d => d.total));
-  const hourMax = Math.max(1, ...byHour.map(h => h.total));
   const grand = byDay.reduce((s, d) => s + d.total, 0);
 
   const busiestDay = byDay.reduce((a, b) => (b.total > a.total ? b : a), byDay[0]);
@@ -100,11 +148,36 @@ export default function UsageRhythm({ data }: { data: UsageHeatmapData }) {
 
   // Working hours = 08:00–18:00. The share outside it is the only thing on this
   // card that could change a decision (out-of-hours access, on-call, licensing).
-  const inHours = byHour.filter(h => h.hour >= 8 && h.hour < 18).reduce((s, h) => s + h.total, 0);
+  const inHours = byHour
+    .filter(h => h.hour >= OFFICE_START && h.hour < OFFICE_END)
+    .reduce((s, h) => s + h.total, 0);
   const inHoursPct = grand > 0 ? Math.round((inHours / grand) * 100) : 0;
 
   const weekend = byDay.filter(d => d.dow === 0 || d.dow === 6).reduce((s, d) => s + d.total, 0);
   const weekendPct = grand > 0 ? Math.round((weekend / grand) * 100) : 0;
+
+  const dayCols = useMemo<Col[]>(
+    () => byDay.map(d => ({
+      key: String(d.dow),
+      label: FULL_DOW[d.dow],
+      tick: DAY_LABELS[d.dow],
+      value: d.total,
+      // The weekend is context, not the story — it stays recessive.
+      muted: d.dow === 0 || d.dow === 6,
+    })),
+    [byDay],
+  );
+
+  const hourCols = useMemo<Col[]>(
+    () => byHour.map(h => ({
+      key: String(h.hour),
+      label: hourLabel(h.hour),
+      tick: hourLabel(h.hour),
+      value: h.total,
+      muted: h.hour < OFFICE_START || h.hour >= OFFICE_END,
+    })),
+    [byHour],
+  );
 
   if (grand === 0) {
     return <p className="text-[0.8125rem] text-ink-400">No activity in this period, so there is no pattern to show.</p>;
@@ -120,55 +193,23 @@ export default function UsageRhythm({ data }: { data: UsageHeatmapData }) {
         <span className="font-semibold text-ink-900">{weekendPct}%</span> at the weekend.
       </p>
 
-      <div className="mt-6">
-        <Eyebrow className="mb-3">By day of the week</Eyebrow>
-        <Bars
-          max={dayMax}
-          ariaUnit="actions"
-          data={byDay.map(d => ({
-            key: String(d.dow),
-            label: FULL_DOW[d.dow],
-            value: d.total,
-            // The weekend is context, not the story — it stays recessive.
-            muted: d.dow === 0 || d.dow === 6,
-            title: `${FULL_DOW[d.dow]}: ${fmt(d.total)} action${d.total === 1 ? '' : 's'}`,
-          }))}
-        />
-        <div className="mt-2 flex gap-1">
-          {DOW_ORDER.map(dow => (
-            <span key={dow} className="flex-1 text-center text-[0.625rem] font-medium text-ink-400">
-              {DAY_LABELS[dow]}
-            </span>
-          ))}
+      <div className="mt-6 grid grid-cols-1 xl:grid-cols-12 gap-6 xl:gap-8">
+        <div className="xl:col-span-4">
+          <Eyebrow className="mb-3">By day of the week</Eyebrow>
+          <ColumnChart data={dayCols} height={148} unit="actions" interval={0} labelPeak />
+          <p className="mt-3 text-[0.6875rem] text-ink-400">Weekend columns are drawn in the lighter step.</p>
         </div>
-      </div>
 
-      <div className="mt-7 pt-6 border-t border-canvas-border">
-        <Eyebrow className="mb-3">By hour of the day</Eyebrow>
-        <Bars
-          max={hourMax}
-          ariaUnit="actions"
-          annotate="peak"
-          data={byHour.map(h => ({
-            key: String(h.hour),
-            label: hourLabel(h.hour),
-            value: h.total,
-            muted: h.hour < 8 || h.hour >= 18,
-            title: `${hourLabel(h.hour)}: ${fmt(h.total)} action${h.total === 1 ? '' : 's'}`,
-          }))}
-        />
-        {/* Every third hour, and written as a time. Bare "09" under a bar chart
-            reads as a value as easily as an hour. */}
-        <div className="mt-2 grid" style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}>
-          {byHour.map(h => (
-            <span key={h.hour} className="text-center text-[0.5625rem] text-ink-400 tabular-nums whitespace-nowrap">
-              {h.hour % 3 === 0 ? hourLabel(h.hour) : ''}
-            </span>
-          ))}
+        <div className="xl:col-span-8 xl:border-l xl:border-canvas-border xl:pl-8">
+          <Eyebrow className="mb-3">By hour of the day</Eyebrow>
+          {/* Every third hour on the axis, and written as a time. A bare "09"
+              under a bar chart reads as a value as easily as an hour. */}
+          <ColumnChart data={hourCols} height={148} unit="actions" interval={2} labelPeak />
+          <p className="mt-3 text-[0.6875rem] text-ink-400">
+            Office hours ({hourLabel(OFFICE_START)} to {hourLabel(OFFICE_END)}) in full colour, nights in the lighter
+            step. Hover a column for its count.
+          </p>
         </div>
-        <p className="mt-3 text-[0.625rem] text-ink-400">
-          Office hours (08:00 to 18:00) in full colour, nights muted. Hover a bar for its count.
-        </p>
       </div>
     </div>
   );

@@ -25,7 +25,7 @@
 
 import { useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { Info } from 'lucide-react';
+import { ArrowUpRight, Info } from 'lucide-react';
 import { KpiCountUp } from '../shared/KpiTile';
 import type { Stat } from '../admin/adminTokens';
 import { CARD_BASE, KH_EASE } from './usageTokens';
@@ -48,27 +48,40 @@ export interface UsageStat extends Stat {
   excludes?: string;
 }
 
-/** The change, said the way a person would say it. */
+/**
+ * The change, said the way a person would say it — and split in two, because it
+ * is two facts: the movement (which wants to be seen) and the baseline it moved
+ * from (which only wants to be available).
+ *
+ * `chip` is the movement: "Up 8%", "Down 2 reports". `from` is the baseline:
+ * "from 487". They used to be one flat grey sentence, so the one number on the
+ * card that says whether things are getting better or worse was set in the same
+ * weight as the footnote naming what it was measured against.
+ */
 function changeSentence(stat: UsageStat, compareLabel: string) {
   const { current, prior } = stat;
-  if (prior === 0 && current === 0) return { text: 'None in either period', tone: 'flat' as const };
-  if (prior === 0) return { text: `New, none in the ${compareLabel}`, tone: 'up' as const };
+  if (prior === 0 && current === 0) {
+    return { chip: 'None in either period', from: '', tone: 'flat' as const };
+  }
+  if (prior === 0) return { chip: 'New', from: `none in the ${compareLabel}`, tone: 'up' as const };
 
   const diff = current - prior;
   const tone = diff > 0 ? ('up' as const) : diff < 0 ? ('down' as const) : ('flat' as const);
-  if (diff === 0) return { text: `Same as the ${compareLabel}`, tone };
+  if (diff === 0) return { chip: 'No change', from: `same as the ${compareLabel}`, tone };
 
   const noun = stat.unit ?? '';
   const n = Math.abs(diff);
+  const from = `from ${prior.toLocaleString('en-US')}`;
   // Small base → say it in whole units. A percentage of twelve people is a lie.
   if (Math.max(current, prior) < SMALL_BASE) {
     return {
-      text: `${diff > 0 ? 'Up' : 'Down'} ${n} ${n === 1 ? noun.replace(/s$/, '') : noun} from ${prior.toLocaleString('en-US')}`,
+      chip: `${diff > 0 ? 'Up' : 'Down'} ${n} ${n === 1 ? noun.replace(/s$/, '') : noun}`,
+      from,
       tone,
     };
   }
   const pct = Math.round((diff / prior) * 100);
-  return { text: `${pct > 0 ? 'Up' : 'Down'} ${Math.abs(pct)}% from ${prior.toLocaleString('en-US')}`, tone };
+  return { chip: `${pct > 0 ? 'Up' : 'Down'} ${Math.abs(pct)}%`, from, tone };
 }
 
 function UsageKpiCell({ stat, index, compareLabel }: {
@@ -77,12 +90,21 @@ function UsageKpiCell({ stat, index, compareLabel }: {
   const prefersReduced = useReducedMotion();
   const [defOpen, setDefOpen] = useState(false);
   const change = changeSentence(stat, compareLabel);
-  const changeTone =
-    change.tone === 'up' ? 'text-compliant-700' : change.tone === 'down' ? 'text-risk-700' : 'text-ink-400';
+  /* The chip is the only place on this card that carries a hue, so the hue has
+     to mean one thing: direction. It is backed by a tint of its own tone rather
+     than left as coloured text on white — a bare green word beside a black
+     number reads as a typo; a chip reads as a measurement. The arrow carries the
+     direction too, for the readers who cannot rely on red against green. */
+  const chipTone =
+    change.tone === 'up'
+      ? 'text-compliant-700 bg-compliant-700/[0.08]'
+      : change.tone === 'down'
+        ? 'text-risk-700 bg-risk-700/[0.08]'
+        : 'text-ink-500 bg-ink-900/[0.05]';
 
   return (
     <motion.div
-      aria-label={`${stat.label}: ${stat.value}${stat.of ? ` ${stat.of}` : ''}. ${change.text} in the ${compareLabel}.`}
+      aria-label={`${stat.label}: ${stat.value}${stat.of ? ` ${stat.of}` : ''}. ${change.chip} ${change.from} in the ${compareLabel}.`}
       initial={prefersReduced ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={prefersReduced ? { duration: 0 } : { duration: 0.3, delay: Math.min(index, 8) * 0.04, ease: KH_EASE }}
@@ -119,17 +141,35 @@ function UsageKpiCell({ stat, index, compareLabel }: {
         )}
       </div>
 
-      {/* 26px — DESIGN.md's KPI value. It was 36px, which is the display rank
-          the spec reserves for a page's one hero; this band has four of them,
-          and four heroes is no hero. */}
-      <div className="mt-3 text-[1.625rem] font-bold leading-none tracking-[-0.02em] tabular-nums text-ink-900">
+      {/* 28px — DESIGN.md's KPI value rank, not the 36px display rank the spec
+          reserves for a page's one hero. This band has three of them, and three
+          heroes is no hero; the hero is the gauge above.
+
+          Proportional figures, not tabular: at this size `tabular-nums` gives
+          every digit the width of a zero and a number like "525" comes out
+          visibly loose. Tabular is for columns that have to align down a table,
+          which this is not. */}
+      <div className="mt-3 text-[1.75rem] font-semibold leading-none tracking-[-0.025em] text-ink-900">
         <KpiCountUp value={String(stat.value)} delay={120 + index * 70} />
       </div>
-      {/* Reserved, so the change line lands on the same baseline in all four
-          cells whether or not the metric has a denominator to print. */}
+      {/* Reserved, so the change line lands on the same baseline in all cells
+          whether or not the metric has a denominator to print. */}
       <p className="mt-2 h-5 text-[0.8125rem] text-ink-500 truncate">{stat.of ?? ''}</p>
 
-      <p className={`mt-2 text-[0.8125rem] font-medium ${changeTone} truncate`}>{change.text}</p>
+      <p className="mt-2.5 flex items-center gap-2 min-w-0">
+        <span className={`shrink-0 inline-flex items-center gap-1 h-[1.375rem] px-2 rounded-full text-[0.75rem] font-semibold ${chipTone}`}>
+          {change.tone !== 'flat' && (
+            <ArrowUpRight
+              size={12}
+              strokeWidth={2.5}
+              className={change.tone === 'up' ? '' : 'rotate-90'}
+              aria-hidden
+            />
+          )}
+          {change.chip}
+        </span>
+        {change.from && <span className="text-[0.75rem] text-ink-400 truncate">{change.from}</span>}
+      </p>
     </motion.div>
   );
 }
