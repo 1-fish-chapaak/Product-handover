@@ -25,11 +25,11 @@ export const SOPS = [
 
 // ─── RACMs ───
 export const RACMS = [
-  { id: "RACM-001", bpId: "p2p", name: "FY26 P2P · Vendor Payment", fw: "SOX", status: "active", owner: "Tushar Goel", lastRun: "Mar 18, 2026", sopId: "sop-001" },
-  { id: "RACM-002", bpId: "p2p", name: "FY26 P2P · Purchase Order", fw: "Internal", status: "draft", owner: "Deepak Bansal", lastRun: "Mar 5, 2026", sopId: "sop-002" },
-  { id: "RACM-003", bpId: "o2c", name: "FY26 O2C · Invoice Mgmt", fw: "Key Control", status: "active", owner: "Neha Joshi", lastRun: "Mar 20, 2026", sopId: "sop-003" },
-  { id: "RACM-004", bpId: "r2r", name: "FY26 R2R · Financial Close", fw: "SOX", status: "active", owner: "Karan Mehta", lastRun: "Mar 15, 2026", sopId: "sop-004" },
-  { id: "RACM-005", bpId: "r2r", name: "FY26 R2R · GL Reconciliation", fw: "ITGC", status: "active", owner: "Sneha Desai", lastRun: "Feb 28, 2026", sopId: "sop-005" },
+  { id: "RACM-001", bpId: "p2p", name: "FY26 P2P · Vendor Payment", fw: "SOX", status: "active", owner: "Tushar Goel", lastRun: "Apr 15, 2026", sopId: "sop-001" },
+  { id: "RACM-002", bpId: "p2p", name: "FY26 P2P · Purchase Order", fw: "Internal", status: "draft", owner: "Deepak Bansal", lastRun: "Apr 2, 2026", sopId: "sop-002" },
+  { id: "RACM-003", bpId: "o2c", name: "FY26 O2C · Invoice Mgmt", fw: "Key Control", status: "active", owner: "Neha Joshi", lastRun: "Apr 17, 2026", sopId: "sop-003" },
+  { id: "RACM-004", bpId: "r2r", name: "FY26 R2R · Financial Close", fw: "SOX", status: "active", owner: "Karan Mehta", lastRun: "Apr 12, 2026", sopId: "sop-004" },
+  { id: "RACM-005", bpId: "r2r", name: "FY26 R2R · GL Reconciliation", fw: "ITGC", status: "active", owner: "Sneha Desai", lastRun: "Mar 28, 2026", sopId: "sop-005" },
   // S2C is the "from scratch" demo process — no seed RACM/risks/SOP so its tabs show empty states.
   { id: "RACM-007", bpId: "o2c", name: "FY26 O2C · Order to Cash", fw: "SOX", status: "active", owner: "Neha Joshi", lastRun: "Mar 21, 2026", sopId: "sop-003" },
   // RACMs generated from the P2P SOP-list "RACM Ready" SOPs — each shares its SOP's name.
@@ -40,19 +40,19 @@ export const RACMS = [
 
 // ─── Risks ───
 export const RISKS = [
-  { id: "RSK-001", name: "Unauthorized vendor payments processed without approval", ctls: 3, keyCtls: 1, lastUpdated: "Mar 18, 2026", severity: "high", bpId: "p2p", status: "open" },
-  { id: "RSK-002", name: "Duplicate invoices leading to overpayment", ctls: 4, keyCtls: 2, lastUpdated: "Mar 15, 2026", severity: "high", bpId: "p2p", status: "mitigated" },
+  { id: "RSK-001", name: "Unauthorized vendor payments processed without approval", ctls: 3, keyCtls: 1, lastUpdated: "Apr 15, 2026", severity: "high", bpId: "p2p", status: "open" },
+  { id: "RSK-002", name: "Duplicate invoices leading to overpayment", ctls: 4, keyCtls: 2, lastUpdated: "Apr 12, 2026", severity: "high", bpId: "p2p", status: "mitigated" },
   { id: "RSK-003", name: "Vendor master data manipulation by unauthorized users", ctls: 2, keyCtls: 1, lastUpdated: "Mar 10, 2026", severity: "medium", bpId: "p2p", status: "open" },
   { id: "RSK-004", name: "Fictitious vendor registration bypassing approval", ctls: 0, keyCtls: 0, lastUpdated: null, severity: "critical", bpId: "p2p", status: "open" },
-  { id: "RSK-005", name: "Unauthorized changes to payment terms", ctls: 1, keyCtls: 0, lastUpdated: "Feb 20, 2026", severity: "medium", bpId: "p2p", status: "mitigated" },
+  { id: "RSK-005", name: "Unauthorized changes to payment terms", ctls: 1, keyCtls: 0, lastUpdated: "Mar 20, 2026", severity: "medium", bpId: "p2p", status: "mitigated" },
   { id: "RSK-006", name: "Overdue customer receivables not escalated for collection", ctls: 4, keyCtls: 1, lastUpdated: "Feb 15, 2026", severity: "medium", bpId: "o2c", status: "mitigated" },
   { id: "RSK-008", name: "Segregation of duties violation in Accounts Payable", ctls: 3, keyCtls: 1, lastUpdated: "Jan 30, 2026", severity: "critical", bpId: "p2p", status: "open" },
-  { id: "RSK-010", name: "Revenue recognition timing manipulation", ctls: 4, keyCtls: 2, lastUpdated: "Mar 19, 2026", severity: "high", bpId: "o2c", status: "open" },
-  { id: "RSK-011", name: "Incorrect period-end journal entries", ctls: 3, keyCtls: 2, lastUpdated: "Mar 17, 2026", severity: "medium", bpId: "r2r", status: "mitigated" },
-  { id: "RSK-012", name: "GL balance discrepancy across subsidiaries", ctls: 2, keyCtls: 1, lastUpdated: "Feb 28, 2026", severity: "high", bpId: "r2r", status: "open" },
+  { id: "RSK-010", name: "Revenue recognition timing manipulation", ctls: 4, keyCtls: 2, lastUpdated: "Apr 16, 2026", severity: "high", bpId: "o2c", status: "open" },
+  { id: "RSK-011", name: "Incorrect period-end journal entries", ctls: 3, keyCtls: 2, lastUpdated: "Apr 14, 2026", severity: "medium", bpId: "r2r", status: "mitigated" },
+  { id: "RSK-012", name: "GL balance discrepancy across subsidiaries", ctls: 2, keyCtls: 1, lastUpdated: "Mar 28, 2026", severity: "high", bpId: "r2r", status: "open" },
   // O2C — Order to Cash risks (orders, credit, shipping, billing, cash application, collections)
   { id: "RSK-013", name: "Sales orders processed beyond approved customer credit limit", ctls: 5, keyCtls: 2, lastUpdated: "Mar 21, 2026", severity: "high", bpId: "o2c", status: "open" },
-  { id: "RSK-014", name: "Goods shipped without a confirmed and approved customer order", ctls: 5, keyCtls: 2, lastUpdated: "Mar 16, 2026", severity: "medium", bpId: "o2c", status: "mitigated" },
+  { id: "RSK-014", name: "Goods shipped without a confirmed and approved customer order", ctls: 5, keyCtls: 2, lastUpdated: "Apr 13, 2026", severity: "medium", bpId: "o2c", status: "mitigated" },
   { id: "RSK-015", name: "Customer invoices not raised for goods shipped", ctls: 0, keyCtls: 0, lastUpdated: null, severity: "high", bpId: "o2c", status: "open" },
   { id: "RSK-016", name: "Cash receipts misapplied to incorrect customer accounts", ctls: 0, keyCtls: 0, lastUpdated: null, severity: "medium", bpId: "o2c", status: "open" },
   { id: "RSK-017", name: "Sales returns and credit notes issued without authorization", ctls: 0, keyCtls: 0, lastUpdated: null, severity: "critical", bpId: "o2c", status: "open" },
@@ -115,22 +115,22 @@ export const ENGAGEMENT_CONTROLS = [
 export const DEFICIENCIES = [
   { id: "def-001", finding: "Automated credit limit monitoring failed for 3 high-value customers in Q4 FY26", severity: "SD", control: "Automated credit limit monitoring", assignee: "Sneha Desai", status: "open", due: "Apr 15, 2026" },
   { id: "def-002", finding: "Journal entry approval override used 7 times without adequate documentation during Dec 2025", severity: "MW", control: "Journal entry management review", assignee: "Rohan Patel", status: "in-progress", due: "Mar 31, 2026" },
-  { id: "def-003", finding: "SOD violation identified between AP entry and payment approval roles for 2 users", severity: "CD", control: "SOD violation detector real-time", assignee: "Karan Mehta", status: "resolved", due: "Feb 28, 2026" },
+  { id: "def-003", finding: "SOD violation identified between AP entry and payment approval roles for 2 users", severity: "CD", control: "SOD violation detector real-time", assignee: "Karan Mehta", status: "resolved", due: "Mar 28, 2026" },
 ];
 
 // ─── Workflows (Pre-built) ───
 export const WORKFLOWS = [
-  { id: "wf-001", name: "Duplicate Invoice Detector", desc: "Scans incoming invoices against historical data to flag potential duplicates before payment processing", bpId: "p2p", type: "Detection", lastRun: "Mar 18, 2026", runs: 12, status: "active", steps: ["Ingest invoice data", "Normalize fields", "Fuzzy match against history", "Score duplicates", "Flag & notify AP team"] },
-  { id: "wf-002", name: "Vendor Master Change Monitor", desc: "Monitors all changes to vendor master data and alerts compliance team of unauthorized modifications", bpId: "p2p", type: "Monitoring", lastRun: "Mar 20, 2026", runs: 8, status: "active", steps: ["Listen to change events", "Classify change type", "Check authorization", "Generate alert", "Log audit trail"] },
-  { id: "wf-003", name: "High-Value Payment Flagging", desc: "Automatically flags payments exceeding threshold amounts for additional review", bpId: "p2p", type: "Detection", lastRun: "Mar 12, 2026", runs: 6, status: "active", steps: ["Monitor payment queue", "Apply threshold rules", "Enrich with vendor data", "Route for approval", "Release or hold"] },
-  { id: "wf-004", name: "Revenue Recognition Checker", desc: "Validates revenue recognition against ASC 606 criteria for compliance", bpId: "o2c", type: "Compliance", lastRun: "Mar 19, 2026", runs: 4, status: "active", steps: ["Extract revenue entries", "Map to ASC 606 criteria", "Validate timing", "Check completeness", "Generate compliance report"] },
-  { id: "wf-005", name: "Journal Entry Anomaly Detector", desc: "Uses AI/ML to detect unusual journal entry patterns that may indicate fraud or errors", bpId: "r2r", type: "Detection", lastRun: "Mar 17, 2026", runs: 22, status: "active", steps: ["Collect journal entries", "Feature extraction", "Run anomaly model", "Score entries", "Alert reviewers"] },
-  { id: "wf-006", name: "Contract Expiry Alert", desc: "Tracks contract expiration dates and sends proactive alerts to stakeholders", bpId: "s2c", type: "Monitoring", lastRun: "Mar 5, 2026", runs: 3, status: "active", steps: ["Scan contract database", "Calculate days to expiry", "Apply alert rules", "Notify stakeholders", "Log actions"] },
-  { id: "wf-007", name: "Three-Way PO Match", desc: "Automated matching of Purchase Order, Goods Receipt Note, and Invoice for payment validation", bpId: "p2p", type: "Reconciliation", lastRun: "Mar 15, 2026", runs: 45, status: "active", steps: ["Fetch PO details", "Match GRN", "Match Invoice", "Validate tolerances", "Auto-approve or escalate"] },
-  { id: "wf-008", name: "SOD Violation Detector", desc: "Real-time segregation of duties conflict detection across all business processes", bpId: "p2p", type: "Compliance", lastRun: "Mar 1, 2026", runs: 15, status: "active", steps: ["Load role matrix", "Map user permissions", "Detect conflicts", "Assess risk level", "Generate violation report"] },
+  { id: "wf-001", name: "Duplicate Invoice Detector", desc: "Scans incoming invoices against historical data to flag potential duplicates before payment processing", bpId: "p2p", type: "Detection", lastRun: "Apr 15, 2026", runs: 12, status: "active", steps: ["Ingest invoice data", "Normalize fields", "Fuzzy match against history", "Score duplicates", "Flag & notify AP team"] },
+  { id: "wf-002", name: "Vendor Master Change Monitor", desc: "Monitors all changes to vendor master data and alerts compliance team of unauthorized modifications", bpId: "p2p", type: "Monitoring", lastRun: "Apr 17, 2026", runs: 8, status: "active", steps: ["Listen to change events", "Classify change type", "Check authorization", "Generate alert", "Log audit trail"] },
+  { id: "wf-003", name: "High-Value Payment Flagging", desc: "Automatically flags payments exceeding threshold amounts for additional review", bpId: "p2p", type: "Detection", lastRun: "Apr 9, 2026", runs: 6, status: "active", steps: ["Monitor payment queue", "Apply threshold rules", "Enrich with vendor data", "Route for approval", "Release or hold"] },
+  { id: "wf-004", name: "Revenue Recognition Checker", desc: "Validates revenue recognition against ASC 606 criteria for compliance", bpId: "o2c", type: "Compliance", lastRun: "Apr 16, 2026", runs: 4, status: "active", steps: ["Extract revenue entries", "Map to ASC 606 criteria", "Validate timing", "Check completeness", "Generate compliance report"] },
+  { id: "wf-005", name: "Journal Entry Anomaly Detector", desc: "Uses AI/ML to detect unusual journal entry patterns that may indicate fraud or errors", bpId: "r2r", type: "Detection", lastRun: "Apr 14, 2026", runs: 22, status: "active", steps: ["Collect journal entries", "Feature extraction", "Run anomaly model", "Score entries", "Alert reviewers"] },
+  { id: "wf-006", name: "Contract Expiry Alert", desc: "Tracks contract expiration dates and sends proactive alerts to stakeholders", bpId: "s2c", type: "Monitoring", lastRun: "Apr 2, 2026", runs: 3, status: "active", steps: ["Scan contract database", "Calculate days to expiry", "Apply alert rules", "Notify stakeholders", "Log actions"] },
+  { id: "wf-007", name: "Three-Way PO Match", desc: "Automated matching of Purchase Order, Goods Receipt Note, and Invoice for payment validation", bpId: "p2p", type: "Reconciliation", lastRun: "Apr 12, 2026", runs: 45, status: "active", steps: ["Fetch PO details", "Match GRN", "Match Invoice", "Validate tolerances", "Auto-approve or escalate"] },
+  { id: "wf-008", name: "SOD Violation Detector", desc: "Real-time segregation of duties conflict detection across all business processes", bpId: "p2p", type: "Compliance", lastRun: "Mar 29, 2026", runs: 15, status: "active", steps: ["Load role matrix", "Map user permissions", "Detect conflicts", "Assess risk level", "Generate violation report"] },
   // ── O2C — Order to Cash workflows ──
   { id: "wf-009", name: "Credit Limit Monitor", desc: "Continuously checks open sales orders against approved customer credit limits and holds orders that breach the limit", bpId: "o2c", type: "Monitoring", lastRun: "Mar 21, 2026", runs: 19, status: "active", steps: ["Fetch open orders", "Pull customer credit limit", "Compute exposure", "Flag breaches", "Place order on credit hold"] },
-  { id: "wf-010", name: "Cash Application Matcher", desc: "Auto-matches incoming customer remittances to open invoices and routes unmatched receipts for review", bpId: "o2c", type: "Reconciliation", lastRun: "Mar 20, 2026", runs: 33, status: "active", steps: ["Ingest bank remittances", "Parse remittance advice", "Match to open invoices", "Apply cash", "Queue unmatched for review"] },
+  { id: "wf-010", name: "Cash Application Matcher", desc: "Auto-matches incoming customer remittances to open invoices and routes unmatched receipts for review", bpId: "o2c", type: "Reconciliation", lastRun: "Apr 17, 2026", runs: 33, status: "active", steps: ["Ingest bank remittances", "Parse remittance advice", "Match to open invoices", "Apply cash", "Queue unmatched for review"] },
 ];
 
 // ─── Report Templates ───
@@ -305,44 +305,72 @@ export const SEED_BULK_AUDIT_WORKFLOWS: WorkflowResult[] = [
  *  version suffix to invalidate stale blobs (e.g. after a seed-shape change).
  *  All writers (ReportsView, App, BulkRunProgress) must use this constant so
  *  the key can never drift between them. */
-export const GENERATED_REPORTS_KEY = 'irame.reports.generatedReports.v9';
+export const GENERATED_REPORTS_KEY = 'irame.reports.generatedReports.v10';
 
+/**
+ * The report book — the registry Platform Usage counts its "Reports" KPI from
+ * (together with ATR_LIBRARY), and the library the Reports view lists.
+ *
+ * Dates run back roughly six months from 21 Apr 2026 (the horizon the rest of
+ * the seeded platform sits on), thinning out as they get older. That spread is
+ * deliberate: the usage page compares each window against the one before it, so
+ * a registry bunched into the last few weeks reads as an absurd spike ("+1100%
+ * vs the previous 30 days") rather than the steady growth it should show. Keep
+ * new seed reports spread out for the same reason.
+ */
 export const GENERATED_REPORTS = [
-  { id: "gr-001", templateId: "rt-001", name: "FY26 Q1 Financial Reporting Controls Review", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 20, 2026", status: "final", pages: 24, queries: 6 },
-  { id: "gr-002", templateId: "ct-custom-01", name: "P2P Risk Assessment — March 2026", tag: "Bulk Audit", generatedBy: "You", generatedAt: "Mar 18, 2026", status: "draft", pages: 12, queries: 4, workflowResults: SEED_BULK_AUDIT_WORKFLOWS },
-  { id: "gr-003", templateId: "ct-custom-02", name: "Workflow Performance Review — Feb 2026", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 1, 2026", status: "final", pages: 8, queries: 3 },
-  { id: "gr-004", templateId: "rt-001", name: "FY26 Q1 Comprehensive Multi-Jurisdictional Procure-to-Pay and Order-to-Cash Risk Assessment with Detailed Vendor Master Anomaly Detection, Duplicate Invoice Forensics, Segregation of Duties Audit, and Quarter-End Reconciliation Variance Review Report", tag: "Internal Audit", generatedBy: "You", generatedAt: "Feb 24, 2026", status: "draft", pages: 41, queries: 12 },
-  { id: "gr-005", templateId: "rt-001", name: "Quarter-End Reconciliation Variance Review — Q1 FY26", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 16, 2026", status: "final", pages: 16, queries: 5 },
-  { id: "gr-006", templateId: "rt-001", name: "Segregation of Duties Assessment — Finance", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 12, 2026", status: "draft", pages: 11, queries: 4 },
-  { id: "gr-007", templateId: "rt-001", name: "IT General Controls Effectiveness — FY26", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 8, 2026", status: "final", pages: 19, queries: 7 },
-  { id: "gr-008", templateId: "rt-internal-audit", name: "Procure-to-Pay Process Audit — March 2026", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 5, 2026", status: "final", pages: 14, queries: 5 },
-  { id: "gr-009", templateId: "rt-internal-audit", name: "Vendor Master Data Integrity Assessment", tag: "Internal Audit", generatedBy: "You", generatedAt: "Feb 28, 2026", status: "draft", pages: 9, queries: 3 },
-  { id: "gr-010", templateId: "rt-internal-audit", name: "Order-to-Cash Revenue Audit — Q1 FY26", tag: "Internal Audit", generatedBy: "You", generatedAt: "Feb 20, 2026", status: "final", pages: 22, queries: 8 },
+  // ── Last 30 days ──
+  { id: "gr-001", templateId: "rt-001", name: "FY26 Q1 Financial Reporting Controls Review", tag: "Internal Audit", generatedBy: "You", generatedAt: "Apr 18, 2026", pages: 24, queries: 6 },
+  { id: "gr-002", templateId: "ct-custom-01", name: "P2P Risk Assessment — April 2026", tag: "Bulk Audit", generatedBy: "You", generatedAt: "Apr 13, 2026", pages: 12, queries: 4, workflowResults: SEED_BULK_AUDIT_WORKFLOWS },
+  { id: "gr-005", templateId: "rt-001", name: "Quarter-End Reconciliation Variance Review — Q1 FY26", tag: "Internal Audit", generatedBy: "You", generatedAt: "Apr 9, 2026", pages: 16, queries: 5 },
+  { id: "gr-006", templateId: "rt-001", name: "Segregation of Duties Assessment — Finance", tag: "Internal Audit", generatedBy: "You", generatedAt: "Apr 5, 2026", pages: 11, queries: 4 },
+  { id: "gr-007", templateId: "rt-001", name: "IT General Controls Effectiveness — FY26", tag: "Internal Audit", generatedBy: "You", generatedAt: "Apr 1, 2026", pages: 19, queries: 7 },
+  { id: "gr-008", templateId: "rt-internal-audit", name: "Procure-to-Pay Process Audit — March 2026", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 26, 2026", pages: 14, queries: 5 },
+  // ── 30–60 days ──
+  { id: "gr-003", templateId: "ct-custom-02", name: "Workflow Performance Review — Feb 2026", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 19, 2026", pages: 8, queries: 3 },
+  { id: "gr-009", templateId: "rt-internal-audit", name: "Vendor Master Data Integrity Assessment", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 8, 2026", pages: 9, queries: 3 },
+  { id: "gr-004", templateId: "rt-001", name: "FY26 Q1 Comprehensive Multi-Jurisdictional Procure-to-Pay and Order-to-Cash Risk Assessment with Detailed Vendor Master Anomaly Detection, Duplicate Invoice Forensics, Segregation of Duties Audit, and Quarter-End Reconciliation Variance Review Report", tag: "Internal Audit", generatedBy: "You", generatedAt: "Mar 2, 2026", pages: 41, queries: 12 },
+  { id: "gr-010", templateId: "rt-internal-audit", name: "Order-to-Cash Revenue Audit — Q1 FY26", tag: "Internal Audit", generatedBy: "You", generatedAt: "Feb 24, 2026", pages: 22, queries: 8 },
+  // ── 60–90 days ──
+  { id: "gr-011", templateId: "rt-001", name: "Payroll Controls Review — H2R", tag: "Internal Audit", generatedBy: "Ayushi Narang", generatedAt: "Feb 17, 2026", pages: 13, queries: 4 },
+  { id: "gr-012", templateId: "rt-internal-audit", name: "Three-Way Match Exception Analysis", tag: "Internal Audit", generatedBy: "Aditya Thakur", generatedAt: "Feb 10, 2026", pages: 10, queries: 3 },
+  // ── The prior 90 days — the baseline every "vs previous period" is measured against ──
+  { id: "gr-013", templateId: "rt-001", name: "Privileged Access Review — FY26 H1", tag: "Internal Audit", generatedBy: "Abhinav Sharma", generatedAt: "Jan 19, 2026", pages: 17, queries: 6 },
+  { id: "gr-014", templateId: "rt-internal-audit", name: "Manual Journal Entry Testing — December", tag: "Internal Audit", generatedBy: "Aditya Thakur", generatedAt: "Jan 13, 2026", pages: 15, queries: 5 },
+  { id: "gr-015", templateId: "rt-001", name: "FY25 Year-End Close Controls Assessment", tag: "Internal Audit", generatedBy: "You", generatedAt: "Jan 7, 2026", pages: 28, queries: 9 },
+  { id: "gr-016", templateId: "rt-internal-audit", name: "Vendor Onboarding Compliance Check", tag: "Internal Audit", generatedBy: "Ayushi Narang", generatedAt: "Dec 30, 2025", pages: 9, queries: 3 },
+  { id: "gr-017", templateId: "rt-001", name: "Aging Receivables Exposure Review", tag: "Internal Audit", generatedBy: "Abhinav Sharma", generatedAt: "Dec 22, 2025", pages: 12, queries: 4 },
+  { id: "gr-018", templateId: "ct-custom-02", name: "Duplicate Payment Forensics — Q3 FY26", tag: "Bulk Audit", generatedBy: "Aditya Thakur", generatedAt: "Dec 15, 2025", pages: 20, queries: 7 },
+  { id: "gr-019", templateId: "rt-internal-audit", name: "GL Reconciliation Controls — November", tag: "Internal Audit", generatedBy: "You", generatedAt: "Dec 5, 2025", pages: 11, queries: 4 },
+  { id: "gr-020", templateId: "rt-001", name: "Purchase Order Approval Threshold Audit", tag: "Internal Audit", generatedBy: "Ayushi Narang", generatedAt: "Nov 26, 2025", pages: 14, queries: 5 },
+  { id: "gr-021", templateId: "rt-internal-audit", name: "Contract Lifecycle Controls Review", tag: "Internal Audit", generatedBy: "Abhinav Sharma", generatedAt: "Nov 17, 2025", pages: 16, queries: 5 },
+  { id: "gr-022", templateId: "rt-001", name: "Revenue Recognition Cut-Off Testing — O2C", tag: "Internal Audit", generatedBy: "You", generatedAt: "Nov 7, 2025", pages: 18, queries: 6 },
+  { id: "gr-023", templateId: "rt-internal-audit", name: "ITGC Change Management Assessment", tag: "Internal Audit", generatedBy: "Aditya Thakur", generatedAt: "Oct 29, 2025", pages: 13, queries: 4 },
 ];
 
 export const SHARED_REPORTS = [
-  { id: "sr-001", name: "FY26 Internal Audit Summary", kind: "ia", source: "system", sharedBy: "Neha Joshi", sharedAt: "Apr 10, 2026", status: "final", pages: 18, sharedWith: "Audit Team", queries: 5 },
-  { id: "sr-002", name: "O2C Controls Review — Q1 2026", kind: "sox", source: "custom", sharedBy: "Deepak Bansal", sharedAt: "Apr 5, 2026", status: "final", pages: 14, sharedWith: "Finance", queries: 4 },
-  { id: "sr-003", name: "Vendor Risk Exposure Report", kind: "ia", source: "system", sharedBy: "Karan Mehta", sharedAt: "Mar 28, 2026", status: "draft", pages: 9, sharedWith: "Risk Committee", queries: 2 },
-  { id: "sr-004", name: "GL Reconciliation — Feb 2026", kind: "sox", source: "custom", sharedBy: "Sneha Desai", sharedAt: "Mar 15, 2026", status: "final", pages: 22, sharedWith: "CFO Office", queries: 7 },
+  { id: "sr-001", name: "FY26 Internal Audit Summary", kind: "ia", source: "system", sharedBy: "Neha Joshi", sharedAt: "Apr 10, 2026", pages: 18, sharedWith: "Audit Team", queries: 5 },
+  { id: "sr-002", name: "O2C Controls Review — Q1 2026", kind: "sox", source: "custom", sharedBy: "Deepak Bansal", sharedAt: "Apr 5, 2026", pages: 14, sharedWith: "Finance", queries: 4 },
+  { id: "sr-003", name: "Vendor Risk Exposure Report", kind: "ia", source: "system", sharedBy: "Karan Mehta", sharedAt: "Mar 28, 2026", pages: 9, sharedWith: "Risk Committee", queries: 2 },
+  { id: "sr-004", name: "GL Reconciliation — Feb 2026", kind: "sox", source: "custom", sharedBy: "Sneha Desai", sharedAt: "Apr 12, 2026", pages: 22, sharedWith: "CFO Office", queries: 7 },
 ];
 
 // ─── Data Sources ───
 export const DATA_SOURCES = [
-  { id: "ds-001", name: "SAP ERP: AP Module", type: "sql", status: "connected", lastSync: "Mar 20, 2026", records: "1.2M" },
-  { id: "ds-002", name: "Invoice Archive 2026", type: "pdf", status: "connected", lastSync: "Mar 19, 2026", records: "4,521" },
-  { id: "ds-003", name: "Vendor Master Data", type: "csv", status: "connected", lastSync: "Mar 20, 2026", records: "892" },
-  { id: "ds-004", name: "GL Transaction History", type: "sql", status: "connected", lastSync: "Mar 18, 2026", records: "3.8M" },
+  { id: "ds-001", name: "SAP ERP: AP Module", type: "sql", status: "connected", lastSync: "Apr 17, 2026", records: "1.2M" },
+  { id: "ds-002", name: "Invoice Archive 2026", type: "pdf", status: "connected", lastSync: "Apr 16, 2026", records: "4,521" },
+  { id: "ds-003", name: "Vendor Master Data", type: "csv", status: "connected", lastSync: "Apr 17, 2026", records: "892" },
+  { id: "ds-004", name: "GL Transaction History", type: "sql", status: "connected", lastSync: "Apr 15, 2026", records: "3.8M" },
   { id: "ds-005", name: "Contract Repository", type: "pdf", status: "disconnected", lastSync: "Feb 15, 2026", records: "234" },
 ];
 
 // ─── Chat History ───
 export const CHAT_HISTORY = [
-  { id: "ch-001", title: "P2P Risk Analysis", preview: "Show me all high-severity risks in P2P...", timestamp: "Mar 20, 2026", messages: 8 },
-  { id: "ch-002", title: "Duplicate Invoice Workflow", preview: "Build a workflow to detect duplicate invoices...", timestamp: "Mar 19, 2026", messages: 12 },
-  { id: "ch-003", title: "SOX Compliance Status", preview: "What's the current SOX compliance status...", timestamp: "Mar 18, 2026", messages: 5 },
-  { id: "ch-004", title: "Control Effectiveness Query", preview: "Which controls are marked ineffective...", timestamp: "Mar 17, 2026", messages: 6 },
-  { id: "ch-005", title: "Journal Entry Anomalies", preview: "Run the journal entry anomaly detector...", timestamp: "Mar 15, 2026", messages: 15 },
+  { id: "ch-001", title: "P2P Risk Analysis", preview: "Show me all high-severity risks in P2P...", timestamp: "Apr 17, 2026", messages: 8 },
+  { id: "ch-002", title: "Duplicate Invoice Workflow", preview: "Build a workflow to detect duplicate invoices...", timestamp: "Apr 16, 2026", messages: 12 },
+  { id: "ch-003", title: "SOX Compliance Status", preview: "What's the current SOX compliance status...", timestamp: "Apr 15, 2026", messages: 5 },
+  { id: "ch-004", title: "Control Effectiveness Query", preview: "Which controls are marked ineffective...", timestamp: "Apr 14, 2026", messages: 6 },
+  { id: "ch-005", title: "Journal Entry Anomalies", preview: "Run the journal entry anomaly detector...", timestamp: "Apr 12, 2026", messages: 15 },
 ];
 
 // ─── Pre-built Chat Conversations ───
@@ -741,6 +769,12 @@ export const CLARIFICATION_STEPS = [
     category: 'Logic',
   },
   {
+    // Severity is NOT asked here. It is user-defined, but the only rule a user
+    // could state up front is a materiality amount — and even that reads better
+    // once the findings exist. So severity is asked MID-RUN, when the plan
+    // reaches the risk step (see ChatView → showSeverityClarification), then
+    // used to rate the flow diagram's output list and stamp the results table
+    // (chatPlan.ts → buildChatPlanRiskItems / severityRuleNote).
     stage: 4,
     question: 'What matching logic should I use to detect duplicates between candidate invoice pairs in your data?',
     options: ['Invoice number + amount', 'Fuzzy match all fields', 'AI-powered pattern detection'],

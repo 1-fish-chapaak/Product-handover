@@ -420,7 +420,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial }: 
                     </div>
                     <div>
                       <label className={labelCls}>Entity</label>
-                      <input type="text" value={entity} onChange={e => setEntity(e.target.value)} placeholder="e.g. Air India Express Ltd" className={inputCls} />
+                      <input type="text" value={entity} onChange={e => setEntity(e.target.value)} placeholder="e.g. Airline Group Ltd" className={inputCls} />
                     </div>
                   </div>
                   <div>

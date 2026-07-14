@@ -115,6 +115,12 @@ export function DateFilterPicker({ filter, open, onToggle, onClose, onApply, tod
     <div className="relative">
       <button
         onClick={onToggle}
+        // Named distinctly from the presets inside the popover: both the trigger
+        // and the "Last 30 days" option would otherwise answer to the same
+        // accessible name, which is ambiguous to a screen reader and to a test.
+        aria-label={`Date range: ${label}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
         className={`flex items-center gap-2 px-3 ${triggerHeight} ${triggerRounded} border text-[0.8125rem] font-medium transition-colors cursor-pointer ${
           active
             ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'

@@ -22,6 +22,7 @@ import type { AtrMeta, AtrObservation, AtrInsight, AtrReportData } from './atrTy
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS, GENERATED_REPORTS_KEY } from '../../data/mockData';
 import { ATR_LIBRARY, EVIDENCE_LIBRARY, type AtrLibraryReport } from '../../data/atrLibrary';
 import { exportAtrWord } from './atrTemplate';
+import { currentVersion } from './atrReview';
 import { type Tone } from '../shared/StatusBadge';
 import { ReportPill } from './ReportPill';
 import { reportDisplayName } from './reportName';
@@ -416,7 +417,7 @@ export default function ReportsView({
         tag: 'Internal Audit',
         generatedBy: r.generatedBy,
         generatedAt: r.generatedAt,
-        status: r.status === 'final' ? 'final' : 'draft',
+        status: 'final',
         pages: r.pages ?? 1,
         queries: r.queries ?? 0,
         area: r.atrData!.meta.auditTitle ?? 'Custom ATR',
@@ -455,7 +456,6 @@ export default function ReportsView({
     source: 'system' | 'custom';
     description: string;
     pills: string[];
-    status: 'draft' | 'final';
     date: string;
     sortDate: number;
     open: () => void;
@@ -474,10 +474,20 @@ export default function ReportsView({
   const atrDesc = (a: AtrLibraryReport) => `${a.atrData.meta.auditEntity} — ${a.atrData.meta.auditPeriod}`;
   const atrPills = (a: AtrLibraryReport) => {
     const plans = a.atrData.observations.reduce((n, o) => n + o.actionPlans.length, 0);
-    return [a.status === 'final' ? 'Final' : 'Draft', `${a.atrData.observations.length} observations`, `${plans} action plans`];
+    const version = currentVersion(a.id, {
+      status: a.status,
+      by: a.generatedBy ?? a.atrData.meta.preparedBy ?? 'You',
+      at: a.generatedAt ?? a.atrData.meta.generatedOn ?? '',
+      reviewedBy: a.atrData.meta.reviewedBy,
+      observations: a.atrData.observations.map(o => o.title),
+    });
+    return [`v${version}`, `${a.atrData.observations.length} observations`, `${plans} action plans`];
   };
   const allReportsUnified = useMemo<UnifiedRow[]>(() => {
     const ts = (d?: string) => { const t = d ? Date.parse(d) : NaN; return Number.isNaN(t) ? 0 : t; };
+    // A report reads as "Custom" only when it was generated from a template that
+    // still exists in the user's custom list — not merely a `ct-` prefix.
+    const customTemplateIds = new Set(customTemplates.map(t => t.id));
     const rows: UnifiedRow[] = [];
     // IA + SOX live reports (ATR-kind reports are surfaced via allAtrs below).
     generatedReports.forEach(r => {
@@ -486,9 +496,8 @@ export default function ReportsView({
       if (k !== 'sox' && k !== 'ia') return;
       rows.push({
         id: r.id, kind: k, name: r.name, bulk: r.tag === 'Bulk Audit',
-        source: r.templateId?.startsWith('ct-') ? 'custom' : 'system',
+        source: r.templateId && customTemplateIds.has(r.templateId) ? 'custom' : 'system',
         description: reportDesc(r), pills: reportPills(r),
-        status: r.status === 'final' ? 'final' : 'draft',
         date: r.generatedAt, sortDate: ts(r.generatedAt),
         open: () => openReport(r),
         download: () => {
@@ -504,7 +513,6 @@ export default function ReportsView({
       rows.push({
         id: a.id, kind: 'atr', name: a.name, bulk: false, source: 'system',
         description: atrDesc(a), pills: atrPills(a),
-        status: a.status === 'final' ? 'final' : 'draft',
         date: a.generatedAt, sortDate: ts(a.generatedAt),
         open: () => openAtr(a),
         download: () => { exportAtrWord(a.atrData.meta, a.atrData.observations); addToast({ type: 'success', message: `Downloading “${a.name}”.` }); logEvent({ action: 'Export', description: `Downloaded ATR "${a.name}" as Word`, module: 'Reports', entity: 'Report' }); },
@@ -521,7 +529,6 @@ export default function ReportsView({
         id: ev.id, kind: 'evidence', name: ev.name, bulk: false, source: 'system',
         description: `${ev.area} · linked to ${ev.atrName}`,
         pills: [ev.type, ev.size],
-        status: 'final',
         date: ev.uploadedAt, sortDate: ts(ev.uploadedAt),
         open: openFile,
         download: () => { addToast({ type: 'success', message: `Downloading “${ev.name}”.` }); logEvent({ action: 'Export', description: `Downloaded evidence file "${ev.name}" (${ev.type}, ${ev.size})`, module: 'Reports', entity: 'Evidence' }); },
@@ -530,7 +537,7 @@ export default function ReportsView({
     });
     return rows.sort((a, b) => b.sortDate - a.sortDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generatedReports, allAtrs, addToast, updateToast, openAtr, openAtrById]);
+  }, [generatedReports, allAtrs, customTemplates, addToast, updateToast, openAtr, openAtrById]);
   const KIND_FULL_LABEL: Record<UnifiedKind, string> = {
     ia: 'Internal Audit',
     sox: 'SOX Compliance',
@@ -670,7 +677,7 @@ export default function ReportsView({
       tag: 'Internal Audit' as const,
       generatedBy: 'You',
       generatedAt: stamp,
-      status: 'draft' as const,
+      status: 'final' as const,
       pages: Math.max(1, data.observations.length * 2),
       queries: data.observations.length,
       atrData: data,
@@ -832,7 +839,6 @@ export default function ReportsView({
       tag: 'Internal Audit',
       generatedBy: 'You',
       generatedAt: today,
-      status: 'draft',
       pages: blockCount + 2,
       queries: payload.queries.length,
       generatedQueries: payload.queries,
@@ -944,7 +950,7 @@ export default function ReportsView({
   // so columns line up tab to tab. The Report (name) column has no fixed width,
   // so under SmartTable `fixedLayout` it absorbs the slack — the detail columns
   // and actions stay packed together on the right with no empty gap.
-  const COL_W = { type: '180px', status: '128px', queries: '112px', sharedBy: '200px', generated: '150px', actions: '120px', source: '110px' };
+  const COL_W = { type: '180px', queries: '112px', sharedBy: '200px', generated: '150px', actions: '120px', source: '110px' };
   // Muted placeholder for the Type column when a row has no special type.
 
 
@@ -959,7 +965,7 @@ export default function ReportsView({
     if (viewingReport.atrData) {
       return (
         <AtrReportView
-          report={{ ...viewingReport, atrData: viewingReport.atrData, status: viewingReport.status === 'final' ? 'final' : 'draft' }}
+          report={{ ...viewingReport, atrData: viewingReport.atrData, status: 'final' }}
           onBack={() => setViewingReport(null)}
           onShare={onShare ? () => onShare(viewingReport.id) : undefined}
           onSave={data => saveAtrEdits(viewingReport.id, data)}
@@ -1183,9 +1189,7 @@ export default function ReportsView({
                       eyebrow={row.bulk ? 'Bulk Audit' : m.label}
                       title={reportDisplayName(row.name)}
                       description={row.description}
-                      // Drop the Draft/Final status chip from the card — it's
-                      // carried by the list view's status column, not the cards.
-                      pills={row.pills.filter(p => p !== 'Draft' && p !== 'Final')}
+                      pills={row.pills}
                       badge={<SourceChip source={row.source} />}
                       footerRight={<span className="text-[0.6875rem] tabular-nums text-ink-400">{row.date}</span>}
                       onClick={() => row.open()}
@@ -1821,7 +1825,6 @@ export default function ReportsView({
               tag: 'Internal Audit',
               generatedBy: 'You',
               generatedAt: today,
-              status: 'draft',
               pages: Math.max(1, observations.length),
               queries: observations.length,
               atrData: { meta, observations, insights },

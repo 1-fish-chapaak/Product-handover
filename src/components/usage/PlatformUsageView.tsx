@@ -6,7 +6,7 @@
  * KPI band with prior-period deltas → derived highlights → usage chart +
  * module breakdown (click a module for its drill-down) → AI usage + seats &
  * lifecycle → activity-rhythm heatmap → segmented Users|Teams table with
- * member/team drill-down drawers and CSV export. People-management stays in
+ * member/team drill-down modals and CSV export. People-management stays in
  * Administration; this view only links there.
  */
 
@@ -25,36 +25,81 @@ import { useCurrentUser } from '../../context/CurrentUserContext';
 import { getRole } from '../../data/rbac';
 import {
   USAGE_MODULES, usageDaysWithLive, userUsageRows, usageDayLabel,
-  usageAnchorLabel,
+  usageAnchorLabel, usageAnchor,
   usageWindowTotals, usageDeltaPct, seatBuckets, lastLoginOffsetDays,
+  bucketDays, bucketSizeFor, bucketSizeLabel, distinctActors,
   segmentFor, activeMeanActions, aiAdoptionPct, usageHourlyMatrix,
   activityConcentration, usageSpikes, recentDownloads, downloadFormatSplit,
   aiQuestions, aiToolRuns,
   creationTotals, recentCreations, workflowRunTotals, recentRuns, shareTotals, recentShares,
   ENGAGEMENT_SEGMENTS, SEGMENT_LABELS,
-  type UsageModule, type UserUsageRow, type EngagementSegment,
+  type UsageModule, type UsageDay, type UserUsageRow, type EngagementSegment,
 } from '../../data/platform-usage';
 import SmartTable, { type Column } from '../shared/SmartTable';
+import {
+  DateFilterPicker, DATE_PRESETS, type DateFilter,
+} from '../shared/DateFilterPicker';
 import ColumnFilter from '../shared/ColumnFilter';
 import FloatingLines from '../shared/FloatingLines';
 import EmptyState from '../shared/EmptyState';
 import { useToast } from '../shared/Toast';
 import { InitialsAvatar, MemberSearch } from '../admin/AdminPrimitives';
 import { presetChip } from '../admin/adminTokens';
-import UsageKpiRow, { type UsageStat } from './UsageKpiRow';
-import UserUsageDrawer from './UserUsageDrawer';
-import ModuleUsageDrawer from './ModuleUsageDrawer';
-import TeamUsageDrawer from './TeamUsageDrawer';
+import UsageKpiRow, { type UsageStat, type TrendPoint } from './UsageKpiRow';
+import UserUsageModal from './UserUsageModal';
+import ModuleUsageModal from './ModuleUsageModal';
+import TeamUsageModal from './TeamUsageModal';
 import UsageHeatmap from './UsageHeatmap';
 import UsagePlatformSections from './UsagePlatformSections';
+import UsageAdoption from './UsageAdoption';
 import { CARD } from './usageSectionPrimitives';
 
-type RangeDays = 7 | 30 | 90;
-const RANGES: { days: RangeDays; label: string }[] = [
-  { days: 7, label: 'Last 7 days' },
-  { days: 30, label: 'Last 30 days' },
-  { days: 90, label: 'Last 90 days' },
-];
+const DAY_MS = 86400000;
+
+/** Day-offset of an ISO date relative to the anchor (0 = the anchor day, larger = older). */
+function offsetFromAnchor(iso: string, anchor: Date): number {
+  const d = new Date(iso);
+  const day = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const a = Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate());
+  return Math.round((a - day) / DAY_MS);
+}
+
+/**
+ * Turn a DateFilter into the window this page reports on.
+ *
+ * The page is anchored on the newest real record, not wall-clock time, so the
+ * picker gets the anchor as its `today` and every window is measured back from
+ * there. Presets end at the anchor (identical to the old chips); a custom range
+ * can sit anywhere in the 180-day series. `priorDays` is always the equally-long
+ * window immediately before, so the period-over-period deltas stay honest.
+ */
+function usageWindow(allDays: UsageDay[], filter: DateFilter, anchor: Date) {
+  const total = allDays.length;
+
+  if (filter.kind === 'preset') {
+    const preset = DATE_PRESETS.find(p => p.id === filter.id);
+    // 'all' has days: null → the whole series. 'today' has days: 0 → the anchor bucket.
+    const len = preset?.days == null ? total : Math.max(1, preset.days);
+    return {
+      days: allDays.slice(-len),
+      priorDays: allDays.slice(Math.max(0, total - 2 * len), total - len),
+      rangeDays: Math.min(len, total),
+    };
+  }
+
+  const a = offsetFromAnchor(filter.from, anchor);
+  const b = offsetFromAnchor(filter.to, anchor);
+  const oldest = Math.min(total - 1, Math.max(a, b));
+  const newest = Math.max(0, Math.min(a, b));
+  const days = oldest < newest ? [] : allDays.filter(d => d.dayOffset <= oldest && d.dayOffset >= newest);
+  const len = days.length;
+  return {
+    days,
+    priorDays: allDays.filter(d => d.dayOffset > oldest && d.dayOffset <= oldest + len),
+    rangeDays: len,
+  };
+}
+
 
 type Lens = 'users' | 'teams';
 
@@ -170,13 +215,8 @@ const teamColumns: Column<TeamUsageRow>[] = [
 /** Full day names (JS getDay() order) for the busiest-day sentence. */
 const FULL_DAYS = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
 
-/** Compress a daily series into at most `buckets` bars (sums), oldest → newest. */
-function bucketize(values: number[], buckets = 12): number[] {
-  if (values.length <= buckets) return values;
-  const size = values.length / buckets;
-  return Array.from({ length: buckets }, (_, i) =>
-    values.slice(Math.floor(i * size), Math.floor((i + 1) * size)).reduce((s, v) => s + v, 0));
-}
+/* The trend bars are built in the component — each one needs the date range it
+   covers so it can say so on hover, which the old number[]-only shape couldn't. */
 
 /* ── Home's list-widget shell: icon header strip + optional right action ── */
 function WidgetCard({ icon: Icon, title, subtitle, right, className = '', bodyClassName = 'p-5', children }: {
@@ -288,16 +328,18 @@ export default function PlatformUsageView() {
   const logEvent = useAuditLog();
   const { addToast } = useToast();
 
-  const [range, setRange] = useState<RangeDays>(30);
+  // Defaults to the last 30 days — the window the page shipped with.
+  const [filter, setFilter] = useState<DateFilter>({ kind: 'preset', id: '30d' });
+  const [dateOpen, setDateOpen] = useState(false);
   const [compareOn, setCompareOn] = useState(false);
   const [lens, setLensState] = useState<Lens>('users');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string[]>([]);
   const [segmentFilter, setSegmentFilter] = useState<EngagementSegment | null>(null);
-  const [drawerEmail, setDrawerEmail] = useState<string | null>(null);
-  const [drawerModule, setDrawerModule] = useState<UsageModule | null>(null);
-  const [drawerTeam, setDrawerTeam] = useState<string | null>(null);
+  const [modalEmail, setModalEmail] = useState<string | null>(null);
+  const [modalModule, setModalModule] = useState<UsageModule | null>(null);
+  const [modalTeam, setModalTeam] = useState<string | null>(null);
 
   // Switching lens resets the toolbar so filters never apply invisibly.
   const setLens = (l: Lens) => {
@@ -309,8 +351,25 @@ export default function PlatformUsageView() {
   // into the anchor bucket), then the window slices.
   const allDays = useMemo(() => usageDaysWithLive(logs), [logs]);
   const anchorLabel = useMemo(() => usageAnchorLabel(logs), [logs]);
-  const days = useMemo(() => allDays.slice(-range), [allDays, range]);
-  const priorDays = useMemo(() => allDays.slice(-2 * range, -range), [allDays, range]);
+
+  // When an event happened, said honestly. The page is "as of" the anchor, not
+  // wall-clock, so only what this session actually produced is "Today" —
+  // everything else is dated, which also matches the chart's axis.
+  const whenLabel = (ev: { live: boolean; dayOffset: number; time: string }) =>
+    ev.live ? `Today ${ev.time}` : usageDayLabel(ev.dayOffset, logs);
+  // The picker measures from the anchor, not wall-clock — otherwise "last 7
+  // days" would land months after the newest record and read as empty.
+  const anchorDate = useMemo(() => new Date(usageAnchor(logs)), [logs]);
+  const { days, priorDays, rangeDays: range } = useMemo(
+    () => usageWindow(allDays, filter, anchorDate),
+    [allDays, filter, anchorDate],
+  );
+  // Where the window actually ends. Presets run up to the anchor; a custom range
+  // can stop earlier, and the copy must not call that "the most recent activity".
+  const endOffset = days.length > 0 ? days[days.length - 1].dayOffset : 0;
+  const endsAtAnchor = endOffset === 0;
+  const endLabel = endsAtAnchor ? anchorLabel : usageDayLabel(endOffset, logs);
+
   const questionsAsked = useMemo(() => aiQuestions(days), [days]);
   const toolRuns = useMemo(() => aiToolRuns(days), [days]);
 
@@ -340,11 +399,61 @@ export default function PlatformUsageView() {
       segment: segmentFor(r, activeMean),
     })), [rawRows, priorByEmail, activeMean]);
 
+  // Trend bars — one bucket per bar, each carrying the dates it covers so the
+  // bar can name them on hover. `active` is counted, not summed: see
+  // distinctActors(). The rest are plain counts, so summing them is correct.
+  const buckets = useMemo(() => bucketDays(days), [days]);
+  const barSize = bucketSizeLabel(bucketSizeFor(days.length));
+  const trendOf = (value: (bucket: UsageDay[]) => number): TrendPoint[] =>
+    buckets.map(b => {
+      const from = usageDayLabel(b[0].dayOffset, logs);
+      const to = usageDayLabel(b[b.length - 1].dayOffset, logs);
+      return {
+        label: from === to ? from : `${from} – ${to}`,
+        from,
+        to,
+        value: value(b),
+      };
+    });
+  const sumOf = (pick: (d: UsageDay) => number) =>
+    (b: UsageDay[]) => b.reduce((s, d) => s + pick(d), 0);
+
   const stats: UsageStat[] = [
-    { key: 'active', label: 'Active users', value: totals.activeUsers, icon: Users, hint: 'Members who did at least one thing in this period', deltaPct: usageDeltaPct(totals.activeUsers, priorTotals.activeUsers), trend: bucketize(days.map(d => d.activeUsers)) },
-    { key: 'actions', label: 'Actions', value: fmt(totals.actions), icon: Activity, hint: 'Everything done on the platform in this period', deltaPct: usageDeltaPct(totals.actions, priorTotals.actions), trend: bucketize(days.map(d => d.actions)) },
-    { key: 'ai', label: 'AI activity', value: fmt(totals.aiActivity), icon: Sparkles, hint: 'Questions asked, Concierge tool runs, and conversations started in this period', deltaPct: usageDeltaPct(totals.aiActivity, priorTotals.aiActivity), trend: bucketize(days.map(d => d.aiEvents + d.aiConversations)) },
-    { key: 'reports', label: 'Reports', value: fmt(totals.reports), icon: FileBarChart, hint: 'Reports and ATRs generated in this period', deltaPct: usageDeltaPct(totals.reports, priorTotals.reports), trend: bucketize(days.map(d => d.reports)) },
+    {
+      key: 'active', label: 'Active users', value: totals.activeUsers, icon: Users,
+      hint: 'Members who did at least one thing in this period',
+      unit: 'active', deltaPct: usageDeltaPct(totals.activeUsers, priorTotals.activeUsers),
+      trend: trendOf(b => distinctActors(b, users)),
+      valueCaption: `different people used the platform`,
+      // Worded so nobody adds the points up: this is the one metric where the
+      // curve is NOT a slice of the headline. Someone active in several buckets
+      // counts once in the headline but once per bucket here.
+      trendCaption: `people active in each ${barSize} · not a slice of ${totals.activeUsers}`,
+    },
+    {
+      key: 'actions', label: 'Actions', value: fmt(totals.actions), icon: Activity,
+      hint: 'Everything done on the platform in this period',
+      unit: 'actions', deltaPct: usageDeltaPct(totals.actions, priorTotals.actions),
+      trend: trendOf(sumOf(d => d.actions)),
+      valueCaption: `things done on the platform`,
+      trendCaption: `actions in each ${barSize} · adds up to ${fmt(totals.actions)}`,
+    },
+    {
+      key: 'ai', label: 'AI activity', value: fmt(totals.aiActivity), icon: Sparkles,
+      hint: 'Questions asked, Concierge tool runs, and conversations started in this period',
+      unit: 'AI actions', deltaPct: usageDeltaPct(totals.aiActivity, priorTotals.aiActivity),
+      trend: trendOf(sumOf(d => d.aiEvents + d.aiConversations)),
+      valueCaption: `questions, tool runs and chats`,
+      trendCaption: `AI actions in each ${barSize} · adds up to ${fmt(totals.aiActivity)}`,
+    },
+    {
+      key: 'reports', label: 'Reports', value: fmt(totals.reports), icon: FileBarChart,
+      hint: 'Reports and ATRs generated in this period',
+      unit: 'reports', deltaPct: usageDeltaPct(totals.reports, priorTotals.reports),
+      trend: trendOf(sumOf(d => d.reports)),
+      valueCaption: `reports and ATRs generated`,
+      trendCaption: `reports in each ${barSize} · adds up to ${fmt(totals.reports)}`,
+    },
   ];
 
   // Chart data — oldest → today; thin the axis labels so long ranges stay
@@ -356,7 +465,11 @@ export default function PlatformUsageView() {
     aiQueries: d.aiEvents + d.aiConversations,
     prior: priorDays[i]?.actions ?? null,
   }));
-  const tickInterval = range === 7 ? 0 : range === 30 ? 4 : 13;
+  // Roughly 6-7 axis labels whatever the window length (custom ranges included).
+  const tickInterval = range <= 8 ? 0 : Math.max(1, Math.ceil(range / 7) - 1);
+  // The AI chart's tallest day — printed next to it, so the curve's height means
+  // something instead of being a shape with no scale.
+  const aiPeak = Math.max(0, ...chartData.map(d => d.aiQueries));
 
   // Anomaly detection — days above mean + 2 standard deviations.
   const spikes = useMemo(() => usageSpikes(days), [days]);
@@ -371,7 +484,12 @@ export default function PlatformUsageView() {
     };
     const cur = sum(days);
     const prior = sum(priorDays);
+    // An area nobody touched in the window is not a ranking of zero — it is not
+    // a row. This also keeps 'Other' (the catch-all for a module string nothing
+    // maps yet) invisible until it actually catches something, at which point
+    // it appears and says so.
     return USAGE_MODULES.map(m => ({ module: m, count: cur[m], deltaPct: usageDeltaPct(cur[m], prior[m]) }))
+      .filter(m => m.count > 0)
       .sort((a, b) => b.count - a.count);
   }, [days, priorDays]);
   const moduleMax = Math.max(1, ...moduleTotals.map(m => m.count));
@@ -425,9 +543,12 @@ export default function PlatformUsageView() {
       });
     }
     if (seats.dormant.length > 0) {
+      const n = seats.dormant.length;
       steps.push({
         key: 'dormant',
-        text: `${seats.dormant.length} member${seats.dormant.length !== 1 ? 's' : ''} haven't signed in for 30+ days — they may not need a seat.`,
+        text: n === 1
+          ? "1 member hasn't signed in for 30+ days — that seat may not be needed."
+          : `${n} members haven't signed in for 30+ days — those seats may not be needed.`,
       });
     }
     if (typeof concentration === 'number' && concentration >= 60) {
@@ -511,9 +632,9 @@ export default function PlatformUsageView() {
     return counts;
   }, [rows]);
 
-  const drawerRow = drawerEmail ? rawRows.find(r => r.user.email === drawerEmail) ?? null : null;
-  const drawerTeamMembers = drawerTeam
-    ? rawRows.filter(r => (r.user.team === '—' ? 'Unassigned' : r.user.team) === drawerTeam)
+  const modalRow = modalEmail ? rawRows.find(r => r.user.email === modalEmail) ?? null : null;
+  const modalTeamMembers = modalTeam
+    ? rawRows.filter(r => (r.user.team === '—' ? 'Unassigned' : r.user.team) === modalTeam)
     : [];
 
   // Export exactly what's on screen (the filtered set for the active lens).
@@ -620,16 +741,27 @@ export default function PlatformUsageView() {
           animate={{ opacity: 1 }}
           transition={{ duration: prefersReduced ? 0 : 0.2, ease: [0.2, 0, 0, 1] }}
         >
-          {/* Range switch — applies to everything below. */}
-          <div className="mb-4 flex items-center gap-1.5">
-            {RANGES.map(r => (
-              <button key={r.days} className={presetChip(range === r.days)} onClick={() => setRange(r.days)} aria-pressed={range === r.days}>
-                {r.label}
-              </button>
-            ))}
+          {/* Period — applies to everything below. Presets plus a custom range,
+              using the platform's shared picker (Admin, Recents, Data Sources). */}
+          <div className="mb-4 flex items-center gap-2">
+            <DateFilterPicker
+              filter={filter}
+              open={dateOpen}
+              onToggle={() => setDateOpen(o => !o)}
+              onClose={() => setDateOpen(false)}
+              onApply={f => { setFilter(f); setDateOpen(false); }}
+              today={anchorDate}
+              triggerRounded="rounded-full"
+              triggerHeight="h-8"
+            />
+            <span className="text-[0.6875rem] text-ink-400">
+              {range > 0
+                ? <>{range} {range === 1 ? 'day' : 'days'} {endsAtAnchor ? 'up to' : 'ending'} {endLabel}</>
+                : <>No days in this range — the record set ends {anchorLabel}</>}
+            </span>
           </div>
 
-          <UsageKpiRow stats={stats} rangeDays={range} asOf={anchorLabel} />
+          <UsageKpiRow stats={stats} rangeDays={range} asOf={endLabel} endsAtAnchor={endsAtAnchor} />
 
           {/* Highlights — findings derived from the same aggregates below. */}
           <div className="mb-4">
@@ -669,6 +801,9 @@ export default function PlatformUsageView() {
               </HighlightCard>
             </div>
           </div>
+
+          {/* Adoption — is the licence earning its keep, and what is shelfware. */}
+          <UsageAdoption days={days} users={users} />
 
           {/* Per-section deep-dives — compact tiles, full detail opens in a modal */}
           <div className="mb-3">
@@ -746,7 +881,7 @@ export default function PlatformUsageView() {
                   return (
                     <button
                       key={module}
-                      onClick={() => setDrawerModule(module)}
+                      onClick={() => setModalModule(module)}
                       className="group w-full text-left -mx-2 px-2 py-1.5 rounded-md hover:bg-canvas transition-colors cursor-pointer"
                     >
                       <div className="flex items-center justify-between mb-1">
@@ -776,57 +911,101 @@ export default function PlatformUsageView() {
             <WidgetCard
               icon={Sparkles}
               title="AI usage"
-              subtitle="How much the team uses Ask IRA and the AI tools"
+              subtitle="Ask IRA is the chat; the AI Concierge is the toolkit. Counted separately."
               className="lg:col-span-2"
             >
-              <div className="flex flex-wrap items-start gap-6">
-                <div className="min-w-[240px]">
-                  <div className="flex items-center gap-6">
-                    <div title="Questions sent to Ask IRA, from the audit log">
-                      <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(questionsAsked)}</div>
-                      <div className="text-[0.6875rem] text-ink-500 mt-1">Questions asked</div>
+              <div className="flex flex-col gap-5 h-full">
+                {/* The two AI surfaces, kept apart — a question you type and a
+                    tool you run are different products and shouldn't be added up. */}
+                <div className="flex flex-wrap gap-x-8 gap-y-4">
+                  <div>
+                    <div className="text-[0.625rem] font-semibold text-ink-400 uppercase tracking-[0.14em] mb-2">Ask IRA</div>
+                    <div className="flex items-center gap-6">
+                      <div title="Questions sent to Ask IRA, from the audit log">
+                        <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(questionsAsked)}</div>
+                        <div className="text-[0.6875rem] text-ink-500 mt-1">Questions asked</div>
+                      </div>
+                      <div title="Saved conversations in chat history">
+                        <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(totals.aiConversations)}</div>
+                        <div className="text-[0.6875rem] text-ink-500 mt-1">Conversations</div>
+                      </div>
                     </div>
-                    <div title="AI Concierge tool runs, from the audit log">
-                      <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(toolRuns)}</div>
-                      <div className="text-[0.6875rem] text-ink-500 mt-1">Tool runs</div>
+                  </div>
+
+                  <div className="pl-8 border-l border-canvas-border">
+                    <div className="text-[0.625rem] font-semibold text-ink-400 uppercase tracking-[0.14em] mb-2">AI Concierge</div>
+                    <div className="flex items-center gap-6">
+                      <div title="AI Concierge tool runs, from the audit log">
+                        <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(toolRuns)}</div>
+                        <div className="text-[0.6875rem] text-ink-500 mt-1">Tool runs</div>
+                      </div>
                     </div>
-                    <div title="Saved conversations in chat history">
-                      <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(totals.aiConversations)}</div>
-                      <div className="text-[0.6875rem] text-ink-500 mt-1">Conversations</div>
-                    </div>
-                    <div title="Share of active members who asked the AI at least one question in this period">
-                      <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{aiAdoption}%</div>
-                      <div className="text-[0.6875rem] text-ink-500 mt-1">Members using AI</div>
+                  </div>
+
+                  <div className="pl-8 border-l border-canvas-border">
+                    <div className="text-[0.625rem] font-semibold text-ink-400 uppercase tracking-[0.14em] mb-2">Between them</div>
+                    <div className="flex items-center gap-6">
+                      <div title="Share of active members who used Ask IRA or a Concierge tool at least once in this period">
+                        <div className="text-[1.375rem] font-bold text-ink-900 tabular-nums leading-none">{aiAdoption}%</div>
+                        <div className="text-[0.6875rem] text-ink-500 mt-1">Members using AI</div>
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div className="flex-1 min-w-[180px] self-end">
-                  <ResponsiveContainer width="100%" height={96}>
-                    <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="usageAiSpark" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#A366F0" stopOpacity={0.25} />
-                          <stop offset="100%" stopColor="#A366F0" stopOpacity={0.03} />
-                        </linearGradient>
-                      </defs>
-                      <Area type="monotone" dataKey="aiQueries" stroke="#A366F0" strokeWidth={1.5} fill="url(#usageAiSpark)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-                {topAiUsers.length > 0 && (
-                  <div className="min-w-[170px]">
-                    <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2.5">Top AI users</div>
-                    <div className="space-y-2">
-                      {topAiUsers.map(u => (
-                        <div key={u.email} className="flex items-center gap-2">
-                          <InitialsAvatar name={u.name} size={22} />
-                          <span className="text-[0.75rem] font-medium text-ink-800 truncate">{u.name}</span>
-                          <span className="ml-auto text-[0.75rem] text-ink-500 tabular-nums">{fmt(u.aiQueries)}</span>
-                        </div>
-                      ))}
+
+                <div className="flex flex-wrap gap-6 flex-1 min-h-0">
+                  {/* The chart used to be an unlabelled squiggle: no title, no
+                      dates, no scale, no tooltip. It now says what it plots, where
+                      the window starts and ends, and what its tallest point is worth. */}
+                  <div className="flex-1 min-w-[260px] flex flex-col">
+                    <div className="flex items-baseline justify-between mb-1">
+                      <span className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em]">AI actions per day</span>
+                      <span className="text-[0.625rem] text-ink-400 tabular-nums">
+                        peak <span className="font-semibold text-ink-600">{fmt(aiPeak)}</span>
+                      </span>
                     </div>
+                    <ResponsiveContainer width="100%" height={112}>
+                      <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="usageAiSpark" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#A366F0" stopOpacity={0.25} />
+                            <stop offset="100%" stopColor="#A366F0" stopOpacity={0.03} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#EEEEF1" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#6B5D82' }} tickLine={false} axisLine={{ stroke: '#E5E7EB' }} interval={tickInterval} />
+                        <YAxis tick={{ fontSize: 9, fill: '#6B5D82' }} tickLine={false} axisLine={false} width={40} allowDecimals={false} />
+                        <Tooltip
+                          contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                          cursor={{ stroke: 'rgba(163,102,240,0.35)' }}
+                          formatter={(v) => [fmt(Number(v ?? 0)), 'AI actions']}
+                        />
+                        <Area type="monotone" dataKey="aiQueries" name="AI actions" stroke="#A366F0" strokeWidth={1.5} fill="url(#usageAiSpark)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                    <p className="mt-1 text-[0.625rem] text-ink-400">
+                      Questions asked, Concierge tool runs and conversations started, each day.
+                    </p>
                   </div>
-                )}
+
+                  {topAiUsers.length > 0 && (
+                    <div className="min-w-[190px]">
+                      <div className="flex items-baseline justify-between mb-2.5">
+                        <span className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em]">Top AI users</span>
+                        <span className="text-[0.625rem] text-ink-400">AI actions</span>
+                      </div>
+                      <div className="space-y-2">
+                        {topAiUsers.map(u => (
+                          <div key={u.email} className="flex items-center gap-2">
+                            <InitialsAvatar name={u.name} size={22} />
+                            <span className="text-[0.75rem] font-medium text-ink-800 truncate">{u.name}</span>
+                            <span className="ml-auto text-[0.75rem] font-semibold text-ink-700 tabular-nums">{fmt(u.aiQueries)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </WidgetCard>
 
@@ -947,7 +1126,7 @@ export default function PlatformUsageView() {
                             <span className="ml-1.5 inline-flex items-center px-1.5 h-4 rounded border border-canvas-border bg-canvas text-[0.5625rem] font-semibold text-ink-500 align-middle">{cr.kindLabel}</span>
                           </div>
                           <span className={`shrink-0 text-[0.6875rem] font-mono tabular-nums ${cr.live ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>
-                            {cr.dayOffset === 0 ? `Today ${cr.time}` : cr.dayOffset === 1 ? 'Yesterday' : `${cr.dayOffset}d ago`}
+                            {whenLabel(cr)}
                           </span>
                         </div>
                       ))}
@@ -1000,7 +1179,7 @@ export default function PlatformUsageView() {
                             <span className="text-[0.75rem] text-ink-700"> {rn.item}</span>
                           </div>
                           <span className={`shrink-0 text-[0.6875rem] font-mono tabular-nums ${rn.live ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>
-                            {rn.dayOffset === 0 ? `Today ${rn.time}` : rn.dayOffset === 1 ? 'Yesterday' : `${rn.dayOffset}d ago`}
+                            {whenLabel(rn)}
                           </span>
                         </div>
                       ))}
@@ -1050,7 +1229,7 @@ export default function PlatformUsageView() {
                             <span className="text-[0.75rem] text-ink-700"> {sh.item}</span>
                           </div>
                           <span className={`shrink-0 text-[0.6875rem] font-mono tabular-nums ${sh.live ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>
-                            {sh.dayOffset === 0 ? `Today ${sh.time}` : sh.dayOffset === 1 ? 'Yesterday' : `${sh.dayOffset}d ago`}
+                            {whenLabel(sh)}
                           </span>
                         </div>
                       ))}
@@ -1112,7 +1291,7 @@ export default function PlatformUsageView() {
                             <span className="ml-1.5 inline-flex items-center px-1.5 h-4 rounded border border-canvas-border bg-canvas text-[0.5625rem] font-semibold text-ink-500 align-middle">{dl.format}</span>
                           </div>
                           <span className={`shrink-0 text-[0.6875rem] font-mono tabular-nums ${dl.live ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>
-                            {dl.dayOffset === 0 ? `Today ${dl.time}` : dl.dayOffset === 1 ? 'Yesterday' : `${dl.dayOffset}d ago`}
+                            {whenLabel(dl)}
                           </span>
                         </div>
                       ))}
@@ -1169,7 +1348,7 @@ export default function PlatformUsageView() {
               pageSize={10}
               hideResultCount
               animateRows={false}
-              onRowClick={(r) => setDrawerEmail(r.email as string)}
+              onRowClick={(r) => setModalEmail(r.email as string)}
               headerExtra={toolbar}
               emptyContent={
                 <EmptyState
@@ -1191,7 +1370,7 @@ export default function PlatformUsageView() {
               pageSize={10}
               hideResultCount
               animateRows={false}
-              onRowClick={(r) => setDrawerTeam(r.team as string)}
+              onRowClick={(r) => setModalTeam(r.team as string)}
               headerExtra={toolbar}
               emptyContent={
                 <EmptyState
@@ -1207,36 +1386,36 @@ export default function PlatformUsageView() {
       </div>
 
       <AnimatePresence>
-        {drawerRow && (
-          <UserUsageDrawer
-            key={`user-${drawerRow.user.email}`}
-            row={drawerRow}
+        {modalRow && (
+          <UserUsageModal
+            key={`user-${modalRow.user.email}`}
+            row={modalRow}
             days={days}
             logs={logs}
             rangeDays={range}
-            segment={segmentFor(drawerRow, activeMean)}
-            onClose={() => setDrawerEmail(null)}
+            segment={segmentFor(modalRow, activeMean)}
+            onClose={() => setModalEmail(null)}
           />
         )}
-        {drawerModule && (
-          <ModuleUsageDrawer
-            key={`module-${drawerModule}`}
-            module={drawerModule}
+        {modalModule && (
+          <ModuleUsageModal
+            key={`module-${modalModule}`}
+            module={modalModule}
             days={days}
             priorDays={priorDays}
             totalActions={totals.actions}
             rows={rawRows}
             rangeDays={range}
-            onClose={() => setDrawerModule(null)}
+            onClose={() => setModalModule(null)}
           />
         )}
-        {drawerTeam && (
-          <TeamUsageDrawer
-            key={`team-${drawerTeam}`}
-            team={drawerTeam}
-            members={drawerTeamMembers}
+        {modalTeam && (
+          <TeamUsageModal
+            key={`team-${modalTeam}`}
+            team={modalTeam}
+            members={modalTeamMembers}
             rangeDays={range}
-            onClose={() => setDrawerTeam(null)}
+            onClose={() => setModalTeam(null)}
           />
         )}
       </AnimatePresence>

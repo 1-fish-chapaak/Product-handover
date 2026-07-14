@@ -1,157 +1,46 @@
 import { type ElementType } from 'react';
 import { motion } from 'motion/react';
 import {
-  Table2, Workflow, ShieldCheck, BarChart3,
+  Table2, ShieldCheck, BarChart3,
   Image as ImageIcon, Mic, HeartPulse, TableProperties,
 } from 'lucide-react';
 import type { View } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
 import FloatingLines from '../shared/FloatingLines';
+import { CONCIERGE_TOOLS, type ConciergeTool } from '../../data/conciergeTools';
 
 interface Props {
   setView: (v: View) => void;
   onLaunchWorkflowBuilder?: (prompt: string) => void;
 }
 
-interface ToolTag {
-  label: string;
-  /** Legacy per-tag color — retained for reference; tags now render as a
-   *  uniform brand chip (bg-brand-50 / text-brand-700). */
-  color: string;
-}
-
-interface Tool {
-  id: string;
+interface Tool extends ConciergeTool {
   icon: ElementType;
   /** Pastel icon-chip accent — chip background + icon color, per tool. */
   accent: { chip: string; icon: string };
-  title: string;
-  description: string;
-  tags: ToolTag[];
-  view?: string;
   isWorkflowLauncher?: boolean;
   /** No tool screen yet — clicking shows a "coming soon" toast. */
   comingSoon?: boolean;
 }
 
-const tools: Tool[] = [
-  {
-    id: 'racm-generator',
-    icon: TableProperties,
-    // #1 icon-chip unify → revert to per-tool pastel: { chip: 'bg-violet-100', icon: 'text-violet-600' }
-    accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
-    title: 'RACM Generator',
-    description: 'Generate Risk & Control Matrices from SOP and process documents',
-    tags: [
-      { label: 'RACM', color: 'bg-violet-100 text-violet-700' },
-      { label: 'Risk', color: 'bg-risk-50 text-risk-700' },
-      { label: 'SOP', color: 'bg-sky-100 text-sky-700' },
-    ],
-    view: 'ai-concierge-racm',
-  },
-  {
-    id: 'forensics',
-    icon: ShieldCheck,
-    // #1 icon-chip unify → revert to per-tool pastel: { chip: 'bg-rose-100', icon: 'text-rose-600' }
-    accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
-    title: 'Document Forensics',
-    description: 'Detect forgery, tampering, and AI-generated content in documents',
-    tags: [
-      { label: 'Compliance', color: 'bg-risk-50 text-risk-700' },
-      { label: 'Detection', color: 'bg-mitigated-50 text-mitigated-700' },
-    ],
-    view: 'ai-concierge-forensics',
-  },
-  {
-    id: 'table',
-    icon: Table2,
-    // #1 icon-chip unify → revert to per-tool pastel: { chip: 'bg-sky-100', icon: 'text-sky-600' }
-    accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
-    title: 'Table Extractor',
-    description: 'Extract structured tables from PDFs and images with AI',
-    tags: [
-      { label: 'Data', color: 'bg-sky-100 text-sky-700' },
-      { label: 'Extraction', color: 'bg-teal-100 text-teal-700' },
-    ],
-    view: 'ai-concierge-table-extractor',
-  },
-  // Workflow Builder tile commented out of the AI Concierge homepage (per request).
-  // Workflow building is still reachable inside Ask IRA chat; the launcher wiring
-  // (isWorkflowLauncher / onLaunchWorkflowBuilder) is kept for an easy restore.
-  /*
-  {
-    id: 'workflow-builder',
-    icon: Workflow,
-    accent: { chip: 'bg-fuchsia-100', icon: 'text-fuchsia-600' },
-    title: 'Workflow Builder',
-    description: 'Design a custom audit workflow from a prompt: upload data, map columns, run.',
-    tags: [
-      { label: 'Workflow', color: 'bg-violet-100 text-violet-700' },
-      { label: 'Audit', color: 'bg-indigo-100 text-indigo-700' },
-      { label: 'Builder', color: 'bg-fuchsia-100 text-fuchsia-700' },
-    ],
-    // After the ChatView convergence, the workflow builder lives inside
-    // the chat surface. Click routes through onLaunchWorkflowBuilder('').
-    isWorkflowLauncher: true,
-  },
-  */
-  {
-    id: 'insights-anomaly',
-    icon: BarChart3,
-    // #1 icon-chip unify → revert to per-tool pastel: { chip: 'bg-indigo-100', icon: 'text-indigo-600' }
-    accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
-    title: 'Insights & Anomaly Report',
-    description: 'Automated statistical profiling, anomaly detection, and heuristic reports',
-    tags: [
-      { label: 'EDA', color: 'bg-sky-100 text-sky-700' },
-      { label: 'Analytics', color: 'bg-indigo-100 text-indigo-700' },
-      { label: 'Data', color: 'bg-teal-100 text-teal-700' },
-    ],
-    view: 'ai-concierge-insights',
-  },
-  {
-    id: 'image-analytics',
-    icon: ImageIcon,
-    // #1 icon-chip unify → revert to per-tool pastel: { chip: 'bg-teal-100', icon: 'text-teal-600' }
-    accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
-    title: 'Image Analytics',
-    description: 'AI-powered image chat, comparison, and compliance auditing',
-    tags: [
-      { label: 'Image', color: 'bg-violet-100 text-violet-700' },
-      { label: 'Audit', color: 'bg-indigo-100 text-indigo-700' },
-      { label: 'Compare', color: 'bg-sky-100 text-sky-700' },
-    ],
-    view: 'ai-concierge-image',
-  },
-  {
-    id: 'speech-auditor',
-    icon: Mic,
-    // #1 icon-chip unify → revert to per-tool pastel: { chip: 'bg-amber-100', icon: 'text-amber-600' }
-    accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
-    title: 'Speech Auditor',
-    description: 'AI-powered call recording analysis with transcription, sentiment, and audit reports',
-    tags: [
-      { label: 'Speech', color: 'bg-fuchsia-100 text-fuchsia-700' },
-      { label: 'Audit', color: 'bg-indigo-100 text-indigo-700' },
-      { label: 'Sentiment', color: 'bg-teal-100 text-teal-700' },
-    ],
-    view: 'ai-concierge-speech',
-  },
-  {
-    id: 'medical-report-reader',
-    icon: HeartPulse,
-    // #1 icon-chip unify → revert to per-tool pastel: { chip: 'bg-emerald-100', icon: 'text-emerald-600' }
-    accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
-    title: 'Medical Report Reader',
-    description: 'AI-powered forensic medical report analysis for insurance fraud detection',
-    tags: [
-      { label: 'Medical', color: 'bg-teal-100 text-teal-700' },
-      { label: 'Forensics', color: 'bg-risk-50 text-risk-700' },
-      { label: 'Insurance', color: 'bg-sky-100 text-sky-700' },
-    ],
-    view: 'ai-concierge-medical',
-  },
-];
+/** The only per-tool thing this view owns. Every fact about a tool — title,
+ *  description, tags, destination — comes from the catalog in data/. */
+const TOOL_ICONS: Record<string, ElementType> = {
+  'racm-generator': TableProperties,
+  'forensics': ShieldCheck,
+  'table': Table2,
+  'insights-anomaly': BarChart3,
+  'image-analytics': ImageIcon,
+  'speech-auditor': Mic,
+  'medical-report-reader': HeartPulse,
+};
+
+const tools: Tool[] = CONCIERGE_TOOLS.map(t => ({
+  ...t,
+  icon: TOOL_ICONS[t.id],
+  // #1 icon-chip unify → per-tool pastels were reverted to one brand chip.
+  accent: { chip: 'bg-brand-50', icon: 'text-brand-600' },
+}));
 
 // Concierge tool card — flat editorial (DESIGN.md §5/§7.17): canvas-elevated
 // sheet, 1px hairline that tints brand-200 on hover, flat at rest with a single

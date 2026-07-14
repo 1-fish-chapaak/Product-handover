@@ -569,7 +569,7 @@ function AppInner() {
                 ...BUILTIN_DASHBOARDS,
                 ...SHARED_DASHBOARD_OPTIONS,
               ]}
-              availableReports={GENERATED_REPORTS.map(r => ({ id: r.id, name: r.name, status: r.status as 'draft' | 'final', generatedBy: r.generatedBy }))}
+              availableReports={GENERATED_REPORTS.map(r => ({ id: r.id, name: r.name, generatedBy: r.generatedBy }))}
               onAddResultToDashboard={(payload) => {
                 if (payload.isNew && payload.newName) {
                   createDashboard({

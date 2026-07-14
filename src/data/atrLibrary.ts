@@ -13,7 +13,8 @@ export interface AtrLibraryReport {
   tag: 'Internal Audit';
   generatedBy: string;
   generatedAt: string;
-  status: 'final' | 'draft' | 'frozen';
+  /** Reports have no draft state — an ATR is either issued or locked. */
+  status: 'final' | 'frozen';
   pages: number;
   queries: number;
   /** Audit area used to group/segregate. */
@@ -32,7 +33,7 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
     name: 'FY26 Q1 — Procure-to-Pay Controls ATR',
     tag: 'Internal Audit',
     generatedBy: 'Karan Mehta',
-    generatedAt: 'Mar 22, 2026, 16:40',
+    generatedAt: 'Apr 16, 2026, 16:40',
     status: 'final',
     pages: 14,
     queries: 3,
@@ -90,8 +91,8 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
     name: 'FY26 Q1 — IT General Controls ATR',
     tag: 'Internal Audit',
     generatedBy: 'Priya Mehta',
-    generatedAt: 'Mar 18, 2026, 11:05',
-    status: 'draft',
+    generatedAt: 'Mar 14, 2026, 11:05',
+    status: 'final',
     pages: 11,
     queries: 2,
     area: 'IT General Controls',
@@ -148,7 +149,7 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
     name: 'FY26 — Order-to-Cash Revenue ATR',
     tag: 'Internal Audit',
     generatedBy: 'Neha Joshi',
-    generatedAt: 'Feb 28, 2026, 09:20',
+    generatedAt: 'Feb 3, 2026, 09:20',
     status: 'final',
     pages: 9,
     queries: 2,

@@ -1,15 +1,15 @@
 /**
- * Platform Usage — member drill-down drawer.
+ * Platform Usage — member drill-down modal.
  *
  * Read-only detail for one member: identity, activity trend over the selected
  * range, module mix, AI stats, and their real audit-log events from the
  * current session. All numbers derive from the same row the table shows, so
- * the drawer always reconciles with the list. Managing the person happens in
+ * the modal always reconciles with the list. Managing the person happens in
  * Administration (footer link) — never here.
  */
 
 import { ResponsiveContainer, AreaChart, Area } from 'recharts';
-import Drawer from '../shared/Drawer';
+import Modal from '../shared/Modal';
 import { StatusBadge, ActionBadge } from '../shared/StatusBadge';
 import { InitialsAvatar } from '../admin/AdminPrimitives';
 import { getRole } from '../../data/rbac';
@@ -25,7 +25,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2.5">{children}</div>;
 }
 
-export default function UserUsageDrawer({
+export default function UserUsageModal({
   row, days, logs, rangeDays, segment, onClose,
 }: {
   row: UserUsageRow;
@@ -44,10 +44,10 @@ export default function UserUsageDrawer({
   const sessionEvents = liveLogsToday(logs).filter(l => l.user === user.name).slice(0, 5);
 
   return (
-    <Drawer
+    <Modal
       title={user.name}
       subtitle={user.email}
-      width="max-w-[520px]"
+      width="max-w-[560px]"
       onClose={onClose}
     >
       {/* Identity */}
@@ -92,12 +92,12 @@ export default function UserUsageDrawer({
           <ResponsiveContainer width="100%" height={88}>
             <AreaChart data={series} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
               <defs>
-                <linearGradient id="userDrawerFill" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="userModalFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#6A12CD" stopOpacity={0.2} />
                   <stop offset="100%" stopColor="#6A12CD" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <Area type="monotone" dataKey="actions" stroke="#6A12CD" strokeWidth={1.5} fill="url(#userDrawerFill)" />
+              <Area type="monotone" dataKey="actions" stroke="#6A12CD" strokeWidth={1.5} fill="url(#userModalFill)" />
             </AreaChart>
           </ResponsiveContainer>
         ) : (
@@ -144,6 +144,6 @@ export default function UserUsageDrawer({
           <p className="text-[0.8125rem] text-ink-400">No activity in this session yet.</p>
         )}
       </div>
-    </Drawer>
+    </Modal>
   );
 }

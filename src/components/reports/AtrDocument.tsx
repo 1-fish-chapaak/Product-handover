@@ -1,7 +1,8 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { motion } from 'motion/react';
+import ConfirmationModal from '../shared/ConfirmationModal';
 import {
-  Calendar, Lightbulb, PenLine, Eye,
+  Calendar, Lightbulb, PenLine, Eye, Trash2,
   ClipboardList, AlertTriangle, ListChecks, CircleDot, CheckCircle2, Clock,
 } from 'lucide-react';
 import type {
@@ -10,7 +11,7 @@ import type {
 } from './atrTypes';
 import { computeExecSummary } from './atrTemplate';
 import { ReportNumberedHeading, ReportBrandBanner, ReportKpiTiles } from './ReportDocumentChrome';
-import { ATR_SECTION_ORDER, type AtrSectionKey } from './atrSections';
+import { ATR_SECTION_ORDER, ATR_SECTION_LABEL, type AtrSectionKey } from './atrSections';
 
 // ─── Token maps (theme defines base / -50 / -700 only for semantic colors) ───
 const OBS_STATUS_PILL: Record<AtrObservationStatus, { cls: string; dot: string }> = {
@@ -107,11 +108,13 @@ export default function AtrDocument({
   meta, observations, insights = [], headerActions, maxWidthClass = 'max-w-[840px]',
   editable, onMetaChange, onObservationsChange, onInsightsChange,
   sectionOrder = ATR_SECTION_ORDER, hiddenSections = [],
-  renderObservationActions,
+  renderObservationActions, version, onDeleteSection,
 }: {
   meta: AtrMeta;
   observations: AtrObservation[];
   insights?: AtrInsight[];
+  /** Current version number of the saved ATR — shown in the banner byline. */
+  version?: number;
   /** Optional CTAs rendered in the banner top-right (e.g. on the saved report). */
   headerActions?: React.ReactNode;
   /** Width of the document surface. */
@@ -127,12 +130,21 @@ export default function AtrDocument({
   /** Optional per-observation action slot (e.g. a "Manage Exceptions" CTA),
    *  rendered in each observation card header. Receives the 0-based index. */
   renderObservationActions?: (index: number) => React.ReactNode;
+  /** Edit-mode: remove a section from the report. Enables the per-section
+   *  delete control on each section heading. */
+  onDeleteSection?: (key: AtrSectionKey) => void;
 }) {
   const ex = computeExecSummary(observations);
 
   const setMeta = (key: keyof AtrMeta, v: string) => onMetaChange?.({ ...meta, [key]: v || undefined });
   const setObs = (i: number, next: AtrObservation) => onObservationsChange?.(observations.map((o, idx) => (idx === i ? next : o)));
   const setInsight = (i: number, next: AtrInsight) => onInsightsChange?.(insights.map((ins, idx) => (idx === i ? next : ins)));
+  const removeInsight = (i: number) => onInsightsChange?.(insights.filter((_, idx) => idx !== i));
+  const removeObs = (i: number) => onObservationsChange?.(observations.filter((_, idx) => idx !== i));
+
+  // Every delete goes through a confirm dialog. `pendingDelete.run` fires on confirm.
+  const [pendingDelete, setPendingDelete] = useState<{ title: string; description: string; run: () => void } | null>(null);
+  const confirmDelete = (title: string, description: string, run: () => void) => setPendingDelete({ title, description, run });
 
   // Executive Summary — exactly six KPIs. Overdue observations fold into Open.
   const totalExceptions = meta.totalExceptions ?? ex.totalExceptions;
@@ -208,7 +220,7 @@ export default function AtrDocument({
         <ReportNumberedHeading n={n} title="Observation Details" subtitle="Issue, risk, management action plan, evidence and verification" />
         <div className="space-y-5">
           {observations.map((o, i) => (
-            <ObservationCard key={i} index={i + 1} obs={o} editable={editable} onChange={next => setObs(i, next)} actions={renderObservationActions?.(i)} />
+            <ObservationCard key={i} index={i + 1} obs={o} editable={editable} onChange={next => setObs(i, next)} onDelete={() => confirmDelete('Delete observation?', `This removes “${o.title || `Observation ${i + 1}`}” and its action plans from the report. You can undo by cancelling before you save.`, () => removeObs(i))} actions={renderObservationActions?.(i)} />
           ))}
         </div>
       </>
@@ -220,10 +232,21 @@ export default function AtrDocument({
           {insights.map((ins, i) => (
             <div key={i} className="flex gap-3.5 bg-canvas-elevated border border-canvas-border rounded-lg p-4 hover:border-brand-200 transition-colors">
               <span className="shrink-0 mt-0.5 w-6 h-6 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center"><Lightbulb size={13} /></span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="text-[0.9375rem] font-semibold text-ink-900 mb-1 leading-snug"><EditableText value={ins.title} editable={editable} onCommit={v => setInsight(i, { ...ins, title: v })} /></div>
                 <p className="text-[1rem] text-ink-700 leading-relaxed"><EditableText value={ins.body} editable={editable} multiline onCommit={v => setInsight(i, { ...ins, body: v })} /></p>
               </div>
+              {editable && (
+                <button
+                  type="button"
+                  onClick={() => confirmDelete('Delete insight?', `This removes “${ins.title || 'this insight'}” from Key Insights & Recommendations. You can undo by cancelling before you save.`, () => removeInsight(i))}
+                  title="Delete insight"
+                  aria-label="Delete insight"
+                  className="shrink-0 self-start w-7 h-7 rounded-sm inline-flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer print:hidden"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -263,6 +286,7 @@ export default function AtrDocument({
   const visible = sectionOrder.filter(k => !hiddenSections.includes(k) && !(k === 'insights' && insights.length === 0));
 
   return (
+    <>
     <article className={`report-printable ${maxWidthClass} mx-auto bg-canvas-elevated border border-canvas-border rounded-lg overflow-hidden`}>
       {editable && <style>{`.atr-ed:empty:before{content:attr(data-ph);color:#C2B9CB;}`}</style>}
 
@@ -279,6 +303,7 @@ export default function AtrDocument({
           const parts = [
             meta.preparedBy,
             meta.generatedOn,
+            version != null ? `v${version}` : null,
             `${ex.totalObservations} ${ex.totalObservations === 1 ? 'observation' : 'observations'}`,
           ].filter(Boolean);
           if (parts.length === 0) return null;
@@ -322,16 +347,38 @@ export default function AtrDocument({
         const last = i === visible.length - 1;
         const heading = bodies[key](i + 1);
         return (
-          <section key={key} id={SECTION_ID[key]} className={`px-9 ${last ? 'pb-9' : 'pb-6'} ${first ? 'pt-7' : 'pt-6'} scroll-mt-20`}>
+          <section key={key} id={SECTION_ID[key]} className={`relative group/sec px-9 ${last ? 'pb-9' : 'pb-6'} ${first ? 'pt-7' : 'pt-6'} scroll-mt-20`}>
+            {editable && onDeleteSection && (
+              <button
+                type="button"
+                onClick={() => confirmDelete(`Delete ${ATR_SECTION_LABEL[key]}?`, `This removes the “${ATR_SECTION_LABEL[key]}” section from this report. You can undo by cancelling before you save.`, () => onDeleteSection(key))}
+                title={`Delete ${ATR_SECTION_LABEL[key]}`}
+                aria-label={`Delete ${ATR_SECTION_LABEL[key]} section`}
+                className="absolute right-9 top-6 z-10 inline-flex items-center gap-1.5 h-7 pl-2 pr-2.5 rounded-sm border border-risk-200 bg-white text-risk-700 text-[0.6875rem] font-semibold hover:bg-risk-50 hover:border-risk-300 transition-colors cursor-pointer print:hidden shadow-sm"
+              >
+                <Trash2 size={13} /> Delete
+              </button>
+            )}
             {heading}
           </section>
         );
       })}
     </article>
+    <ConfirmationModal
+      open={pendingDelete !== null}
+      title={pendingDelete?.title ?? ''}
+      description={pendingDelete?.description}
+      confirmLabel="Delete"
+      cancelLabel="Cancel"
+      tone="destructive"
+      onConfirm={() => { pendingDelete?.run(); setPendingDelete(null); }}
+      onClose={() => setPendingDelete(null)}
+    />
+    </>
   );
 }
 
-function ObservationCard({ index, obs, editable, onChange, actions }: { index: number; obs: AtrObservation; editable?: boolean; onChange?: (next: AtrObservation) => void; actions?: React.ReactNode }) {
+function ObservationCard({ index, obs, editable, onChange, onDelete, actions }: { index: number; obs: AtrObservation; editable?: boolean; onChange?: (next: AtrObservation) => void; onDelete?: () => void; actions?: React.ReactNode }) {
   const setPlan = (i: number, next: AtrActionPlan) => onChange?.({ ...obs, actionPlans: obs.actionPlans.map((p, idx) => (idx === i ? next : p)) });
   return (
     <div className="border border-canvas-border rounded-lg overflow-hidden">
@@ -354,6 +401,17 @@ function ObservationCard({ index, obs, editable, onChange, actions }: { index: n
             );
           })()}
           {actions && <span className="print:hidden">{actions}</span>}
+          {editable && onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              title="Delete observation"
+              aria-label="Delete observation"
+              className="shrink-0 inline-flex items-center gap-1.5 h-7 pl-2 pr-2.5 rounded-sm border border-risk-200 bg-white text-risk-700 text-[0.6875rem] font-semibold hover:bg-risk-50 hover:border-risk-300 transition-colors cursor-pointer print:hidden"
+            >
+              <Trash2 size={13} /> Delete
+            </button>
+          )}
         </div>
       </div>
 

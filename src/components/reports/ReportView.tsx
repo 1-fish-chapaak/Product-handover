@@ -39,7 +39,6 @@ import {
 } from './reportShared';
 import QueryWidgetModal from './QueryWidgetModal';
 import { useToast } from '../shared/Toast';
-import { useAuditLog } from '../../context/AdminDataContext';
 import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
 import { KpiCountUp } from '../shared/KpiTile';
 import { ReportBrandBanner, ReportNumberedHeading, ReportKpiTiles, ReportSignoffBlock } from './ReportDocumentChrome';
@@ -125,7 +124,7 @@ function GenerateCasesGate({ queryId, phase, onPhaseChange }: { queryId: string;
 }
 
 
-function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddComment, title }: { query: QueryShape; index: number; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void; title?: string }) {
+function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddComment, title }: { query: QueryShape; index: number; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void; title?: string }) {
   const { addToast } = useToast();
   const { can } = useCan();
   const safeQuery = query ?? { id: '', risk: '', severity: '', title: '', addedBy: '', kpis: [], summary: '', findings: [], observations: [], answer: '', chartData: [] } as QueryShape;
@@ -518,6 +517,30 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
 }
 
 
+// Comment attachments store only a filename (the composer keeps the name, not
+// the bytes), so there's no real file to serve. Open a clean placeholder
+// document in a new tab keyed to the file name.
+function openAttachment(name: string) {
+  const safe = (name || 'Attachment').replace(/[<>&"]/g, '');
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${safe}</title><style>body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-family:Inter,system-ui,sans-serif;background:#faf9fc;color:#1e1b2e}.doc{font-size:15px;font-weight:600}.hint{font-size:13px;color:#8b8698}.tag{font:600 11px/1 ui-monospace,monospace;color:#6d28d9;background:#f3effc;padding:4px 10px;border-radius:999px}</style></head><body><span class="tag">ATTACHMENT</span><div class="doc">${safe}</div><div class="hint">Preview isn't available in this prototype.</div></body></html>`;
+  window.open('data:text/html;charset=utf-8,' + encodeURIComponent(html), '_blank', 'noopener,noreferrer');
+}
+
+// Downloads the attachment under its own name. The prototype has no stored
+// bytes, so we save a small placeholder file keyed to the name.
+function downloadAttachment(name: string) {
+  const safe = name || 'attachment';
+  const blob = new Blob([`${safe}\n\nPlaceholder file — this prototype stores the attachment name, not its contents.`], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = safe;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ─── Query side-sheet — Comments ───
 function CommentDrawer({
   query,
@@ -527,11 +550,11 @@ function CommentDrawer({
 }: {
   query: QueryShape;
   comments: QueryComment[];
-  onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void;
+  onAddComment?: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void;
   onClose: () => void;
 }) {
   const [text, setText] = useState('');
-  const [attachment, setAttachment] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<string[]>([]);
   const [isPosting, setIsPosting] = useState(false);
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -560,9 +583,9 @@ function CommentDrawer({
     if (!body || isPosting) return;
     setIsPosting(true);
     // Optimistic — clear inputs immediately so the new entry appears posted.
-    onAddComment?.(query.id, query.title, body, attachment ?? undefined);
+    onAddComment?.(query.id, query.title, body, attachments.length ? attachments : undefined);
     setText('');
-    setAttachment(null);
+    setAttachments([]);
     // Release the busy state on the next frame; the parent state update has
     // already flushed by then.
     window.setTimeout(() => setIsPosting(false), 120);
@@ -590,7 +613,7 @@ function CommentDrawer({
         aria-label="Comments"
       >
         {/* Header — icon tile + title + count, matching the Report Activity Log */}
-        <header className="shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
+        <header className="group shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
           <div className="flex items-start gap-3 min-w-0">
             <div className="w-10 h-10 rounded-md bg-brand-600/10 text-brand-600 flex items-center justify-center shrink-0">
               <MessageSquare size={20} />
@@ -609,7 +632,7 @@ function CommentDrawer({
                   </motion.span>
                 )}
               </div>
-              <p className="text-[0.75rem] text-ink-400 mt-0.5 leading-snug truncate">
+              <p title={`On ${query.id} — ${query.title}`} className="text-[0.75rem] text-ink-400 mt-0.5 leading-snug line-clamp-1 group-hover:line-clamp-none transition-all">
                 On <span className="font-mono font-semibold text-brand-600">{query.id}</span> — {query.title}
               </p>
             </div>
@@ -640,14 +663,16 @@ function CommentDrawer({
                 <input
                   ref={fileInputRef}
                   type="file"
+                  multiple
                   className="hidden"
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) setAttachment(f.name);
+                    const names = Array.from(e.target.files ?? []).map(f => f.name);
+                    if (names.length) setAttachments(prev => [...prev, ...names.filter(n => !prev.includes(n))]);
+                    e.target.value = '';
                   }}
                 />
                 <AnimatePresence>
-                  {attachment && (
+                  {attachments.length > 0 && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
@@ -655,14 +680,16 @@ function CommentDrawer({
                       transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
                       className="overflow-hidden"
                     >
-                      <div className="px-3 pb-2">
-                        <span className="inline-flex items-center gap-1.5 h-6 pl-2 pr-1.5 bg-brand-50 text-brand-700 text-[0.6875rem] font-medium rounded-full">
-                          <Paperclip size={12} />
-                          <span className="truncate max-w-[200px]">{attachment}</span>
-                          <button onClick={() => setAttachment(null)} className="ml-0.5 text-brand-700/60 hover:text-brand-700 cursor-pointer" aria-label="Remove attachment">
-                            <X size={12} />
-                          </button>
-                        </span>
+                      <div className="px-3 pb-2 flex flex-wrap gap-1.5">
+                        {attachments.map((name) => (
+                          <span key={name} className="inline-flex items-center gap-1.5 h-6 pl-2 pr-1.5 bg-brand-50 text-brand-700 text-[0.6875rem] font-medium rounded-full">
+                            <Paperclip size={12} />
+                            <span className="truncate max-w-[180px]">{name}</span>
+                            <button onClick={() => setAttachments(prev => prev.filter(n => n !== name))} className="ml-0.5 text-brand-700/60 hover:text-brand-700 cursor-pointer" aria-label={`Remove ${name}`}>
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
                       </div>
                     </motion.div>
                   )}
@@ -723,6 +750,7 @@ function CommentDrawer({
                             const isLong = c.text.length > 1000;
                             const isExpanded = expandedComments.has(c.id);
                             const displayText = isLong && !isExpanded ? c.text.slice(0, 1000) + '…' : c.text;
+                            const files = c.attachments ?? (c.attachment ? [c.attachment] : []);
                             return (
                               <li key={c.id} className="relative flex gap-3.5">
                                 <div className="relative z-[1] shrink-0 w-8 h-8 rounded-full bg-brand-600/10 text-brand-700 ring-[3px] ring-white flex items-center justify-center text-[0.625rem] font-semibold tracking-tight">
@@ -747,11 +775,29 @@ function CommentDrawer({
                                       {isExpanded ? 'Show less' : 'Show more'}
                                     </button>
                                   )}
-                                  {c.attachment && (
-                                    <button className="mt-2.5 inline-flex items-center gap-1.5 max-w-full h-7 px-2.5 bg-canvas border border-canvas-border text-ink-700 text-[0.6875rem] font-medium rounded-sm hover:border-brand-600/30 hover:text-brand-700 transition-colors cursor-pointer">
-                                      <Paperclip size={12} className="text-ink-400 shrink-0" />
-                                      <span className="truncate">{c.attachment}</span>
-                                    </button>
+                                  {files.length > 0 && (
+                                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                      {files.map((file) => (
+                                        <span key={file} className="inline-flex items-center max-w-full h-7 bg-canvas border border-canvas-border rounded-sm overflow-hidden text-[0.6875rem] font-medium text-ink-700">
+                                          <button
+                                            onClick={() => openAttachment(file)}
+                                            title={`Open ${file} in a new tab`}
+                                            className="inline-flex items-center gap-1.5 min-w-0 h-full pl-2.5 pr-2 hover:text-brand-700 hover:bg-white transition-colors cursor-pointer"
+                                          >
+                                            <Paperclip size={12} className="text-ink-400 shrink-0" />
+                                            <span className="truncate">{file}</span>
+                                          </button>
+                                          <button
+                                            onClick={() => downloadAttachment(file)}
+                                            title={`Download ${file}`}
+                                            aria-label={`Download ${file}`}
+                                            className="inline-flex items-center justify-center h-full w-7 border-l border-canvas-border text-ink-400 hover:text-brand-700 hover:bg-white transition-colors cursor-pointer shrink-0"
+                                          >
+                                            <Download size={12} />
+                                          </button>
+                                        </span>
+                                      ))}
+                                    </div>
                                   )}
                                 </div>
                               </li>
@@ -798,11 +844,11 @@ function ReportActivityLogDrawer({
 }: {
   reportName: string;
   comments: QueryComment[];
-  onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void;
+  onAddComment?: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void;
   onClose: () => void;
 }) {
   const [text, setText] = useState('');
-  const [attachment, setAttachment] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<string[]>([]);
   const [isPosting, setIsPosting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLElement | null>(null);
@@ -828,9 +874,9 @@ function ReportActivityLogDrawer({
     if (!body || isPosting) return;
     setIsPosting(true);
     // Report-level entries are tagged as global so they show across all surfaces.
-    onAddComment?.('REPORT', `${reportName} — Report-level note`, body, attachment ?? undefined);
+    onAddComment?.('REPORT', `${reportName} — Report-level note`, body, attachments.length ? attachments : undefined);
     setText('');
-    setAttachment(null);
+    setAttachments([]);
     window.setTimeout(() => setIsPosting(false), 120);
   };
 
@@ -906,14 +952,16 @@ function ReportActivityLogDrawer({
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               className="hidden"
               onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) setAttachment(f.name);
+                const names = Array.from(e.target.files ?? []).map(f => f.name);
+                if (names.length) setAttachments(prev => [...prev, ...names.filter(n => !prev.includes(n))]);
+                e.target.value = '';
               }}
             />
             <AnimatePresence>
-              {attachment && (
+              {attachments.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
@@ -921,14 +969,16 @@ function ReportActivityLogDrawer({
                   transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
                   className="overflow-hidden"
                 >
-                  <div className="px-3 pb-2">
-                    <span className="inline-flex items-center gap-1.5 h-6 pl-2 pr-1.5 bg-brand-50 text-brand-700 text-[0.6875rem] font-medium rounded-full">
-                      <Paperclip size={12} />
-                      <span className="truncate max-w-[200px]">{attachment}</span>
-                      <button onClick={() => setAttachment(null)} className="ml-0.5 text-brand-700/60 hover:text-brand-700 cursor-pointer" aria-label="Remove attachment">
-                        <X size={12} />
-                      </button>
-                    </span>
+                  <div className="px-3 pb-2 flex flex-wrap gap-1.5">
+                    {attachments.map((name) => (
+                      <span key={name} className="inline-flex items-center gap-1.5 h-6 pl-2 pr-1.5 bg-brand-50 text-brand-700 text-[0.6875rem] font-medium rounded-full">
+                        <Paperclip size={12} />
+                        <span className="truncate max-w-[180px]">{name}</span>
+                        <button onClick={() => setAttachments(prev => prev.filter(n => n !== name))} className="ml-0.5 text-brand-700/60 hover:text-brand-700 cursor-pointer" aria-label={`Remove ${name}`}>
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
                   </div>
                 </motion.div>
               )}
@@ -1001,6 +1051,7 @@ function ReportActivityLogDrawer({
                     <ol className="space-y-5">
                       {group.items.map((c, ii) => {
                         const idx = offset + ii;
+                        const files = c.attachments ?? (c.attachment ? [c.attachment] : []);
                         return (
                         <motion.li
                           key={c.id}
@@ -1029,14 +1080,29 @@ function ReportActivityLogDrawer({
                               <span className="truncate">{c.queryTitle}</span>
                             </div>
                             <p className="mt-2 text-[0.8125rem] text-ink-700 leading-relaxed">{c.text}</p>
-                            {c.attachment && (
-                              <motion.button
-                                whileTap={{ scale: 0.97 }}
-                                className="mt-2.5 inline-flex items-center gap-1.5 max-w-full h-7 px-2.5 bg-canvas border border-canvas-border text-ink-700 text-[0.6875rem] font-medium rounded-sm hover:border-brand-600/30 hover:text-brand-700 transition-colors cursor-pointer"
-                              >
-                                <Paperclip size={12} className="text-ink-400 shrink-0" />
-                                <span className="truncate">{c.attachment}</span>
-                              </motion.button>
+                            {files.length > 0 && (
+                              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                {files.map((file) => (
+                                  <span key={file} className="inline-flex items-center max-w-full h-7 bg-canvas border border-canvas-border rounded-sm overflow-hidden text-[0.6875rem] font-medium text-ink-700">
+                                    <button
+                                      onClick={() => openAttachment(file)}
+                                      title={`Open ${file} in a new tab`}
+                                      className="inline-flex items-center gap-1.5 min-w-0 h-full pl-2.5 pr-2 hover:text-brand-700 hover:bg-white transition-colors cursor-pointer"
+                                    >
+                                      <Paperclip size={12} className="text-ink-400 shrink-0" />
+                                      <span className="truncate">{file}</span>
+                                    </button>
+                                    <button
+                                      onClick={() => downloadAttachment(file)}
+                                      title={`Download ${file}`}
+                                      aria-label={`Download ${file}`}
+                                      className="inline-flex items-center justify-center h-full w-7 border-l border-canvas-border text-ink-400 hover:text-brand-700 hover:bg-white transition-colors cursor-pointer shrink-0"
+                                    >
+                                      <Download size={12} />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
                             )}
                           </div>
                         </motion.li>
@@ -1798,7 +1864,7 @@ function DraggableQuerySection({
   onOpenQuery?: (query: { id: string; title: string }) => void;
   onDelete: () => void;
   comments: QueryComment[];
-  onAddComment: (queryId: string, queryTitle: string, text: string, attachment?: string) => void;
+  onAddComment: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void;
 }) {
   return (
     <Reorder.Item {...sectionProps} className={`${sectionProps.className} relative`}>
@@ -1841,7 +1907,6 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   onSaveAtrVersion?: (label: string, data: AtrReportData) => void;
 }) {
   const { addToast } = useToast();
-  const logEvent = useAuditLog();
   const { currentUser } = useCurrentUser();
   // Manual sign-on / sign-off on the report's approval slots. Signing records
   // the slot's assigned name (or the current user) + today's date; signing off
@@ -2342,12 +2407,6 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       icon: 'file-text',
       sections: sectionDefs,
     } as typeof REPORT_TEMPLATES[number]);
-    logEvent({
-      action: 'Create',
-      description: `Saved report as template "${report.name} Template" (${sectionDefs.length} ${sectionDefs.length === 1 ? 'section' : 'sections'})`,
-      module: 'Reports',
-      entity: 'Template',
-    });
   };
 
   // ─── Add-Observation modal state ───
@@ -2628,7 +2687,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     { id: 'c-2', queryId: 'Q01', queryTitle: 'Detects duplicate invoice entries by vendor, date, and amount', author: 'Karan Mehta',  initials: 'KM', timestamp: '1 day ago',  text: 'Flagged EX-2024-003 as a bulk case for remediation — MFA enforcement applied.', attachment: 'mfa_remediation_plan.pdf' },
     { id: 'c-3', queryId: 'Q02', queryTitle: 'Identifies unauthorized vendor master changes without proper approval workflow in the last 90 days', author: 'Ravi Kumar', initials: 'RK', timestamp: '5 hours ago', text: 'Control owner confirmed — vendor master workflow is being tightened; expect residual risk to drop next quarter.' },
   ]);
-  const addComment = (queryId: string, queryTitle: string, text: string, attachment?: string) => {
+  const addComment = (queryId: string, queryTitle: string, text: string, attachments?: string[]) => {
     setComments(prev => [
       ...prev,
       {
@@ -2639,7 +2698,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         initials: (report.generatedBy ?? 'You').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
         timestamp: 'just now',
         text,
-        attachment,
+        attachments: attachments && attachments.length ? attachments : undefined,
       },
     ]);
   };
@@ -3304,7 +3363,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
 
 
       {/* Generate ATR — editable Action Taken Report preview (same as Action Hub) */}
-      {atrModalOpen && <GenerateATRModal onClose={() => setAtrModalOpen(false)} onSaveVersion={onSaveAtrVersion ? (label, data) => { onSaveAtrVersion(label, data); logEvent({ action: 'Create', description: `Saved ATR version "${label}" from report "${report.name}"`, module: 'Reports', entity: 'Report' }); } : undefined} />}
+      {atrModalOpen && <GenerateATRModal onClose={() => setAtrModalOpen(false)} onSaveVersion={onSaveAtrVersion} />}
 
       {/* Confirm dialog — section delete from Contents */}
       <ConfirmDialog

@@ -1,67 +1,145 @@
 /**
- * Platform Usage — derived entirely from the platform's real records.
+ * Platform Usage — every number derived from the platform's own records.
  *
- * There is no synthetic history here. Every number on the Platform Usage page
- * traces back to something the platform actually stores:
+ * Nothing here invents a figure. Each tile is counted off something the platform
+ * actually stores:
  *
  *   · actions / activeUsers / downloads / byModule  ← the audit log (AuditLog[])
  *   · reports                                       ← GENERATED_REPORTS + ATR_LIBRARY
- *   · aiQueries                                     ← CHAT_HISTORY (saved conversations)
+ *   · aiEvents                                      ← Ask IRA / Concierge audit events
+ *   · aiConversations                               ← CHAT_HISTORY (saved conversations)
+ *
+ * Those records are seeded rather than produced by a live backend — the audit
+ * log's six months of history is composed in audit-history.ts — but this module
+ * only ever *counts* them. There is no second, made-up series behind the page:
+ * if a member has 65 actions here, there are 65 events in the log with their
+ * name on them, and the drill-down lists them.
  *
  * ## The anchor
  *
- * Without a backend the seeded records are fixed in the past (the newest audit
- * event is Apr 2026). Measuring "last 30 days" against wall-clock time would
- * therefore render every tile as 0. Instead day-offset 0 is the **anchor**: the
- * most recent real record in the data set. Windows run backwards from there and
- * the page labels itself "Data as of <anchor>".
+ * The seeded records are fixed in the past (the newest is Apr 2026). Measuring
+ * "last 30 days" against wall-clock time would therefore render every tile as 0.
+ * Instead day-offset 0 is the **anchor**: the most recent real record in the
+ * data set. Windows run backwards from there and the page says "Data as of
+ * <anchor>".
  *
  * Events logged during *this session* are folded into the anchor bucket, so an
  * action you take right now still shows up. The anchor itself never moves —
- * otherwise a single click would slide the whole window and empty it.
+ * otherwise a single click would slide the whole window and empty it. Those
+ * session events are the only ones flagged `live` (see UsageEntry.live); the
+ * anchor day's seeded events are history, not "today".
  *
  * ## Known gaps (real, not hidden)
  *
- * Nothing on the platform writes an audit event for Ask IRA or the Concierge
- * tools, so per-member AI attribution is unavailable: `UserUsageRow.aiQueries`
- * counts Ask IRA log events, which is 0 until those flows call `logEvent`.
- * Platform-wide AI volume comes from CHAT_HISTORY instead. Report and chat
- * records carry a date but no clock time, so they are excluded from the
- * weekday×hour rhythm heatmap, whose total is therefore ≤ the action total.
+ * Report and chat records carry a date but no clock time, so they can't be
+ * placed on the weekday×hour rhythm heatmap; its total is therefore ≤ the
+ * window's action total, and it reports the shortfall rather than smearing
+ * those events across the grid.
  */
 
 import type { AdminUser, AuditLog } from '../context/AdminDataContext';
 import { GENERATED_REPORTS, CHAT_HISTORY } from './mockData';
 import { ATR_LIBRARY } from './atrLibrary';
+import { WORKSPACES, type Workspace } from './workspaces';
 
-/* ── Modules the breakdown reports on ── */
+/* ── Modules the breakdown reports on ──
+ *
+ * One bucket per surface a user can actually open. This list used to be eight
+ * entries with everything unrecognised falling through to 'Risk & Controls',
+ * which quietly swallowed whole modules: exception triage, audit planning, the
+ * Process Hub, and every Concierge tool run (those log under the tool's own
+ * name — 'PDF Structure', 'QR Scanner', …). The page then reported Risk &
+ * Controls as the platform's busiest area, which was an artefact of the default
+ * case, not a fact about the workspace.
+ */
 export const USAGE_MODULES = [
   'Ask IRA',
+  'AI Concierge',
   'Reports',
   'Engagements',
+  'Exceptions',
+  'Audit Planning',
+  'Process Hub',
+  'Risk & Controls',
   'Workflows',
   'Dashboards',
   'Knowledge Hub',
-  'Risk & Controls',
   'Admin',
+  'Other',
 ] as const;
 export type UsageModule = (typeof USAGE_MODULES)[number];
 
+/**
+ * Every module string the platform actually writes, mapped to its bucket.
+ *
+ * Keys are lowercased on lookup, because the same surface logs itself under
+ * several spellings ('Reports' and 'reports', 'Workflows' and 'workflows') and
+ * a case-sensitive switch sent half of them to the default.
+ *
+ * Anything genuinely unknown lands in 'Other' rather than being folded into a
+ * real module. A new surface that forgets to register here then shows up as
+ * unattributed activity — visible, and fixable — instead of silently inflating
+ * whichever bucket happened to be the default.
+ */
+const MODULE_BUCKETS: Record<string, UsageModule> = {
+  // Chat
+  'ask ira': 'Ask IRA',
+  'chat': 'Ask IRA',
+  // Concierge — the rack itself, plus each tool, which logs under its own name
+  'ai concierge': 'AI Concierge',
+  'concierge': 'AI Concierge',
+  'pdf structure': 'AI Concierge',
+  'image quality': 'AI Concierge',
+  'content validation': 'AI Concierge',
+  'content verifier': 'AI Concierge',
+  'template detection': 'AI Concierge',
+  'truesight ai detection': 'AI Concierge',
+  'qr scanner': 'AI Concierge',
+  'font forensics': 'AI Concierge',
+  'jpeg forensics': 'AI Concierge',
+  'metadata analysis': 'AI Concierge',
+  'copy-move detection': 'AI Concierge',
+  'gstin verifier': 'AI Concierge',
+  // Reports
+  'report': 'Reports',
+  'reports': 'Reports',
+  // Engagements (SOX/ICFR and fieldwork are engagement work)
+  'engagements': 'Engagements',
+  'engagement execution': 'Engagements',
+  'sox icfr': 'Engagements',
+  // Exception triage — My Queue and case management
+  'exceptions': 'Exceptions',
+  // Planning
+  'planning': 'Audit Planning',
+  'audit planning': 'Audit Planning',
+  // Process Hub
+  'process hub': 'Process Hub',
+  'business_process': 'Process Hub',
+  // The control environment
+  'governance': 'Risk & Controls',
+  'control library': 'Risk & Controls',
+  'controls': 'Risk & Controls',
+  'risk register': 'Risk & Controls',
+  'risk': 'Risk & Controls',
+  'racm': 'Risk & Controls',
+  // Automation
+  'workflow library': 'Workflows',
+  'workflows': 'Workflows',
+  // Intelligence
+  'dashboard': 'Dashboards',
+  'dashboards': 'Dashboards',
+  // Data
+  'knowledge hub': 'Knowledge Hub',
+  'data sources': 'Knowledge Hub',
+  'datasource': 'Knowledge Hub',
+  // Platform
+  'admin': 'Admin',
+  'notifications': 'Admin',
+};
+
 /** Map an AuditLog.module string onto a usage bucket. */
 export function usageModuleFor(logModule: string): UsageModule {
-  switch (logModule) {
-    // Concierge tools count as AI usage — the PRD defines AI queries as
-    // "Ask IRA and Concierge events".
-    case 'Ask IRA': case 'Chat': case 'AI Concierge': return 'Ask IRA';
-    case 'Report': case 'Reports': return 'Reports';
-    case 'Engagements': case 'Engagement Execution': case 'SOX ICFR': return 'Engagements';
-    case 'Workflow Library': case 'Workflows': return 'Workflows';
-    case 'Dashboard': case 'Dashboards': return 'Dashboards';
-    case 'Knowledge Hub': case 'Data Sources': return 'Knowledge Hub';
-    case 'Admin': return 'Admin';
-    // Process Hub, RACM, Control Library, Risk Register, Exceptions, …
-    default: return 'Risk & Controls';
-  }
+  return MODULE_BUCKETS[logModule.trim().toLowerCase()] ?? 'Other';
 }
 
 /** One real audit event, reduced to what the usage page needs. */
@@ -74,6 +152,15 @@ export interface UsageEntry {
   hour: number | null;
   description: string;
   id: string;
+  /** 'Failed' is what makes a rejected sign-in legible as a security signal
+   *  rather than just another action. */
+  status: AuditLog['status'];
+  /** The workspace the action happened in (Workspace.id). */
+  workspaceId: string;
+  /** Produced by this session, rather than seeded. Not the same thing as
+   *  "day-offset 0": the anchor day is seeded history, and calling those events
+   *  "Today" would be a lie — the page is as of the anchor, not wall-clock. */
+  live: boolean;
 }
 
 export interface UsageDay {
@@ -224,6 +311,9 @@ export function usageDaysWithLive(logs: AuditLog[]): UsageDay[] {
     day.entries.push({
       id: l.id, user: l.user, action: l.action, entity: l.entity,
       module, hour: hourOf(l.timestamp), description: l.description,
+      status: l.status,
+      workspaceId: l.workspaceId,
+      live: key >= today,
     });
     day.actions += 1;
     day.byModule[module] += 1;
@@ -298,9 +388,11 @@ export function lastLoginOffsetDays(lastLogin: string): number {
  * counting all Creates would double-count one action and read a RACM
  * generation as a question.
  */
+/** AI activity = a question asked of the chat, or a Concierge tool run. */
 function isAiEntry(e: UsageEntry): boolean {
-  if (e.module !== 'Ask IRA') return false;
-  return e.action === 'Run' || (e.action === 'Create' && e.entity === 'Query');
+  if (e.module === 'AI Concierge') return e.action === 'Run';
+  if (e.module === 'Ask IRA') return e.action === 'Create' && e.entity === 'Query';
+  return false;
 }
 
 /** Per-user rows for a window, counted from that window's real events. */
@@ -369,6 +461,63 @@ export function usageDeltaPct(current: number, prior: number): number | null {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
+ * Bucketing — for the KPI trend bars
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Bucket sizes a person can actually hold in their head. The old bucketing
+ * divided the window into 12 equal slices, which made a bar 2.5 days long on
+ * the 30-day range — a unit nobody can read off a chart. We now pick a whole
+ * number of days from this list instead, so a bar is always "1 day", "3 days",
+ * "1 week" or "2 weeks" and the axis can say so.
+ */
+const BUCKET_SIZES = [1, 2, 3, 7, 14, 30];
+
+/** Days per bar for a window of `dayCount` days, keeping the bar count sane. */
+export function bucketSizeFor(dayCount: number, maxBars = 13): number {
+  return BUCKET_SIZES.find(s => Math.ceil(dayCount / s) <= maxBars) ?? 30;
+}
+
+/** How to say that bucket size out loud. */
+export function bucketSizeLabel(size: number): string {
+  if (size === 1) return '1 day';
+  if (size === 7) return '1 week';
+  if (size === 14) return '2 weeks';
+  return `${size} days`;
+}
+
+/**
+ * Split a window into contiguous whole-day buckets, oldest → newest.
+ *
+ * Buckets are filled from the newest day backwards, so any remainder lands in
+ * the *oldest* bucket. The recent bars — the ones people actually read — are
+ * therefore always a full bucket wide and comparable with each other.
+ */
+export function bucketDays(days: UsageDay[], maxBars = 13): UsageDay[][] {
+  const size = bucketSizeFor(days.length, maxBars);
+  const out: UsageDay[][] = [];
+  for (let end = days.length; end > 0; end -= size) {
+    out.unshift(days.slice(Math.max(0, end - size), end));
+  }
+  return out;
+}
+
+/**
+ * Distinct known members who did anything in a slice.
+ *
+ * Active users is the one KPI that is *not* additive: summing each day's active
+ * count double-counts anyone who worked on more than one day, which would make
+ * the trend bars a different — and much larger — quantity than the headline
+ * figure above them. Count the people, don't add up the days.
+ */
+export function distinctActors(days: UsageDay[], users: AdminUser[]): number {
+  const known = new Set(users.map(u => u.name));
+  const actors = new Set<string>();
+  days.forEach(d => d.entries.forEach(e => { if (known.has(e.user)) actors.add(e.user); }));
+  return actors.size;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
  * Downloads & exports — real Export events
  * ────────────────────────────────────────────────────────────────────────── */
 
@@ -410,7 +559,7 @@ export function recentDownloads(days: UsageDay[], limit = 6): DownloadEvent[] {
       ...parseExportLog(e.description, e.entity),
       dayOffset,
       time: e.hour === null ? '' : `${String(e.hour).padStart(2, '0')}:00`,
-      live: dayOffset === 0,
+      live: e.live,
     }))
     .slice(0, limit);
 }
@@ -468,7 +617,7 @@ export function fullUserModuleMix(row: UserUsageRow): { module: UsageModule; cou
     .sort((a, b) => b.count - a.count);
 }
 
-/** The drawer's ranked module list — top 4. */
+/** The member modal's ranked module list — top 4. */
 export function userModuleMix(row: UserUsageRow): { module: UsageModule; count: number }[] {
   return fullUserModuleMix(row).slice(0, 4);
 }
@@ -514,20 +663,43 @@ export function segmentFor(row: UserUsageRow, activeMean: number): EngagementSeg
   return 'Casual';
 }
 
-/** Concierge / Ask IRA tool runs in the window (audit `Run` events). */
+/** A Concierge tool run: a `Run` in the Concierge bucket. Each tool logs under
+ *  its own module name ('QR Scanner', 'Font Forensics', …), and they all bucket
+ *  to 'AI Concierge' — so this counts the whole rack, not just the launcher. */
+const isConciergeRun = (e: UsageEntry) => e.module === 'AI Concierge' && e.action === 'Run';
+
+/** A question typed into the chat. */
+const isAskIraQuestion = (e: UsageEntry) =>
+  e.module === 'Ask IRA' && e.action === 'Create' && e.entity === 'Query';
+
+/** Concierge tool runs in the window. */
 export function aiToolRuns(days: UsageDay[]): number {
-  return days.reduce(
-    (s, d) => s + d.entries.filter(e => e.module === 'Ask IRA' && e.action === 'Run').length,
-    0,
-  );
+  return days.reduce((s, d) => s + d.entries.filter(isConciergeRun).length, 0);
+}
+
+function tallyByUser(days: UsageDay[], match: (e: UsageEntry) => boolean) {
+  const byUser = new Map<string, number>();
+  days.forEach(d => d.entries
+    .filter(match)
+    .forEach(e => byUser.set(e.user, (byUser.get(e.user) ?? 0) + 1)));
+  return [...byUser.entries()]
+    .map(([user, count]) => ({ user, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+/** Who ran Concierge tools in the window, busiest first. */
+export function conciergeRunners(days: UsageDay[]): { user: string; count: number }[] {
+  return tallyByUser(days, isConciergeRun);
+}
+
+/** Members who asked Ask IRA a question in the window, busiest first. */
+export function askIraAskers(days: UsageDay[]): { user: string; count: number }[] {
+  return tallyByUser(days, isAskIraQuestion);
 }
 
 /** Questions asked of Ask IRA in the window (chat sends → `Create` / `Query`). */
 export function aiQuestions(days: UsageDay[]): number {
-  return days.reduce(
-    (s, d) => s + d.entries.filter(e => e.module === 'Ask IRA' && e.action === 'Create' && e.entity === 'Query').length,
-    0,
-  );
+  return days.reduce((s, d) => s + d.entries.filter(isAskIraQuestion).length, 0);
 }
 
 /** Share of active members whose activity includes an AI event. */
@@ -535,6 +707,59 @@ export function aiAdoptionPct(rows: UserUsageRow[]): number {
   const active = rows.filter(r => r.actions > 0);
   if (active.length === 0) return 0;
   return Math.round((active.filter(r => r.aiQueries > 0).length / active.length) * 100);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Workspaces — the same events, cut by where they happened
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface WorkspaceUsage {
+  workspace: Workspace;
+  actions: number;
+  /** Distinct known members who did anything in this workspace. */
+  members: number;
+  /** Questions asked + tool runs, in this workspace. */
+  aiEvents: number;
+  downloads: number;
+  /** Share of all action volume in the window (0-100). */
+  sharePct: number;
+  /** The module they lean on most here — null when there's no activity at all. */
+  topModule: UsageModule | null;
+}
+
+/**
+ * Usage per workspace, from the workspace stamped on each audit event.
+ *
+ * The same person shows up in more than one workspace if they work in more than
+ * one, so `members` summed across workspaces can exceed the platform's active-user
+ * count. That's the point: it answers "who is working in this workspace", not
+ * "how do we divide the seats up".
+ */
+export function workspaceUsage(days: UsageDay[], users: AdminUser[]): WorkspaceUsage[] {
+  const known = new Set(users.map(u => u.name));
+  const entries = days.flatMap(d => d.entries);
+  const total = entries.length;
+
+  return WORKSPACES
+    .map(workspace => {
+      const mine = entries.filter(e => e.workspaceId === workspace.id);
+      const byModule = emptyByModule();
+      mine.forEach(e => { byModule[e.module] += 1; });
+      const topModule = mine.length === 0
+        ? null
+        : USAGE_MODULES.reduce((best, m) => (byModule[m] > byModule[best] ? m : best), USAGE_MODULES[0]);
+
+      return {
+        workspace,
+        actions: mine.length,
+        members: new Set(mine.filter(e => known.has(e.user)).map(e => e.user)).size,
+        aiEvents: mine.filter(isAiEntry).length,
+        downloads: mine.filter(e => e.action === 'Export').length,
+        sharePct: total > 0 ? Math.round((mine.length / total) * 100) : 0,
+        topModule,
+      };
+    })
+    .sort((a, b) => b.actions - a.actions);
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -637,7 +862,7 @@ export function recentCreations(days: UsageDay[], limit = 6): CreationEvent[] {
       kindLabel: labelByEntity.get(e.entity)!,
       dayOffset,
       time: e.hour === null ? '' : `${String(e.hour).padStart(2, '0')}:00`,
-      live: dayOffset === 0,
+      live: e.live,
     }))
     .slice(0, limit);
 }
@@ -693,7 +918,7 @@ export function recentRuns(days: UsageDay[], limit = 5): RunEvent[] {
       area: runAreaFor(e.module),
       dayOffset,
       time: e.hour === null ? '' : `${String(e.hour).padStart(2, '0')}:00`,
-      live: dayOffset === 0,
+      live: e.live,
     }))
     .slice(0, limit);
 }
@@ -752,7 +977,7 @@ export function recentShares(days: UsageDay[], limit = 5): ShareEvent[] {
       kind: shareKindFor(e.entity),
       dayOffset,
       time: e.hour === null ? '' : `${String(e.hour).padStart(2, '0')}:00`,
-      live: dayOffset === 0,
+      live: e.live,
     }))
     .slice(0, limit);
 }
@@ -814,4 +1039,228 @@ export function seatBuckets(users: AdminUser[], rangeDays: number): SeatBuckets 
     invited: users.filter(u => u.status === 'Invited'),
     suspendedOrInactive: users.filter(u => u.status === 'Suspended' || u.status === 'Locked' || u.status === 'Inactive'),
   };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Adoption — the licence questions, in Amplitude's vocabulary
+ *
+ * Three questions an admin of a seat-licensed tenant actually has: who is using
+ * this, is it worth the licence, and what should I fix. The metrics below are
+ * lifted from Amplitude's analytics model, with one deliberate departure.
+ *
+ * ## The departure: no DAU/MAU stickiness ratio
+ *
+ * Amplitude also defines stickiness as DAU/MAU, and we do NOT show it. That
+ * ratio only means something for a product with a natural *daily* cadence. This
+ * is a workweek product — auditors work in engagement and quarter-close bursts —
+ * so the ratio is pinned low by the shape of the work, not by any failure, and
+ * it never moves. Worse, its denominator is MAU: roll the tool out to more
+ * people successfully and the ratio gets *worse*. A number that punishes you for
+ * succeeding is not a number to put on an admin page.
+ *
+ * What replaces it is Amplitude's other, better stickiness definition — the
+ * count of distinct days a user did something real — read as a distribution
+ * rather than averaged into a ratio. A tenant with 5 power users and 12 dead
+ * seats and a tenant with 17 mediocre ones produce the same ratio and completely
+ * different histograms, and only one of them tells you who to call.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * The critical event: did this person do real work?
+ *
+ * Amplitude is explicit that "active" must be gated on a completed unit of value,
+ * never on a login — a login-level definition tells you someone opened the door,
+ * not that the product did anything for them. Everything this platform logs is a
+ * completed action (a control tested, a report exported, a risk raised) except
+ * the session events, so the rule is simply: signing in is not using it.
+ */
+export function isValueEvent(e: UsageEntry): boolean {
+  return e.entity !== 'Session';
+}
+
+/** Seats that did real work in the window, over seats we are paying for. */
+export interface LicenceUse {
+  /** Seats with at least one value event. */
+  used: number;
+  /** Every seat on the bill — including invites nobody has accepted. */
+  total: number;
+  pct: number;
+  /** Paid-for seats with no value event in the window. */
+  idle: AdminUser[];
+}
+
+export function licenceUse(days: UsageDay[], users: AdminUser[]): LicenceUse {
+  const workers = new Set(
+    days.flatMap(d => d.entries).filter(isValueEvent).map(e => e.user),
+  );
+  const idle = users.filter(u => !workers.has(u.name));
+  const used = users.length - idle.length;
+  return {
+    used,
+    total: users.length,
+    pct: users.length > 0 ? Math.round((used / users.length) * 100) : 0,
+    idle,
+  };
+}
+
+/* ── The power-user curve ─────────────────────────────────────────────────── */
+
+export interface PowerBucket {
+  label: string;
+  /** Inclusive day-count range this bucket covers. */
+  min: number;
+  max: number;
+  seats: AdminUser[];
+  /** Seats active on at least `min` days — the cumulative reading. */
+  atLeast: number;
+}
+
+export interface PowerCurve {
+  buckets: PowerBucket[];
+  /** Days in the window the curve is measured over (Amplitude's L7 / L28). */
+  windowDays: number;
+  /** Distinct days of real work, per member. */
+  daysActive: Map<string, number>;
+  /** Seats at the bottom of the curve — one day of work or none at all. */
+  reclaim: AdminUser[];
+  /** Seats at the top — active on at least half the window. */
+  committed: AdminUser[];
+}
+
+/** Bucket edges. Kept coarse: with a tenant-sized seat count a bar per day-count
+ *  would be 28 mostly-empty bars, and the shape is what carries the meaning. */
+const POWER_BUCKETS: { label: string; min: number; max: number }[] = [
+  { label: '0', min: 0, max: 0 },
+  { label: '1–2', min: 1, max: 2 },
+  { label: '3–5', min: 3, max: 5 },
+  { label: '6–9', min: 6, max: 9 },
+  { label: '10–14', min: 10, max: 14 },
+  { label: '15–19', min: 15, max: 19 },
+  { label: '20+', min: 20, max: Infinity },
+];
+
+/**
+ * How many distinct days each seat did real work, as a distribution.
+ *
+ * This is Amplitude's stickiness chart — "X days out of N" — and the reason it is
+ * a histogram rather than an average is that the shape is the whole point. The
+ * left spike is the licence you are wasting; the right spike is the people the
+ * licence is for.
+ */
+export function powerCurve(days: UsageDay[], users: AdminUser[]): PowerCurve {
+  const known = new Set(users.map(u => u.name));
+
+  const daysActive = new Map<string, number>();
+  users.forEach(u => daysActive.set(u.name, 0));
+  days.forEach(d => {
+    const worked = new Set(
+      d.entries.filter(e => isValueEvent(e) && known.has(e.user)).map(e => e.user),
+    );
+    worked.forEach(name => daysActive.set(name, (daysActive.get(name) ?? 0) + 1));
+  });
+
+  const buckets: PowerBucket[] = POWER_BUCKETS.map(b => {
+    const seats = users.filter(u => {
+      const n = daysActive.get(u.name) ?? 0;
+      return n >= b.min && n <= b.max;
+    });
+    const atLeast = users.filter(u => (daysActive.get(u.name) ?? 0) >= b.min).length;
+    return { ...b, seats, atLeast };
+  });
+
+  const half = Math.max(1, Math.ceil(days.length / 2));
+  return {
+    buckets,
+    windowDays: days.length,
+    daysActive,
+    reclaim: users.filter(u => (daysActive.get(u.name) ?? 0) <= 1),
+    committed: users.filter(u => (daysActive.get(u.name) ?? 0) >= half),
+  };
+}
+
+/* ── The engagement matrix ────────────────────────────────────────────────── */
+
+export type MatrixQuadrant = 'core' | 'power' | 'onboarding' | 'shelfware';
+
+export interface MatrixPoint {
+  module: UsageModule;
+  /** Share of *licensed seats* who touched this module at least once (0–100).
+   *  Amplitude normalises breadth against monthly actives; against seats is the
+   *  honest denominator for a licence question — a module nobody outside the
+   *  power users has opened is shelfware even if every active user opened it. */
+  breadth: number;
+  /** Average events in this module among the people who used it at all. */
+  frequency: number;
+  users: number;
+  events: number;
+  quadrant: MatrixQuadrant;
+}
+
+export const QUADRANT_LABEL: Record<MatrixQuadrant, string> = {
+  core: 'Core — broad and heavily used',
+  power: 'Power — a few people lean on it hard',
+  onboarding: 'Set-up — most people touch it once',
+  shelfware: 'Shelfware — improve it or drop it',
+};
+
+/**
+ * Every module placed on breadth × frequency, the way Amplitude's Engagement
+ * Matrix places features. It is a feature audit: the bottom-left quadrant is the
+ * part of the product nobody adopted, which for a licensed tenant is the part
+ * you are paying for and not using.
+ *
+ * Quadrants split at the midpoint of each axis rather than at a fixed threshold,
+ * so the read is "relative to the rest of this platform" — which is the only
+ * comparison that means anything without an industry benchmark.
+ */
+export function engagementMatrix(days: UsageDay[], users: AdminUser[]): {
+  points: MatrixPoint[];
+  breadthMid: number;
+  frequencyMid: number;
+} {
+  const known = new Set(users.map(u => u.name));
+  const seats = Math.max(1, users.length);
+  const entries = days.flatMap(d => d.entries).filter(e => isValueEvent(e) && known.has(e.user));
+
+  const raw = USAGE_MODULES.map(module => {
+    const mine = entries.filter(e => e.module === module);
+    const people = new Set(mine.map(e => e.user));
+    return {
+      module,
+      events: mine.length,
+      users: people.size,
+      breadth: Math.round((people.size / seats) * 100),
+      frequency: people.size > 0 ? Math.round((mine.length / people.size) * 10) / 10 : 0,
+    };
+  })
+    // A module with no events has no frequency — it can't be placed on the axis,
+    // and plotting it at the origin would drag both midpoints down and quietly
+    // reclassify the real modules around it. Absent is not the same as unused.
+    .filter(r => r.events > 0);
+
+  // Split on the median, not the midpoint of the range. One runaway module (a
+  // Reports at 65% breadth) drags a min/max midpoint far enough right that
+  // half the platform falls into "shelfware" — and "improve or drop six of your
+  // twelve modules" is not a finding, it's noise. The median splits each axis
+  // down the middle of the modules that actually exist, which is what makes the
+  // bottom-left quadrant small enough to act on.
+  const mid = (xs: number[]) => {
+    const s = [...xs].sort((a, b) => a - b);
+    const m = s.length >> 1;
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+  const breadthMid = mid(raw.map(r => r.breadth));
+  const frequencyMid = mid(raw.map(r => r.frequency));
+
+  const points: MatrixPoint[] = raw.map(r => {
+    const wide = r.breadth >= breadthMid;
+    const often = r.frequency >= frequencyMid;
+    const quadrant: MatrixQuadrant = wide && often ? 'core'
+      : !wide && often ? 'power'
+      : wide && !often ? 'onboarding'
+      : 'shelfware';
+    return { ...r, quadrant };
+  });
+
+  return { points, breadthMid, frequencyMid };
 }

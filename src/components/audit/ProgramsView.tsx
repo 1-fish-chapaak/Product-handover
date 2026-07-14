@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Building2, Search, Plus, X, Trash2, HelpCircle, ChevronRight,
 } from 'lucide-react';
-import { BUSINESS_PROCESSES, RACMS, RISKS, CONTROLS } from '../../data/mockData';
+import { BUSINESS_PROCESSES } from '../../data/mockData';
+import { processCoverage, racmsForProcess } from '../../data/processCoverage';
 import type { UserProcess } from '../../hooks/useAppState';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
@@ -34,16 +35,9 @@ const inputCls = 'w-full px-3 py-2.5 border border-border rounded-md text-[0.812
 const selectCls = inputCls + ' cursor-pointer appearance-none';
 const labelCls = 'text-[0.75rem] font-semibold text-text-muted block mb-1.5';
 
-function racmsForProcess(bpId: string) { return RACMS.filter(r => r.bpId === bpId).length; }
-
-/** Coverage = % of this process's risks that have at least one mapped control. */
-function coverageForProcess(bp: { id: string }) {
-  const rs = RISKS.filter(r => r.bpId === bp.id);
-  if (!rs.length) return 0;
-  const ids = new Set(rs.map(r => r.id));
-  const covered = new Set(CONTROLS.filter(c => ids.has(c.riskId)).map(c => c.riskId));
-  return Math.round((covered.size / rs.length) * 100);
-}
+// Coverage and the RACM count now live in the data layer, so Platform Usage
+// reports the same figures this screen shows. See data/processCoverage.ts.
+const coverageForProcess = (bp: { id: string }) => processCoverage(bp.id);
 
 // ─── Component ──────────────────────────────────────────────────────────────
 

@@ -174,6 +174,9 @@ export interface Control {
   riskId: string;
   riskDescription: string;
   assertions: Assertion[];
+  /** Days until the next scheduled test — 0 = due today, negative = overdue.
+   *  Optional: when absent it is derived from the control's frequency. */
+  testDueInDays?: number;
   racmReview?: RacmReview;
   design: DesignTrack;
   operating: OperatingTrack;

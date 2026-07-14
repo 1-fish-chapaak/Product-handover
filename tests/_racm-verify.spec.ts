@@ -5,14 +5,14 @@ import { test, expect } from './_helpers';
  * with a clear auditor approval / remark status per row, plus bulk test of
  * controls and bulk approval from the selection bar.
  */
-test('Air India engagement RACM shows single matrix with approvals + bulk test', async ({ page }) => {
+test('Airline Group engagement RACM shows single matrix with approvals + bulk test', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto('/');
   // open Engagements from nav (collapsed sidebar → title attr)
   await page.locator('[title="Engagements"]').first().click();
   await page.waitForTimeout(800);
-  // open the Air India ICFR engagement
-  await page.getByText('FY26 ICFR — Air India Express').first().click();
+  // open the Airline Group ICFR engagement
+  await page.getByText('FY26 ICFR — Airline P2P & O2C').first().click();
   await page.waitForTimeout(1000);
   // RACM tab — the matrix is shown directly, no list of RACMs in between
   await page.getByRole('button', { name: 'RACM', exact: true }).first().click().catch(async () => {

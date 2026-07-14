@@ -2276,11 +2276,6 @@ function BusinessProcessesSection({ setView, rangeDays, setSelectedBP }: { setVi
 
 // ─── Recent reports ─────────────────────────────────────────────────────────
 
-const REPORT_STATUS_TONE: Record<string, string> = {
-  final: 'bg-compliant-50 text-compliant-700',
-  draft: 'bg-mitigated-50 text-mitigated-700',
-};
-
 function RecentReportsSection({
   setView, rangeDays, isPinned, togglePin,
 }: {
@@ -2326,7 +2321,6 @@ function RecentReportsSection({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-meta text-ink-900 truncate">{r.name}</span>
-                  <span className={`shrink-0 inline-flex items-center text-[0.75rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${REPORT_STATUS_TONE[r.status] ?? 'bg-canvas-border/40 text-ink-700'}`}>{r.status}</span>
                 </div>
                 <div className="text-xs text-ink-500 mt-0.5 tabular-nums">
                   {r.generatedBy} · {r.generatedAt} · {r.pages}p
@@ -2658,7 +2652,7 @@ function PinnedSection({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-meta font-medium text-ink-900 truncate">{r.name}</div>
-                  <div className="text-xs text-ink-500 mt-0.5 truncate">Report · {r.status}</div>
+                  <div className="text-xs text-ink-500 mt-0.5 truncate">Report · {r.tag}</div>
                 </div>
                 <PinButton active={isPinned('report', r.id)} onToggle={() => toggle('report', r.id)} label={r.name} />
               </button>
@@ -3289,9 +3283,9 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
 
   if (kind === 'reports-list') {
     const rows = [
-      { name: 'Q1 SOX Compliance', status: 'final' },
-      { name: 'P2P Risk Assessment', status: 'draft' },
-      { name: 'Workflow Performance', status: 'final' },
+      { name: 'Q1 SOX Compliance', pages: 24 },
+      { name: 'P2P Risk Assessment', pages: 12 },
+      { name: 'Workflow Performance', pages: 8 },
     ];
     return (
       <div className="absolute inset-0">
@@ -3302,7 +3296,7 @@ function WidgetPreview({ kind }: { kind: WidgetKey }) {
                 <FileText size={7} className="text-brand-700" />
               </div>
               <div className="text-[0.5rem] text-ink-900 truncate flex-1">{r.name}</div>
-              <span className={`text-[0.75rem] font-bold uppercase px-1 rounded ${r.status === 'final' ? 'bg-compliant-50 text-compliant-700' : 'bg-mitigated-50 text-mitigated-700'}`}>{r.status}</span>
+              <span className="text-[0.5rem] text-ink-500 tabular-nums shrink-0">{r.pages}p</span>
             </div>
           ))}
         </div>

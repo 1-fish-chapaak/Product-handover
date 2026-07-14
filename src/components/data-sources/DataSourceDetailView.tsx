@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import {
   ChevronLeft, ChevronRight, Search, ChevronDown, ArrowUpDown,
-  FileText, FolderOpen, Database, Globe, Cloud, MessageSquare,
+  FileText, FolderOpen, Database, MessageSquare,
   Loader2, AlertCircle, AlertOctagon, Pencil, Check, X, Upload,
   Eye, EyeOff, Copy, Mail, Plus, RotateCcw, Download, Table2, List,
 } from 'lucide-react';
@@ -22,7 +22,7 @@ import {
 } from './datasetFiles';
 import { TODAY } from './sources';
 
-type SourceType = 'file' | 'database' | 'api' | 'cloud' | 'session';
+type SourceType = 'file' | 'database' | 'session';
 
 interface DataSource {
   id: string;
@@ -46,8 +46,10 @@ interface Props {
   onStartRenamingConsumed?: () => void;
 }
 
+// SourceType no longer carries 'api' or 'cloud' — the Hub connects files,
+// databases and chat-session uploads.
 const TYPE_ICON: Record<SourceType, React.ElementType> = {
-  file: FileText, database: Database, api: Globe, cloud: Cloud, session: MessageSquare,
+  file: FileText, database: Database, session: MessageSquare,
 };
 
 // Status → label. Tone is owned by StatusPillFlat (the sole consumer); the

@@ -1,15 +1,15 @@
 /**
- * Platform Usage — module drill-down drawer.
+ * Platform Usage — module drill-down modal.
  *
  * One module's story over the selected range: total + delta vs the prior
  * window, share of platform activity, daily trend, and its top members. Top
- * members come from the same per-user mix the member drawer renders, so the
+ * members come from the same per-user mix the member modal renders, so the
  * two drill-downs always agree.
  */
 
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { TrendingUp } from 'lucide-react';
-import Drawer from '../shared/Drawer';
+import Modal from '../shared/Modal';
 import { InitialsAvatar } from '../admin/AdminPrimitives';
 import { useAdminData } from '../../context/AdminDataContext';
 import {
@@ -23,7 +23,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em] mb-2.5">{children}</div>;
 }
 
-export default function ModuleUsageDrawer({
+export default function ModuleUsageModal({
   module, days, priorDays, totalActions, rows, rangeDays, onClose,
 }: {
   module: UsageModule;
@@ -45,10 +45,10 @@ export default function ModuleUsageDrawer({
   const tickInterval = rangeDays === 7 ? 0 : rangeDays === 30 ? 6 : 14;
 
   return (
-    <Drawer
+    <Modal
       title={module}
       subtitle={`Module usage · last ${rangeDays} days`}
-      width="max-w-[520px]"
+      width="max-w-[560px]"
       onClose={onClose}
       ariaLabel={`${module} usage`}
     >
@@ -83,7 +83,7 @@ export default function ModuleUsageDrawer({
         <ResponsiveContainer width="100%" height={140}>
           <AreaChart data={chartData} margin={{ top: 4, right: 0, left: -16, bottom: 0 }}>
             <defs>
-              <linearGradient id="moduleDrawerFill" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="moduleModalFill" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#6A12CD" stopOpacity={0.2} />
                 <stop offset="100%" stopColor="#6A12CD" stopOpacity={0.02} />
               </linearGradient>
@@ -92,7 +92,7 @@ export default function ModuleUsageDrawer({
             <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#6B5D82' }} tickLine={false} axisLine={{ stroke: '#E5E7EB' }} interval={tickInterval} />
             <YAxis tick={{ fontSize: 9, fill: '#6B5D82' }} tickLine={false} axisLine={false} width={36} />
             <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} cursor={{ stroke: 'rgba(106,18,205,0.25)' }} />
-            <Area type="monotone" dataKey="count" name="Actions" stroke="#6A12CD" strokeWidth={1.5} fill="url(#moduleDrawerFill)" />
+            <Area type="monotone" dataKey="count" name="Actions" stroke="#6A12CD" strokeWidth={1.5} fill="url(#moduleModalFill)" />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -114,6 +114,6 @@ export default function ModuleUsageDrawer({
           <p className="text-[0.8125rem] text-ink-400">No activity in this range.</p>
         )}
       </div>
-    </Drawer>
+    </Modal>
   );
 }

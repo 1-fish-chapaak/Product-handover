@@ -5,8 +5,8 @@ import { useCurrentUser } from '../../context/CurrentUserContext';
 import { findEngagement } from '../../data/engagements';
 import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { IcfrProvider, useIcfr, type SoxTab } from './store';
-import { useAuditLog } from '../../context/AdminDataContext';
 import { RoleSwitcher } from './parts';
+import NotificationsBell from './NotificationsBell';
 import Overview from './Overview';
 import Racm from './Racm';
 import RiskLibrary from './RiskLibrary';
@@ -25,7 +25,6 @@ const SOX_TABS: TabDef[] = [
 
 function Inner({ onBack }: { onBack?: () => void }) {
   const { eng, role, tab, view, racmEditor, setRole, setTab, togglePeriod, back } = useIcfr();
-  const logEvent = useAuditLog();
 
   const topBar = (
     <div className="sticky top-0 z-30 bg-canvas/85 backdrop-blur border-b border-canvas-border shrink-0">
@@ -36,12 +35,13 @@ function Inner({ onBack }: { onBack?: () => void }) {
             <span className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center"><ShieldCheck size={16} className="text-white" /></span>
             <span className="font-mono text-[0.75rem] font-semibold text-ink-700">{eng.code}</span>
             <span className="text-[0.8125rem] font-semibold text-ink-900 truncate">{eng.name}</span>
-            <button onClick={() => { logEvent({ action: 'Update', description: `Switched period to ${eng.period === 'Interim' ? 'Year-end' : 'Interim'}`, module: 'SOX ICFR', entity: 'Engagement' }); togglePeriod(); }} title="Switch period — Interim ⇄ Year-end (roll-forward)" className="text-[0.6875rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 px-2 h-5 inline-flex items-center gap-1 rounded-full cursor-pointer transition-colors">{eng.period}<RefreshCw size={10} /></button>
+            <button onClick={togglePeriod} title="Switch period — Interim ⇄ Year-end (roll-forward)" className="text-[0.6875rem] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 px-2 h-5 inline-flex items-center gap-1 rounded-full cursor-pointer transition-colors">{eng.period}<RefreshCw size={10} /></button>
           </span>
         </div>
         {/* The switcher is a demo affordance — it previews the other persona
             without changing who is signed in, hence the "Viewing as" prefix. */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
+          <NotificationsBell />
           <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500">Viewing as</span>
           <RoleSwitcher role={role} onChange={setRole} />
         </div>

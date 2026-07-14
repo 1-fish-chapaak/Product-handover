@@ -1,5 +1,5 @@
 /**
- * Platform Usage — team drill-down drawer.
+ * Platform Usage — team drill-down modal.
  *
  * A team's members ranked by activity in the selected range, with the team's
  * totals. Numbers are the same per-member rows the Users lens shows, summed —
@@ -7,14 +7,14 @@
  * Administration.
  */
 
-import Drawer from '../shared/Drawer';
+import Modal from '../shared/Modal';
 import { InitialsAvatar } from '../admin/AdminPrimitives';
 import { getRole } from '../../data/rbac';
 import type { UserUsageRow } from '../../data/platform-usage';
 
 const fmt = (n: number) => n.toLocaleString('en-US');
 
-export default function TeamUsageDrawer({
+export default function TeamUsageModal({
   team, members, rangeDays, onClose,
 }: {
   team: string;
@@ -28,10 +28,10 @@ export default function TeamUsageDrawer({
   const aiQueries = members.reduce((s, m) => s + m.aiQueries, 0);
 
   return (
-    <Drawer
+    <Modal
       title={team}
       subtitle={`${members.length} member${members.length !== 1 ? 's' : ''} · last ${rangeDays} days`}
-      width="max-w-[520px]"
+      width="max-w-[560px]"
       onClose={onClose}
     >
       {/* Team totals */}
@@ -65,6 +65,6 @@ export default function TeamUsageDrawer({
           ))}
         </div>
       </div>
-    </Drawer>
+    </Modal>
   );
 }

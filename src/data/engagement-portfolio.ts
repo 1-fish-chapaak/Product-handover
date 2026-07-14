@@ -11,6 +11,7 @@
  */
 
 import { ENGAGEMENTS, type Engagement, type EngType, type EngStatus, type ProcessCode } from './engagements';
+import { ENGAGEMENT_EXCEPTIONS } from './engagement-exceptions';
 
 export const ENG_TYPES: EngType[] = ['SOX / ICFR', 'Internal Audit', 'Compliance', 'Automation'];
 export const ENG_STATUSES: EngStatus[] = ['Active', 'In Progress', 'Review', 'Planned', 'Draft', 'Closed'];
@@ -73,7 +74,27 @@ function effectiveControls(e: Engagement): number {
   return Math.round((e.controls * e.health) / 100);
 }
 
+/**
+ * Open findings, counted off the exception registry rather than the engagement
+ * record's `openIssues` summary field.
+ *
+ * The Engagements overview and My Queue both work the exception registry, and
+ * the summary field had drifted from it — the overview showed 32 open findings
+ * while this page claimed 35. The registry is the thing a user can actually
+ * open, triage and resolve, so it wins. An engagement nobody has raised an
+ * exception against has none.
+ */
+function openExceptionsByEngagement(): Map<string, number> {
+  const byEng = new Map<string, number>();
+  for (const ex of ENGAGEMENT_EXCEPTIONS) {
+    if (ex.status === 'Resolved') continue;
+    byEng.set(ex.engagementId, (byEng.get(ex.engagementId) ?? 0) + 1);
+  }
+  return byEng;
+}
+
 export function buildEngagementRows(engagements: Engagement[] = ENGAGEMENTS): EngRow[] {
+  const openByEng = openExceptionsByEngagement();
   return engagements.map(e => ({
     id: e.id,
     code: e.code,
@@ -85,7 +106,7 @@ export function buildEngagementRows(engagements: Engagement[] = ENGAGEMENTS): En
     controls: e.controls,
     health: e.health,
     effective: effectiveControls(e),
-    openIssues: e.openIssues,
+    openIssues: openByEng.get(e.id) ?? 0,
     lastActivity: e.lastActivity,
   }));
 }
@@ -96,19 +117,22 @@ export function deriveEngagementPortfolio(engagements: Engagement[] = ENGAGEMENT
 
   const controlsInScope = engagements.reduce((s, e) => s + e.controls, 0);
   const controlsEffective = engagements.reduce((s, e) => s + effectiveControls(e), 0);
-  const openFindings = engagements.reduce((s, e) => s + e.openIssues, 0);
+  // Every unresolved exception on the register, matching the Engagements
+  // overview KPI exactly — not the sum of each engagement's `openIssues` field.
+  const openFindings = ENGAGEMENT_EXCEPTIONS.filter(ex => ex.status !== 'Resolved').length;
   const avgHealth = inFlightRows.length > 0
     ? Math.round(inFlightRows.reduce((s, e) => s + e.health, 0) / inFlightRows.length)
     : 0;
 
   const byType: TypeAgg[] = ENG_TYPES.map(type => {
     const of = engagements.filter(e => e.type === type);
+    const ofRows = rows.filter(r => r.type === type);
     return {
       type,
       count: of.length,
       controls: of.reduce((s, e) => s + e.controls, 0),
       effective: of.reduce((s, e) => s + effectiveControls(e), 0),
-      findings: of.reduce((s, e) => s + e.openIssues, 0),
+      findings: ofRows.reduce((s, r) => s + r.openIssues, 0),
     };
   }).filter(t => t.count > 0);
 
@@ -132,7 +156,7 @@ export function deriveEngagementPortfolio(engagements: Engagement[] = ENGAGEMENT
     effectivePct: controlsInScope > 0 ? Math.round((controlsEffective / controlsInScope) * 100) : 0,
     openFindings,
     avgHealth,
-    needsAttention: engagements.filter(e => e.openIssues > 0).length,
+    needsAttention: rows.filter(r => r.openIssues > 0).length,
     byType,
     byStatus,
     byProcess,

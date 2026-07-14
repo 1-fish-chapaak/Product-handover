@@ -12,7 +12,8 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   ClipboardCheck, Sparkles, FileBarChart, Workflow, ShieldCheck, Database,
-  LayoutDashboard, ChevronRight, type LucideIcon,
+  LayoutDashboard, ShieldUser, Wand2, Calendar, Inbox, Layers, ChevronRight,
+  type LucideIcon,
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import Modal from '../shared/Modal';
@@ -20,9 +21,13 @@ import { CARD } from './usageSectionPrimitives';
 import { PortfolioStat } from './usageSectionPrimitives';
 import UsageEngagementsSection from './UsageEngagementsSection';
 import { deriveEngagementPortfolio } from '../../data/engagement-portfolio';
+import { useKnowledgeSources } from '../../hooks/useKnowledgeSources';
+import { useGeneratedReports } from '../../hooks/useGeneratedReports';
 import {
-  deriveAskIraPortfolio, deriveReportsPortfolio, deriveWorkflowsPortfolio,
+  deriveAskIraPortfolio, deriveConciergePortfolio, deriveReportsPortfolio, deriveWorkflowsPortfolio,
   deriveRiskControlsPortfolio, deriveKnowledgePortfolio, deriveDashboardsPortfolio,
+  deriveAdminPortfolio, deriveAuditPlanningPortfolio, deriveExceptionsPortfolio,
+  deriveProcessHubPortfolio,
   type SectionPortfolio, type SectionStat, type RankedRow,
 } from '../../data/section-portfolios';
 import type { UsageDay, UserUsageRow } from '../../data/platform-usage';
@@ -176,16 +181,18 @@ function SectionDetail({ portfolio }: { portfolio: SectionPortfolio }) {
         </div>
       </div>
 
-      {/* Ranked rows */}
-      <div className="pt-4 border-t border-canvas-border/60">
-        <div className="flex items-baseline justify-between mb-2">
-          <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em]">{portfolio.rows.title}</div>
-          <div className="text-[0.625rem] text-ink-400">{portfolio.rows.subtitle}</div>
+      {/* Ranked rows — sections with no ranked list omit this block entirely. */}
+      {portfolio.rows && (
+        <div className="pt-4 border-t border-canvas-border/60">
+          <div className="flex items-baseline justify-between mb-2">
+            <div className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-[0.14em]">{portfolio.rows.title}</div>
+            <div className="text-[0.625rem] text-ink-400">{portfolio.rows.subtitle}</div>
+          </div>
+          <div className="space-y-1">
+            {portfolio.rows.items.map(row => <RankedRowLine key={row.id} row={row} />)}
+          </div>
         </div>
-        <div className="space-y-1">
-          {portfolio.rows.items.map(row => <RankedRowLine key={row.id} row={row} />)}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -221,7 +228,10 @@ function SectionTile({ icon: Icon, title, hint, stats, onOpen }: {
   );
 }
 
-type SectionKey = 'engagements' | 'ask-ira' | 'reports' | 'workflows' | 'risk-controls' | 'knowledge' | 'dashboards';
+type SectionKey =
+  | 'engagements' | 'planning' | 'exceptions' | 'process-hub'
+  | 'ask-ira' | 'concierge' | 'reports' | 'workflows'
+  | 'risk-controls' | 'knowledge' | 'dashboards' | 'admin';
 
 export default function UsagePlatformSections({ days, rows, rangeDays }: {
   days: UsageDay[];
@@ -230,13 +240,32 @@ export default function UsagePlatformSections({ days, rows, rangeDays }: {
 }) {
   const [open, setOpen] = useState<SectionKey | null>(null);
 
+  // The Knowledge Hub's catalog is live — a user can add or delete a source and
+  // the Hub reflects it immediately. Read the same store so this page does too,
+  // rather than reporting on a snapshot that stopped being true.
+  const { sources: knowledgeSources } = useKnowledgeSources();
+
+  // The report book is live too — a report generated this session must be
+  // counted here, not just in the Reports view.
+  const generatedReports = useGeneratedReports();
+
   const eng = useMemo(() => deriveEngagementPortfolio(), []);
   const askIra = useMemo(() => deriveAskIraPortfolio(days, rows), [days, rows]);
-  const reports = useMemo(() => deriveReportsPortfolio(), []);
+  const concierge = useMemo(() => deriveConciergePortfolio(days, rows), [days, rows]);
+  const reports = useMemo(() => deriveReportsPortfolio(generatedReports), [generatedReports]);
   const workflows = useMemo(() => deriveWorkflowsPortfolio(), []);
   const riskControls = useMemo(() => deriveRiskControlsPortfolio(), []);
-  const knowledge = useMemo(() => deriveKnowledgePortfolio(rangeDays), [rangeDays]);
+  const knowledge = useMemo(
+    () => deriveKnowledgePortfolio(knowledgeSources, rangeDays),
+    [knowledgeSources, rangeDays],
+  );
   const dashboards = useMemo(() => deriveDashboardsPortfolio(days), [days]);
+  const admin = useMemo(() => deriveAdminPortfolio(days, rows), [days, rows]);
+  // Three surfaces the page never reported on at all: the plan, the triage
+  // queue, and the process map every RACM hangs off.
+  const planning = useMemo(() => deriveAuditPlanningPortfolio(), []);
+  const exceptions = useMemo(() => deriveExceptionsPortfolio(), []);
+  const processHub = useMemo(() => deriveProcessHubPortfolio(), []);
 
   const engStats: SectionStat[] = [
     { label: 'Engagements', value: String(eng.total) },
@@ -246,12 +275,17 @@ export default function UsagePlatformSections({ days, rows, rangeDays }: {
 
   const sections: { key: SectionKey; icon: LucideIcon; title: string; subtitle: string; stats: SectionStat[]; portfolio?: SectionPortfolio }[] = [
     { key: 'engagements', icon: ClipboardCheck, title: 'Engagements', subtitle: 'The whole book of work — controls, testing and findings across every engagement', stats: engStats },
-    { key: 'ask-ira', icon: Sparkles, title: 'Ask IRA & AI tools', subtitle: 'Saved conversations and Concierge tool runs', stats: askIra.stats, portfolio: askIra },
+    { key: 'planning', icon: Calendar, title: 'Audit Planning', subtitle: 'The plan — what is scheduled, what is running, and who is carrying it', stats: planning.stats, portfolio: planning },
+    { key: 'exceptions', icon: Inbox, title: 'Exceptions', subtitle: 'The triage queue — what workflows flagged and whether anyone is working it', stats: exceptions.stats, portfolio: exceptions },
+    { key: 'process-hub', icon: Layers, title: 'Process Hub', subtitle: 'The process map — SOPs, RACMs and coverage per business process', stats: processHub.stats, portfolio: processHub },
+    { key: 'ask-ira', icon: Sparkles, title: 'Ask IRA', subtitle: 'The chat — questions asked and conversations held', stats: askIra.stats, portfolio: askIra },
+    { key: 'concierge', icon: Wand2, title: 'AI Concierge', subtitle: 'The toolkit — which tools exist and how often they run', stats: concierge.stats, portfolio: concierge },
     { key: 'reports', icon: FileBarChart, title: 'Reports', subtitle: 'The report book — generated, shared and Action Taken Reports', stats: reports.stats, portfolio: reports },
     { key: 'workflows', icon: Workflow, title: 'Workflows', subtitle: 'The automation library and how much it runs', stats: workflows.stats, portfolio: workflows },
     { key: 'risk-controls', icon: ShieldCheck, title: 'Risk & Controls', subtitle: 'The control environment — risks, controls, RACMs and coverage', stats: riskControls.stats, portfolio: riskControls },
     { key: 'knowledge', icon: Database, title: 'Knowledge Hub', subtitle: 'What data the platform can reach', stats: knowledge.stats, portfolio: knowledge },
     { key: 'dashboards', icon: LayoutDashboard, title: 'Dashboards', subtitle: 'What the team watches', stats: dashboards.stats, portfolio: dashboards },
+    { key: 'admin', icon: ShieldUser, title: 'Admin & access', subtitle: 'Workspaces, teams, roles — and who can change what', stats: admin.stats, portfolio: admin },
   ];
 
   const active = sections.find(s => s.key === open) ?? null;

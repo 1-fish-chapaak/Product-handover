@@ -1,15 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
-  CheckCircle2, Circle, FileSpreadsheet, FlaskConical, ListFilter, MessageSquareWarning,
-  Search, Star, Table2, X, Check, MessageSquarePlus, RotateCcw,
+  CheckCircle2, Circle, FileSpreadsheet, FlaskConical, ListFilter, Loader2, MessageSquareWarning,
+  Paperclip, Search, Star, Table2, UploadCloud, X, Check, MessageSquarePlus, RotateCcw,
 } from 'lucide-react';
 import { useIcfr } from './store';
-import { controlConclusion, trackResult } from './helpers';
+import { controlConclusion, testDueDisplay, trackResult } from './helpers';
+import { useToast } from '../shared/Toast';
 import { Pill } from '../shared/StatusBadge';
 import { NatureChip, Tickmark } from './parts';
 import BulkTestModal from './BulkTestModal';
 import { cn } from '../../lib/cn';
-import { useAuditLog } from '../../context/AdminDataContext';
 import type { Control } from './types';
 
 const BINDINGS = ['#6A12CD', '#0369A1', '#550FA5', '#075985', '#8838DE', '#0284C7', '#3B0B72', '#1E3A5F'];
@@ -43,8 +43,8 @@ function ReviewCell({ c }: { c: Control }) {
  * spreadsheet editor remains one click away for cell-by-cell editing.
  */
 export default function Racm() {
-  const { eng, role, openRacmEditor, openControl, approveRacmRows, remarkRacmRow, clearRacmReview } = useIcfr();
-  const logEvent = useAuditLog();
+  const { eng, role, openRacmEditor, openControl, approveRacmRows, remarkRacmRow, clearRacmReview, racmDocs, addRacmDoc } = useIcfr();
+  const { addToast } = useToast();
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
   const [review, setReview] = useState<ReviewFilter>('All');
@@ -52,6 +52,21 @@ export default function Racm() {
   const [remarkFor, setRemarkFor] = useState<Control | null>(null);
   const [remarkText, setRemarkText] = useState('');
   const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
+  const [importing, setImporting] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Upload a RACM / SOP source document — parsed (simulated) and pinned to the matrix.
+  const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setImporting(f.name);
+    window.setTimeout(() => {
+      addRacmDoc(f.name);
+      setImporting(null);
+      addToast({ type: 'success', title: 'Imported', message: `${f.name} attached to the engagement RACM — rows and test attributes read from the document.` });
+    }, 1600);
+  };
 
   const isAuditor = role === 'auditor';
   const processes = useMemo(() => ['All', ...Array.from(new Set(eng.controls.map(c => c.process)))], [eng.controls]);
@@ -97,7 +112,7 @@ export default function Racm() {
   const saveRemark = () => { if (remarkFor && remarkText.trim()) { remarkRacmRow(remarkFor.id, remarkText.trim()); setRemarkFor(null); } };
 
   const risks = new Set(eng.controls.map(c => c.riskId)).size;
-  const colSpan = isAuditor ? 9 : 8;
+  const colSpan = 9;
 
   const reviewChip = (id: ReviewFilter, label: string, n: number, Icon: typeof CheckCircle2, cls: string) => (
     <button onClick={() => setReview(review === id ? 'All' : id)}
@@ -119,19 +134,36 @@ export default function Racm() {
           <p className="text-[0.8125rem] text-ink-500 mt-0.5">{eng.entity} · one RACM for this engagement · {risks} risks · {eng.controls.length} controls · {processes.length - 1} processes</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {isAuditor && (
-            <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
-              title={sel.size ? `Bulk test the ${sel.size} selected rows` : 'Bulk test all rows in view'}
-              className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
-              <FlaskConical size={14} /> Bulk test{sel.size > 0 && <span className="tabular-nums text-brand-700">({sel.size})</span>}
-            </button>
-          )}
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.pdf,.docx" className="hidden" onChange={onPickFile} aria-label="Upload RACM or SOP document" />
+          <button onClick={() => fileRef.current?.click()} disabled={!!importing}
+            title="Upload a RACM workbook or SOP — rows and test attributes are read from the document"
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 disabled:opacity-60 transition-colors cursor-pointer">
+            {importing ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />} {importing ? 'Importing…' : 'Upload RACM / SOP'}
+          </button>
+          <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
+            title={sel.size ? `Bulk test the ${sel.size} selected rows` : 'Bulk test all rows in view'}
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
+            <FlaskConical size={14} /> Bulk test{sel.size > 0 && <span className="tabular-nums text-brand-700">({sel.size})</span>}
+          </button>
           <button onClick={() => openRacmEditor({ name: `${eng.entity} — Engagement RACM` })}
             className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
             <FileSpreadsheet size={15} /> Open spreadsheet editor
           </button>
         </div>
       </div>
+
+      {/* source documents pinned to the matrix */}
+      {racmDocs.length > 0 && (
+        <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+          <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Source documents</span>
+          {racmDocs.map(d => (
+            <span key={d.id} className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-medium text-ink-700">
+              <Paperclip size={11} className="text-ink-400" /> {d.name}
+              <span className="text-ink-400">· {d.uploadedAt}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* auditor-review summary — the approval state of the matrix at a glance */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -162,7 +194,7 @@ export default function Racm() {
         <table className="w-full border-collapse">
           <thead className="reg-head">
             <tr>
-              {isAuditor && <th style={{ width: 34 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer accent-brand-600" aria-label="Select all rows" /></th>}
+              <th style={{ width: 34 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer accent-brand-600" aria-label="Select all rows" /></th>
               <th style={{ width: 64 }}>W/P</th>
               <th style={{ width: 230 }}>Risk</th>
               <th>Control</th>
@@ -187,10 +219,12 @@ export default function Racm() {
                 </td></tr>
                 {g.rows.map(c => {
                   const d = trackResult(c.design); const o = trackResult(c.operating);
+                  const ineffective = controlConclusion(c) === 'Ineffective';
                   return (
-                    <tr key={c.id} className={cn('reg-row', sel.has(c.id) && 'sel')} onClick={() => openControl(c.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') openControl(c.id); }} role="button" aria-label={`Open ${c.id} — ${c.description}`}>
+                    <tr key={c.id} className={cn('reg-row', sel.has(c.id) && 'sel')} onClick={() => openControl(c.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') openControl(c.id); }} role="button" aria-label={`Open ${c.id} — ${c.description}`}
+                      style={ineffective ? { boxShadow: 'inset 3px 0 0 var(--color-risk-500)' } : undefined}>
                       {/* toggle from the input's change only — a td-level toggle would double-fire when the checkbox itself is clicked */}
-                      {isAuditor && <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>}
+                      <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>
                       <td><span className="wp-ref">{c.wpRef}</span></td>
                       <td className="tight">
                         <div className="font-mono text-[0.65625rem] font-bold text-ink-500">{c.riskId}</div>
@@ -200,8 +234,14 @@ export default function Racm() {
                         <div className="flex items-center gap-1.5">
                           {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
                           <span className="font-semibold text-ink-900 text-[0.78125rem] truncate max-w-[340px]">{c.description}</span>
+                          {/* the auditor's verdict — kept loud so the risk owner can't miss it */}
+                          {ineffective && <Pill tone="risk">Ineffective</Pill>}
                         </div>
-                        <div className="text-[0.6875rem] text-ink-400 mt-0.5">{c.id} · {c.frequency} · {c.owner} · {c.assertions[0]}{c.assertions.length > 1 ? ` +${c.assertions.length - 1}` : ''}</div>
+                        <div className="text-[0.6875rem] text-ink-400 mt-0.5">
+                          {c.id} · {c.frequency} ·{' '}
+                          {(() => { const dd = testDueDisplay(c); return <span className={dd.cls}>{dd.label}</span>; })()}{' '}
+                          · {c.owner} · {c.assertions[0]}{c.assertions.length > 1 ? ` +${c.assertions.length - 1}` : ''}
+                        </div>
                       </td>
                       <td><NatureChip nature={c.nature} small /></td>
                       <td><span className="inline-flex items-center gap-1.5"><Tickmark result={d === 'Effective' ? 'Pass' : d === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
@@ -213,7 +253,7 @@ export default function Racm() {
                             {c.racmReview?.status === 'Approved' ? (
                               <button onClick={() => clearRacmReview(c.id)} title="Withdraw approval" aria-label={`Withdraw approval on ${c.id}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-ink-400 hover:text-ink-700 hover:border-ink-300 transition-colors cursor-pointer"><RotateCcw size={12} /></button>
                             ) : (
-                              <button onClick={() => { approveRacmRows([c.id]); logEvent({ action: 'Update', description: `Approved 1 RACM row (${c.id})`, module: 'SOX ICFR', entity: 'RACM' }); }} title="Approve row" aria-label={`Approve ${c.id}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-compliant-700 hover:bg-compliant-50 hover:border-compliant-300 transition-colors cursor-pointer"><Check size={13} /></button>
+                              <button onClick={() => approveRacmRows([c.id])} title="Approve row" aria-label={`Approve ${c.id}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-compliant-700 hover:bg-compliant-50 hover:border-compliant-300 transition-colors cursor-pointer"><Check size={13} /></button>
                             )}
                             <button onClick={() => openRemark(c)} title="Add remark" aria-label={`Remark on ${c.id}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-high-700 hover:bg-high-50 hover:border-high-300 transition-colors cursor-pointer"><MessageSquarePlus size={13} /></button>
                           </span>
@@ -234,13 +274,13 @@ export default function Racm() {
       </div>
       <div className="mt-3 text-[0.71875rem] text-ink-400">Showing {filtered.length} of {eng.controls.length} rows</div>
 
-      {/* bulk bar — test and approve controls in one go */}
-      {isAuditor && sel.size > 0 && (
+      {/* bulk bar — both personas can bulk test; approving rows stays with the auditor */}
+      {sel.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
           <span className="text-[0.78125rem] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
           <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>
-          <button onClick={() => { approveRacmRows(Array.from(sel)); logEvent({ action: 'Update', description: `Approved ${sel.size} RACM rows`, module: 'SOX ICFR', entity: 'RACM' }); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve rows</button>
+          {isAuditor && <button onClick={() => { approveRacmRows(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve rows</button>}
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
       )}
