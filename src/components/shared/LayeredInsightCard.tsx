@@ -209,26 +209,20 @@ export default function LayeredInsightCard({
           </div>
         )}
 
-        {/* Cause/driver paired two-up with the short facts, so neither the reason
-            nor the one-line facts sits alone in a wide, half-empty box. */}
+        {/* Reasoning takes the wide box — it's text-heavy — while the short facts
+            (at stake + the confirm-first root cause) stack in the second column. */}
         <div className="grid lg:grid-cols-2 gap-3 mt-3">
-          {/* Likely cause / coverage gap / driver — confirm-first candidate */}
+          {/* Reasoning · counted once — the prominent, text-heavy box */}
           <div className={`rounded-xl border ${vTone.soft} p-3.5`}>
             <div className="flex items-center gap-1.5 mb-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-ink-500">
-                {insight.layer === 'risk' ? 'The coverage gap' : insight.layer === 'engagement' ? 'The one driver' : 'Likely cause'}
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-500">
+                <Layers size={12} className="text-brand-600" aria-hidden="true" /> Reasoning · counted once
               </span>
-              {insight.likelyCause.confirmFirst && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-canvas-elevated border border-mitigated-200 px-2 py-0.5 text-[9px] font-bold text-mitigated-700">
-                  <Info size={9} /> Confirm first
-                </span>
-              )}
             </div>
-            <p className="text-[13px] font-semibold text-ink-900 leading-snug">{insight.likelyCause.label}</p>
-            <p className="text-[12px] text-ink-600 leading-relaxed mt-1">{insight.likelyCause.detail}</p>
+            <p className="text-[12px] text-ink-700 leading-relaxed">{insight.reasoning}</p>
           </div>
 
-          {/* At stake + counted-once reasoning, stacked in the second column */}
+          {/* At stake + root cause, stacked in the second column */}
           <div className="grid gap-3 content-start">
             <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-3">
               <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1">
@@ -237,10 +231,18 @@ export default function LayeredInsightCard({
               <p className="text-[12px] text-ink-700 leading-snug">{insight.atStake}</p>
             </div>
             <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-3">
-              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1">
-                <Layers size={12} className="text-brand-600" aria-hidden="true" /> Reasoning · counted once
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400">
+                  <Crosshair size={12} className="text-ink-500" aria-hidden="true" /> Root cause
+                </span>
+                {insight.likelyCause.confirmFirst && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-canvas-elevated border border-mitigated-200 px-2 py-0.5 text-[9px] font-bold text-mitigated-700">
+                    <Info size={9} /> Confirm first
+                  </span>
+                )}
               </div>
-              <p className="text-[12px] text-ink-700 leading-snug">{insight.reasoning}</p>
+              <p className="text-[12px] font-semibold text-ink-900 leading-snug">{insight.likelyCause.label}</p>
+              <p className="text-[12px] text-ink-600 leading-relaxed mt-0.5">{insight.likelyCause.detail}</p>
             </div>
           </div>
         </div>

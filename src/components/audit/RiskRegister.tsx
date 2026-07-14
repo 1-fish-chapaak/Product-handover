@@ -34,8 +34,9 @@ import { addCreatedControl, useCreatedControls } from '../../data/createdControl
 import { useRiskControlLinks, addRiskControlLinks } from '../../data/riskControlLinksStore';
 import { getRiskRelationships, getControlRelationships } from '../../data/processHubJoins';
 import { BUSINESS_PROCESSES } from '../../data/mockData';
-import InsightGenerator, { AIRecommendsBadge } from '../shared/InsightGenerator';
-import { hasMaterialInsight } from '../../data/layeredInsights';
+import InsightGenerator from '../shared/InsightGenerator';
+import AIRecommendsPopover from '../shared/AIRecommendsPopover';
+import { actionableRecs, isPricingSubject } from '../../data/layeredInsights';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -753,6 +754,14 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
   // Count risks with no mapped controls (draft status = unmapped)
   const unmappedCount = baseRisks.filter(r => r.status === 'Draft').length;
 
+  // The register-level AI insight box (mirrors the engagement overview's) anchors
+  // on the headline risk: the flagship pricing thread when present, else the
+  // highest-priority risk in view. Cheap to derive; no engine call until Generate.
+  const RISK_PRIORITY_RANK: Record<RiskPriority, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+  const headlineRisk = baseRisks.length === 0 ? null : [...baseRisks].sort((a, b) =>
+    (Number(isPricingSubject(b.name)) - Number(isPricingSubject(a.name))) ||
+    (RISK_PRIORITY_RANK[a.priority] - RISK_PRIORITY_RANK[b.priority]))[0];
+
   // Link Control + Link Workflow drawers — shared by the list view and the risk
   // detail-page takeover (both can trigger linking), so they render in each return.
   const linkDrawers = (
@@ -967,6 +976,27 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
         ) : (
         <>
 
+        {/* ─── AI insight · register altitude (generate-on-demand) ───
+            One box for the whole register — the engagement-overview pattern. It
+            anchors on the headline risk and renders the full Layer-3 card inline;
+            InsightGenerator session-caches, so revisits don't re-bill. */}
+        {headlineRisk && (
+          <InsightGenerator
+            layer="risk"
+            subjectId={headlineRisk.id}
+            subjectLabel={headlineRisk.name}
+            priority={headlineRisk.priority}
+            labelOverride="this risk register"
+            scanOverride="Scans every risk in this register and rolls up the controls mapped to the sharpest exposure"
+            stepsOverride={[
+              'Reading every risk in the register',
+              'Rolling up each risk’s mapped controls',
+              'Finding the shared coverage gap',
+              'Writing the explanation',
+            ]}
+          />
+        )}
+
         {/* Filter row — search on the left, dropdown filters + clear on the right. */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="relative shrink-0">
@@ -1025,6 +1055,9 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
           ) : filteredRisks.map((risk, i) => {
             const isChecked = selectedRiskIds.includes(risk.id);
             const cardControls = controlsForRisk(risk);
+            // Deterministic, engine-free recommendations for this risk (do-now / this-period).
+            // Same source the other tabs use — powers the click-to-open popover on the badge.
+            const aiRecs = actionableRecs({ layer: 'risk', subjectId: risk.id, subjectLabel: risk.name, priority: risk.priority });
             return (
               <motion.div
                 key={risk.id}
@@ -1117,8 +1150,8 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             {identity}
-                            {hasMaterialInsight({ layer: 'risk', subjectId: risk.id, subjectLabel: risk.name, priority: risk.priority }) && (
-                              <AIRecommendsBadge className="shrink-0" />
+                            {aiRecs.length > 0 && (
+                              <AIRecommendsPopover recs={aiRecs} subjectLabel={risk.id} subjectSub={risk.name} className="shrink-0" />
                             )}
                           </div>
                           <p title={risk.description} className="text-[0.8125rem] text-text leading-relaxed mt-2.5 max-w-[50ch] line-clamp-2">{risk.description || '—'}</p>
@@ -1140,8 +1173,8 @@ export default function RiskRegister({ onNavigate, processFilter }: Props) {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             {identity}
-                            {hasMaterialInsight({ layer: 'risk', subjectId: risk.id, subjectLabel: risk.name, priority: risk.priority }) && (
-                              <AIRecommendsBadge className="shrink-0" />
+                            {aiRecs.length > 0 && (
+                              <AIRecommendsPopover recs={aiRecs} subjectLabel={risk.id} subjectSub={risk.name} className="shrink-0" />
                             )}
                             {p2pChip}
                             {categoryChip}

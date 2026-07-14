@@ -12,9 +12,9 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, 
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
 import Gated from '../shared/Gated';
-import InsightGenerator, { AIRecommendsBadge } from '../shared/InsightGenerator';
-import RecommendationsPanel, { type PanelRec } from '../shared/RecommendationsPanel';
-import { actionableWorkflowRecs, workflowRecBadge } from '../../data/layeredInsights';
+import InsightGenerator from '../shared/InsightGenerator';
+import AIRecommendsPopover from '../shared/AIRecommendsPopover';
+import { actionableWorkflowRecs } from '../../data/layeredInsights';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import {
   ENGAGEMENTS,
@@ -2233,17 +2233,6 @@ function WorkflowsBySubProcess({
 
   const groups = useMemo(() => groupBySubProcess(visibleWorkflows), [visibleWorkflows]);
 
-  // AI recommendations across the visible workflows (metric-driven, deterministic).
-  const workflowPanelRecs = useMemo<PanelRec[]>(() =>
-    visibleWorkflows.flatMap(w => {
-      const eff = w.totalFires > 0 ? Math.round((w.truePositives / w.totalFires) * 100) : 0;
-      const cadence = w.cadence.kind === 'Ad-hoc' ? 'Ad-hoc' : w.cadence.label;
-      return actionableWorkflowRecs({ subjectLabel: w.name, effectivePct: eff, openExceptions: openByWorkflow.get(w.id) ?? 0, cadence, status: w.status, category: w.type })
-        .map(r => ({ ...r, subjectLabel: w.code, subjectSub: w.name }));
-    }),
-    [visibleWorkflows, openByWorkflow],
-  );
-
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [grouped, setGrouped] = useState(false); // flat list by default; grouping is opt-in
   const [bulkMode, setBulkMode] = useState(false);
@@ -2374,9 +2363,6 @@ function WorkflowsBySubProcess({
         </div>
       </div>
 
-      {/* AI recommendations across these workflows (visible, no generation) */}
-      <RecommendationsPanel recs={workflowPanelRecs} scopeLabel="these workflows" />
-
       {visibleWorkflows.length === 0 ? (
         <div className="glass-card rounded-xl px-4 py-10 text-center text-[12px] text-text-muted">
           No workflows match “{query}”.
@@ -2488,7 +2474,7 @@ function WorkflowRow({
 }) {
   const eff = wf.totalFires > 0 ? Math.round((wf.truePositives / wf.totalFires) * 100) : 0;
   const tier = effectivenessTier(eff);
-  const wfBadge = workflowRecBadge({ subjectLabel: wf.name, effectivePct: eff, openExceptions: openCount, cadence: wf.cadence.kind === 'Ad-hoc' ? 'Ad-hoc' : wf.cadence.label, status: wf.status, category: wf.type });
+  const wfRecs = actionableWorkflowRecs({ subjectLabel: wf.name, effectivePct: eff, openExceptions: openCount, cadence: wf.cadence.kind === 'Ad-hoc' ? 'Ad-hoc' : wf.cadence.label, status: wf.status, category: wf.type });
   const handleRowClick = () => {
     if (bulkMode) onToggleSelect();
     else onOpen();
@@ -2514,7 +2500,11 @@ function WorkflowRow({
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[14px] font-semibold text-text leading-snug">{wf.name}</span>
           <span className="px-1.5 h-[18px] rounded text-[10px] font-bold bg-surface-2 text-text-secondary font-mono inline-flex items-center">{wf.code}</span>
-          {wfBadge && <AIRecommendsBadge priority={wfBadge.topPriority} count={wfBadge.count} className="shrink-0" />}
+          {wfRecs.length > 0 && (
+            <span onClick={(e) => e.stopPropagation()} className="shrink-0 inline-flex">
+              <AIRecommendsPopover recs={wfRecs} subjectLabel={wf.code} subjectSub={wf.name} />
+            </span>
+          )}
         </div>
         {/* Meta line — generous spacing, input badges grouped here */}
         <div className="text-[11.5px] text-text-muted mt-2 flex items-center gap-x-2.5 gap-y-1.5 flex-wrap">

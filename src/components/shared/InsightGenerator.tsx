@@ -48,11 +48,19 @@ interface Props {
   flagship?: boolean;
   /** Tighter idle panel for dense row contexts. */
   compact?: boolean;
+  /** Override the "for {label}" phrase in the idle/generating headers — e.g. a
+   *  register-level box that anchors on one subject ("this risk register"). */
+  labelOverride?: string;
+  /** Override the idle-body scan clause (defaults to the layer's scan line). */
+  scanOverride?: string;
+  /** Override the generating-pipeline steps (defaults to the layer's steps). */
+  stepsOverride?: string[];
   onCheckMore?: (opt: CheckMoreOption) => void;
 }
 
 export default function InsightGenerator({
-  layer, subjectId, subjectLabel, status, priority, isKey, flagship, compact = false, onCheckMore,
+  layer, subjectId, subjectLabel, status, priority, isKey, flagship, compact = false,
+  labelOverride, scanOverride, stepsOverride, onCheckMore,
 }: Props) {
   const key = cacheKey(layer, subjectId);
   const cached = CACHE.get(key) ?? null;
@@ -61,7 +69,9 @@ export default function InsightGenerator({
   const [step, setStep] = useState(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const meta = LAYER_META[layer];
-  const steps = PIPELINE[layer];
+  const label = labelOverride ?? meta.label;
+  const scan = scanOverride ?? meta.scan;
+  const steps = stepsOverride ?? PIPELINE[layer];
 
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
 
@@ -104,7 +114,7 @@ export default function InsightGenerator({
           <span className="size-6 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center">
             <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.4, ease: 'linear' }} className="inline-flex"><Loader2 size={13} /></motion.span>
           </span>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700">Generating insight · {meta.label}</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700">Generating insight · {label}</span>
           <span className="ml-auto flex items-center gap-1">
             {[0, 1, 2].map(i => (
               <motion.span key={i} className="size-1.5 rounded-full bg-brand-400"
@@ -139,10 +149,10 @@ export default function InsightGenerator({
         </span>
         <div className="min-w-0 flex-1">
           <h4 className={`${compact ? 'text-[13px]' : 'text-[14px]'} font-bold text-ink-900 leading-tight`}>
-            Generate AI insights for {meta.label}
+            Generate AI insights for {label}
           </h4>
           <p className="text-[11.5px] text-ink-500 leading-relaxed mt-0.5">
-            {meta.scan}, correlates the findings, and prices the consequence — with a recommended action. Won’t run automatically; you trigger it so it only bills when you need it.
+            {scan}, correlates the findings, and prices the consequence — with a recommended action. Won’t run automatically; you trigger it so it only bills when you need it.
           </p>
           <button
             type="button" onClick={run}
