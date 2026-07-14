@@ -26,7 +26,7 @@ import {
   type UsageDay,
 } from '../../data/platform-usage';
 import { InitialsAvatar } from '../admin/AdminPrimitives';
-import { Card, Eyebrow, Meter, RadialGauge } from './usageChrome';
+import { Card, Eyebrow, Meter } from './usageChrome';
 import { SERIES } from './usageTokens';
 
 /* The one colour that carries an action. Validated against the brand at
@@ -77,26 +77,26 @@ function PowerCurvePanel({ days, users }: { days: UsageDay[]; users: AdminUser[]
       title="How often each seat is used"
       subtitle={`Days of real work in the last ${curve.windowDays}`}
     >
-      {/* Licence utilisation — the headline the admin is here for. The ring is
-          the same mark the Overview's hero wears, one rank down: this is the
-          same question ("do the seats get used") asked over the page's own
-          window rather than over the fixed week the benchmark is defined on, so
-          it gets the same shape and a smaller size. */}
-      <div className="flex items-center gap-5 mb-7">
-        <RadialGauge pct={licence.pct} healthy size={96}>
-          <span className="text-[1.375rem] font-semibold leading-none tracking-[-0.02em] text-ink-900">
-            {licence.pct}%
-          </span>
-        </RadialGauge>
-        <div className="min-w-0">
-          <p className="text-[0.875rem] text-ink-700 leading-snug">
-            <strong className="font-semibold text-ink-900">{licence.used} of {licence.total} seats</strong> did real
-            work in this period.
-          </p>
-          <p className="mt-1.5 text-[0.75rem] text-ink-400">
-            The bands below split those seats by how many days they showed up.
-          </p>
-        </div>
+      {/* Licence utilisation over the page's window — stated, not drawn.
+          It briefly wore a ring of its own, and that was a mistake the moment the
+          verdict moved onto this tab: two gauges within one screen of each other,
+          reading 65% and 71%, are not two facts a reader combines — they are a
+          number that appears to disagree with itself. They measure different
+          windows (a fixed week against the date filter), which is exactly the
+          distinction a second identical mark destroys.
+
+          One ring per tab, and the hero owns it. This is the same number said in
+          words, and the bands under it are what this card is actually for. */}
+      <div className="mb-6">
+        <p className="text-[0.9375rem] text-ink-700 leading-snug">
+          <strong className="font-semibold text-ink-900">
+            {licence.used} of {licence.total} seats
+          </strong>{' '}
+          did real work in this period — <span className="font-semibold text-ink-900">{licence.pct}%</span>.
+        </p>
+        <p className="mt-1.5 text-[0.75rem] text-ink-400">
+          The bands below split those seats by how many days they showed up.
+        </p>
       </div>
 
       {/* Seven buckets over seventeen seats is the 24x7 heatmap's mistake again:

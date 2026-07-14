@@ -33,33 +33,42 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
   test.setTimeout(120000);
   await openUsage(page);
 
-  // Header + KPI band. There is no "People active" tile: the hero above owns
-  // seat usage, and owns it better (number + denominator + change + benchmark).
-  // The band starts at the work the seats produced.
+  // Overview opens on the KPI band, because Overview's promise is "how much
+  // happened in this period, and when" — the work the seats produced, not the
+  // seats. The licence verdict used to lead here and now leads ADOPTION, whose
+  // subhead is literally "whether the licence is earning its keep": a
+  // procurement number has no business being the loudest mark on the tab an
+  // admin opens to see what their team did.
   await expect(page.getByRole('heading', { name: 'Platform Usage' })).toBeVisible();
   await expect(page.getByText('Work done')).toBeVisible();
+  await expect(page.locator('[aria-label="Licence use"]')).toHaveCount(0);
 
-  // The change is a sentence against a named baseline, not a bare percentage
-  // chip: "Down 2 people from 14". A percent on a base of twelve is one person.
-  await expect(page.getByText(/(Up|Down|Same as|New this period)/).first()).toBeVisible();
+  // The change splits in two: a toned chip for the movement ("Up 8%") and muted
+  // text for the baseline it moved from ("from 487"). Both are always present —
+  // a number with no named baseline is the vanity metric this page forbids.
+  await expect(page.getByText(/(Up|Down|No change|New)/).first()).toBeVisible();
+  await expect(page.getByText(/from \d/).first()).toBeVisible();
   await expect(page.getByText(/The 30 days up to .*Each change is against the 30 days before that\./)).toBeVisible();
 
-  // Overview leads with the verdict, then the trend and the module ranking.
-  // Chart titles are takeaway SENTENCES now, not nouns — assert on what they
-  // must always contain, not on a fixed string that moves with the data.
-  // The verdict is a share of paid seats, against the benchmark that gives it
-  // meaning. It is a <section aria-label="Licence use">, not a heading, so match
-  // the sentence rather than a role that isn't there.
+  // Charts take noun titles; the sentence lives in the subtitle and the strip.
+  await expect(page.getByRole('heading', { name: 'Actions per day' })).toBeVisible();
+
+  // The verdict, on the tab that asks the question. It is a
+  // <section aria-label="Licence use">, not a heading, so match the sentence
+  // rather than a role that isn't there.
+  //
   // One sentence carries both forms of the number: "12 of your 17 paid seats".
   // There used to be a second sentence ("12 of 17 people used it...") saying the
   // same thing, and this asserted on it — 12 of 17 IS the percentage beside it.
+  //
   // The verdict is measured on a FIXED week, not on the page's date filter — the
   // 60% benchmark is a weekly-active-to-licence ratio, so it only means anything
   // against a week. The card says "this week" out loud precisely because it does
   // not follow the filter above it.
+  await usageTab(page, 'Adoption');
   await expect(page.getByText(/\d+ of your \d+ paid seats did real work this week/)).toBeVisible();
   // The verdict reads the chart out loud: which side of the benchmark, and which
-  // way it is moving. A line nobody interprets is decoration.
+  // way it is moving. A chart nobody interprets is decoration.
   await expect(
     page.getByText(/(Above|Below) the healthy mark for a paid licence, (and climbing|but falling|and holding steady|measured this week)\./),
   ).toBeVisible();
@@ -69,8 +78,7 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
   // metric usageChrome's delta spec exists to forbid.
   const bareDelta = page.locator('[aria-label="Licence use"]').getByText(/^[+−-]\d+$/);
   await expect(bareDelta).toHaveCount(0);
-  // Charts take noun titles; the sentence lives in the subtitle and the strip.
-  await expect(page.getByRole('heading', { name: 'Actions per day' })).toBeVisible();
+  await usageTab(page, 'Overview');
   await expect(page.getByText(/7-day average.*weekends/)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Top areas' })).toBeVisible();
 
@@ -193,6 +201,10 @@ test('CSV export downloads the filtered set and shows a toast', async ({ page })
  */
 test('the licence verdict does not move when the date range moves', async ({ page }) => {
   await openUsage(page);
+  // The verdict lives on Adoption now, not Overview — it is a licence question,
+  // and Adoption is the tab that asks it. The date filter is shared across all
+  // five tabs, so what this test checks is unchanged.
+  await usageTab(page, 'Adoption');
 
   const read = async () => {
     const t = (await page.locator('[aria-label="Licence use"]').innerText()).replace(/\s+/g, ' ');
@@ -218,16 +230,15 @@ test('depth: highlights, rhythm, module modal, segments, team modal', async ({ p
   test.setTimeout(120000);
   await openUsage(page);
 
-  // The verdict panel now carries the findings the four highlight cards used to
-  // (fastest-growing area, AI share, dormant seats), in prose, above the fold.
-  // The one finding that rides alongside the verdict, and only when it fires.
-  // The seed leaves seats idle, so it does.
+  // Business framing: the licence verdict, the seat funnel, the working-pattern
+  // charts and the read-only findings all live on Adoption — every one of them
+  // is a licence question, and none of them is what Overview is for.
+  await usageTab(page, 'Adoption');
+
+  // The one finding that rides under the verdict, and only when it fires. The
+  // seed leaves seats idle, so it does.
   await expect(page.getByText(/seats? (is|are) idle/)).toBeVisible();
 
-  // Business framing: the seat funnel, the working-pattern heatmap and the
-  // read-only findings all live on Adoption — every one is a licence question.
-  await usageTab(page, 'Adoption');
-  // Band and Card carry the same title, so take the first.
   await expect(page.getByText('When the work happens').first()).toBeVisible();
   await expect(page.getByText('Every stage as a share of the seats you pay for.')).toBeVisible();
   await expect(page.getByText('Worth checking')).toBeVisible();

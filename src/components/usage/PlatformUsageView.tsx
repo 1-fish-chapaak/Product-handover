@@ -1254,18 +1254,14 @@ export default function PlatformUsageView() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: prefersReduced ? 0 : 0.3, ease: KH_EASE }}
         >
-          {/* The answer, before the evidence. An admin arrives with three
-              questions — is my team using this, is the licence worth it, what
-              should I do — and every one of them used to be answerable only by
-              reading four tiles and a chart and doing the arithmetic themselves.
-              Nothing here is new data; it is the page's own numbers, said out
-              loud, with the one button that acts on them. */}
-          {tab === 'overview' && (
-            <div className="mb-4">
-              <UsageVerdict v={verdict} onSeeWho={() => setTab('people')} />
-            </div>
-          )}
-
+          {/* Overview opens on what Overview promises: how much happened.
+              It used to open on the licence verdict — a 148px gauge saying what
+              share of the PAID SEATS did work — which is a procurement question,
+              and it is the Adoption tab's entire stated purpose. Seat health
+              matters, but it is not what an admin comes to a usage page to ask
+              first, and it has no business being the loudest mark on a tab whose
+              own subhead says "how much happened in this period, and when". It
+              now leads Adoption, where it is the answer rather than a guest. */}
           {tab === 'overview' && (
             <UsageKpiRow stats={stats} rangeDays={range} asOf={endLabel} endsAtAnchor={endsAtAnchor} />
           )}
@@ -1377,25 +1373,20 @@ export default function PlatformUsageView() {
           </Band>
           )}
 
-          {/* When the team works — a working-pattern question, so it lives with
-              the other licence-and-behaviour questions.
-
-              The band takes no title: it holds exactly one card, and that card's
-              own header already says "When the work happens". The heading and the
-              card title were the same six words, twenty pixels apart. */}
+          {/* The answer, before the evidence — and on the tab that asks the
+              question. An admin wondering whether to renew arrives with one
+              question, "is the licence worth it", and it has a single number for
+              an answer: the share of paid seats that did real work. Nothing here
+              is new data; it is the page's own numbers, said out loud, with the
+              one button that acts on them. */}
           {tab === 'adoption' && (
-          <Band>
-            <Card
-              icon={CalendarClock}
-              title="When the work happens"
-              subtitle="Which days the team works, and which hours."
-            >
-              <UsageRhythm data={heatmap} />
-            </Card>
-          </Band>
+            <div className="mb-4">
+              <UsageVerdict v={verdict} onSeeWho={() => setTab('people')} />
+            </div>
           )}
 
-          {/* Adoption — is the licence earning its keep, and what is shelfware. */}
+          {/* The evidence under the verdict: which seats get used, and which
+              areas earn their keep. */}
           {tab === 'adoption' && (
           <Band title="Seats and areas" note="Is the licence earning its keep">
             <UsageAdoption days={days} users={users} />
@@ -1551,6 +1542,27 @@ export default function PlatformUsageView() {
                 </div>
               </Card>
             </div>
+          </Band>
+          )}
+
+          {/* When the team works — a working-pattern question, so it lives with
+              the other licence-and-behaviour questions, but at the FOOT of them:
+              it is the one card on this tab that changes no renewal decision, and
+              it was sitting between the seat curve and the seat funnel, cutting
+              the licence argument in half to talk about Tuesdays.
+
+              The band takes no title: it holds exactly one card, and that card's
+              own header already says "When the work happens". The heading and the
+              card title were the same six words, twenty pixels apart. */}
+          {tab === 'adoption' && (
+          <Band>
+            <Card
+              icon={CalendarClock}
+              title="When the work happens"
+              subtitle="Which days the team works, and which hours."
+            >
+              <UsageRhythm data={heatmap} />
+            </Card>
           </Band>
           )}
 
