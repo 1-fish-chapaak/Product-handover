@@ -10,7 +10,9 @@ export interface QueryClarificationData {
   questions: { question: string; options: string[]; multi?: boolean }[];
   answers: Record<number, string[]>;
   status: 'open' | 'submitted';
-  purpose?: 'audit-query' | 'save-workflow';
+  // 'severity' is the mid-run materiality question asked when the plan reaches
+  // the risk step — it sets the High/Medium threshold, it does not start a run.
+  purpose?: 'audit-query' | 'save-workflow' | 'severity';
 }
 
 // ─── Query clarification card (multi-select, navigated) ──────────────────────
@@ -150,7 +152,11 @@ export default function QueryClarificationCard({
   }, [safeIndex, optionCount, isMulti, attachedSources.length, files.length]);
 
   if (data.status === 'submitted') {
-    return <div className="text-[0.8125rem] text-ink-700 leading-relaxed">Got it. Running with these inputs.</div>;
+    return (
+      <div className="text-[0.8125rem] text-ink-700 leading-relaxed">
+        {data.purpose === 'severity' ? 'Got it — applying that to the findings now.' : 'Got it. Running with these inputs.'}
+      </div>
+    );
   }
   if (!viewQ) return null;
 

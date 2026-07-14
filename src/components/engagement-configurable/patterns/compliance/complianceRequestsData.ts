@@ -5,8 +5,11 @@ import type { SamplesEvidenceState } from './complianceSamplesEvidenceData';
 import type { AttributeTestingState } from './complianceAttributeTestingData';
 import type { ComplianceReviewState } from './complianceReviewData';
 import type { ComplianceConclusionState } from './complianceConclusionData';
+import type { ScopeControl } from './complianceControlScopeData';
 
 export interface ComplianceWorkspaceState {
+  /** Controls currently in scope for this engagement (library adds / imports / manual controls append here). */
+  scopeControls: ScopeControl[];
   requests: PBCRequest[];
   samplesEvidence: SamplesEvidenceState;
   attributeTesting: AttributeTestingState;
@@ -36,6 +39,10 @@ export interface PBCRequest {
   createdAt: string;
   sentAt?: string;
   receivedAt?: string;
+  /** Timestamp of the last reminder the auditor sent (shown as a chip on overdue rows). */
+  lastReminded?: string;
+  /** Name of the risk owner who uploaded / marked the request as provided. */
+  providedBy?: string;
 }
 
 export const MOCK_PBC_REQUESTS: PBCRequest[] = [

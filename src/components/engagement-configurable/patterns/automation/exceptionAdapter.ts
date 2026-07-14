@@ -3,7 +3,7 @@
 // so ManageExceptionsView can be embedded in V3 Automation Project.
 
 import type { AutomationRunException, ExceptionSeverity, ExceptionStatus } from './automationRunsData';
-import type { GrcException, GrcExceptionSeverity, GrcExceptionStatus, GrcExceptionClassification, GrcReviewStatus } from '../../../../data/mockData';
+import { ensureCaseDetail, type GrcException, type GrcExceptionSeverity, type GrcExceptionStatus, type GrcExceptionClassification, type GrcReviewStatus } from '../../../../data/mockData';
 
 // ── V3 → GRC ─────────────────────────────────────────────────────────────
 
@@ -41,6 +41,9 @@ function reviewStatusFromV3(ex: AutomationRunException): GrcReviewStatus {
 export function mapV3ExceptionToGrc(ex: AutomationRunException, runId: string): GrcException {
   const ownerName = ex.assignedOwner || 'Unassigned';
   const initials = ownerName.split(' ').map(w => w[0] || '').join('').slice(0, 2).toUpperCase() || 'U';
+  // Seed a case-detail record so the classify / action lifecycle works the same as
+  // the report-level Manage Exceptions (which reads & writes GRC_CASE_DETAILS).
+  ensureCaseDetail(ex.id);
   return {
     id: ex.id,
     riskCategory: ex.category.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()),

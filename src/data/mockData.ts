@@ -321,10 +321,10 @@ export const GENERATED_REPORTS = [
 ];
 
 export const SHARED_REPORTS = [
-  { id: "sr-001", name: "FY26 Internal Audit Summary", kind: "ia", sharedBy: "Neha Joshi", sharedAt: "Apr 10, 2026", status: "final", pages: 18, sharedWith: "Audit Team", queries: 5 },
-  { id: "sr-002", name: "O2C Controls Review — Q1 2026", kind: "sox", sharedBy: "Deepak Bansal", sharedAt: "Apr 5, 2026", status: "final", pages: 14, sharedWith: "Finance", queries: 4 },
-  { id: "sr-003", name: "Vendor Risk Exposure Report", kind: "ia", sharedBy: "Karan Mehta", sharedAt: "Mar 28, 2026", status: "draft", pages: 9, sharedWith: "Risk Committee", queries: 2 },
-  { id: "sr-004", name: "GL Reconciliation — Feb 2026", kind: "sox", sharedBy: "Sneha Desai", sharedAt: "Mar 15, 2026", status: "final", pages: 22, sharedWith: "CFO Office", queries: 7 },
+  { id: "sr-001", name: "FY26 Internal Audit Summary", kind: "ia", source: "system", sharedBy: "Neha Joshi", sharedAt: "Apr 10, 2026", status: "final", pages: 18, sharedWith: "Audit Team", queries: 5 },
+  { id: "sr-002", name: "O2C Controls Review — Q1 2026", kind: "sox", source: "custom", sharedBy: "Deepak Bansal", sharedAt: "Apr 5, 2026", status: "final", pages: 14, sharedWith: "Finance", queries: 4 },
+  { id: "sr-003", name: "Vendor Risk Exposure Report", kind: "ia", source: "system", sharedBy: "Karan Mehta", sharedAt: "Mar 28, 2026", status: "draft", pages: 9, sharedWith: "Risk Committee", queries: 2 },
+  { id: "sr-004", name: "GL Reconciliation — Feb 2026", kind: "sox", source: "custom", sharedBy: "Sneha Desai", sharedAt: "Mar 15, 2026", status: "final", pages: 22, sharedWith: "CFO Office", queries: 7 },
 ];
 
 // ─── Data Sources ───
@@ -451,6 +451,7 @@ export type GrcExceptionClassification =
   | 'Design Deficiency'
   | 'System Deficiency'
   | 'Procedural Non-Compliance'
+  | 'Others'
   | 'Business as Usual'
   | 'False Positive';
 export type GrcReviewStatus = 'Pending' | 'Approved' | 'Rejected' | 'Implemented';
@@ -581,6 +582,15 @@ export const GRC_CASE_DETAILS: Record<string, GrcCaseDetail> = {
   'EXC009': BLANK_DETAIL(),
   'EXC010': BLANK_DETAIL(),
 };
+
+/** Guarantee a case-detail record exists for an exception id. Cases surfaced
+ *  from other sources (e.g. an engagement's own exceptions) aren't pre-seeded
+ *  above, so this lazily creates a blank detail — without it the classify /
+ *  action lifecycle (which reads & writes GRC_CASE_DETAILS[id]) is a no-op. */
+export function ensureCaseDetail(id: string): GrcCaseDetail {
+  if (!GRC_CASE_DETAILS[id]) GRC_CASE_DETAILS[id] = BLANK_DETAIL();
+  return GRC_CASE_DETAILS[id];
+}
 
 // ─── Action Hub (Case Mgmt > Action Hub tab) ───
 export type ActionHubActorRole = 'Risk Owner' | 'Auditor' | 'Ira (AI)' | 'System';
@@ -731,6 +741,12 @@ export const CLARIFICATION_STEPS = [
     category: 'Logic',
   },
   {
+    // Severity is NOT asked here. It is user-defined, but the only rule a user
+    // could state up front is a materiality amount — and even that reads better
+    // once the findings exist. So severity is asked MID-RUN, when the plan
+    // reaches the risk step (see ChatView → showSeverityClarification), then
+    // used to rate the flow diagram's output list and stamp the results table
+    // (chatPlan.ts → buildChatPlanRiskItems / severityRuleNote).
     stage: 4,
     question: 'What matching logic should I use to detect duplicates between candidate invoice pairs in your data?',
     options: ['Invoice number + amount', 'Fuzzy match all fields', 'AI-powered pattern detection'],

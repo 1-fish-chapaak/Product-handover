@@ -3,7 +3,9 @@
 // brand banner, metadata grid, numbered sections, KPI tile grid.
 
 import { motion } from 'motion/react';
+import { PenLine, Check, RotateCcw } from 'lucide-react';
 import FloatingLines from '../shared/FloatingLines';
+import type { SignatorySlot, Signoff } from './reportShared';
 
 export type ReportStat = {
   label: string;
@@ -71,7 +73,10 @@ export function ReportNumberedHeading({ n, title, subtitle, right }: {
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-baseline gap-3.5 min-w-0">
-          <span className="shrink-0 text-[0.8125rem] font-semibold tabular-nums tracking-[0.16em] text-brand-700 leading-none">
+          <span
+            className="shrink-0 text-[0.8125rem] font-semibold tabular-nums tracking-[0.16em] leading-none"
+            style={{ color: 'var(--rep-accent, #550fa5)' }}
+          >
             {String(n).padStart(2, '0')}
           </span>
           <div className="min-w-0">
@@ -86,10 +91,72 @@ export function ReportNumberedHeading({ n, title, subtitle, right }: {
         whileInView={{ scaleX: 1 }}
         viewport={{ once: true, margin: '-80px' }}
         transition={{ duration: 0.45, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
-        className="mt-3.5 block h-[2px] w-8 origin-left rounded-full bg-brand-500/80"
+        className="mt-3.5 block h-[2px] w-8 origin-left rounded-full"
+        style={{ backgroundColor: 'var(--rep-accent, rgba(136,56,222,0.8))' }}
         aria-hidden="true"
       />
     </motion.div>
+  );
+}
+
+// Approvals & sign-off block. Static in the template preview (no callbacks); in
+// the report reader `onSign`/`onSignOff` make each slot manually signable and
+// revocable. Signed slots record who + when. Accent tracks --rep-accent (theme
+// / brand colour), so the block matches the rest of the report.
+export function ReportSignoffBlock({ signatories, signoffs, onSign, onSignOff, className = '' }: {
+  signatories: SignatorySlot[];
+  signoffs?: Record<string, Signoff>;
+  onSign?: (slot: SignatorySlot) => void;
+  onSignOff?: (slot: SignatorySlot) => void;
+  className?: string;
+}) {
+  if (!signatories.length) return null;
+  const interactive = !!onSign;
+  const cols = signatories.length >= 3 ? 'sm:grid-cols-3' : signatories.length === 2 ? 'sm:grid-cols-2' : 'grid-cols-1';
+  return (
+    <div className={className}>
+      <div className="flex items-center gap-2.5 mb-4">
+        <span className="w-7 h-7 rounded-[8px] flex items-center justify-center text-white shrink-0" style={{ backgroundColor: 'var(--rep-accent, #550fa5)' }}><PenLine size={14} /></span>
+        <div>
+          <h2 className="text-[1.25rem] font-semibold text-ink-900 tracking-[-0.012em] leading-[1.15]">Approvals &amp; Sign-Off</h2>
+          <p className="text-[0.8125rem] text-ink-500 leading-snug">Manual authorisation of this report.</p>
+        </div>
+      </div>
+      <div className={`grid grid-cols-1 ${cols} gap-4`}>
+        {signatories.map(s => {
+          const signed = signoffs?.[s.id];
+          const name = signed?.signedBy || s.name;
+          return (
+            <div key={s.id} className={`rounded-[10px] border p-5 transition-colors ${signed ? 'border-compliant-200 bg-compliant-50/40' : 'border-canvas-border'}`}>
+              <div className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-3">
+                <PenLine size={12} /> {s.role}
+              </div>
+              {name ? (
+                <div className="text-[0.8125rem] font-bold text-ink-900 leading-tight mb-4">{name}</div>
+              ) : (
+                <div className="h-5 mb-4" />
+              )}
+              {signed ? (
+                <div className="border-t border-dashed border-compliant-300 pt-2.5">
+                  <div className="flex items-center gap-1.5 text-[0.6875rem] font-semibold text-compliant-700"><Check size={12} strokeWidth={2.5} /> Signed · {signed.signedAt}</div>
+                  {interactive && (
+                    <button onClick={() => onSignOff?.(s)} className="mt-2 inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-ink-500 hover:text-risk-700 transition-colors cursor-pointer"><RotateCcw size={11} /> Sign off</button>
+                  )}
+                </div>
+              ) : (
+                <div className="border-t border-dashed border-canvas-border pt-2.5">
+                  {interactive ? (
+                    <button onClick={() => onSign?.(s)} className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[8px] text-[0.75rem] font-semibold text-white cursor-pointer transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--rep-accent, #550fa5)' }}><PenLine size={12} /> Sign</button>
+                  ) : (
+                    <div className="text-[0.6875rem] italic text-ink-500 text-center">Signature / Digital Approval</div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

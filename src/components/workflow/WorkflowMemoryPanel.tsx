@@ -19,120 +19,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Brain, Zap, ShieldAlert, Network, ArrowRight, Check, RefreshCw,
   GitCompareArrows, TrendingUp, TrendingDown, Minus,
-  ChevronDown, Eye, Sparkles, Plus, Info,
+  ChevronDown, Eye, Plus,
 } from 'lucide-react';
 import {
-  ENTITY_MEMORY, RUN_GOLDEN_RECORD, STAGE3_CURRENT, correlatedRecords, diffRuns,
-  PROCESS_INSIGHTS, PATTERN_META, SEVERITY_LABEL, displayConfidencePct,
-  type GoldenRecordStatus, type MemoryInsight,
-  type Stage3Record, type Stage3EvidenceRow, type Stage3RunDiff,
+  ENTITY_MEMORY, RUN_OUTPUT_COMPARE, RUN_GOLDEN_RECORD,
+  type EntityMemory, type OutputCompare, type GoldenRecordStatus,
 } from '../../data/insightMemory';
-
-// ─── 0. Headline insight — the full finding for this run ──────────────────
-// Reasoning + evidence table + recommended actions, so the analyst sees the
-// complete STAGE_3-style insight in the executor (not just the supporting
-// memory surfaces below it).
-
-const fmtMoney = (n: number | null): string => (n == null ? '—' : `$${n.toFixed(2)}`);
-
-function RunHeadlineInsight({ insight }: { insight: MemoryInsight }) {
-  const pct = displayConfidencePct(insight);
-  const rows = insight.evidence.rows ?? [];
-  const actions = insight.recommendedActions ?? (insight.recommendedAction ? [insight.recommendedAction] : []);
-  const limited = insight.evidence.runsAnalysed <= 2 || insight.factors.sourceDiversity < 0.55;
-
-  return (
-    <div className="rounded-2xl border border-risk/25 bg-canvas-elevated overflow-hidden">
-      <div className="p-4">
-        <div className="flex items-center gap-2 flex-wrap mb-2">
-          <span className="inline-flex items-center gap-1 rounded-full bg-risk-50 text-risk px-2 py-0.5 text-[10px] font-bold border border-risk/25">
-            <span className="size-1.5 rounded-full bg-risk" /> {SEVERITY_LABEL[insight.severity]}
-          </span>
-          <span className="inline-flex items-center rounded-full bg-canvas text-ink-500 px-2 py-0.5 text-[10px] font-semibold">{PATTERN_META[insight.type].label}</span>
-          <span className="inline-flex items-center gap-1 rounded-full border border-canvas-border bg-canvas-elevated px-2 py-0.5 text-[10px] font-semibold text-ink-800">
-            <span className="size-1.5 rounded-full" style={{ background: pct >= 70 ? 'rgb(16 185 129)' : 'rgb(217 119 6)' }} /> {pct}% confidence
-          </span>
-          {limited && (
-            <span className="inline-flex items-center rounded-full bg-mitigated-50 text-mitigated-700 px-2 py-0.5 text-[10px] font-semibold">
-              Limited evidence · {insight.evidence.runsAnalysed} run{insight.evidence.runsAnalysed === 1 ? '' : 's'}
-            </span>
-          )}
-        </div>
-        <h4 className="text-[15px] font-bold text-ink-900 leading-snug">{insight.title}</h4>
-
-        <div className="mt-3">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1">Reasoning</div>
-          <p className="text-[12.5px] text-ink-600 leading-relaxed">{insight.description}</p>
-        </div>
-        {limited && (
-          <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-mitigated-200 bg-mitigated-50/50 px-3 py-2">
-            <Info size={13} className="text-mitigated-700 shrink-0 mt-0.5" />
-            <span className="text-[11px] text-mitigated-700 leading-relaxed">
-              Only {insight.evidence.runsAnalysed} run examined — a severe within-run concentration, not a proven multi-period recurrence.
-            </span>
-          </div>
-        )}
-      </div>
-
-      {rows.length > 0 && (
-        <div className="px-4 pb-3">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Evidence · {rows.length} sampled rows</div>
-          <div className="overflow-x-auto rounded-lg border border-canvas-border">
-            <table className="w-full min-w-[620px] text-[10.5px] border-collapse">
-              <thead>
-                <tr className="bg-canvas text-ink-400">
-                  <th className="text-left font-semibold uppercase tracking-wider py-1.5 px-2">Product</th>
-                  <th className="text-left font-semibold uppercase tracking-wider py-1.5 px-2">Contract</th>
-                  <th className="text-left font-semibold uppercase tracking-wider py-1.5 px-2">Exception</th>
-                  <th className="text-right font-semibold uppercase tracking-wider py-1.5 px-2">Paid</th>
-                  <th className="text-right font-semibold uppercase tracking-wider py-1.5 px-2">WAC</th>
-                  <th className="text-right font-semibold uppercase tracking-wider py-1.5 px-2">Contract $</th>
-                  <th className="text-right font-semibold uppercase tracking-wider py-1.5 px-2">Revised</th>
-                  <th className="text-right font-semibold uppercase tracking-wider py-1.5 px-2">Diff</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(r => (
-                  <tr key={r.productRef} className="border-t border-canvas-border align-top">
-                    <td className="py-1.5 px-2 text-ink-800 font-medium max-w-[180px]">
-                      {r.product}
-                      <span className="block font-mono text-ink-400 text-[9.5px]">{r.productRef}</span>
-                    </td>
-                    <td className="py-1.5 px-2 font-mono text-ink-500 whitespace-nowrap">{r.contractRef}</td>
-                    <td className="py-1.5 px-2 text-ink-600">{r.remark}</td>
-                    <td className="py-1.5 px-2 text-right tabular-nums text-ink-700">{fmtMoney(r.paid)}</td>
-                    <td className="py-1.5 px-2 text-right tabular-nums text-ink-700">{fmtMoney(r.wac)}</td>
-                    <td className="py-1.5 px-2 text-right tabular-nums text-ink-700">{fmtMoney(r.contractPrice)}</td>
-                    <td className="py-1.5 px-2 text-right tabular-nums text-ink-700">{fmtMoney(r.revised)}</td>
-                    <td className={`py-1.5 px-2 text-right tabular-nums font-semibold ${r.difference != null && r.difference < 0 ? 'text-risk' : 'text-ink-500'}`}>
-                      {r.difference != null ? r.difference.toFixed(2) : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {actions.length > 0 && (
-        <div className="px-4 pb-4">
-          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-brand-700 mb-2">
-            <ArrowRight size={12} className="text-brand-600" /> Recommended actions · {actions.length}
-          </div>
-          <ul className="space-y-2">
-            {actions.map((a, idx) => (
-              <li key={idx} className="flex items-start gap-2 text-[12px] text-ink-800 leading-relaxed">
-                <span className="mt-0.5 size-4 shrink-0 rounded border border-brand-200 bg-canvas-elevated text-[9px] font-bold text-brand-700 flex items-center justify-center tabular-nums">{idx + 1}</span>
-                <span>{a}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── Section shell ────────────────────────────────────────────────────────
 
@@ -154,16 +46,16 @@ function MemorySection({
     : 'bg-brand-50 text-brand-600';
   return (
     <section className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-3">
+      <div className="flex items-center gap-3 px-[20px] py-3">
         <button
           type="button"
           onClick={() => setOpen(o => !o)}
           aria-expanded={open}
-          className="flex flex-1 items-center gap-3 text-left cursor-pointer min-w-0"
+          className="flex flex-1 items-start gap-3 text-left cursor-pointer min-w-0"
         >
           <span className={`size-7 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>{icon}</span>
           <span className="min-w-0">
-            <span className="block text-[13px] font-bold text-ink-800 leading-tight">{title}</span>
+            <span className="block text-[14px] font-bold text-ink-900 leading-tight">{title}</span>
             {subtitle && <span className="block text-[11.5px] text-ink-500 leading-tight mt-px">{subtitle}</span>}
           </span>
         </button>
@@ -188,7 +80,7 @@ function MemorySection({
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden"
           >
-            <div className="px-4 pb-4 pt-0.5 border-t border-canvas-border/70">{children}</div>
+            <div className="px-[20px] pb-4 pt-0.5 border-t border-canvas-border/70">{children}</div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -237,207 +129,348 @@ export function GoldenRecordBadge({ gr }: { gr: GoldenRecordStatus }) {
 // The Acme example: the run is green but checking the wrong column. Memory
 // caught the schema change and blocks blind trust until the user re-confirms.
 
-function SourceDriftBanner() {
+export function SourceDriftBanner() {
   const [resolved, setResolved] = useState<null | 'reconfirmed' | 'kept'>(null);
-  return (
-    <div className="rounded-2xl border border-mitigated-200 bg-mitigated-50/40 overflow-hidden">
-      <div className="flex items-start gap-3 p-4">
-        <span className="size-8 rounded-lg bg-mitigated-50 text-mitigated-700 flex items-center justify-center shrink-0">
-          <ShieldAlert size={15} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[13px] font-bold text-ink-800">Memory caught a price-master change — verify before settling this run</span>
-            <span className="inline-flex items-center rounded-full bg-mitigated-50 text-mitigated-700 px-2 py-0.5 text-[10.5px] font-bold border border-mitigated-200">
-              Memory conflict
-            </span>
-          </div>
-          <p className="text-[12px] text-ink-600 mt-1.5 leading-relaxed">
-            The <span className="font-mono font-medium text-ink-800">WAC</span> on contract HPG12 moved in the master, and several
-            MCKESSON rows were priced against the old value. The run still completed — but some chargebacks were calculated on
-            <span className="font-medium text-ink-800"> stale pricing</span>, so the WAC-mismatch flags need confirming before settlement.
-          </p>
-          <div className="mt-2.5 rounded-lg border border-mitigated-200 bg-canvas-elevated px-3 py-2 text-[11.5px]">
-            <div className="flex items-center gap-2 text-ink-500">
-              <span className="font-semibold text-ink-700 w-[120px] shrink-0">Promoted memory</span>
-              <span className="font-mono">HPG12 · WAC = master price file (v3)</span>
-            </div>
-            <div className="flex items-center gap-2 text-ink-500 mt-1">
-              <span className="font-semibold text-ink-700 w-[120px] shrink-0">This upload</span>
-              <span className="font-mono">HPG12 · WAC differs on 2 products <span className="text-mitigated-700 font-sans font-semibold">(mismatch)</span></span>
-            </div>
-          </div>
+  // The banner starts expanded (it's a pre-run gate). One chevron top-right is
+  // the only expand/collapse control — no separate "Review" button. Making a
+  // decision auto-collapses it to a one-line summary so it stops competing with
+  // the mapping table; the chevron reopens the evidence to change that call.
+  const [open, setOpen] = useState(true);
 
-          {resolved === null ? (
-            <div className="flex items-center gap-2 mt-3">
-              <button
-                type="button"
-                onClick={() => setResolved('reconfirmed')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold transition-colors cursor-pointer"
-              >
-                <RefreshCw size={12} /> Re-confirm pricing
-              </button>
-              <button
-                type="button"
-                onClick={() => setResolved('kept')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-canvas-border text-ink-600 text-[12px] font-semibold hover:bg-canvas transition-colors cursor-pointer"
-              >
-                Keep old pricing
-              </button>
+  const decide = (choice: 'reconfirmed' | 'kept') => {
+    setResolved(choice);
+    setOpen(false);
+  };
+
+  const isGreen = resolved === 'reconfirmed';
+  const frame = isGreen ? 'border-compliant/30 bg-compliant-50/40' : 'border-mitigated-200 bg-mitigated-50/40';
+  const iconChip = isGreen
+    ? 'bg-compliant-50 text-compliant-700 ring-compliant/25'
+    : 'bg-mitigated-50 text-mitigated-700 ring-mitigated-200';
+
+  // One-line summary text keyed off the decision (or the un-decided warning).
+  const summary =
+    resolved === 'reconfirmed'
+      ? { title: 'Mapping re-confirmed', tail: ' — memory updated for future runs.', tailClass: 'text-ink-500' }
+      : resolved === 'kept'
+      ? { title: 'Kept the old mapping', tail: ' — flagged for review on next run.', tailClass: 'text-ink-500' }
+      : { title: 'Source layout changed', tail: ' — verify before you run', tailClass: 'text-mitigated-700 font-semibold' };
+
+  const chevron = (
+    <button
+      type="button"
+      onClick={() => setOpen((o) => !o)}
+      aria-expanded={open}
+      aria-label={open ? 'Collapse' : 'Expand'}
+      className="size-6 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 hover:bg-canvas transition-colors cursor-pointer shrink-0 -mr-1"
+    >
+      <motion.span
+        animate={{ rotate: open ? 180 : 0 }}
+        transition={{ type: 'spring', stiffness: 360, damping: 26 }}
+        className="inline-flex"
+      >
+        <ChevronDown size={15} />
+      </motion.span>
+    </button>
+  );
+
+  return (
+    <div className="mb-5">
+      <AnimatePresence initial={false} mode="wait">
+        {!open ? (
+          <motion.div
+            key="collapsed"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 ${frame}`}>
+              <span className={`flex size-7 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset ${iconChip}`}>
+                {isGreen ? <Check size={14} strokeWidth={3} /> : <ShieldAlert size={14} />}
+              </span>
+              <p className="min-w-0 flex-1 text-[12px] leading-snug">
+                <span className="font-bold text-ink-800">{summary.title}</span>
+                <span className={summary.tailClass}>{summary.tail}</span>
+              </p>
+              {chevron}
             </div>
-          ) : (
-            <div className="flex items-center gap-1.5 mt-3 text-[12px] font-semibold text-compliant-700">
-              <Check size={13} strokeWidth={3} />
-              {resolved === 'reconfirmed'
-                ? 'Pricing re-confirmed — memory updated for future runs.'
-                : 'Kept the old pricing — flagged for review on next run.'}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="detail"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="flex gap-3 rounded-xl border border-mitigated-200 bg-mitigated-50/40 p-4">
+              <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-mitigated-50 text-mitigated-700 ring-1 ring-inset ring-mitigated-200">
+                <ShieldAlert size={15} />
+              </span>
+              <div className="min-w-0 flex-1">
+                {/* Pre-run gate on the confirm screen: heading + prose warn that
+                    the saved mapping is stale BEFORE the run, so the copy stays
+                    conditional (nothing has executed yet) and the field/change it
+                    names matches the evidence table below — the Amount column
+                    moving, not a rename. Chevron top-right mirrors the collapsed
+                    strip's control. */}
+                <div className="flex items-start justify-between gap-3">
+                  <h4 className="text-[13px] font-bold text-ink-900 leading-snug">
+                    Source layout changed{' '}
+                    <span className="text-mitigated-700">— verify before you run</span>
+                  </h4>
+                  {chevron}
+                </div>
+
+                <p className="text-[12px] text-ink-600 mt-1.5 leading-relaxed">
+                  The Amount column on the Acme source moved position, so this upload no longer lines up with the
+                  saved mapping. Left as-is, some checks would run against the wrong field.
+                </p>
+
+                {/* The disputed field named once, then where memory expected it vs
+                    where this upload put it. The F → H shift is the single thing
+                    the auditor must register. */}
+                <div className="mt-3 rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
+                  <div className="px-3 py-1.5 border-b border-canvas-border/60 bg-canvas/50">
+                    <span className="font-mono text-[11px] text-ink-700">Acme · Amount</span>
+                  </div>
+                  <div className="grid grid-cols-[132px_1fr] items-center gap-2 px-3 py-2">
+                    <span className="text-[11px] font-semibold text-ink-500">Promoted memory</span>
+                    <span className="font-mono text-[11.5px] text-ink-600">column&nbsp;F</span>
+                  </div>
+                  <div className="grid grid-cols-[132px_1fr] items-center gap-2 px-3 py-2 border-t border-canvas-border/40 bg-mitigated-50/50">
+                    <span className="text-[11px] font-semibold text-ink-700">This upload</span>
+                    <span className="font-mono text-[11.5px] text-ink-700 flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-mitigated-700">column&nbsp;H</span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-mitigated-50 text-mitigated-700 px-1.5 py-0.5 text-[9.5px] font-sans font-bold uppercase tracking-wide border border-mitigated-200">
+                        <ArrowRight size={9} strokeWidth={2.5} /> moved
+                      </span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 mt-3.5">
+                  <button
+                    type="button"
+                    onClick={() => decide('reconfirmed')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[12px] font-semibold transition-colors cursor-pointer"
+                  >
+                    <RefreshCw size={12} /> Re-confirm mapping
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => decide('kept')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-ink-600 text-[12px] font-semibold hover:bg-canvas hover:border-ink-300 transition-colors cursor-pointer"
+                  >
+                    Keep old mapping
+                  </button>
+                </div>
+              </div>
             </div>
-          )}
-        </div>
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-// ─── 3. Cross-workflow correlation (Stage-3 entity_key) ───────────────────
-// The current run's entity_key surfacing in OTHER workflows' Stage-3 records —
-// same backend payload shape, correlated on entity_key.
+// A compact, top-of-output strip that surfaces the memory conflict BEFORE the
+// green results, so an auditor can't approve a drifted run without seeing the
+// warning. Collapsed it's a one-line summary (conflict + secondary counts);
+// expanding reveals the full source-drift card with its re-confirm actions.
+// The richer context (cross-workflow correlation, output compare) still lives
+// in WorkflowMemoryPanel beneath the results — this strip owns only the gate.
+export function MemoryConflictStrip({
+  entities = Object.values(ENTITY_MEMORY),
+  compare = RUN_OUTPUT_COMPARE,
+  hasConflict = true,
+}: {
+  entities?: EntityMemory[];
+  compare?: OutputCompare;
+  hasConflict?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!hasConflict) return null; // the strip exists only to gate a conflict
 
-const SEVERITY_DOT: Record<Stage3Record['insight']['severity'], string> = {
-  high: 'rgb(220 38 38)',
-  medium: 'rgb(217 119 6)',
-  low: 'rgb(107 114 128)',
-};
+  const correlated = entities.length;
+  const newFindings = compare.newFindings.length;
 
-// A one-line detail derived from a record's own evidence — dominant exception
-// remark + the contract(s) it hit. No bespoke summary field required.
-function correlationDetail(rec: Stage3Record): string {
-  const rows = rec.insight.evidence;
-  const counts = new Map<string, number>();
-  for (const r of rows) counts.set(r['Exception Remark'], (counts.get(r['Exception Remark']) ?? 0) + 1);
-  const topRemark = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'flagged';
-  const contracts = [...new Set(rows.map((r) => r['Contract Ref Id']))];
-  const where = contracts.length === 1 ? ` on ${contracts[0]}` : contracts.length > 1 ? ` across ${contracts.length} contracts` : '';
-  return `${topRemark}${where}`;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+      className="mb-5 rounded-xl border border-mitigated-200 bg-canvas-elevated overflow-hidden"
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-3 px-4 py-2.5 text-left bg-mitigated-50/40 hover:bg-mitigated-50/70 transition-colors cursor-pointer"
+      >
+        <span className="size-6 rounded-lg bg-mitigated-50 text-mitigated-700 flex items-center justify-center shrink-0">
+          <Brain size={13} />
+        </span>
+        <span className="text-[12.5px] font-bold text-ink-800 shrink-0">Memory</span>
+        <span className="flex items-center gap-2 flex-wrap min-w-0 text-[11.5px]">
+          <span className="inline-flex items-center gap-1 rounded-full bg-mitigated-50 text-mitigated-700 px-2 py-0.5 font-bold border border-mitigated-200">
+            <ShieldAlert size={11} /> 1 conflict
+          </span>
+          <span className="text-ink-300">·</span>
+          <span className="text-ink-600">
+            <span className="font-semibold text-ink-700 tabular-nums">{correlated}</span> seen elsewhere
+          </span>
+          {newFindings > 0 && (
+            <>
+              <span className="text-ink-300">·</span>
+              <span className="text-ink-600">
+                <span className="font-semibold text-ink-700 tabular-nums">{newFindings}</span> new
+              </span>
+            </>
+          )}
+        </span>
+        <span className="ml-auto inline-flex items-center gap-1 text-[11.5px] font-semibold text-mitigated-700 shrink-0">
+          {open ? 'Hide' : 'Verify before approving'}
+          <motion.span
+            animate={{ rotate: open ? 180 : 0 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 26 }}
+            className="inline-flex"
+          >
+            <ChevronDown size={14} />
+          </motion.span>
+        </span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 pt-3.5 pb-4 border-t border-mitigated-200/60 bg-mitigated-50/25">
+              <SourceDriftBanner />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
 }
 
-function EntityCorrelation({ current, correlated }: { current: Stage3Record; correlated: Stage3Record[] }) {
-  const displayName = current.insight.evidence[0]?.['Vendor Name'] ?? current.insight.entity_key.toUpperCase();
-  const watch = ENTITY_MEMORY[displayName];
+// ─── 3. Cross-workflow correlation ────────────────────────────────────────
+
+function EntityMemoryRow({ mem }: { mem: EntityMemory }) {
+  const flags = mem.alsoFlaggedIn;
   return (
-    <div className="rounded-xl border border-canvas-border bg-canvas/40 p-3">
+    <div className="py-3.5 first:pt-1">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[12.5px] font-bold text-ink-800">{displayName}</span>
-        <span className="inline-flex items-center rounded-md bg-canvas text-ink-500 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-          {current.insight.entity_type}
-        </span>
-        {watch?.onWatch && (
+        <span className="text-[13px] font-bold text-ink-900">{mem.entity}</span>
+        <span className="text-[11px] font-mono text-ink-400">{mem.vendorId}</span>
+        {mem.onWatch && (
           <span className="inline-flex items-center gap-1 rounded-full bg-risk-50 text-risk px-2 py-0.5 text-[10px] font-bold border border-risk/25">
             <Eye size={10} /> On watch
           </span>
         )}
+        <span className="ml-auto inline-flex items-center rounded-full bg-canvas border border-canvas-border text-ink-500 px-2 py-0.5 text-[10.5px] font-bold tabular-nums shrink-0">
+          {flags.length}
+        </span>
       </div>
-      {watch?.watchNote && <p className="text-[11px] text-ink-500 mt-1">{watch.watchNote}</p>}
-      {correlated.length === 0 ? (
-        <p className="text-[11.5px] text-ink-400 mt-2">No other workflow has flagged this entity yet.</p>
-      ) : (
-        <div className="flex flex-col gap-1.5 mt-2">
-          {correlated.map((rec, i) => (
-            <div key={i} className="flex items-center gap-2 text-[11.5px]">
-              <ArrowRight size={11} className="text-brand-400 shrink-0" />
+      {mem.watchNote && <p className="text-[11px] text-ink-500 mt-1">{mem.watchNote}</p>}
+      {/* Prior flags as a connected timeline: a hairline rail through small
+          nodes reads as one vendor's history across workflows — a ledger, not a
+          loose list of arrowed lines. */}
+      <div className="relative mt-2.5 ml-1">
+        {flags.length > 1 && (
+          <span aria-hidden="true" className="absolute left-[3px] top-2.5 bottom-2.5 w-px bg-brand-200" />
+        )}
+        <div className="flex flex-col gap-1">
+          {flags.map((f, i) => (
+            <div key={i} className="relative flex items-center gap-3 text-[11.5px] py-0.5">
+              <span
+                aria-hidden="true"
+                className="relative z-10 size-[7px] rounded-full bg-brand-400 ring-2 ring-canvas-elevated shrink-0"
+              />
               <span className="inline-flex items-center rounded-md bg-brand-50 text-brand-700 px-1.5 py-0.5 text-[10.5px] font-semibold shrink-0">
-                {rec.workflow}
+                {f.workflow}
               </span>
-              <span className="text-ink-600 truncate">{correlationDetail(rec)}</span>
-              <span className="inline-flex items-center gap-1 text-ink-400 ml-auto shrink-0 tabular-nums">
-                <span className="size-1.5 rounded-full" style={{ background: SEVERITY_DOT[rec.insight.severity] }} />
-                {Math.round(rec.insight.confidence * 100)}% · {rec.runDate}
-              </span>
+              <span className="text-ink-600 truncate">{f.detail}</span>
+              <span className="text-ink-400 ml-auto shrink-0 tabular-nums">{f.date}</span>
             </div>
           ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
 // ─── 4. Output compare ────────────────────────────────────────────────────
 
-function DeltaIcon({ direction }: { direction: 'up' | 'down' | 'flat' }) {
-  if (direction === 'up') return <TrendingUp size={12} className="text-mitigated-700" />;
-  if (direction === 'down') return <TrendingDown size={12} className="text-compliant-700" />;
-  return <Minus size={12} className="text-ink-400" />;
+// The delta chip is a tinted pill: its wash tracks whether the move is
+// favourable (compliant = good, mitigated = bad, neutral bordered = no
+// judgement — more records processed isn't a warning), its glyph tracks raw
+// direction, and it carries the magnitude — so the reader takes in size,
+// direction, and sentiment in one badge.
+function deltaPill(sentiment: 'good' | 'bad' | 'neutral') {
+  return sentiment === 'good' ? 'bg-compliant-50 text-compliant-700'
+    : sentiment === 'bad' ? 'bg-mitigated-50 text-mitigated-700'
+    : 'bg-canvas text-ink-500 border border-canvas-border';
+}
+function DeltaGlyph({ direction }: { direction: 'up' | 'down' | 'flat' }) {
+  if (direction === 'up') return <TrendingUp size={11} />;
+  if (direction === 'down') return <TrendingDown size={11} />;
+  return <Minus size={11} />;
 }
 
-function EvidenceRefLine({ r, resolved = false }: { r: Stage3EvidenceRow; resolved?: boolean }) {
+function OutputComparePanel({ cmp }: { cmp: OutputCompare }) {
   return (
-    <div className="text-[11.5px] leading-snug mb-1 last:mb-0">
-      <span className={`font-mono font-medium ${resolved ? 'text-ink-700 line-through' : 'text-ink-800'}`}>{r['Product Ref Id']}</span>
-      <span className="text-ink-400"> · {r['Contract Ref Id']}</span>
-      <span className={resolved ? 'text-ink-500' : 'text-ink-600'}> · {r['Exception Remark']}</span>
-    </div>
-  );
-}
+    <div className="flex flex-col gap-4">
+      {/* KPI deltas as a borderless stat row split by hairlines — not tiles. */}
+      <div className="grid grid-cols-3 divide-x divide-canvas-border/60">
+        {cmp.kpiDeltas.map((k) => (
+          <div key={k.label} className="px-5 first:pl-0 last:pr-0">
+            <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide mb-2">{k.label}</div>
+            <div className="flex items-center gap-2">
+              <span className="text-[21px] font-bold font-mono text-ink-900 leading-none">{k.current}</span>
+              <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums leading-none ${deltaPill(k.sentiment)}`}>
+                <DeltaGlyph direction={k.direction} />{k.delta}
+              </span>
+            </div>
+            <div className="text-[11px] text-ink-400 mt-2 font-mono">was {k.previous}</div>
+          </div>
+        ))}
+      </div>
 
-function Stage3ComparePanel({ diff }: { diff: Stage3RunDiff }) {
-  const cur = diff.current.insight;
-  const prev = diff.previous.insight;
-  const curPct = Math.round(cur.confidence * 100);
-  const prevPct = Math.round(prev.confidence * 100);
-  const confDir: 'up' | 'down' | 'flat' = curPct === prevPct ? 'flat' : curPct > prevPct ? 'up' : 'down';
-  const rowsDir: 'up' | 'down' | 'flat' = diff.exceptionDelta === 0 ? 'flat' : diff.exceptionDelta > 0 ? 'up' : 'down';
-  const rowKey = (r: Stage3EvidenceRow) => `${r['Product Ref Id']}-${r['Contract Ref Id']}`;
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-lg border border-canvas-border bg-canvas/40 px-3 py-2">
-          <div className="text-[10.5px] text-ink-400 uppercase tracking-wider mb-1">Confidence</div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[16px] font-bold font-mono text-ink-800 leading-none">{curPct}%</span>
-            <DeltaIcon direction={confDir} />
+      {/* New vs resolved — colour lives in the labels, not in boxes. */}
+      <div className="grid grid-cols-2 divide-x divide-canvas-border/60">
+        <div className="pr-5">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-mitigated-700 mb-2">
+            <Plus size={12} /> New this run ({cmp.newFindings.length})
           </div>
-          <div className="text-[10.5px] text-ink-400 mt-1 font-mono">was {prevPct}%</div>
+          {cmp.newFindings.map((f) => (
+            <div key={f.ref} className="text-[11.5px] text-ink-600 leading-snug mb-1 last:mb-0">
+              <span className="font-mono font-medium text-ink-800">{f.ref}</span> · {f.detail}
+            </div>
+          ))}
         </div>
-        <div className="rounded-lg border border-canvas-border bg-canvas/40 px-3 py-2">
-          <div className="text-[10.5px] text-ink-400 uppercase tracking-wider mb-1">Evidence rows</div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[16px] font-bold font-mono text-ink-800 leading-none">{cur.evidence.length}</span>
-            <DeltaIcon direction={rowsDir} />
+        <div className="pl-5">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-compliant-700 mb-2">
+            <Check size={12} strokeWidth={3} /> Resolved since last run ({cmp.resolvedFindings.length})
           </div>
-          <div className="text-[10.5px] text-ink-400 mt-1 font-mono">was {prev.evidence.length}</div>
-        </div>
-        <div className="rounded-lg border border-canvas-border bg-canvas/40 px-3 py-2">
-          <div className="text-[10.5px] text-ink-400 uppercase tracking-wider mb-1">Carried over</div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[16px] font-bold font-mono text-ink-800 leading-none">{diff.carriedRows.length}</span>
-            <Minus size={12} className="text-ink-400" />
-          </div>
-          <div className="text-[10.5px] text-ink-400 mt-1 font-mono">unchanged</div>
+          {cmp.resolvedFindings.map((f) => (
+            <div key={f.ref} className="text-[11.5px] text-ink-500 leading-snug mb-1 last:mb-0">
+              <span className="font-mono font-medium text-ink-700 line-through">{f.ref}</span> · {f.detail}
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-lg border border-mitigated-200 bg-mitigated-50/30 p-2.5">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-mitigated-700 mb-1.5">
-            <Plus size={12} /> New this run ({diff.newRows.length})
-          </div>
-          {diff.newRows.length
-            ? diff.newRows.map((r) => <EvidenceRefLine key={rowKey(r)} r={r} />)
-            : <div className="text-[11px] text-ink-400">None</div>}
-        </div>
-        <div className="rounded-lg border border-compliant/30 bg-compliant-50/20 p-2.5">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-compliant-700 mb-1.5">
-            <Check size={12} strokeWidth={3} /> Resolved since last run ({diff.resolvedRows.length})
-          </div>
-          {diff.resolvedRows.length
-            ? diff.resolvedRows.map((r) => <EvidenceRefLine key={rowKey(r)} r={r} resolved />)
-            : <div className="text-[11px] text-ink-400">None</div>}
-        </div>
-      </div>
-      <p className="text-[11px] text-ink-400">
-        {diff.carriedRows.length} exception{diff.carriedRows.length === 1 ? '' : 's'} carried over unchanged · compared against{' '}
-        <span className="font-medium text-ink-600">{diff.previous.runLabel}</span> ({diff.previous.runDate})
+      <p className="text-[11px] text-ink-400 pt-1 border-t border-canvas-border/50">
+        {cmp.carriedOver} findings carried over unchanged · previous run {cmp.previousRunDate}
       </p>
     </div>
   );
@@ -457,71 +490,74 @@ export function GoldenRecordPlanCard({ gr = RUN_GOLDEN_RECORD }: { gr?: GoldenRe
 }
 
 export default function WorkflowMemoryPanel({
-  current = STAGE3_CURRENT,
-  correlated = correlatedRecords(STAGE3_CURRENT),
-  diff = diffRuns(STAGE3_CURRENT),
+  entities = Object.values(ENTITY_MEMORY),
+  compare = RUN_OUTPUT_COMPARE,
   showSourceDrift = true,
 }: {
-  current?: Stage3Record;
-  correlated?: Stage3Record[];
-  diff?: Stage3RunDiff;
+  entities?: EntityMemory[];
+  compare?: OutputCompare;
   showSourceDrift?: boolean;
 }) {
-  const headlineInsight = PROCESS_INSIGHTS.find(i => i.severity === 'high') ?? PROCESS_INSIGHTS[0];
-  const entityName = current.insight.evidence[0]?.['Vendor Name'] ?? current.insight.entity_key.toUpperCase();
   return (
     <motion.section
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.15, duration: 0.3 }}
-      className="mt-5 flex flex-col gap-3"
+      className="mt-5"
     >
-      <div className="flex items-center gap-2">
-        <span className="size-6 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center">
-          <Brain size={13} />
-        </span>
-        <h3 className="text-[13px] font-bold text-ink-800">What memory knows about this run</h3>
-        <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 px-2 py-0.5 text-[10px] font-bold border border-brand-100">
-          <Sparkles size={10} /> Insight Memory Engine
-        </span>
-      </div>
-
-      {/* The full finding for this run — reasoning, evidence table, recommended actions */}
-      {headlineInsight && <RunHeadlineInsight insight={headlineInsight} />}
-
-      {/* Headline before the collapsible detail — the analyst reads the summary first */}
-      <p className="text-[11.5px] text-ink-500 leading-snug -mt-0.5">
-        <span className="font-semibold text-ink-700">{entityName}</span> also flagged in
-        <span className="font-semibold text-ink-700 tabular-nums"> {correlated.length}</span> other workflow{correlated.length === 1 ? '' : 's'} ·
-        <span className="font-semibold text-mitigated-700 tabular-nums"> {diff.newRows.length} new</span> and
-        <span className="font-semibold text-compliant-700 tabular-nums"> {diff.resolvedRows.length} resolved</span> vs the previous run.
-      </p>
-
-      {showSourceDrift && <SourceDriftBanner />}
-
+      {/* One memory section. The two lenses — cross-workflow correlation and
+          the compare-with-previous-run — live inside it as sub-blocks split by
+          a rule, rather than as two separate cards. */}
       <MemorySection
-        icon={<Network size={14} />}
-        title="Cross-workflow correlation"
-        subtitle="Where this entity's Stage-3 signal has surfaced in other workflows"
+        icon={<Brain size={14} />}
+        title="What memory knows about this run"
         right={
-          <span className="inline-flex items-center rounded-full bg-canvas text-ink-500 px-2 py-0.5 text-[10.5px] font-bold tabular-nums">
-            {correlated.length}
+          <span className="inline-flex items-center rounded-full bg-brand-50 text-brand-700 px-2.5 py-0.5 text-[10px] font-bold border border-brand-100 shrink-0">
+            Insight Memory Engine
           </span>
         }
       >
-        <div className="pt-2">
-          <EntityCorrelation current={current} correlated={correlated} />
-        </div>
-      </MemorySection>
+        {showSourceDrift && (
+          <div className="pt-3 pb-4 mb-4 border-b border-canvas-border/70">
+            <SourceDriftBanner />
+          </div>
+        )}
 
-      <MemorySection
-        icon={<GitCompareArrows size={14} />}
-        title="Compare with previous output"
-        subtitle={`vs ${diff.previous.runLabel}`}
-        accent="compliant"
-      >
-        <div className="pt-2">
-          <Stage3ComparePanel diff={diff} />
+        {/* Lens 1 — cross-workflow correlation */}
+        <div className="pt-3">
+          <div className="flex items-start gap-2.5">
+            <span className="size-6 rounded-md bg-canvas border border-canvas-border text-ink-400 flex items-center justify-center shrink-0">
+              <Network size={13} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-bold text-ink-900 leading-tight">Cross-workflow correlation</div>
+              <div className="text-[11px] text-ink-500 leading-tight mt-0.5">Entities memory has seen flagged elsewhere</div>
+            </div>
+            <span className="inline-flex items-center rounded-full bg-canvas text-ink-500 px-2 py-0.5 text-[10.5px] font-bold tabular-nums shrink-0">
+              {entities.length}
+            </span>
+          </div>
+          <div className="mt-1.5 flex flex-col divide-y divide-canvas-border/60">
+            {entities.map((m) => <EntityMemoryRow key={m.vendorId} mem={m} />)}
+          </div>
+        </div>
+
+        <div className="my-4 border-t border-canvas-border/70" />
+
+        {/* Lens 2 — compare with the previous run */}
+        <div>
+          <div className="flex items-start gap-2.5">
+            <span className="size-6 rounded-md bg-canvas border border-canvas-border text-ink-400 flex items-center justify-center shrink-0">
+              <GitCompareArrows size={13} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-bold text-ink-900 leading-tight">Compare with previous output</div>
+              <div className="text-[11px] text-ink-500 leading-tight mt-0.5">vs {compare.previousRunLabel}</div>
+            </div>
+          </div>
+          <div className="mt-2.5">
+            <OutputComparePanel cmp={compare} />
+          </div>
         </div>
       </MemorySection>
     </motion.section>

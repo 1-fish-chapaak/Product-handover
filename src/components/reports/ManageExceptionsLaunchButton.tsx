@@ -36,7 +36,10 @@ export function ManageExceptionsLaunchButton({ queryId, compact = false }: { que
     // Fire the new tab just after the user's eye has locked onto the hint.
     window.setTimeout(() => {
       const url = `${window.location.pathname}?view=manage-exceptions&from=${encodeURIComponent(queryId)}`;
-      window.open(url, '_blank', 'noopener,noreferrer');
+      // Intentionally NOT 'noopener' — the new tab seeds its (in-memory) query→flow
+      // assignments from this opener tab's live store (see queryFlowStore). Same-origin
+      // internal navigation, so keeping the opener reference is safe.
+      window.open(url, '_blank');
     }, 340);
     // Reset state so the button becomes re-usable (same tab stays open).
     window.setTimeout(() => {

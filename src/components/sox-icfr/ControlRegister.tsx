@@ -1,60 +1,68 @@
 import { useMemo, useState } from 'react';
 import {
-  Search, Plus, FileSpreadsheet, AlertTriangle, Layers, Rows3, MessageSquare,
-  Star, RefreshCw, ListFilter, FileText, X, Send, LayoutGrid, Table2,
+  Search, Plus, FileSpreadsheet, Layers, Rows3, MessageSquare,
+  Star, RefreshCw, ListFilter, FileText, X, Send, LayoutGrid, Table2, FlaskConical,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import {
-  controlConclusion, courtFor, designProgress, engagementProgress, openDiscussionCount,
-  operatingProgress, trackResult,
+  controlConclusion, courtFor, designProgress, designStarted, engagementProgress, openDiscussionCount,
+  operatingProgress, operatingStarted, isTestDueNow, testDueDisplay, testsDueNow, trackResult,
 } from './helpers';
 import { ConclusionPill, CourtBadge, NatureChip, Tickmark } from './parts';
+import BulkTestModal from './BulkTestModal';
 import { downloadIcfrWorkingPaper } from './icfrWorkingPaper';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
 
-type SavedView = 'all' | 'court' | 'design' | 'operating' | 'exceptions' | 'key';
+type SavedView = 'all' | 'due' | 'court' | 'design' | 'operating' | 'exceptions' | 'key';
 const VIEWS: { id: SavedView; label: string }[] = [
-  { id: 'all', label: 'All controls' },
+  { id: 'all', label: 'All' },
+  { id: 'due', label: 'Due now' },
   { id: 'court', label: 'My court' },
-  { id: 'design', label: 'Design outstanding' },
-  { id: 'operating', label: 'Operating outstanding' },
+  { id: 'design', label: 'Design' },
+  { id: 'operating', label: 'Operating' },
   { id: 'exceptions', label: 'Exceptions' },
-  { id: 'key', label: 'Key controls' },
+  { id: 'key', label: 'Key' },
 ];
 
 // binding colours, one per process — drawn from the brand purple + evidence blue families (on-theme, no brown)
 const BINDINGS = ['#6A12CD', '#0369A1', '#550FA5', '#075985', '#8838DE', '#0284C7', '#3B0B72', '#1E3A5F'];
 function spineColor(p: string): string { let h = 0; for (let i = 0; i < p.length; i++) h = (h * 31 + p.charCodeAt(i)) >>> 0; return BINDINGS[h % BINDINGS.length]; }
 
-function ControlCard({ c, discN, court, role, onOpen }: { c: Control; discN: number; court: ReturnType<typeof courtFor>; role: ReturnType<typeof useIcfr>['role']; onOpen: () => void }) {
-  const dp = designProgress(c); const op = operatingProgress(c);
-  const dRes = trackResult(c.design); const oRes = trackResult(c.operating);
-  const concl = controlConclusion(c);
-  const dStarted = dp.docsReceived > 0 || dp.pointsPass > 0;
-  const oStarted = op.tested > 0;
-  const dotCls = (res: ReturnType<typeof trackResult>, started: boolean) => res === 'Effective' ? 'ok' : res === 'Ineffective' ? 'ko' : started ? 'prog' : 'none';
-  const label = (res: ReturnType<typeof trackResult>, started: boolean) => res === 'Not tested' ? (started ? 'In progress' : 'Not started') : res;
+function CardTrack({ label, res, started }: { label: string; res: ReturnType<typeof trackResult>; started: boolean }) {
+  const dot = res === 'Effective' ? 'ok' : res === 'Ineffective' ? 'ko' : started ? 'prog' : 'none';
+  const word = res === 'Not tested' ? (started ? 'In progress' : 'Not started') : res;
+  return (
+    <div className="flex items-center gap-2.5 text-[11.5px]">
+      <span className="text-ink-400 w-[58px] shrink-0">{label}</span>
+      <span className={cn('ac-dot', dot)} />
+      <span className="font-medium text-ink-700">{word}</span>
+    </div>
+  );
+}
+
+function ControlCard({ c, discN, onOpen }: { c: Control; discN: number; onOpen: () => void }) {
   return (
     <button className="ac-card" onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter') onOpen(); }} aria-label={`Open ${c.id} — ${c.description}`}>
       <div className="flex items-center gap-2">
-        <span className="wp-ref">{c.wpRef}</span>
         <span className="ac-eyebrow"><span className="dot" style={{ background: spineColor(c.process) }} /><span className="lbl">{c.process}</span></span>
-        {c.isKey && <Star size={12} className="text-mitigated fill-mitigated-100 shrink-0" />}
-        {discN > 0 && <span className="ml-auto inline-flex items-center gap-0.5 text-[10.5px] font-bold text-brand-700 bg-brand-50 px-1.5 h-[17px] rounded-full"><MessageSquare size={9} />{discN}</span>}
+        <span className="ml-auto inline-flex items-center gap-2 shrink-0">
+          {c.isKey && <Star size={11} className="text-mitigated-500 fill-mitigated-100" />}
+          {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-brand-700"><MessageSquare size={9} />{discN}</span>}
+          <span className="font-mono text-[10.5px] text-ink-400">{c.wpRef}</span>
+        </span>
       </div>
-      <h3 className="ac-title mt-2.5">{c.description}</h3>
-      <div className="ac-meta">{c.id} · {c.subProcess} · {c.nature}</div>
+      <h3 className="ac-title mt-2">{c.description}</h3>
+      <div className="ac-meta">
+        {c.id} · {c.nature} ·{' '}
+        {(() => { const dd = testDueDisplay(c); return <span className={dd.cls}>{dd.label}</span>; })()}
+      </div>
       <div className="ac-div" />
-      <div>
-        <div className="ac-track"><span className="ac-track-label">Design</span><span className={cn('ac-dot', dotCls(dRes, dStarted))} /><span className="ac-track-status">{label(dRes, dStarted)}</span><span className="ac-track-count">{dp.docsReceived}/{dp.docsTotal}</span></div>
-        <div className="ac-track"><span className="ac-track-label">Operating</span><span className={cn('ac-dot', dotCls(oRes, oStarted))} /><span className="ac-track-status">{label(oRes, oStarted)}</span><span className="ac-track-count">{op.tested}/{op.total}</span></div>
+      <div className="space-y-1.5">
+        <CardTrack label="Design" res={trackResult(c.design)} started={designStarted(c)} />
+        <CardTrack label="Operating" res={trackResult(c.operating)} started={operatingStarted(c)} />
       </div>
-      <div className="ac-div" />
-      <div className="ac-foot">
-        <ConclusionPill c={concl} />
-        <span className="ml-auto"><CourtBadge court={court} fromRole={role} /></span>
-      </div>
+      <div className="mt-3"><ConclusionPill c={controlConclusion(c)} /></div>
     </button>
   );
 }
@@ -78,6 +86,7 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
 
 export default function ControlRegister() {
   const { eng, role, openControl, setView, rollForward, requestDesignDocs } = useIcfr();
+  const [bulkTestIds, setBulkTestIds] = useState<string[] | null>(null);
   const [savedView, setSavedView] = useState<SavedView>('all');
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
@@ -97,6 +106,7 @@ export default function ControlRegister() {
       if (nature !== 'All' && c.nature !== nature) return false;
       if (term && !(`${c.id} ${c.wpRef} ${c.description} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       const concl = controlConclusion(c);
+      if (savedView === 'due' && !isTestDueNow(c)) return false;
       if (savedView === 'court' && courtFor(c, eng.tasks) !== role) return false;
       if (savedView === 'design' && trackResult(c.design) !== 'Not tested') return false;
       if (savedView === 'operating' && trackResult(c.operating) !== 'Not tested') return false;
@@ -116,7 +126,7 @@ export default function ControlRegister() {
   const allVisible = filtered.map(c => c.id);
   const allSelected = allVisible.length > 0 && allVisible.every(id => sel.has(id));
   const toggleAll = () => setSel(allSelected ? new Set() : new Set(allVisible));
-  const toggle = (id: string) => setSel(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggle = (id: string) => setSel(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const colSpan = 8;
 
@@ -125,31 +135,19 @@ export default function ControlRegister() {
       {/* header */}
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
-          <h1 className="text-[22px] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>Control register</h1>
-          <p className="text-[13px] text-ink-500 mt-0.5">{eng.controls.length} controls · Design and operating effectiveness tested independently · {eng.framework}</p>
+          <h1 className="text-[22px] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>Control library</h1>
+          <p className="text-[13px] text-ink-500 mt-0.5">{eng.controls.length} controls · <span className="font-semibold text-mitigated-700">{testsDueNow(eng.controls).length} tests due now</span> · {stats.effective} effective · {stats.waitingOnOwner} waiting on owner</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setView('scope')} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Layers size={14} /> Materiality &amp; scope</button>
-          <button onClick={() => setView('deficiencies')} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><AlertTriangle size={14} /> Exceptions <span className="ml-0.5 px-1.5 h-[18px] inline-flex items-center rounded-full bg-risk-50 text-risk-700 text-[10.5px] font-bold">{eng.deficiencies.length}</span></button>
-          <button onClick={() => downloadIcfrWorkingPaper(eng)} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={14} /> Working paper</button>
-          <button onClick={rollForward} title="Roll forward to year-end" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RefreshCw size={14} /> Roll forward</button>
-          <button onClick={() => setView('setup')} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New engagement</button>
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => downloadIcfrWorkingPaper(eng)} title="Export working paper" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>
+          {role === 'auditor' && <button onClick={rollForward} title="Roll forward to year-end" aria-label="Roll forward to year-end" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RefreshCw size={15} /></button>}
+          <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
+            title={sel.size ? `Bulk test the ${sel.size} selected controls` : 'Bulk test all controls in view'}
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
+            <FlaskConical size={14} /> Bulk test{sel.size > 0 && <span className="tabular-nums text-brand-700">({sel.size})</span>}
+          </button>
+          {role === 'auditor' && <button onClick={() => setView('setup')} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New</button>}
         </div>
-      </div>
-
-      {/* progress rail */}
-      <div className="grid grid-cols-4 gap-3 mb-4">
-        {[
-          { k: 'Design concluded', v: `${stats.designDone}/${stats.total}`, t: 'text-brand-700' },
-          { k: 'Operating concluded', v: `${stats.operatingDone}/${stats.total}`, t: 'text-evidence-700' },
-          { k: 'Effective', v: stats.effective, t: 'text-compliant-700' },
-          { k: 'Waiting on owner', v: stats.waitingOnOwner, t: 'text-mitigated-700' },
-        ].map(s => (
-          <div key={s.k} className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3">
-            <div className={cn('text-[20px] font-bold tabular-nums', s.t)}>{s.v}</div>
-            <div className="text-[11.5px] text-ink-500 font-medium mt-0.5">{s.k}</div>
-          </div>
-        ))}
       </div>
 
       {/* saved views */}
@@ -180,7 +178,7 @@ export default function ControlRegister() {
           </select>
         </div>
         <div className="flex-1" />
-        <button onClick={() => setGrouped(g => !g)} className={cn('filter-pill', grouped && 'on')}><Layers size={13} /> {layout === 'cards' ? 'Shelves' : 'Group'} by process</button>
+        <button onClick={() => setGrouped(g => !g)} className={cn('filter-pill', grouped && 'on')}><Layers size={13} /> Group</button>
         {layout === 'table' && <button onClick={() => setDense(d => !d)} className={cn('filter-pill', dense && 'on')}><Rows3 size={13} /> Dense</button>}
         <div className="inline-flex items-center p-0.5 rounded-lg border border-canvas-border bg-canvas-elevated">
           <button onClick={() => setLayout('cards')} title="Card view" className={cn('h-8 px-2.5 rounded-md text-[12px] font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors', layout === 'cards' ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}><LayoutGrid size={13} /> Cards</button>
@@ -203,7 +201,7 @@ export default function ControlRegister() {
                 </div>
               )}
               <div className="card-grid">
-                {g.rows.map(c => <ControlCard key={c.id} c={c} discN={openDiscussionCount(eng, c.id)} court={courtFor(c, eng.tasks)} role={role} onOpen={() => openControl(c.id)} />)}
+                {g.rows.map(c => <ControlCard key={c.id} c={c} discN={openDiscussionCount(eng, c.id)} onOpen={() => openControl(c.id)} />)}
               </div>
             </div>
           ))}
@@ -243,7 +241,7 @@ export default function ControlRegister() {
                   const discN = openDiscussionCount(eng, c.id);
                   return (
                     <tr key={c.id} className={cn('reg-row', sel.has(c.id) && 'sel')} onClick={() => openControl(c.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') openControl(c.id); }} role="button" aria-label={`Open ${c.id} — ${c.description}`}>
-                      <td onClick={e => { e.stopPropagation(); toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>
+                      <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>
                       <td><span className="wp-ref">{c.wpRef}</span></td>
                       <td className="tight">
                         <div className="flex items-center gap-1.5">
@@ -251,7 +249,10 @@ export default function ControlRegister() {
                           <span className="font-semibold text-ink-900 text-[12.5px] truncate max-w-[420px]">{c.description}</span>
                           {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[10.5px] font-bold text-brand-700 bg-brand-50 px-1.5 h-[17px] rounded-full"><MessageSquare size={9} />{discN}</span>}
                         </div>
-                        <div className="text-[11px] text-ink-400 mt-0.5">{c.id} · {c.subProcess} · {c.owner}</div>
+                        <div className="text-[11px] text-ink-400 mt-0.5">
+                          {c.id} · {c.subProcess} · {c.owner} ·{' '}
+                          {(() => { const dd = testDueDisplay(c); return <span className={dd.cls}>{dd.label}</span>; })()}
+                        </div>
                       </td>
                       <td><NatureChip nature={c.nature} small /></td>
                       <td><TrackCell result={trackResult(c.design)} a={dp.docsReceived} b={dp.docsTotal} label={`${dp.docsReceived}/${dp.docsTotal} docs`} /></td>
@@ -270,21 +271,22 @@ export default function ControlRegister() {
         </table>
       </div>
       )}
-      <div className="mt-2 text-[11.5px] text-ink-400 flex items-center justify-between">
-        <span>Showing {filtered.length} of {eng.controls.length} controls</span>
-        <span className="inline-flex items-center gap-3"><span className="inline-flex items-center gap-1"><Tickmark result="Pass" size={13} /> effective</span><span className="inline-flex items-center gap-1"><Tickmark result="Fail" size={13} /> ineffective</span><span className="inline-flex items-center gap-1"><Tickmark result="Not tested" size={13} /> not started</span></span>
-      </div>
+      <div className="mt-3 text-[11.5px] text-ink-400">Showing {filtered.length} of {eng.controls.length} controls</div>
 
       {/* bulk bar */}
       {sel.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
           <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
-          <button onClick={() => { requestDesignDocs(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>
+          <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>
+          {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
           <button onClick={() => { openControl(Array.from(sel)[0]); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><Send size={14} /> Open first</button>
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
       )}
+
+      {/* bulk test — compile files → attach unique datasets → execute */}
+      {bulkTestIds && <BulkTestModal controlIds={bulkTestIds} onClose={() => setBulkTestIds(null)} />}
     </div>
   );
 }

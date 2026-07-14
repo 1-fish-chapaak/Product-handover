@@ -13,7 +13,7 @@ import {
   Layout, X, Edit3, Loader2, Trash2,
   List, LayoutGrid, GripVertical, Plus,
   MoreVertical, Eye, EyeOff, SquareArrowOutUpRight,
-  MessageSquare, Paperclip, Send, Clock as ClockIcon, History,
+  MessageSquare, Paperclip, Send, History,
   Layers, Check, RefreshCw, Lock, Sparkles,
 } from 'lucide-react';
 import EmptyState from '../shared/EmptyState';
@@ -30,17 +30,18 @@ import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { reportDisplayName } from './reportName';
 import { ApplyTemplateDropdown } from './TemplateEditor';
 import {
-  SECTION_ICONS, TEMPLATE_THEME_GRADIENT, mergeTemplateOptions,
+  SECTION_ICONS, reportGradient, reportAccent, mergeTemplateOptions,
   computeQueryKpis, reportKind,
   type WorkflowResult,
   CUSTOM_TEMPLATES,
   type QueryShape, type QueryComment, type GeneratedReport,
+  type SignatorySlot, type Signoff,
 } from './reportShared';
 import QueryWidgetModal from './QueryWidgetModal';
 import { useToast } from '../shared/Toast';
-import { useCan } from '../../context/CurrentUserContext';
+import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
 import { KpiCountUp } from '../shared/KpiTile';
-import { ReportBrandBanner, ReportNumberedHeading, ReportKpiTiles } from './ReportDocumentChrome';
+import { ReportBrandBanner, ReportNumberedHeading, ReportKpiTiles, ReportSignoffBlock } from './ReportDocumentChrome';
 import { statTone } from './reportTones';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import { composeExecSummary, composeSectionContent, workflowToQueryDef } from './templateQueryPool';
@@ -123,7 +124,7 @@ function GenerateCasesGate({ queryId, phase, onPhaseChange }: { queryId: string;
 }
 
 
-function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddComment, title }: { query: QueryShape; index: number; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void; title?: string }) {
+function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddComment, title }: { query: QueryShape; index: number; onOpenQuery?: (query: { id: string; title: string }) => void; onDelete?: () => void; comments?: QueryComment[]; onAddComment?: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void; title?: string }) {
   const { addToast } = useToast();
   const { can } = useCan();
   const safeQuery = query ?? { id: '', risk: '', severity: '', title: '', addedBy: '', kpis: [], summary: '', findings: [], observations: [], answer: '', chartData: [] } as QueryShape;
@@ -516,6 +517,30 @@ function QueryCard({ query, index, onOpenQuery, onDelete, comments = [], onAddCo
 }
 
 
+// Comment attachments store only a filename (the composer keeps the name, not
+// the bytes), so there's no real file to serve. Open a clean placeholder
+// document in a new tab keyed to the file name.
+function openAttachment(name: string) {
+  const safe = (name || 'Attachment').replace(/[<>&"]/g, '');
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${safe}</title><style>body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-family:Inter,system-ui,sans-serif;background:#faf9fc;color:#1e1b2e}.doc{font-size:15px;font-weight:600}.hint{font-size:13px;color:#8b8698}.tag{font:600 11px/1 ui-monospace,monospace;color:#6d28d9;background:#f3effc;padding:4px 10px;border-radius:999px}</style></head><body><span class="tag">ATTACHMENT</span><div class="doc">${safe}</div><div class="hint">Preview isn't available in this prototype.</div></body></html>`;
+  window.open('data:text/html;charset=utf-8,' + encodeURIComponent(html), '_blank', 'noopener,noreferrer');
+}
+
+// Downloads the attachment under its own name. The prototype has no stored
+// bytes, so we save a small placeholder file keyed to the name.
+function downloadAttachment(name: string) {
+  const safe = name || 'attachment';
+  const blob = new Blob([`${safe}\n\nPlaceholder file — this prototype stores the attachment name, not its contents.`], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = safe;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ─── Query side-sheet — Comments ───
 function CommentDrawer({
   query,
@@ -525,11 +550,11 @@ function CommentDrawer({
 }: {
   query: QueryShape;
   comments: QueryComment[];
-  onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void;
+  onAddComment?: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void;
   onClose: () => void;
 }) {
   const [text, setText] = useState('');
-  const [attachment, setAttachment] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<string[]>([]);
   const [isPosting, setIsPosting] = useState(false);
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -538,22 +563,29 @@ function CommentDrawer({
 
   // Show only comments belonging to the query the user clicked from.
   const queryComments = comments.filter(c => c.queryId === query.id);
-  const grouped = queryComments.reduce<Record<string, { queryId: string; queryTitle: string; items: QueryComment[] }>>((acc, c) => {
-    if (!acc[c.queryId]) acc[c.queryId] = { queryId: c.queryId, queryTitle: c.queryTitle, items: [] };
-    acc[c.queryId].items.push(c);
-    return acc;
-  }, {});
-  const queryGroups = Object.values(grouped);
   const totalComments = queryComments.length;
+
+  // Coarse date buckets from the relative timestamp string, mirroring the
+  // Report Activity Log so both comment surfaces read the same.
+  const bucketOf = (ts: string): 'Today' | 'Yesterday' | 'Earlier' => {
+    const t = ts.toLowerCase();
+    if (/just now|second|minute|hour|today/.test(t)) return 'Today';
+    if (/^1\s*day|yesterday/.test(t)) return 'Yesterday';
+    return 'Earlier';
+  };
+  const sortedComments = [...queryComments].reverse();
+  const dateGroups = (['Today', 'Yesterday', 'Earlier'] as const)
+    .map(label => ({ label, items: sortedComments.filter(c => bucketOf(c.timestamp) === label) }))
+    .filter(g => g.items.length > 0);
 
   const handlePost = () => {
     const body = text.trim();
     if (!body || isPosting) return;
     setIsPosting(true);
     // Optimistic — clear inputs immediately so the new entry appears posted.
-    onAddComment?.(query.id, query.title, body, attachment ?? undefined);
+    onAddComment?.(query.id, query.title, body, attachments.length ? attachments : undefined);
     setText('');
-    setAttachment(null);
+    setAttachments([]);
     // Release the busy state on the next frame; the parent state update has
     // already flushed by then.
     window.setTimeout(() => setIsPosting(false), 120);
@@ -580,101 +612,120 @@ function CommentDrawer({
         aria-modal="true"
         aria-label="Comments"
       >
-        {/* Header strip + close */}
-        <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-4 border-b border-canvas-border bg-white">
-          <div className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-brand-600">
-            <MessageSquare size={14} className="shrink-0" />
-            Comments
-            <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 text-[0.625rem] font-semibold rounded-full tabular-nums bg-brand-600/10 text-brand-600">
-              {totalComments}
-            </span>
+        {/* Header — icon tile + title + count, matching the Report Activity Log */}
+        <header className="group shrink-0 px-6 py-5 flex items-start justify-between gap-4 border-b border-canvas-border">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-[8px] bg-brand-600/10 text-brand-600 flex items-center justify-center shrink-0">
+              <MessageSquare size={20} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-[1rem] font-semibold text-ink-800 leading-tight">Comments</h2>
+                {totalComments > 0 && (
+                  <motion.span
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.15, type: 'spring', stiffness: 520, damping: 24 }}
+                    className="inline-flex items-center h-[18px] px-1.5 rounded-full bg-brand-50 text-brand-700 text-[0.625rem] font-semibold tabular-nums"
+                  >
+                    {totalComments}
+                  </motion.span>
+                )}
+              </div>
+              <p title={`On ${query.id} — ${query.title}`} className="text-[0.75rem] text-ink-400 mt-0.5 leading-snug line-clamp-1 group-hover:line-clamp-none transition-all">
+                On <span className="font-mono font-semibold text-brand-600">{query.id}</span> — {query.title}
+              </p>
+            </div>
           </div>
-          <button
+          <motion.button
             onClick={onClose}
+            whileTap={{ scale: 0.88 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 22 }}
             className="w-8 h-8 rounded-full text-ink-400 hover:text-ink-800 hover:bg-brand-50 flex items-center justify-center cursor-pointer shrink-0"
             aria-label="Close"
           >
             <X size={16} />
-          </button>
-        </div>
-
-        {/* Header (title + sub-text) */}
-        <header className="shrink-0 px-6 py-5 border-b border-canvas-border">
-          <h2 className="text-[1rem] font-semibold text-ink-800 leading-tight">
-            Comments
-          </h2>
-          <p className="text-[0.75rem] text-ink-400 mt-0.5 leading-snug">
-            Commenting on{' '}
-            <span className="font-mono font-semibold text-brand-600">{query.id}</span> — {query.title}
-          </p>
+          </motion.button>
         </header>
 
         <>
-            {/* Comment input */}
-            <section className="shrink-0 px-6 py-4 border-b border-canvas-border">
-              <div className="relative">
+            {/* Composer — bordered card with inner toolbar, matching the activity log */}
+            <section className="shrink-0 px-6 py-4 border-b border-canvas-border bg-canvas">
+              <div className="bg-white border border-canvas-border rounded-[10px] focus-within:border-brand-600/40 focus-within:ring-2 focus-within:ring-brand-600/15 transition-all overflow-hidden">
                 <textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
+                  onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handlePost(); } }}
                   placeholder={`Leave a comment on ${query.id}…`}
                   rows={3}
-                  className="w-full resize-none p-3 pr-[72px] bg-white border border-canvas-border rounded-[8px] text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-600/20"
+                  className="w-full resize-none bg-transparent border-0 px-3 pt-3 pb-1.5 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-0"
                 />
                 <input
                   ref={fileInputRef}
                   type="file"
+                  multiple
                   className="hidden"
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) setAttachment(f.name);
+                    const names = Array.from(e.target.files ?? []).map(f => f.name);
+                    if (names.length) setAttachments(prev => [...prev, ...names.filter(n => !prev.includes(n))]);
+                    e.target.value = '';
                   }}
                 />
-                <div className="absolute bottom-2 right-2 flex items-center gap-1">
-                  <button
+                <AnimatePresence>
+                  {attachments.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-3 pb-2 flex flex-wrap gap-1.5">
+                        {attachments.map((name) => (
+                          <span key={name} className="inline-flex items-center gap-1.5 h-6 pl-2 pr-1.5 bg-brand-50 text-brand-700 text-[0.6875rem] font-medium rounded-full">
+                            <Paperclip size={12} />
+                            <span className="truncate max-w-[180px]">{name}</span>
+                            <button onClick={() => setAttachments(prev => prev.filter(n => n !== name))} className="ml-0.5 text-brand-700/60 hover:text-brand-700 cursor-pointer" aria-label={`Remove ${name}`}>
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <div className="flex items-center justify-between px-2 py-2 border-t border-canvas-border/60">
+                  <motion.button
                     type="button"
+                    whileTap={{ scale: 0.9 }}
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-7 h-7 flex items-center justify-center text-ink-400 hover:text-brand-600 cursor-pointer"
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-[8px] text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1"
                     aria-label="Attach file"
                     title="Attach file"
                   >
-                    <Paperclip size={14} />
-                  </button>
-                  <button
-                    type="button"
+                    <Paperclip size={15} />
+                  </motion.button>
+                  <motion.button
                     onClick={handlePost}
                     disabled={!text.trim() || isPosting}
-                    className={`w-7 h-7 flex items-center justify-center rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
+                    whileTap={text.trim() && !isPosting ? { scale: 0.96 } : undefined}
+                    title="Post comment (⌘↵)"
+                    className={`inline-flex items-center gap-1.5 h-8 px-4 text-[0.75rem] font-semibold rounded-[8px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 ${
                       text.trim() && !isPosting
                         ? 'bg-brand-600 text-white hover:bg-brand-500 cursor-pointer'
-                        : 'text-ink-400/50 cursor-not-allowed'
+                        : 'bg-brand-600/40 text-white/80 cursor-not-allowed'
                     }`}
-                    aria-label="Post comment"
-                    title="Post comment"
                   >
-                    {isPosting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                  </button>
+                    {isPosting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                    {isPosting ? 'Posting…' : 'Post'}
+                  </motion.button>
                 </div>
               </div>
-              {attachment && (
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/10 text-brand-600 text-[0.6875rem] font-medium rounded-full">
-                    <Paperclip size={12} />
-                    {attachment}
-                  </span>
-                  <button onClick={() => setAttachment(null)} className="text-[0.6875rem] text-ink-400 hover:text-risk-700 cursor-pointer">remove</button>
-                </div>
-              )}
             </section>
 
-            {/* Shared activity log */}
-            <div className="flex-1 overflow-y-auto px-6 py-4" aria-live="polite">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-400">Activity log</h3>
-                <span className="text-[0.6875rem] text-ink-400 tabular-nums">
-                  {totalComments} {totalComments === 1 ? 'comment' : 'comments'} across {queryGroups.length} {queryGroups.length === 1 ? 'query' : 'queries'}
-                </span>
-              </div>
-              {queryGroups.length === 0 ? (
+            {/* Feed — date-bucketed spine timeline, matching the Report Activity Log */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 bg-white" aria-live="polite">
+              {totalComments === 0 ? (
                 <EmptyState
                   icon={MessageSquare}
                   title="No comments yet"
@@ -682,38 +733,35 @@ function CommentDrawer({
                   size="compact"
                 />
               ) : (
-                <div className="space-y-4">
-                  {queryGroups.map(group => (
-                    <section key={group.queryId} className="border border-canvas-border rounded-[12px] overflow-hidden">
-                      <header className={`px-3 py-2 bg-canvas border-b border-canvas-border flex items-center justify-between ${group.queryId === query.id ? 'bg-brand-600/5' : ''}`}>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-[0.6875rem] font-bold text-brand-600 shrink-0">{group.queryId}</span>
-                          <span className="text-[0.6875rem] text-ink-400 truncate">{group.queryTitle}</span>
+                <div className="relative">
+                  <span aria-hidden className="absolute left-[15px] top-1 bottom-1 w-px bg-canvas-border" />
+                  <div className="space-y-6">
+                    {dateGroups.map(group => (
+                      <section key={group.label}>
+                        <div className="flex items-center gap-2.5 mb-3 pl-[46px]">
+                          <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-400">{group.label}</h3>
+                          <div className="flex-1 h-px bg-canvas-border/70" />
+                          <span className="text-[0.625rem] tabular-nums text-ink-300">
+                            {group.items.length} {group.items.length === 1 ? 'entry' : 'entries'}
+                          </span>
                         </div>
-                        <span className="text-[0.625rem] text-ink-400 tabular-nums shrink-0">
-                          {group.items.length} {group.items.length === 1 ? 'comment' : 'comments'}
-                        </span>
-                      </header>
-                      <ol className="divide-y divide-border-light">
-                        {group.items.slice().reverse().map(c => {
-                          const isLong = c.text.length > 1000;
-                          const isExpanded = expandedComments.has(c.id);
-                          const displayText = isLong && !isExpanded ? c.text.slice(0, 1000) + '…' : c.text;
-                          return (
-                            <li key={c.id} className="px-3 py-3">
-                              <div className="flex items-start gap-2.5">
-                                <span className="shrink-0 w-7 h-7 rounded-full bg-brand-600/10 text-brand-600 flex items-center justify-center text-[0.625rem] font-bold tracking-wider">
+                        <ol className="space-y-5">
+                          {group.items.map(c => {
+                            const isLong = c.text.length > 1000;
+                            const isExpanded = expandedComments.has(c.id);
+                            const displayText = isLong && !isExpanded ? c.text.slice(0, 1000) + '…' : c.text;
+                            const files = c.attachments ?? (c.attachment ? [c.attachment] : []);
+                            return (
+                              <li key={c.id} className="relative flex gap-3.5">
+                                <div className="relative z-[1] shrink-0 w-8 h-8 rounded-full bg-brand-600/10 text-brand-700 ring-[3px] ring-white flex items-center justify-center text-[0.625rem] font-semibold tracking-tight">
                                   {c.initials}
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between gap-2 mb-0.5">
-                                    <span className="text-[0.75rem] font-semibold text-ink-800">{c.author}</span>
-                                    <span className="inline-flex items-center gap-1 text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap">
-                                      <ClockIcon size={12} />
-                                      {c.timestamp}
-                                    </span>
+                                </div>
+                                <div className="flex-1 min-w-0 pb-0.5">
+                                  <div className="flex items-baseline gap-2">
+                                    <span className="text-[0.8125rem] font-semibold text-ink-800 truncate">{c.author}</span>
+                                    <span className="ml-auto text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap">{c.timestamp}</span>
                                   </div>
-                                  <p className="text-[0.75rem] text-ink-800 leading-relaxed whitespace-pre-wrap break-words">{displayText}</p>
+                                  <p className="mt-1.5 text-[0.8125rem] text-ink-700 leading-relaxed whitespace-pre-wrap break-words">{displayText}</p>
                                   {isLong && (
                                     <button
                                       type="button"
@@ -727,20 +775,38 @@ function CommentDrawer({
                                       {isExpanded ? 'Show less' : 'Show more'}
                                     </button>
                                   )}
-                                  {c.attachment && (
-                                    <span className="mt-1.5 inline-flex items-center gap-1.5 h-6 px-2 bg-brand-600/10 text-brand-600 text-[0.6875rem] font-medium rounded-full">
-                                      <Paperclip size={12} />
-                                      {c.attachment}
-                                    </span>
+                                  {files.length > 0 && (
+                                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                      {files.map((file) => (
+                                        <span key={file} className="inline-flex items-center max-w-full h-7 bg-canvas border border-canvas-border rounded-[7px] overflow-hidden text-[0.6875rem] font-medium text-ink-700">
+                                          <button
+                                            onClick={() => openAttachment(file)}
+                                            title={`Open ${file} in a new tab`}
+                                            className="inline-flex items-center gap-1.5 min-w-0 h-full pl-2.5 pr-2 hover:text-brand-700 hover:bg-white transition-colors cursor-pointer"
+                                          >
+                                            <Paperclip size={12} className="text-ink-400 shrink-0" />
+                                            <span className="truncate">{file}</span>
+                                          </button>
+                                          <button
+                                            onClick={() => downloadAttachment(file)}
+                                            title={`Download ${file}`}
+                                            aria-label={`Download ${file}`}
+                                            className="inline-flex items-center justify-center h-full w-7 border-l border-canvas-border text-ink-400 hover:text-brand-700 hover:bg-white transition-colors cursor-pointer shrink-0"
+                                          >
+                                            <Download size={12} />
+                                          </button>
+                                        </span>
+                                      ))}
+                                    </div>
                                   )}
                                 </div>
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ol>
-                    </section>
-                  ))}
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      </section>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -778,11 +844,11 @@ function ReportActivityLogDrawer({
 }: {
   reportName: string;
   comments: QueryComment[];
-  onAddComment?: (queryId: string, queryTitle: string, text: string, attachment?: string) => void;
+  onAddComment?: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void;
   onClose: () => void;
 }) {
   const [text, setText] = useState('');
-  const [attachment, setAttachment] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<string[]>([]);
   const [isPosting, setIsPosting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLElement | null>(null);
@@ -808,9 +874,9 @@ function ReportActivityLogDrawer({
     if (!body || isPosting) return;
     setIsPosting(true);
     // Report-level entries are tagged as global so they show across all surfaces.
-    onAddComment?.('REPORT', `${reportName} — Report-level note`, body, attachment ?? undefined);
+    onAddComment?.('REPORT', `${reportName} — Report-level note`, body, attachments.length ? attachments : undefined);
     setText('');
-    setAttachment(null);
+    setAttachments([]);
     window.setTimeout(() => setIsPosting(false), 120);
   };
 
@@ -862,7 +928,6 @@ function ReportActivityLogDrawer({
           <motion.button
             onClick={onClose}
             whileTap={{ scale: 0.88 }}
-            whileHover={{ rotate: 90 }}
             transition={{ type: 'spring', stiffness: 400, damping: 22 }}
             className="w-8 h-8 rounded-full text-ink-400 hover:text-ink-800 hover:bg-brand-50 flex items-center justify-center cursor-pointer shrink-0"
             aria-label="Close"
@@ -887,14 +952,16 @@ function ReportActivityLogDrawer({
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               className="hidden"
               onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) setAttachment(f.name);
+                const names = Array.from(e.target.files ?? []).map(f => f.name);
+                if (names.length) setAttachments(prev => [...prev, ...names.filter(n => !prev.includes(n))]);
+                e.target.value = '';
               }}
             />
             <AnimatePresence>
-              {attachment && (
+              {attachments.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
@@ -902,14 +969,16 @@ function ReportActivityLogDrawer({
                   transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
                   className="overflow-hidden"
                 >
-                  <div className="px-3 pb-2">
-                    <span className="inline-flex items-center gap-1.5 h-6 pl-2 pr-1.5 bg-brand-50 text-brand-700 text-[0.6875rem] font-medium rounded-full">
-                      <Paperclip size={12} />
-                      <span className="truncate max-w-[200px]">{attachment}</span>
-                      <button onClick={() => setAttachment(null)} className="ml-0.5 text-brand-700/60 hover:text-brand-700 cursor-pointer" aria-label="Remove attachment">
-                        <X size={12} />
-                      </button>
-                    </span>
+                  <div className="px-3 pb-2 flex flex-wrap gap-1.5">
+                    {attachments.map((name) => (
+                      <span key={name} className="inline-flex items-center gap-1.5 h-6 pl-2 pr-1.5 bg-brand-50 text-brand-700 text-[0.6875rem] font-medium rounded-full">
+                        <Paperclip size={12} />
+                        <span className="truncate max-w-[180px]">{name}</span>
+                        <button onClick={() => setAttachments(prev => prev.filter(n => n !== name))} className="ml-0.5 text-brand-700/60 hover:text-brand-700 cursor-pointer" aria-label={`Remove ${name}`}>
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
                   </div>
                 </motion.div>
               )}
@@ -982,6 +1051,7 @@ function ReportActivityLogDrawer({
                     <ol className="space-y-5">
                       {group.items.map((c, ii) => {
                         const idx = offset + ii;
+                        const files = c.attachments ?? (c.attachment ? [c.attachment] : []);
                         return (
                         <motion.li
                           key={c.id}
@@ -1010,14 +1080,29 @@ function ReportActivityLogDrawer({
                               <span className="truncate">{c.queryTitle}</span>
                             </div>
                             <p className="mt-2 text-[0.8125rem] text-ink-700 leading-relaxed">{c.text}</p>
-                            {c.attachment && (
-                              <motion.button
-                                whileTap={{ scale: 0.97 }}
-                                className="mt-2.5 inline-flex items-center gap-1.5 max-w-full h-7 px-2.5 bg-canvas border border-canvas-border text-ink-700 text-[0.6875rem] font-medium rounded-[7px] hover:border-brand-600/30 hover:text-brand-700 transition-colors cursor-pointer"
-                              >
-                                <Paperclip size={12} className="text-ink-400 shrink-0" />
-                                <span className="truncate">{c.attachment}</span>
-                              </motion.button>
+                            {files.length > 0 && (
+                              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                {files.map((file) => (
+                                  <span key={file} className="inline-flex items-center max-w-full h-7 bg-canvas border border-canvas-border rounded-[7px] overflow-hidden text-[0.6875rem] font-medium text-ink-700">
+                                    <button
+                                      onClick={() => openAttachment(file)}
+                                      title={`Open ${file} in a new tab`}
+                                      className="inline-flex items-center gap-1.5 min-w-0 h-full pl-2.5 pr-2 hover:text-brand-700 hover:bg-white transition-colors cursor-pointer"
+                                    >
+                                      <Paperclip size={12} className="text-ink-400 shrink-0" />
+                                      <span className="truncate">{file}</span>
+                                    </button>
+                                    <button
+                                      onClick={() => downloadAttachment(file)}
+                                      title={`Download ${file}`}
+                                      aria-label={`Download ${file}`}
+                                      className="inline-flex items-center justify-center h-full w-7 border-l border-canvas-border text-ink-400 hover:text-brand-700 hover:bg-white transition-colors cursor-pointer shrink-0"
+                                    >
+                                      <Download size={12} />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
                             )}
                           </div>
                         </motion.li>
@@ -1078,7 +1163,7 @@ function ContentsRow({
       >
         <GripVertical size={13} />
       </button>
-      <span className={`shrink-0 w-5 text-[0.6875rem] font-semibold font-mono tabular-nums text-right ${active ? 'text-brand-700' : 'text-brand-500'}`}>{String(index).padStart(2, '0')}</span>
+      <span className="shrink-0 w-5 text-[0.6875rem] font-semibold font-mono tabular-nums text-right" style={{ color: 'var(--rep-accent, #550fa5)', opacity: active ? 1 : 0.65 }}>{String(index).padStart(2, '0')}</span>
       {isEditing ? (
         <input
           value={draftValue}
@@ -1779,7 +1864,7 @@ function DraggableQuerySection({
   onOpenQuery?: (query: { id: string; title: string }) => void;
   onDelete: () => void;
   comments: QueryComment[];
-  onAddComment: (queryId: string, queryTitle: string, text: string, attachment?: string) => void;
+  onAddComment: (queryId: string, queryTitle: string, text: string, attachments?: string[]) => void;
 }) {
   return (
     <Reorder.Item {...sectionProps} className={`${sectionProps.className} relative`}>
@@ -1806,7 +1891,7 @@ function DraggableQuerySection({
 // ─── Attached Query Card — compact pending card for queries the user just attached ───
 
 // ─── Report View (with multiple queries) ───
-export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onSaveAsTemplate, onSaveAtrVersion }: {
+export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onUpdateSignoffs, onSaveAsTemplate, onSaveAtrVersion }: {
   report: GeneratedReport;
   onBack: () => void;
   onShare?: () => void;
@@ -1815,11 +1900,30 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   initialTemplate?: typeof REPORT_TEMPLATES[0] | null;
   customTemplates?: typeof REPORT_TEMPLATES[number][];
   onUpdateDescription?: (reportId: string, description: string) => void;
+  /** Persist manual sign / sign-off state on the report. */
+  onUpdateSignoffs?: (reportId: string, signoffs: Record<string, Signoff>) => void;
   onSaveAsTemplate?: (t: typeof REPORT_TEMPLATES[number]) => void;
   /** Save the Live ATR as a brand-new card in the ATR tab. */
   onSaveAtrVersion?: (label: string, data: AtrReportData) => void;
 }) {
   const { addToast } = useToast();
+  const { currentUser } = useCurrentUser();
+  // Manual sign-on / sign-off on the report's approval slots. Signing records
+  // the slot's assigned name (or the current user) + today's date; signing off
+  // clears it. Persisted via onUpdateSignoffs (no-op if the report is read-only).
+  const canSignoff = !!onUpdateSignoffs && !report.isReadOnly;
+  const handleSign = (slot: SignatorySlot) => {
+    const signer = slot.name?.trim() || currentUser?.name || 'You';
+    const signedAt = new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+    onUpdateSignoffs?.(report.id, { ...(report.signoffs ?? {}), [slot.id]: { signedBy: signer, signedAt } });
+    addToast({ type: 'success', message: `Signed as ${signer}.` });
+  };
+  const handleSignOff = (slot: SignatorySlot) => {
+    const next = { ...(report.signoffs ?? {}) };
+    delete next[slot.id];
+    onUpdateSignoffs?.(report.id, next);
+    addToast({ type: 'info', message: 'Sign-off removed.' });
+  };
   const { can } = useCan();
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   // One-time skeleton "stream-in" on open: query sections resolve from a
@@ -2583,7 +2687,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     { id: 'c-2', queryId: 'Q01', queryTitle: 'Detects duplicate invoice entries by vendor, date, and amount', author: 'Karan Mehta',  initials: 'KM', timestamp: '1 day ago',  text: 'Flagged EX-2024-003 as a bulk case for remediation — MFA enforcement applied.', attachment: 'mfa_remediation_plan.pdf' },
     { id: 'c-3', queryId: 'Q02', queryTitle: 'Identifies unauthorized vendor master changes without proper approval workflow in the last 90 days', author: 'Ravi Kumar', initials: 'RK', timestamp: '5 hours ago', text: 'Control owner confirmed — vendor master workflow is being tightened; expect residual risk to drop next quarter.' },
   ]);
-  const addComment = (queryId: string, queryTitle: string, text: string, attachment?: string) => {
+  const addComment = (queryId: string, queryTitle: string, text: string, attachments?: string[]) => {
     setComments(prev => [
       ...prev,
       {
@@ -2594,7 +2698,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
         initials: (report.generatedBy ?? 'You').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
         timestamp: 'just now',
         text,
-        attachment,
+        attachments: attachments && attachments.length ? attachments : undefined,
       },
     ]);
   };
@@ -2786,7 +2890,12 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           centered document column. The rail tracks scroll position and jumps
           between sections; the document keeps a comfortable reading measure
           instead of spanning the full page. */}
-      <div className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10">
+      <div
+        className="px-6 lg:px-12 xl:px-[124px] pt-3 pb-8 flex items-start gap-8 xl:gap-10"
+        // A custom brand colour (or named theme) colours the body accents (section
+        // numbers, ticks, outline rail) to match the cover.
+        style={{ '--rep-accent': reportAccent(report.theme, report.brandColor) } as React.CSSProperties}
+      >
         <aside className="hidden xl:block w-[252px] shrink-0 sticky top-[72px] self-start max-h-[calc(100vh-96px)] overflow-y-auto pr-1 -mr-1 print:hidden">
           <OutlineRail />
         </aside>
@@ -2798,7 +2907,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             <div className="rounded-[12px] overflow-hidden mb-5 border border-canvas-border bg-white">
               <ReportBrandBanner
                 title={reportDisplayName(report.name)}
-                gradient={report.theme ? TEMPLATE_THEME_GRADIENT[report.theme] : undefined}
+                gradient={reportGradient(report.theme, report.brandColor)}
                 actions={
                   <>
                     {canGenerateAtr && (
@@ -2903,6 +3012,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 ))}
               </div>
             )}
+
           </>
         ) : (
           <div className="w-full">
@@ -2942,7 +3052,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                         <ReportBrandBanner
                           title={reportDisplayName(report.name)}
                                     className="rounded-t-[12px]"
-                          gradient={report.theme ? TEMPLATE_THEME_GRADIENT[report.theme] : undefined}
+                          gradient={reportGradient(report.theme, report.brandColor)}
                           eyebrow={report.id && (
                             <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{report.id.toUpperCase()}</span>
                           )}
@@ -3141,6 +3251,20 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             </main>
           </div>
         )}
+
+        {/* Approvals & Sign-Off — from the template's signature block, rendered
+            for both report layouts. Each slot is manually signable / revocable
+            here in the reader (persisted); static otherwise. */}
+        {report.signoffEnabled && (report.signatories?.length ?? 0) > 0 && (
+          <div className="mt-6 bg-white rounded-[12px] border border-canvas-border p-6">
+            <ReportSignoffBlock
+              signatories={report.signatories!}
+              signoffs={report.signoffs}
+              onSign={canSignoff ? handleSign : undefined}
+              onSignOff={canSignoff ? handleSignOff : undefined}
+            />
+          </div>
+        )}
         </div>
       </div>
 
@@ -3166,6 +3290,10 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
             templateName={reportTemplate?.name}
             generatedBy={report.generatedBy}
             generatedAt={report.generatedAt}
+            pageNumbers={report.pageNumbers}
+            brandColor={report.brandColor}
+            signatories={report.signoffEnabled ? report.signatories : undefined}
+            signoffs={report.signoffs}
             sections={sections.map((s): DownloadPreviewSection => {
               if (s.kind === 'query') {
                 const q = s.query;

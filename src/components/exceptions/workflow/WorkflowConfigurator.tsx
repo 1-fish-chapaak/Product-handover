@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, Star, Check, ArrowLeft, ShieldCheck, AlertTriangle } from 'lucide-react';
 import type { Persona, WorkflowTemplate } from './workflowTypes';
-import { useWorkflow } from './WorkflowContext';
+import { approvalFlows, useApprovalFlows } from './approvalFlowStore';
 import WorkflowPipelineBuilder from './WorkflowPipelineBuilder';
 import { userName } from './workflowData';
 import { useToast } from '../../shared/Toast';
@@ -21,8 +21,13 @@ function blankTemplate(persona: Persona, createdBy: string): WorkflowTemplate {
   };
 }
 
-export default function WorkflowConfigurator({ role }: { role: Persona }) {
-  const { templates, upsertTemplate, deleteTemplate, setDefaultTemplate, currentUserId } = useWorkflow();
+export default function WorkflowConfigurator({ role, currentUserId = 'system', onRoleChange }: { role: Persona; currentUserId?: string; onRoleChange?: (role: Persona) => void }) {
+  // Reads/writes the shared approval-flow store directly, so this works both inside
+  // the Exceptions provider and standalone in Administration.
+  const templates = useApprovalFlows();
+  const upsertTemplate = approvalFlows.upsert;
+  const deleteTemplate = approvalFlows.remove;
+  const setDefaultTemplate = approvalFlows.setDefault;
   const { addToast } = useToast();
   // RBAC: a persona only sees/edits its own workflows.
   const mine = templates.filter(t => t.persona === role);
@@ -34,17 +39,17 @@ export default function WorkflowConfigurator({ role }: { role: Persona }) {
     const canSave = !nameMissing && !levelMissing && draft.levels.length > 0;
     return (
       <div className="bg-canvas-elevated border border-canvas-border rounded-[12px] p-6 max-w-[760px]">
-        <button onClick={() => setDraft(null)} className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-500 hover:text-brand-700 mb-4 cursor-pointer"><ArrowLeft size={14} /> Back to routes</button>
+        <button onClick={() => setDraft(null)} className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-500 hover:text-brand-700 mb-4 cursor-pointer"><ArrowLeft size={14} /> Back to flows</button>
         <div className="flex items-center gap-2 mb-1">
           <ShieldCheck size={16} className="text-brand-700" />
-          <h3 className="text-[16px] font-semibold text-ink-900">{templates.some(t => t.id === draft.id) ? 'Edit' : 'New'} {PERSONA_LABEL[role]} Approval Route</h3>
+          <h3 className="text-[16px] font-semibold text-ink-900">{templates.some(t => t.id === draft.id) ? 'Edit' : 'New'} {PERSONA_LABEL[role]} Approval Flow</h3>
         </div>
-        <p className="text-[12.5px] text-ink-500 mb-5">Define a reusable approval chain. Editing an existing route creates a new version — in-flight assignments keep their original version.</p>
+        <p className="text-[12.5px] text-ink-500 mb-5">Define a reusable approval chain. Editing an existing flow creates a new version — in-flight assignments keep their original version.</p>
 
         <div className="space-y-4">
           <div>
-            <label className="text-[12px] font-semibold text-ink-800 mb-1.5 block">Route Name <span className="text-risk">*</span></label>
-            <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. P2P Quarterly Review – RO Route" className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/15" />
+            <label className="text-[12px] font-semibold text-ink-800 mb-1.5 block">Flow Name <span className="text-risk">*</span></label>
+            <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. P2P Quarterly Review – RO Flow" className="w-full h-10 px-3 bg-canvas-elevated border border-canvas-border rounded-[8px] text-[13px] text-ink-900 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/15" />
           </div>
 
           <div className="flex items-center gap-2 px-3 py-2.5 rounded-[8px] bg-[#FAFAFB] border border-canvas-border">
@@ -61,7 +66,7 @@ export default function WorkflowConfigurator({ role }: { role: Persona }) {
 
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={draft.isDefault} onChange={e => setDraft({ ...draft, isDefault: e.target.checked })} className="w-4 h-4 accent-brand-600 cursor-pointer" />
-            <span className="text-[12.5px] text-ink-700">Make this the default route for new {PERSONA_LABEL[role]} assignments</span>
+            <span className="text-[12.5px] text-ink-700">Make this the default flow for new {PERSONA_LABEL[role]} assignments</span>
           </label>
         </div>
 
@@ -72,13 +77,13 @@ export default function WorkflowConfigurator({ role }: { role: Persona }) {
               if (!canSave) return;
               upsertTemplate(draft);
               if (draft.isDefault) setDefaultTemplate(draft.id, role);
-              addToast({ type: 'success', message: `Approval route "${draft.name.trim()}" saved.` });
+              addToast({ type: 'success', message: `Approval flow "${draft.name.trim()}" saved.` });
               setDraft(null);
             }}
             disabled={!canSave}
             className="h-9 px-5 text-[12.5px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Save Route
+            Save Flow
           </button>
         </div>
       </div>
@@ -87,12 +92,21 @@ export default function WorkflowConfigurator({ role }: { role: Persona }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-[15px] font-semibold text-ink-900">{PERSONA_LABEL[role]} Approval Routes</h3>
-          <p className="text-[12.5px] text-ink-500">Reusable approval chains for {role === 'auditor' ? 'auditor review' : 'risk-owner'} assignments. Switch the role toggle to manage the other side.</p>
-        </div>
-        <button onClick={() => setDraft(blankTemplate(role, currentUserId))} className="h-9 px-4 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer"><Plus size={14} /> Create Route</button>
+      <div className="flex items-center justify-between gap-3 mb-4">
+        {onRoleChange ? (
+          <div className="inline-flex items-center p-0.5 bg-[#F4F2F7] rounded-[8px]">
+            {(['risk-owner', 'auditor'] as Persona[]).map(p => (
+              <button
+                key={p}
+                onClick={() => onRoleChange(p)}
+                className={`h-8 px-3.5 text-[12px] font-semibold rounded-[6px] cursor-pointer transition-colors ${role === p ? 'bg-canvas-elevated text-brand-700 shadow-sm' : 'text-ink-500 hover:text-ink-800'}`}
+              >
+                {p === 'auditor' ? 'Auditor' : 'Risk Owner'}
+              </button>
+            ))}
+          </div>
+        ) : <span />}
+        <button onClick={() => setDraft(blankTemplate(role, currentUserId))} className="h-9 px-4 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded-[8px] cursor-pointer"><Plus size={14} /> Create Flow</button>
       </div>
 
       <div className="grid md:grid-cols-2 gap-3">
@@ -102,7 +116,7 @@ export default function WorkflowConfigurator({ role }: { role: Persona }) {
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h4 className="text-[13.5px] font-semibold text-ink-900">{t.name}</h4>
-                  <span className={`inline-flex items-center h-5 px-2 text-[10px] font-semibold rounded-full ${t.persona === 'auditor' ? 'bg-evidence-50 text-evidence-700' : 'bg-brand-50 text-brand-700'}`}>{PERSONA_LABEL[t.persona]} route</span>
+                  <span className={`inline-flex items-center h-5 px-2 text-[10px] font-semibold rounded-full ${t.persona === 'auditor' ? 'bg-evidence-50 text-evidence-700' : 'bg-brand-50 text-brand-700'}`}>{PERSONA_LABEL[t.persona]} flow</span>
                   {t.isDefault && <span className="inline-flex items-center gap-1 h-5 px-2 text-[10px] font-semibold bg-brand-50 text-brand-700 rounded-full"><Star size={9} /> Default</span>}
                   <span className="text-[10px] text-ink-400">v{t.version}</span>
                 </div>
@@ -125,7 +139,7 @@ export default function WorkflowConfigurator({ role }: { role: Persona }) {
         ))}
         {mine.length === 0 && (
           <div className="md:col-span-2 border border-dashed border-canvas-border rounded-[12px] p-8 text-center text-[12.5px] text-ink-500">
-            No {PERSONA_LABEL[role]} approval routes yet. Create one to start delegating.
+            No {PERSONA_LABEL[role]} approval flows yet. Create one to start delegating.
           </div>
         )}
       </div>

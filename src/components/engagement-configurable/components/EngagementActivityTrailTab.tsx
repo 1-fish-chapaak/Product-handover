@@ -179,7 +179,7 @@ export default function EngagementActivityTrailTab({ engagement, complianceState
       {/* Filter bar */}
       <div className="flex items-center gap-4 pb-4 border-b border-border-light">
         <div>
-          <div className="text-[0.5625rem] font-semibold text-gray-400 uppercase tracking-wider mb-1">Type</div>
+          <div className="text-[0.6875rem] font-semibold text-gray-400 uppercase tracking-wider mb-1">Type</div>
           <div className="flex items-center gap-1.5">
             {TYPE_FILTERS.map(f => (
               <button key={f.label} onClick={() => setTypeFilter(f.label)}
@@ -205,7 +205,7 @@ export default function EngagementActivityTrailTab({ engagement, complianceState
             <div key={group.label}>
               <div className="flex items-center gap-3 py-3 sticky top-0 bg-surface z-10">
                 <span className="text-[0.6875rem] font-bold text-gray-400 tracking-wider">{group.label}</span>
-                <span className="text-[0.625rem] text-gray-300">({group.entries.length})</span>
+                <span className="text-[0.6875rem] text-gray-300">({group.entries.length})</span>
                 <div className="flex-1 border-b border-border-light/50" />
               </div>
               <div className="space-y-1 pb-2">
@@ -217,11 +217,11 @@ export default function EngagementActivityTrailTab({ engagement, complianceState
                       <div className={`w-7 h-7 rounded-full ${icon.bg} ${icon.color} flex items-center justify-center shrink-0 mt-0.5`}><Icon size={13} /></div>
                       <div className="flex-1 min-w-0">
                         <div className="text-[0.75rem] font-semibold text-text leading-snug">{entry.title}</div>
-                        <div className="text-[0.625rem] text-gray-400 mt-0.5">{entry.subtitle}</div>
+                        <div className="text-[0.6875rem] text-gray-400 mt-0.5">{entry.subtitle}</div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="text-[0.625rem] text-gray-300 tabular-nums">{formatTime(entry.timestamp)}</div>
-                        <div className="text-[0.625rem] text-gray-400 mt-0.5">{entry.actor}</div>
+                        <div className="text-[0.6875rem] text-gray-300 tabular-nums">{formatTime(entry.timestamp)}</div>
+                        <div className="text-[0.6875rem] text-gray-400 mt-0.5">{entry.actor}</div>
                       </div>
                     </div>
                   );

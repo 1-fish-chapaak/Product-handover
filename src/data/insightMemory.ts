@@ -408,7 +408,18 @@ export interface OutputCompare {
   newFindings: { ref: string; detail: string }[];
   resolvedFindings: { ref: string; detail: string }[];
   carriedOver: number;
-  kpiDeltas: { label: string; current: string; previous: string; direction: 'up' | 'down' | 'flat' }[];
+  kpiDeltas: {
+    label: string;
+    current: string;
+    previous: string;
+    direction: 'up' | 'down' | 'flat';
+    /** Whether the movement is favourable. Drives the delta colour independent
+        of raw direction — more records processed is neutral, not a warning. */
+    sentiment: 'good' | 'bad' | 'neutral';
+    /** Pre-formatted magnitude of the change, sign implied by `direction`
+        (e.g. "1", "341", "₹2.5L"). Rendered as the coloured delta chip. */
+    delta: string;
+  }[];
 }
 
 export const RUN_OUTPUT_COMPARE: OutputCompare = {
@@ -423,9 +434,9 @@ export const RUN_OUTPUT_COMPARE: OutputCompare = {
     { ref: 'MCK-AMPHS', detail: 'A prior AMPHS2024 missing-price row was populated and reconciled' },
   ],
   kpiDeltas: [
-    { label: 'Exceptions', current: '90', previous: '76', direction: 'up' },
-    { label: 'Rows processed', current: '12,480', previous: '11,900', direction: 'up' },
-    { label: '$ under-recovered (sampled)', current: '$60.28', previous: '$41.10', direction: 'up' },
+    { label: 'Exceptions', current: '90', previous: '76', direction: 'up', sentiment: 'bad', delta: '14' },
+    { label: 'Rows processed', current: '12,480', previous: '11,900', direction: 'up', sentiment: 'neutral', delta: '580' },
+    { label: '$ under-recovered (sampled)', current: '$60.28', previous: '$41.10', direction: 'up', sentiment: 'bad', delta: '$19.18' },
   ],
 };
 

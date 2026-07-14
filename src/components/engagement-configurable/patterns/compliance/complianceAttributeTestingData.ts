@@ -1,12 +1,12 @@
 // ─── Compliance Attribute Testing — Types & Helpers ───────────────────────
 
-import { MOCK_COMPLIANCE_CONTROLS, type ScopeAttribute } from './complianceControlScopeData';
+import { MOCK_COMPLIANCE_CONTROLS } from './complianceControlScopeData';
 import type { TestItem } from './complianceSamplesEvidenceData';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
 export type AttrTestResult = 'NOT_TESTED' | 'PASS' | 'FAIL' | 'NA';
-export type AttrTestSource = 'MANUAL' | 'AUTOMATED' | 'SYSTEM_SUGGESTED';
+export type AttrTestSource = 'MANUAL' | 'AUTOMATED' | 'SYSTEM_SUGGESTED' | 'AI_SUGGESTED';
 
 export interface AttributeTestResult {
   id: string;
@@ -19,6 +19,11 @@ export interface AttributeTestResult {
   testedBy: string;
   testedAt: string | null;
   evidenceIds: string[];
+  /** One-line cited justification produced by the AI verdict run. */
+  aiJustification?: string;
+  /** Set when the auditor confirms an AI-suggested verdict (locks the result). */
+  aiConfirmedBy?: string;
+  aiConfirmedAt?: string;
 }
 
 export type ComplianceSampleResult = 'PENDING' | 'PASS' | 'FAIL';
@@ -83,6 +88,31 @@ export function deriveComplianceTestingSummary(results: AttributeTestResult[]) {
   const pendingChecks = totalChecks - completedChecks;
   const completionPercent = totalChecks > 0 ? Math.round((completedChecks / totalChecks) * 100) : 0;
   return { totalChecks, completedChecks, passedChecks, failedChecks, pendingChecks, completionPercent };
+}
+
+// ─── AI Verdict Simulation ────────────────────────────────────────────────
+// Deterministic mock: INV-1003 breaks attributes B & C; everything else passes.
+// Justifications cite the first mapped evidence file so the verdict reads grounded.
+
+export function deriveAiVerdict(
+  testItemRef: string,
+  attrCode: string,
+  attrName: string,
+  evidenceFileNames: string[],
+): { result: 'PASS' | 'FAIL'; justification: string } {
+  const file = evidenceFileNames[0] || 'mapped evidence';
+  const ref = testItemRef.toLowerCase();
+  const fails = (ref.includes('1003') || ref.includes('txn-0003')) && (attrCode === 'B' || attrCode === 'C');
+  if (fails) {
+    return {
+      result: 'FAIL',
+      justification: `Evidence '${file}' does not support "${attrName}" for ${testItemRef} — the required approval / matching record could not be traced, so the attribute is concluded Fail.`,
+    };
+  }
+  return {
+    result: 'PASS',
+    justification: `Evidence '${file}' shows "${attrName}" satisfied for ${testItemRef} — approval by K. Rao on 04 Feb, within DOA limit. No exceptions found.`,
+  };
 }
 
 // ─── Automated Check Simulation ───────────────────────────────────────────

@@ -44,3 +44,12 @@ playwright-report/
 # Review/automation artifacts — not part of the product, never commit
 rbac-share-review/
 .github/workflows/notify-main-merge.yml
+
+# Internal-only BRD + QA captures — not part of the product, never commit
+/BRD-REPORT-TEMPLATES.md
+/BRD-REPORT-TEMPLATES.pdf
+/assets/
+/tests/__screenshots__/qa/
+/tests/__screenshots__/templates-galleries.png
+/tests/__screenshots__/templates-nomatch.png
+/tests/__screenshots__/templates-search.png

@@ -21,7 +21,7 @@ export default function SetupWizard() {
 
   const [name, setName] = useState('O2C — ICFR / SOX');
   const [code, setCode] = useState('ENG-NEW');
-  const [entity, setEntity] = useState('Air India Express Ltd');
+  const [entity, setEntity] = useState('Airline Group Ltd');
   const [framework, setFramework] = useState(FRAMEWORKS[0]!);
   const [periodStart, setPeriodStart] = useState('Apr 2025');
   const [periodEnd, setPeriodEnd] = useState('Mar 2026');
@@ -41,11 +41,11 @@ export default function SetupWizard() {
   const create = () => {
     const eng: IcfrEngagement = {
       id: 'icfr-new', code, name, entity, framework, periodStart, periodEnd, period,
-      materiality, performanceMateriality: pm, preparer: 'You · Auditor', reviewer: 'Reviewer',
+      materiality, performanceMateriality: pm, preparer: 'You · Auditor', reviewer: 'Audit Manager',
       rules: { clearlyTrivial: Math.round(materiality * 0.05), sdBandPct: 20, aggregate: true, autoRoute: true, mwIndicators: [] },
       accounts: TEMPLATE_ACCOUNTS.map(a => ({ ...a, inScope: scope[a.id] ?? a.inScope })),
       controls: controls.map(c => ({ ...c, owner: owners[c.id] ?? c.owner })),
-      deficiencies: [], tasks: [], discussions: [],
+      deficiencies: [], tasks: [], discussions: [], executions: [],
     };
     createEngagement(eng);
     addToast({ type: 'success', title: 'Engagement created', message: `${eng.name} · ${eng.controls.length} controls scoped` });
