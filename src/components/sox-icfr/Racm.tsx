@@ -42,10 +42,6 @@ export function RacmLanding() {
 
   return (
     <div>
-      <div className="mb-4">
-        <h1 className="text-[22px] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>RACM</h1>
-        <p className="text-[13px] text-ink-500 mt-0.5">One risk &amp; control matrix per business process — open one to review and test its rows.</p>
-      </div>
       <div className="grid sm:grid-cols-2 gap-3">
         {processes.map(({ name, rows }) => {
           const status = matrixStatusOf(rows);
