@@ -54,11 +54,6 @@ export default function RunsView() {
 
   return (
     <div>
-      <div className="mb-4">
-        <h1 className="text-[22px] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>Runs</h1>
-        <p className="text-[13px] text-ink-500 mt-0.5">Every execution in this engagement — bulk tests, control tests, workflow runs and AI validations, newest first.</p>
-      </div>
-
       {/* kind filters */}
       <div className="flex items-center gap-1.5 mb-4 flex-wrap">
         {FILTERS.map(f => (
