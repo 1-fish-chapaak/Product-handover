@@ -146,24 +146,8 @@ export default function RiskLibrary() {
     });
   }, [risks, q, process, cell]);
 
-  const counts = {
-    critical: risks.filter(r => r.rl * r.ri >= 15).length,
-    exceptions: risks.filter(r => r.status === 'Exception').length,
-    mitigated: risks.filter(r => r.status === 'Mitigated').length,
-  };
-
   return (
     <div>
-      {/* header */}
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div>
-          <h1 className="text-[22px] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>Risk library</h1>
-          <p className="text-[13px] text-ink-500 mt-0.5">
-            {risks.length} risks derived from the engagement RACM · {counts.critical} critical residual · {counts.exceptions} with exceptions · {counts.mitigated} mitigated
-          </p>
-        </div>
-      </div>
-
       {/* heatmaps — inherent vs residual */}
       <div className="grid lg:grid-cols-2 gap-4 mb-4">
         <Heatmap title="Inherent risk" subtitle="before controls" risks={risks} kind="inherent" sel={cell} onSelect={setCell} />
