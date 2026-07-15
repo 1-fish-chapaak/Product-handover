@@ -32,11 +32,26 @@
 
 import { useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowUpRight, Info } from 'lucide-react';
+import { ArrowUpRight, Info, Users, Activity, Sparkles, FileText, type LucideIcon } from 'lucide-react';
 import { KpiCountUp } from '../shared/KpiTile';
 import type { Stat } from '../admin/adminTokens';
 import { TrendBars } from './usageChrome';
-import { CARD_BASE, KH_EASE, fmt } from './usageTokens';
+import { CARD_BASE, KH_EASE, ICON_TILE, fmt } from './usageTokens';
+
+/** The icon carries each metric's identity — four distinct marks, so the row
+ *  reads as four things and not one grid of numbers. The tile hue is deliberately
+ *  NOT a fifth axis of that: it is brand for three of them and blue only for AI,
+ *  because blue is this page's AI colour everywhere else (the AI series on the
+ *  activity chart, the AI-share split bars). It is a signal the reader already
+ *  knows, not decoration — so the other three stay neutral brand rather than each
+ *  inventing a hue that would mean nothing. */
+const KPI_LOOK: Record<string, { icon: LucideIcon; tile: string }> = {
+  active: { icon: Users, tile: 'bg-brand-50 text-brand-700' },
+  actions: { icon: Activity, tile: 'bg-brand-50 text-brand-700' },
+  ai: { icon: Sparkles, tile: 'bg-evidence/[0.08] text-evidence' },
+  reports: { icon: FileText, tile: 'bg-brand-50 text-brand-700' },
+};
+const KPI_FALLBACK = { icon: Activity, tile: 'bg-brand-50 text-brand-700' };
 
 /** Below this, a percentage change is noise — say it in whole units instead. */
 const SMALL_BASE = 30;
@@ -132,17 +147,24 @@ function UsageKpiCell({ stat, index, compareLabel }: {
         ? 'text-risk-700 bg-risk-700/[0.08]'
         : 'text-ink-500 bg-ink-900/[0.05]';
 
+  const look = KPI_LOOK[stat.key] ?? KPI_FALLBACK;
+  const Icon = look.icon;
+
   return (
     <motion.div
       aria-label={`${stat.label}: ${stat.value}${stat.of ? ` ${stat.of}` : ''}. ${change.chip} ${change.from} in the ${compareLabel}.`}
       initial={prefersReduced ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={prefersReduced ? { duration: 0 } : { duration: 0.3, delay: Math.min(index, 8) * 0.04, ease: KH_EASE }}
-      className={`${CARD_BASE} relative p-4 min-w-0 hover:border-brand-200`}
+      className={`${CARD_BASE} relative p-4 min-w-0 hover:border-brand-200 flex flex-col`}
     >
-      <div className="flex items-center gap-2">
-        {/* 11px — DESIGN.md's "Uppercase eyebrow / KPI label" rank. */}
-        <h3 className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide truncate flex-1">
+      {/* Icon + label + the change, all on one row: the card leads with a mark
+          the eye lands on, not a line of uppercase text. */}
+      <div className="flex items-center gap-2.5">
+        <div className={`${ICON_TILE} ${look.tile}`}>
+          <Icon size={18} strokeWidth={2} aria-hidden />
+        </div>
+        <h3 className="text-[0.75rem] font-semibold text-ink-600 truncate flex-1 min-w-0">
           {stat.label}
         </h3>
         <button
@@ -158,7 +180,7 @@ function UsageKpiCell({ stat, index, compareLabel }: {
           <Info size={14} />
         </button>
         {defOpen && (
-          <div className="absolute right-4 top-10 z-30 w-64 rounded-lg border border-canvas-border bg-canvas-elevated p-3 shadow-[0_8px_24px_-6px_rgba(15,7,32,0.14)]">
+          <div className="absolute right-4 top-12 z-30 w-64 rounded-lg border border-canvas-border bg-canvas-elevated p-3 shadow-[0_8px_24px_-6px_rgba(15,7,32,0.14)]">
             <p className="text-[0.75rem] text-ink-700 leading-relaxed">
               <span className="font-semibold text-ink-900">Counts:</span> {stat.counts}
             </p>
@@ -171,29 +193,13 @@ function UsageKpiCell({ stat, index, compareLabel }: {
         )}
       </div>
 
-      {/* 28px — DESIGN.md's KPI value rank, not the 36px display rank the spec
-          reserves for a page's one hero. This band has three of them, and three
-          heroes is no hero; the hero is the gauge above.
-
-          Proportional figures, not tabular: at this size `tabular-nums` gives
-          every digit the width of a zero and a number like "525" comes out
-          visibly loose. Tabular is for columns that have to align down a table,
-          which this is not. */}
-      <div className="mt-3 text-[1.75rem] font-semibold leading-none tracking-[-0.025em] text-ink-900">
-        <KpiCountUp value={String(stat.value)} delay={120 + index * 70} />
-      </div>
-      {/* Reserved, so the change line lands on the same baseline in all cells
-          whether or not the metric has a denominator to print. */}
-      <p className="mt-2 h-5 text-[0.8125rem] text-ink-500 truncate">{stat.of ?? ''}</p>
-
-      {/* Wraps, never truncates. Four tiles in a 1,280px window are ~200px wide,
-          and "Down 2 people from 14" does not fit on one line there — it came out
-          as "Down 2 people f…", which cuts off the baseline and leaves the chip
-          asserting a change against nothing. The baseline is the half of this
-          line that makes the other half mean anything; it drops to a second row
-          rather than be clipped. */}
-      <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
-        <span className={`shrink-0 inline-flex items-center gap-1 h-[1.375rem] px-2 rounded-full text-[0.75rem] font-semibold ${chipTone}`}>
+      {/* The number, big, with its change right beside it — one glance gives the
+          value and its direction together. */}
+      <div className="mt-4 flex items-end gap-2.5 flex-wrap">
+        <div className="text-[2rem] font-semibold leading-none tracking-[-0.03em] text-ink-900">
+          <KpiCountUp value={String(stat.value)} delay={120 + index * 70} />
+        </div>
+        <span className={`inline-flex items-center gap-0.5 h-[1.375rem] px-2 rounded-full text-[0.75rem] font-semibold mb-0.5 ${chipTone}`}>
           {change.tone !== 'flat' && (
             <ArrowUpRight
               size={12}
@@ -204,37 +210,46 @@ function UsageKpiCell({ stat, index, compareLabel }: {
           )}
           {change.chip}
         </span>
-        {change.from && <span className="text-[0.75rem] text-ink-400">{change.from}</span>}
+      </div>
+      <p className="mt-1.5 text-[0.8125rem] text-ink-400 truncate">
+        {stat.of ? stat.of : change.from ? change.from : ' '}
       </p>
 
+      {/* The visual: the metric's own daily shape as bars from a zero baseline —
+          the page's one small-multiple mark, shared with the twelve area cards.
+          A bar's length is a quantity, so for Actions and Reports the bars ARE
+          the number, split by day (REQ-2.5). A reader sees climbing / steady /
+          spiky before reading a digit — the thing the card is FOR. */}
       {stat.series && stat.series.length > 1 && (
-        <>
-          {/* The shared mark, in a wrapper that owns the spacing — the component
-              itself must stay layout-neutral, because the twelve area cards drop
-              it into a 64px slot with no top margin at all. */}
-          <div className="mt-3">
-            <TrendBars
-              series={stat.series}
-              additive={stat.additive ?? true}
-              total={stat.current}
-              delay={0.2 + index * 0.05}
-            />
+        <div className="mt-auto pt-3.5 border-t border-canvas-border">
+          {/* A labelled trend section, matching the Output tab's mini-trends so
+              the page draws its small daily shape one way everywhere. The label
+              on the left names the mark; the note on the right keeps it honest
+              (REQ-2.6) — additive tiles say what the bars add up to (for AI that
+              is the "N of M" count, not the share headline), and Active users,
+              whose bars genuinely cannot sum to the count, says so instead. It
+              used to be a full-width sentence stacked under the bars. */}
+          <div className="flex items-baseline justify-between gap-2 mb-2">
+            <span className="text-[0.625rem] font-semibold uppercase tracking-wide text-ink-400">
+              Day by day
+            </span>
+            <span className="text-[0.625rem] text-ink-400 tabular-nums">
+              {stat.additive === false
+                ? 'one bar per active day'
+                : `adds up to ${fmt(stat.current)}`}
+            </span>
           </div>
-          {/* REQ-2.6. The one tile whose bars do not reconcile with its headline
-              is the one tile that has to say so, on its face, not in a tooltip
-              nobody opens. Every other tile stays silent, and its silence is the
-              claim: these bars ARE the number.
-
-              The wording matters. It used to read "Days don't add up", which
-              sounds like the page apologising for a broken chart. The bars are
-              correct. What they count is people-per-day, and a person who works
-              on three days is counted on all three. Say that instead. */}
-          <p className="mt-1.5 text-[0.625rem] text-ink-400 leading-snug">
-            {stat.additive === false
-              ? 'One bar per day. Somebody active on three days appears on all three'
-              : `The ${stat.series.length} days behind the number, adding up to ${fmt(stat.current)}`}
-          </p>
-        </>
+          <TrendBars
+            series={stat.series}
+            additive={stat.additive ?? true}
+            total={stat.current}
+            delay={0.2 + index * 0.05}
+            height="h-11"
+            baseline
+            rounded
+            emphasizePeak
+          />
+        </div>
       )}
     </motion.div>
   );

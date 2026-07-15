@@ -21,7 +21,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Users, User, UserCheck, UserX, Activity, Sparkles, Download,
   CalendarClock, ListChecks, PackagePlus, Play, Share2, TrendingUp,
-  Gauge, LayoutGrid, Grid2x2,
+  Gauge, LayoutGrid, Grid2x2, Send, Clock, CalendarDays,
   type LucideIcon,
 } from 'lucide-react';
 import { useAdminData, useAuditLog, type AdminUser } from '../../context/AdminDataContext';
@@ -29,9 +29,9 @@ import { useCurrentUser } from '../../context/CurrentUserContext';
 import { getRole } from '../../data/rbac';
 import {
   USAGE_MODULES, usageDaysWithLive, userUsageRows, usageDayLabel,
-  usageAnchorLabel, usageAnchor, usageStaleness,
+  usageAnchorLabel, usageAnchor,
   usageWindowTotals, usageDeltaPct, seatBuckets, lastLoginOffsetDays,
-  segmentFor, activeMeanActions, aiAdoptionPct, usageHourlyMatrix,
+  segmentFor, activeMeanActions, aiAdoptionPct, usageHourlyMatrix, engagementMatrix,
   activityConcentration, usageSpikes, recentDownloads, downloadFormatSplit,
   aiQuestions, aiToolRuns,
   creationTotals, recentCreations, workflowRunTotals, recentRuns, shareTotals, recentShares,
@@ -64,10 +64,18 @@ import { MODULE_SECTION, type SectionKey } from './usageSectionMap';
 import UsageAdoption from './UsageAdoption';
 import UsageConcentration from './UsageConcentration';
 import UsageMiniTrend from './UsageMiniTrend';
-import { Card, Band, Donut, Eyebrow, DeltaPill, Legend, Meter, RankedRow } from './usageChrome';
-import { KH_EASE, MUTED, SERIES, fmt } from './usageTokens';
+import UsageCumulativePace from './UsageCumulativePace';
+import { Card, Band, Donut, Eyebrow, DeltaPill, Legend, Meter, RankedRow, UsageLede } from './usageChrome';
+import { KH_EASE, SERIES, fmt } from './usageTokens';
 
 const DAY_MS = 86400000;
+
+/** Join a list the way a person says it: "A", "A and B", "A, B and C". */
+function listAnd(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
 
 /** Day-offset of an ISO date relative to the anchor (0 = the anchor day, larger = older). */
 function offsetFromAnchor(iso: string, anchor: Date): number {
@@ -462,29 +470,135 @@ function UsageLensSwitch({ lens, onSelect }: { lens: Lens; onSelect: (l: Lens) =
 }
 
 /* ── Seats & lifecycle bucket row: label + avatar stack + count ── */
-function SeatRow({ label, people, tone }: { label: string; people: AdminUser[]; tone?: 'attention' }) {
+/* The four states 17 seats can be in. A flat label-gap-count table hid the one
+   thing this breakdown is for — the PROPORTION: that Active dwarfs the rest, and
+   how much of what you pay for is sitting idle. Each row now carries a bar of its
+   share of the total, tone-coloured (brand for the seats doing work, amber for
+   the ones you are paying for and not using, grey for the expected-inactive), so
+   the composition reads at a glance and the empty middle is gone. */
+const SEAT_TONES: Record<'active' | 'attention' | 'muted', { bar: string; text: string }> = {
+  active: { bar: '#6A12CD', text: 'text-ink-700' },
+  attention: { bar: '#B45309', text: 'text-mitigated-700' },
+  muted: { bar: '#B9AEC9', text: 'text-ink-500' },
+};
+
+function SeatRow({ label, people, total, tone, index = 0 }: {
+  label: string;
+  people: AdminUser[];
+  total: number;
+  tone: 'active' | 'attention' | 'muted';
+  index?: number;
+}) {
+  const prefersReduced = useReducedMotion();
   const shown = people.slice(0, 4);
   const extra = people.length - shown.length;
+  const n = people.length;
+  const pct = total > 0 ? (n / total) * 100 : 0;
+  // A count of zero never wears a warning colour — an empty bucket is good news.
+  const t = n === 0 ? SEAT_TONES.muted : SEAT_TONES[tone];
+
   return (
-    <div className="flex items-center gap-2 py-1.5 border-b border-canvas-border last:border-0">
-      <span className={`text-[0.75rem] flex-1 min-w-0 truncate ${
-        tone === 'attention' && people.length > 0 ? 'font-medium text-mitigated-700' : 'font-medium text-ink-600'
-      }`}>
-        {label}
-      </span>
-      <div className="flex items-center">
-        {shown.map((p, i) => (
-          <div key={p.email} className={i > 0 ? '-ml-1.5' : ''} title={p.name}>
-            <InitialsAvatar name={p.name} size={22} />
-          </div>
-        ))}
-        {extra > 0 && (
-          <span className="-ml-1.5 inline-flex items-center justify-center w-[22px] h-[22px] rounded-full bg-canvas border border-canvas-border text-[0.5625rem] font-semibold text-ink-500">
-            +{extra}
-          </span>
-        )}
+    <div className="py-2.5">
+      <div className="flex items-center gap-3 mb-2">
+        <span className={`text-[0.8125rem] font-medium flex-1 min-w-0 truncate ${t.text}`}>
+          {label}
+        </span>
+        <div className="flex items-center">
+          {shown.map((p, i) => (
+            <div key={p.email} className={i > 0 ? '-ml-1.5' : ''} title={p.name}>
+              <InitialsAvatar name={p.name} size={20} />
+            </div>
+          ))}
+          {extra > 0 && (
+            <span className="-ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-canvas border border-canvas-border text-[0.5625rem] font-semibold text-ink-500">
+              +{extra}
+            </span>
+          )}
+        </div>
+        <span className="text-[0.9375rem] font-semibold text-ink-900 tabular-nums w-6 text-right">{n}</span>
       </div>
-      <span className="text-[0.8125rem] font-semibold text-ink-900 tabular-nums w-6 text-right">{people.length}</span>
+      {/* The share of all seats, drawn — so the row says "how big" without the
+          reader dividing by the total in their head. */}
+      <div className="h-1.5 rounded-full bg-ink-900/[0.05] overflow-hidden">
+        <motion.div
+          className="h-full rounded-full"
+          style={{ background: t.bar }}
+          initial={prefersReduced ? false : { width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={prefersReduced ? { duration: 0 } : { duration: 0.5, delay: 0.1 + index * 0.06, ease: KH_EASE }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ── The seat funnel — from paying for a licence to using it as a habit ──────
+   A meter-per-stage read as four progress bars, not a funnel: the narrowing
+   from 17 → 9 only lived in the numbers, and the drop-off was a line of red
+   text the eye had to find. Now the bars themselves taper — each one's WIDTH is
+   its share of the seats you pay for — so the funnel is the shape, and the seats
+   that fall away between stages are drawn as a red gap the "−N" label sits over.
+
+   The stages darken as they descend the same one hue (RAMP is defined for
+   ordered buckets): the seats that reached the habit land on full brand, the
+   funnel they came through steps back toward it — the author's "the last stage
+   is the point" intent, now carried by the ramp instead of a flat muted/brand
+   split. Red is the only non-brand ink here, because the drop-off is the one
+   thing on this card an admin can act on. */
+const FUNNEL_SHADES = ['#C4A2EE', '#A87BE4', '#8B4FD8', '#6A12CD'];
+
+function SeatFunnel({ stages, total }: {
+  stages: { label: string; count: number; hint: string }[];
+  total: number;
+}) {
+  const prefersReduced = useReducedMotion();
+  return (
+    <div className="space-y-2">
+      {stages.map((stage, i) => {
+        const pct = total > 0 ? (stage.count / total) * 100 : 0;
+        const prev = i > 0 ? stages[i - 1] : null;
+        const prevPct = prev && total > 0 ? (prev.count / total) * 100 : 100;
+        const lost = prev ? prev.count - stage.count : 0;
+        const shade = FUNNEL_SHADES[Math.min(i, FUNNEL_SHADES.length - 1)];
+        return (
+          <div key={stage.label} title={stage.hint}>
+            <div className="flex items-baseline justify-between gap-2 mb-1">
+              <span className="text-[0.75rem] font-medium text-ink-700 truncate min-w-0">{stage.label}</span>
+              <span className="shrink-0 inline-flex items-baseline gap-1.5 text-[0.75rem] tabular-nums">
+                {lost > 0 && (
+                  <span className="text-[0.625rem] font-semibold text-risk-700">
+                    −{lost} {lost === 1 ? 'seat drops off' : 'seats drop off'}
+                  </span>
+                )}
+                <span className="font-semibold text-ink-900 ml-1">{stage.count}</span>
+                <span className="text-ink-400 w-8 text-right">{Math.round(pct)}%</span>
+              </span>
+            </div>
+            <div className="relative h-7 rounded-md bg-brand-50/70 overflow-hidden">
+              {/* The seats that fell away since the stage above, drawn where they
+                  fell away — the gap between this bar and the wider one before it. */}
+              {lost > 0 && (
+                <div
+                  className="absolute inset-y-0 bg-risk-700/[0.09]"
+                  style={{ left: `${pct}%`, width: `${Math.max(0, prevPct - pct)}%` }}
+                  aria-hidden
+                />
+              )}
+              <motion.div
+                className="absolute inset-y-0 left-0 rounded-md"
+                style={{ background: shade }}
+                initial={prefersReduced ? false : { width: 0 }}
+                animate={{ width: `${Math.max(2, pct)}%` }}
+                transition={
+                  prefersReduced
+                    ? { duration: 0 }
+                    : { type: 'spring', stiffness: 240, damping: 30, delay: 0.06 * i }
+                }
+              />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -552,6 +666,11 @@ export default function PlatformUsageView() {
   const [filter, setFilter] = useState<DateFilter>({ kind: 'preset', id: '30d' });
   const [dateOpen, setDateOpen] = useState(false);
   const [compareOn, setCompareOn] = useState(false);
+  /* AI is off by default now, not a second chart pinned under the first. It was
+     always-on: everyone landing on Overview met two stacked plots before the
+     page told them anything. AI is a tenth of the work — an optional lens on the
+     activity chart, revealed on demand, not a permanent equal beside the total. */
+  const [aiOn, setAiOn] = useState(false);
   const [lens, setLensState] = useState<Lens>('users');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string[]>([]);
@@ -600,11 +719,6 @@ export default function PlatformUsageView() {
   // into the anchor bucket), then the window slices.
   const allDays = useMemo(() => usageDaysWithLive(logs), [logs]);
   const anchorLabel = useMemo(() => usageAnchorLabel(logs), [logs]);
-  // How far behind wall-clock time the records are. Every window on this page is
-  // measured from the newest record, so when the records stop months back, "the
-  // last 30 days" is a window that closed months ago — and unless the page says
-  // what today is, nothing on it lets the reader notice.
-  const stale = useMemo(() => usageStaleness(logs), [logs]);
 
   // When an event happened, said honestly. The page is "as of" the anchor, not
   // wall-clock, so only what this session actually produced is "Today" —
@@ -729,6 +843,12 @@ export default function PlatformUsageView() {
   const OVERVIEW_MODULES = 6;
   const topModules = moduleTotals.slice(0, OVERVIEW_MODULES);
   const restModules = Math.max(0, moduleTotals.length - OVERVIEW_MODULES);
+  /** Barely-used areas — the actionable end of the reach×depth read, surfaced in
+   *  the Areas lede so the tab's answer leads before the table proving it. */
+  const barelyUsed = useMemo(
+    () => engagementMatrix(days, users).points.filter(p => p.quadrant === 'shelfware').map(p => p.module),
+    [days, users],
+  );
 
   /* ── The KPI band ────────────────────────────────────────────────────────
      Every tile names what it counts and what it doesn't (the ⓘ), states its
@@ -803,6 +923,9 @@ export default function PlatformUsageView() {
 
   const topAiUsers = [...rows].sort((a, b) => b.aiQueries - a.aiQueries).slice(0, 5).filter(r => r.aiQueries > 0);
   const aiAdoption = useMemo(() => aiAdoptionPct(rawRows), [rawRows]);
+  /** People who actually did something this period — the denominator the People
+   *  lede and the concentration split both count against. */
+  const activeDoerCount = useMemo(() => rawRows.filter(r => r.actions > 0).length, [rawRows]);
   const concentration = useMemo(() => activityConcentration(rawRows), [rawRows]);
 
   /* ── What stands out ─────────────────────────────────────────────────────
@@ -870,6 +993,16 @@ export default function PlatformUsageView() {
   // title — shipped dashboards title charts with nouns and put the sentence in
   // the subtitle; the takeaway lives in the verdict strip at the top.
   const activityNote = useMemo(() => activityTakeaway(activityData), [activityData]);
+
+  // Which days the work lands on — the coarse companion to the hours heatmap.
+  const weekSplit = useMemo(() => {
+    const s = activityData.reduce(
+      (a, p) => { if (p.weekend) a.weekend += p.total; else a.weekday += p.total; return a; },
+      { weekday: 0, weekend: 0 },
+    );
+    const total = s.weekday + s.weekend;
+    return { ...s, total, weekdayPct: total > 0 ? Math.round((s.weekday / total) * 100) : 0 };
+  }, [activityData]);
 
   const verdict = useMemo<VerdictInput>(() => {
     const [first, second] = moduleTotals;
@@ -967,32 +1100,47 @@ export default function PlatformUsageView() {
   // Worth checking — the business "so what" of this period's numbers, as
   // read-only findings. This page only reports; acting on them lives elsewhere.
   const nextSteps = useMemo(() => {
-    const steps: { key: string; text: string }[] = [];
+    // Same shape the Overview highlights use — a short eyebrow, the figure that
+    // IS the finding, and a sentence saying what it is about — so the two finding
+    // surfaces read as one component. These stay read-only (act in Admin), so
+    // they are static tiles, not the clickable highlight ones.
+    const steps: { key: string; icon: LucideIcon; eyebrow: string; figure: string; detail: string }[] = [];
     if (seats.invited.length > 0) {
+      const n = seats.invited.length;
       steps.push({
         key: 'invites',
-        text: `${seats.invited.length} invite${seats.invited.length !== 1 ? 's' : ''} still pending. You are paying for those seats and nobody is using them.`,
+        icon: Send,
+        eyebrow: 'Pending invites',
+        figure: String(n),
+        detail: `Paid for, and nobody is using ${n === 1 ? 'it' : 'them'} yet.`,
       });
     }
     if (seats.dormant.length > 0) {
       const n = seats.dormant.length;
       steps.push({
         key: 'dormant',
-        text: n === 1
-          ? "1 member hasn't signed in for 30+ days. That seat may not be needed."
-          : `${n} members haven't signed in for 30+ days. Those seats may not be needed.`,
+        icon: Clock,
+        eyebrow: 'Quiet 30+ days',
+        figure: String(n),
+        detail: `No sign-in in a month — ${n === 1 ? 'the seat' : 'those seats'} may not be needed.`,
       });
     }
     if (typeof concentration === 'number' && concentration >= 60) {
       steps.push({
         key: 'concentration',
-        text: `The busiest 3 people do ${concentration}% of all the work. Hardly anyone else has taken it up.`,
+        icon: Users,
+        eyebrow: 'Carried by 3',
+        figure: `${concentration}%`,
+        detail: 'of the work is these three. Hardly anyone else has taken it up.',
       });
     }
     if (aiAdoption < 50 && totals.activeUsers > 0) {
       steps.push({
         key: 'ai',
-        text: `Only ${aiAdoption}% of the people working in the platform have tried the AI. The rest are doing it the long way.`,
+        icon: Sparkles,
+        eyebrow: 'Using the AI',
+        figure: `${aiAdoption}%`,
+        detail: 'have tried it. The rest are doing it the long way.',
       });
     }
     return steps.slice(0, 3);
@@ -1260,8 +1408,17 @@ export default function PlatformUsageView() {
               ReportDocumentChrome already use.
               NOTE: both props default to TRUE in FloatingLines — they have to be
               passed as false explicitly, not merely omitted. */}
+          {/* Only the TOP wave. This strip is not title-only like the other
+              headers that run FloatingLines (DataSourceDetail, ReportDocumentChrome)
+              — it also carries the tab row along its bottom edge. The `bottom` wave
+              sits at 80% of the strip height with a ±40px amplitude, which is
+              exactly where the tabs are: it drew a drifting purple band straight
+              across "Areas / Output", and where its three lines converged on the
+              right their strokes stacked into a saturated blob over the tab labels.
+              Confined to the top wave, the texture stays in the title band and
+              never reaches anything you have to read or click. */}
           <FloatingLines
-            enabledWaves={['top', 'bottom']}
+            enabledWaves={['top']}
             lineCount={3}
             lineDistance={10}
             bendRadius={5}
@@ -1325,34 +1482,22 @@ export default function PlatformUsageView() {
             product-wide that slot holds an action (Create Risk, New Engagement,
             Add source), and the period is a filter, not an action. */}
         <div className="shrink-0 flex items-center justify-between gap-4 px-6 lg:px-12 xl:px-[124px] pb-1">
+          {/* Two ends of the row, no shared words between them. The picker on the
+              right already prints the exact window ("Mar 23 – Apr 21, 2026"), so
+              this side never restates the dates — it carries only what the picker
+              can't: the window as a plain day-count.
+
+              There is no freshness note here. The audit log is a fixed seed anchored
+              to Apr 21, 2026 (src/data/audit-history.ts) — the whole platform's mock
+              records live in early 2026 by design, and there is no ingestion feed.
+              A "no new data since…" line would flag a staleness state that can't
+              exist: nothing ever stopped arriving because nothing ever arrives. */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0 text-[0.8125rem]">
             <span className="text-ink-500 min-w-0 truncate">
               {range > 0
-                ? <>Showing <span className="font-semibold text-ink-800">{range} {range === 1 ? 'day' : 'days'}</span> {endsAtAnchor ? 'up to' : 'ending'} <span className="font-semibold text-ink-800">{endLabel}</span></>
+                ? <>Showing <span className="font-semibold text-ink-800">{range} {range === 1 ? 'day' : 'days'}</span> of activity</>
                 : <>No days in this range. The records end {anchorLabel}</>}
             </span>
-
-            {/* The trap this closes: the page's clock is the newest record, not
-                today's date. "Showing 30 days up to Apr 21" is true and still
-                tells the reader nothing, because they have no second date to
-                measure it against — they will read it as the last 30 days and
-                move on. Naming today beside it is the only thing on the page
-                that makes the three-month jump visible. */}
-            {stale.stale && (
-              <span
-                className="inline-flex items-center gap-1.5 text-mitigated-700 shrink-0"
-                title={`Every window on this page is measured back from the newest record (${stale.anchorLabel}), not from today. Nothing has been recorded since.`}
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-mitigated-700 shrink-0" aria-hidden />
-                {/* One text node, not two flex children. The row's `gap-1.5` sits
-                    between every child, which put a space before the comma:
-                    "Jul 14, 2026 , and the newest record...". */}
-                <span>
-                  Today is <span className="font-semibold">{stale.todayLabel}</span>
-                  <span className="text-mitigated-700/80">, and the newest record is {stale.gapDays} days old</span>
-                </span>
-              </span>
-            )}
           </div>
           <div className="shrink-0">
             <DateFilterPicker
@@ -1399,6 +1544,21 @@ export default function PlatformUsageView() {
               own subhead says "how much happened in this period, and when". It
               now leads Adoption, where it is the answer rather than a guest. */}
           {tab === 'overview' && (
+            <div className="mb-7">
+              {/* The lede is the tab's one-line answer, so it must not restate the
+                  bands directly beneath it. The AI-people share (75%) is the
+                  "Using the AI" finding's whole job, one screen down, and repeating
+                  it here printed the same number twice on one view. The lede keeps
+                  the activity trend (which nothing else states) and the plain
+                  participation that answers the subhead's "is anyone using this?";
+                  the AI reading is left to the card that owns it. */}
+              <UsageLede tone="neutral" lead={`${activityNote}.`}>
+                {totals.activeUsers} of {seats.total} people did the work.
+              </UsageLede>
+            </div>
+          )}
+
+          {tab === 'overview' && (
             <UsageKpiRow stats={stats} rangeDays={range} asOf={endLabel} endsAtAnchor={endsAtAnchor} />
           )}
 
@@ -1425,7 +1585,7 @@ export default function PlatformUsageView() {
               with a noun ("Daily activity") makes the reader derive the finding
               themselves, which most readers simply will not do. */}
           {tab === 'overview' && (
-          <Band title="Activity" note={activityNote}>
+          <Band title="Activity">
             <div className="grid grid-cols-1 gap-4">
               <Card
                 rank="hero"
@@ -1441,7 +1601,10 @@ export default function PlatformUsageView() {
                       <Legend
                         keys={[
                           { color: SERIES.primary, label: 'Weekday' },
-                          { color: MUTED.primary, label: 'Weekend' },
+                          { color: '#BC9BE8', label: 'Weekend' },
+                          ...(aiOn
+                            ? [{ color: SERIES.secondary, label: 'AI' }]
+                            : []),
                           ...(spikes.length > 0
                             ? [{ color: SERIES.attention, label: 'An odd day' }]
                             : []),
@@ -1451,20 +1614,32 @@ export default function PlatformUsageView() {
                         ]}
                       />
                     </div>
-                    <button className={presetChip(compareOn)} onClick={() => setCompareOn(c => !c)} aria-pressed={compareOn}>
-                      Compare
-                    </button>
+                    {/* Two lenses on the same plot, both off by default. The chart
+                        answers its own question — how much work, day by day —
+                        before either is asked for. */}
+                    <div className="flex items-center gap-2">
+                      <button className={presetChip(aiOn)} onClick={() => setAiOn(a => !a)} aria-pressed={aiOn}>
+                        AI
+                      </button>
+                      <button className={presetChip(compareOn)} onClick={() => setCompareOn(c => !c)} aria-pressed={compareOn}>
+                        Compare
+                      </button>
+                    </div>
                   </div>
                 }
               >
                 <UsageActivityChart points={activityData} compareOn={compareOn} height={260} />
 
-                {/* REQ-4.2. AI on its own scale, sharing the dates above. Stacked
-                    into those bars it was a flat blue crust nobody could read a
-                    day off; here the shape is finally visible. */}
-                <div className="mt-5 pt-5 border-t border-canvas-border">
-                  <UsageAiStrip points={activityData} />
-                </div>
+                {/* REQ-4.2. AI on its own scale, sharing the dates above — but
+                    only when the reader asks for it. Stacked into the bars it was
+                    a flat blue crust nobody could read a day off; on its own scale
+                    the shape is visible; behind a toggle it stops being a second
+                    chart everyone has to scroll past to reach the heatmap. */}
+                {aiOn && (
+                  <div className="mt-5 pt-5 border-t border-canvas-border">
+                    <UsageAiStrip points={activityData} />
+                  </div>
+                )}
 
                 {/* "for that kind of day" is the whole fix, so the copy has to say
                     it. A ring on a Sunday with 8 actions looks absurd next to a
@@ -1485,6 +1660,25 @@ export default function PlatformUsageView() {
           </Band>
           )}
 
+          {/* Pace against last period. The hero above answers "how much, day by
+              day"; the KPI row answers it as one number and a change-chip. Neither
+              answers the question a renewal conversation actually turns on: is this
+              period running ahead of the last one, or behind it. A cumulative curve
+              against the prior window's cumulative is the one honest way to show it
+              — daily counts are too noisy to read a lead off, but a running total
+              only climbs, so the gap between the two lines is the whole finding. */}
+          {tab === 'overview' && (
+          <Band title="Pace against last period">
+            <Card
+              icon={TrendingUp}
+              title="Actions so far, against last period"
+              subtitle="Both lines are running totals. The gap between them is how far ahead of, or behind, last period's pace this one is running."
+            >
+              <UsageCumulativePace activity={activityData} />
+            </Card>
+          </Band>
+          )}
+
           {/* Where the work lands, and when — the two halves of the same
               question, side by side, exactly as PRD §5 lays the tab out: "Then
               the busiest 6 areas, and a grid showing which hours of the week
@@ -1498,15 +1692,55 @@ export default function PlatformUsageView() {
           {/* Overview keeps WHEN the work happens. WHERE it happens — the areas —
               now lives on the Areas tab in one piece, instead of being previewed
               here, plotted on Adoption, and detailed on Sections. */}
+          {/* Two readings of "when": which DAYS the work lands on (the coarse
+              split) and which HOURS (the grid). The split is the one-glance
+              headline — "is this a weekday tool" — that the dense grid answers in
+              detail beside it. */}
           {tab === 'overview' && (
           <Band title="When the work happens">
-            <Card
-              icon={CalendarClock}
-              title="When people are working"
-              subtitle="Each square is one hour of one weekday. The darker it is, the busier that hour was."
-            >
-              <UsageRhythm data={heatmap} />
-            </Card>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+              <Card
+                icon={CalendarDays}
+                title="Weekday vs weekend"
+                subtitle="How the work splits across the week."
+                className="lg:col-span-4"
+              >
+                <div className="flex flex-col gap-5 pt-1">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-[2rem] font-semibold leading-none tracking-[-0.03em] text-ink-900 tabular-nums">
+                      {weekSplit.weekdayPct}%
+                    </span>
+                    <span className="text-[0.8125rem] text-ink-500">lands on weekdays</span>
+                  </div>
+                  <div className="space-y-3">
+                    {[
+                      { name: 'Weekdays', value: weekSplit.weekday, pct: weekSplit.weekdayPct, color: SERIES.primary },
+                      { name: 'Weekends', value: weekSplit.weekend, pct: 100 - weekSplit.weekdayPct, color: '#C4A2EE' },
+                    ].map(row => (
+                      <div key={row.name}>
+                        <div className="flex items-baseline justify-between mb-1.5">
+                          <span className="text-[0.8125rem] text-ink-600">{row.name}</span>
+                          <span className="text-[0.8125rem] text-ink-500 tabular-nums">
+                            {fmt(row.value)} <span className="text-ink-400">· {row.pct}%</span>
+                          </span>
+                        </div>
+                        <div className="h-2.5 rounded-full bg-ink-900/[0.06] overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${row.pct}%`, background: row.color }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </Card>
+              <Card
+                icon={CalendarClock}
+                title="When people are working"
+                subtitle="Each square is one hour of one weekday. The darker it is, the busier that hour was."
+                className="lg:col-span-8"
+              >
+                <UsageRhythm data={heatmap} />
+              </Card>
+            </div>
           </Band>
           )}
 
@@ -1555,60 +1789,41 @@ export default function PlatformUsageView() {
                 subtitle="Each stage as a share of the seats you pay for."
                 className="xl:col-span-5"
               >
-                {/* Labels ride above the track, never inside the fill: a fill
-                    that reaches 100% would otherwise put ink on brand purple,
-                    and one that reaches 20% would put white on an empty track.
-                    The drop-off between stages is the point of the chart, so it
-                    is the only red on the page. */}
-                <div>
-                  {funnel.map((stage, i) => {
-                    const pct = seats.total > 0 ? Math.round((stage.count / seats.total) * 100) : 0;
-                    const prev = i > 0 ? funnel[i - 1] : null;
-                    const lost = prev ? prev.count - stage.count : 0;
-                    return (
-                      <div key={stage.label}>
-                        {prev && (
-                          <div className="flex items-center justify-end py-1.5">
-                            {lost > 0 ? (
-                              <span className="text-[0.625rem] font-semibold text-risk-700 tabular-nums">
-                                {/* Name the thing that drops off. "−1 drops off here"
-                                    left the reader supplying the noun themselves. */}
-                                −{lost} {lost === 1 ? 'seat drops off here' : 'seats drop off here'}
-                              </span>
-                            ) : (
-                              <span className="text-[0.625rem] text-ink-300">nobody drops off</span>
-                            )}
-                          </div>
-                        )}
-                        {/* The last stage is the one that matters, the seats that
-                            reached the habit, so it is the only one at full
-                            strength. The stages above it are the funnel it came
-                            through, and they read as the lighter step of the same
-                            hue rather than as four equal claims. */}
-                        <Meter
-                          index={i}
-                          title={stage.hint}
-                          tone={i === funnel.length - 1 ? 'brand' : 'muted'}
-                          label={stage.label}
-                          value={stage.count}
-                          note={<span>{pct}%</span>}
-                          pct={pct}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
+                {/* The bars taper — each width is the stage's share of the seats
+                    you pay for — so the funnel is the shape and the drop-off is
+                    the gap between one bar and the next, drawn in the one red on
+                    the card. Labels ride above the track, never inside the fill. */}
+                <SeatFunnel stages={funnel} total={seats.total} />
 
                 <div className="mt-5 pt-4 border-t border-canvas-border">
                   <Eyebrow className="mb-2">Where the seats sit</Eyebrow>
-                  <SeatRow label="Active this period" people={seats.activeInRange} />
-                  <SeatRow label="No sign-in 30+ days" people={seats.dormant} tone="attention" />
-                  <SeatRow label="Invited, not joined yet" people={seats.invited} tone="attention" />
-                  <SeatRow label="Suspended or inactive" people={seats.suspendedOrInactive} />
+                  <SeatRow label="Active this period" people={seats.activeInRange} total={seats.total} tone="active" index={0} />
+                  <SeatRow label="No sign-in 30+ days" people={seats.dormant} total={seats.total} tone="attention" index={1} />
+                  <SeatRow label="Invited, not joined yet" people={seats.invited} total={seats.total} tone="attention" index={2} />
+                  <SeatRow label="Suspended or inactive" people={seats.suspendedOrInactive} total={seats.total} tone="muted" index={3} />
                 </div>
               </Card>
             </div>
           </Band>
+          )}
+
+          {/* PEOPLE — who carries the work, and who has gone quiet: the tab's
+              question, answered in one line before any card. */}
+          {tab === 'people' && (
+            <div className="mb-7">
+              <UsageLede
+                tone={typeof concentration === 'number' && concentration >= 60 ? 'watch' : 'neutral'}
+                lead={
+                  typeof concentration === 'number'
+                    ? `The busiest 3 of ${activeDoerCount} active members do ${concentration}% of the work.`
+                    : `${activeDoerCount} members did the work this period.`
+                }
+              >
+                {seats.dormant.length > 0
+                  ? <>{seats.dormant.length} {seats.dormant.length === 1 ? 'member has' : 'members have'} gone quiet for 30+ days.</>
+                  : 'Nobody has gone quiet in the last 30 days.'}
+              </UsageLede>
+            </div>
           )}
 
           {/* PEOPLE — who carries the work, and how much of it is AI.
@@ -1622,7 +1837,7 @@ export default function PlatformUsageView() {
               <Card
                 icon={TrendingUp}
                 title="How much the team leans on its busiest people"
-                subtitle="Everyone ranked by how much they did, adding up as you go."
+                subtitle="The busiest three against everyone else, then each member ranked by what they did."
                 className="xl:col-span-5"
                 bodyClassName="flex flex-col"
               >
@@ -1679,19 +1894,31 @@ export default function PlatformUsageView() {
                     One definition: AI's share of the work is the AI ACTIONS over
                     all actions. Conversations are real, and they are counted —
                     but they are counted as themselves, in the tile beside this. */}
-                <p className="mt-5 text-[0.75rem] text-ink-600 leading-relaxed">
-                  {totals.actions > 0 && aiEventsTotal > 0 ? (
-                    <>
-                      AI was involved in <span className="font-semibold text-ink-900">{aiSharePct}%</span> of
-                      everything done on the platform this period: <span className="font-semibold text-ink-900">{fmt(aiEventsTotal)}</span> of {fmt(totals.actions)} actions.
-                      {totals.aiConversations > 0 && (
-                        <> The {fmt(totals.aiConversations)} saved conversation{totals.aiConversations === 1 ? '' : 's'} above {totals.aiConversations === 1 ? 'is' : 'are'} not counted as work, so {totals.aiConversations === 1 ? 'it is' : 'they are'} kept separate and never added into this share.</>
-                      )}
-                    </>
-                  ) : (
-                    <>No AI activity was recorded in this period.</>
-                  )}
-                </p>
+                {/* AI's share of the work, shown not told: a two-segment bar,
+                    AI against everything else. Same split-bar language as the
+                    concentration card, so the tab reads as one system. */}
+                {totals.actions > 0 && aiEventsTotal > 0 ? (
+                  <div className="mt-5">
+                    <div className="flex items-baseline justify-between mb-2 text-[0.75rem]">
+                      <span className="font-semibold text-evidence">AI-assisted · {aiSharePct}%</span>
+                      <span className="text-ink-400 tabular-nums">{fmt(aiEventsTotal)} of {fmt(totals.actions)} actions</span>
+                    </div>
+                    <div className="flex h-3 w-full gap-[2px]">
+                      <div
+                        className="rounded-l-full rounded-r-sm min-w-[3px]"
+                        style={{ width: `${aiSharePct}%`, background: 'linear-gradient(90deg,#0EA5E9,#0284C7)' }}
+                      />
+                      <div className="flex-1 rounded-r-full rounded-l-sm bg-ink-900/[0.06]" />
+                    </div>
+                    {totals.aiConversations > 0 && (
+                      <p className="mt-2 text-[0.6875rem] text-ink-400">
+                        {fmt(totals.aiConversations)} saved conversation{totals.aiConversations === 1 ? '' : 's'} counted separately, not as work.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-5 text-[0.75rem] text-ink-400">No AI activity was recorded in this period.</p>
+                )}
 
                 {/* Pinned to the bottom of the card, this block used to leave a
                     hand-sized hole in the middle of it: the card stretches to the
@@ -1751,30 +1978,59 @@ export default function PlatformUsageView() {
               in for 30+ days" would be on the same screen twice. */}
           {tab === 'seats' && (
           <Band>
-            <Card
-              icon={ListChecks}
-              title="Worth checking"
-              subtitle="What these numbers suggest you look at. To act on any of it, go to Administration."
-            >
+            {/* A lean strip, not a full Card. The 40px icon tile, the two-line
+                subtitle and the p-5 body were a hero panel's worth of chrome around
+                two one-word findings; the whole block ran taller than the seat curve
+                it followed. Header is one line, findings sit side by side, and the
+                attention amber still rides the chip and count only. */}
+            <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4">
+              <div className="flex items-baseline gap-2 mb-3">
+                <ListChecks size={14} strokeWidth={2} className="shrink-0 self-center text-brand-600" aria-hidden />
+                <h3 className="text-[0.8125rem] font-semibold text-ink-900">Worth checking</h3>
+                <span className="min-w-0 truncate text-[0.75rem] text-ink-400">Act on any of these in Administration.</span>
+              </div>
               {nextSteps.length > 0 ? (
-                <ul className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-3.5">
+                <ul className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
                   {nextSteps.map(step => (
-                    <li key={step.key} className="flex items-start gap-2.5">
-                      <span className="mt-[7px] h-1.5 w-1.5 rounded-full bg-mitigated-700 shrink-0" />
-                      <p className="text-[0.75rem] text-ink-600 leading-relaxed">{step.text}</p>
+                    <li key={step.key} className="flex items-center gap-2.5">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-mitigated-700/[0.12] text-mitigated-700">
+                        <step.icon size={13} strokeWidth={1.75} aria-hidden />
+                      </span>
+                      <span className="shrink-0 text-[0.9375rem] font-semibold leading-none tracking-[-0.02em] tabular-nums text-mitigated-700">
+                        {step.figure}
+                      </span>
+                      <p className="min-w-0 truncate text-[0.8125rem] text-ink-500">
+                        <span className="font-semibold text-ink-800">{step.eyebrow}</span>
+                        <span className="text-ink-300"> · </span>
+                        {step.detail}
+                      </p>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-[0.8125rem] text-ink-400">Nothing needs attention right now.</p>
+                <div className="flex items-center gap-2.5">
+                  <UserCheck size={15} strokeWidth={2} className="text-compliant-700 shrink-0" aria-hidden />
+                  <p className="text-[0.8125rem] text-ink-600">Nothing needs attention right now. Every seat is earning its keep.</p>
+                </div>
               )}
-            </Card>
+            </div>
           </Band>
           )}
 
           {/* What the platform produced this period. The tab is called Output and
               its subhead already says what that means — a band heading here would
               be the third time the page says the same thing. */}
+          {tab === 'output' && (
+            <div className="mb-7">
+              <UsageLede
+                tone="neutral"
+                lead={`The team created ${fmt(created.count)} ${created.count === 1 ? 'thing' : 'things'} this period.`}
+              >
+                It ran {fmt(runs.total)} {runs.total === 1 ? 'workflow' : 'workflows'} and sent {fmt(shares.total)} {shares.total === 1 ? 'share' : 'shares'}.
+              </UsageLede>
+            </div>
+          )}
+
           {tab === 'output' && (
           <Band>
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
@@ -1966,12 +2222,27 @@ export default function PlatformUsageView() {
               finding in their head across a tab switch. Now the dot IS the door. */}
           {tab === 'areas' && (
           <>
+            <div className="mb-7">
+              <UsageLede
+                tone={barelyUsed.length > 0 ? 'watch' : 'neutral'}
+                lead={
+                  topModules.length > 0
+                    ? `${topModules[0].module}${topModules[1] ? ` and ${topModules[1].module}` : ''} ${topModules[1] ? 'are' : 'is'} the busiest ${topModules[1] ? 'areas' : 'area'}.`
+                    : 'No area was used in this period.'
+                }
+              >
+                {barelyUsed.length > 0
+                  ? <>{listAnd(barelyUsed)} {barelyUsed.length === 1 ? 'is' : 'are'} barely used — worth asking whether the team needs {barelyUsed.length === 1 ? 'it' : 'them'}.</>
+                  : 'Every area is being used, by a lot of people or heavily by a few.'}
+              </UsageLede>
+            </div>
+
             <Band title="Which areas earn their keep" note="Click any area for its detail">
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
                 <Card
                   icon={Grid2x2}
                   title="How many people use each area, and how hard"
-                  subtitle="The dashed lines are the middle of this platform, not a target. Anything in the bottom-left box is being paid for and barely touched."
+                  subtitle="Reach is the share of people who opened it; depth is how much each of them did. Barely-used areas — low on both — are flagged."
                   className="xl:col-span-7"
                 >
                   <UsageMatrix days={days} users={users} onSelect={openArea} />
@@ -1979,7 +2250,7 @@ export default function PlatformUsageView() {
 
                 <Card
                   title="Busiest areas"
-                  subtitle="Ranked by how much work happened in each. The chart beside this cannot show that, because volume is on neither of its axes."
+                  subtitle="Ranked by total work done in each — the volume the table beside this does not carry."
                   className="xl:col-span-5"
                 >
                   <div className="space-y-1">

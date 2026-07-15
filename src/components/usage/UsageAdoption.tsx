@@ -18,6 +18,7 @@
  */
 
 import { useMemo } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import { Gauge } from 'lucide-react';
 import type { AdminUser } from '../../context/AdminDataContext';
 import {
@@ -25,12 +26,85 @@ import {
   type UsageDay,
 } from '../../data/platform-usage';
 import { InitialsAvatar } from '../admin/AdminPrimitives';
-import { Card, Eyebrow, Meter } from './usageChrome';
+import { Card } from './usageChrome';
 import { SERIES } from './usageTokens';
 
 /* The one colour that carries an action. Validated against the brand at
  * ΔE 136.6 (protan) — see the dataviz palette check. */
 const ATTENTION = SERIES.attention;
+
+/* ── The two ends of the curve ─────────────────────────────────────────────
+   The seats to keep, and the seats to act on. One block each: an amber tint on
+   the one that carries a to-do, so it reads as a task and not a second statistic.
+
+   The avatar row is the block's whole payload, so it must not lie. It caps at
+   six faces and then says "+N" — a six-face stack under a "9 seats" headline,
+   with no overflow mark, is a stack that silently contradicts its own number.
+   Every face names the fact behind it on hover: how many of the window's days
+   that seat did real work, which is the number the two blocks are sorted on. */
+const FACE = 26;
+const FACES_SHOWN = 6;
+
+function SeatGroup({ tone, heading, caption, people, daysActive, windowDays, emptyNote }: {
+  tone: 'keep' | 'act';
+  heading: string;
+  caption: string;
+  people: AdminUser[];
+  daysActive: Map<string, number>;
+  windowDays: number;
+  emptyNote?: string;
+}) {
+  const act = tone === 'act';
+  const shown = people.slice(0, FACES_SHOWN);
+  const overflow = people.slice(FACES_SHOWN);
+  const dayLabel = (name: string) => {
+    const n = daysActive.get(name) ?? 0;
+    return `${name} · ${n} of ${windowDays} ${n === 1 ? 'day' : 'days'}`;
+  };
+  return (
+    <div className={`rounded-lg border p-4 ${act ? 'border-mitigated-200/70 bg-mitigated-50' : 'border-brand-100 bg-brand-50/40'}`}>
+      <div
+        className="text-[0.6875rem] font-semibold uppercase tracking-wide"
+        style={{ color: act ? ATTENTION : undefined }}
+      >
+        <span className={act ? undefined : 'text-brand-700'}>{heading}</span>
+      </div>
+      <div className="mt-2 flex items-baseline gap-1.5">
+        <span className="text-[1.75rem] font-semibold leading-none tracking-[-0.03em] text-ink-900 tabular-nums">
+          {people.length}
+        </span>
+        <span className="text-[0.8125rem] text-ink-500">{people.length === 1 ? 'seat' : 'seats'}</span>
+      </div>
+      <p className="mt-1 text-[0.75rem] text-ink-500 leading-snug">{caption}</p>
+
+      <div className="mt-3.5 flex items-center">
+        {shown.map((p, i) => (
+          <div
+            key={p.email}
+            className={`rounded-full ring-2 ring-canvas-elevated ${i > 0 ? '-ml-2' : ''}`}
+            title={dayLabel(p.name)}
+          >
+            <InitialsAvatar name={p.name} size={FACE} />
+          </div>
+        ))}
+        {overflow.length > 0 && (
+          <div
+            className={`-ml-2 flex items-center justify-center rounded-full ring-2 ring-canvas-elevated text-[0.625rem] font-semibold tabular-nums ${
+              act ? 'bg-mitigated-100 text-mitigated-700' : 'bg-brand-100 text-brand-700'
+            }`}
+            style={{ width: FACE, height: FACE }}
+            title={overflow.map(p => dayLabel(p.name)).join('\n')}
+          >
+            +{overflow.length}
+          </div>
+        )}
+        {people.length === 0 && emptyNote && (
+          <span className="text-[0.75rem] text-ink-400">{emptyNote}</span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /** The card every panel on this tab wears. */
 function Panel({ icon, title, subtitle, children, className = '' }: {
@@ -50,8 +124,14 @@ function Panel({ icon, title, subtitle, children, className = '' }: {
 /* ── The power-user curve ─────────────────────────────────────────────────── */
 
 function PowerCurvePanel({ days, users, className }: { days: UsageDay[]; users: AdminUser[]; className?: string }) {
+  const prefersReduced = useReducedMotion();
   const curve = useMemo(() => powerCurve(days, users), [days, users]);
   const licence = useMemo(() => licenceUse(days, users), [days, users]);
+
+  /* The day-count that earns the "committed" label — mirrors the threshold the
+     data layer sorts on (ceil of half the window), so the caption states the
+     exact bar the faces below it cleared. */
+  const halfWindow = Math.max(1, Math.ceil(curve.windowDays / 2));
 
   /* The four bands, folded from the seven raw buckets. Boundaries come from the
      buckets' own min/max, so this stays correct if the edges are ever retuned. */
@@ -92,17 +172,16 @@ function PowerCurvePanel({ days, users, className }: { days: UsageDay[]; users: 
           healthy mark is defined against); this reads the date range the page is
           set to. Two true percentages, one screen apart, and without the words
           they look like the page disagreeing with itself. */}
-      <div className="mb-6">
-        <p className="text-[0.9375rem] text-ink-700 leading-snug">
-          <strong className="font-semibold text-ink-900">
-            {licence.used} of {licence.total} seats
-          </strong>{' '}
-          did real work in the period you have selected, or{' '}
-          <span className="font-semibold text-ink-900">{licence.pct}%</span>.
-        </p>
-        <p className="mt-1.5 text-[0.75rem] text-ink-400">
-          The bands below split those seats by how many days each one showed up.
-        </p>
+      {/* The summary as one visual stat, not a sentence: the big number, and the
+          two counts it is made of. The bands below carry the shape. */}
+      <div className="mb-5 flex items-end gap-3">
+        <span className="text-[2.25rem] font-semibold leading-none tracking-[-0.03em] text-ink-900 tabular-nums">
+          {licence.pct}%
+        </span>
+        <span className="mb-1 text-[0.8125rem] text-ink-500">
+          of seats did real work
+          <span className="text-ink-400"> · {licence.used} of {licence.total}</span>
+        </span>
       </div>
 
       {/* Seven buckets over seventeen seats is the 24x7 heatmap's mistake again:
@@ -111,74 +190,61 @@ function PowerCurvePanel({ days, users, className }: { days: UsageDay[]; users: 
           bands an admin can act on, the shape says what it always meant: a pile
           that never showed up, and a pile that lives in the product.
 
-          Horizontal, because these are counts of one thing against a shared
-          baseline, and because the bar next to its name needs no axis. */}
-      <div className="space-y-3">
+          One row per band — label, bar and count on a single line — rather than
+          the 28px block with its own label line above. That block sized itself to
+          sit beside the engagement funnel; the funnel has since moved to Areas, so
+          the panel stands alone and the tall bar was only paying for height the
+          card no longer needs. */}
+      <div className="space-y-2.5">
         {bands.map((band, i) => {
           const n = band.seats.length;
           const share = licence.total > 0 ? Math.round((n / licence.total) * 100) : 0;
+          const attn = band.attention && n > 0;
           return (
-            <Meter
+            <div
               key={band.label}
-              index={i}
-              tone={band.attention && n > 0 ? 'attention' : 'brand'}
+              className="flex items-center gap-3"
               title={n === 0 ? `${band.label}: nobody` : `${band.label}: ${band.seats.map(s => s.name).join(', ')}`}
-              label={
-                <span className={band.attention && n > 0 ? 'font-semibold text-ink-900' : undefined}>
-                  {band.label}
-                </span>
-              }
-              value={n}
-              note={
-                <span className="text-ink-400">
-                  {n === 1 ? 'seat' : 'seats'}
-                  {n > 0 && <span className="ml-1.5 text-ink-300">{share}%</span>}
-                </span>
-              }
-              pct={(n / bandMax) * 100}
-            />
+            >
+              <span className={`w-28 shrink-0 text-[0.8125rem] leading-snug ${attn ? 'font-semibold text-ink-900' : 'font-medium text-ink-700'}`}>
+                {band.label}
+              </span>
+              <div className={`flex-1 h-2.5 rounded-full overflow-hidden ${attn ? 'bg-mitigated-700/[0.14]' : 'bg-brand-100/70'}`}>
+                <motion.div
+                  className={`h-full rounded-full ${attn ? 'bg-mitigated-700' : 'bg-brand-600'}`}
+                  initial={prefersReduced ? false : { width: 0 }}
+                  animate={{ width: `${Math.max(2, (n / bandMax) * 100)}%` }}
+                  transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 30, delay: 0.04 * i }}
+                />
+              </div>
+              <span className="w-24 shrink-0 whitespace-nowrap text-right text-[0.75rem] text-ink-400 tabular-nums">
+                <span className="font-semibold text-ink-900">{n}</span> {n === 1 ? 'seat' : 'seats'}
+                {n > 0 && <span className="ml-1 text-ink-300">{share}%</span>}
+              </span>
+            </div>
           );
         })}
       </div>
-      <p className="mt-3 text-[0.625rem] text-ink-400">
-        Days each seat did real work, out of the last {curve.windowDays}.
-      </p>
 
       {/* The two ends of the curve are the only two things to act on. */}
-      <div className="mt-6 pt-5 border-t border-canvas-border grid grid-cols-2 gap-5">
-        <div>
-          <Eyebrow className="mb-2.5">Earning the licence</Eyebrow>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-[1.25rem] font-semibold text-ink-900 tabular-nums">{curve.committed.length}</span>
-            <span className="text-[0.6875rem] text-ink-500">seats, half the period or more</span>
-          </div>
-          <div className="flex items-center mt-2.5">
-            {curve.committed.slice(0, 6).map((p, i) => (
-              <div key={p.email} className={i > 0 ? '-ml-1.5' : ''} title={p.name}>
-                <InitialsAvatar name={p.name} size={22} />
-              </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          {/* Same rank as the Eyebrow beside it, in the attention tone — so it
-              is spelled like one, `tracking-wide` and all. */}
-          <div className="text-[0.6875rem] font-semibold uppercase tracking-wide mb-2.5" style={{ color: ATTENTION }}>
-            Reclaim or retrain
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-[1.25rem] font-semibold text-ink-900 tabular-nums">{curve.reclaim.length}</span>
-            <span className="text-[0.6875rem] text-ink-500">seats, one day or none</span>
-          </div>
-          <div className="flex items-center mt-2.5">
-            {curve.reclaim.slice(0, 6).map((p, i) => (
-              <div key={p.email} className={i > 0 ? '-ml-1.5' : ''} title={p.name}>
-                <InitialsAvatar name={p.name} size={22} />
-              </div>
-            ))}
-            {curve.reclaim.length === 0 && <span className="text-[0.6875rem] text-ink-400">Nobody. Every seat is in use.</span>}
-          </div>
-        </div>
+      <div className="mt-5 pt-4 border-t border-canvas-border grid grid-cols-2 gap-3">
+        <SeatGroup
+          tone="keep"
+          heading="Using it regularly"
+          caption={`Opened it on ${halfWindow} of the last ${curve.windowDays} days or more`}
+          people={curve.committed}
+          daysActive={curve.daysActive}
+          windowDays={curve.windowDays}
+        />
+        <SeatGroup
+          tone="act"
+          heading="Barely using it"
+          caption="Opened it once, or not at all"
+          people={curve.reclaim}
+          daysActive={curve.daysActive}
+          windowDays={curve.windowDays}
+          emptyNote="Nobody — every seat is in use."
+        />
       </div>
     </Panel>
   );

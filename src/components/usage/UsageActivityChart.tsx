@@ -40,7 +40,7 @@ import {
 } from 'recharts';
 import { TooltipCard } from './usageChrome';
 import {
-  GRID, SERIES, MUTED, HOVER_FILL, BAR_SIZE, BAR_RADIUS, xAxisProps, yAxisProps, fmt,
+  GRID, SERIES, HOVER_FILL, BAR_RADIUS, xAxisProps, yAxisProps, fmt,
 } from './usageTokens';
 import { aiPeak, type ActivityPoint } from './usageActivity';
 
@@ -110,6 +110,15 @@ export default function UsageActivityChart({
               <stop offset="0%" stopColor="#7B2BDB" />
               <stop offset="100%" stopColor="#6A12CD" />
             </linearGradient>
+            {/* The weekend, as the muted step of the same hue — but the old flat
+                #DCC9F5 sat at barely 1.2:1 on white, so a quiet Saturday's short
+                bar all but vanished and the chart looked like it was missing days.
+                A mid-lilac gradient keeps the "same measure, quieter day" reading
+                while actually being visible. */}
+            <linearGradient id="usage-bar-weekend" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#C6A8EC" />
+              <stop offset="100%" stopColor="#B790E4" />
+            </linearGradient>
           </defs>
 
           {/* NO WEEKEND SHADING. It used to be a grey ReferenceArea behind every
@@ -133,13 +142,13 @@ export default function UsageActivityChart({
             dataKey="total"
             name="Actions"
             radius={BAR_RADIUS}
-            maxBarSize={14}
+            maxBarSize={18}
             isAnimationActive={false}
           >
             {points.map(p => (
               <Cell
                 key={p.label}
-                fill={p.weekend ? MUTED.primary : 'url(#usage-bar-primary)'}
+                fill={p.weekend ? 'url(#usage-bar-weekend)' : 'url(#usage-bar-primary)'}
               />
             ))}
           </Bar>

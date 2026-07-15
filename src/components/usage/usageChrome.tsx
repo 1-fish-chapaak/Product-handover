@@ -109,6 +109,40 @@ export function Eyebrow({ children, className = '' }: { children: ReactNode; cla
   );
 }
 
+/* ── Lede ──────────────────────────────────────────────────────────────────
+   The answer, before the evidence. Every tab asks one question in its subhead;
+   this is that question answered in a sentence, at the top, in a size that wins.
+
+   The page used to bury its verdict: the plain-English reading was set as faint
+   grey helper text, smaller than the charts it summarised, so the one thing the
+   reader actually needed to leave with was the quietest mark on the tab. This
+   inverts that. The headline clause is dark and heavy; the qualifier that
+   follows stays light, because it is context, not the point. A single accent
+   dot carries a health read (good / watch / neutral) without a loud badge. */
+
+export function UsageLede({ lead, tone = 'neutral', children }: {
+  /** The headline clause — the answer itself. Dark, semibold, read first. */
+  lead: ReactNode;
+  /** The health read the dot carries. Neutral is the default; it is not a status. */
+  tone?: 'good' | 'watch' | 'neutral';
+  /** The supporting clause — the numbers behind the answer. Light, read second. */
+  children?: ReactNode;
+}) {
+  const dot =
+    tone === 'good' ? 'bg-compliant-600'
+      : tone === 'watch' ? 'bg-mitigated-600'
+        : 'bg-brand-500';
+  return (
+    <div className="flex items-baseline gap-2.5">
+      <span className={`translate-y-[-0.1rem] h-2 w-2 shrink-0 rounded-full ${dot}`} aria-hidden />
+      <p className="text-[1.0625rem] leading-snug text-ink-400 max-w-[70ch]">
+        <span className="font-semibold text-ink-900">{lead}</span>
+        {children ? <> {children}</> : null}
+      </p>
+    </div>
+  );
+}
+
 /* ── Tile ──────────────────────────────────────────────────────────────────
    The Hub's clickable card, exactly: hairline at rest, brand-300 border and a
    spring lift on hover, icon in a brand-50 tile. Anything on this page you can
@@ -250,7 +284,7 @@ const METER_TRACK = {
 export type MeterTone = keyof typeof METER_FILL;
 
 export function Meter({
-  label, value, note, pct, tone = 'brand', delta, compareLabel, index = 0, title,
+  label, value, note, pct, tone = 'brand', delta, compareLabel, index = 0, title, size = 'sm',
 }: {
   label: ReactNode;
   /** The number that gets read. */
@@ -264,8 +298,16 @@ export function Meter({
   compareLabel?: string;
   index?: number;
   title?: string;
+  /**
+   * The bar's weight. `sm` is the hairline bullet used inline in dense lists
+   * (RankedRow, the KPI drawers). `lg` is a substantial 28px block for a card
+   * whose bars ARE the content — the seat bands, so they carry the same weight
+   * as the funnel beside them rather than reading two steps quieter. */
+  size?: 'sm' | 'lg';
 }) {
   const prefersReduced = useReducedMotion();
+  const lg = size === 'lg';
+  const radius = lg ? 'rounded-md' : 'rounded-full';
   return (
     <div title={title}>
       <div className="flex items-baseline justify-between gap-2 mb-1.5">
@@ -278,11 +320,11 @@ export function Meter({
           )}
         </span>
       </div>
-      <div className={`h-1.5 rounded-full overflow-hidden ${METER_TRACK[tone]}`}>
+      <div className={`${lg ? 'h-7' : 'h-1.5'} ${radius} overflow-hidden ${METER_TRACK[tone]}`}>
         <motion.div
-          className={`h-full rounded-full ${METER_FILL[tone]}`}
+          className={`h-full ${radius} ${METER_FILL[tone]}`}
           initial={prefersReduced ? false : { width: 0 }}
-          animate={{ width: `${Math.max(1.5, Math.min(100, pct))}%` }}
+          animate={{ width: `${Math.max(lg ? 2 : 1.5, Math.min(100, pct))}%` }}
           transition={
             prefersReduced
               ? { duration: 0 }
@@ -314,6 +356,7 @@ export function Meter({
 
 export function TrendBars({
   series, total, additive = true, height = 'h-8', delay = 0, ariaLabel, maxBars = 40,
+  baseline = false, rounded = false, emphasizePeak = false,
 }: {
   /** One value per bucket, oldest first. */
   series: number[];
@@ -326,6 +369,17 @@ export function TrendBars({
   height?: string;
   delay?: number;
   ariaLabel?: string;
+  /** Draw a hairline the columns stand on, and render empty days as a visible
+   *  tick on it. Off by default so the 64px area-card strips stay as they were;
+   *  the KPI band opts in, because at its width a floating column with no axis
+   *  reads as a broken chart and an empty day reads as missing data. */
+  baseline?: boolean;
+  /** Round the data-end. Only safe where a column is more than a few pixels
+   *  wide — the KPI band is; the two-pixel area strips are not. */
+  rounded?: boolean;
+  /** Mark the busiest bucket in full-strength brand and step the rest back one
+   *  shade, so the eye finds the peak day before it reads a number. */
+  emphasizePeak?: boolean;
   /**
    * The most bars this mark is allowed to draw. Above it, adjacent days are
    * SUMMED into buckets.
@@ -356,7 +410,7 @@ export function TrendBars({
 
   return (
     <div
-      className={`flex items-end gap-px ${height}`}
+      className={`relative flex items-end ${baseline ? 'gap-[2px] border-b border-canvas-border pb-px' : 'gap-px'} ${height}`}
       role="img"
       aria-label={
         ariaLabel ??
@@ -365,23 +419,32 @@ export function TrendBars({
           : `Day by day. These do not add up to ${fmt(total)}.`)
       }
     >
-      {bars.map((v, i) => (
-        <motion.div
-          key={i}
-          // No corner radius: these bars are a few pixels wide, and the smallest
-          // radius on the scale would round them into lozenges and cost the flat
-          // cap that makes a row of them read as a distribution.
-          className="flex-1 min-w-0"
-          style={{ background: v > 0 ? '#6A12CD' : 'rgba(15, 7, 32, 0.055)' }}
-          initial={prefersReduced ? false : { height: 0 }}
-          animate={{ height: `${v > 0 ? Math.max(8, (v / max) * 100) : 4}%` }}
-          transition={
-            prefersReduced
-              ? { duration: 0 }
-              : { duration: 0.45, delay: delay + Math.min(i, 40) * 0.008, ease: KH_EASE }
-          }
-        />
-      ))}
+      {bars.map((v, i) => {
+        const isZero = v <= 0;
+        // The peak column keeps full brand; the rest step back one shade of the
+        // same hue, so the emphasis reads as "less of the same thing", never as a
+        // second series. Zero days become a faint tick on the axis rather than a
+        // grey stub floating in space.
+        const fill = isZero
+          ? 'rgba(15, 7, 32, 0.08)'
+          : emphasizePeak && v < max
+            ? '#A87BE4'
+            : '#6A12CD';
+        return (
+          <motion.div
+            key={i}
+            className={`flex-1 min-w-0 ${rounded && !isZero ? 'rounded-t-xs' : ''}`}
+            style={{ background: fill }}
+            initial={prefersReduced ? false : { height: 0 }}
+            animate={{ height: `${isZero ? (baseline ? 5 : 4) : Math.max(baseline ? 12 : 8, (v / max) * 100)}%` }}
+            transition={
+              prefersReduced
+                ? { duration: 0 }
+                : { duration: 0.45, delay: delay + Math.min(i, 40) * 0.008, ease: KH_EASE }
+            }
+          />
+        );
+      })}
     </div>
   );
 }

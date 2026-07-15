@@ -38,7 +38,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { Zap, Sparkles, UserMinus, Users, type LucideIcon } from 'lucide-react';
+import { Zap, Sparkles, UserMinus, Users, ArrowRight, type LucideIcon } from 'lucide-react';
 import { Tile } from './usageChrome';
 import { fmt } from './usageTokens';
 import type { UsageModule } from '../../data/platform-usage';
@@ -61,7 +61,7 @@ export interface HighlightsInput {
   topNames: string[];
 }
 
-function Highlight({ icon: Icon, eyebrow, figure, attention, onClick, ariaLabel, index, children }: {
+function Highlight({ icon: Icon, eyebrow, figure, attention, onClick, ariaLabel, index, cta, children }: {
   icon: LucideIcon;
   /** What the number is. Four words at most — it is a column header, not a claim. */
   eyebrow: string;
@@ -71,6 +71,11 @@ function Highlight({ icon: Icon, eyebrow, figure, attention, onClick, ariaLabel,
   onClick: () => void;
   ariaLabel: string;
   index: number;
+  /** Where the click goes, said plainly — "See who", "Open Engagements". A finding
+   *  you can click has to say so; the brand border alone left the affordance to
+   *  guesswork, and it also pinned the card's foot so four short findings stop
+   *  reading as four hollow blocks. */
+  cta: string;
   /** The sentence under the figure: what the number is about. */
   children: ReactNode;
 }) {
@@ -78,23 +83,30 @@ function Highlight({ icon: Icon, eyebrow, figure, attention, onClick, ariaLabel,
     <Tile onClick={onClick} index={index} ariaLabel={ariaLabel} className="p-4 h-full">
       <div className="flex h-full flex-col">
         <div className="flex items-center gap-2.5">
-          <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
+          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
             attention ? 'bg-mitigated-700/[0.12] text-mitigated-700' : 'bg-brand-50 text-brand-600'
           }`}>
-            <Icon size={14} strokeWidth={1.75} />
+            <Icon size={15} strokeWidth={1.75} />
           </div>
           <span className="text-[0.625rem] font-semibold uppercase tracking-wide text-ink-400 truncate">
             {eyebrow}
           </span>
         </div>
 
-        <div className={`mt-3 text-[1.5rem] font-semibold leading-none tracking-[-0.025em] ${
+        <div className={`mt-3.5 text-[1.75rem] font-semibold leading-none tracking-[-0.03em] ${
           attention ? 'text-mitigated-700' : 'text-ink-900'
         }`}>
           {figure}
         </div>
 
         <p className="mt-2 text-[0.75rem] text-ink-500 leading-snug">{children}</p>
+
+        <div className={`mt-auto pt-3 inline-flex items-center gap-1 text-[0.75rem] font-semibold ${
+          attention ? 'text-mitigated-700' : 'text-brand-600 group-hover:text-brand-700'
+        }`}>
+          {cta}
+          <ArrowRight size={13} strokeWidth={2.25} className="transition-transform duration-200 group-hover:translate-x-0.5" />
+        </div>
       </div>
     </Tile>
   );
@@ -120,6 +132,7 @@ export default function UsageHighlights({ h, onOpenModule, onSeeAi, onSeeQuiet, 
         eyebrow="Fastest growing"
         figure={h.growing ? `+${h.growing.deltaPct}%` : '—'}
         ariaLabel={h.growing ? `Fastest growing area: ${h.growing.module}` : 'Areas by growth'}
+        cta={h.growing ? `Open ${h.growing.module}` : 'See areas'}
         onClick={() => h.growing ? onOpenModule(h.growing.module) : onSeeTop()}
       >
         {h.growing ? (
@@ -137,6 +150,7 @@ export default function UsageHighlights({ h, onOpenModule, onSeeAi, onSeeQuiet, 
         // them to a current member", not "nobody uses AI". Show the true one.
         figure={h.aiAdoptionPct > 0 ? `${h.aiAdoptionPct}%` : h.aiActivity > 0 ? fmt(h.aiActivity) : '0'}
         ariaLabel="Share of active people using AI"
+        cta="See AI use"
         onClick={onSeeAi}
       >
         {h.aiAdoptionPct > 0 ? (
@@ -155,6 +169,7 @@ export default function UsageHighlights({ h, onOpenModule, onSeeAi, onSeeQuiet, 
         figure={h.dormant}
         attention={h.dormant > 0}
         ariaLabel="Members with no recent sign-in"
+        cta="See who"
         onClick={onSeeQuiet}
       >
         {h.dormant > 0 ? (
@@ -171,6 +186,7 @@ export default function UsageHighlights({ h, onOpenModule, onSeeAi, onSeeQuiet, 
         figure={typeof h.concentration === 'number' ? `${h.concentration}%` : '—'}
         attention={concentrated}
         ariaLabel="Share of the work done by the busiest three people"
+        cta="See the busiest"
         onClick={onSeeTop}
       >
         {typeof h.concentration === 'number' ? (

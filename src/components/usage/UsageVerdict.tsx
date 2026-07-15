@@ -28,9 +28,8 @@
 
 import { motion, useReducedMotion } from 'motion/react';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, ReferenceLine, Tooltip } from 'recharts';
-import { RadialGauge } from './usageChrome';
-import { BAR_RADIUS, BAR_SIZE, CARD_BASE, HOVER_FILL, KH_EASE, MUTED, SERIES } from './usageTokens';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, ReferenceLine, Tooltip } from 'recharts';
+import { CARD_BASE, HOVER_FILL, KH_EASE, SERIES } from './usageTokens';
 
 export interface VerdictInput {
   /** The verdict's own window, fixed at a week. NOT the page's date filter. */
@@ -84,6 +83,20 @@ export default function UsageVerdict({ v, onSeeWho }: {
     return 'and holding steady';
   })();
 
+  /* The trend is a line, not columns, and this is why.
+     A licence share lives in a narrow band — here 62 to 68 — so on the 0-100
+     axis a bar demands, every column is the same near-full height and the one
+     thing this chart exists to show, the direction, is invisible. The old
+     version literally said "but falling" over eight identical bars.
+     A line reads position, not length, so it can honestly sit on a focused
+     axis: the window is padded around the data and always contains the 60%
+     mark, so the reader still sees the series above or below healthy — the fall
+     is now a slope you see, not a word you take on trust. */
+  const pcts = trend.map(t => t.pct);
+  const lo = Math.max(0, Math.min(HEALTHY_SEAT_USE, ...pcts) - 6);
+  const hi = Math.min(100, Math.max(HEALTHY_SEAT_USE, ...pcts) + 5);
+  const last = trend[trend.length - 1];
+
   return (
     <motion.section
       initial={prefersReduced ? false : { opacity: 0, y: 8 }}
@@ -98,21 +111,74 @@ export default function UsageVerdict({ v, onSeeWho }: {
           the "Healthy 60%" label — a chart squeezed to a squiggle, which is
           worse than no chart. Below 2xl the trend drops to a full-width row of
           its own, where it has more space than it ever had beside the number. */}
-      <div className="flex flex-col 2xl:flex-row 2xl:items-center gap-6 2xl:gap-8 p-6 lg:p-7">
+      <div className="flex flex-col xl:flex-row xl:items-center gap-6 xl:gap-8 p-6 lg:p-7">
         <div className="flex flex-col sm:flex-row sm:items-center gap-6 lg:gap-8 shrink-0">
-          {/* The gauge IS the headline. The percentage lives in the middle of it,
-              so the number and the benchmark it is judged against are one mark
-              instead of two facts a reader has to combine. */}
-          <RadialGauge pct={pct} benchmark={HEALTHY_SEAT_USE} healthy={healthy} size={148}>
-            <span
-              className={`text-[2.5rem] font-semibold leading-none tracking-[-0.03em] ${
+          {/* A linear gauge, not a radial one. The reader reads a fill against a
+              benchmark tick the way they read a progress bar — left to right,
+              over the mark or under it — which needs no interpreting. A donut
+              asks them to judge an arc's sweep against a notch on a circle, and
+              that is exactly the "confusing chart type" this page was told to
+              drop. Same number, same 60% benchmark, read at a glance. */}
+          <div className="shrink-0 w-full sm:w-[13.5rem]">
+            <div
+              className={`text-[2.75rem] font-semibold leading-none tracking-[-0.03em] ${
                 healthy ? 'text-ink-900' : 'text-mitigated-700'
               }`}
             >
               {pct}%
-            </span>
-            <span className="mt-1.5 text-[0.6875rem] font-medium text-ink-400">of {v.seats} seats</span>
-          </RadialGauge>
+            </div>
+            <div className="mt-2 text-[0.75rem] font-medium text-ink-500">of {v.seats} seats used this week</div>
+            <div className="mt-4">
+              <div className="relative h-3">
+                <div className="absolute inset-0 rounded-full bg-ink-900/[0.06] overflow-hidden">
+                  {/* The stretch past the benchmark — the cushion the seat share is
+                      meant to sit in. A hair of the fill's own hue so an empty
+                      track still says which side is "healthy", never a second
+                      colour competing with the fill. */}
+                  <div
+                    className="absolute inset-y-0 right-0 bg-brand-500/[0.07]"
+                    style={{ left: `${HEALTHY_SEAT_USE}%` }}
+                    aria-hidden
+                  />
+                  <motion.div
+                    className="absolute inset-y-0 left-0 rounded-full"
+                    style={{
+                      background: healthy
+                        ? 'linear-gradient(90deg,#8B4FD8,#6A12CD)'
+                        : 'linear-gradient(90deg,#D97A1E,#B45309)',
+                    }}
+                    initial={prefersReduced ? false : { width: 0 }}
+                    animate={{ width: `${pct}%` }}
+                    transition={prefersReduced ? { duration: 0 } : { duration: 0.7, ease: KH_EASE }}
+                  />
+                </div>
+                {/* The benchmark, drawn ON TOP and taller than the track so it
+                    survives the fill crossing it — when the share clears 60% the
+                    old 1px line was painted over by its own bar, so the one mark
+                    the number is judged against vanished exactly when it mattered.
+                    A white keyline carries it across both the purple fill and the
+                    grey track. */}
+                <div
+                  className="absolute -top-1 -bottom-1 w-[3px] -translate-x-1/2 rounded-full bg-canvas-elevated"
+                  style={{ left: `${HEALTHY_SEAT_USE}%` }}
+                  aria-hidden
+                />
+                <div
+                  className="absolute -top-1 -bottom-1 w-[1.5px] -translate-x-1/2 rounded-full bg-ink-900/55"
+                  style={{ left: `${HEALTHY_SEAT_USE}%` }}
+                  aria-hidden
+                />
+              </div>
+              <div className="relative mt-2 h-4 text-[0.625rem] font-medium text-ink-400">
+                <span
+                  className="absolute -translate-x-1/2 whitespace-nowrap"
+                  style={{ left: `${HEALTHY_SEAT_USE}%` }}
+                >
+                  Healthy {HEALTHY_SEAT_USE}%
+                </span>
+              </div>
+            </div>
+          </div>
 
           {/* What the arc means, in people. The window IS named here, and it has
               to be: this card deliberately does not follow the date filter above
@@ -168,40 +234,40 @@ export default function UsageVerdict({ v, onSeeWho }: {
             rule to its left. Either way there is a hairline between the answer
             and its history — they are two readings, not one block. */}
         {trend.length > 1 && (
-          <div className="flex-1 min-w-0 border-t border-canvas-border pt-5 2xl:border-t-0 2xl:pt-0 2xl:border-l 2xl:pl-8">
-            <div className="flex items-baseline justify-between gap-3 mb-1">
+          <div className="flex-1 min-w-0 border-t border-canvas-border pt-4 xl:border-t-0 xl:pt-0 xl:border-l xl:pl-8">
+            <div className="flex items-baseline justify-between gap-3 mb-2">
               <span className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide">
                 Last {trend.length} weeks
               </span>
               <span className="text-[0.6875rem] text-ink-400">Share of seats, week by week</span>
             </div>
-            {/* Columns, not a line.
-                On a zero-based percentage axis a line that lives around 65% is a
-                thread across the top of the plot with two thirds of the box empty
-                under it — and filling that space with a wash just turns it into a
-                tinted slab. Eight weeks is exactly the density a column chart
-                wants, columns grow from the zero the axis is anchored on, and the
-                benchmark drawn across them turns "were we ever below the mark"
-                into something you see rather than something you compute. */}
-            <div className="h-[110px] -ml-1">
+            {/* The fill IS the reading, not decoration.
+                A licence share barely moves week to week, so on a 0-100 axis
+                every column is the same near-full height and the direction — the
+                one thing this chart is for — disappears. So: a line on a focused
+                axis, and the band filled only DOWN TO the 60% mark, not to the
+                floor. That shaded wedge is the cushion above healthy; you watch
+                it thin as the line slides toward the line it is read against. An
+                earlier version filled to the plot floor, which is the "tinted
+                slab" the old note rightly warned off — a wash that encodes
+                nothing. This one encodes the margin. */}
+            <div className="h-[72px] -ml-1">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={trend} margin={{ top: 10, right: 74, bottom: 2, left: 4 }} barCategoryGap="28%">
+                <AreaChart data={trend} margin={{ top: 10, right: 44, bottom: 4, left: 4 }}>
                   <defs>
-                    <linearGradient id="verdict-col" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={healthy ? '#7B2BDB' : '#C2690C'} />
-                      <stop offset="100%" stopColor={line} />
+                    <linearGradient id="verdict-trend" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={line} stopOpacity={0.26} />
+                      <stop offset="100%" stopColor={line} stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  {/* Zero-based, so a column cannot exaggerate a wobble. A licence
-                      share is a percentage of a whole and gets the whole axis. */}
-                  <YAxis domain={[0, 100]} hide />
-                  {/* Data is oldest-first, so plain array order already reads
-                      left-to-right as past-to-present. `reversed` mirrored it and
-                      put this week on the left, which inverted the whole story. */}
+                  {/* Focused, not zero-based — legitimate for a line, whose points
+                      read by position. The window always spans the 60% mark, so
+                      the benchmark stays on-screen with room beneath it. */}
+                  <YAxis domain={[lo, hi]} hide />
                   <XAxis dataKey="weeksAgo" hide />
                   <Tooltip
                     isAnimationActive={false}
-                    cursor={{ fill: HOVER_FILL }}
+                    cursor={{ stroke: HOVER_FILL, strokeWidth: 1 }}
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     content={({ active, payload }: any) => {
                       if (!active || !payload?.length) return null;
@@ -218,44 +284,52 @@ export default function UsageVerdict({ v, onSeeWho }: {
                       );
                     }}
                   />
-                  {/* The benchmark is the line the series is read against, so it
-                      is drawn IN the chart, over the columns, and labelled at its
-                      own height — the same threshold the gauge's tick marks, said
-                      twice in two registers because the two answer different
-                      questions (are we over it / were we ever). */}
+                  {/* The 60% mark, labelled at the LEFT so the right end is left
+                      clear for this week's value — the two used to collide in the
+                      corner. It is the floor the band fills down to. */}
                   <ReferenceLine
                     y={HEALTHY_SEAT_USE}
-                    stroke="rgba(15,7,32,0.35)"
-                    strokeDasharray="4 4"
+                    stroke="rgba(15,7,32,0.28)"
+                    strokeDasharray="3 3"
                     strokeWidth={1}
-                    ifOverflow="extendDomain"
                     label={{
                       value: `Healthy ${HEALTHY_SEAT_USE}%`,
-                      position: 'right',
-                      fill: '#6B5D82',
-                      fontSize: 11,
+                      position: 'insideBottomLeft',
+                      fill: '#8B7BA3',
+                      fontSize: 10.5,
                       fontWeight: 500,
+                      offset: 6,
                     }}
                   />
-                  <Bar
+                  <Area
+                    type="monotone"
                     dataKey="pct"
-                    radius={BAR_RADIUS}
-                    maxBarSize={BAR_SIZE}
+                    stroke={line}
+                    strokeWidth={2.25}
+                    fill="url(#verdict-trend)"
+                    baseValue={HEALTHY_SEAT_USE}
                     isAnimationActive={!prefersReduced}
                     animationDuration={700}
-                  >
-                    {/* Only this week is at full strength — it is the number
-                        printed inside the gauge. The seven behind it are the
-                        history it came out of, and they read as the lighter step
-                        of the same hue rather than as eight equal claims. */}
-                    {trend.map(t => (
-                      <Cell
-                        key={t.weeksAgo}
-                        fill={t.weeksAgo === 0 ? 'url(#verdict-col)' : healthy ? MUTED.primary : 'rgba(180,83,9,0.28)'}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
+                    /* Only this week gets a marked point — the number printed in
+                       the gauge — with its value beside it, so the end of the line
+                       and the hero read as one fact. The weeks behind are the path
+                       it travelled, not eight competing claims. */
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    dot={({ cx, cy, payload }: any) =>
+                      payload.weeksAgo === 0 ? (
+                        <g key="now">
+                          <circle cx={cx} cy={cy} r={5} fill={line} stroke="#fff" strokeWidth={2} />
+                          <text x={cx + 10} y={cy} dy={4.5} fontSize={12.5} fontWeight={700} fill={line}>
+                            {last.pct}%
+                          </text>
+                        </g>
+                      ) : (
+                        <circle key={payload.weeksAgo} cx={cx} cy={cy} r={0} fill="none" />
+                      )
+                    }
+                    activeDot={{ r: 4, fill: line, stroke: '#fff', strokeWidth: 2 }}
+                  />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
