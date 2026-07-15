@@ -18,15 +18,13 @@
  */
 
 import { useMemo } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
-import { Gauge } from 'lucide-react';
+import { Gauge, CircleCheck, CircleAlert } from 'lucide-react';
 import type { AdminUser } from '../../context/AdminDataContext';
 import {
   powerCurve, licenceUse,
   type UsageDay,
 } from '../../data/platform-usage';
-import { InitialsAvatar } from '../admin/AdminPrimitives';
-import { Card } from './usageChrome';
+import { Card, Meter } from './usageChrome';
 import { SERIES } from './usageTokens';
 
 /* The one colour that carries an action. Validated against the brand at
@@ -37,15 +35,18 @@ const ATTENTION = SERIES.attention;
    The seats to keep, and the seats to act on. One block each: an amber tint on
    the one that carries a to-do, so it reads as a task and not a second statistic.
 
-   The avatar row is the block's whole payload, so it must not lie. It caps at
-   six faces and then says "+N" — a six-face stack under a "9 seats" headline,
-   with no overflow mark, is a stack that silently contradicts its own number.
-   Every face names the fact behind it on hover: how many of the window's days
-   that seat did real work, which is the number the two blocks are sorted on. */
-const FACE = 26;
-const FACES_SHOWN = 6;
+   Who is in each block is named in plain first names, not a stack of overlapping
+   two-letter avatars. Overlapped, each face hid the next one's initials, so the
+   row read as cryptic fragments rather than as people; a short list of names says
+   who at a glance, with the full names and each seat's day count on hover. */
 
-function SeatGroup({ tone, heading, caption, people, daysActive, windowDays, emptyNote }: {
+/** How many names sit on the line before the rest fold into "+N more". Capped so
+ *  a big group cannot spill the list across five lines and wreck the card; the
+ *  folded names are still there, one hover away. */
+const NAMES_SHOWN = 4;
+
+function SeatGroup({ icon: Icon, tone, heading, caption, people, daysActive, windowDays, emptyNote }: {
+  icon: typeof Gauge;
   tone: 'keep' | 'act';
   heading: string;
   caption: string;
@@ -55,21 +56,32 @@ function SeatGroup({ tone, heading, caption, people, daysActive, windowDays, emp
   emptyNote?: string;
 }) {
   const act = tone === 'act';
-  const shown = people.slice(0, FACES_SHOWN);
-  const overflow = people.slice(FACES_SHOWN);
   const dayLabel = (name: string) => {
     const n = daysActive.get(name) ?? 0;
     return `${name} · ${n} of ${windowDays} ${n === 1 ? 'day' : 'days'}`;
   };
+  const shownFirst = people.slice(0, NAMES_SHOWN).map(p => p.name.split(' ')[0]);
+  const hiddenCount = Math.max(0, people.length - NAMES_SHOWN);
   return (
     <div className={`rounded-lg border p-4 ${act ? 'border-mitigated-200/70 bg-mitigated-50' : 'border-brand-100 bg-brand-50/40'}`}>
-      <div
-        className="text-[0.6875rem] font-semibold uppercase tracking-wide"
-        style={{ color: act ? ATTENTION : undefined }}
-      >
-        <span className={act ? undefined : 'text-brand-700'}>{heading}</span>
+      {/* Icon + label on one line: a tick for the seats that are fine, an alert
+          for the ones to act on — so which block is the to-do reads before a word
+          is. */}
+      <div className="flex items-center gap-2">
+        <span
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${act ? '' : 'bg-brand-100 text-brand-700'}`}
+          style={act ? { color: ATTENTION, backgroundColor: 'rgba(180, 83, 9, 0.12)' } : undefined}
+        >
+          <Icon size={13} strokeWidth={2} aria-hidden />
+        </span>
+        <span
+          className={`text-[0.6875rem] font-semibold uppercase tracking-wide ${act ? '' : 'text-brand-700'}`}
+          style={act ? { color: ATTENTION } : undefined}
+        >
+          {heading}
+        </span>
       </div>
-      <div className="mt-2 flex items-baseline gap-1.5">
+      <div className="mt-2.5 flex items-baseline gap-1.5">
         <span className="text-[1.75rem] font-semibold leading-none tracking-[-0.03em] text-ink-900 tabular-nums">
           {people.length}
         </span>
@@ -77,31 +89,30 @@ function SeatGroup({ tone, heading, caption, people, daysActive, windowDays, emp
       </div>
       <p className="mt-1 text-[0.75rem] text-ink-500 leading-snug">{caption}</p>
 
-      <div className="mt-3.5 flex items-center">
-        {shown.map((p, i) => (
-          <div
-            key={p.email}
-            className={`rounded-full ring-2 ring-canvas-elevated ${i > 0 ? '-ml-2' : ''}`}
-            title={dayLabel(p.name)}
-          >
-            <InitialsAvatar name={p.name} size={FACE} />
-          </div>
-        ))}
-        {overflow.length > 0 && (
-          <div
-            className={`-ml-2 flex items-center justify-center rounded-full ring-2 ring-canvas-elevated text-[0.625rem] font-semibold tabular-nums ${
-              act ? 'bg-mitigated-100 text-mitigated-700' : 'bg-brand-100 text-brand-700'
-            }`}
-            style={{ width: FACE, height: FACE }}
-            title={overflow.map(p => dayLabel(p.name)).join('\n')}
-          >
-            +{overflow.length}
-          </div>
-        )}
-        {people.length === 0 && emptyNote && (
-          <span className="text-[0.75rem] text-ink-400">{emptyNote}</span>
-        )}
-      </div>
+      {people.length > 0 ? (
+        <p className="mt-3 text-[0.75rem] leading-snug text-ink-600">
+          {shownFirst.join(', ')}
+          {hiddenCount > 0 && (
+            // The rest fold into "+N more", but hovering it shows exactly who —
+            // in a real popover, not the browser's title tooltip that the reader
+            // could not find. Everyone in the group is listed with their days.
+            <span className="group/more relative whitespace-nowrap">
+              {' '}
+              <span className="cursor-help font-medium text-ink-500 underline decoration-dotted decoration-ink-300 underline-offset-2">
+                +{hiddenCount} more
+              </span>
+              <span className="invisible absolute bottom-full left-0 z-20 mb-1.5 w-max max-w-[15rem] rounded-lg border border-canvas-border bg-canvas-elevated p-2.5 text-[0.6875rem] leading-relaxed text-ink-600 opacity-0 shadow-[0_8px_24px_-6px_rgba(15,7,32,0.16)] transition-opacity duration-150 group-hover/more:visible group-hover/more:opacity-100">
+                <span className="mb-1 block font-semibold text-ink-900">All {people.length}</span>
+                {people.map(p => (
+                  <span key={p.email} className="block">{dayLabel(p.name)}</span>
+                ))}
+              </span>
+            </span>
+          )}
+        </p>
+      ) : emptyNote ? (
+        <p className="mt-3 text-[0.75rem] text-ink-400">{emptyNote}</p>
+      ) : null}
     </div>
   );
 }
@@ -124,14 +135,8 @@ function Panel({ icon, title, subtitle, children, className = '' }: {
 /* ── The power-user curve ─────────────────────────────────────────────────── */
 
 function PowerCurvePanel({ days, users, className }: { days: UsageDay[]; users: AdminUser[]; className?: string }) {
-  const prefersReduced = useReducedMotion();
   const curve = useMemo(() => powerCurve(days, users), [days, users]);
   const licence = useMemo(() => licenceUse(days, users), [days, users]);
-
-  /* The day-count that earns the "committed" label — mirrors the threshold the
-     data layer sorts on (ceil of half the window), so the caption states the
-     exact bar the faces below it cleared. */
-  const halfWindow = Math.max(1, Math.ceil(curve.windowDays / 2));
 
   /* The four bands, folded from the seven raw buckets. Boundaries come from the
      buckets' own min/max, so this stays correct if the edges are ever retuned. */
@@ -190,38 +195,32 @@ function PowerCurvePanel({ days, users, className }: { days: UsageDay[]; users: 
           bands an admin can act on, the shape says what it always meant: a pile
           that never showed up, and a pile that lives in the product.
 
-          One row per band — label, bar and count on a single line — rather than
-          the 28px block with its own label line above. That block sized itself to
-          sit beside the engagement funnel; the funnel has since moved to Areas, so
-          the panel stands alone and the tall bar was only paying for height the
-          card no longer needs. */}
-      <div className="space-y-2.5">
+          The bar is the funnel's bar (Meter, size lg): the label and count ride
+          above a full-width track, and the fill is a tall rounded block — so the
+          two cards on this tab, the seat bands and the seat funnel beside them,
+          read as one kind of mark rather than two. */}
+      <div className="space-y-2">
         {bands.map((band, i) => {
           const n = band.seats.length;
           const share = licence.total > 0 ? Math.round((n / licence.total) * 100) : 0;
           const attn = band.attention && n > 0;
           return (
-            <div
+            <Meter
               key={band.label}
-              className="flex items-center gap-3"
+              index={i}
+              size="lg"
+              tone={attn ? 'attention' : 'brand'}
               title={n === 0 ? `${band.label}: nobody` : `${band.label}: ${band.seats.map(s => s.name).join(', ')}`}
-            >
-              <span className={`w-28 shrink-0 text-[0.8125rem] leading-snug ${attn ? 'font-semibold text-ink-900' : 'font-medium text-ink-700'}`}>
-                {band.label}
-              </span>
-              <div className={`flex-1 h-2.5 rounded-full overflow-hidden ${attn ? 'bg-mitigated-700/[0.14]' : 'bg-brand-100/70'}`}>
-                <motion.div
-                  className={`h-full rounded-full ${attn ? 'bg-mitigated-700' : 'bg-brand-600'}`}
-                  initial={prefersReduced ? false : { width: 0 }}
-                  animate={{ width: `${Math.max(2, (n / bandMax) * 100)}%` }}
-                  transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 30, delay: 0.04 * i }}
-                />
-              </div>
-              <span className="w-24 shrink-0 whitespace-nowrap text-right text-[0.75rem] text-ink-400 tabular-nums">
-                <span className="font-semibold text-ink-900">{n}</span> {n === 1 ? 'seat' : 'seats'}
-                {n > 0 && <span className="ml-1 text-ink-300">{share}%</span>}
-              </span>
-            </div>
+              label={<span className={attn ? 'font-semibold text-ink-900' : undefined}>{band.label}</span>}
+              value={n}
+              note={
+                <span className="text-ink-400">
+                  {n === 1 ? 'seat' : 'seats'}
+                  {n > 0 && <span className="ml-1.5">{share}%</span>}
+                </span>
+              }
+              pct={(n / bandMax) * 100}
+            />
           );
         })}
       </div>
@@ -229,21 +228,23 @@ function PowerCurvePanel({ days, users, className }: { days: UsageDay[]; users: 
       {/* The two ends of the curve are the only two things to act on. */}
       <div className="mt-5 pt-4 border-t border-canvas-border grid grid-cols-2 gap-3">
         <SeatGroup
+          icon={CircleCheck}
           tone="keep"
-          heading="Using it regularly"
-          caption={`Opened it on ${halfWindow} of the last ${curve.windowDays} days or more`}
+          heading="Using it a lot"
+          caption="Used it most days"
           people={curve.committed}
           daysActive={curve.daysActive}
           windowDays={curve.windowDays}
         />
         <SeatGroup
+          icon={CircleAlert}
           tone="act"
           heading="Barely using it"
-          caption="Opened it once, or not at all"
+          caption="Used it once or never"
           people={curve.reclaim}
           daysActive={curve.daysActive}
           windowDays={curve.windowDays}
-          emptyNote="Nobody — every seat is in use."
+          emptyNote="Nobody. Every seat is in use."
         />
       </div>
     </Panel>

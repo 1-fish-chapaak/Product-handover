@@ -59,7 +59,7 @@ export default function UsageCumulativePace({ activity }: { activity: ActivityPo
   const deltaColor = ahead ? SERIES.primary : SERIES.attention;
 
   return (
-    <div className="flex flex-col">
+    <div className="flex h-full flex-col">
       {/* The reading, before the chart. When there is an earlier period the gap is
           the finding; when there is not, the honest line is that there is nothing
           to compare against yet. */}
@@ -78,7 +78,7 @@ export default function UsageCumulativePace({ activity }: { activity: ActivityPo
         </p>
       )}
 
-      <div className="h-[220px] -mx-1">
+      <div className="min-h-[168px] flex-1 -mx-1">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={points} margin={{ top: 8, right: 48, bottom: 2, left: 4 }}>
             <defs>
@@ -96,7 +96,7 @@ export default function UsageCumulativePace({ activity }: { activity: ActivityPo
               content={({ active, payload }: any) => {
                 if (!active || !payload?.length) return null;
                 const p = payload[0].payload as PacePoint;
-                const rows = [{ color: SERIES.primary, name: 'This period', value: p.current }];
+                const rows: { color: string; name: string; value: number }[] = [{ color: SERIES.primary, name: 'This period', value: p.current }];
                 if (p.prior !== null) rows.push({ color: SERIES.compare, name: 'Last period', value: p.prior });
                 return <TooltipCard title={p.label} rows={rows} />;
               }}

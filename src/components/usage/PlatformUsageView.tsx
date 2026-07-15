@@ -21,7 +21,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Users, User, UserCheck, UserX, Activity, Sparkles, Download,
   CalendarClock, ListChecks, PackagePlus, Play, Share2, TrendingUp,
-  Gauge, LayoutGrid, Grid2x2, Send, Clock, CalendarDays,
+  Gauge, LayoutGrid, Grid2x2, Send, Clock,
   type LucideIcon,
 } from 'lucide-react';
 import { useAdminData, useAuditLog, type AdminUser } from '../../context/AdminDataContext';
@@ -476,10 +476,14 @@ function UsageLensSwitch({ lens, onSelect }: { lens: Lens; onSelect: (l: Lens) =
    share of the total, tone-coloured (brand for the seats doing work, amber for
    the ones you are paying for and not using, grey for the expected-inactive), so
    the composition reads at a glance and the empty middle is gone. */
-const SEAT_TONES: Record<'active' | 'attention' | 'muted', { bar: string; text: string }> = {
-  active: { bar: '#6A12CD', text: 'text-ink-700' },
-  attention: { bar: '#B45309', text: 'text-mitigated-700' },
-  muted: { bar: '#B9AEC9', text: 'text-ink-500' },
+/* Each state gets a fill AND a matching track — the track is a faint wash of the
+   fill's own hue (not a flat grey), so an empty end of the bar still reads as the
+   same state, the way the shared `Meter` does. Keeps this breakdown in the same
+   bar language as the funnel above it and the thick lists across the page. */
+const SEAT_TONES: Record<'active' | 'attention' | 'muted', { bar: string; track: string; text: string }> = {
+  active: { bar: '#6A12CD', track: 'bg-brand-100/70', text: 'text-ink-800' },
+  attention: { bar: '#B45309', track: 'bg-mitigated-700/[0.12]', text: 'text-mitigated-700' },
+  muted: { bar: '#B9AEC9', track: 'bg-ink-900/[0.06]', text: 'text-ink-500' },
 };
 
 function SeatRow({ label, people, total, tone, index = 0 }: {
@@ -498,33 +502,47 @@ function SeatRow({ label, people, total, tone, index = 0 }: {
   const t = n === 0 ? SEAT_TONES.muted : SEAT_TONES[tone];
 
   return (
-    <div className="py-2.5">
+    <div className="py-2">
       <div className="flex items-center gap-3 mb-2">
         <span className={`text-[0.8125rem] font-medium flex-1 min-w-0 truncate ${t.text}`}>
           {label}
         </span>
-        <div className="flex items-center">
-          {shown.map((p, i) => (
-            <div key={p.email} className={i > 0 ? '-ml-1.5' : ''} title={p.name}>
-              <InitialsAvatar name={p.name} size={20} />
-            </div>
-          ))}
-          {extra > 0 && (
-            <span className="-ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-canvas border border-canvas-border text-[0.5625rem] font-semibold text-ink-500">
-              +{extra}
-            </span>
-          )}
-        </div>
-        <span className="text-[0.9375rem] font-semibold text-ink-900 tabular-nums w-6 text-right">{n}</span>
+        {/* The faces behind the count, overlapped and separated by a hairline of
+            the card's own surface so each stays legible. */}
+        {n > 0 && (
+          <div className="flex items-center">
+            {shown.map((p, i) => (
+              <div
+                key={p.email}
+                className={`rounded-full ring-2 ring-canvas-elevated ${i > 0 ? '-ml-2' : ''}`}
+                title={p.name}
+              >
+                <InitialsAvatar name={p.name} size={22} />
+              </div>
+            ))}
+            {extra > 0 && (
+              <span className="-ml-2 inline-flex items-center justify-center w-[22px] h-[22px] rounded-full bg-canvas ring-2 ring-canvas-elevated text-[0.5625rem] font-semibold text-ink-500 tabular-nums">
+                +{extra}
+              </span>
+            )}
+          </div>
+        )}
+        {/* Count and share in the same fixed columns as the funnel above, so the
+            whole card's numbers line up down one right edge. */}
+        <span className="flex items-baseline gap-2.5 shrink-0 tabular-nums">
+          <span className="w-5 text-right text-[0.8125rem] font-semibold text-ink-900">{n}</span>
+          <span className="w-9 text-right text-[0.6875rem] text-ink-400">{n > 0 ? `${Math.round(pct)}%` : ''}</span>
+        </span>
       </div>
       {/* The share of all seats, drawn — so the row says "how big" without the
-          reader dividing by the total in their head. */}
-      <div className="h-1.5 rounded-full bg-ink-900/[0.05] overflow-hidden">
+          reader dividing by the total in their head. Thicker than the old hairline
+          and on a tone-tinted track, to sit in the page's heavier bar language. */}
+      <div className={`h-3 rounded-full overflow-hidden ${t.track}`}>
         <motion.div
           className="h-full rounded-full"
           style={{ background: t.bar }}
           initial={prefersReduced ? false : { width: 0 }}
-          animate={{ width: `${pct}%` }}
+          animate={{ width: `${Math.max(n > 0 ? 2 : 0, pct)}%` }}
           transition={prefersReduced ? { duration: 0 } : { duration: 0.5, delay: 0.1 + index * 0.06, ease: KH_EASE }}
         />
       </div>
@@ -562,16 +580,20 @@ function SeatFunnel({ stages, total }: {
         const shade = FUNNEL_SHADES[Math.min(i, FUNNEL_SHADES.length - 1)];
         return (
           <div key={stage.label} title={stage.hint}>
-            <div className="flex items-baseline justify-between gap-2 mb-1">
-              <span className="text-[0.75rem] font-medium text-ink-700 truncate min-w-0">{stage.label}</span>
-              <span className="shrink-0 inline-flex items-baseline gap-1.5 text-[0.75rem] tabular-nums">
+            <div className="flex items-baseline justify-between gap-2 mb-1.5">
+              <span className="text-[0.8125rem] font-medium text-ink-700 truncate min-w-0">{stage.label}</span>
+              {/* Count and share in the same fixed columns the SeatRows below use,
+                  so every number on this card lands on one right edge. The
+                  drop-off sits to their left as a quiet red note — the one thing
+                  to act on, but not loud enough to fight the count for the row. */}
+              <span className="shrink-0 inline-flex items-baseline gap-2.5 tabular-nums">
                 {lost > 0 && (
-                  <span className="text-[0.625rem] font-semibold text-risk-700">
+                  <span className="text-[0.625rem] font-medium text-risk-600">
                     −{lost} {lost === 1 ? 'seat drops off' : 'seats drop off'}
                   </span>
                 )}
-                <span className="font-semibold text-ink-900 ml-1">{stage.count}</span>
-                <span className="text-ink-400 w-8 text-right">{Math.round(pct)}%</span>
+                <span className="w-5 text-right text-[0.8125rem] font-semibold text-ink-900">{stage.count}</span>
+                <span className="w-9 text-right text-[0.6875rem] text-ink-400">{Math.round(pct)}%</span>
               </span>
             </div>
             <div className="relative h-7 rounded-md bg-brand-50/70 overflow-hidden">
@@ -1660,86 +1682,63 @@ export default function PlatformUsageView() {
           </Band>
           )}
 
-          {/* Pace against last period. The hero above answers "how much, day by
-              day"; the KPI row answers it as one number and a change-chip. Neither
-              answers the question a renewal conversation actually turns on: is this
-              period running ahead of the last one, or behind it. A cumulative curve
-              against the prior window's cumulative is the one honest way to show it
-              — daily counts are too noisy to read a lead off, but a running total
-              only climbs, so the gap between the two lines is the whole finding. */}
+          {/* Pace and rhythm, side by side — "this period in context" as one row
+              instead of two stacked full-width bands. Pace answers whether the work
+              is running ahead of last period; the grid answers which hours it lands
+              in. Neither needs a section header the cards' own titles do not already
+              give, so the two band headings are dropped and the row reads as one.
+
+              The split is intentional: a cumulative line reads fine in a narrow
+              column, so Pace takes the smaller share and leaves the 24-hour punch
+              card the wider one it was asking for. */}
           {tab === 'overview' && (
-          <Band title="Pace against last period">
+          <Band>
+            <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-12">
             <Card
               icon={TrendingUp}
               title="Actions so far, against last period"
-              subtitle="Both lines are running totals. The gap between them is how far ahead of, or behind, last period's pace this one is running."
+              subtitle="Both lines are running totals; the gap is how far ahead of, or behind, last period this one is running."
+              className="xl:col-span-5"
             >
               <UsageCumulativePace activity={activityData} />
             </Card>
-          </Band>
-          )}
-
-          {/* Where the work lands, and when — the two halves of the same
-              question, side by side, exactly as PRD §5 lays the tab out: "Then
-              the busiest 6 areas, and a grid showing which hours of the week
-              people work."
-
-              The hours grid spent a while on Adoption. That was wrong twice over:
-              it is not a licence question, so it interrupted the renewal argument
-              (verdict → seats → areas → funnel) to talk about Tuesdays; and it
-              left Overview — the tab everyone lands on — with two visuals and a
-              screen and a half of dead space under them. */}
-          {/* Overview keeps WHEN the work happens. WHERE it happens — the areas —
-              now lives on the Areas tab in one piece, instead of being previewed
-              here, plotted on Adoption, and detailed on Sections. */}
-          {/* Two readings of "when": which DAYS the work lands on (the coarse
-              split) and which HOURS (the grid). The split is the one-glance
-              headline — "is this a weekday tool" — that the dense grid answers in
-              detail beside it. */}
-          {tab === 'overview' && (
-          <Band title="When the work happens">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-              <Card
-                icon={CalendarDays}
-                title="Weekday vs weekend"
-                subtitle="How the work splits across the week."
-                className="lg:col-span-4"
-              >
-                <div className="flex flex-col gap-5 pt-1">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-[2rem] font-semibold leading-none tracking-[-0.03em] text-ink-900 tabular-nums">
-                      {weekSplit.weekdayPct}%
-                    </span>
-                    <span className="text-[0.8125rem] text-ink-500">lands on weekdays</span>
-                  </div>
-                  <div className="space-y-3">
-                    {[
-                      { name: 'Weekdays', value: weekSplit.weekday, pct: weekSplit.weekdayPct, color: SERIES.primary },
-                      { name: 'Weekends', value: weekSplit.weekend, pct: 100 - weekSplit.weekdayPct, color: '#C4A2EE' },
-                    ].map(row => (
-                      <div key={row.name}>
-                        <div className="flex items-baseline justify-between mb-1.5">
-                          <span className="text-[0.8125rem] text-ink-600">{row.name}</span>
-                          <span className="text-[0.8125rem] text-ink-500 tabular-nums">
-                            {fmt(row.value)} <span className="text-ink-400">· {row.pct}%</span>
-                          </span>
-                        </div>
-                        <div className="h-2.5 rounded-full bg-ink-900/[0.06] overflow-hidden">
-                          <div className="h-full rounded-full" style={{ width: `${row.pct}%`, background: row.color }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+            {/* The weekday/weekend balance rides as a compact strip on top of the
+                grid rather than as its own narrow card — see the earlier note; here
+                it keeps that shape while sharing the row with Pace. */}
+            <Card
+              icon={CalendarClock}
+              title="When people are working"
+              subtitle="Each square is one hour of one weekday. The darker it is, the busier that hour was."
+              className="xl:col-span-7"
+            >
+              <div className="mb-5 flex flex-wrap items-center gap-x-8 gap-y-3 border-b border-canvas-border pb-5">
+                <div className="flex shrink-0 items-baseline gap-1.5">
+                  <span className="text-[1.5rem] font-semibold leading-none tracking-[-0.03em] text-ink-900 tabular-nums">
+                    {weekSplit.weekdayPct}%
+                  </span>
+                  <span className="text-[0.8125rem] text-ink-500">lands on weekdays</span>
                 </div>
-              </Card>
-              <Card
-                icon={CalendarClock}
-                title="When people are working"
-                subtitle="Each square is one hour of one weekday. The darker it is, the busier that hour was."
-                className="lg:col-span-8"
-              >
-                <UsageRhythm data={heatmap} />
-              </Card>
+                <div className="grid min-w-[16rem] flex-1 grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
+                  {[
+                    { name: 'Weekdays', value: weekSplit.weekday, pct: weekSplit.weekdayPct, color: SERIES.primary },
+                    { name: 'Weekends', value: weekSplit.weekend, pct: 100 - weekSplit.weekdayPct, color: '#C4A2EE' },
+                  ].map(row => (
+                    <div key={row.name}>
+                      <div className="mb-1 flex items-baseline justify-between">
+                        <span className="text-[0.75rem] text-ink-600">{row.name}</span>
+                        <span className="text-[0.75rem] text-ink-500 tabular-nums">
+                          {fmt(row.value)} <span className="text-ink-400">· {row.pct}%</span>
+                        </span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-ink-900/[0.06]">
+                        <div className="h-full rounded-full" style={{ width: `${row.pct}%`, background: row.color }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <UsageRhythm data={heatmap} />
+            </Card>
             </div>
           </Band>
           )}
@@ -1939,11 +1938,12 @@ export default function PlatformUsageView() {
                         list cannot drift away from the six others. */}
                     <div className="space-y-3">
                       {topAiUsers.map((u, i) => (
-                        <div key={u.email} className="flex items-center gap-2.5">
-                          <InitialsAvatar name={u.name} size={24} />
+                        <div key={u.email} className="flex items-center gap-3">
+                          <InitialsAvatar name={u.name} size={28} />
                           <div className="min-w-0 flex-1">
                             <Meter
                               index={i}
+                              size="lg"
                               label={<span className="text-ink-800">{u.name}</span>}
                               value={fmt(u.aiQueries)}
                               note={
@@ -2055,10 +2055,11 @@ export default function PlatformUsageView() {
                     <div className="mt-4">
                       <UsageMiniTrend points={seriesFor('created')} name="Things created" />
                     </div>
-                    <div className="mt-5 space-y-3.5">
+                    <div className="mt-5 space-y-3">
                       {creations.map((c, i) => (
                         <Meter
                           key={c.kind.key}
+                          size="lg"
                           label={c.kind.label}
                           value={fmt(c.count)}
                           pct={(c.count / creationMax) * 100}
@@ -2099,9 +2100,9 @@ export default function PlatformUsageView() {
                     beside it was the page breaking its own rule: a mark that says
                     "almost none" where the truth is "none at all". Sharing below
                     already filters the same way; Runs did not. */}
-                <div className="mt-5 space-y-3.5">
+                <div className="mt-5 space-y-3">
                   {runs.byArea.filter(a => a.count > 0).map((a, i) => (
-                    <Meter key={a.area} label={a.area} value={fmt(a.count)} pct={(a.count / runAreaMax) * 100} index={i} />
+                    <Meter key={a.area} size="lg" label={a.area} value={fmt(a.count)} pct={(a.count / runAreaMax) * 100} index={i} />
                   ))}
                 </div>
                 <div className="mt-5 pt-4 border-t border-canvas-border">
@@ -2123,9 +2124,9 @@ export default function PlatformUsageView() {
                 <div className="mt-4">
                   <UsageMiniTrend points={seriesFor('shares')} name="Shares" />
                 </div>
-                <div className="mt-5 space-y-3.5">
+                <div className="mt-5 space-y-3">
                   {shares.byKind.filter(k => k.count > 0).map((k, i) => (
-                    <Meter key={k.kind} label={k.kind} value={fmt(k.count)} pct={(k.count / shareKindMax) * 100} index={i} />
+                    <Meter key={k.kind} size="lg" label={k.kind} value={fmt(k.count)} pct={(k.count / shareKindMax) * 100} index={i} />
                   ))}
                 </div>
                 <div className="mt-5 pt-4 border-t border-canvas-border">
@@ -2253,10 +2254,11 @@ export default function PlatformUsageView() {
                   subtitle="Ranked by total work done in each — the volume the table beside this does not carry."
                   className="xl:col-span-5"
                 >
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     {topModules.map(({ module, count }, i) => (
                       <RankedRow
                         key={module}
+                        size="lg"
                         label={module}
                         count={count}
                         share={totals.actions > 0 ? Math.round((count / totals.actions) * 100) : 0}

@@ -755,7 +755,7 @@ export function TooltipCard({ title, rows, footer }: {
    The "most-used areas" shape: name, meter, value, share. Used wherever the
    page ranks a handful of things against each other. */
 
-export function RankedRow({ label, count, share, pct, onClick, index = 0, active }: {
+export function RankedRow({ label, count, share, pct, onClick, index = 0, active, size = 'sm' }: {
   label: string;
   count: number;
   share?: number;
@@ -763,8 +763,14 @@ export function RankedRow({ label, count, share, pct, onClick, index = 0, active
   onClick?: () => void;
   index?: number;
   active?: boolean;
+  /** Bar weight, matching `Meter`: `sm` is the hairline bullet; `lg` is the
+   *  substantial 28px block used on the Seats tab, so a ranking whose bars ARE
+   *  the content reads at the same weight everywhere on the page. */
+  size?: 'sm' | 'lg';
 }) {
   const prefersReduced = useReducedMotion();
+  const lg = size === 'lg';
+  const radius = lg ? 'rounded-md' : 'rounded-full';
   const inner = (
     <>
       <div className="flex items-baseline justify-between gap-2 mb-1.5">
@@ -778,11 +784,11 @@ export function RankedRow({ label, count, share, pct, onClick, index = 0, active
           {typeof share === 'number' && <span className="ml-1.5">{share}%</span>}
         </span>
       </div>
-      <div className="h-1.5 rounded-full bg-brand-100/70 overflow-hidden">
+      <div className={`${lg ? 'h-7' : 'h-1.5'} ${radius} bg-brand-100/70 overflow-hidden`}>
         <motion.div
-          className="h-full rounded-full bg-brand-600 group-hover:bg-brand-500 transition-colors"
+          className={`h-full ${radius} bg-brand-600 group-hover:bg-brand-500 transition-colors`}
           initial={prefersReduced ? false : { width: 0 }}
-          animate={{ width: `${Math.max(1.5, pct)}%` }}
+          animate={{ width: `${Math.max(lg ? 2 : 1.5, pct)}%` }}
           transition={
             prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 30, delay: 0.03 * index }
           }

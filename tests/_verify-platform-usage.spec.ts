@@ -57,19 +57,23 @@ test('page renders end to end with delta KPIs on every range', async ({ page }) 
   // Every tile carries the days behind its number (REQ-2.5), and the ONE tile
   // whose bars do not add up to its headline says so on its face (REQ-2.6):
   // a person active on three days is 1 user and 3 bars.
-  await expect(page.getByText(/adding up to/).first()).toBeVisible();
-  // The bars are not broken; what they count is people-per-day, and a person who
-  // works on three days is counted on all three. The tile says that rather than
-  // apologising for its own chart.
-  await expect(page.getByText(/Somebody active on three days appears on all three/)).toBeVisible();
+  await expect(page.getByText(/adds up to/).first()).toBeVisible();
+  // The bars are not broken; what they count is people-per-day, and the one tile
+  // whose bars do not reconcile with its headline says so on its face: a person
+  // active on three days is one user and three bars.
+  await expect(page.getByText(/one bar per active day/)).toBeVisible();
 
   // Charts take noun titles; the sentence lives in the subtitle and the strip.
   await expect(page.getByRole('heading', { name: 'Actions per day' })).toBeVisible();
 
   // AI is NOT stacked into those bars. It is a tenth of the work, so on the main
   // chart's scale it was a flat blue crust you could not read a day off — the
-  // exact failure REQ-4.2 predicts. It gets its own strip, its own scale, and it
-  // prints what that scale tops out at.
+  // exact failure REQ-4.2 predicts. It gets its own strip, on its own scale, that
+  // prints what that scale tops out at — now behind an "AI" toggle so it is not a
+  // second chart everyone scrolls past to reach the heatmap. Reveal it, then read.
+  await expect(page.getByText('AI actions per day')).toHaveCount(0);
+  await page.getByRole('button', { name: 'AI', exact: true }).click();
+  await page.waitForTimeout(400);
   await expect(page.getByText('AI actions per day')).toBeVisible();
   await expect(page.getByText(/Own scale · peak/)).toBeVisible();
 
@@ -520,17 +524,16 @@ test('live audit events raise today\'s totals', async ({ page }) => {
  * All of them come from the same root: the page's clock is the newest record,
  * not today's date, and it used to keep that to itself.
  */
-test('the page names today, dates its presets, and puts the top-3 share back on Overview', async ({ page }) => {
+test('the page dates its presets and puts the top-3 share on Overview', async ({ page }) => {
   test.setTimeout(120000);
   await openUsage(page);
 
-  // 1. The window says what it covers AND what today is, so the reader can see
-  //    the gap between them. "Showing 30 days up to Apr 21" alone reads as "the
-  //    last 30 days" and hides a three-month jump.
-  await expect(page.getByText(/Showing\s+30 days\s+up to/)).toBeVisible();
-  const staleNote = page.getByText(/Today is \w{3} \d{1,2}, \d{4}/);
-  await expect(staleNote).toBeVisible();
-  await expect(page.getByText(/the newest record is \d+ days old/)).toBeVisible();
+  // 1. The window summary names what it covers. It used to also print "Today is
+  //    <date>, the newest record is N days old" as a staleness cue, but the data
+  //    is a fixed April-2026 seed with no ingestion, so a freshness line is a
+  //    lying label — it was removed on purpose. The summary now just states the
+  //    window; the dates it resolves to live on the picker (checked next).
+  await expect(page.getByText(/Showing\s+30 days\s+of activity/)).toBeVisible();
 
   // 2. The dates the window will actually hand back — measured from the anchor,
   //    not from wall-clock today — are on the CLOSED trigger, not just inside the
@@ -553,8 +556,8 @@ test('the page names today, dates its presets, and puts the top-3 share back on 
   await page.waitForTimeout(300);
 
   // The dates the picker promised are the dates the page reports on: the end of
-  // the 30-day preset is the same day the window summary names.
-  // (Both the summary line and the KPI caption name that day, hence .first().)
+  // the 30-day preset is the same day the KPI footer names ("The 30 days up to
+  // Apr 21, 2026. Each change is against the 30 days before that.").
   const endDay = dated.match(/– (\w{3} \d{1,2}), \d{4}/)?.[1];
   expect(endDay).toBeTruthy();
   await expect(page.getByText(new RegExp(`up to\\s+${endDay}`)).first()).toBeVisible();
@@ -567,7 +570,7 @@ test('the page names today, dates its presets, and puts the top-3 share back on 
   // old prose. The findings themselves are unchanged.
   await expect(page.getByText('What stands out')).toBeVisible();
   await expect(page.getByText('Fastest growing')).toBeVisible();
-  await expect(page.getByText(/of the people working in the platform used AI|Nobody used the AI|none we can trace/)).toBeVisible();
+  await expect(page.getByText(/of the people working on the platform used AI|Nobody used the AI|none we can trace/)).toBeVisible();
   await expect(page.getByText(/signed in for 30\+ days|Everyone has signed in/)).toBeVisible();
 
   // The one an admin cannot reach from anything else on the page.
@@ -576,15 +579,14 @@ test('the page names today, dates its presets, and puts the top-3 share back on 
   await expect(topThree).toContainText(/\d+%/);
   await expect(topThree).toContainText('of all the work');
 
-  /* And every finding clicks through to its evidence — which now lands on SEATS,
-     where the member table lives alongside the licence argument it is evidence
-     for.
+  /* The finding clicks through to its evidence on the PEOPLE tab, where the
+     concentration chart lives alongside the member table.
 
-     The top-3 share also finally has a CHART. It is the one finding on this page
-     an admin cannot assemble from anything else — a healthy total hides it by
-     construction — and until now it was a number in a small card with no picture.
-     The Lorenz curve draws the gap between what happens and what an even spread
-     would look like, and marks the top 3 on it. */
+     The chart is no longer a Lorenz curve (that was retired). It is a split bar:
+     "Busiest 3 · 42%" against "Everyone else (9) · 58%", over the ranked members.
+     The point it makes is the one a healthy-looking total hides — three people
+     doing most of the work — and it is the one finding on this page an admin
+     cannot assemble from anything else. */
   // Read the finding's number BEFORE clicking: the click leaves Overview, and the
   // card goes with it.
   const finding = await topThree.textContent();
@@ -594,9 +596,9 @@ test('the page names today, dates its presets, and puts the top-3 share back on 
   await page.waitForTimeout(900);
   await expect(page.getByRole('button', { name: 'Export CSV' })).toBeVisible();
   await expect(page.getByRole('heading', { name: /leans on its busiest people/ })).toBeVisible();
-  await expect(page.getByText(/what an even split would look like/)).toBeVisible();
 
-  // The chart and the finding are the same number, drawn and said, so they can
-  // never disagree — the curve is fed the very percentage the card prints.
-  await expect(page.getByText(new RegExp(`${pct}%\\s*of all the work`))).toBeVisible();
+  // The chart and the finding are the same number, shown two ways, so they can
+  // never disagree: the split bar's "Busiest 3 · N%" is the very percentage the
+  // Overview card printed.
+  await expect(page.getByText(new RegExp(`Busiest 3 · ${pct}%`))).toBeVisible();
 });

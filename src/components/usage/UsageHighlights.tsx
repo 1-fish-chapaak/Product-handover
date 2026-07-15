@@ -136,9 +136,9 @@ export default function UsageHighlights({ h, onOpenModule, onSeeAi, onSeeQuiet, 
         onClick={() => h.growing ? onOpenModule(h.growing.module) : onSeeTop()}
       >
         {h.growing ? (
-          <><span className="font-semibold text-ink-700">{h.growing.module}</span>, on the period before.</>
+          <><span className="font-semibold text-ink-700">{h.growing.module}</span>, vs the period before.</>
         ) : (
-          <>No area grew on the period before.</>
+          <>No area grew vs the period before.</>
         )}
       </Highlight>
 
@@ -154,7 +154,7 @@ export default function UsageHighlights({ h, onOpenModule, onSeeAi, onSeeQuiet, 
         onClick={onSeeAi}
       >
         {h.aiAdoptionPct > 0 ? (
-          <>of the people working in the platform used AI.</>
+          <>of the people working on the platform used AI.</>
         ) : h.aiActivity > 0 ? (
           <>AI {h.aiActivity === 1 ? 'action' : 'actions'} this period, none we can trace to a current member.</>
         ) : (

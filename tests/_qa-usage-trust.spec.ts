@@ -38,18 +38,20 @@ test('AI share has exactly one definition across the page', async ({ page }) => 
   const kpiPct = num((label ?? '').match(/(\d+)%/)?.[1] ?? '');
   expect(kpiPct, 'the AI KPI should print a share').toBeGreaterThan(0);
 
-  // Adoption's AI card says the same thing in a sentence. It used to say 12%
-  // where the KPI said 11% — because it divided by aiActivity (AI actions PLUS
-  // saved conversations), and a saved conversation is not an audit action, so it
-  // is not in the denominator. One fact, two numbers, no way to tell which.
+  // The People tab's AI card prints the same share, now as a labelled bar rather
+  // than a sentence: "AI-assisted · 11%". It used to say 12% where the KPI said
+  // 11% — because it divided by aiActivity (AI actions PLUS saved conversations),
+  // and a saved conversation is not an audit action, so it is not in the
+  // denominator. One fact, two numbers, no way to tell which. The label carries
+  // the value verbatim, so read it there.
   await usageTab(page, 'People');
-  const sentence = await page.getByText(/AI was involved in .* of everything done/).textContent();
-  const cardPct = num((sentence ?? '').match(/(\d+)%/)?.[1] ?? '');
+  const barLabel = await page.getByText(/AI-assisted · \d+%/).first().textContent();
+  const cardPct = num((barLabel ?? '').match(/(\d+)%/)?.[1] ?? '');
 
   expect(cardPct, 'the AI share must be the same number wherever the page prints it').toBe(kpiPct);
 
   // And the conversations are still counted — just not folded into the share.
-  await expect(page.getByText(/saved conversations? .* not counted as work/)).toBeVisible();
+  await expect(page.getByText(/saved conversations? counted separately, not as work/)).toBeVisible();
 });
 
 test('Sections says which of its numbers the date range governs', async ({ page }) => {

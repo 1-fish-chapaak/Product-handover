@@ -111,11 +111,12 @@ export default function UsageConcentration({ rows, topShare }: {
         </div>
         <div className="space-y-3">
           {shown.map((r, i) => (
-            <div key={r.user.email} className="flex items-center gap-2.5">
-              <InitialsAvatar name={r.user.name} size={24} />
+            <div key={r.user.email} className="flex items-center gap-3">
+              <InitialsAvatar name={r.user.name} size={28} />
               <div className="min-w-0 flex-1">
                 <Meter
                   index={i}
+                  size="lg"
                   tone={i < 3 ? (concentrated ? 'attention' : 'brand') : 'muted'}
                   label={<span className="text-ink-800">{r.user.name}</span>}
                   value={fmt(r.actions)}
@@ -126,13 +127,14 @@ export default function UsageConcentration({ rows, topShare }: {
             </div>
           ))}
           {restCount > 0 && (
-            <div className="flex items-center gap-2.5">
-              <div className="h-6 w-6 shrink-0 rounded-full bg-brand-50 flex items-center justify-center text-[0.5625rem] font-semibold text-brand-700">
+            <div className="flex items-center gap-3">
+              <div className="h-7 w-7 shrink-0 rounded-full bg-brand-50 flex items-center justify-center text-[0.5625rem] font-semibold text-brand-700">
                 +{restCount}
               </div>
               <div className="min-w-0 flex-1">
                 <Meter
                   index={SHOWN}
+                  size="lg"
                   tone="muted"
                   label={<span className="text-ink-500">{restCount} more {restCount === 1 ? 'member' : 'members'}</span>}
                   value={fmt(restActions)}

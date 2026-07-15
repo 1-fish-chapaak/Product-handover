@@ -86,7 +86,7 @@ export default function UsageMatrix({ days, users, onSelect }: {
       {/* One bar per area. Length is reach (share of people); colour is the
           verdict; the actions-each figure rides at the end. Two facts the retired
           scatter needed two axes for, now read straight off a coloured bar. */}
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         {rows.map(p => {
           const color = VERDICT_COLOR[p.quadrant];
           const shelf = p.quadrant === 'shelfware';
@@ -102,7 +102,7 @@ export default function UsageMatrix({ days, users, onSelect }: {
                     'aria-label': `${p.module}, ${QUADRANT_NAME[p.quadrant]}, ${p.breadth}% of people, open this area`,
                   }
                 : {})}
-              className={`group w-full flex items-center gap-3 py-2 px-2 -mx-2 rounded-lg text-left transition-colors ${
+              className={`group w-full flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg text-left transition-colors ${
                 onSelect ? 'cursor-pointer hover:bg-brand-50/50' : ''
               }`}
             >
@@ -111,9 +111,9 @@ export default function UsageMatrix({ days, users, onSelect }: {
               </span>
 
               <div className="flex-1 min-w-0 flex items-center gap-2.5">
-                <div className="flex-1 h-2.5 rounded-full bg-ink-900/[0.05] overflow-hidden">
+                <div className="flex-1 h-5 rounded-md bg-ink-900/[0.05] overflow-hidden">
                   <div
-                    className="h-full rounded-full"
+                    className="h-full rounded-md"
                     style={{ width: `${Math.max(3, p.breadth)}%`, background: color }}
                   />
                 </div>
