@@ -251,9 +251,10 @@ export default function Overview() {
             </div>
             <div className="mt-2.5 flex items-center gap-x-5 gap-y-1.5 flex-wrap text-[12.5px]">
               {sev.mwOpen > 0 && (
-                <span className="inline-flex items-center gap-1.5 font-semibold text-risk-700">
+                <button onClick={() => setView('deficiencies')} title="Open exceptions — remediate, retest, close"
+                  className="inline-flex items-center gap-1.5 font-semibold text-risk-700 hover:text-risk-800 hover:underline underline-offset-2 cursor-pointer transition-colors">
                   <AlertTriangle size={13} /> {sev.mwOpen} material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'open past year-end ⇒' : 'open at year-end ⇒'} ICFR publicly ineffective
-                </span>
+                </button>
               )}
               {openOther > 0 && <span className="inline-flex items-center gap-1.5 text-ink-700"><Circle size={11} className="text-high-600" /> {openOther} exception{openOther === 1 ? '' : 's'} still in the lifecycle (remediate → retest → reviewer close)</span>}
               {unconcluded > 0 && <span className="inline-flex items-center gap-1.5 text-ink-700"><Circle size={11} className="text-ink-400" /> {unconcluded} control{unconcluded === 1 ? '' : 's'} not concluded</span>}

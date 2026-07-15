@@ -19,7 +19,7 @@ test('the ground rules read as prose for the reviewer — no live controls', asy
   await openSox(page);
   await page.getByRole('button', { name: 'Reviewer', exact: true }).click();
   await page.waitForTimeout(600);
-  // the period pill is the auditor's dial — a plain label for everyone else
+  // the header period pill is gone for every role — roll-forward lives in the register header
   await expect(page.getByTitle(/Switch period/)).toHaveCount(0);
   await page.getByRole('button', { name: /Materiality & scope/ }).click();
   await page.waitForTimeout(700);
