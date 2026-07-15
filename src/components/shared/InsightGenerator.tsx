@@ -8,20 +8,28 @@
 // Once generated for a given subject, the result is cached for the session, so
 // navigating away and back does not re-run the engine. A "Regenerate" affordance
 // re-runs it deliberately. Renders LayeredInsightCard when ready.
+//
+// Two shapes:
+//   • single subject  → one LayeredInsightCard (the default).
+//   • `subjects` set  → one Generate produces N insights, rendered as an
+//     InsightStack accordion (the engagement / roll-up altitude, where the
+//     engine legitimately surfaces many findings at once).
 
 import { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { Sparkles, Loader2, Check, RefreshCw, Brain, Zap } from 'lucide-react';
 import {
   buildLayeredInsight, LAYER_META,
-  type InsightLayer, type LayeredInsight, type CheckMoreOption,
+  type InsightLayer, type LayeredInsight, type CheckMoreOption, type BuildInsightInput,
 } from '../../data/layeredInsights';
 import LayeredInsightCard from './LayeredInsightCard';
+import InsightStack from './InsightStack';
 
 // ─── Session cache — keeps a generated insight alive across navigation ──────
 // Module-level so it survives unmount. Cleared only on a hard reload.
 
 const CACHE = new Map<string, LayeredInsight>();
+const MULTI_CACHE = new Map<string, LayeredInsight[]>();
 const cacheKey = (layer: InsightLayer, subjectId: string) => `${layer}:${subjectId}`;
 
 // ─── The generating pipeline (honest "AI thinking") ────────────────────────
@@ -31,6 +39,13 @@ const PIPELINE: Record<InsightLayer, string[]> = {
   risk: ['Reading this risk’s mapped controls', 'Finding the shared root cause', 'Locating the coverage gap', 'Writing the explanation'],
   engagement: ['Reading every risk and control', 'Collapsing findings that share a driver', 'Weighing the total against readiness', 'Writing the escalation'],
 };
+
+const stackSteps = (n: number): string[] => [
+  'Reading every risk and control in scope',
+  'Correlating findings across the scope',
+  'Collapsing findings that share a driver',
+  `Writing ${n} insight${n === 1 ? '' : 's'}`,
+];
 
 const STEP_MS = 520;
 
@@ -56,22 +71,34 @@ interface Props {
   /** Override the generating-pipeline steps (defaults to the layer's steps). */
   stepsOverride?: string[];
   onCheckMore?: (opt: CheckMoreOption) => void;
+  /** Multi-insight mode: one Generate builds every subject and renders an
+   *  InsightStack accordion instead of a single card. */
+  subjects?: BuildInsightInput[];
+  /** Trailing phrase for the stack header, e.g. "across this engagement". */
+  stackScopeLabel?: string;
+  /** How many top rows of the stack open on first render (default 1). */
+  initialOpen?: number;
 }
 
 export default function InsightGenerator({
   layer, subjectId, subjectLabel, status, priority, isKey, flagship, compact = false,
   labelOverride, scanOverride, stepsOverride, onCheckMore,
+  subjects, stackScopeLabel, initialOpen = 1,
 }: Props) {
-  const key = cacheKey(layer, subjectId);
-  const cached = CACHE.get(key) ?? null;
-  const [insight, setInsight] = useState<LayeredInsight | null>(cached);
-  const [phase, setPhase] = useState<'idle' | 'generating' | 'generated'>(cached ? 'generated' : 'idle');
+  const multi = (subjects?.length ?? 0) > 0;
+  const key = multi ? `${cacheKey(layer, subjectId)}:stack:${subjects!.length}` : cacheKey(layer, subjectId);
+  const cachedSingle = !multi ? (CACHE.get(key) ?? null) : null;
+  const cachedMulti = multi ? (MULTI_CACHE.get(key) ?? null) : null;
+
+  const [insight, setInsight] = useState<LayeredInsight | null>(cachedSingle);
+  const [stack, setStack] = useState<LayeredInsight[] | null>(cachedMulti);
+  const [phase, setPhase] = useState<'idle' | 'generating' | 'generated'>(cachedSingle || cachedMulti ? 'generated' : 'idle');
   const [step, setStep] = useState(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const meta = LAYER_META[layer];
   const label = labelOverride ?? meta.label;
   const scan = scanOverride ?? meta.scan;
-  const steps = stepsOverride ?? PIPELINE[layer];
+  const steps = stepsOverride ?? (multi ? stackSteps(subjects!.length) : PIPELINE[layer]);
 
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
 
@@ -84,18 +111,26 @@ export default function InsightGenerator({
       timers.current.push(setTimeout(() => setStep(i + 1), STEP_MS * (i + 1)));
     });
     timers.current.push(setTimeout(() => {
-      const built = buildLayeredInsight({ layer, subjectId, subjectLabel, status, priority, isKey, flagship });
-      CACHE.set(key, built);
-      setInsight(built);
+      if (multi) {
+        const built = subjects!.map(buildLayeredInsight);
+        MULTI_CACHE.set(key, built);
+        setStack(built);
+      } else {
+        const built = buildLayeredInsight({ layer, subjectId, subjectLabel, status, priority, isKey, flagship });
+        CACHE.set(key, built);
+        setInsight(built);
+      }
       setPhase('generated');
     }, STEP_MS * (steps.length + 1)));
   };
 
   // ── Generated ──
-  if (phase === 'generated' && insight) {
+  if (phase === 'generated' && (insight || stack)) {
     return (
       <div className="space-y-2">
-        <LayeredInsightCard insight={insight} onCheckMore={onCheckMore} />
+        {multi && stack
+          ? <InsightStack insights={stack} scopeLabel={stackScopeLabel ?? ''} onCheckMore={onCheckMore} initialOpen={initialOpen} />
+          : insight && <LayeredInsightCard insight={insight} onCheckMore={onCheckMore} />}
         <div className="flex items-center gap-2 px-1">
           <span className="text-[10.5px] text-ink-400 flex items-center gap-1"><Check size={11} className="text-compliant" /> Generated just now · cached for this session</span>
           <button type="button" onClick={run} className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-brand-700 hover:text-brand-600 cursor-pointer">
@@ -114,7 +149,7 @@ export default function InsightGenerator({
           <span className="size-6 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center">
             <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.4, ease: 'linear' }} className="inline-flex"><Loader2 size={13} /></motion.span>
           </span>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700">Generating insight · {label}</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700">Generating insight{multi ? 's' : ''} · {label}</span>
           <span className="ml-auto flex items-center gap-1">
             {[0, 1, 2].map(i => (
               <motion.span key={i} className="size-1.5 rounded-full bg-brand-400"

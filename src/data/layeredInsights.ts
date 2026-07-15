@@ -1,7 +1,7 @@
 // ─── Layered Insight Engine — Control · Risk · Engagement altitudes ────────
 //
 // The Insight Memory Engine already surfaces a "what this run means" card at the
-// workflow-output altitude (WorkflowOutputInsight) and a richer per-process tab
+// workflow-output altitude (the executor's run-output LayeredInsightCard) and a richer per-process tab
 // (ProcessInsightsTab). This file adds the THREE higher altitudes the audit
 // hierarchy needs — each rolls up the layer below and dedupes the shared root
 // cause so one story is "counted once" as it climbs:

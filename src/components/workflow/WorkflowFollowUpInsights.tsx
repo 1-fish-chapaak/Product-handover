@@ -10,19 +10,21 @@
 //      still open, and one next action.
 //   2. Cross-workflow correlation — the same entity surfacing in OTHER
 //      workflows: who it's about, where else it's shown up, how strong the
-//      pattern is, the money involved, whether it's already on a watchlist, and
-//      one next action.
+//      pattern is, the money involved, whether it's already on a watchlist.
+//      Rendered through the shared LayeredInsightCard so it reads identically
+//      to the engagement / risk / control AI-insight surfaces; the sampled
+//      exception rows survive as the evidence drill-down.
 //
 // Presentational + light derivation only. Data comes from the shared Insight
 // Memory Engine layer (RUN_OUTPUT_COMPARE / STAGE3_* / ENTITY_MEMORY), so the
-// numbers always tie back to the run. Every "what to do next" can seed the
-// follow-up composer via `onAction`, threading these insights into chat.
+// numbers always tie back to the run. Every recommendation / "what to do next"
+// can seed the follow-up composer via `onAction`, threading insights into chat.
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  GitCompareArrows, Network, TrendingUp, TrendingDown, Minus,
-  Plus, Check, Eye, Sparkles, ArrowRight, Brain, Layers,
+  GitCompareArrows, TrendingUp, TrendingDown, Minus,
+  Plus, Check, Sparkles, ArrowRight, Brain, Layers,
   ChevronDown, ScrollText,
 } from 'lucide-react';
 import {
@@ -30,6 +32,8 @@ import {
   PROCESS_INSIGHTS, correlatedRecords,
   type OutputCompare, type Stage3Record, type Stage3EvidenceRow,
 } from '../../data/insightMemory';
+import type { LayeredInsight, VerdictTone } from '../../data/layeredInsights';
+import LayeredInsightCard from '../shared/LayeredInsightCard';
 
 // ─── shared helpers ───────────────────────────────────────────────────────
 
@@ -263,8 +267,11 @@ export function OutputComparePanel({
 
 // ─── 2. Cross-workflow correlation ────────────────────────────────────────
 
-const SEV_DOT: Record<Stage3Record['insight']['severity'], string> = {
-  high: '#B42318', medium: '#B45309', low: '#9A8FAE',
+const STAGE3_SEV: Record<Stage3Record['insight']['severity'], LayeredInsight['severity']> = {
+  high: 'high', medium: 'med', low: 'low',
+};
+const STAGE3_TONE: Record<Stage3Record['insight']['severity'], VerdictTone> = {
+  high: 'negative', medium: 'caution', low: 'positive',
 };
 
 // A one-line "why it flagged" from a record's own evidence — dominant remark +
@@ -284,11 +291,11 @@ const sumPaid = (rec: Stage3Record) =>
 
 const fmtMoney = (n: number | null): string => (n == null ? '—' : `$${n.toFixed(2)}`);
 
-// Collapsible evidence table — the sampled exception rows behind the
-// correlation, mirroring the evidence table on the other AI-insight surfaces
+// Collapsible sampled-rows table — the exception rows behind the correlation
 // (Product · Contract · Exception · Paid · WAC · Contract $ · Revised · Diff),
 // with a leading Source column so the same entity's rows read across the
-// different checks that flagged it.
+// different checks that flagged it. Nests inside the LayeredInsightCard's
+// evidence drill-down, one level deeper than the per-run evidence rows.
 function CorrelationEvidenceTable({
   rows,
   checks,
@@ -307,8 +314,8 @@ function CorrelationEvidenceTable({
         className="w-full flex items-center gap-2 px-3 py-2 text-left cursor-pointer hover:bg-canvas transition-colors"
       >
         <ScrollText size={13} className="text-ink-400" />
-        <span className="text-[11px] font-semibold text-ink-800">Evidence</span>
-        <span className="text-[10px] text-ink-400">{rows.length} sampled rows across {checks} checks</span>
+        <span className="text-[11px] font-semibold text-ink-800">Sampled rows</span>
+        <span className="text-[10px] text-ink-400">{rows.length} rows across {checks} checks</span>
         <ChevronDown size={13} className={`ml-auto text-ink-400 transition-transform ${open ? '' : '-rotate-90'}`} />
       </button>
       <AnimatePresence initial={false}>
@@ -374,22 +381,6 @@ function CorrelationEvidenceTable({
   );
 }
 
-// N-segment strength meter — the more distinct checks flag the entity, the more
-// filled segments and the stronger the label.
-function StrengthMeter({ checks }: { checks: number }) {
-  const total = 3;
-  const filled = Math.min(total, checks);
-  const strong = checks >= 3;
-  const cls = strong ? 'bg-risk' : checks === 2 ? 'bg-mitigated-500' : 'bg-brand-400';
-  return (
-    <span className="inline-flex items-center gap-1">
-      {Array.from({ length: total }).map((_, i) => (
-        <span key={i} className={`h-3 w-1.5 rounded-full ${i < filled ? cls : 'bg-canvas-border'}`} />
-      ))}
-    </span>
-  );
-}
-
 export function CrossWorkflowCorrelationPanel({
   current = STAGE3_CURRENT,
   correlated = correlatedRecords(STAGE3_CURRENT),
@@ -419,97 +410,97 @@ export function CrossWorkflowCorrelationPanel({
   const evidenceRows = allRecords.flatMap((rec) =>
     rec.insight.evidence.map((row) => ({ row, workflow: rec.workflow })),
   );
-  const strengthLabel = checks >= 3 ? 'Strong' : checks === 2 ? 'Moderate' : 'Emerging';
+  const entityType = current.insight.entity_type;
 
-  const takeaway = watch?.onWatch
-    ? `${shortName} shows up in ${checks} different checks — and it's already on a watchlist.`
-    : `${shortName} shows up in ${checks} different checks, not just this one.`;
-
-  const nextAction = `Open a cross-workflow review of ${displayName}`;
+  const insight: LayeredInsight = {
+    id: `xwf-${current.insight.entity_key.replace(/\s+/g, '-')}`,
+    layer: 'control',
+    subjectId: current.insight.entity_key,
+    subjectLabel: displayName,
+    takeaway: watch?.onWatch
+      ? `${shortName} shows up in ${checks} different checks — and it's already on a watchlist.`
+      : `${shortName} shows up in ${checks} different checks, not just this one.`,
+    verdict:
+      checks >= 3 ? { label: 'Strong pattern', tone: 'negative' }
+      : checks === 2 ? { label: 'Moderate pattern', tone: 'caution' }
+      : { label: 'Emerging pattern', tone: 'caution' },
+    severity: STAGE3_SEV[current.insight.severity],
+    likelyCause: watch?.onWatch
+      ? {
+          label: `${displayName} is already on a standing watch${watchEntry ? ` — since ${watchEntry.approvedOn}` : ''}.`,
+          detail: `${watch.watchNote ? `${watch.watchNote} ` : ''}The same ${entityType} failing ${checks} unrelated checks points at one upstream driver, not ${checks} coincidences.`,
+          confirmFirst: false,
+        }
+      : {
+          label: 'One upstream driver, not check-specific noise.',
+          detail: `The same ${entityType} failing ${checks} unrelated checks points at a shared upstream cause. Confirm against the ${entityType} master before concluding.`,
+          confirmFirst: true,
+        },
+    reasoning: `The ${checks} checks flag one ${entityType}, not ${checks} separate problems. This run's ${shortName} exceptions overlap the ${correlated.length} earlier run${correlated.length === 1 ? '' : 's'}, so memory counts the pattern once — it is not new noise.`,
+    atStake: `${usd0(totalPaid)} flagged across sampled rows in ${checks} checks — sampled rows only, the full population is larger. This run: ${currentRunFlag}.`,
+    factors: { frequency: 0.72, sourceDiversity: 0.9, recency: 0.96, businessImpact: 0.7 },
+    confidenceOverride: current.insight.confidence,
+    evidence: [
+      {
+        ref: current.runDate,
+        label: `${current.workflow} — this run · ${currentRunFlag}`,
+        detail: `${Math.round(current.insight.confidence * 100)}%`,
+        tone: STAGE3_TONE[current.insight.severity],
+      },
+      ...correlated.map((rec) => ({
+        ref: rec.runDate,
+        label: `${rec.workflow} — ${detailFor(rec)}`,
+        detail: `${Math.round(rec.insight.confidence * 100)}%`,
+        tone: STAGE3_TONE[rec.insight.severity],
+      })),
+    ],
+    evidenceNote: `${evidenceRows.length} sampled rows across ${checks} checks · entity correlation, not yet a confirmed shared root cause.`,
+    runsAnalysed: allRecords.length,
+    detectedOn: current.runDate,
+    detectedBy: 'traceable',
+    rollupOf: { label: 'checks', count: checks },
+    checkMore: [
+      { kind: 'trace', label: `Open a cross-workflow review of ${shortName}` },
+      { kind: 'compare', label: 'Compare how each check scored it' },
+      { kind: 'ask', label: watch?.onWatch ? 'Ask what changed since it went on watch' : 'Ask whether these share a root cause' },
+    ],
+    recommendedActions: [],
+    recommendations: [
+      {
+        id: 'xwf-rec-review', category: 'monitoring', priority: 'do-now',
+        title: `Open a cross-workflow review of ${displayName}.`,
+        rationale: `${checks} checks flagging one ${entityType} is a concentration — review them together before grading each finding alone.`,
+      },
+      {
+        id: 'xwf-rec-aggregate', category: 'deficiency', priority: 'this-period',
+        title: `Aggregate the ${checks} findings by assertion before grading severity.`,
+        rationale: 'Findings that share an entity can aggregate to a higher severity than any single check suggests.',
+        guardrail: 'Severity stays a human call.',
+      },
+      {
+        id: 'xwf-rec-cause', category: 'root-cause', priority: 'this-period',
+        title: `Confirm whether all ${checks} checks trace to the same ${entityType} master data.`,
+        rationale: 'If one feed drives them all, one fix clears them together — and grading them separately overstates the population.',
+      },
+      ...(watch?.onWatch && correlated.length > 0
+        ? [{
+            id: 'xwf-rec-watch', category: 'monitoring' as const, priority: 'advisory' as const,
+            title: `Extend the standing watch to cover the other ${correlated.length} check${correlated.length === 1 ? '' : 's'} that flagged it.`,
+            rationale: 'The watch predates this run; the correlation shows the exposure is wider than the check it was raised on.',
+          }]
+        : []),
+    ],
+  };
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, delay: 0.05 }}
-      className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden"
-    >
-      <div className="p-4">
-        {/* Header — label + strength */}
-        <div className="flex items-center gap-2">
-          <span className="size-6 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center shrink-0">
-            <Network size={13} />
-          </span>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700">Also seen across workflows</span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 px-2 py-0.5 text-[10px] font-bold border border-brand-100">
-            <Sparkles size={10} /> AI Insight
-          </span>
-          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas px-2 py-0.5 text-[10px] font-bold text-ink-700">
-            <StrengthMeter checks={checks} /> {strengthLabel}
-          </span>
-        </div>
-
-        {/* Takeaway */}
-        <h4 className="text-[15px] font-bold text-ink-900 leading-snug mt-2.5">{takeaway}</h4>
-
-        {/* Who it's about + total money — side by side (entity gets the room,
-            the $ reads as the companion stat) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mt-3 items-stretch">
-          <div className="sm:col-span-2 rounded-xl border border-canvas-border bg-canvas/40 p-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[13px] font-bold text-ink-900">{displayName}</span>
-              <span className="inline-flex items-center rounded-md bg-canvas text-ink-500 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-                {current.insight.entity_type}
-              </span>
-              {watch?.onWatch && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-risk-50 text-risk px-2 py-0.5 text-[10px] font-bold border border-risk/25">
-                  <Eye size={10} /> On watch{watchEntry ? ` · since ${watchEntry.approvedOn}` : ''}
-                </span>
-              )}
-            </div>
-            <p className="text-[11.5px] text-ink-600 mt-1.5">
-              <span className="font-semibold text-ink-800">This run:</span> {currentRunFlag}.
-            </p>
-            {watch?.watchNote && <p className="text-[11px] text-ink-400 mt-1 leading-snug">{watch.watchNote}</p>}
-          </div>
-          <div className="sm:col-span-1 flex flex-col justify-center rounded-xl border border-canvas-border bg-canvas/40 px-3 py-2.5">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1">Flagged $ across checks</div>
-            <div className="text-[20px] font-bold font-mono text-ink-800 leading-none">{usd0(totalPaid)}</div>
-            <div className="text-[11px] text-ink-400 mt-1">summed over sampled rows</div>
-          </div>
-        </div>
-
-        {/* Where else it has shown up */}
-        <div className="mt-3">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1.5">
-            Where else it has shown up · {correlated.length} runs
-          </div>
-          {correlated.length === 0 ? (
-            <p className="text-[11.5px] text-ink-400">No other workflow has flagged this entity yet.</p>
-          ) : (
-            <div className="rounded-xl border border-canvas-border divide-y divide-canvas-border overflow-hidden">
-              {correlated.map((rec, i) => (
-                <div key={i} className="flex items-center gap-2.5 px-3 py-2 bg-canvas-elevated">
-                  <span className="inline-flex items-center rounded-md bg-brand-50 text-brand-700 px-1.5 py-0.5 text-[10.5px] font-semibold shrink-0">
-                    {rec.workflow}
-                  </span>
-                  <span className="text-[11.5px] text-ink-600 truncate min-w-0">{detailFor(rec)}</span>
-                  <span className="ml-auto flex items-center gap-1.5 shrink-0 text-[10.5px] text-ink-400 tabular-nums">
-                    <span className="size-1.5 rounded-full" style={{ background: SEV_DOT[rec.insight.severity] }} />
-                    {Math.round(rec.insight.confidence * 100)}% · {rec.runDate}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Evidence — sampled exception rows across every check (drill-down) */}
-        <CorrelationEvidenceTable rows={evidenceRows} checks={checks} />
-
-        <NextAction label={nextAction} onClick={onAction ? () => onAction(nextAction) : undefined} />
-      </div>
-    </motion.section>
+    <LayeredInsightCard
+      insight={insight}
+      headerLabel="across workflows"
+      evidenceLabel="Evidence · runs across checks"
+      evidenceExtra={<CorrelationEvidenceTable rows={evidenceRows} checks={checks} />}
+      onCheckMore={onAction ? (opt) => onAction(opt.detail ? `${opt.label} — ${opt.detail}` : opt.label) : undefined}
+      onRec={onAction}
+    />
   );
 }
 
