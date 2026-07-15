@@ -15,6 +15,18 @@ import type { Control } from './types';
 const BINDINGS = ['#6A12CD', '#0369A1', '#550FA5', '#075985', '#8838DE', '#0284C7', '#3B0B72', '#1E3A5F'];
 function spineColor(p: string): string { let h = 0; for (let i = 0; i < p.length; i++) h = (h * 31 + p.charCodeAt(i)) >>> 0; return BINDINGS[h % BINDINGS.length]!; }
 
+// The spreadsheet editor opens in its own tab (the Process Hub pattern) — same
+// racmId the in-app editor used, so persisted edits stay attached to the sheet.
+function openEditorTab(engId: string, process: string): void {
+  const params = new URLSearchParams({
+    view: 'racm-full-editor',
+    racmId: `sox-racm-${engId}-${process.replace(/\s+/g, '-').toLowerCase()}`,
+    racmName: `${process} — RACM`,
+    processLabel: process,
+  });
+  window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank', 'noopener');
+}
+
 type ReviewFilter = 'All' | 'Pending' | 'Approved' | 'Remark';
 
 /** Roll-up status of one RACM — shared by the landing cards and the matrix header. */
@@ -32,7 +44,7 @@ function matrixStatusOf(controls: Control[]): { label: string; tone: Parameters<
  * spreadsheet editor stays one click away per RACM.
  */
 export function RacmLanding() {
-  const { eng, openRacmMatrix, openRacmEditor } = useIcfr();
+  const { eng, openRacmMatrix } = useIcfr();
 
   const processes = useMemo(() => {
     const map = new Map<string, Control[]>();
@@ -74,7 +86,7 @@ export function RacmLanding() {
               <div className="flex items-center gap-2 mt-4 pt-4 border-t border-canvas-border">
                 <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-brand-700 group-hover:text-brand-800">Open RACM <ArrowRight size={14} /></span>
                 <span className="flex-1" />
-                <button onClick={e => { e.stopPropagation(); openRacmEditor({ name: `${name} — RACM`, process: name }); }}
+                <button onClick={e => { e.stopPropagation(); openEditorTab(eng.id, name); }}
                   className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
                   <FileSpreadsheet size={13} /> Spreadsheet editor
                 </button>
@@ -113,7 +125,7 @@ function ReviewCell({ c }: { c: Control }) {
  * spreadsheet editor remains one click away for cell-by-cell editing.
  */
 export default function Racm() {
-  const { eng, role, racmProcess, setView, openRacmEditor, openControl, approveRacmRows, remarkRacmRow, clearRacmReview, racmDocs, addRacmDoc } = useIcfr();
+  const { eng, role, racmProcess, setView, openControl, approveRacmRows, remarkRacmRow, clearRacmReview, racmDocs, addRacmDoc } = useIcfr();
   const { addToast } = useToast();
   const [q, setQ] = useState('');
   const [review, setReview] = useState<ReviewFilter>('All');
@@ -206,7 +218,7 @@ export default function Racm() {
             className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
             <FlaskConical size={14} /> {sel.size > 0 ? <>Bulk test <span className="tabular-nums text-brand-700">({sel.size})</span></> : <>Bulk test all <span className="tabular-nums text-ink-400">({filtered.length})</span></>}
           </button>}
-          <button onClick={() => openRacmEditor({ name: `${proc} — RACM`, process: proc })}
+          <button onClick={() => openEditorTab(eng.id, proc)}
             className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
             <FileSpreadsheet size={15} /> Open spreadsheet editor
           </button>
