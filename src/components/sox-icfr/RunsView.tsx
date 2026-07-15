@@ -4,6 +4,7 @@ import {
   ArrowRight, Calendar, Check, CheckCircle2, ChevronDown, Database, FlaskConical, History, ListChecks, SlidersHorizontal, Sparkles, Workflow, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
+import DatePicker from '../shared/DatePicker';
 import { cn } from '../../lib/cn';
 import type { RunKind, RunRecord } from './types';
 
@@ -29,18 +30,74 @@ const FILTERS: { id: FilterId; label: string }[] = [
   { id: 'ai-validation', label: 'AI validations' },
 ];
 
-type DateId = 'any' | 'today' | '7d' | '30d';
-const DATES: { id: DateId; label: string; days: number | null }[] = [
-  { id: 'any', label: 'All time', days: null },
-  { id: 'today', label: 'Today', days: 0 },
-  { id: '7d', label: 'Last 7 days', days: 7 },
-  { id: '30d', label: 'Last 30 days', days: 30 },
-];
-// runs carry relative timestamps ('just now', '3d ago', '2w ago') — read them as days-ago
+// runs carry relative timestamps ('just now', '3d ago', '2w ago') — anchor them
+// to concrete dates so the range picker has something real to compare against
 const daysAgo = (at: string): number => {
   const m = at.match(/(\d+)\s*([dw])/i);
   return m ? parseInt(m[1]!, 10) * (m[2]!.toLowerCase() === 'w' ? 7 : 1) : 0;
 };
+const toISO = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const isoDaysBack = (n: number): string => { const d = new Date(); d.setDate(d.getDate() - n); return toISO(d); };
+const runISO = (at: string): string => isoDaysBack(daysAgo(at));
+const fmtShort = (iso: string): string => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+const RANGE_FIELD = 'w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12px] font-medium text-ink-800 hover:border-ink-300 transition-colors text-left';
+
+/** The date filter — a From / To range on the shared brand calendar, with quick windows. */
+function DateRangeMenu({ from, to, onChange, open, onToggle }: {
+  from: string; to: string; onChange: (from: string, to: string) => void; open: boolean; onToggle: () => void;
+}) {
+  const isDefault = !from && !to;
+  const label = isDefault ? 'All time'
+    : from && to ? (from === to ? fmtShort(from) : `${fmtShort(from)} – ${fmtShort(to)}`)
+    : from ? `From ${fmtShort(from)}`
+    : `Until ${fmtShort(to)}`;
+  return (
+    <div className="relative">
+      <button onClick={onToggle} aria-label="Filter by date range"
+        className={cn('h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer',
+          isDefault ? 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-ink-300' : 'border-brand-200 bg-brand-50 text-brand-700')}>
+        <Calendar size={13} className={isDefault ? 'text-ink-400' : 'text-brand-600'} />
+        {label}
+        <ChevronDown size={12} className="text-ink-400" />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={onToggle} />
+            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+              className="absolute left-0 mt-1.5 z-20 w-72 rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_16px_40px_-16px_rgba(15,8,30,.4)] p-3">
+              <div className="grid grid-cols-2 gap-2">
+                <label>
+                  <span className="block text-[10.5px] font-semibold uppercase tracking-wide text-ink-400 mb-1">From</span>
+                  <DatePicker value={from} onChange={e => onChange(e.target.value, to)} max={to || undefined} placeholder="Any" aria-label="Runs from date" className={RANGE_FIELD} />
+                </label>
+                <label>
+                  <span className="block text-[10.5px] font-semibold uppercase tracking-wide text-ink-400 mb-1">To</span>
+                  <DatePicker value={to} onChange={e => onChange(from, e.target.value)} min={from || undefined} placeholder="Any" aria-label="Runs to date" className={RANGE_FIELD} />
+                </label>
+              </div>
+              <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+                {[{ l: 'Today', d: 0 }, { l: 'Last 7 days', d: 7 }, { l: 'Last 30 days', d: 30 }].map(s => (
+                  <button key={s.l} onClick={() => onChange(isoDaysBack(s.d), isoDaysBack(0))}
+                    className="h-6 px-2 rounded-md border border-canvas-border text-[11px] font-semibold text-ink-600 hover:text-brand-700 hover:border-brand-300 cursor-pointer transition-colors">
+                    {s.l}
+                  </button>
+                ))}
+                <span className="flex-1" />
+                {!isDefault && (
+                  <button onClick={() => onChange('', '')} className="h-6 px-2 rounded-md text-[11px] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer transition-colors">
+                    Clear
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 /** One compact filter button + popover menu — the register's dropdown idiom. */
 function FilterMenu<T extends string>({ Icon, ariaLabel, value, options, isDefault, onPick, open, onToggle }: {
@@ -95,14 +152,17 @@ function OutcomeChips({ run }: { run: RunRecord }) {
 export default function RunsView() {
   const { eng, openControl } = useIcfr();
   const [filter, setFilter] = useState<FilterId>('all');
-  const [date, setDate] = useState<DateId>('any');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [menu, setMenu] = useState<'kind' | 'date' | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const dateWindow = DATES.find(d => d.id === date)!;
   const inWindow = useMemo(
-    () => eng.runs.filter(r => dateWindow.days === null || daysAgo(r.at) <= dateWindow.days),
-    [eng.runs, dateWindow.days],
+    () => eng.runs.filter(r => {
+      const d = runISO(r.at);
+      return (!from || d >= from) && (!to || d <= to);
+    }),
+    [eng.runs, from, to],
   );
 
   // kind counts follow the date window, so the menu reads as what you'll get
@@ -123,11 +183,9 @@ export default function RunsView() {
           isDefault={filter === 'all'} open={menu === 'kind'}
           onToggle={() => setMenu(m => (m === 'kind' ? null : 'kind'))}
           onPick={id => { setFilter(id); setMenu(null); }} />
-        <FilterMenu Icon={Calendar} ariaLabel="Filter by date" value={date}
-          options={DATES.map(d => ({ id: d.id, label: d.label }))}
-          isDefault={date === 'any'} open={menu === 'date'}
+        <DateRangeMenu from={from} to={to} open={menu === 'date'}
           onToggle={() => setMenu(m => (m === 'date' ? null : 'date'))}
-          onPick={id => { setDate(id); setMenu(null); }} />
+          onChange={(f, t) => { setFrom(f); setTo(t); }} />
       </div>
 
       {/* the registry */}
