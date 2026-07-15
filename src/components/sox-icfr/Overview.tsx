@@ -256,10 +256,10 @@ export default function Overview() {
                   <AlertTriangle size={13} /> {sev.mwOpen} material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'open past year-end ⇒' : 'open at year-end ⇒'} ICFR publicly ineffective
                 </button>
               )}
-              {openOther > 0 && <span className="inline-flex items-center gap-1.5 text-ink-700"><Circle size={11} className="text-high-600" /> {openOther} exception{openOther === 1 ? '' : 's'} still in the lifecycle (remediate → retest → reviewer close)</span>}
-              {unconcluded > 0 && <span className="inline-flex items-center gap-1.5 text-ink-700"><Circle size={11} className="text-ink-400" /> {unconcluded} control{unconcluded === 1 ? '' : 's'} not concluded</span>}
-              {stats.total - stats.reviewed - unconcluded > 0 && <span className="inline-flex items-center gap-1.5 text-ink-700"><Circle size={11} className="text-evidence-600" /> {stats.total - stats.reviewed - unconcluded} paper{stats.total - stats.reviewed - unconcluded === 1 ? '' : 's'} awaiting sign-off / countersign</span>}
-              <span className="inline-flex items-center gap-1.5 text-ink-500"><PenLine size={12} /> then: {so.preparer ? 'reviewer countersign' : 'preparer sign-off + reviewer countersign'}</span>
+              {openOther > 0 && <button onClick={() => setView('deficiencies')} title="Open exceptions — remediate, retest, close" className="inline-flex items-center gap-1.5 text-ink-700 hover:text-ink-900 hover:underline underline-offset-2 cursor-pointer transition-colors"><Circle size={11} className="text-high-600" /> {openOther} exception{openOther === 1 ? '' : 's'} still in the lifecycle (remediate → retest → reviewer close)</button>}
+              {unconcluded > 0 && <button onClick={() => setTab('controls')} title="Open the Control Library — conclude the remaining controls" className="inline-flex items-center gap-1.5 text-ink-700 hover:text-ink-900 hover:underline underline-offset-2 cursor-pointer transition-colors"><Circle size={11} className="text-ink-400" /> {unconcluded} control{unconcluded === 1 ? '' : 's'} not concluded</button>}
+              {stats.total - stats.reviewed - unconcluded > 0 && <button onClick={() => setTab('controls')} title="Open the Control Library — sign / countersign the concluded papers" className="inline-flex items-center gap-1.5 text-ink-700 hover:text-ink-900 hover:underline underline-offset-2 cursor-pointer transition-colors"><Circle size={11} className="text-evidence-600" /> {stats.total - stats.reviewed - unconcluded} paper{stats.total - stats.reviewed - unconcluded === 1 ? '' : 's'} awaiting sign-off / countersign</button>}
+              <button onClick={() => document.getElementById('eng-signoff')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} title="Go to Engagement sign-off" className="inline-flex items-center gap-1.5 text-ink-500 hover:text-ink-800 hover:underline underline-offset-2 cursor-pointer transition-colors"><PenLine size={12} /> then: {so.preparer ? 'reviewer countersign' : 'preparer sign-off + reviewer countersign'}</button>
               {sev.mwOpen === 0 && openOther === 0 && unconcluded === 0 && stats.reviewed === stats.total && <span className="inline-flex items-center gap-1.5 font-semibold text-compliant-700"><CheckCircle2 size={13} /> Nothing outstanding — ready to conclude</span>}
             </div>
           </section>
@@ -293,9 +293,16 @@ export default function Overview() {
               <span className={cn('inline-flex items-center gap-1.5 font-semibold', signoffReady ? 'text-compliant-700' : 'text-ink-500')}>
                 {signoffReady ? <CheckCircle2 size={13} /> : <Circle size={13} />} {concludedCount}/{stats.total} concluded · {stats.reviewed}/{stats.total} countersigned
               </span>
-              <span className="inline-flex items-center gap-1.5 text-ink-500">
-                <AlertTriangle size={12} className={sev.open ? 'text-high-600' : 'text-ink-300'} /> {sev.open} exception{sev.open === 1 ? '' : 's'} open
-              </span>
+              {sev.open > 0 ? (
+                <button onClick={() => setView('deficiencies')} title="Open exceptions — remediate, retest, close"
+                  className="inline-flex items-center gap-1.5 font-semibold text-high-700 hover:text-high-800 hover:underline underline-offset-2 cursor-pointer transition-colors">
+                  <AlertTriangle size={12} className="text-high-600" /> {sev.open} exception{sev.open === 1 ? '' : 's'} open
+                </button>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-ink-500">
+                  <AlertTriangle size={12} className="text-ink-300" /> 0 exceptions open
+                </span>
+              )}
             </div>
           </div>
           <div className="flex flex-col gap-1.5 items-end shrink-0">
