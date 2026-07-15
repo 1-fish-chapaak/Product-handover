@@ -181,7 +181,7 @@ export default function WorkingPaperModal({ eng, control, onClose }: { eng: Icfr
 
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
-      <div className={cn('modal flex flex-col', control ? 'max-w-[860px]' : 'max-w-[540px]')} onClick={e => e.stopPropagation()}>
+      <div className={cn('modal flex flex-col', control && 'modal-wide')} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border shrink-0">
           <h3 className="text-[14px] font-bold text-ink-900 inline-flex items-center gap-2"><FileSpreadsheet size={15} className="text-brand-600" /> Working paper — preview</h3>
           <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>

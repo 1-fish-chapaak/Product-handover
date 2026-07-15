@@ -221,6 +221,8 @@
 /* ── Modal ──────────────────────────────────────────────────────────────────────── */
 .modal-backdrop { position: fixed; inset: 0; background: color-mix(in srgb, var(--color-ink-900) 42%, transparent); backdrop-filter: blur(2px); z-index: 50; display: flex; align-items: flex-start; justify-content: center; padding: 64px 20px; }
 .modal { width: 100%; max-width: 540px; background: var(--color-canvas-elevated); border: 1px solid var(--color-canvas-border); border-radius: 16px; box-shadow: 0 24px 60px -20px rgba(15,8,30,.55); overflow: hidden; }
+/* document-shaped modals (the working paper) get page width, not dialog width */
+.modal.modal-wide { max-width: 900px; }
 
 @media (prefers-reduced-motion: reduce) {
   .sox-book-ui * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
