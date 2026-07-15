@@ -153,7 +153,7 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
   // Current version number for the banner byline — reads the same trail the
   // review drawer shows. Re-reads each render, so it updates after a save.
   const atrVersion = currentVersion(report.id, {
-    status: report.status ?? 'final',
+    status: report.status === 'final' ? 'final' : 'draft',
     by: report.generatedBy ?? meta.preparedBy ?? 'You',
     at: report.generatedAt ?? meta.generatedOn ?? '',
     reviewedBy: meta.reviewedBy,

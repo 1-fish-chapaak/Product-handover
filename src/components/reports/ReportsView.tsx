@@ -475,7 +475,7 @@ export default function ReportsView({
   const atrPills = (a: AtrLibraryReport) => {
     const plans = a.atrData.observations.reduce((n, o) => n + o.actionPlans.length, 0);
     const version = currentVersion(a.id, {
-      status: a.status,
+      status: a.status === 'final' ? 'final' : 'draft',
       by: a.generatedBy ?? a.atrData.meta.preparedBy ?? 'You',
       at: a.generatedAt ?? a.atrData.meta.generatedOn ?? '',
       reviewedBy: a.atrData.meta.reviewedBy,

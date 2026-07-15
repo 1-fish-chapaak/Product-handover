@@ -341,7 +341,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                       </span>
                       {eng.aiRecommended && (
                         <span
-                          className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-semibold bg-gradient-to-r from-brand-500 to-fuchsia-500 text-white"
+                          className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold bg-gradient-to-r from-brand-500 to-fuchsia-500 text-white"
                           title="Drafted by Ira's One-Click Audit"
                         >
                           <Sparkles size={10} />

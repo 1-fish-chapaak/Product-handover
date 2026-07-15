@@ -6,7 +6,7 @@ import { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
 import {
   ArrowLeft, Shield, Calendar, User, Clock, FileText, Search,
-  ChevronRight, ChevronDown, AlertTriangle, X, ExternalLink, Upload,
+  ChevronRight, AlertTriangle, X, ExternalLink, Upload,
 } from 'lucide-react';
 import RacmMappingWorkspace from '../audit/RacmMappingWorkspace';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -21,6 +21,7 @@ import {
   deriveTestingProgress, deriveEngagementKpis,
 } from './helpers';
 import ExecutionControlWorkspaceV2 from './ExecutionControlWorkspaceV2';
+import EngagementInsightsRollup from './EngagementInsightsRollup';
 
 // ─── Props ────────────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ interface Props {
 
 // ─── Component ────────────────────────────────────────────────────────────
 
-export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWorkflowBuilder, requestPbcEnabled = true, generateFromPopulation = false }: Props) {
+export default function EngagementExecutionV2({ onBack, onLaunchWorkflowBuilder, requestPbcEnabled = true, generateFromPopulation = false }: Props) {
   const [engagement, setEngagement] = useState<EngagementExecution>(MOCK_ENGAGEMENT_V2);
   const [showRacmModal, setShowRacmModal] = useState(false);
   const logEvent = useAuditLog();
@@ -154,6 +155,9 @@ export default function EngagementExecutionV2({ engagementId, onBack, onLaunchWo
             </div>
           ))}
         </div>
+
+        {/* ═══ AI insight roll-up (engagement / portfolio altitude) ═══ */}
+        <EngagementInsightsRollup engagementName={engagement.name} />
 
         {/* ═══ Linked RACM Snapshot ═══ */}
         <div className="bg-white rounded-lg border border-border-light p-4 mb-5 flex items-center justify-between">

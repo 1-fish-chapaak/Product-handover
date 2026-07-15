@@ -42,7 +42,7 @@ function Inner({ onBack }: { onBack?: () => void }) {
             without changing who is signed in, hence the "Viewing as" prefix. */}
         <div className="flex items-center gap-3 shrink-0">
           <NotificationsBell />
-          <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500">Viewing as</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Viewing as</span>
           <RoleSwitcher role={role} onChange={setRole} />
         </div>
       </div>

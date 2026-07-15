@@ -267,7 +267,7 @@ export default function KnowledgeHubView() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-[0.9375rem] font-semibold text-white">Audit with AI</p>
-                        <span className="px-1.5 h-[18px] inline-flex items-center rounded-full bg-fuchsia-400/25 text-fuchsia-100 text-[0.5625rem] font-bold uppercase tracking-[0.1em]">Recommended</span>
+                        <span className="px-1.5 h-[18px] inline-flex items-center rounded-full bg-fuchsia-400/25 text-fuchsia-100 text-[9px] font-bold uppercase tracking-[0.1em]">Recommended</span>
                       </div>
                       <p className="text-[0.75rem] text-white/65 truncate">
                         {connectedDbs} databases connected — Ira can draft engagements, controls & workflows from your live data in one click.

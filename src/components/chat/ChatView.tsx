@@ -5865,7 +5865,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="text-[0.8125rem] font-semibold text-white">One-Click Audit</p>
-                  <span className="px-1.5 h-[16px] inline-flex items-center rounded-full bg-fuchsia-400/25 text-fuchsia-100 text-[0.53125rem] font-bold uppercase tracking-[0.1em]">New</span>
+                  <span className="px-1.5 h-[16px] inline-flex items-center rounded-full bg-fuchsia-400/25 text-fuchsia-100 text-[8.5px] font-bold uppercase tracking-[0.1em]">New</span>
                 </div>
                 <p className="text-[0.6875rem] text-white/65 truncate">Your databases are connected — let Ira draft engagements, controls & workflows for your review.</p>
               </div>

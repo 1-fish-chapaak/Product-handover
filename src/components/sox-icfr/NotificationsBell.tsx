@@ -153,7 +153,7 @@ export default function NotificationsBell() {
           open ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300')}>
         <Bell size={16} />
         {items.length > 0 && (
-          <span className={cn('absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[0.625rem] font-bold text-white inline-flex items-center justify-center tabular-nums',
+          <span className={cn('absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white inline-flex items-center justify-center tabular-nums',
             urgent > 0 ? 'bg-risk-600' : 'bg-brand-600')}>
             {items.length}
           </span>
@@ -166,10 +166,10 @@ export default function NotificationsBell() {
             className="absolute right-0 top-[calc(100%+8px)] z-50 w-[400px] rounded-2xl border border-canvas-border bg-canvas-elevated shadow-[0_20px_50px_-18px_rgba(15,8,30,0.45)] overflow-hidden">
             <div className="px-4 py-3 border-b border-canvas-border flex items-center justify-between">
               <div>
-                <div className="text-[0.8125rem] font-semibold text-ink-900">Notifications</div>
-                <div className="text-[0.6875rem] text-ink-400 mt-0.5">Pending assignment &amp; review · viewing as {role === 'auditor' ? 'Auditor' : 'Risk Owner'}</div>
+                <div className="text-[13px] font-semibold text-ink-900">Notifications</div>
+                <div className="text-[11px] text-ink-400 mt-0.5">Pending assignment &amp; review · viewing as {role === 'auditor' ? 'Auditor' : 'Risk Owner'}</div>
               </div>
-              {urgent > 0 && <span className="text-[0.65625rem] font-bold text-risk-700 bg-risk-50 border border-risk-200 rounded-full px-2 h-5 inline-flex items-center">{urgent} ineffective</span>}
+              {urgent > 0 && <span className="text-[10.5px] font-bold text-risk-700 bg-risk-50 border border-risk-200 rounded-full px-2 h-5 inline-flex items-center">{urgent} ineffective</span>}
             </div>
             <div className="max-h-[420px] overflow-y-auto p-2">
               {items.map(it => {
@@ -179,14 +179,14 @@ export default function NotificationsBell() {
                     className="w-full flex items-start gap-2.5 rounded-xl p-2.5 text-left hover:bg-paper-50 transition-colors cursor-pointer">
                     <span className={cn('w-7 h-7 rounded-lg border inline-flex items-center justify-center shrink-0', meta.cls)}><meta.Icon size={14} /></span>
                     <span className="min-w-0 flex-1">
-                      <span className={cn('block text-[0.75rem] font-semibold leading-snug', it.kind === 'ineffective' ? 'text-risk-700' : 'text-ink-900')}>{it.title}</span>
-                      <span className="block text-[0.6875rem] text-ink-500 mt-0.5 line-clamp-2">{it.detail}</span>
+                      <span className={cn('block text-[12px] font-semibold leading-snug', it.kind === 'ineffective' ? 'text-risk-700' : 'text-ink-900')}>{it.title}</span>
+                      <span className="block text-[11px] text-ink-500 mt-0.5 line-clamp-2">{it.detail}</span>
                     </span>
                   </button>
                 );
               })}
               {items.length === 0 && (
-                <div className="py-10 text-center text-[0.75rem] text-ink-400">
+                <div className="py-10 text-center text-[12px] text-ink-400">
                   <CheckCircle2 size={18} className="mx-auto mb-2 text-compliant-500" /> Nothing pending — all caught up.
                 </div>
               )}

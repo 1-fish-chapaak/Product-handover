@@ -45,7 +45,7 @@ const GRADIENT_STOPS = ['#6A12CD', '#A366F0', '#E947F5', '#4B6FE8'];
  *  Same treatment as the Engagement Library's badge so they read as one. */
 function AiBadge({ compact = false }: { compact?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 h-[18px] rounded-full bg-gradient-to-r from-brand-500 to-fuchsia-500 text-white text-[0.5625rem] font-bold uppercase tracking-[0.08em] shrink-0">
+    <span className="inline-flex items-center gap-1 px-1.5 h-[18px] rounded-full bg-gradient-to-r from-brand-500 to-fuchsia-500 text-white text-[9px] font-bold uppercase tracking-[0.08em] shrink-0">
       <Sparkles size={9} />
       {compact ? 'AI' : 'AI Recommended'}
     </span>
@@ -429,7 +429,7 @@ export default function OneClickAuditModal({ onClose }: { onClose: () => void })
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h2 className="text-[1.0625rem] font-semibold text-ink-900 tracking-tight">One-Click Audit</h2>
-                  <span className="px-1.5 h-[18px] inline-flex items-center rounded-full bg-brand-50 text-brand-700 text-[0.5625rem] font-bold uppercase tracking-[0.1em]">Beta</span>
+                  <span className="px-1.5 h-[18px] inline-flex items-center rounded-full bg-brand-50 text-brand-700 text-[9px] font-bold uppercase tracking-[0.1em]">Beta</span>
                 </div>
                 <p className="text-[0.75rem] text-ink-500 truncate">Ira drafts your audit universe from your connected data — you stay in control.</p>
               </div>

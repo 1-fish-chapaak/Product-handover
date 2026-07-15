@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import SmartTable from '../shared/SmartTable';
 import Orb from '../shared/Orb';
+import AIRecommendsPopover from '../shared/AIRecommendsPopover';
+import { actionableRecs } from '../../data/layeredInsights';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
@@ -327,9 +329,21 @@ export default function ControlLibraryView({ processFilter }: ControlLibraryProp
             {
               key: 'name',
               label: 'Control Name',
-              render: (item) => (
-                <div className="text-text font-medium text-[0.75rem]">{String(item.name)}</div>
-              ),
+              render: (item) => {
+                const ctrl = item as unknown as ControlRow;
+                const recs = actionableRecs({ layer: 'control', subjectId: String(ctrl.controlId ?? ctrl.id), subjectLabel: String(ctrl.name ?? ctrl.description ?? ''), status: '', isKey: ctrl.classification === 'Key' });
+                return (
+                  <div className="flex items-center gap-2">
+                    <span className="text-text font-medium text-[0.75rem]">{String(item.name)}</span>
+                    {recs.length > 0 && (
+                      // Stop the click bubbling to the row (which would open the detail view).
+                      <span onClick={(e) => e.stopPropagation()} className="inline-flex shrink-0">
+                        <AIRecommendsPopover recs={recs} subjectLabel={String(ctrl.controlId ?? ctrl.id)} subjectSub={String(ctrl.name ?? '')} />
+                      </span>
+                    )}
+                  </div>
+                );
+              },
             },
             {
               key: 'businessProcess',

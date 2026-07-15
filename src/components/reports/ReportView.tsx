@@ -778,7 +778,7 @@ function CommentDrawer({
                                   {files.length > 0 && (
                                     <div className="mt-2.5 flex flex-wrap gap-1.5">
                                       {files.map((file) => (
-                                        <span key={file} className="inline-flex items-center max-w-full h-7 bg-canvas border border-canvas-border rounded-sm overflow-hidden text-[0.6875rem] font-medium text-ink-700">
+                                        <span key={file} className="inline-flex items-center max-w-full h-7 bg-canvas border border-canvas-border rounded-[7px] overflow-hidden text-[0.6875rem] font-medium text-ink-700">
                                           <button
                                             onClick={() => openAttachment(file)}
                                             title={`Open ${file} in a new tab`}
@@ -1083,7 +1083,7 @@ function ReportActivityLogDrawer({
                             {files.length > 0 && (
                               <div className="mt-2.5 flex flex-wrap gap-1.5">
                                 {files.map((file) => (
-                                  <span key={file} className="inline-flex items-center max-w-full h-7 bg-canvas border border-canvas-border rounded-sm overflow-hidden text-[0.6875rem] font-medium text-ink-700">
+                                  <span key={file} className="inline-flex items-center max-w-full h-7 bg-canvas border border-canvas-border rounded-[7px] overflow-hidden text-[0.6875rem] font-medium text-ink-700">
                                     <button
                                       onClick={() => openAttachment(file)}
                                       title={`Open ${file} in a new tab`}

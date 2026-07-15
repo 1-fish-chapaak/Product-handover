@@ -390,11 +390,11 @@ export function PlanFlowGraph({
                   <Table2 size={11} />
                 </span>
                 <span className="min-w-0 flex-1 text-left">
-                  <span className="block text-[0.59375rem] font-bold uppercase tracking-wider text-brand-700/80 leading-none">Output</span>
-                  <span className="block text-[0.75rem] font-semibold text-ink-900 leading-tight truncate mt-0.5">{outputLabel}</span>
+                  <span className="block text-[9.5px] font-bold uppercase tracking-wider text-brand-700/80 leading-none">Output</span>
+                  <span className="block text-[12px] font-semibold text-ink-900 leading-tight truncate mt-0.5">{outputLabel}</span>
                 </span>
                 {finalRows != null && (
-                  <span className="shrink-0 inline-flex items-center rounded-md border border-brand-100 bg-canvas-elevated px-1.5 py-0.5 text-[0.625rem] font-semibold text-brand-700 tabular-nums">
+                  <span className="shrink-0 inline-flex items-center rounded-md border border-brand-100 bg-canvas-elevated px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 tabular-nums">
                     {fmt(finalRows)} risks
                   </span>
                 )}
@@ -426,14 +426,14 @@ export function PlanFlowGraph({
                           produced. There is no "re-rate by another basis"
                           switch — the user already answered which rule to use. */}
                       {outNote && (
-                        <p className="text-left text-[0.65625rem] text-ink-500 leading-snug pb-1.5">{outNote}</p>
+                        <p className="text-left text-[10.5px] text-ink-500 leading-snug pb-1.5">{outNote}</p>
                       )}
                       <ul className="space-y-1.5">
                         {outList!.map((r, i) => (
                           <li key={r.id} className="flex items-baseline gap-2">
-                            <span className="shrink-0 w-4 text-right text-[0.65625rem] tabular-nums text-ink-400" aria-hidden>{i + 1}.</span>
-                            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[0.59375rem] font-bold uppercase tracking-wide ${LEVEL_TONE[r.level]}`}>{r.level}</span>
-                            <span className="text-[0.71875rem] text-ink-800 leading-snug text-left">
+                            <span className="shrink-0 w-4 text-right text-[10.5px] tabular-nums text-ink-400" aria-hidden>{i + 1}.</span>
+                            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide ${LEVEL_TONE[r.level]}`}>{r.level}</span>
+                            <span className="text-[11.5px] text-ink-800 leading-snug text-left">
                               {r.title}
                               <span className="text-ink-400"> · {r.control}</span>
                             </span>
@@ -544,7 +544,7 @@ export default function PlanFlowDiagram({
             className="overflow-hidden border-t border-canvas-border"
           >
             <div className="px-4 pt-3 pb-4">
-              <p className="text-[0.71875rem] text-ink-500 leading-snug mb-3">{FLOW_HINT}</p>
+              <p className="text-[11.5px] text-ink-500 leading-snug mb-3">{FLOW_HINT}</p>
               <PlanFlowGraph
                 steps={steps} outputLabel={outputLabel} outputItems={outputItems} outputNote={outputNote}
                 building={building} gateAfterId={gateAfterId} gateOpen={gateOpen}

@@ -137,12 +137,12 @@ export default function Racm() {
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.pdf,.docx" className="hidden" onChange={onPickFile} aria-label="Upload RACM or SOP document" />
           <button onClick={() => fileRef.current?.click()} disabled={!!importing}
             title="Upload a RACM workbook or SOP — rows and test attributes are read from the document"
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 disabled:opacity-60 transition-colors cursor-pointer">
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 disabled:opacity-60 transition-colors cursor-pointer">
             {importing ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />} {importing ? 'Importing…' : 'Upload RACM / SOP'}
           </button>
           <button onClick={() => setBulkTestIds(sel.size ? Array.from(sel) : filtered.map(c => c.id))}
             title={sel.size ? `Bulk test the ${sel.size} selected rows` : 'Bulk test all rows in view'}
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
             <FlaskConical size={14} /> Bulk test{sel.size > 0 && <span className="tabular-nums text-brand-700">({sel.size})</span>}
           </button>
           <button onClick={() => openRacmEditor({ name: `${eng.entity} — Engagement RACM` })}
@@ -155,9 +155,9 @@ export default function Racm() {
       {/* source documents pinned to the matrix */}
       {racmDocs.length > 0 && (
         <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-          <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Source documents</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Source documents</span>
           {racmDocs.map(d => (
-            <span key={d.id} className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-medium text-ink-700">
+            <span key={d.id} className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[11.5px] font-medium text-ink-700">
               <Paperclip size={11} className="text-ink-400" /> {d.name}
               <span className="text-ink-400">· {d.uploadedAt}</span>
             </span>
@@ -233,11 +233,11 @@ export default function Racm() {
                       <td className="tight">
                         <div className="flex items-center gap-1.5">
                           {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
-                          <span className="font-semibold text-ink-900 text-[0.78125rem] truncate max-w-[340px]">{c.description}</span>
+                          <span className="font-semibold text-ink-900 text-[12.5px] truncate max-w-[340px]">{c.description}</span>
                           {/* the auditor's verdict — kept loud so the risk owner can't miss it */}
                           {ineffective && <Pill tone="risk">Ineffective</Pill>}
                         </div>
-                        <div className="text-[0.6875rem] text-ink-400 mt-0.5">
+                        <div className="text-[11px] text-ink-400 mt-0.5">
                           {c.id} · {c.frequency} ·{' '}
                           {(() => { const dd = testDueDisplay(c); return <span className={dd.cls}>{dd.label}</span>; })()}{' '}
                           · {c.owner} · {c.assertions[0]}{c.assertions.length > 1 ? ` +${c.assertions.length - 1}` : ''}
@@ -279,8 +279,8 @@ export default function Racm() {
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
           <span className="text-[0.78125rem] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
-          <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>
-          {isAuditor && <button onClick={() => { approveRacmRows(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve rows</button>}
+          <button onClick={() => { setBulkTestIds(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FlaskConical size={14} /> Test controls</button>
+          {isAuditor && <button onClick={() => { approveRacmRows(Array.from(sel)); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve rows</button>}
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
       )}

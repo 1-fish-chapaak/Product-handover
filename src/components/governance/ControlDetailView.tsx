@@ -8,6 +8,7 @@ import {
   Settings, Eye, Repeat, Share2,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
+import InsightGenerator from '../shared/InsightGenerator';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
@@ -325,6 +326,18 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
             {/* ═══ CONTROL DEFINITION ═══ */}
             {activeTab === 'definition' && (
               <div className="space-y-6">
+                {/* AI insight — the Layer-2 deep card, cost-gated. Same journey as the
+                    engagement Controls tab: idle → Generate → full reasoning + fix.
+                    Not passed a test result (the library holds definitions, not runs),
+                    so it reads forward-looking; pricing-thread controls surface the
+                    confirmed root-cause story. */}
+                <InsightGenerator
+                  layer="control"
+                  subjectId={control.controlId}
+                  subjectLabel={control.name}
+                  isKey={control.classification === 'Key'}
+                />
+
                 {/* Description & Objective */}
                 <div className="grid grid-cols-2 gap-6">
                   <div className="glass-card p-5">

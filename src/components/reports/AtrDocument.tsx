@@ -242,7 +242,7 @@ export default function AtrDocument({
                   onClick={() => confirmDelete('Delete insight?', `This removes “${ins.title || 'this insight'}” from Key Insights & Recommendations. You can undo by cancelling before you save.`, () => removeInsight(i))}
                   title="Delete insight"
                   aria-label="Delete insight"
-                  className="shrink-0 self-start w-7 h-7 rounded-sm inline-flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer print:hidden"
+                  className="shrink-0 self-start w-7 h-7 rounded-[7px] inline-flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer print:hidden"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -287,7 +287,7 @@ export default function AtrDocument({
 
   return (
     <>
-    <article className={`report-printable ${maxWidthClass} mx-auto bg-canvas-elevated border border-canvas-border rounded-lg overflow-hidden`}>
+    <article className={`report-printable ${maxWidthClass} mx-auto bg-canvas-elevated border border-canvas-border rounded-[12px] overflow-hidden`}>
       {editable && <style>{`.atr-ed:empty:before{content:attr(data-ph);color:#C2B9CB;}`}</style>}
 
       {/* Purple letterhead — the shared ReportBrandBanner so the ATR matches
@@ -354,7 +354,7 @@ export default function AtrDocument({
                 onClick={() => confirmDelete(`Delete ${ATR_SECTION_LABEL[key]}?`, `This removes the “${ATR_SECTION_LABEL[key]}” section from this report. You can undo by cancelling before you save.`, () => onDeleteSection(key))}
                 title={`Delete ${ATR_SECTION_LABEL[key]}`}
                 aria-label={`Delete ${ATR_SECTION_LABEL[key]} section`}
-                className="absolute right-9 top-6 z-10 inline-flex items-center gap-1.5 h-7 pl-2 pr-2.5 rounded-sm border border-risk-200 bg-white text-risk-700 text-[0.6875rem] font-semibold hover:bg-risk-50 hover:border-risk-300 transition-colors cursor-pointer print:hidden shadow-sm"
+                className="absolute right-9 top-6 z-10 inline-flex items-center gap-1.5 h-7 pl-2 pr-2.5 rounded-[7px] border border-risk-200 bg-white text-risk-700 text-[0.6875rem] font-semibold hover:bg-risk-50 hover:border-risk-300 transition-colors cursor-pointer print:hidden shadow-sm"
               >
                 <Trash2 size={13} /> Delete
               </button>
@@ -407,7 +407,7 @@ function ObservationCard({ index, obs, editable, onChange, onDelete, actions }: 
               onClick={onDelete}
               title="Delete observation"
               aria-label="Delete observation"
-              className="shrink-0 inline-flex items-center gap-1.5 h-7 pl-2 pr-2.5 rounded-sm border border-risk-200 bg-white text-risk-700 text-[0.6875rem] font-semibold hover:bg-risk-50 hover:border-risk-300 transition-colors cursor-pointer print:hidden"
+              className="shrink-0 inline-flex items-center gap-1.5 h-7 pl-2 pr-2.5 rounded-[7px] border border-risk-200 bg-white text-risk-700 text-[0.6875rem] font-semibold hover:bg-risk-50 hover:border-risk-300 transition-colors cursor-pointer print:hidden"
             >
               <Trash2 size={13} /> Delete
             </button>

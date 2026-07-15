@@ -23,6 +23,9 @@ import { OWNER_NAMES, PEOPLE } from '../../data/grc-domain';
 import { useEngagementWorkspace } from './engagementWorkspace';
 import { useCan } from '../../context/CurrentUserContext';
 import ControlTestJourney from './ControlTestJourney';
+import InsightGenerator from '../shared/InsightGenerator';
+import AIRecommendsPopover from '../shared/AIRecommendsPopover';
+import { actionableRecs } from '../../data/layeredInsights';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -559,6 +562,7 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
         {filteredControls.map(c => {
           const status = controlStatuses.get(c.controlId) ?? 'Not tested';
           const expanded = expandedControlIds.has(c.controlId);
+          const aiRecs = actionableRecs({ layer: 'control', subjectId: c.controlId, subjectLabel: c.description, status, isKey: c.isKey });
           return (
             <div
               key={c.controlId}
@@ -577,6 +581,11 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                   </span>
                 )}
                 {c.isKey && <span className="px-1.5 h-5 rounded text-[0.625rem] font-bold uppercase tracking-wide bg-brand-50 text-brand-700 border border-brand-100 inline-flex items-center shrink-0">Key</span>}
+                {aiRecs.length > 0 && (
+                  <span onClick={(e) => e.stopPropagation()} className="shrink-0 inline-flex">
+                    <AIRecommendsPopover recs={aiRecs} subjectLabel={c.controlId} subjectSub={c.description} />
+                  </span>
+                )}
                 <span className={`px-2 h-6 rounded-full text-[0.6875rem] font-semibold border inline-flex items-center gap-1.5 shrink-0 ${CONTROL_STATUS_CLS[status]}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${CONTROL_STATUS_DOT[status]}`} />{status}
                 </span>
@@ -593,6 +602,13 @@ export default function ControlsTab({ engagement, onCreateWorkflow, onTestEviden
                     className="overflow-hidden border-t border-canvas-border bg-canvas/40"
                   >
                     <div className="p-4 space-y-4">
+                      <InsightGenerator
+                        layer="control"
+                        subjectId={c.controlId}
+                        subjectLabel={c.description}
+                        status={status}
+                        isKey={c.isKey}
+                      />
                       <div className="flex items-center justify-between gap-3">
                         <h4 className="text-[0.75rem] font-bold uppercase tracking-wider text-ink-600">Attributes</h4>
                         <Gated permission="racm_edit" mode="disable" title="You don't have permission to test controls">

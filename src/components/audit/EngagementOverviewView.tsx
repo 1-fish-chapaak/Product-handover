@@ -13,6 +13,9 @@ import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
+import InsightGenerator from '../shared/InsightGenerator';
+import AIRecommendsPopover from '../shared/AIRecommendsPopover';
+import { actionableWorkflowRecs } from '../../data/layeredInsights';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import {
   ENGAGEMENTS,
@@ -1450,6 +1453,15 @@ export function HealthOverviewTab({
 
   return (
     <div className="space-y-5">
+      {/* ─── AI insight · engagement altitude (generate-on-demand) ─── */}
+      <InsightGenerator
+        layer="engagement"
+        subjectId={eng.id}
+        subjectLabel={eng.name}
+        status={eng.status}
+        flagship={/p2p|procure|vendor|invoice|pricing|chargeback/i.test(`${eng.name} ${eng.process ?? ''} ${eng.subtype ?? ''}`)}
+      />
+
       {/* ─── KPI strip ─── */}
       <div className="grid grid-cols-4 gap-3">
         <KpiCard
@@ -2223,6 +2235,7 @@ function WorkflowsBySubProcess({
   }, [allWorkflows, query, sortBy, openByWorkflow]);
 
   const groups = useMemo(() => groupBySubProcess(visibleWorkflows), [visibleWorkflows]);
+
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [grouped, setGrouped] = useState(false); // flat list by default; grouping is opt-in
   const [bulkMode, setBulkMode] = useState(false);
@@ -2466,6 +2479,7 @@ function WorkflowRow({
 }) {
   const eff = wf.totalFires > 0 ? Math.round((wf.truePositives / wf.totalFires) * 100) : 0;
   const tier = effectivenessTier(eff);
+  const wfRecs = actionableWorkflowRecs({ subjectLabel: wf.name, effectivePct: eff, openExceptions: openCount, cadence: wf.cadence.kind === 'Ad-hoc' ? 'Ad-hoc' : wf.cadence.label, status: wf.status, category: wf.type });
   const handleRowClick = () => {
     if (bulkMode) onToggleSelect();
     else onOpen();
@@ -2489,8 +2503,13 @@ function WorkflowRow({
       <div className="flex-1 min-w-0">
         {/* Title line */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[0.875rem] font-semibold text-text leading-snug">{wf.name}</span>
-          <span className="px-1.5 h-[18px] rounded text-[0.625rem] font-bold bg-surface-2 text-text-secondary font-mono inline-flex items-center">{wf.code}</span>
+          <span className="text-[14px] font-semibold text-text leading-snug">{wf.name}</span>
+          <span className="px-1.5 h-[18px] rounded text-[10px] font-bold bg-surface-2 text-text-secondary font-mono inline-flex items-center">{wf.code}</span>
+          {wfRecs.length > 0 && (
+            <span onClick={(e) => e.stopPropagation()} className="shrink-0 inline-flex">
+              <AIRecommendsPopover recs={wfRecs} subjectLabel={wf.code} subjectSub={wf.name} />
+            </span>
+          )}
         </div>
         {/* Meta line — generous spacing, input badges grouped here */}
         <div className="text-[0.71875rem] text-text-muted mt-2 flex items-center gap-x-2.5 gap-y-1.5 flex-wrap">
