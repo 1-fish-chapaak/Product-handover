@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
-  ArrowRight, CheckCircle2, ChevronDown, Database, FlaskConical, History, ListChecks, Sparkles, Workflow, XCircle,
+  ArrowRight, Calendar, Check, CheckCircle2, ChevronDown, Database, FlaskConical, History, ListChecks, SlidersHorizontal, Sparkles, Workflow, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { cn } from '../../lib/cn';
@@ -21,12 +22,64 @@ const KIND_META: Record<RunKind, { label: string; Icon: typeof FlaskConical; chi
 
 type FilterId = 'all' | RunKind;
 const FILTERS: { id: FilterId; label: string }[] = [
-  { id: 'all', label: 'All' },
+  { id: 'all', label: 'All types' },
   { id: 'bulk-test', label: 'Bulk tests' },
   { id: 'control-test', label: 'Control tests' },
   { id: 'workflow-run', label: 'Workflow runs' },
   { id: 'ai-validation', label: 'AI validations' },
 ];
+
+type DateId = 'any' | 'today' | '7d' | '30d';
+const DATES: { id: DateId; label: string; days: number | null }[] = [
+  { id: 'any', label: 'All time', days: null },
+  { id: 'today', label: 'Today', days: 0 },
+  { id: '7d', label: 'Last 7 days', days: 7 },
+  { id: '30d', label: 'Last 30 days', days: 30 },
+];
+// runs carry relative timestamps ('just now', '3d ago', '2w ago') — read them as days-ago
+const daysAgo = (at: string): number => {
+  const m = at.match(/(\d+)\s*([dw])/i);
+  return m ? parseInt(m[1]!, 10) * (m[2]!.toLowerCase() === 'w' ? 7 : 1) : 0;
+};
+
+/** One compact filter button + popover menu — the register's dropdown idiom. */
+function FilterMenu<T extends string>({ Icon, ariaLabel, value, options, isDefault, onPick, open, onToggle }: {
+  Icon: typeof Calendar; ariaLabel: string; value: T;
+  options: { id: T; label: string; count?: number }[];
+  isDefault: boolean; onPick: (id: T) => void; open: boolean; onToggle: () => void;
+}) {
+  const current = options.find(o => o.id === value)!;
+  return (
+    <div className="relative">
+      <button onClick={onToggle} aria-label={ariaLabel}
+        className={cn('h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer',
+          isDefault ? 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-ink-300' : 'border-brand-200 bg-brand-50 text-brand-700')}>
+        <Icon size={13} className={isDefault ? 'text-ink-400' : 'text-brand-600'} />
+        {current.label}
+        {current.count !== undefined && <span className="tabular-nums opacity-60">{current.count}</span>}
+        <ChevronDown size={12} className="text-ink-400" />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={onToggle} />
+            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+              className="absolute left-0 mt-1.5 z-20 w-52 rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_16px_40px_-16px_rgba(15,8,30,.4)] p-1">
+              {options.map(o => (
+                <button key={o.id} onClick={() => onPick(o.id)}
+                  className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-[12.5px] hover:bg-paper-50 cursor-pointer flex items-center gap-2', o.id === value ? 'text-brand-700 font-semibold' : 'text-ink-700')}>
+                  {o.id === value ? <Check size={12} /> : <span className="w-3" />}
+                  <span className="flex-1">{o.label}</span>
+                  {o.count !== undefined && <span className="text-[11px] text-ink-400 tabular-nums">{o.count}</span>}
+                </button>
+              ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 function OutcomeChips({ run }: { run: RunRecord }) {
   const eff = run.controls.filter(c => c.outcome === 'Effective').length;
@@ -42,25 +95,39 @@ function OutcomeChips({ run }: { run: RunRecord }) {
 export default function RunsView() {
   const { eng, openControl } = useIcfr();
   const [filter, setFilter] = useState<FilterId>('all');
+  const [date, setDate] = useState<DateId>('any');
+  const [menu, setMenu] = useState<'kind' | 'date' | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const counts = useMemo(() => {
-    const c: Record<FilterId, number> = { all: eng.runs.length, 'bulk-test': 0, 'control-test': 0, 'workflow-run': 0, 'ai-validation': 0 };
-    eng.runs.forEach(r => { c[r.kind] += 1; });
-    return c;
-  }, [eng.runs]);
+  const dateWindow = DATES.find(d => d.id === date)!;
+  const inWindow = useMemo(
+    () => eng.runs.filter(r => dateWindow.days === null || daysAgo(r.at) <= dateWindow.days),
+    [eng.runs, dateWindow.days],
+  );
 
-  const runs = useMemo(() => (filter === 'all' ? eng.runs : eng.runs.filter(r => r.kind === filter)), [eng.runs, filter]);
+  // kind counts follow the date window, so the menu reads as what you'll get
+  const counts = useMemo(() => {
+    const c: Record<FilterId, number> = { all: inWindow.length, 'bulk-test': 0, 'control-test': 0, 'workflow-run': 0, 'ai-validation': 0 };
+    inWindow.forEach(r => { c[r.kind] += 1; });
+    return c;
+  }, [inWindow]);
+
+  const runs = useMemo(() => (filter === 'all' ? inWindow : inWindow.filter(r => r.kind === filter)), [inWindow, filter]);
 
   return (
     <div>
-      {/* kind filters */}
+      {/* filters — one type menu, one date window */}
       <div className="flex items-center gap-1.5 mb-4 flex-wrap">
-        {FILTERS.map(f => (
-          <button key={f.id} onClick={() => setFilter(f.id)} className={cn('view-chip', filter === f.id && 'on')}>
-            {f.label} <span className="tabular-nums opacity-60">{counts[f.id]}</span>
-          </button>
-        ))}
+        <FilterMenu Icon={SlidersHorizontal} ariaLabel="Filter by run type" value={filter}
+          options={FILTERS.map(f => ({ id: f.id, label: f.label, count: counts[f.id] }))}
+          isDefault={filter === 'all'} open={menu === 'kind'}
+          onToggle={() => setMenu(m => (m === 'kind' ? null : 'kind'))}
+          onPick={id => { setFilter(id); setMenu(null); }} />
+        <FilterMenu Icon={Calendar} ariaLabel="Filter by date" value={date}
+          options={DATES.map(d => ({ id: d.id, label: d.label }))}
+          isDefault={date === 'any'} open={menu === 'date'}
+          onToggle={() => setMenu(m => (m === 'date' ? null : 'date'))}
+          onPick={id => { setDate(id); setMenu(null); }} />
       </div>
 
       {/* the registry */}
@@ -115,7 +182,9 @@ export default function RunsView() {
         {runs.length === 0 && (
           <div className="text-center py-16 text-ink-400 text-[13px] rounded-2xl border border-dashed border-canvas-border">
             <History size={20} className="mx-auto mb-2 opacity-40" />
-            No runs here yet — test a control, or bulk test from the RACM or Control library, and the run lands in this registry.
+            {eng.runs.length === 0
+              ? 'No runs here yet — test a control, or bulk test from the RACM or Control library, and the run lands in this registry.'
+              : 'No runs match these filters — widen the type or the date window.'}
           </div>
         )}
       </div>
