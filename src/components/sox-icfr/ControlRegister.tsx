@@ -118,22 +118,30 @@ export default function ControlRegister() {
   }), [scoped, eng.tasks, eng.reviewNotes]);
   const processes = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.process)))], [scoped]);
 
-  const filtered = useMemo(() => {
+  const matchesView = (c: Control, v: SavedView): boolean => {
+    if (v === 'due') return isTestDueNow(c);
+    if (v === 'court') return courtFor(c, eng.tasks, eng.reviewNotes) === role;
+    if (v === 'design') return trackResult(c.design) === 'Not tested';
+    if (v === 'operating') return trackResult(c.operating) === 'Not tested';
+    if (v === 'exceptions') return controlConclusion(c) === 'Ineffective';
+    if (v === 'key') return c.isKey;
+    return true;
+  };
+  // search + process + nature first — the Status dropdown's counts read from this base
+  const base = useMemo(() => {
     const term = q.trim().toLowerCase();
     return scoped.filter(c => {
       if (process !== 'All' && c.process !== process) return false;
       if (nature !== 'All' && c.nature !== nature) return false;
       if (term && !(`${c.id} ${c.wpRef} ${c.description} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
-      const concl = controlConclusion(c);
-      if (savedView === 'due' && !isTestDueNow(c)) return false;
-      if (savedView === 'court' && courtFor(c, eng.tasks, eng.reviewNotes) !== role) return false;
-      if (savedView === 'design' && trackResult(c.design) !== 'Not tested') return false;
-      if (savedView === 'operating' && trackResult(c.operating) !== 'Not tested') return false;
-      if (savedView === 'exceptions' && concl !== 'Ineffective') return false;
-      if (savedView === 'key' && !c.isKey) return false;
       return true;
     });
-  }, [scoped, eng.tasks, eng.reviewNotes, q, process, nature, savedView, role]);
+  }, [scoped, q, process, nature]);
+  const filtered = useMemo(() => base.filter(c => matchesView(c, savedView)), [base, savedView, eng.tasks, eng.reviewNotes, role]);
+  const viewCounts = useMemo(
+    () => Object.fromEntries(VIEWS.map(v => [v.id, base.filter(c => matchesView(c, v.id)).length])) as Record<SavedView, number>,
+    [base, eng.tasks, eng.reviewNotes, role],
+  );
 
   const groups = useMemo(() => {
     if (!grouped) return [{ key: '', rows: filtered }];
@@ -172,21 +180,17 @@ export default function ControlRegister() {
         </div>
       </div>
 
-      {/* saved views */}
-      <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1">
-        {VIEWS.map(v => (
-          <button key={v.id} onClick={() => setSavedView(v.id)} className={cn('view-chip', savedView === v.id && 'on')}>
-            {v.id === 'court' && <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />}{v.label}
-            <span className="tabular-nums opacity-60">{v.id === savedView ? filtered.length : ''}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* toolbar */}
+      {/* toolbar — Status folds the saved views into one filter */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls, owners, W/P…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+        </div>
+        <div className={cn('inline-flex items-center gap-1.5 h-9 px-2.5 rounded-lg border bg-canvas-elevated', savedView !== 'all' ? 'border-brand-300' : 'border-canvas-border')}>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Status</span>
+          <select value={savedView} onChange={e => setSavedView(e.target.value as SavedView)} aria-label="Filter by status" className="bg-transparent text-[12.5px] font-semibold text-ink-700 focus:outline-none cursor-pointer">
+            {VIEWS.map(v => <option key={v.id} value={v.id}>{v.label} ({viewCounts[v.id]})</option>)}
+          </select>
         </div>
         <div className="inline-flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated">
           <ListFilter size={13} className="text-ink-400" />
