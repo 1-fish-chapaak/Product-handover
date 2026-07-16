@@ -582,11 +582,12 @@ test('the page dates its presets and puts the top-3 share on Overview', async ({
   /* The finding clicks through to its evidence on the PEOPLE tab, where the
      concentration chart lives alongside the member table.
 
-     The chart is no longer a Lorenz curve (that was retired). It is a split bar:
-     "Busiest 3 · 42%" against "Everyone else (9) · 58%", over the ranked members.
-     The point it makes is the one a healthy-looking total hides — three people
-     doing most of the work — and it is the one finding on this page an admin
-     cannot assemble from anything else. */
+     The chart is neither the retired Lorenz curve nor the split bar that
+     replaced it. It is one ranked bar chart: every active member, longest first,
+     grouped under "Busiest 3" and "Everyone else (N)", the busiest three
+     accented. The point it makes is the one a healthy-looking total hides, three
+     people doing most of the work, and it is the one finding on this page an
+     admin cannot assemble from anything else. */
   // Read the finding's number BEFORE clicking: the click leaves Overview, and the
   // card goes with it.
   const finding = await topThree.textContent();
@@ -595,10 +596,12 @@ test('the page dates its presets and puts the top-3 share on Overview', async ({
   await topThree.click();
   await page.waitForTimeout(900);
   await expect(page.getByRole('button', { name: 'Export CSV' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: /leans on its busiest people/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /relies on its busiest people/ })).toBeVisible();
 
-  // The chart and the finding are the same number, shown two ways, so they can
-  // never disagree: the split bar's "Busiest 3 · N%" is the very percentage the
-  // Overview card printed.
-  await expect(page.getByText(new RegExp(`Busiest 3 · ${pct}%`))).toBeVisible();
+  // The card's lede and the Overview finding are the same number, so they can
+  // never disagree. The share is printed once, in the lede: the chart below it
+  // shows the shape (three accented bars over the rest), it does not re-print
+  // the percentage.
+  await expect(page.getByText(new RegExp(`The busiest 3 of \\d+ active members do ${pct}% of the work`))).toBeVisible();
+  await expect(page.getByText('Everyone else (', { exact: false })).toBeVisible();
 });

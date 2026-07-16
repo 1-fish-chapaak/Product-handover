@@ -37,7 +37,7 @@
  * those events across the grid.
  */
 
-import type { AdminUser, AuditLog } from '../context/AdminDataContext';
+import type { AdminUser, AuditLog, ExportFormat } from '../context/AdminDataContext';
 import { GENERATED_REPORTS, CHAT_HISTORY } from './mockData';
 import { ATR_LIBRARY } from './atrLibrary';
 import { CONCIERGE_TOOLS } from './conciergeTools';
@@ -70,6 +70,74 @@ export const USAGE_MODULES = [
   'Other',
 ] as const;
 export type UsageModule = (typeof USAGE_MODULES)[number];
+
+/**
+ * The KINDS of work, and which areas make up each. The Overview's ring plots
+ * these, not the thirteen areas underneath.
+ *
+ * WHY THIS EXISTS. An audit lead does not arrive asking "how many actions landed
+ * in Process Hub". They arrive asking "is my team spending its time on the audit,
+ * or on overhead". Thirteen areas cannot answer that: the busiest is 15%, so the
+ * ring came out six near-equal arcs plus a 37% grey "7 more areas" remainder —
+ * the biggest mark on the chart was the one thing nobody can act on, and no
+ * rollup setting fixed it. You need ten named arcs before the remainder stops
+ * dominating, and ten arcs is the pinwheel the rollup exists to prevent. The
+ * fault was never the ring. It was asking a part-to-whole chart to carry a
+ * thirteen-way split with no dominant part.
+ *
+ * Grouped, the same 528 actions become 50 / 21 / 12 / 9 / 8: one clear lead, a
+ * real descent, every arc named, and no remainder at all. That is a shape worth
+ * drawing, and it answers the question actually being asked.
+ *
+ * THE JUDGEMENT CALLS, so the next person can argue with them rather than guess:
+ *   · Workflows sits in Audit work. A workflow run executes audit procedures; it
+ *     is the audit being done, just automated.
+ *   · Knowledge Hub stands alone rather than joining Audit work. It is the firm's
+ *     methodology library — consulted during the audit, but reading the manual is
+ *     not fieldwork, and folding it in would flatter the Audit work number.
+ *   · Admin stands alone because it is the overhead the lead is testing FOR. It
+ *     must never hide inside another kind.
+ *
+ * Order here is the tie-break only; the ring and the list both rank by size.
+ */
+export const USAGE_FAMILIES = [
+  {
+    name: 'Audit work',
+    modules: ['Risk & Controls', 'Engagements', 'Exceptions', 'Working Papers', 'Audit Planning', 'Process Hub', 'Workflows'],
+  },
+  /* "Reporting", not "Reports and dashboards": the long form truncated to
+     "Reports and dashbo…" in the list, and the row already names Reports and
+     Dashboards underneath it. */
+  { name: 'Reporting', modules: ['Reports', 'Dashboards'] },
+  { name: 'IRA help', modules: ['Ask IRA', 'AI Concierge'] },
+  { name: 'Admin', modules: ['Admin'] },
+  { name: 'Knowledge Hub', modules: ['Knowledge Hub'] },
+  { name: 'Other', modules: ['Other'] },
+] as const satisfies readonly { name: string; modules: readonly UsageModule[] }[];
+
+export type UsageFamily = (typeof USAGE_FAMILIES)[number]['name'];
+
+/** Which kind of work an area belongs to. */
+export const MODULE_FAMILY = Object.fromEntries(
+  USAGE_FAMILIES.flatMap(f => f.modules.map(m => [m, f.name])),
+) as Record<UsageModule, UsageFamily>;
+
+/**
+ * Every area is claimed by exactly one kind, checked at compile time. Add an area
+ * to USAGE_MODULES without filing it above and this line stops compiling, which is
+ * the point: an unfiled area would silently vanish from the ring rather than show
+ * up wrong.
+ *
+ * It has to read the LITERAL module names out of USAGE_FAMILIES. Asserting
+ * `MODULE_FAMILY` against `Record<UsageModule, UsageFamily>` looks like the same
+ * check and is worth nothing, because the `as` cast on Object.fromEntries already
+ * asserts that type into being — the assertion then only proves the cast happened.
+ * Verified by deleting a family and watching this fail.
+ */
+type FiledModule = (typeof USAGE_FAMILIES)[number]['modules'][number];
+type UnfiledModules = Exclude<UsageModule, FiledModule>;
+const _everyModuleIsFiled: UnfiledModules extends never ? true : ['unfiled areas:', UnfiledModules] = true;
+void _everyModuleIsFiled;
 
 /**
  * Every module string the platform actually writes, mapped to its bucket.
@@ -166,6 +234,11 @@ export interface UsageEntry {
   status: AuditLog['status'];
   /** The workspace the action happened in (Workspace.id). */
   workspaceId: string;
+  /** Export events: the artifact's name and format as the logger stated them.
+   *  Absent on an Export means the logger didn't declare them — the download
+   *  feed says so rather than inventing a format. */
+  artifact?: string;
+  format?: ExportFormat;
   /** Produced by this session, rather than seeded. Not the same thing as
    *  "day-offset 0": the anchor day is seeded history, and calling those events
    *  "Today" would be a lie — the page is as of the anchor, not wall-clock. */
@@ -377,6 +450,7 @@ export function usageDaysWithLive(logs: AuditLog[]): UsageDay[] {
       module, hour: hourOf(l.timestamp), description: l.description,
       status: l.status,
       workspaceId: l.workspaceId,
+      artifact: l.artifact, format: l.format,
       live: key >= today,
     });
     day.actions += 1;
@@ -634,17 +708,25 @@ export function recentDownloads(days: UsageDay[], limit = 6): DownloadEvent[] {
     .slice(0, limit);
 }
 
-/** Real format mix across the window's Export events. */
-export function downloadFormatSplit(days: UsageDay[]): { format: DownloadFormat; count: number }[] {
-  const counts = new Map<DownloadFormat, number>();
+/** What was downloaded, by area, across the window's Export events.
+ *
+ * This used to split by file format — PDF 25, XLSX 11, CSV 9. Nobody asks which
+ * file extension leads: the format is a property of the click, not of the work.
+ * The question an audit lead actually has is *what* is leaving the platform, so
+ * the split is by the area each export came out of: reports, workflow results,
+ * working papers, RACM matrices. Each Export event already carries its bucket
+ * (UsageEntry.module), the same vocabulary the Areas tab uses, so a reader who
+ * sees "Workflows 11" here can go find those 11 there. The per-file format is
+ * still on each row of the feed, where it describes one real file. */
+export function downloadAreaSplit(days: UsageDay[]): { area: UsageModule; count: number }[] {
+  const counts = new Map<UsageModule, number>();
   days.forEach(d => d.entries.forEach(e => {
     if (e.action !== 'Export') return;
-    const { format } = parseExportLog(e.description, e.entity);
-    counts.set(format, (counts.get(format) ?? 0) + 1);
+    counts.set(e.module, (counts.get(e.module) ?? 0) + 1);
   }));
   return [...counts.entries()]
-    .map(([format, count]) => ({ format, count }))
-    .sort((a, b) => b.count - a.count);
+    .map(([area, count]) => ({ area, count }))
+    .sort((a, b) => b.count - a.count || a.area.localeCompare(b.area));
 }
 
 /** Flatten a window's entries newest-first, keeping each one's day offset. */
@@ -1121,11 +1203,11 @@ export function recentCreations(days: UsageDay[], limit = 6): CreationEvent[] {
     .slice(0, limit);
 }
 
-export type RunArea = 'Workflow Library' | 'Engagements' | 'AI tools';
-export const RUN_AREAS: RunArea[] = ['Workflow Library', 'Engagements', 'AI tools'];
+export type RunArea = 'Workflow Library' | 'Engagements' | 'IRA tools';
+export const RUN_AREAS: RunArea[] = ['Workflow Library', 'Engagements', 'IRA tools'];
 
 function runAreaFor(module: UsageModule): RunArea {
-  if (module === 'Ask IRA') return 'AI tools';
+  if (module === 'Ask IRA') return 'IRA tools';
   if (module === 'Workflows') return 'Workflow Library';
   return 'Engagements';
 }

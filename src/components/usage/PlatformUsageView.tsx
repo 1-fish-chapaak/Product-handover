@@ -16,12 +16,12 @@
  * reports.
  */
 
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Users, User, UserCheck, UserX, Activity, Sparkles, Download,
   CalendarClock, PackagePlus, Play, Share2, TrendingUp,
-  Gauge, LayoutGrid, Grid2x2, Send, Clock, MessageSquare, Wrench, Layers,
+  Gauge, LayoutGrid, Grid2x2, Send, Clock, Layers,
   PieChart as PieChartIcon,
   type LucideIcon,
 } from 'lucide-react';
@@ -29,11 +29,12 @@ import { useAdminData, useAuditLog, type AdminUser } from '../../context/AdminDa
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import { getRole } from '../../data/rbac';
 import {
-  USAGE_MODULES, usageDaysWithLive, userUsageRows, usageDayLabel,
+  USAGE_MODULES, MODULE_FAMILY, type UsageFamily,
+  usageDaysWithLive, userUsageRows, usageDayLabel,
   usageAnchorLabel, usageAnchor,
   usageWindowTotals, usageDeltaPct, seatBuckets, lastLoginOffsetDays,
   segmentFor, activeMeanActions, aiAdoptionPct, usageHourlyMatrix, engagementMatrix,
-  activityConcentration, usageSpikes, recentDownloads, downloadFormatSplit,
+  activityConcentration, usageSpikes, recentDownloads, downloadAreaSplit,
   aiQuestions, aiToolRuns,
   creationTotals, recentCreations, workflowRunTotals, recentRuns, shareTotals, recentShares,
   bulkAuditActivity,
@@ -49,7 +50,7 @@ import FloatingLines from '../shared/FloatingLines';
 import EmptyState from '../shared/EmptyState';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
-import { InitialsAvatar, MemberSearch, AdminKpiRow } from '../admin/AdminPrimitives';
+import { InitialsAvatar, AvatarStack, MemberSearch, AdminKpiRow } from '../admin/AdminPrimitives';
 import { presetChip, BTN_CTA_OUTLINE, type Stat } from '../admin/adminTokens';
 import UsageKpiRow, { type UsageStat } from './UsageKpiRow';
 import UserUsageModal from './UserUsageModal';
@@ -67,7 +68,7 @@ import UsageAdoption from './UsageAdoption';
 import UsageConcentration from './UsageConcentration';
 import UsageMiniTrend from './UsageMiniTrend';
 import UsageAreaMix from './UsageAreaMix';
-import { Card, Band, Donut, Eyebrow, DeltaPill, InfoPopover, Legend, Meter, RankedRow, UsageLede } from './usageChrome';
+import { Card, Band, Eyebrow, DeltaPill, InfoPopover, Legend, Meter, RankedRow, UsageLede } from './usageChrome';
 import { KH_EASE, SERIES, fmt } from './usageTokens';
 
 const DAY_MS = 86400000;
@@ -185,7 +186,7 @@ const teamLabel = (team: string) => (team === '—' ? UNASSIGNED : team);
 const Blank = () => <span className="text-[0.75rem] text-ink-300">—</span>;
 
 /* The members table. `table-fixed` (see `fixedLayout` below) makes these widths
-   real, so the header row can no longer wrap "AI Queries" onto two lines while
+   real, so the header row can no longer wrap "IRA Queries" onto two lines while
    the Trend column sits half-empty beside it. Widths sum to 80; Member takes
    the remaining 20%. */
 const userColumns = (compareLabel: string): Column<UsageRow>[] => [
@@ -202,7 +203,7 @@ const userColumns = (compareLabel: string): Column<UsageRow>[] => [
     ),
   },
   {
-    key: 'segment', label: 'Usage', sortable: true, width: '9%',
+    key: 'segment', label: 'Usage', sortable: true, width: '100px',
     render: (r) => <Pill tone={SEGMENT_TONE[r.segment]}>{SEGMENT_LABELS[r.segment]}</Pill>,
   },
   /* `truncate` is `overflow:hidden` + `text-overflow:ellipsis`, and neither does
@@ -213,11 +214,11 @@ const userColumns = (compareLabel: string): Column<UsageRow>[] => [
      hold the longest free text in the table and were the two narrowest columns
      on it. */
   {
-    key: 'roleName', label: 'Role', sortable: true, width: '11%',
+    key: 'roleName', label: 'Role', sortable: true, width: '116px',
     render: (r) => <span className="block truncate text-[0.8125rem] text-ink-700" title={r.roleName}>{r.roleName}</span>,
   },
   {
-    key: 'team', label: 'Team', sortable: true, width: '10%',
+    key: 'team', label: 'Team', sortable: true, width: '108px',
     render: (r) => r.team === '—'
       ? <span className="block truncate text-[0.8125rem] text-ink-400">{UNASSIGNED}</span>
       : <span className="block truncate text-[0.8125rem] text-ink-700" title={r.team}>{r.team}</span>,
@@ -229,7 +230,7 @@ const userColumns = (compareLabel: string): Column<UsageRow>[] => [
      truncating — so the clock was pushing real content off the table to say
      something nobody came here to read. It stays on hover, and in the CSV. */
   {
-    key: 'lastLogin', label: 'Last active', sortable: true, width: '10%',
+    key: 'lastLogin', label: 'Last active', sortable: true, width: '110px',
     render: (r) => (
       <span
         title={r.lastLogin}
@@ -245,7 +246,7 @@ const userColumns = (compareLabel: string): Column<UsageRow>[] => [
     // already spells that as a number plus a `DeltaPill` (every CardFigure and
     // Meter does), and the pill names its baseline on hover — which the bare
     // "+35%" never did.
-    key: 'actions', label: 'Actions', sortable: true, width: '11%', align: 'right',
+    key: 'actions', label: 'Actions', sortable: true, width: '112px', align: 'right',
     render: (r) => (
       <div className="inline-flex items-baseline gap-1.5">
         <span className="text-[0.8125rem] font-semibold text-ink-900 tabular-nums">{fmt(r.actions)}</span>
@@ -253,16 +254,16 @@ const userColumns = (compareLabel: string): Column<UsageRow>[] => [
       </div>
     ),
   },
-  /* "AI use", not "AI actions". A right-aligned count column has to be wide
-     enough for its own HEADER, not just its digits, and "AI actions" plus a sort
+  /* "IRA use", not "IRA actions". A right-aligned count column has to be wide
+     enough for its own HEADER, not just its digits, and "IRA actions" plus a sort
      arrow did not fit in 9% of the table — it wrapped onto two lines and dragged
      the whole header row down with it. The shorter label fits on one. */
   {
-    key: 'aiQueries', label: 'AI use', sortable: true, width: '8%', align: 'right',
+    key: 'aiQueries', label: 'IRA use', sortable: true, width: '82px', align: 'right',
     render: (r) => r.aiQueries === 0 ? <Blank /> : <span className="text-[0.8125rem] text-ink-700 tabular-nums">{fmt(r.aiQueries)}</span>,
   },
   {
-    key: 'downloads', label: 'Downloads', sortable: true, width: '11%', align: 'right',
+    key: 'downloads', label: 'Downloads', sortable: true, width: '114px', align: 'right',
     render: (r) => r.downloads === 0 ? <Blank /> : <span className="text-[0.8125rem] text-ink-700 tabular-nums">{fmt(r.downloads)}</span>,
   },
   {
@@ -270,20 +271,40 @@ const userColumns = (compareLabel: string): Column<UsageRow>[] => [
     // and inside a Pill inside an 11% cell of a `table-fixed` layout it was
     // clipped mid-word on every row that had it — a chip that cannot print its
     // own label is worse than no chip.
-    key: 'topModule', label: 'Top area', sortable: true, width: '12%',
+    key: 'topModule', label: 'Top area', sortable: true, width: '132px',
     render: (r) => r.actions === 0 ? <Blank /> : <Pill tone="draft">{r.topModule}</Pill>,
   },
 ];
 
 /* The teams table, spelled exactly like Administration's: a brand icon tile and
    the name, the member avatar stack, then the numbers. */
+/* The Teams lens is the SAME TABLE as the Users lens, counting a different noun,
+   and the two are one toggle apart — so every shared column has to be spelled the
+   same way in both. It was not: Teams said "Last Active" where Users said "Last
+   active", printed its timestamp in `font-mono` where Users used the page's own
+   face, and headed its AI column "IRA actions" — the exact label Users had already
+   rejected for wrapping onto two lines. Flipping the switch redrew the same row in
+   a different dialect. */
 const teamColumns: Column<TeamUsageRow>[] = [
+  /* Fixed, and the avatars flexible — not the other way round. With Team taking
+     the slack, six columns in a 1470px table left roughly 790px of white between
+     a team's name and its faces, so the two halves of one row read as unrelated
+     objects. The identity column only needs room for the longest team name.
+
+     No `truncate` here: that prop means `max-width: 0` (SmartTable §Column), which
+     is the trick that lets a WIDTH-LESS column shrink, and it beats an explicit
+     width — set both and the column collapses to its own padding. Fixed width and
+     `truncate` are alternatives, not a pair. The name still ellipsizes: the cell
+     is a `min-w-0` flex row, so the inner `truncate` div clips against 260px. */
   {
-    key: 'team', label: 'Team', sortable: true, truncate: true,
+    key: 'team', label: 'Team', sortable: true, width: '260px',
     render: (r) => (
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
-          <Users size={15} className="text-brand-700" />
+      /* 26px and `gap-2.5`, matching the Member cell one toggle away. This was a
+         36px brand tile against the Users lens's 26px avatar, which made the two
+         tables different ROW HEIGHTS — the switch between them visibly jumped. */
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className="w-[26px] h-[26px] rounded-lg bg-brand-100 ring-1 ring-inset ring-brand-600/10 flex items-center justify-center shrink-0">
+          <Users size={13} className="text-brand-700" />
         </div>
         <div className="min-w-0 leading-tight">
           <div className="text-[0.8125rem] font-semibold text-ink-900 tracking-[-0.01em] truncate">{r.team}</div>
@@ -293,41 +314,39 @@ const teamColumns: Column<TeamUsageRow>[] = [
     ),
   },
   {
-    key: 'memberNames', label: 'Members', sortable: false, width: '18%',
-    render: (r) => (
-      <div className="flex items-center -space-x-2">
-        {r.memberNames.slice(0, 5).map((m, i) => (
-          <div
-            key={`${m}-${i}`}
-            title={m}
-            className="relative rounded-full ring-2 ring-canvas-elevated transition-transform duration-150 hover:z-10 hover:-translate-y-0.5"
-          >
-            <InitialsAvatar name={m} size={26} />
-          </div>
-        ))}
-        {r.memberNames.length > 5 && (
-          <div className="relative w-[26px] h-[26px] rounded-full flex items-center justify-center text-[0.625rem] font-semibold text-ink-500 bg-canvas ring-2 ring-canvas-elevated tabular-nums">
-            +{r.memberNames.length - 5}
-          </div>
-        )}
-      </div>
-    ),
+    key: 'memberNames', label: 'Members', sortable: false,
+    render: (r) => <AvatarStack names={r.memberNames} />,
   },
   {
-    key: 'actions', label: 'Actions', sortable: true, width: '11%', align: 'right',
+    key: 'actions', label: 'Actions', sortable: true, width: '112px', align: 'right',
     render: (r) => <span className="text-[0.8125rem] font-semibold text-ink-900 tabular-nums">{fmt(r.actions)}</span>,
   },
+  /* "IRA use" at 82px, the Users lens's own answer to this exact column. Its
+     comment there records why: "IRA actions" plus a sort arrow does not fit a
+     right-aligned count column and wraps onto two lines. */
   {
-    key: 'aiQueries', label: 'AI actions', sortable: true, width: '12%', align: 'right',
+    key: 'aiQueries', label: 'IRA use', sortable: true, width: '82px', align: 'right',
     render: (r) => r.aiQueries === 0 ? <Blank /> : <span className="text-[0.8125rem] text-ink-700 tabular-nums">{fmt(r.aiQueries)}</span>,
   },
   {
-    key: 'topModule', label: 'Top area', sortable: true, width: '12%',
+    key: 'topModule', label: 'Top area', sortable: true, width: '132px',
     render: (r) => r.actions === 0 ? <Blank /> : <Pill tone="draft">{r.topModule}</Pill>,
   },
+  /* The DAY, not the clock — the Users lens's rule, and for its reason: this is
+     an adoption surface, and the minute a team last signed in is not what it is
+     for. The time stays on hover and in the CSV. `font-mono` is gone with it: no
+     other cell on this page is monospaced, and a lone typewriter column read as
+     debug output sitting in a product table. */
   {
-    key: 'lastActive', label: 'Last Active', sortable: true, width: '12%',
-    render: (r) => <span className={`text-[0.75rem] font-mono tabular-nums ${r.lastActive === 'Never' ? 'italic text-ink-400' : 'text-ink-700'}`}>{r.lastActive}</span>,
+    key: 'lastActive', label: 'Last active', sortable: true, width: '110px',
+    render: (r) => (
+      <span
+        title={r.lastActive}
+        className={`block truncate text-[0.75rem] tabular-nums ${r.lastActive === 'Never' ? 'italic text-ink-400' : 'text-ink-700'}`}
+      >
+        {r.lastActive.split(',')[0]}
+      </span>
+    ),
   },
 ];
 
@@ -378,6 +397,12 @@ const TABS: { id: UsageTab; label: string; icon: LucideIcon }[] = [
 const VERDICT_WINDOW_DAYS = 7;
 /** How many weeks of licence use the hero plots behind the number. */
 const VERDICT_TREND_WEEKS = 8;
+
+/** How many AI users the "who uses it most" list names before rolling the tail
+ *  into one row. Nine covers every AI user in the seeded period, so the list is
+ *  the whole roster rather than a head with a hidden tail; the roll-up still
+ *  catches a wider window. */
+const AI_USERS_SHOWN = 9;
 
 /* The subhead is the tab's question, asked in the words the reader would use.
    It used to be a description of the contents ("What got created, run, shared
@@ -490,80 +515,6 @@ function UsageLensSwitch({ lens, onSelect }: { lens: Lens; onSelect: (l: Lens) =
    share of the total, tone-coloured (brand for the seats doing work, amber for
    the ones you are paying for and not using, grey for the expected-inactive), so
    the composition reads at a glance and the empty middle is gone. */
-/* Each state gets a fill AND a matching track — the track is a faint wash of the
-   fill's own hue (not a flat grey), so an empty end of the bar still reads as the
-   same state, the way the shared `Meter` does. Keeps this breakdown in the same
-   bar language as the funnel above it and the thick lists across the page. */
-const SEAT_TONES: Record<'active' | 'attention' | 'muted', { bar: string; track: string; text: string }> = {
-  active: { bar: '#6A12CD', track: 'bg-brand-100/70', text: 'text-ink-800' },
-  attention: { bar: '#B45309', track: 'bg-mitigated-700/[0.12]', text: 'text-mitigated-700' },
-  muted: { bar: '#B9AEC9', track: 'bg-ink-900/[0.06]', text: 'text-ink-500' },
-};
-
-function SeatRow({ label, people, total, tone, index = 0 }: {
-  label: string;
-  people: AdminUser[];
-  total: number;
-  tone: 'active' | 'attention' | 'muted';
-  index?: number;
-}) {
-  const prefersReduced = useReducedMotion();
-  const shown = people.slice(0, 4);
-  const extra = people.length - shown.length;
-  const n = people.length;
-  const pct = total > 0 ? (n / total) * 100 : 0;
-  // A count of zero never wears a warning colour — an empty bucket is good news.
-  const t = n === 0 ? SEAT_TONES.muted : SEAT_TONES[tone];
-
-  return (
-    <div className="py-2">
-      <div className="flex items-center gap-3 mb-2">
-        <span className={`text-[0.8125rem] font-medium flex-1 min-w-0 truncate ${t.text}`}>
-          {label}
-        </span>
-        {/* The faces behind the count, overlapped and separated by a hairline of
-            the card's own surface so each stays legible. */}
-        {n > 0 && (
-          <div className="flex items-center">
-            {shown.map((p, i) => (
-              <div
-                key={p.email}
-                className={`rounded-full ring-2 ring-canvas-elevated ${i > 0 ? '-ml-2' : ''}`}
-                title={p.name}
-              >
-                <InitialsAvatar name={p.name} size={22} />
-              </div>
-            ))}
-            {extra > 0 && (
-              <span className="-ml-2 inline-flex items-center justify-center w-[22px] h-[22px] rounded-full bg-canvas ring-2 ring-canvas-elevated text-[0.5625rem] font-semibold text-ink-500 tabular-nums">
-                +{extra}
-              </span>
-            )}
-          </div>
-        )}
-        {/* Count and share in the same fixed columns as the funnel above, so the
-            whole card's numbers line up down one right edge. */}
-        <span className="flex items-baseline gap-2.5 shrink-0 tabular-nums">
-          <span className="w-5 text-right text-[0.8125rem] font-semibold text-ink-900">{n}</span>
-          <span className="w-9 text-right text-[0.6875rem] text-ink-400">{n > 0 ? `${Math.round(pct)}%` : ''}</span>
-        </span>
-      </div>
-      {/* The share of all seats, drawn — so the row says "how big" without the
-          reader dividing by the total in their head. Thicker than the old hairline
-          and on a tone-tinted track, to sit in the page's heavier bar language. */}
-      <div className={`h-3 rounded-full overflow-hidden ${t.track}`}>
-        <motion.div
-          className="h-full rounded-full"
-          style={{ background: t.bar }}
-          initial={prefersReduced ? false : { width: 0 }}
-          animate={{ width: `${Math.max(n > 0 ? 2 : 0, pct)}%` }}
-          transition={prefersReduced ? { duration: 0 } : { duration: 0.5, delay: 0.1 + index * 0.06, ease: KH_EASE }}
-        />
-      </div>
-    </div>
-  );
-}
-
 /* ── The seat funnel — from paying for a licence to using it as a habit ──────
    A meter-per-stage read as four progress bars, not a funnel: the narrowing
    from 17 → 9 only lived in the numbers, and the drop-off was a line of red
@@ -579,41 +530,92 @@ function SeatRow({ label, people, total, tone, index = 0 }: {
    thing on this card an admin can act on. */
 const FUNNEL_SHADES = ['#C4A2EE', '#A87BE4', '#8B4FD8', '#6A12CD'];
 
-function SeatFunnel({ stages, total }: {
-  stages: { label: string; count: number; hint: string }[];
+/**
+ * Why one seat never reached a stage, in the seat's own terms.
+ *
+ * "−4 seats drop off" was the card's worst line: four seats left the funnel for
+ * four unrelated reasons, and flattening them into one red number told an admin
+ * to worry about all four equally. Three of them are switched off ON PURPOSE
+ * (suspended, locked, inactive) and are not waste at all; the fourth is a live
+ * Active licence that has been silent for months, and IS. One of those is a
+ * to-do and three are noise, and the old line could not tell you which.
+ *
+ * This explains why a seat is not SIGNED IN or not ACTIVE. It is deliberately not
+ * the reason for every stage: a seat that stops at "Used IRA" is signed in, is
+ * active, and stopped for a reason this function knows nothing about — so the
+ * stage that rejected the seat supplies its own explanation (`why`, below), and
+ * this is only the default. Asked to explain an IRA drop it would reach for the
+ * login clock and answer "quiet 0 days", which is both absurd and false.
+ */
+function dropReason(u: AdminUser): string {
+  if (u.status === 'Invited') return 'invite not accepted';
+  if (u.status === 'Suspended') return 'suspended';
+  if (u.status === 'Locked') return 'locked';
+  if (u.status === 'Inactive') return 'set to inactive';
+  const d = lastLoginOffsetDays(u.lastLogin);
+  return Number.isFinite(d) ? `quiet ${d} days` : 'never signed in';
+}
+
+/**
+ * The seat funnel: seventeen seats, and the point each one stopped at.
+ *
+ * This took `count: number` per stage and could therefore only ever say "−2".
+ * A reader's very next question is "which two", and a count has thrown that away
+ * before the component is even called. It takes SETS now, so every drop-off is a
+ * real set difference and every seat that falls out can be named, given a reason,
+ * and clicked through to.
+ *
+ * The stages are nested BY CONSTRUCTION (each filters the one above) rather than
+ * by three predicates that happen to agree today. A funnel whose third bar can
+ * outgrow its second is not a funnel, and `prev.count - stage.count` would have
+ * quietly printed a negative drop-off if the definitions ever drifted.
+ *
+ * The hint used to live in a `title` attribute, so the only way to learn what a
+ * stage meant was to rest the cursor on it and wait for the OS to draw a black
+ * box over the card. It is a subtitle now: on the surface, where the label is.
+ */
+function SeatFunnel({ stages, total, onPick }: {
+  stages: {
+    label: string;
+    seats: AdminUser[];
+    hint: string;
+    /** Why a seat failed to reach THIS stage. Owned by the stage, because only
+     *  the stage knows what it tested for. */
+    why: (u: AdminUser) => string;
+  }[];
   total: number;
+  /** Cross to People with this seat found. The one crossing this page allows. */
+  onPick: (name: string) => void;
 }) {
   const prefersReduced = useReducedMotion();
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
       {stages.map((stage, i) => {
-        const pct = total > 0 ? (stage.count / total) * 100 : 0;
+        const count = stage.seats.length;
+        const pct = total > 0 ? (count / total) * 100 : 0;
         const prev = i > 0 ? stages[i - 1] : null;
-        const prevPct = prev && total > 0 ? (prev.count / total) * 100 : 100;
-        const lost = prev ? prev.count - stage.count : 0;
+        const prevPct = prev && total > 0 ? (prev.seats.length / total) * 100 : 100;
+        // The real seats that fell away, not a subtraction of two totals.
+        const lostSeats = prev
+          ? prev.seats.filter(p => !stage.seats.some(s => s.email === p.email))
+          : [];
         const shade = FUNNEL_SHADES[Math.min(i, FUNNEL_SHADES.length - 1)];
         return (
-          <div key={stage.label} title={stage.hint}>
+          <div key={stage.label}>
             <div className="flex items-baseline justify-between gap-2 mb-1.5">
-              <span className="text-[0.8125rem] font-medium text-ink-700 truncate min-w-0">{stage.label}</span>
-              {/* Count and share in the same fixed columns the SeatRows below use,
-                  so every number on this card lands on one right edge. The
-                  drop-off sits to their left as a quiet red note — the one thing
-                  to act on, but not loud enough to fight the count for the row. */}
+              <span className="min-w-0 truncate text-[0.8125rem] font-medium text-ink-700">{stage.label}</span>
               <span className="shrink-0 inline-flex items-baseline gap-2.5 tabular-nums">
-                {lost > 0 && (
-                  <span className="text-[0.625rem] font-medium text-risk-600">
-                    −{lost} {lost === 1 ? 'seat drops off' : 'seats drop off'}
-                  </span>
-                )}
-                <span className="w-5 text-right text-[0.8125rem] font-semibold text-ink-900">{stage.count}</span>
+                <span className="w-5 text-right text-[0.8125rem] font-semibold text-ink-900">{count}</span>
                 <span className="w-9 text-right text-[0.6875rem] text-ink-400">{Math.round(pct)}%</span>
               </span>
             </div>
-            <div className="relative h-7 rounded-md bg-brand-50/70 overflow-hidden">
-              {/* The seats that fell away since the stage above, drawn where they
-                  fell away — the gap between this bar and the wider one before it. */}
-              {lost > 0 && (
+            {/* What the stage counts, said on the card rather than hidden in an OS
+                tooltip. */}
+            <p className="mb-1.5 text-[0.6875rem] leading-snug text-ink-400">{stage.hint}</p>
+            <div className="relative h-7 overflow-hidden rounded-md bg-brand-50/70">
+              {/* The seats that fell away, drawn where they fell away: the gap
+                  between this bar and the wider one above it. */}
+              {lostSeats.length > 0 && (
                 <div
                   className="absolute inset-y-0 bg-risk-700/[0.09]"
                   style={{ left: `${pct}%`, width: `${Math.max(0, prevPct - pct)}%` }}
@@ -632,6 +634,32 @@ function SeatFunnel({ stages, total }: {
                 }
               />
             </div>
+
+            {/* Who dropped, by name, under the gap they dropped into. Each name is
+                a real button: it crosses to People with that seat found, because
+                "which two?" deserves an answer the reader can act on rather than
+                a number they have to go hunting for. */}
+            {lostSeats.length > 0 && (
+              <div className="mt-2">
+                <div className="text-[0.6875rem] font-medium text-risk-600">
+                  {lostSeats.length} {lostSeats.length === 1 ? 'seat stops here' : 'seats stop here'}
+                </div>
+                <div className="mt-1 space-y-0.5">
+                  {lostSeats.map(u => (
+                    <button
+                      key={u.email}
+                      type="button"
+                      onClick={() => onPick(u.name)}
+                      className="group flex w-full items-baseline justify-between gap-3 rounded px-1 -mx-1 py-0.5 text-left transition-colors hover:bg-canvas"
+                      title={`Find ${u.name} on the People tab`}
+                    >
+                      <span className="truncate text-[0.75rem] text-ink-700 group-hover:text-brand-700">{u.name}</span>
+                      <span className="shrink-0 text-[0.6875rem] text-ink-400">{stage.why(u)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         );
       })}
@@ -668,6 +696,40 @@ function FeedRow({ who, verb, what, chip, when, live }: {
       )}
       <span className={`shrink-0 w-[3.25rem] text-right text-[0.6875rem] font-mono tabular-nums ${live ? 'text-brand-700 font-semibold' : 'text-ink-400'}`}>
         {when}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * One member on the "who uses IRA" lists: avatar, name, then the figure
+ * leading its share.
+ *
+ * No bar. The five it replaces were full-width 28px slabs scaled to the TOP
+ * user, while the figure printed beside each was a share of all IRA actions — so
+ * the longest bar filled its row and read 22%. A bar whose length contradicts
+ * its own number is worse than no bar. Rescaling them to the same denominator
+ * would not save it either: with counts this close (13, 11, 10, 9…) a linear bar
+ * either reads uniform or shrinks to a stub, and the split bar in the left
+ * column already carries the one proportion worth drawing.
+ *
+ * The row is instead the shape `UsageConcentration`'s `RankRow` uses at HEAD —
+ * 30px avatar, hairline, figure then share — because the two cards sit side by
+ * side on the People tab and rank the same people by two measures. Rhythm is
+ * 17px rather than that card's 13px: this card lists every AI user instead of a
+ * head plus a roll-up, so the looser rhythm is what brings the two lists to the
+ * same baseline. Spacing does the filling, not invented content.
+ */
+function AiUserRow({ avatar, name, nameClass, figure, trail }: {
+  avatar: ReactNode; name: string; nameClass: string; figure: ReactNode; trail: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 py-[17px] border-b border-canvas-border/50 last:border-b-0">
+      <span className="inline-flex shrink-0">{avatar}</span>
+      <span className={`min-w-0 flex-1 truncate text-[0.875rem] font-medium ${nameClass}`} title={name}>{name}</span>
+      <span className="shrink-0 inline-flex items-baseline gap-2.5 tabular-nums">
+        <span className="text-[0.9375rem] font-semibold text-ink-900 tracking-[-0.01em]">{figure}</span>
+        <span className="w-9 text-right text-[0.75rem] text-ink-400">{trail}</span>
       </span>
     </div>
   );
@@ -928,6 +990,37 @@ export default function PlatformUsageView() {
       .sort((a, b) => b.count - a.count);
   }, [days, priorDays]);
   const moduleMax = Math.max(1, ...moduleTotals.map(m => m.count));
+
+  /**
+   * The same actions, grouped into the KINDS of work the Overview ring plots.
+   *
+   * Built from moduleTotals rather than from the entries again, so the ring and
+   * the area ranking can never disagree: same numbers, one grouping deep. The
+   * reasoning for the taxonomy itself is on USAGE_FAMILIES.
+   */
+  const familyTotals = useMemo(() => {
+    const byFamily = new Map<UsageFamily, { value: number; members: string[] }>();
+    // moduleTotals is already ranked, so each family's member list comes out
+    // busiest-first for free.
+    moduleTotals.forEach(m => {
+      const family = MODULE_FAMILY[m.module];
+      const row = byFamily.get(family) ?? { value: 0, members: [] };
+      row.value += m.count;
+      row.members.push(m.module);
+      byFamily.set(family, row);
+    });
+    return [...byFamily.entries()]
+      .map(([name, r]) => ({ name, value: r.value, members: r.members }))
+      .sort((a, b) => b.value - a.value);
+  }, [moduleTotals]);
+
+  /** The two the Overview lede names. Shares are computed the same way the ring
+   *  computes them, so the sentence and the segment can never disagree. */
+  const [topFamily, secondFamily] = familyTotals.map(f => ({
+    ...f,
+    share: totals.actions > 0 ? Math.round((f.value / totals.actions) * 100) : 0,
+  }));
+
   // Overview ranks the leaders; the full inventory of areas is the Sections tab.
   const OVERVIEW_MODULES = 6;
   const topModules = moduleTotals.slice(0, OVERVIEW_MODULES);
@@ -1005,9 +1098,9 @@ export default function PlatformUsageView() {
       excludes: 'Signing in, and opening a page without changing anything.',
     },
     {
-      key: 'ai', label: 'AI-assisted work', value: `${aiSharePct}%`,
+      key: 'ai', label: 'Work done with IRA', value: `${aiSharePct}%`,
       of: `${fmt(aiEventsTotal)} of ${fmt(totals.actions)}`,
-      current: aiEventsTotal, prior: priorDays.reduce((s, d) => s + d.aiEvents, 0), unit: 'AI actions',
+      current: aiEventsTotal, prior: priorDays.reduce((s, d) => s + d.aiEvents, 0), unit: 'IRA actions',
       series: days.map(d => d.aiEvents),
       counts: 'Work where someone asked Ask IRA a question or ran an AI Concierge tool.',
       excludes: `Opening the AI panel without asking anything. Saved conversations are counted separately (${fmt(totals.aiConversations)} in this period).`,
@@ -1028,7 +1121,22 @@ export default function PlatformUsageView() {
   const spikes = useMemo(() => usageSpikes(days, logs), [days, logs]);
   const biggestSpike = spikes[0];
 
-  const topAiUsers = [...rows].sort((a, b) => b.aiQueries - a.aiQueries).slice(0, 5).filter(r => r.aiQueries > 0);
+  /* Everyone who used IRA, busiest first — and everyone who is active but has
+     not touched it. The card is titled "Who uses IRA", and the people who
+     don't are the other half of that answer: they are already implied by the
+     "9 of 12" in the lede, so naming them costs nothing and saves the reader
+     working out who the other three are. */
+  const aiUsersRanked = useMemo(
+    () => [...rows].filter(r => r.aiQueries > 0).sort((a, b) => b.aiQueries - a.aiQueries),
+    [rows],
+  );
+  const topAiUsers = aiUsersRanked.slice(0, AI_USERS_SHOWN);
+  const aiUsersRest = aiUsersRanked.slice(AI_USERS_SHOWN);
+  const aiUsersRestQueries = aiUsersRest.reduce((s, r) => s + r.aiQueries, 0);
+  const aiAbstainers = useMemo(
+    () => [...rows].filter(r => r.actions > 0 && r.aiQueries === 0).sort((a, b) => b.actions - a.actions),
+    [rows],
+  );
   const aiAdoption = useMemo(() => aiAdoptionPct(rawRows), [rawRows]);
   /** People who actually did something this period — the denominator the People
    *  lede and the concentration split both count against. */
@@ -1055,7 +1163,7 @@ export default function PlatformUsageView() {
       growing: risen ? { module: risen.module, deltaPct: risen.deltaPct as number } : null,
       aiAdoptionPct: aiAdoption,
       // AI *actions*, not aiActivity. This card's fallback copy calls the number
-      // "AI actions this period" — so it has to BE the AI actions, not the AI
+      // "IRA actions this period" — so it has to BE the IRA actions, not the IRA
       // actions plus the saved conversations, which are not actions at all.
       aiActivity: aiEventsTotal,
       dormant: seats.dormant.length,
@@ -1137,7 +1245,7 @@ export default function PlatformUsageView() {
   // The window's action total against the equal window before it — the one line
   // of comparison the area-mix donut carries above its slices.
   const actionsDelta = usageDeltaPct(totals.actions, priorTotals.actions);
-  const formatSplit = useMemo(() => downloadFormatSplit(days), [days]);
+  const downloadAreas = useMemo(() => downloadAreaSplit(days), [days]);
   const recentDl = useMemo(() => recentDownloads(days), [days]);
   const topDownloaders = useMemo(
     () => [...rows].sort((a, b) => b.downloads - a.downloads).slice(0, 3).filter(r => r.downloads > 0),
@@ -1199,12 +1307,31 @@ export default function PlatformUsageView() {
 
   // Adoption funnel — every stage a fraction of total seats, and the drop-off
   // between stages is the point of the chart, so it gets said out loud.
-  const funnel = useMemo(() => [
-    { label: 'Seats', count: seats.total, hint: 'Licences you pay for' },
-    { label: 'Ever signed in', count: users.filter(u => u.lastLogin !== 'Never').length, hint: 'Reached the product at least once' },
-    { label: 'Active this period', count: seats.activeInRange.length, hint: 'Did something in the window' },
-    { label: 'Used AI this period', count: rawRows.filter(r => r.actions > 0 && r.aiQueries > 0).length, hint: 'Asked IRA or ran a Concierge tool' },
-  ], [seats, users, rawRows]);
+  // Each stage is filtered FROM the stage above it, so the sets are nested by
+  // construction and a drop-off is a real set difference. Built as counts, this
+  // was three unrelated predicates whose totals happened to descend; nothing
+  // stopped a later stage outgrowing an earlier one and printing a negative
+  // drop. Carrying the seats rather than their length is also the only reason
+  // the card can name who fell out.
+  const funnel = useMemo(() => {
+    const paid = seats.total > 0 ? scopedUsers : [];
+    const signedIn = paid.filter(u => u.lastLogin !== 'Never');
+    const activeEmails = new Set(seats.activeInRange.map(u => u.email));
+    const active = signedIn.filter(u => activeEmails.has(u.email));
+    const iraEmails = new Set(
+      rawRows.filter(r => r.actions > 0 && r.aiQueries > 0).map(r => r.user.email),
+    );
+    const usedIra = active.filter(u => iraEmails.has(u.email));
+    // Each stage explains its own rejects. The last one cannot use `dropReason`:
+    // its seats are signed in and active, so the login clock has nothing to say
+    // about them and would answer "quiet 0 days".
+    return [
+      { label: 'Seats you pay for', seats: paid, hint: 'Every licence on the bill', why: dropReason },
+      { label: 'Ever signed in', seats: signedIn, hint: 'Reached the product at least once', why: dropReason },
+      { label: 'Active this period', seats: active, hint: 'Signed in within the window', why: dropReason },
+      { label: 'Used IRA this period', seats: usedIra, hint: 'Asked IRA or ran a Concierge tool', why: () => 'never opened IRA' },
+    ];
+  }, [seats, scopedUsers, rawRows]);
 
   // Worth checking — the business "so what" of this period's numbers, as
   // read-only findings. This page only reports; acting on them lives elsewhere.
@@ -1247,7 +1374,7 @@ export default function PlatformUsageView() {
       steps.push({
         key: 'ai',
         icon: Sparkles,
-        eyebrow: 'Using the AI',
+        eyebrow: 'Using IRA',
         figure: `${aiAdoption}%`,
         detail: 'have tried it. The rest work without it.',
       });
@@ -1370,7 +1497,7 @@ export default function PlatformUsageView() {
         // Summed from the rows below, not from the page totals — a band that
         // disagrees with the column it sits on top of is worse than no band.
         { key: 'actions', label: 'Actions', value: fmt(teamRows.reduce((s, t) => s + t.actions, 0)), icon: Activity },
-        { key: 'ai', label: 'AI queries', value: fmt(teamRows.reduce((s, t) => s + t.aiQueries, 0)), icon: Sparkles },
+        { key: 'ai', label: 'IRA queries', value: fmt(teamRows.reduce((s, t) => s + t.aiQueries, 0)), icon: Sparkles },
       ];
 
   // The Actions cell names its own baseline ("vs the previous 30 days"), so the
@@ -1393,8 +1520,8 @@ export default function PlatformUsageView() {
     // things a spreadsheet can hold that a cell can't: the email and the members
     // behind a team's avatar stack.
     const headers = lens === 'users'
-      ? ['Member', 'Email', 'Usage', 'Role', 'Team', 'Last active', 'Actions', `Trend vs ${compareLabel}`, 'AI actions', 'Downloads', 'Top area']
-      : ['Team', 'Members', 'Member Names', 'Actions', 'AI actions', 'Top area', 'Last Active'];
+      ? ['Member', 'Email', 'Usage', 'Role', 'Team', 'Last active', 'Actions', `Trend vs ${compareLabel}`, 'IRA actions', 'Downloads', 'Top area']
+      : ['Team', 'Members', 'Member Names', 'Actions', 'IRA actions', 'Top area', 'Last Active'];
     const body = lens === 'users'
       ? filteredRows.map(r => [
           r.name, r.email, SEGMENT_LABELS[r.segment], r.roleName, teamLabel(r.team), r.lastLogin, r.actions,
@@ -1714,7 +1841,7 @@ export default function PlatformUsageView() {
                           { color: SERIES.primary, label: 'Weekday' },
                           { color: '#BC9BE8', label: 'Weekend' },
                           ...(aiOn
-                            ? [{ color: SERIES.secondary, label: 'AI' }]
+                            ? [{ color: SERIES.secondary, label: 'IRA' }]
                             : []),
                           ...(spikes.length > 0
                             ? [{ color: SERIES.attention, label: 'Unusually busy' }]
@@ -1730,7 +1857,7 @@ export default function PlatformUsageView() {
                         before either is asked for. */}
                     <div className="flex items-center gap-2">
                       <button className={presetChip(aiOn)} onClick={() => setAiOn(a => !a)} aria-pressed={aiOn}>
-                        AI
+                        IRA
                       </button>
                       <button className={presetChip(compareOn)} onClick={() => setCompareOn(c => !c)} aria-pressed={compareOn}>
                         Compare
@@ -1792,22 +1919,36 @@ export default function PlatformUsageView() {
             <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-12">
             <Card
               icon={PieChartIcon}
-              title="What this period was made of"
+              title="What people worked on"
               className="xl:col-span-5"
               bodyClassName="flex flex-col"
               right={
                 <InfoPopover
-                  label="the area mix"
-                  counts="Every piece of real work in the window, split into the area it happened in. The slices add up to Work done."
+                  label="the work mix"
+                  counts="Every piece of real work in the window, grouped into the kind of work it was. The segments add up to Work done."
                   excludes="Signing in, or opening a page without changing anything."
-                  note="Hover a slice, or its row, to read that area's count and share. Areas past the top few fold into one 'more areas' slice. The bar at the foot is how much of it was AI-assisted."
+                  note="The thirteen areas are grouped into kinds of work, because the busiest single area is only 15% and thirteen near-equal segments say nothing. Each row names the areas inside it. Hover a segment, or its row, to read that kind's count and share. Per-area counts are on the Areas tab. The bar at the foot is how much of it was done with IRA."
                 />
               }
             >
+              {/* The answer, in words, before the ring that proves it. Every other
+                  tab on this page leads with its verdict; this card used to show a
+                  shape and leave the reader to infer the finding, which was the
+                  one thing it existed to say. */}
+              {topFamily && (
+                <div className="mb-5">
+                  <UsageLede lead={`${topFamily.name} was the biggest kind, at ${topFamily.share}%.`}>
+                    {fmt(topFamily.value)} of {fmt(totals.actions)} actions.
+                    {secondFamily && ` ${secondFamily.name} came next at ${secondFamily.share}%.`}
+                  </UsageLede>
+                </div>
+              )}
+
               <UsageAreaMix
                 className="flex-1"
-                items={moduleTotals.map(m => ({ name: m.module, value: m.count }))}
+                items={familyTotals}
                 total={totals.actions}
+                areaCount={moduleTotals.length}
                 note={
                   actionsDelta !== null ? (
                     <span className="text-ink-500">
@@ -1822,7 +1963,7 @@ export default function PlatformUsageView() {
                   totals.actions > 0 && aiEventsTotal > 0 ? (
                     <div>
                       <div className="mb-2 flex items-baseline justify-between text-[0.75rem]">
-                        <span className="font-semibold text-evidence">AI-assisted · {aiSharePct}%</span>
+                        <span className="font-semibold text-evidence">Done with IRA · {aiSharePct}%</span>
                         <span className="tabular-nums text-ink-400">{fmt(aiEventsTotal)} of {fmt(totals.actions)} actions</span>
                       </div>
                       <div className="flex h-3 w-full gap-[2px]">
@@ -1832,12 +1973,17 @@ export default function PlatformUsageView() {
                         />
                         <div className="flex-1 rounded-l-sm rounded-r-full bg-ink-900/[0.06]" />
                       </div>
+                      {/* This line names the grey half of the bar, and that is all it
+                          does. It also carried "Saved conversations are not counted
+                          here", which is a definition of the metric, not a reading of
+                          the chart — nobody parses that under a bar. The definition
+                          belongs in the ⓘ on "Who uses IRA", where it now lives. */}
                       <p className="mt-1.5 text-[0.6875rem] text-ink-400">
-                        The rest was done without AI. Saved conversations are counted apart.
+                        The rest was done without IRA.
                       </p>
                     </div>
                   ) : (
-                    <p className="text-[0.75rem] text-ink-400">No AI-assisted work in this period.</p>
+                    <p className="text-[0.75rem] text-ink-400">No work done with IRA in this period.</p>
                   )
                 }
               />
@@ -1939,30 +2085,37 @@ export default function PlatformUsageView() {
               <Card
                 icon={Users}
                 title="From paying for a seat to using it"
-                subtitle="Each stage as a share of the seats you pay for."
+                subtitle={`All ${seats.total} seats you pay for, and where each one stops. Every bar is a share of that ${seats.total}.`}
                 className="xl:col-span-5"
                 right={
                   <InfoPopover
                     label="the seat funnel"
-                    counts="Every paid seat, sorted by how far it got: invited, signed in, did some work, then came back and made a habit of it."
-                    excludes="Seats that are suspended, or were never invited."
-                    note="Each bar is a share of the seats you pay for, so the drop from one bar to the next is where people fall away."
+                    counts={`Every paid seat, sorted by how far it got: signed in, active this period, then used IRA. The top bar is all ${seats.total} seats, so it is the full width and every bar below is a share of it.`}
+                    excludes="Nothing. Suspended, locked and never-invited seats are all still on the bill, so they are all in here, named at the stage where they stop."
+                    note="The names under a bar are the seats that got no further. Click one to find it on the People tab."
                   />
                 }
               >
-                {/* The bars taper — each width is the stage's share of the seats
-                    you pay for — so the funnel is the shape and the drop-off is
-                    the gap between one bar and the next, drawn in the one red on
-                    the card. Labels ride above the track, never inside the fill. */}
-                <SeatFunnel stages={funnel} total={seats.total} />
-
-                <div className="mt-5 pt-4 border-t border-canvas-border">
-                  <Eyebrow className="mb-2">Where the seats sit</Eyebrow>
-                  <SeatRow label="Active this period" people={seats.activeInRange} total={seats.total} tone="active" index={0} />
-                  <SeatRow label="No sign-in 30+ days" people={seats.dormant} total={seats.total} tone="attention" index={1} />
-                  <SeatRow label="Invited, not joined yet" people={seats.invited} total={seats.total} tone="attention" index={2} />
-                  <SeatRow label="Suspended or inactive" people={seats.suspendedOrInactive} total={seats.total} tone="muted" index={3} />
-                </div>
+                {/* "Where the seats sit" used to sit under this funnel: four rows
+                    reading Active 11, No sign-in 1, Invited 2, Suspended 3. That
+                    is 17, which is this funnel's four stages and its three
+                    drop-offs, listed a second time with avatars instead of names
+                    and detached from the drop each one explains. The card was
+                    holding the answer to "who drops off?" three inches below the
+                    question and never joining them up. The names moved onto the
+                    drop they belong to and the block went. */}
+                <SeatFunnel
+                  stages={funnel}
+                  total={seats.total}
+                  // Order matters, and not obviously: `setLens` deliberately
+                  // clears the toolbar so a filter can never apply invisibly, so
+                  // it has to run BEFORE the search it would otherwise wipe.
+                  onPick={(name) => {
+                    setLens('users');
+                    setSearchQuery(name);
+                    setTab('people');
+                  }}
+                />
               </Card>
             </div>
           </Band>
@@ -1995,34 +2148,25 @@ export default function PlatformUsageView() {
               >
                 {/* The reading, before the evidence. Body text, NOT the tab-level
                     UsageLede: that component is a 17px hero built to lead a whole
-                    tab, and inside a card it out-shouted its own 14px title. Here it
-                    is a plain sentence sized under the title, the concentration clause
-                    carrying the weight and the rest staying light. A small tone dot
-                    does the health read the hero's dot used to. */}
-                <div className="mb-5 flex items-start gap-2.5">
-                  <span
-                    className={`mt-[0.3rem] h-1.5 w-1.5 shrink-0 rounded-full ${
-                      typeof concentration === 'number' && concentration >= 60 ? 'bg-mitigated-500' : 'bg-brand-500'
-                    }`}
-                    aria-hidden
-                  />
-                  <div className="min-w-0">
-                    <p className="text-[0.875rem] leading-relaxed text-ink-500">
-                      <span className="font-semibold text-ink-900">
-                        {typeof concentration === 'number'
-                          ? `The busiest 3 of ${activeDoerCount} active members do ${concentration}% of the work.`
-                          : `${activeDoerCount} members did real work this period.`}
-                      </span>
-                      {typeof concentration === 'number' && activeDoerCount > 3
-                        ? ` The other ${activeDoerCount - 3} share the rest.`
-                        : ''}
+                    tab, and inside a card it out-shouted its own 14px title.
+
+                    The tone dot that used to sit beside it is gone, and so is the
+                    " The other 9 share the rest." clause: the chart below now
+                    groups its bars under "Busiest 3" and "Everyone else (9)" and
+                    accents the busiest three, so both were saying a second time
+                    what the picture already says. The share is printed here and
+                    nowhere else on the card. */}
+                <div className="mb-5">
+                  <p className="text-[0.875rem] font-semibold leading-relaxed text-ink-900">
+                    {typeof concentration === 'number'
+                      ? `The busiest 3 of ${activeDoerCount} active members do ${concentration}% of the work.`
+                      : `${activeDoerCount} members did real work this period.`}
+                  </p>
+                  {seats.dormant.length > 0 && (
+                    <p className="mt-1.5 text-[0.75rem] text-ink-400">
+                      Worth a look: {seats.dormant.length} {seats.dormant.length === 1 ? 'member has' : 'members have'} gone quiet for over a month.
                     </p>
-                    {seats.dormant.length > 0 && (
-                      <p className="mt-1.5 text-[0.75rem] text-ink-400">
-                        Worth a look: {seats.dormant.length} {seats.dormant.length === 1 ? 'member has' : 'members have'} gone quiet for over a month.
-                      </p>
-                    )}
-                  </div>
+                  )}
                 </div>
                 <UsageConcentration rows={rawRows} topShare={concentration} />
               </Card>
@@ -2030,146 +2174,178 @@ export default function PlatformUsageView() {
               {!teamScoped && (
               <Card
                 icon={Sparkles}
-                title="Who uses the AI"
-                subtitle="Ask IRA is the chat. The AI Concierge is the toolkit. A question you type and a tool you run are different things, so they are counted separately and never added up."
+                title="Who uses IRA"
+                subtitle="Ask IRA is the chat. The AI Concierge is the toolkit."
                 className="xl:col-span-7"
                 bodyClassName="flex flex-col"
                 right={
                   <InfoPopover
-                    label="the AI usage"
-                    counts="Questions typed into Ask IRA, and tools run in the AI Concierge."
-                    excludes="Opening the AI panel without asking or running anything."
-                    note="A typed question and a tool run are counted on their own and never added together. Members using AI is the share of people who did either."
+                    label="IRA use"
+                    counts="Questions typed into Ask IRA, and tools run in the AI Concierge. Together those are the IRA actions."
+                    excludes="Opening IRA without asking or running anything. Saved conversations, which are kept chats rather than actions."
+                    note="Every IRA action is also one of the period's actions, which is how the share of the work is worked out."
                   />
                 }
               >
-                {/* The two AI surfaces, each in its own panel so it is obvious
-                    which number belongs to which. The old row was four equal
-                    columns divided by hairlines, which hid the grouping — a reader
-                    could not tell that Questions and Conversations both belong to
-                    Ask IRA while Tool runs belongs to the Concierge. Both panels
-                    wear the page's AI blue (`evidence`), the same hue the KPI band
-                    and the AI-assisted bar use, so the whole AI story reads as one
-                    family. */}
-                {/* The two AI channels, balanced. Each box is one hero number.
-                    The old row put Conversations beside Ask IRA's Questions, which
-                    left the Concierge box a lone number in a hand-sized hole — and
-                    Conversations is already named in the "counted separately" note
-                    below, so it was being said twice. */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {[
-                    { icon: MessageSquare, name: 'Ask IRA', kind: 'the chat', value: fmt(questionsAsked), label: 'Questions asked' },
-                    { icon: Wrench, name: 'AI Concierge', kind: 'the toolkit', value: fmt(toolRuns), label: 'Tool runs' },
-                  ].map(surface => {
-                    const SurfaceIcon = surface.icon;
-                    return (
-                      <div key={surface.name} className="rounded-lg border border-evidence/15 bg-evidence/[0.035] p-4">
-                        <div className="mb-3.5 flex items-center gap-2">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-evidence/10 text-evidence">
-                            <SurfaceIcon size={13} strokeWidth={2} aria-hidden />
-                          </span>
-                          <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-evidence">{surface.name}</span>
-                          <span className="text-[0.625rem] text-ink-400">{surface.kind}</span>
-                        </div>
-                        <div className="text-[1.75rem] font-semibold tracking-[-0.02em] text-ink-900 tabular-nums leading-none">{surface.value}</div>
-                        <div className="mt-1.5 text-[0.6875rem] text-ink-400">{surface.label}</div>
-                      </div>
-                    );
-                  })}
-                </div>
+                {/* The card is one chain the reader can follow end to end: two
+                    surfaces add up to the IRA actions, and the IRA actions are a
+                    slice of the period's actions. The old card DENIED that chain
+                    in its own subtitle ("counted separately and never added up")
+                    while the bar underneath quietly added them anyway: `aiEvents`
+                    IS the Ask IRA questions plus the Concierge runs, by
+                    construction (see `isAiEntry`) — 39 + 19 = 58, the very number
+                    the share was drawn from. So the reader was told not to do the
+                    one sum the card had already done for them, and the 39 and the
+                    19 sat in two tinted boxes with no stated relation to anything
+                    below. Now the sum is drawn as the sum it is.
 
-                {/* Two ways to read how much the team leans on AI, side by side.
-                    The card carries two AI percentages that look interchangeable
-                    and are not: one is a share of PEOPLE (who tried it), one a
-                    share of the WORK (what it touched), on different denominators.
-
-                    The work share is AI ACTIONS over all actions — NOT aiActivity
-                    (events plus saved conversations), which is not a subset of
-                    actions and can top 100%. Saved conversations are real and
-                    counted, but as themselves, in the note below — never as work.
-
-                    Pairing the two as matching meters shows they are two lenses,
-                    not a contradiction: most people try AI, yet it touches a small
-                    slice of the actual work. Both in the page's AI blue. */}
+                    Gone with it: the two tinted hero-number panels (a box inside
+                    a box, and the big-number/small-label template this kit
+                    refuses), the "of the people" meter (75% of what the sentence
+                    beside it already said as "9 of 12"), and the five full-width
+                    28px bars. Those bars were scaled to the top user while the
+                    figure beside them was a share of all IRA actions, so the
+                    longest bar filled its row and read 22%. */}
                 {totals.actions > 0 && aiEventsTotal > 0 ? (
-                  <>
-                    <Eyebrow className="mt-5 mb-3">How much they lean on it</Eyebrow>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                      {(() => {
-                        const aiUsers = rawRows.filter(r => r.actions > 0 && r.aiQueries > 0).length;
-                        return [
-                          { key: 'people', label: 'Of the people', pct: aiAdoption, foot: `${fmt(aiUsers)} of ${fmt(activeDoerCount)} active members used AI` },
-                          { key: 'work', label: 'Of the work', pct: aiSharePct, foot: `${fmt(aiEventsTotal)} of ${fmt(totals.actions)} actions were AI-assisted` },
-                        ].map(l => (
-                          <div key={l.key}>
-                            <div className="mb-2 flex items-baseline justify-between gap-2">
-                              <span className="text-[0.75rem] font-medium text-ink-600">{l.label}</span>
-                              <span className="text-[1rem] font-semibold text-evidence tabular-nums leading-none">{l.pct}%</span>
-                            </div>
-                            <div className="h-2.5 w-full overflow-hidden rounded-full bg-evidence/10">
-                              <div className="h-full rounded-full" style={{ width: `${Math.max(3, l.pct)}%`, background: 'linear-gradient(90deg,#0EA5E9,#0284C7)' }} />
-                            </div>
-                            <p className="mt-2 text-[0.6875rem] text-ink-400">{l.foot}</p>
-                          </div>
-                        ));
-                      })()}
-                    </div>
-                    {totals.aiConversations > 0 && (
-                      <p className="mt-4 text-[0.6875rem] text-ink-400">
-                        Plus {fmt(totals.aiConversations)} saved conversation{totals.aiConversations === 1 ? '' : 's'}, counted separately — a saved chat is not work.
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <p className="mt-5 text-[0.75rem] text-ink-400">No AI activity was recorded in this period.</p>
-                )}
+                  <div className="grid flex-1 grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-12">
+                    {/* How much: the sum, where it sits, and who is outside it. */}
+                    <div className="lg:col-span-5">
+                      {/* The reading, before the evidence. A plain sentence under
+                          the title, not the tab-level UsageLede: the same call the
+                          concentration card beside it makes, so the two cards open
+                          in one voice. The dot is neutral brand — this page has no
+                          AI target to pass or miss, and a dot that changed colour
+                          would invent one. */}
+                      <div className="flex items-start gap-2.5">
+                        <span className="mt-[0.3rem] h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" aria-hidden />
+                        <p className="text-[0.875rem] leading-relaxed text-ink-500">
+                          <span className="font-semibold text-ink-900">
+                            {fmt(aiUsersRanked.length)} of the {fmt(activeDoerCount)} active {activeDoerCount === 1 ? 'member' : 'members'} used IRA.
+                          </span>
+                          {' '}It did {fmt(aiEventsTotal)} of the {fmt(totals.actions)} things done this period.
+                        </p>
+                      </div>
 
-                {/* Pinned to the bottom of the card, this block used to leave a
-                    hand-sized hole in the middle of it: the card stretches to the
-                    height of the taller funnel beside it, and `mt-auto` pushed all
-                    of that slack into one gap between the sentence and the list.
-                    Slack at the foot of a card reads as padding; slack through the
-                    middle of one reads as something failed to load. */}
-                {topAiUsers.length > 0 && (
-                  <div className="mt-6 pt-5 border-t border-canvas-border">
-                    <div className="flex items-baseline justify-between mb-3">
-                      <Eyebrow>Who leans on it most</Eyebrow>
-                      <span className="text-[0.625rem] text-ink-400">AI actions in this period</span>
-                    </div>
-                    {/* Ranked, so rank it. Five names against five right-aligned
-                        numerals was the one list on this page you had to read
-                        rather than see — every other ranking here carries a bar,
-                        and now it is the same bar: the shared `Meter`, so this
-                        list cannot drift away from the six others. */}
-                    <div className="space-y-3">
-                      {topAiUsers.map((u, i) => (
-                        <div key={u.email} className="flex items-center gap-3">
-                          <InitialsAvatar name={u.name} size={28} />
-                          <div className="min-w-0 flex-1">
-                            <Meter
-                              index={i}
-                              size="lg"
-                              label={<span className="text-ink-800">{u.name}</span>}
-                              value={fmt(u.aiQueries)}
-                              note={
-                                <span>
-                                  {/* Share of the AI ACTIONS, not of aiActivity.
-                                      `aiQueries` is a per-user count of AI events;
-                                      dividing it by a total that also carries
-                                      saved conversations gave every name a share
-                                      of a whole it is not part of, so the five
-                                      shares could never add up to the ranking they
-                                      sit in. */}
-                                  {aiEventsTotal > 0 ? Math.round((u.aiQueries / aiEventsTotal) * 100) : 0}%
-                                </span>
-                              }
-                              pct={(u.aiQueries / topAiUsers[0].aiQueries) * 100}
-                            />
+                      {/* The sum, laid out as a sum: two surfaces, a rule, the
+                          total they make. The arithmetic is the layout, so no
+                          sentence has to assert it. */}
+                      <div className="mt-5">
+                        <Eyebrow className="mb-1.5">Where IRA runs</Eyebrow>
+                        {[
+                          { name: 'Ask IRA', kind: 'the chat', value: questionsAsked, unit: questionsAsked === 1 ? 'question' : 'questions' },
+                          { name: 'AI Concierge', kind: 'the toolkit', value: toolRuns, unit: toolRuns === 1 ? 'tool run' : 'tool runs' },
+                        ].map(s => (
+                          <div key={s.name} className="flex items-baseline justify-between gap-3 py-[7px]">
+                            <span className="min-w-0 truncate text-[0.8125rem]">
+                              <span className="font-medium text-ink-800">{s.name}</span>
+                              <span className="text-ink-400"> {s.kind}</span>
+                            </span>
+                            <span className="shrink-0 tabular-nums text-[0.75rem] text-ink-400">
+                              <span className="text-[0.875rem] font-semibold text-ink-900">{fmt(s.value)}</span> {s.unit}
+                            </span>
+                          </div>
+                        ))}
+                        <div className="mt-1.5 flex items-baseline justify-between gap-3 border-t border-canvas-border pt-2.5">
+                          <span className="text-[0.8125rem] font-medium text-ink-800">Together</span>
+                          <span className="shrink-0 tabular-nums text-[0.75rem] text-ink-400">
+                            <span className="text-[0.875rem] font-semibold text-evidence-700">{fmt(aiEventsTotal)}</span> IRA actions
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Those IRA actions against everything else. One split bar,
+                          in the same spelling as the concentration split beside it
+                          — two segments, a 2px surface gap, the recessive half on
+                          the page's neutral track — so the two bars read as one
+                          language answering two questions. Evidence blue, the hue
+                          the KPI band already gives the AI story. */}
+                      <div className="mt-4">
+                        <div className="flex h-3.5 w-full gap-[2px]">
+                          <div
+                            className="rounded-l-full rounded-r-sm"
+                            style={{ width: `${Math.max(2, aiSharePct)}%`, background: 'linear-gradient(90deg,#0EA5E9,#0284C7)' }}
+                          />
+                          <div className="flex-1 rounded-l-sm rounded-r-full bg-ink-900/[0.06]" />
+                        </div>
+                        <div className="mt-2 flex items-baseline justify-between text-[0.6875rem]">
+                          <span className="font-semibold text-evidence-700">Done with IRA · {aiSharePct}%</span>
+                          <span className="text-ink-400">Done without · {100 - aiSharePct}%</span>
+                        </div>
+                      </div>
+
+                      {totals.aiConversations > 0 && (
+                        <p className="mt-3.5 text-[0.6875rem] leading-relaxed text-ink-400">
+                          {fmt(totals.aiConversations)} saved {totals.aiConversations === 1 ? 'conversation sits' : 'conversations sit'} alongside
+                          {' '}these. Keeping a chat is not an action, so it is not in the count.
+                        </p>
+                      )}
+
+                      {/* The other half of "who uses IRA". These people are
+                          working — the figure beside each is their own action
+                          count — they are just doing it without AI, which is the
+                          one thing the reader can act on. */}
+                      {aiAbstainers.length > 0 && (
+                        <div className="mt-5 border-t border-canvas-border pt-4">
+                          <div className="mb-1 flex items-baseline justify-between gap-3">
+                            <Eyebrow>Not using it yet</Eyebrow>
+                            <span className="text-[0.625rem] text-ink-400">Their actions</span>
+                          </div>
+                          <div>
+                            {aiAbstainers.slice(0, 3).map(u => (
+                              <AiUserRow
+                                key={u.email}
+                                avatar={<InitialsAvatar name={u.name} size={30} />}
+                                name={u.name}
+                                nameClass="text-ink-800"
+                                figure={fmt(u.actions)}
+                                trail={<span className="text-ink-300">none</span>}
+                              />
+                            ))}
                           </div>
                         </div>
-                      ))}
+                      )}
+                    </div>
+
+                    {/* Who — the names, in the twin of the list beside it. */}
+                    <div className="lg:col-span-7 lg:border-l lg:border-canvas-border lg:pl-10">
+                      <div className="mb-1 flex items-baseline justify-between gap-3">
+                        <Eyebrow>Who uses it most</Eyebrow>
+                        <span className="text-[0.625rem] text-ink-400">IRA actions in this period</span>
+                      </div>
+                      <div>
+                        {topAiUsers.map(u => (
+                          <AiUserRow
+                            key={u.email}
+                            avatar={<InitialsAvatar name={u.name} size={30} />}
+                            name={u.name}
+                            nameClass="text-ink-800"
+                            figure={fmt(u.aiQueries)}
+                            /* Share of the AI ACTIONS, the total this list is a
+                               breakdown of, so the shares add up to the whole
+                               they sit in. Never of `aiActivity`, which also
+                               carries the saved chats these rows are not part
+                               of. */
+                            trail={`${Math.round((u.aiQueries / aiEventsTotal) * 100)}%`}
+                          />
+                        ))}
+                        {aiUsersRest.length > 0 && (
+                          <AiUserRow
+                            avatar={
+                              <div className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-brand-50 text-[0.5625rem] font-semibold text-brand-700">
+                                +{aiUsersRest.length}
+                              </div>
+                            }
+                            name={`${aiUsersRest.length} more ${aiUsersRest.length === 1 ? 'member' : 'members'}`}
+                            nameClass="text-ink-500"
+                            figure={fmt(aiUsersRestQueries)}
+                            trail={`${Math.round((aiUsersRestQueries / aiEventsTotal) * 100)}%`}
+                          />
+                        )}
+                      </div>
                     </div>
                   </div>
+                ) : (
+                  <p className="text-[0.75rem] text-ink-400">No IRA activity was recorded in this period.</p>
                 )}
               </Card>
               )}
@@ -2225,11 +2401,16 @@ export default function PlatformUsageView() {
                     <div className="mt-4">
                       <UsageMiniTrend points={seriesFor('created')} name="Things created" />
                     </div>
-                    <div className="mt-5 space-y-3">
+                    {/* One line per kind, not a stacked label over a 28px block.
+                        Five counts (7, 7, 5, 4, 2) were running 460px tall — taller
+                        than the six-row feed beside them, so the whole card was
+                        sized by five single-digit numbers and the right half sat
+                        half empty. */}
+                    <div className="mt-4 space-y-2.5">
                       {creations.map((c, i) => (
                         <Meter
                           key={c.kind.key}
-                          size="lg"
+                          size="row"
                           label={c.kind.label}
                           value={fmt(c.count)}
                           pct={(c.count / creationMax) * 100}
@@ -2320,13 +2501,13 @@ export default function PlatformUsageView() {
                   <UsageMiniTrend points={seriesFor('runs')} name="Workflow runs" />
                 </div>
                 {/* An area with nothing in it is not a bar of zero — it is not a
-                    row (REQ-4.7, §8.2). "AI tools · 0" with a 1.5% stub of a bar
+                    row (REQ-4.7, §8.2). "IRA tools · 0" with a 1.5% stub of a bar
                     beside it was the page breaking its own rule: a mark that says
                     "almost none" where the truth is "none at all". Sharing below
                     already filters the same way; Runs did not. */}
-                <div className="mt-5 space-y-3">
+                <div className="mt-4 space-y-2.5">
                   {runs.byArea.filter(a => a.count > 0).map((a, i) => (
-                    <Meter key={a.area} size="lg" label={a.area} value={fmt(a.count)} pct={(a.count / runAreaMax) * 100} index={i} />
+                    <Meter key={a.area} size="row" label={a.area} value={fmt(a.count)} pct={(a.count / runAreaMax) * 100} index={i} />
                   ))}
                 </div>
                 <div className="mt-5 pt-4 border-t border-canvas-border">
@@ -2360,9 +2541,9 @@ export default function PlatformUsageView() {
                 <div className="mt-4">
                   <UsageMiniTrend points={seriesFor('shares')} name="Shares" />
                 </div>
-                <div className="mt-5 space-y-3">
+                <div className="mt-4 space-y-2.5">
                   {shares.byKind.filter(k => k.count > 0).map((k, i) => (
-                    <Meter key={k.kind} size="lg" label={k.kind} value={fmt(k.count)} pct={(k.count / shareKindMax) * 100} index={i} />
+                    <Meter key={k.kind} size="row" label={k.kind} value={fmt(k.count)} pct={(k.count / shareKindMax) * 100} index={i} />
                   ))}
                 </div>
                 <div className="mt-5 pt-4 border-t border-canvas-border">
@@ -2387,9 +2568,9 @@ export default function PlatformUsageView() {
                 right={
                   <InfoPopover
                     label="the downloads"
-                    counts="Every file taken off the platform in this period, grouped by format."
+                    counts="Every file taken off the platform in this period, grouped by what was downloaded."
                     excludes="Viewing a file in the browser without downloading it."
-                    note="Each download is one file of one format, so the formats add up to the total."
+                    note="Each download is one file out of one area, so the areas add up to the total."
                   />
                 }
               >
@@ -2399,21 +2580,55 @@ export default function PlatformUsageView() {
                     <div className="mt-4">
                       <UsageMiniTrend points={seriesFor('downloads')} name="Files downloaded" />
                     </div>
-                    {/* The one genuine part-to-whole on the page: every download
-                        is exactly one format, and the formats add up to the
-                        figure above. A ranked bar would answer "which format
-                        leads" — which nobody asks. The question here is the shape
-                        of the mix, and that is what a donut is for. Everything
-                        else on this page stays a bar. */}
-                    {formatSplit.length > 0 && (
+                    {topDownloaders.length > 0 && (
                       <div className="mt-5">
-                        <Donut
-                          items={formatSplit.map(f => ({ name: f.format, value: f.count }))}
-                          total={totals.downloads}
-                          totalLabel="Files"
-                          size={118}
-                        />
+                        <Eyebrow className="mb-3">Top downloaders</Eyebrow>
+                        <div className="space-y-2.5">
+                          {topDownloaders.map(u => (
+                            <div key={u.email} className="flex items-center gap-2.5">
+                              <InitialsAvatar name={u.name} size={24} />
+                              <span className="text-[0.8125rem] font-medium text-ink-800 truncate">{u.name}</span>
+                              <span className="ml-auto text-[0.8125rem] font-semibold text-ink-900 tabular-nums">{fmt(u.downloads)}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
+                    )}
+                  </div>
+
+                  {/* WHAT was downloaded, not what file type it arrived as. This
+                      was a donut of PDF / XLSX / CSV, which is a fact about the
+                      export button rather than about the work: no audit lead has
+                      ever needed to know that a quarter of the clicks produced
+                      spreadsheets. Reports, workflow results and working papers
+                      are the things people actually pull out, so those are the
+                      rows, in the same area vocabulary the Areas tab uses.
+
+                      Every area with a download gets a row — no top-N. The whole
+                      point is to answer "how many workflows, how many reports",
+                      and an area folded into an "other" line is exactly the one
+                      somebody came to look up. An area with NO download is not a
+                      row of zero, matching Runs and Sharing above.
+
+                      The file type still rides on each row of the feed, where it
+                      describes one real file rather than a made-up category. */}
+                  <div className="lg:col-span-3">
+                    <Eyebrow className="mb-2">What was downloaded</Eyebrow>
+                    {downloadAreas.length > 0 ? (
+                      <div className="space-y-1.5">
+                        {downloadAreas.map(({ area, count }, i) => (
+                          <RankedRow
+                            key={area}
+                            label={area}
+                            count={count}
+                            share={totals.downloads > 0 ? Math.round((count / totals.downloads) * 100) : 0}
+                            pct={(count / downloadAreas[0].count) * 100}
+                            index={i}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[0.8125rem] text-ink-400">Nothing was downloaded in this period.</p>
                     )}
                   </div>
 
@@ -2429,21 +2644,6 @@ export default function PlatformUsageView() {
                       <p className="text-[0.8125rem] text-ink-400">No downloads in this period.</p>
                     )}
                   </div>
-
-                  {topDownloaders.length > 0 && (
-                    <div className="lg:col-span-3">
-                      <Eyebrow className="mb-3">Top downloaders</Eyebrow>
-                      <div className="space-y-2.5">
-                        {topDownloaders.map(u => (
-                          <div key={u.email} className="flex items-center gap-2.5">
-                            <InitialsAvatar name={u.name} size={24} />
-                            <span className="text-[0.8125rem] font-medium text-ink-800 truncate">{u.name}</span>
-                            <span className="ml-auto text-[0.8125rem] font-semibold text-ink-900 tabular-nums">{fmt(u.downloads)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </Card>
             </div>
@@ -2472,7 +2672,7 @@ export default function PlatformUsageView() {
                 <Card
                   icon={Grid2x2}
                   title="How many people use each area, and how hard"
-                  subtitle="Reach is the share of people who opened it. Depth is how much each of them did. Areas low on both are barely used, so they are flagged."
+                  subtitle="Areas that few people use, and not much, are flagged."
                   className="xl:col-span-7"
                   right={
                     <InfoPopover
@@ -2590,16 +2790,38 @@ export default function PlatformUsageView() {
                 for the same state. */}
             <AdminKpiRow stats={peopleStats} />
 
+            {/* The switch between the two lenses, animated.
+                Flipping Users → Teams was a hard cut: the table was simply a
+                different table on the next frame, and because the two count
+                different nouns the reader had no way to tell whether the numbers
+                had been re-read or the page had jumped.
+
+                This is NOT a new animation. It is Administration's People/Teams
+                switch, spelled exactly the same way, because it is the same
+                control doing the same job one screen away — and that switch had
+                already solved the hard part. The outgoing table exits to
+                `position:absolute` so it dissolves ON TOP of the incoming one
+                instead of pushing it: without that, 10 member rows swapping for 5
+                team rows makes the card lurch to double height and collapse back
+                mid-transition. The incoming table, still in flow, defines the
+                height. Crossfade in place, no blank beat. */}
+            <div className="relative">
+            <AnimatePresence initial={false}>
             {lens === 'users' ? (
-              <SmartTable
+              <motion.div
                 key="users"
+                initial={prefersReduced ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={prefersReduced ? undefined : { opacity: 0, position: 'absolute', top: 0, left: 0, right: 0 }}
+                transition={{ duration: prefersReduced ? 0 : 0.2, ease: [0.4, 0, 0.2, 1] }}
+              >
+              <SmartTable
                 columns={userMemberColumns}
                 data={filteredRows}
                 keyField="email"
                 searchable={false}
                 paginated
                 pageSize={10}
-                className="max-w-[1440px]"
                 hideResultCount
                 fixedLayout
                 stickyHeader
@@ -2624,16 +2846,22 @@ export default function PlatformUsageView() {
                   />
                 }
               />
+              </motion.div>
             ) : (
-              <SmartTable
+              <motion.div
                 key="teams"
+                initial={prefersReduced ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={prefersReduced ? undefined : { opacity: 0, position: 'absolute', top: 0, left: 0, right: 0 }}
+                transition={{ duration: prefersReduced ? 0 : 0.2, ease: [0.4, 0, 0.2, 1] }}
+              >
+              <SmartTable
                 columns={teamColumns}
                 data={filteredTeamRows}
                 keyField="team"
                 searchable={false}
                 paginated
                 pageSize={10}
-                className="max-w-[1440px]"
                 hideResultCount
                 fixedLayout
                 stickyHeader
@@ -2658,7 +2886,10 @@ export default function PlatformUsageView() {
                   />
                 }
               />
+              </motion.div>
             )}
+            </AnimatePresence>
+            </div>
           </div>
           </Band>
           )}

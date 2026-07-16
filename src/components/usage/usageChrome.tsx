@@ -18,10 +18,8 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowUpRight, Info, type LucideIcon } from 'lucide-react';
-import { PieChart, Pie, Cell, Tooltip } from 'recharts';
-import ChartAutoSizer from './ChartAutoSizer';
-import { CARD_BASE, DONUT_SHADES, HOVER_FILL, ICON_TILE, ICON_TILE_BRAND, KH_EASE, fmt } from './usageTokens';
+import { ArrowUpRight, ChevronRight, Info, type LucideIcon } from 'lucide-react';
+import { CARD_BASE, HOVER_FILL, ICON_TILE, ICON_TILE_BRAND, KH_EASE, fmt } from './usageTokens';
 
 /* ── Card ──────────────────────────────────────────────────────────────────
    One shell, three ranks. Padding scales with rank — uniform p-4 everywhere is
@@ -354,12 +352,53 @@ export function Meter({
    * The bar's weight. `sm` is the hairline bullet used inline in dense lists
    * (RankedRow, the KPI drawers). `lg` is a substantial 28px block for a card
    * whose bars ARE the content — the seat bands, so they carry the same weight
-   * as the funnel beside them rather than reading two steps quieter. */
-  size?: 'sm' | 'lg';
+   * as the funnel beside them rather than reading two steps quieter.
+   *
+   * `row` is the compact one: label, bar and figure on ONE line. `sm` and `lg`
+   * both stack a label row above the bar, which costs ~62px a row — fine when
+   * five bars are the point of the card, ruinous when they are a breakdown
+   * sitting beside something else and five single-digit counts end up 460px
+   * tall. Same data, same ink, a third of the height. */
+  size?: 'sm' | 'lg' | 'row';
 }) {
   const prefersReduced = useReducedMotion();
   const lg = size === 'lg';
   const radius = lg ? 'rounded-md' : 'rounded-full';
+
+  if (size === 'row') {
+    return (
+      <div title={title} className="flex items-center gap-3">
+        {/* Fixed, and wide enough for the longest label this variant actually
+            carries — "Workflow Library" (RUN_AREAS), against "Risk & Controls"
+            and "Working Papers" from the module list. Fixed rather than natural
+            width because the bars have to start at a common x to be compared;
+            too narrow and the column silently truncates to "Workflow Lib…". */}
+        <span className="w-[7.5rem] shrink-0 truncate text-[0.75rem] font-medium text-ink-600">{label}</span>
+        <div className={`h-2 min-w-0 flex-1 rounded-full overflow-hidden ${METER_TRACK[tone]}`}>
+          <motion.div
+            className={`h-full rounded-full ${METER_FILL[tone]}`}
+            initial={prefersReduced ? false : { width: 0 }}
+            animate={{ width: `${Math.max(1.5, Math.min(100, pct))}%` }}
+            transition={
+              prefersReduced
+                ? { duration: 0 }
+                : { type: 'spring', stiffness: 260, damping: 30, delay: 0.04 * index }
+            }
+          />
+        </div>
+        {/* Fixed width, so every bar in the list ends at the same x and the
+            figures stack into a column that can be read down. */}
+        <span className="w-[5.25rem] shrink-0 inline-flex items-baseline justify-end gap-1.5 text-[0.75rem] text-ink-400 tabular-nums">
+          {value !== undefined && <span className="font-semibold text-ink-900">{value}</span>}
+          {note}
+          {typeof delta === 'number' && compareLabel && (
+            <DeltaPill pct={delta} compareLabel={compareLabel} size="sm" />
+          )}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div title={title}>
       <div className="flex items-baseline justify-between gap-2 mb-1.5">
@@ -730,105 +769,6 @@ export function RadialGauge({
   );
 }
 
-/* ── Donut ─────────────────────────────────────────────────────────────────
-   Part-to-whole, and ONLY part-to-whole: the slices have to be shares of one
-   number, and that number goes in the hole. Anything else — a ranking, a
-   comparison across periods — is a bar, because an angle is the hardest thing
-   on a chart for a person to compare and the only thing a donut is good at is
-   "this slice is about a third".
-
-   The slices are steps of ONE hue, light to dark (DONUT_SHADES, in usageTokens),
-   not four unrelated colours. Four hues would read as four different KINDS of
-   thing and pull the eye to whichever slice happened to land on red. */
-
-export function Donut({ items, total, totalLabel, size = 128 }: {
-  items: { name: string; value: number }[];
-  /** The number in the hole. Passed in, not summed here — a card may want to put
-   *  a different whole in the middle than the slices happen to add up to. */
-  total: number;
-  totalLabel: string;
-  size?: number;
-}) {
-  const prefersReduced = useReducedMotion();
-  const shaded = items.map((d, i) => ({ ...d, color: DONUT_SHADES[i % DONUT_SHADES.length] }));
-  const ring = Math.round(size * 0.13);
-
-  return (
-    <div className="flex items-center gap-5">
-      <div className="relative shrink-0" style={{ width: size, height: size }}>
-        <ChartAutoSizer>
-          {({ width, height }) => (
-          <PieChart width={width} height={height}>
-            <Pie
-              data={shaded}
-              dataKey="value"
-              nameKey="name"
-              cx="50%"
-              cy="50%"
-              innerRadius={size / 2 - ring}
-              outerRadius={size / 2 - 2}
-              // The 2° pad and the 4px corner are the surface gap, in polar form:
-              // white separating touching marks, so neighbouring steps of one hue
-              // stay distinct without a stroke drawn round them.
-              paddingAngle={2}
-              cornerRadius={4}
-              strokeWidth={0}
-              isAnimationActive={!prefersReduced}
-              animationDuration={700}
-            >
-              {shaded.map(s => <Cell key={s.name} fill={s.color} />)}
-            </Pie>
-            <Tooltip
-              isAnimationActive={false}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              content={({ active, payload }: any) => {
-                if (!active || !payload?.length) return null;
-                const p = payload[0];
-                const value = Number(p.value);
-                const share = total > 0 ? Math.round((value / total) * 100) : 0;
-                return (
-                  <TooltipCard
-                    title={String(p.name)}
-                    rows={[{ color: p.payload.color, name: totalLabel, value }]}
-                    footer={<>{share}% of {fmt(total)}</>}
-                  />
-                );
-              }}
-            />
-          </PieChart>
-          )}
-        </ChartAutoSizer>
-        {/* The centre of a donut is the one place the total belongs. */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="text-[1.125rem] font-semibold tracking-[-0.02em] text-ink-900 leading-none">
-            {fmt(total)}
-          </span>
-          <span className="mt-1 text-[0.5625rem] font-medium text-ink-400 uppercase tracking-[0.1em]">
-            {totalLabel}
-          </span>
-        </div>
-      </div>
-
-      {/* The legend carries the values, so no slice needs a label on it — a
-          number printed on a 30° wedge is a number that gets clipped. */}
-      <div className="space-y-1.5 min-w-0 flex-1">
-        {shaded.map(s => (
-          <div key={s.name} className="flex items-center gap-2 text-[0.6875rem]">
-            <span className="h-[3px] w-3.5 rounded-full shrink-0" style={{ background: s.color }} />
-            <span className="text-ink-500 truncate">{s.name}</span>
-            <span className="ml-auto shrink-0 tabular-nums">
-              <span className="font-semibold text-ink-900">{fmt(s.value)}</span>
-              <span className="ml-1.5 text-ink-400">
-                {total > 0 ? Math.round((s.value / total) * 100) : 0}%
-              </span>
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /* ── Tooltip ───────────────────────────────────────────────────────────────
    The one surface on this page allowed to cast a shadow, because it is the one
    surface that genuinely lifts off it. Values lead, series names follow — the
@@ -903,9 +843,20 @@ export function RankedRow({ label, count, share, pct, onClick, index = 0, active
         }`}>
           {label}
         </span>
-        <span className="shrink-0 text-[0.75rem] text-ink-400 tabular-nums">
+        <span className="shrink-0 self-center flex items-center gap-1.5 text-[0.75rem] text-ink-400 tabular-nums">
           <span className="font-semibold text-ink-900">{fmt(count)}</span>
-          {typeof share === 'number' && <span className="ml-1.5">{share}%</span>}
+          {typeof share === 'number' && <span>{share}%</span>}
+          {/* Says the row opens, before the pointer is anywhere near it. The
+              hover tint and the brand label underneath only ever appeared to a
+              reader who had already guessed. Same chevron, same ink-300, as the
+              area rows and the section tiles this row opens. */}
+          {onClick && (
+            <ChevronRight
+              size={13}
+              aria-hidden
+              className="ml-0.5 text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-[color,transform]"
+            />
+          )}
         </span>
       </div>
       <div className={`${lg ? 'h-7' : 'h-1.5'} ${radius} bg-brand-100/70 overflow-hidden`}>

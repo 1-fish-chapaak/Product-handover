@@ -43,7 +43,7 @@ export default function TeamUsageModal({
         </div>
         <div>
           <div className="text-[1.5rem] font-bold text-ink-900 tabular-nums leading-none">{fmt(aiQueries)}</div>
-          <div className="text-[0.6875rem] text-ink-500 mt-1">AI queries</div>
+          <div className="text-[0.6875rem] text-ink-500 mt-1">IRA queries</div>
         </div>
       </div>
 

@@ -678,6 +678,10 @@ Three flat tabs (`members` · `roles` · `logs`); People & Teams are two views o
 #### 7.11.3 Tables · avatar · row actions
 Content is `SmartTable` (§7.10.3). People rows use `InitialsAvatar` — **monochrome `bg-brand-100 text-brand-700 ring-1 ring-inset ring-brand-600/10`; never a rainbow / per-person avatar.** Row action = `BTN_ROW` (`inline-flex gap-1.5 px-2.5 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-600 hover:border-ink-300/70 hover:text-brand-700`). Status is a noun → semantic pill tone, not brand: active `compliant-50/700`, suspended `high-50/700`, locked `risk-50/700`, inactive `draft-50/700`, invited `brand-50/700`. Owner = crown pill `bg-brand-50 text-brand-700`.
 
+**Identity cell — one mark, 26px.** Whatever a row is *about* wears a 26px mark and `gap-2.5`, then a two-line `min-w-0 leading-tight` block (title `text-[0.8125rem] font-semibold` + sub `text-[0.6875rem] text-ink-400 mt-0.5`). A person gets `InitialsAvatar size={26}`; a team gets a `w-[26px] h-[26px] rounded-lg bg-brand-100 ring-1 ring-inset ring-brand-600/10` tile with a `size={13}` glyph. **Never a 36px tile.** Users and Teams are one segmented switch apart in both Administration and Platform Usage, so a mark of a different size there makes the two halves of one control render at different row heights and the swap visibly jumps.
+
+**Groups of people → `AvatarStack` (`admin/AdminPrimitives.tsx`), never a hand-rolled stack.** Overlap is **`-space-x-1` (4px), not `-space-x-2`**: these are *initials*, not faces. At 8px the next circle's 2px ring lands at x≈16 of a 26px avatar whose glyphs sit at x≈6.5–19.5, so it clips the second letter of every avatar but the last. 4px keeps every pair whole and still reads as one group. Faces beyond `max` (default 5) roll into a `+N` chip (`bg-canvas ring-2 ring-canvas-elevated text-[0.625rem]`).
+
 #### 7.11.4 Roles (`RolesWorkspace.tsx`)
 Two-pane workspace (role list · permission detail), with `CreateRoleModal` driven by `PERMISSION_GROUPS` (`data/rbac`). Preset quick-set chips = `presetChip`: `px-3 h-7 rounded-full`, active `bg-brand-50 text-brand-700 border-brand-200`, rest hairline.
 

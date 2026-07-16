@@ -33,7 +33,7 @@ import {
   FIELD_LABEL, FIELD_INPUT, BTN_CANCEL, BTN_PRIMARY,
   BTN_CTA_PRIMARY, BTN_CTA_OUTLINE, BTN_ROW, type Stat,
 } from './adminTokens';
-import { InitialsAvatar, MemberSearch, RowActions, AdminKpiRow, AdminSelect } from './AdminPrimitives';
+import { InitialsAvatar, AvatarStack, MemberSearch, RowActions, AdminKpiRow, AdminSelect } from './AdminPrimitives';
 
 interface Props {
   activeTab?: string;
@@ -1679,10 +1679,15 @@ function TeamsSection({ onCreateTeam }: { onCreateTeam: () => void }) {
     },
     {
       key: 'name', label: 'Team', sortable: true,
+      /* 26px and `gap-2.5`, the same mark the People view one toggle away puts on
+         a person. This was a 36px tile against People's 26px avatar, so the two
+         halves of the same segmented switch rendered at different ROW HEIGHTS and
+         the swap between them jumped. Platform Usage's Teams lens had inherited
+         the identical mismatch; both now speak the People view's dimensions. */
       render: (t) => (
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
-            <Users size={15} className="text-brand-700" />
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-[26px] h-[26px] rounded-lg bg-brand-100 ring-1 ring-inset ring-brand-600/10 flex items-center justify-center shrink-0">
+            <Users size={13} className="text-brand-700" />
           </div>
           <InlineRename value={t.name} onCommit={(name) => renameTeam(t.team, name)} />
         </div>
@@ -1706,24 +1711,7 @@ function TeamsSection({ onCreateTeam }: { onCreateTeam: () => void }) {
       render: (t) => (
         t.members.length === 0
           ? <span className="text-[0.75rem] text-ink-400">No users yet</span>
-          : (
-            <div className="flex items-center -space-x-2">
-              {t.members.slice(0, 5).map((m, i) => (
-                <div
-                  key={i}
-                  title={m}
-                  className="relative rounded-full ring-2 ring-canvas-elevated transition-transform duration-150 hover:z-10 hover:-translate-y-0.5"
-                >
-                  <InitialsAvatar name={m} size={26} />
-                </div>
-              ))}
-              {t.members.length > 5 && (
-                <div className="relative w-[26px] h-[26px] rounded-full flex items-center justify-center text-[0.625rem] font-semibold text-ink-500 bg-canvas ring-2 ring-canvas-elevated tabular-nums">
-                  +{t.members.length - 5}
-                </div>
-              )}
-            </div>
-          )
+          : <AvatarStack names={t.members} />
       ),
     },
     {

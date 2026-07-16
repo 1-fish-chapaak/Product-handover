@@ -71,7 +71,7 @@ export default function UsageActivityChart({
     if (!active || !p) return null;
     const rows: { color: string; name: string; value: number; dashed?: boolean }[] = [
       { color: SERIES.primary, name: 'Actions', value: p.total },
-      { color: SERIES.secondary, name: 'AI was involved in', value: p.ai },
+      { color: SERIES.secondary, name: 'IRA was involved in', value: p.ai },
     ];
     if (p.rolling !== null) {
       rows.push({ color: ROLLING_STROKE, name: '7-day average', value: Math.round(p.rolling) });
@@ -87,7 +87,7 @@ export default function UsageActivityChart({
         footer={
           p.total === 0
             ? <>Nothing happened{p.weekend ? '. It was the weekend' : ''}</>
-            : <>AI was involved in {share}% of the day's work</>
+            : <>IRA was involved in {share}% of the day's work</>
         }
       />
     );
@@ -233,10 +233,10 @@ export function UsageAiStrip({ points, height = 68 }: { points: ActivityPoint[];
     return (
       <TooltipCard
         title={p.label}
-        rows={[{ color: SERIES.secondary, name: 'AI actions', value: p.ai }]}
+        rows={[{ color: SERIES.secondary, name: 'IRA actions', value: p.ai }]}
         footer={
           p.ai === 0
-            ? <>No AI that day</>
+            ? <>No IRA that day</>
             : <>{share}% of the {fmt(p.total)} actions that day</>
         }
       />
@@ -245,7 +245,7 @@ export function UsageAiStrip({ points, height = 68 }: { points: ActivityPoint[];
 
   if (total === 0) {
     return (
-      <p className="text-[0.75rem] text-ink-400">No AI activity in this period.</p>
+      <p className="text-[0.75rem] text-ink-400">No IRA activity in this period.</p>
     );
   }
 
@@ -253,7 +253,7 @@ export function UsageAiStrip({ points, height = 68 }: { points: ActivityPoint[];
     <div>
       <div className="flex items-baseline justify-between gap-4 mb-1.5">
         <span className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide">
-          AI actions per day
+          IRA actions per day
         </span>
         {/* The scale, said out loud. Without this the strip's tallest bar is just
             "tall", and the reader will read it against the axis above — which is
@@ -286,7 +286,7 @@ export function UsageAiStrip({ points, height = 68 }: { points: ActivityPoint[];
             <Tooltip cursor={{ fill: HOVER_FILL }} content={tip} isAnimationActive={false} />
             <Bar
               dataKey="ai"
-              name="AI actions"
+              name="IRA actions"
               fill="url(#usage-bar-ai)"
               radius={BAR_RADIUS}
               maxBarSize={14}

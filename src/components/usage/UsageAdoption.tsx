@@ -1,179 +1,197 @@
 /**
- * Adoption — the three questions a seat-licensed admin actually has.
+ * How often each seat is used — one bar per seat you pay for.
  *
- * "Who is using this, is it worth the licence, what should I fix." The metrics
- * come from Amplitude's analytics model (power-user curve, engagement matrix,
- * licence utilisation); the reasoning behind each — and the one Amplitude metric
- * deliberately left out, DAU/MAU — is in platform-usage.ts.
+ * THE HISTOGRAM IS GONE, and the reason is the whole design.
  *
- * Chart choices, for the next person:
- *   · The curve is a distribution over four bands, drawn as horizontal bars from
- *     a shared baseline. It was seven vertical buckets on a light-to-dark ramp,
- *     but over a tenant-sized seat count two of the seven were always empty and
- *     the ramp was encoding nothing the order of the rows did not already say.
- *   · The engagement matrix is the breadth × frequency SCATTER Amplitude uses,
- *     and it lives in `UsageMatrix.tsx`. It was briefly a ranked bar; the reason
- *     that was wrong — a bar cannot tell Set-up from Shelfware, and you must do
- *     opposite things about them — is written up in full at the top of that file.
+ * This card drew Amplitude's power-user curve: seats bucketed by day count
+ * ("Not once", "1 to 5 days", "6 to 14 days", "15 or more days"), four bars, a
+ * name list under each. That is a real chart with a real pedigree, and it was
+ * the wrong import. You bucket because you CANNOT draw a bar per user —
+ * Amplitude's readers have a million of them. This tenant has seventeen. At
+ * seventeen the histogram is not a summary, it is a shredder: it took 25, 24,
+ * 24, 24, 24, 24, 23, 23 and 21 and printed them as one bar reading "15 or more
+ * days", which is the least interesting true statement available about those
+ * nine seats.
+ *
+ * What the buckets destroyed is the actual finding. Sorted, the real numbers are
+ *
+ *     25 24 24 24 24 24 23 23 21 · 14 · 8 · 5 · 0 0 0 0 0
+ *
+ * a cliff. Nine seats are in the product nearly every working day (30 calendar
+ * days hold about 22 of them, so 21 and up means weekends too). Five have never
+ * opened it. Three sit anywhere in between. There is no middle here, and "no
+ * middle" is a licence decision: the nine are not negotiable, the five are pure
+ * waste, and the three are the only conversation worth having. Four bars cannot
+ * say that. Seventeen bars say it without a word of commentary.
+ *
+ * So: no buckets, no thresholds, no invented bands, and no leftover height to
+ * pad out with rules and air. Every seat is its own bar, ranked, at its own real
+ * day count. The shape is the data, not a model of it.
+ *
+ * It also deleted three mechanisms that existed only to hide data: a "+N more"
+ * popover, a shown-names cap, and first-name disambiguation (two seats are
+ * called Ajay, and bucketing put them in bands that contradicted each other).
+ * Nothing is folded away now, so nothing needs unfolding.
+ *
+ * The bar is the funnel's bar (h-7, rounded-md, a lighter step of its own hue
+ * behind the fill) so the two cards on this tab read as one language. It is
+ * drawn here rather than through `Meter` because Meter stacks its label ABOVE
+ * the track, which is right for four rows and impossible at seventeen: this
+ * needs the name beside the bar.
  */
 
 import { useMemo } from 'react';
-import { Gauge, CircleCheck, CircleAlert } from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
+import { Gauge } from 'lucide-react';
 import type { AdminUser } from '../../context/AdminDataContext';
-import {
-  powerCurve, licenceUse,
-  type UsageDay,
-} from '../../data/platform-usage';
-import { Card, Meter, InfoPopover } from './usageChrome';
-import { InitialsAvatar } from '../admin/AdminPrimitives';
-import { SERIES } from './usageTokens';
+import { powerCurve, licenceUse, type UsageDay } from '../../data/platform-usage';
+import { Card, InfoPopover } from './usageChrome';
+import { FIGURE } from './usageTokens';
 
-/* The one colour that carries an action. Validated against the brand at
- * ΔE 136.6 (protan) — see the dataviz palette check. */
-const ATTENTION = SERIES.attention;
+/* The track is a lighter step of the fill's own ramp rather than a grey wash, so
+   an empty bar still says which hue it belongs to. These are `Meter`'s two tracks
+   to the character: this card draws its own bar (see the note at the top) and
+   must not drift from the one beside it. */
+const TRACK = 'bg-brand-100/70';
+const TRACK_IDLE = 'bg-mitigated-700/[0.14]';
 
-/* ── The two ends of the curve ─────────────────────────────────────────────
-   The seats to keep, and the seats to act on. One block each: an amber tint on
-   the one that carries a to-do, so it reads as a task and not a second statistic.
+/* One grid, declared once, so the ruler's ticks land on the same x as the bars
+   they measure. Three columns: name, track, count. If these drift apart the
+   scale starts lying, which is the exact failure this ruler exists to fix.
+   Alignment is left to each caller: `items-*` are one Tailwind property, so a
+   shared `items-center` here could not be overridden per row by class order. */
+const SEAT_GRID = 'grid grid-cols-[7.5rem_1fr_1.75rem] gap-3';
 
-   Who is in each block is named in plain first names, not a stack of overlapping
-   two-letter avatars. Overlapped, each face hid the next one's initials, so the
-   row read as cryptic fragments rather than as people; a short list of names says
-   who at a glance, with the full names and each seat's day count on hover. */
+/**
+ * Where to put the ruler's ticks: zero, a round step, and always the window's
+ * own end.
+ *
+ * The end tick is the whole point — it is the only mark that says how long the
+ * track IS — so it is never dropped. An inner tick that would crowd it is
+ * dropped instead: the range picker offers 1 day (Today), 7, 30, 90 and custom,
+ * and at 7 a plain step of 2 would otherwise print "6" and "7 days" a fourteenth
+ * of the track apart, on top of each other.
+ */
+function scaleTicks(windowDays: number): number[] {
+  const step = [1, 2, 5, 7, 10, 15, 30].find(s => windowDays / s <= 4) ?? windowDays;
+  const ticks: number[] = [];
+  for (let d = 0; d < windowDays; d += step) ticks.push(d);
+  if (ticks.length > 1 && windowDays - ticks[ticks.length - 1] <= step * 0.5) ticks.pop();
+  ticks.push(windowDays);
+  return ticks;
+}
 
-/** How many names sit on the line before the rest fold into "+N more". Capped so
- *  a big group cannot spill the list across five lines and wreck the card; the
- *  folded names are still there, one hover away. */
-const NAMES_SHOWN = 4;
-
-function SeatGroup({ icon: Icon, tone, heading, caption, people, daysActive, windowDays, emptyNote }: {
-  icon: typeof Gauge;
-  tone: 'keep' | 'act';
-  heading: string;
-  caption: string;
-  people: AdminUser[];
-  daysActive: Map<string, number>;
-  windowDays: number;
-  emptyNote?: string;
-}) {
-  const act = tone === 'act';
-  const shownFirst = people.slice(0, NAMES_SHOWN).map(p => p.name.split(' ')[0]);
-  const hiddenCount = Math.max(0, people.length - NAMES_SHOWN);
+/**
+ * The scale, drawn.
+ *
+ * Every bar here is a count of days against the full window, but the window was
+ * only ever stated in the card's subtitle: the chart itself printed a bare "25"
+ * beside a track that stopped at some unexplained width. So a reader had to read
+ * a sentence, hold "30" in their head, and apply it to seventeen rows — and
+ * nobody reads a chart that way. 25 could have been anything.
+ *
+ * Now the track is labelled at the point where it ends, in the unit it is
+ * counting: the bar reaches 25, the track runs out at "30 days", and the gap
+ * between them is the days that seat did not work. Nothing to hold in your head.
+ */
+function SeatScale({ windowDays }: { windowDays: number }) {
+  // A zero-day window divides to NaN and would place every tick at "NaN%".
+  // There is no scale to draw for a window with no days in it.
+  if (windowDays <= 0) return null;
+  const ticks = scaleTicks(windowDays);
   return (
-    <div className={`rounded-lg border p-4 ${act ? 'border-mitigated-200/70 bg-mitigated-50' : 'border-brand-100 bg-brand-50/40'}`}>
-      {/* Icon + label on one line: a tick for the seats that are fine, an alert
-          for the ones to act on — so which block is the to-do reads before a word
-          is. */}
-      <div className="flex items-center gap-2">
-        <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${act ? '' : 'bg-brand-100 text-brand-700'}`}
-          style={act ? { color: ATTENTION, backgroundColor: 'rgba(180, 83, 9, 0.12)' } : undefined}
-        >
-          <Icon size={13} strokeWidth={2} aria-hidden />
-        </span>
-        <span
-          className={`text-[0.6875rem] font-semibold uppercase tracking-wide ${act ? '' : 'text-brand-700'}`}
-          style={act ? { color: ATTENTION } : undefined}
-        >
-          {heading}
-        </span>
-      </div>
-      <div className="mt-2.5 flex items-baseline gap-1.5">
-        <span className="text-[1.75rem] font-semibold leading-none tracking-[-0.03em] text-ink-900 tabular-nums">
-          {people.length}
-        </span>
-        <span className="text-[0.8125rem] text-ink-500">{people.length === 1 ? 'seat' : 'seats'}</span>
-      </div>
-      <p className="mt-1 text-[0.75rem] text-ink-500 leading-snug">{caption}</p>
-
-      {people.length > 0 ? (
-        <div className="mt-3 text-[0.75rem] leading-snug text-ink-600">
-          {shownFirst.join(', ')}
-          {hiddenCount > 0 && (
-            // The rest fold into "+N more", but hovering it opens a real popover —
-            // every seat in the group by face and name, its day count aligned down
-            // one edge. The old version was a wall of "Name · N of 30 days" text
-            // with no avatars under an "All 9" stub header: a debug dump, not a
-            // surface.
-            <span className="group/more relative whitespace-nowrap">
-              {' '}
-              <span className="cursor-help font-medium text-ink-500 underline decoration-dotted decoration-ink-300 underline-offset-2">
-                +{hiddenCount} more
+    <div className={`${SEAT_GRID} items-end pb-1.5`} aria-hidden>
+      <span />
+      <div className="relative h-4">
+        {ticks.map((d, i) => {
+          const first = i === 0;
+          const last = i === ticks.length - 1;
+          return (
+            <span
+              key={d}
+              className="absolute bottom-0 flex flex-col items-start"
+              style={{
+                left: `${(d / windowDays) * 100}%`,
+                transform: last ? 'translateX(-100%)' : first ? 'none' : 'translateX(-50%)',
+                alignItems: last ? 'flex-end' : first ? 'flex-start' : 'center',
+              }}
+            >
+              {/* The unit rides the last tick, where the track stops, rather than
+                  sitting in a legend: it names the scale at the one x a reader is
+                  already looking at to see how much room is left. */}
+              <span className="whitespace-nowrap text-[0.625rem] leading-none text-ink-400 tabular-nums">
+                {last ? `${d} days` : d}
               </span>
-              {/* The `pb-2` on the outer wrapper is the gap to the trigger AND part
-                  of the hover target, so the cursor can cross into the list to
-                  scroll it without the popover closing. */}
-              <span className="invisible absolute bottom-full left-0 z-30 pb-2 opacity-0 transition-opacity duration-150 group-hover/more:visible group-hover/more:opacity-100">
-                <span className="block w-max min-w-[14rem] max-w-[18rem] overflow-hidden rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_12px_32px_-8px_rgba(15,7,32,0.22)]">
-                  <span className="flex items-baseline justify-between gap-4 border-b border-canvas-border px-3 py-2">
-                    <span className="text-[0.625rem] font-semibold uppercase tracking-wide text-ink-400">{heading}</span>
-                    <span className="text-[0.625rem] tabular-nums text-ink-400">{people.length} {people.length === 1 ? 'seat' : 'seats'}</span>
-                  </span>
-                  <span className="block max-h-[15.5rem] overflow-y-auto p-1.5">
-                    {people.map(p => {
-                      const n = daysActive.get(p.name) ?? 0;
-                      return (
-                        <span key={p.email} className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5 hover:bg-canvas">
-                          <InitialsAvatar name={p.name} size={22} />
-                          <span className="min-w-0 flex-1 truncate text-[0.75rem] font-medium text-ink-800">{p.name}</span>
-                          <span className="shrink-0 tabular-nums text-[0.6875rem] text-ink-400">{n} of {windowDays} days</span>
-                        </span>
-                      );
-                    })}
-                  </span>
-                </span>
-              </span>
+              <span className="mt-1 h-1 w-px bg-canvas-border" />
             </span>
-          )}
-        </div>
-      ) : emptyNote ? (
-        <p className="mt-3 text-[0.75rem] text-ink-400">{emptyNote}</p>
-      ) : null}
+          );
+        })}
+      </div>
+      <span />
     </div>
   );
 }
 
-/** The card every panel on this tab wears. */
-function Panel({ icon, title, subtitle, right, children, className = '' }: {
-  icon: typeof Gauge;
-  title: string;
-  subtitle: string;
-  right?: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
+/**
+ * One seat, one bar.
+ *
+ * A seat at zero has no fill to colour, which is exactly the point, so the TRACK
+ * carries the amber instead. Five empty amber tracks stacked at the foot of the
+ * card is the waste, drawn: you pay for those and get back a bar with nothing in
+ * it. No badge, no icon, no callout box required.
+ */
+function SeatBar({ name, days, windowDays, index }: {
+  name: string;
+  days: number;
+  windowDays: number;
+  index: number;
 }) {
+  const prefersReduced = useReducedMotion();
+  const idle = days === 0;
   return (
-    <Card icon={icon} title={title} subtitle={subtitle} right={right} className={className}>
-      {children}
-    </Card>
+    <div className={`${SEAT_GRID} items-center`} title={`${name}: ${days} of ${windowDays} days`}>
+      <span className={`truncate text-[0.75rem] leading-none ${idle ? 'font-medium text-ink-800' : 'text-ink-600'}`}>
+        {name}
+      </span>
+      <div className={`h-7 overflow-hidden rounded-md ${idle ? TRACK_IDLE : TRACK}`}>
+        {!idle && (
+          <motion.div
+            className="h-full rounded-md bg-brand-600"
+            initial={prefersReduced ? false : { width: 0 }}
+            animate={{ width: `${(days / windowDays) * 100}%` }}
+            transition={
+              prefersReduced
+                ? { duration: 0 }
+                : { type: 'spring', stiffness: 260, damping: 30, delay: 0.02 * index }
+            }
+          />
+        )}
+      </div>
+      <span className={`text-right text-[0.75rem] leading-none tabular-nums ${
+        idle ? 'font-semibold text-mitigated-700' : 'font-medium text-ink-900'
+      }`}>
+        {days}
+      </span>
+    </div>
   );
 }
 
-/* ── The power-user curve ─────────────────────────────────────────────────── */
-
-function PowerCurvePanel({ days, users, className }: { days: UsageDay[]; users: AdminUser[]; className?: string }) {
+function SeatUsagePanel({ days, users, className }: { days: UsageDay[]; users: AdminUser[]; className?: string }) {
   const curve = useMemo(() => powerCurve(days, users), [days, users]);
   const licence = useMemo(() => licenceUse(days, users), [days, users]);
 
-  /* The four bands, folded from the seven raw buckets. Boundaries come from the
-     buckets' own min/max, so this stays correct if the edges are ever retuned. */
-  const bands = useMemo(() => {
-    const fold = (label: string, keep: (b: { min: number; max: number }) => boolean, attention = false) => ({
-      label,
-      attention,
-      seats: curve.buckets.filter(keep).flatMap(b => b.seats),
-    });
-    return [
-      fold('Not once', b => b.max === 0, true),
-      fold('1 to 5 days', b => b.min >= 1 && b.max <= 5),
-      fold('6 to 14 days', b => b.min >= 6 && b.max <= 14),
-      fold('15 or more days', b => b.min >= 15),
-    ];
-  }, [curve.buckets]);
-  const bandMax = Math.max(1, ...bands.map(b => b.seats.length));
+  /* Ranked, busiest first, so the cliff lands where the eye already is and the
+     seats worth taking back collect at the bottom. Ties break on name, so the
+     order is stable rather than an accident of the seed list. */
+  const seats = useMemo(
+    () => users
+      .map(u => ({ name: u.name, email: u.email, days: curve.daysActive.get(u.name) ?? 0 }))
+      .sort((a, b) => b.days - a.days || a.name.localeCompare(b.name)),
+    [users, curve.daysActive],
+  );
 
   return (
-    <Panel
+    <Card
       icon={Gauge}
       title="How often each seat is used"
       subtitle={`Days of real work in the last ${curve.windowDays} days`}
@@ -182,101 +200,62 @@ function PowerCurvePanel({ days, users, className }: { days: UsageDay[]; users: 
           label="how often seats are used"
           counts={`For each paid seat, the number of days it did real work in the last ${curve.windowDays} days.`}
           excludes="Days with a sign-in but no work. A sign-in is not use."
-          note="Seats are grouped by how many days they were used, from not once to 15 or more."
+          note={`Every seat you pay for is listed, busiest first. The bar is that seat's days against the full ${curve.windowDays}.`}
         />
       }
       className={className}
+      bodyClassName="flex flex-col"
     >
-      {/* Licence utilisation over the page's window — stated, not drawn.
-          It briefly wore a ring of its own, and that was a mistake the moment the
-          verdict moved onto this tab: two gauges within one screen of each other,
-          reading 65% and 71%, are not two facts a reader combines — they are a
-          number that appears to disagree with itself. They measure different
-          windows (a fixed week against the date filter), which is exactly the
-          distinction a second identical mark destroys.
+      {/* The licence number, stated rather than drawn: the verdict at the top of
+          this tab already owns the one ring the tab is allowed, and a second
+          gauge reading a different window makes the page look like it disagrees
+          with itself.
 
-          One ring per tab, and the hero owns it. This is the same number said in
-          words, and the bands under it are what this card is actually for. */}
-      {/* The number above the bands names its own window, and it has to. The
-          verdict at the top of this tab reads a fixed week (that is what the 60%
-          healthy mark is defined against); this reads the date range the page is
-          set to. Two true percentages, one screen apart, and without the words
-          they look like the page disagreeing with itself. */}
-      {/* The summary as one visual stat, not a sentence: the big number, and the
-          two counts it is made of. The bands below carry the shape. */}
-      <div className="mb-5 flex items-end gap-3">
-        <span className="text-[2.25rem] font-semibold leading-none tracking-[-0.03em] text-ink-900 tabular-nums">
-          {licence.pct}%
-        </span>
-        <span className="mb-1 text-[0.8125rem] text-ink-500">
-          of seats did real work
-          <span className="text-ink-400"> · {licence.used} of {licence.total}</span>
+          Not a fifth fact either. It is the rows, counted: twelve bars have
+          something in them, five do not. */}
+      <div className="flex items-baseline gap-2.5 pb-4">
+        <span className={FIGURE}>{licence.pct}%</span>
+        <span className="text-[0.8125rem] text-ink-500">of seats did real work</span>
+        <span className="ml-auto shrink-0 text-[0.75rem] tabular-nums text-ink-400">
+          {licence.used} of {licence.total} seats
         </span>
       </div>
 
-      {/* Seven buckets over seventeen seats is the 24x7 heatmap's mistake again:
-          two of them were empty and two held a single seat, so the reader spent
-          their attention on bars that carried no signal. Folded into the four
-          bands an admin can act on, the shape says what it always meant: a pile
-          that never showed up, and a pile that lives in the product.
+      <SeatScale windowDays={curve.windowDays} />
 
-          The bar is the funnel's bar (Meter, size lg): the label and count ride
-          above a full-width track, and the fill is a tall rounded block — so the
-          two cards on this tab, the seat bands and the seat funnel beside them,
-          read as one kind of mark rather than two. */}
-      <div className="space-y-2">
-        {bands.map((band, i) => {
-          const n = band.seats.length;
-          const share = licence.total > 0 ? Math.round((n / licence.total) * 100) : 0;
-          const attn = band.attention && n > 0;
-          return (
-            <Meter
-              key={band.label}
-              index={i}
-              size="lg"
-              tone={attn ? 'attention' : 'brand'}
-              title={n === 0 ? `${band.label}: nobody` : `${band.label}: ${band.seats.map(s => s.name).join(', ')}`}
-              label={<span className={attn ? 'font-semibold text-ink-900' : undefined}>{band.label}</span>}
-              value={n}
-              note={
-                <span className="text-ink-400">
-                  {n === 1 ? 'seat' : 'seats'}
-                  {n > 0 && <span className="ml-1.5">{share}%</span>}
-                </span>
-              }
-              pct={(n / bandMax) * 100}
-            />
-          );
-        })}
-      </div>
+      {/* Seventeen seats, seventeen bars, nothing aggregating between the reader
+          and the number. The rows are the card's height: it fills because it is
+          full, not because the gaps were stretched to reach the bottom. */}
+      <div className="relative">
+        {/* The ruler's ticks, carried down the stack. A ruler at the top alone
+            measures the top row and abandons the sixteen below it, which is where
+            the reader actually is by the time they are comparing seats. The lines
+            sit UNDER the tracks — the tracks are opaque where a bar is filled, so
+            a line never crosses a fill and never gets mistaken for a threshold;
+            it shows only in the empty remainder, which is the part being read. */}
+        <div className={`${SEAT_GRID} items-stretch pointer-events-none absolute inset-0`} aria-hidden>
+          <span />
+          <div className="relative h-full">
+            {scaleTicks(curve.windowDays).slice(1, -1).map(d => (
+              <span
+                key={d}
+                className="absolute inset-y-0 w-px bg-canvas-border/70"
+                style={{ left: `${(d / curve.windowDays) * 100}%` }}
+              />
+            ))}
+          </div>
+          <span />
+        </div>
 
-      {/* The two ends of the curve are the only two things to act on. */}
-      <div className="mt-5 pt-4 border-t border-canvas-border grid grid-cols-2 gap-3">
-        <SeatGroup
-          icon={CircleCheck}
-          tone="keep"
-          heading="Using it a lot"
-          caption="Used it most days"
-          people={curve.committed}
-          daysActive={curve.daysActive}
-          windowDays={curve.windowDays}
-        />
-        <SeatGroup
-          icon={CircleAlert}
-          tone="act"
-          heading="Barely using it"
-          caption="Used it once or never"
-          people={curve.reclaim}
-          daysActive={curve.daysActive}
-          windowDays={curve.windowDays}
-          emptyNote="Nobody. Every seat is in use."
-        />
+        <div className="relative flex flex-col gap-1">
+          {seats.map((s, i) => (
+            <SeatBar key={s.email} name={s.name} days={s.days} windowDays={curve.windowDays} index={i} />
+          ))}
+        </div>
       </div>
-    </Panel>
+    </Card>
   );
 }
-
-/* ── The engagement matrix ────────────────────────────────────────────────── */
 
 /**
  * The engagement matrix used to sit here, beside the seat curve.
@@ -296,5 +275,5 @@ export default function UsageAdoption({ days, users, className }: {
   users: AdminUser[];
   className?: string;
 }) {
-  return <PowerCurvePanel days={days} users={users} className={className} />;
+  return <SeatUsagePanel days={days} users={users} className={className} />;
 }

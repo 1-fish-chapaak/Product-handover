@@ -60,9 +60,11 @@ export default function UsageMiniTrend({
         </span>
         {/* The scale, said out loud. Without it the tallest bar is merely "tall",
             and a reader will measure it against the card next door — which is a
-            different scale, and they would be wrong by an order of magnitude. */}
+            different scale, and they would be wrong by an order of magnitude.
+            Naming the tallest day IS the scale, and it is a fact a person can
+            picture; "Own scale" was the chart talking about its own axis. */}
         <span className="text-[0.625rem] text-ink-400 tabular-nums">
-          Own scale · peak {fmt(peak?.value ?? 0)} on {peak?.label}
+          Busiest day: {fmt(peak?.value ?? 0)} on {peak?.label}
         </span>
       </div>
       <div style={{ height }}>

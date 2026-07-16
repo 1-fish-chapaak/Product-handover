@@ -108,6 +108,9 @@ function deriveTeams(users: AdminUser[]): AdminTeam[] {
   });
 }
 
+/** The file formats an Export event can produce. */
+export type ExportFormat = 'PDF' | 'CSV' | 'XLSX' | 'DOCX' | 'PPTX' | 'HTML' | 'TXT' | 'JSON';
+
 export interface AuditLog {
   /** Stable unique key — many events can share a timestamp (same second). */
   id: string;
@@ -118,6 +121,17 @@ export interface AuditLog {
   module: string;
   entity: string;
   status: 'Success' | 'Failed';
+  /* ── Export events: what came out, and as what ──
+   *
+   * Carried as data, not recovered from `description`. Platform Usage used to
+   * regex the artifact name and format back out of the prose
+   * (`… as PDF` / `… (PDF)`), and every logger whose sentence didn't match that
+   * shape fell through to a hardcoded CSV default. A working paper downloaded as
+   * .xlsx reported itself as a CSV, and the format mix on the Output tab counted
+   * those phantom CSVs as real. Set both on any Export; the description is then
+   * free to read like a sentence. */
+  artifact?: string;
+  format?: ExportFormat;
   /** The workspace the action happened in (Workspace.id). Stamped from whichever
    *  workspace the actor had open — the same one the sidebar switcher shows. This
    *  is what makes usage answerable per workspace rather than only platform-wide. */
@@ -153,6 +167,9 @@ export interface LogInput {
   module: string;
   entity: string;
   status?: AuditLog['status'];
+  /** Export only — the artifact's display name and its real format. */
+  artifact?: string;
+  format?: ExportFormat;
 }
 
 interface AdminDataContextValue {
@@ -226,6 +243,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         module: input.module,
         entity: input.entity,
         status: input.status ?? 'Success',
+        artifact: input.artifact,
+        format: input.format,
         // Whichever workspace the actor has open. Not caller-supplied: an event
         // must be attributed to where it actually happened.
         workspaceId: activeWorkspaceId,

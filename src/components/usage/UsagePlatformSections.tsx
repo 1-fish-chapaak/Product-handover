@@ -528,7 +528,7 @@ export default function UsagePlatformSections({
     { key: 'process-hub', icon: Layers, title: 'Process Hub', subtitle: 'The SOPs and RACMs behind each business process', stats: processHub.stats, scope: 'all-time', portfolio: processHub },
     // Activity. These four ARE functions of `days`, and they move with the range.
     { key: 'ask-ira', icon: Sparkles, title: 'Ask IRA', subtitle: 'What people ask the assistant', stats: askIra.stats, scope: 'period', portfolio: askIra },
-    { key: 'concierge', icon: Wand2, title: 'AI Concierge', subtitle: 'Which AI tool gets run, and who runs it', stats: conciergeStats, scope: 'period' },
+    { key: 'concierge', icon: Wand2, title: 'AI Concierge', subtitle: 'Which tool gets run, and who runs it', stats: conciergeStats, scope: 'period' },
     { key: 'reports', icon: FileBarChart, title: 'Reports', subtitle: 'The report book, and what is in it', stats: reports.stats, scope: 'all-time', portfolio: reports },
     { key: 'workflows', icon: Workflow, title: 'Workflows', subtitle: 'How much the automations actually run', stats: workflows.stats, scope: 'all-time', portfolio: workflows },
     { key: 'risk-controls', icon: ShieldCheck, title: 'Risk & Controls', subtitle: 'How much of the register is controlled', stats: riskControls.stats, scope: 'all-time', portfolio: riskControls },
@@ -605,7 +605,13 @@ export default function UsagePlatformSections({
             key={active.key}
             title={active.title}
             subtitle={active.subtitle}
-            width="max-w-5xl"
+            /* The widest modal in the app, and it earns it: this one carries a
+               full usage panel (a 30-day chart plus a people list) stacked over a
+               whole register (a six-figure portfolio row, type bars and a status
+               breakdown side by side). At 5xl the portfolio row was squeezing six
+               figures into 1024px and the register below the fold was doing the
+               same work in half the room it wants. */
+            width="max-w-7xl"
             onClose={() => setOpen(null)}
           >
             {/* ONE detail per area: how much it was USED, then what is IN it.

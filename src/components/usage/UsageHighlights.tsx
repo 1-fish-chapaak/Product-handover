@@ -49,7 +49,7 @@ export const CONCENTRATION_LIMIT = 60;
 export interface HighlightsInput {
   /** The area with the biggest rise vs the previous window, if any rose. */
   growing: { module: UsageModule; deltaPct: number } | null;
-  /** Share of active members who used AI at all (0–100). */
+  /** Share of active members who used IRA at all (0–100). */
   aiAdoptionPct: number;
   /** AI actions in the window — lets 0% adoption say "unattributed", not "unused". */
   aiActivity: number;
@@ -145,20 +145,20 @@ export default function UsageHighlights({ h, onOpenModule, onSeeAi, onSeeQuiet, 
       <Highlight
         icon={Sparkles}
         index={1}
-        eyebrow="Using the AI"
+        eyebrow="Using IRA"
         // 0% adoption with AI actions on the board means "we cannot attribute
-        // them to a current member", not "nobody uses AI". Show the true one.
+        // them to a current member", not "nobody uses IRA". Show the true one.
         figure={h.aiAdoptionPct > 0 ? `${h.aiAdoptionPct}%` : h.aiActivity > 0 ? fmt(h.aiActivity) : '0'}
-        ariaLabel="Share of active people using AI"
-        cta="See AI use"
+        ariaLabel="Share of active people using IRA"
+        cta="See IRA use"
         onClick={onSeeAi}
       >
         {h.aiAdoptionPct > 0 ? (
-          <>of the people working on the platform used AI.</>
+          <>of the people working on the platform used IRA.</>
         ) : h.aiActivity > 0 ? (
           <>AI {h.aiActivity === 1 ? 'action' : 'actions'} this period, none we can trace to a current member.</>
         ) : (
-          <>Nobody used the AI in this period.</>
+          <>Nobody used IRA in this period.</>
         )}
       </Highlight>
 

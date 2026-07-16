@@ -12,6 +12,20 @@
  * receiving the new visual language.
  */
 @theme {
+  /* ── Breakpoints ──────────────────────────────────────────────────────────
+     `wide` sits between xl (1280) and 2xl (1536), and it exists because that gap
+     is where the laptops are. A 14" MacBook is 1512pt and a 13" is 1440, so a
+     three-column layout gated at 2xl reaches almost nobody on this team: it renders
+     its fallback on every machine in the building and looks like it was never done.
+
+     CAUTION if you use it against a named breakpoint. Tailwind v4 emits `wide:`
+     rules BEFORE `xl:` ones regardless of value, so `xl:w-full` beats
+     `wide:w-auto` at every width — the same trap `min-[1400px]:` has. Do not pair
+     them on one property. Use non-overlapping bands instead (`xl:max-wide:` for the
+     middle, `wide:` for the top), which makes cascade order irrelevant. See
+     UsageVerdict.tsx for the worked example. */
+  --breakpoint-wide: 1340px;
+
   /* ── Brand (anchor 600, dark anchor 900) ── */
   --color-brand-50:  #F7F0FF;
   --color-brand-100: #EDDEFE;

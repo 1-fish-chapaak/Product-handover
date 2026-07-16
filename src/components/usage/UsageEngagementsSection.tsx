@@ -147,7 +147,10 @@ export default function UsageEngagementsSection() {
           className="lg:col-span-2"
         >
           {findingsByEngagement.length > 0 ? (
-            <div className="space-y-3">
+            /* Two up, same as the breakdown below: eight ranked bars stacked in a
+               two-thirds column ran taller than the by-process list beside it, so
+               the row was sized by dead space. */
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-8 gap-y-3">
               {findingsByEngagement.map((e, i) => (
                 <div key={e.id}>
                   <div className="flex items-center justify-between mb-1 gap-2">
@@ -203,15 +206,20 @@ export default function UsageEngagementsSection() {
       <SectionCard
         icon={ShieldCheck}
         title="Controls tested & findings by engagement"
-        subtitle="In-flight work first"
+        subtitle={`All ${p.total} engagements, in-flight work first. Bar length = controls in scope, filled = effective.`}
       >
-        <div className="space-y-1">
+        {/* Two up, once there is room for it. Thirteen engagements in a single
+            stacked column ran 842px — 37% of everything in this modal, and the
+            single biggest reason it scrolled — while the right half of a 1,224px
+            card sat empty. The grid fills row by row, so the in-flight-first rank
+            still reads in order: 1,2 across, then 3,4. */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-8 gap-y-0.5">
           {rankedRows.map((r) => {
             const testedPct = r.controls > 0 ? Math.round((r.effective / r.controls) * 100) : 0;
             return (
               <div
                 key={r.id}
-                className="w-full -mx-2 px-2 py-2 rounded-lg flex items-center gap-3"
+                className="w-full py-2 flex items-center gap-3"
               >
                 {/* name + type */}
                 <div className="min-w-0 w-[34%]">
@@ -226,8 +234,11 @@ export default function UsageEngagementsSection() {
 
                 {/* controls bar */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[0.625rem] text-ink-400">Controls</span>
+                  {/* No "Controls" label on the row. The card's subtitle names what
+                      the bar measures once; printing it again beside all thirteen
+                      bars is the same word thirteen times, and it was eating the
+                      room the figures need now that the rows sit two up. */}
+                  <div className="flex items-center justify-end mb-1">
                     <span className="text-[0.6875rem] text-ink-500 tabular-nums"><span className="font-semibold text-ink-800">{fmt(r.effective)}</span>/{fmt(r.controls)} effective · {testedPct}%</span>
                   </div>
                   <div className="h-2 rounded-full bg-brand-100/70 overflow-hidden" style={{ width: `${Math.max(6, (r.controls / controlsMax) * 100)}%` }}>

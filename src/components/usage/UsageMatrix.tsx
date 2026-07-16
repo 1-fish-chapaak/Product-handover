@@ -28,6 +28,7 @@
  */
 
 import { useMemo } from 'react';
+import { ChevronRight } from 'lucide-react';
 import type { AdminUser } from '../../context/AdminDataContext';
 import {
   engagementMatrix, QUADRANT_NAME,
@@ -113,7 +114,7 @@ export default function UsageMatrix({ days, users, onSelect }: {
                   }
                 : {})}
               className={`group w-full flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg text-left transition-colors ${
-                onSelect ? 'cursor-pointer hover:bg-brand-50/50' : ''
+                onSelect ? 'cursor-pointer hover:bg-canvas' : ''
               }`}
             >
               <span className={`w-28 shrink-0 text-[0.8125rem] font-medium truncate ${shelf ? 'text-mitigated-700' : 'text-ink-800'}`}>
@@ -139,6 +140,22 @@ export default function UsageMatrix({ days, users, onSelect }: {
               <span className={`shrink-0 inline-flex items-center h-5 px-2 rounded-full text-[0.625rem] font-medium whitespace-nowrap ${VERDICT_PILL[p.quadrant]}`}>
                 {QUADRANT_NAME[p.quadrant]}
               </span>
+
+              {/* The one thing the row could not say for itself: that it opens.
+                  A hover tint is not an affordance — it only exists once the
+                  pointer is already on the row, so nothing on the resting card
+                  told a reader any of this was clickable, and most never found
+                  the twelve details behind it. This is the same disclosure
+                  chevron the section tiles below wear, at rest and in the same
+                  ink-300, so "quiet arrow on the right edge" means one thing on
+                  this page rather than two. */}
+              {onSelect && (
+                <ChevronRight
+                  size={14}
+                  aria-hidden
+                  className="shrink-0 text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-[color,transform]"
+                />
+              )}
             </Row>
           );
         })}
