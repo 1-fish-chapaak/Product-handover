@@ -12,8 +12,9 @@ import { useMemo } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { ClipboardCheck, ShieldCheck, AlertTriangle, GitBranch } from 'lucide-react';
 import {
-  ResponsiveContainer, PieChart, Pie, Cell, Tooltip,
+  PieChart, Pie, Cell, Tooltip,
 } from 'recharts';
+import ChartAutoSizer from './ChartAutoSizer';
 import {
   deriveEngagementPortfolio, ENG_TYPE_COLOR, ENG_STATUS_COLOR,
   type EngRow,
@@ -109,14 +110,16 @@ export default function UsageEngagementsSection() {
             <Eyebrow className="mb-3">By status</Eyebrow>
             <div className="flex items-center gap-4">
               <div className="w-[112px] h-[112px] shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
+                <ChartAutoSizer>
+                  {({ width, height }) => (
+                  <PieChart width={width} height={height}>
                     <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={32} outerRadius={54} paddingAngle={2} strokeWidth={0}>
                       {statusData.map(s => <Cell key={s.name} fill={s.color} />)}
                     </Pie>
                     <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
                   </PieChart>
-                </ResponsiveContainer>
+                  )}
+                </ChartAutoSizer>
               </div>
               <div className="space-y-1.5 min-w-0">
                 {statusData.map(s => (

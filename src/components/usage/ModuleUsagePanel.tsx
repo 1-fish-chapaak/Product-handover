@@ -21,7 +21,8 @@
  * it. That area has usage and no inventory, so the usage view is all there is.
  */
 
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import ChartAutoSizer from './ChartAutoSizer';
 import { InitialsAvatar } from '../admin/AdminPrimitives';
 import { Eyebrow, DeltaPill, TooltipCard } from './usageChrome';
 import { useAdminData } from '../../context/AdminDataContext';
@@ -77,13 +78,14 @@ export default function ModuleUsagePanel({
 
       <div className="py-5 border-b border-canvas-border">
         <Eyebrow className="mb-3">Day by day</Eyebrow>
-        <ResponsiveContainer width="100%" height={140}>
-          {/* The house chart chrome — same axis props, same grid, same tooltip as
-              every other plot on this page. It was drawing its own dashed grid, a
-              9px axis and Recharts' default tooltip, so the one chart a reader
-              reached by drilling IN was the one chart that looked like it came
-              from somewhere else. */}
-          <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+        <ChartAutoSizer height={140}>
+          {({ width, height }) => (
+          /* The house chart chrome — same axis props, same grid, same tooltip as
+             every other plot on this page. It was drawing its own dashed grid, a
+             9px axis and Recharts' default tooltip, so the one chart a reader
+             reached by drilling IN was the one chart that looked like it came
+             from somewhere else. */
+          <AreaChart width={width} height={height} data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="module-panel-fill" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={SERIES.primary} stopOpacity={0.22} />
@@ -118,7 +120,8 @@ export default function ModuleUsagePanel({
               isAnimationActive={false}
             />
           </AreaChart>
-        </ResponsiveContainer>
+          )}
+        </ChartAutoSizer>
       </div>
 
       <div className="py-5">

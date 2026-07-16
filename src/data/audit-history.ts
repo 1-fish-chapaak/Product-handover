@@ -272,6 +272,7 @@ const TEMPLATES: Record<Bucket, Template[]> = {
   engagements: [
     { action: 'Create', module: 'Engagements', entity: 'Engagement', weight: 1, text: () => `Created engagement "${pick(ENGAGEMENTS)}"` },
     { action: 'Update', module: 'Engagement Execution', entity: 'Working Paper', weight: 4, text: () => `Edited working paper "${workingPaper()}" and marked it for review` },
+    { action: 'Export', module: 'Engagement Execution', entity: 'Working Paper', weight: 2, text: () => `Exported working paper "${workingPaper()}" as PDF` },
     { action: 'Run', module: 'Engagement Execution', entity: 'Control Test', weight: 3, text: () => `Ran the test for "${pick(CONTROLS)}"` },
     { action: 'Upload', module: 'Engagement Execution', entity: 'Evidence', weight: 3, text: () => `Uploaded evidence for "${pick(CONTROLS)}"` },
     { action: 'Update', module: 'SOX ICFR', entity: 'Control', weight: 2, text: () => `Signed off "${pick(CONTROLS)}" as operating effectively` },
@@ -280,6 +281,7 @@ const TEMPLATES: Record<Bucket, Template[]> = {
   workflows: [
     { action: 'Create', module: 'Workflow Library', entity: 'Workflow', weight: 1, text: () => `Created workflow "${pick(WORKFLOWS)}"` },
     { action: 'Run', module: 'Workflow Library', entity: 'Workflow', weight: 6, text: () => `Ran the ${pick(WORKFLOWS)} workflow on ${pick(PROCESSES)}` },
+    { action: 'Run', module: 'Workflow Library', entity: 'Bulk Run', weight: 2, text: () => `Ran a Bulk Audit across ${between(8, 40)} controls in ${pick(PROCESSES)}` },
     { action: 'Update', module: 'Workflow Library', entity: 'Workflow', weight: 2, text: () => `Tuned the match threshold on "${pick(WORKFLOWS)}"` },
     { action: 'Share', module: 'Workflow Library', entity: 'Workflow', weight: 1, text: () => `Shared the ${pick(WORKFLOWS)} workflow with ${pick(TEAMS)}` },
     { action: 'Export', module: 'Workflow Library', entity: 'Workflow Run', weight: 1, text: () => `Exported ${pick(WORKFLOWS)} results as CSV` },

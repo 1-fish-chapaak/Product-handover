@@ -29,14 +29,17 @@ export interface AuthUser {
   roleId: string;
 }
 
-/** Demo personas — one per seed role so login / switcher can pick a persona. */
+/** Demo personas — one per seed role so login / switcher can pick a persona.
+ *  The Team Lead's email matches a roster member (Ayushi Narang, SOX Audit), so
+ *  Platform Usage can resolve their team and scope the People tab to it. */
 export const DEMO_USERS: AuthUser[] = [
-  { id: 'u-admin',    name: 'Nilesh Anand', email: 'nilesh.anand@irame.ai', initials: 'NA', title: 'Administrator', roleId: 'role-admin' },
-  { id: 'u-enabler',  name: 'Karan Mehta',  email: 'karan.mehta@irame.ai',  initials: 'KM', title: 'Audit Manager', roleId: 'role-enabler' },
-  { id: 'u-auditor',  name: 'Tushar Goel',  email: 'tushar.goel@irame.ai',  initials: 'TG', title: 'Auditor',       roleId: 'role-auditor' },
-  { id: 'u-risk',     name: 'Priya Singh',  email: 'priya.singh@irame.ai',  initials: 'PS', title: 'Risk Owner',    roleId: 'role-risk' },
-  { id: 'u-reviewer', name: 'Vijay Reddy',  email: 'vijay.reddy@irame.ai',  initials: 'VR', title: 'Reviewer',      roleId: 'role-reviewer' },
-  { id: 'u-viewer',   name: 'Sana Kapoor',  email: 'sana.kapoor@irame.ai',  initials: 'SK', title: 'Viewer',        roleId: 'role-viewer' },
+  { id: 'u-admin',    name: 'Nilesh Anand',  email: 'nilesh.anand@irame.ai',  initials: 'NA', title: 'Administrator', roleId: 'role-admin' },
+  { id: 'u-enabler',  name: 'Karan Mehta',   email: 'karan.mehta@irame.ai',   initials: 'KM', title: 'Audit Manager', roleId: 'role-enabler' },
+  { id: 'u-auditor',  name: 'Tushar Goel',   email: 'tushar.goel@irame.ai',   initials: 'TG', title: 'Auditor',       roleId: 'role-auditor' },
+  { id: 'u-risk',     name: 'Priya Singh',   email: 'priya.singh@irame.ai',   initials: 'PS', title: 'Risk Owner',    roleId: 'role-risk' },
+  { id: 'u-reviewer', name: 'Vijay Reddy',   email: 'vijay.reddy@irame.ai',   initials: 'VR', title: 'Reviewer',      roleId: 'role-reviewer' },
+  { id: 'u-viewer',   name: 'Sana Kapoor',   email: 'sana.kapoor@irame.ai',   initials: 'SK', title: 'Viewer',        roleId: 'role-viewer' },
+  { id: 'u-teamlead', name: 'Ayushi Narang', email: 'ayushi.narang@irame.ai', initials: 'AN', title: 'Team Lead',     roleId: 'role-teamlead' },
 ];
 
 /** Default signed-in persona (System Admin) so the full app is visible out of the box. */

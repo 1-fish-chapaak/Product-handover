@@ -18,9 +18,10 @@ import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import type { ReactNode } from 'react';
 import { ArrowLeft, ChevronRight, MousePointerClick, Wand2 } from 'lucide-react';
 import {
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell,
 } from 'recharts';
+import ChartAutoSizer from './ChartAutoSizer';
 import { InitialsAvatar } from '../admin/AdminPrimitives';
 import { PortfolioStat } from './usageSectionPrimitives';
 import { Eyebrow, TooltipCard } from './usageChrome';
@@ -295,8 +296,9 @@ function ToolDetail({ tool, rangeDays, onBack }: {
       ) : (
         <>
           <Band title="Runs over time" note={`Daily runs · last ${rangeDays} days`}>
-            <ResponsiveContainer width="100%" height={170}>
-              <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+            <ChartAutoSizer height={170}>
+              {({ width, height }) => (
+              <AreaChart width={width} height={height} data={chartData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
                 <defs>
                   <linearGradient id="conciergeToolFill" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={SERIES.primary} stopOpacity={0.22} />
@@ -322,7 +324,8 @@ function ToolDetail({ tool, rangeDays, onBack }: {
                 />
                 <Area type="monotone" dataKey="runs" stroke={SERIES.primary} strokeWidth={1.75} fill="url(#conciergeToolFill)" />
               </AreaChart>
-            </ResponsiveContainer>
+              )}
+            </ChartAutoSizer>
           </Band>
 
           <div className={`${BAND_ROW} grid-cols-1 lg:grid-cols-2`}>
@@ -568,8 +571,9 @@ export default function UsageConciergeSection({ days, rows, rangeDays }: {
           {mix.length > 0 ? (
             <div className="flex items-center gap-4">
               <div className="relative w-[120px] h-[120px] shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
+                <ChartAutoSizer>
+                  {({ width, height }) => (
+                  <PieChart width={width} height={height}>
                     <Pie
                       data={mix} dataKey="value" nameKey="name" cx="50%" cy="50%"
                       innerRadius={42} outerRadius={58} paddingAngle={2} cornerRadius={4} strokeWidth={0}
@@ -591,7 +595,8 @@ export default function UsageConciergeSection({ days, rows, rangeDays }: {
                       }}
                     />
                   </PieChart>
-                </ResponsiveContainer>
+                  )}
+                </ChartAutoSizer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <span className="text-[1.125rem] font-semibold tracking-[-0.02em] text-ink-900 tabular-nums leading-none">
                     {fmt(runs)}

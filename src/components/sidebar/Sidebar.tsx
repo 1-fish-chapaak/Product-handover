@@ -383,7 +383,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
           <Divider label="System" expanded={isExpanded} />
 
           {can('ds_live') && <NavItem icon={Database} label="Knowledge Hub" active={view === 'knowledge-hub' || view === 'data-sources' || view === 'configuration'} expanded={isExpanded} onClick={() => setView('knowledge-hub')} />}
-          {can('ad_usage') && <NavItem icon={BarChart3} label="Platform Usage" active={view === 'platform-usage'} expanded={isExpanded} onClick={() => setView('platform-usage')} />}
+          {canAny(['ad_usage', 'ad_usage_people']) && <NavItem icon={BarChart3} label="Platform Usage" active={view === 'platform-usage'} expanded={isExpanded} onClick={() => setView('platform-usage')} />}
           {adminVisible && <NavItem icon={Settings} label="Admin" active={adminViews.includes(view)} expanded={isExpanded} onClick={() => setView(firstAdminView)} />}
 
         </div>

@@ -10,25 +10,21 @@
  * that nothing on the page was louder than anything else, so the eye had nowhere
  * to land and the reader had to consume all of it to learn any of it.
  *
- * So this is the one thing that dominates. An admin comes here to ask "is the
- * licence worth it", and that question has a single number for an answer: the
- * share of paid seats that did real work.
+ * So this is the one thing that dominates: the share of paid seats that did real
+ * work this week, as a plain stat. It reports the number, not a verdict — there
+ * is no target line, no "healthy" threshold, no judgement drawn on the figure.
+ * The reader gets the share, the count in people, and the week-to-week direction,
+ * and draws their own conclusion.
  *
- * The number now sits inside the gauge rather than beside it. That is not
- * decoration — it is what lets the benchmark stop being a footnote. "Healthy is
- * 60%" printed next to a percentage is a fact the reader has to apply
- * themselves; drawn as a tick on the arc, it becomes a place the fill either
- * reaches or falls short of, and the answer is pre-attentive. The arc, the
- * sentence and the trend are three readings of one number, in ascending detail:
- * where we are, what that means in people, and where it is heading.
- *
- * One finding rides underneath, and only if it fires. Not three. Three findings
- * plus a headline is a KPI band, and there is already a KPI band below.
+ * One finding rides underneath, and only if it fires: the idle-seat count, which
+ * is a separate fact about seats nobody is in, not a verdict on the share.
  */
 
 import { motion, useReducedMotion } from 'motion/react';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, ReferenceLine, Tooltip } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
+import ChartAutoSizer from './ChartAutoSizer';
+import { InfoPopover } from './usageChrome';
 import { CARD_BASE, HOVER_FILL, KH_EASE, SERIES } from './usageTokens';
 
 export interface VerdictInput {
@@ -48,53 +44,31 @@ export interface VerdictInput {
   aiSharePct: number;
 }
 
-/**
- * A healthy share of licensed seats in active use.
- *
- * GitHub publishes 60% for Copilot, and the exact definition matters: it is a
- * WEEKLY-active-to-licence ratio. So the number judged against it must be
- * measured on a week, which is why this card ignores the page's date filter and
- * always reads the last seven days. Compared against an arbitrary window the
- * benchmark is meaningless: over ninety days almost every seat signs in at least
- * once, so the verdict reads "healthy" whatever the truth is.
- */
-export const HEALTHY_SEAT_USE = 60;
-
-export default function UsageVerdict({ v, onSeeWho }: {
+export default function UsageVerdict({ v, findings, onSeeWho }: {
   v: VerdictInput;
+  /** The "worth checking" licence questions, merged into this card's footer:
+   *  pending invites, quiet seats, and (when they fire) concentration / AI. */
+  findings: { key: string; eyebrow: string; figure: string; detail: string }[];
   onSeeWho: () => void;
 }) {
   const prefersReduced = useReducedMotion();
   const pct = v.seats > 0 ? Math.round((v.activeUsers / v.seats) * 100) : 0;
-  const healthy = pct >= HEALTHY_SEAT_USE;
   const diff = v.activeUsers - v.priorActiveUsers;
-  const idle = v.neverSignedIn + v.dormant;
 
   const trend = v.trend ?? [];
-  const line = healthy ? SERIES.primary : SERIES.attention;
-
-  /** The chart's reading, said out loud. A line nobody interprets is decoration. */
-  const trendWord = (() => {
-    if (trend.length < 2) return 'measured this week';
-    const first = trend[0].pct;
-    const last = trend[trend.length - 1].pct;
-    if (last > first + 4) return 'and climbing';
-    if (last < first - 4) return 'but falling';
-    return 'and holding steady';
-  })();
+  // No target any more: the card reports the usage share and its direction, it
+  // does not judge it against a line. So one neutral series colour throughout.
+  const line = SERIES.primary;
 
   /* The trend is a line, not columns, and this is why.
-     A licence share lives in a narrow band — here 62 to 68 — so on the 0-100
-     axis a bar demands, every column is the same near-full height and the one
-     thing this chart exists to show, the direction, is invisible. The old
-     version literally said "but falling" over eight identical bars.
-     A line reads position, not length, so it can honestly sit on a focused
-     axis: the window is padded around the data and always contains the 60%
-     mark, so the reader still sees the series above or below healthy — the fall
-     is now a slope you see, not a word you take on trust. */
+     A licence share lives in a narrow band, so on the 0-100 axis a bar demands,
+     every column is the same near-full height and the one thing this chart exists
+     to show, the direction, is invisible. A line reads position, not length, so it
+     can sit on a focused axis padded around the data, and the rise or fall becomes
+     a slope you see rather than a word you take on trust. */
   const pcts = trend.map(t => t.pct);
-  const lo = Math.max(0, Math.min(HEALTHY_SEAT_USE, ...pcts) - 6);
-  const hi = Math.min(100, Math.max(HEALTHY_SEAT_USE, ...pcts) + 5);
+  const lo = pcts.length ? Math.max(0, Math.min(...pcts) - 6) : 0;
+  const hi = pcts.length ? Math.min(100, Math.max(...pcts) + 5) : 100;
   const last = trend[trend.length - 1];
 
   return (
@@ -103,128 +77,92 @@ export default function UsageVerdict({ v, onSeeWho }: {
       animate={{ opacity: 1, y: 0 }}
       transition={prefersReduced ? { duration: 0 } : { duration: 0.35, ease: KH_EASE }}
       aria-label="Licence use"
-      className={`${CARD_BASE} overflow-hidden`}
+      // No overflow-hidden: it existed only to clip the full-bleed footer to the
+      // rounded corners, but it also clipped any tooltip that grew past the card.
+      // The footer now rounds its own bottom corners (rounded-b-lg), so hover cards
+      // can extend beyond the card edge without being cut off.
+      className={CARD_BASE}
     >
-      {/* Three columns only where three columns fit.
-          The gauge is 148px and the sentence needs ~22rem to stay on two lines;
-          at 1280 that leaves the trend about 190px of plot, most of it eaten by
-          the "Healthy 60%" label — a chart squeezed to a squiggle, which is
-          worse than no chart. Below 2xl the trend drops to a full-width row of
-          its own, where it has more space than it ever had beside the number. */}
-      <div className="flex flex-col xl:flex-row xl:items-center gap-6 xl:gap-8 p-6 lg:p-7">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-6 lg:gap-8 shrink-0">
-          {/* A linear gauge, not a radial one. The reader reads a fill against a
-              benchmark tick the way they read a progress bar — left to right,
-              over the mark or under it — which needs no interpreting. A donut
-              asks them to judge an arc's sweep against a notch on a circle, and
-              that is exactly the "confusing chart type" this page was told to
-              drop. Same number, same 60% benchmark, read at a glance. */}
-          <div className="shrink-0 w-full sm:w-[13.5rem]">
-            <div
-              className={`text-[2.75rem] font-semibold leading-none tracking-[-0.03em] ${
-                healthy ? 'text-ink-900' : 'text-mitigated-700'
-              }`}
-            >
-              {pct}%
-            </div>
-            <div className="mt-2 text-[0.75rem] font-medium text-ink-500">of {v.seats} seats used this week</div>
-            <div className="mt-4">
-              <div className="relative h-3">
-                <div className="absolute inset-0 rounded-full bg-ink-900/[0.06] overflow-hidden">
-                  {/* The stretch past the benchmark — the cushion the seat share is
-                      meant to sit in. A hair of the fill's own hue so an empty
-                      track still says which side is "healthy", never a second
-                      colour competing with the fill. */}
-                  <div
-                    className="absolute inset-y-0 right-0 bg-brand-500/[0.07]"
-                    style={{ left: `${HEALTHY_SEAT_USE}%` }}
-                    aria-hidden
-                  />
-                  <motion.div
-                    className="absolute inset-y-0 left-0 rounded-full"
-                    style={{
-                      background: healthy
-                        ? 'linear-gradient(90deg,#8B4FD8,#6A12CD)'
-                        : 'linear-gradient(90deg,#D97A1E,#B45309)',
-                    }}
-                    initial={prefersReduced ? false : { width: 0 }}
-                    animate={{ width: `${pct}%` }}
-                    transition={prefersReduced ? { duration: 0 } : { duration: 0.7, ease: KH_EASE }}
-                  />
-                </div>
-                {/* The benchmark, drawn ON TOP and taller than the track so it
-                    survives the fill crossing it — when the share clears 60% the
-                    old 1px line was painted over by its own bar, so the one mark
-                    the number is judged against vanished exactly when it mattered.
-                    A white keyline carries it across both the purple fill and the
-                    grey track. */}
-                <div
-                  className="absolute -top-1 -bottom-1 w-[3px] -translate-x-1/2 rounded-full bg-canvas-elevated"
-                  style={{ left: `${HEALTHY_SEAT_USE}%` }}
-                  aria-hidden
-                />
-                <div
-                  className="absolute -top-1 -bottom-1 w-[1.5px] -translate-x-1/2 rounded-full bg-ink-900/55"
-                  style={{ left: `${HEALTHY_SEAT_USE}%` }}
-                  aria-hidden
-                />
-              </div>
-              <div className="relative mt-2 h-4 text-[0.625rem] font-medium text-ink-400">
-                <span
-                  className="absolute -translate-x-1/2 whitespace-nowrap"
-                  style={{ left: `${HEALTHY_SEAT_USE}%` }}
-                >
-                  Healthy {HEALTHY_SEAT_USE}%
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* What the arc means, in people. The window IS named here, and it has
-              to be: this card deliberately does not follow the date filter above
-              it. The header can say "Showing 90 days" while this says "this week",
-              and without the words that looks like a bug rather than the point.
-              The chip makes it impossible to miss. */}
-          <div className="min-w-0 sm:w-[22rem]">
-          <span className="inline-flex items-center h-[1.125rem] px-1.5 mb-2 rounded border border-canvas-border bg-canvas text-[0.5625rem] font-semibold uppercase tracking-wide text-ink-500">
-            Always the last 7 days
-          </span>
-          <p className="text-[1.0625rem] text-ink-700 leading-snug">
-            <strong className="font-semibold text-ink-900">
-              {v.activeUsers} of your {v.seats} paid seats
-            </strong>{' '}
-            did real work this week
-          </p>
-
-          <p className="mt-2.5 text-[0.875rem] text-ink-600">
-            <span className={`font-semibold ${healthy ? 'text-compliant-700' : 'text-mitigated-700'}`}>
-              {healthy ? 'Above' : 'Below'} the {HEALTHY_SEAT_USE}% that counts as healthy
-            </span>{' '}
-            for a paid licence, {trendWord}.
-          </p>
-
-          {/* The delta names what it counts and what it counts against. A bare
-              "−2" beside the headline could be seats, points or percent, measured
-              against anything — which is the vanity metric this page's own delta
-              spec exists to forbid. */}
-          {diff !== 0 && (
-            <p className="mt-2 flex items-center gap-1.5 text-[0.8125rem] text-ink-500">
-              <ArrowUpRight
-                size={13}
-                strokeWidth={2.5}
-                className={`shrink-0 ${diff > 0 ? 'text-compliant-700' : 'text-risk-700 rotate-90'}`}
-                aria-hidden
-              />
-              <span>
-                <strong className={`font-semibold tabular-nums ${diff > 0 ? 'text-compliant-700' : 'text-risk-700'}`}>
-                  {Math.abs(diff)} {Math.abs(diff) === 1 ? 'seat' : 'seats'} {diff > 0 ? 'more' : 'fewer'}
-                </strong>{' '}
-                than the week before
+      <div className="p-4 lg:p-5">
+        {/* One row, not a header band stacked over a data row. The chip, the plain
+            takeaway and the 60% definition used to sit in a full-width strip above
+            the number; folding them beside the gauge deletes that whole vertical
+            zone, and the card is wide enough that the definition still fits on one
+            line. Reading order left to right: the number, the words, the trend. */}
+        <div className="flex flex-col xl:flex-row xl:items-center gap-4 xl:gap-6">
+          {/* A linear gauge, read left to right against the 60% tick. The
+              "confusing chart type" this page was told to drop was the donut, not
+              this progress bar. */}
+          <div className="shrink-0 w-full sm:w-[16rem]">
+            {/* Number and count on one baseline row. No target, so no colour
+                verdict on the figure — it is the neutral ink of a plain stat. */}
+            <div className="flex items-baseline gap-2.5">
+              <span className="text-[2rem] font-semibold leading-none tracking-[-0.03em] text-ink-900">
+                {pct}%
               </span>
-            </p>
-          )}
+              <span className="text-[0.75rem] font-medium text-ink-500">
+                {v.activeUsers} of {v.seats} seats used
+              </span>
+            </div>
+            {/* A plain progress bar: the share of paid seats used. No tick, because
+                there is no target to read it against. */}
+            <div className="mt-2 relative h-3 rounded-full bg-ink-900/[0.06] overflow-hidden">
+              <motion.div
+                className="absolute inset-y-0 left-0 rounded-full"
+                style={{ background: 'linear-gradient(90deg,#8B4FD8,#6A12CD)' }}
+                initial={prefersReduced ? false : { width: 0 }}
+                animate={{ width: `${pct}%` }}
+                transition={prefersReduced ? { duration: 0 } : { duration: 0.7, ease: KH_EASE }}
+              />
+            </div>
           </div>
-        </div>
+
+          {/* Zone B: the plain words, now beside the number instead of in a
+              full-width band above it. Chip, takeaway, definition, then the one
+              live line the visuals cannot say in words — which side of the mark and
+              which way it is heading. */}
+          <div className="min-w-0 xl:flex-1">
+            <span className="inline-flex items-center h-[1.125rem] px-1.5 mb-1 rounded border border-canvas-border bg-canvas text-[0.5625rem] font-semibold uppercase tracking-wide text-ink-500">
+              Always the last 7 days
+            </span>
+            {/* The widget's ⓘ is the shared InfoPopover every other card on this
+                page uses in its header's right slot (see UsageAdoption / the KPI
+                band). This card's true top-right corner is taken by the trend, so
+                the faithful equivalent is the right of the header text: title left,
+                ⓘ pushed to the right edge of the words zone. */}
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-base font-semibold leading-snug text-ink-900">
+                How many paid seats are being used
+              </h2>
+              <span className="mt-0.5 shrink-0">
+                <InfoPopover
+                  label="a used seat"
+                  counts="at least one real action this week, like opening a report, running a workflow, or exporting a file"
+                  excludes="signing in on its own"
+                />
+              </span>
+            </div>
+
+            {/* The delta names what it counts and what it counts against, so a bare
+                "2 fewer" cannot be read as points or percent. It is the one plain
+                read of direction now that the verdict line is gone. */}
+            {diff !== 0 && (
+              <p className="mt-2 flex items-center gap-1.5 text-[0.75rem] text-ink-500">
+                <ArrowUpRight
+                  size={13}
+                  strokeWidth={2.5}
+                  className={`shrink-0 ${diff > 0 ? 'text-compliant-700' : 'text-risk-700 rotate-90'}`}
+                  aria-hidden
+                />
+                <span>
+                  <strong className={`font-semibold tabular-nums ${diff > 0 ? 'text-compliant-700' : 'text-risk-700'}`}>
+                    {Math.abs(diff)} {Math.abs(diff) === 1 ? 'seat' : 'seats'} {diff > 0 ? 'more' : 'fewer'}
+                  </strong>{' '}
+                  than the week before
+                </span>
+              </p>
+            )}
+          </div>
 
         {/* An arc says where you are. It cannot say where you are heading, and
             for a licence that is the whole question: 71% on the way down is a
@@ -234,26 +172,20 @@ export default function UsageVerdict({ v, onSeeWho }: {
             rule to its left. Either way there is a hairline between the answer
             and its history — they are two readings, not one block. */}
         {trend.length > 1 && (
-          <div className="flex-1 min-w-0 border-t border-canvas-border pt-4 xl:border-t-0 xl:pt-0 xl:border-l xl:pl-8">
-            <div className="flex items-baseline justify-between gap-3 mb-2">
+          <div className="flex-1 min-w-0 border-t border-canvas-border pt-3 xl:border-t-0 xl:pt-0 xl:border-l xl:pl-6">
+            <div className="flex items-baseline justify-between gap-3 mb-1.5">
               <span className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide">
                 Last {trend.length} weeks
               </span>
               <span className="text-[0.6875rem] text-ink-400">Share of seats, week by week</span>
             </div>
-            {/* The fill IS the reading, not decoration.
-                A licence share barely moves week to week, so on a 0-100 axis
-                every column is the same near-full height and the direction — the
-                one thing this chart is for — disappears. So: a line on a focused
-                axis, and the band filled only DOWN TO the 60% mark, not to the
-                floor. That shaded wedge is the cushion above healthy; you watch
-                it thin as the line slides toward the line it is read against. An
-                earlier version filled to the plot floor, which is the "tinted
-                slab" the old note rightly warned off — a wash that encodes
-                nothing. This one encodes the margin. */}
-            <div className="h-[72px] -ml-1">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trend} margin={{ top: 10, right: 44, bottom: 4, left: 4 }}>
+            {/* A line on a focused axis: the share barely moves week to week, so a
+                0-100 axis would flatten the direction this chart exists to show. The
+                fill falls to the axis floor under the line. */}
+            <div className="h-[48px] -ml-1">
+              <ChartAutoSizer>
+                {({ width, height }) => (
+                <AreaChart width={width} height={height} data={trend} margin={{ top: 10, right: 44, bottom: 4, left: 4 }}>
                   <defs>
                     <linearGradient id="verdict-trend" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor={line} stopOpacity={0.26} />
@@ -284,30 +216,15 @@ export default function UsageVerdict({ v, onSeeWho }: {
                       );
                     }}
                   />
-                  {/* The 60% mark, labelled at the LEFT so the right end is left
-                      clear for this week's value — the two used to collide in the
-                      corner. It is the floor the band fills down to. */}
-                  <ReferenceLine
-                    y={HEALTHY_SEAT_USE}
-                    stroke="rgba(15,7,32,0.28)"
-                    strokeDasharray="3 3"
-                    strokeWidth={1}
-                    label={{
-                      value: `Healthy ${HEALTHY_SEAT_USE}%`,
-                      position: 'insideBottomLeft',
-                      fill: '#8B7BA3',
-                      fontSize: 10.5,
-                      fontWeight: 500,
-                      offset: 6,
-                    }}
-                  />
+                  {/* No 60% reference line: there is no target to draw. The line
+                      just reports the share week to week; the fill falls to the
+                      focused axis floor. */}
                   <Area
                     type="monotone"
                     dataKey="pct"
                     stroke={line}
                     strokeWidth={2.25}
                     fill="url(#verdict-trend)"
-                    baseValue={HEALTHY_SEAT_USE}
                     isAnimationActive={!prefersReduced}
                     animationDuration={700}
                     /* Only this week gets a marked point — the number printed in
@@ -330,41 +247,57 @@ export default function UsageVerdict({ v, onSeeWho }: {
                     activeDot={{ r: 4, fill: line, stroke: '#fff', strokeWidth: 2 }}
                   />
                 </AreaChart>
-              </ResponsiveContainer>
+                )}
+              </ChartAutoSizer>
             </div>
           </div>
         )}
+        </div>
       </div>
 
-      {/* One finding, and only if it fires. It is a footer of the hero card, not
-          a card of its own: DESIGN.md's alert spelling is a 3px left-edge stripe
-          with no background tint, and the amber wash this used to carry is what
-          made a finding read as a warning banner. */}
-      {idle > 0 && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-canvas-border border-l-[3px] border-l-mitigated-700 bg-canvas/60 py-3 pl-5 pr-4">
-          <p className="text-[0.875rem] text-ink-700 flex-1 min-w-0">
-            <strong className="font-semibold text-ink-900">{idle} {idle === 1 ? 'seat is' : 'seats are'} idle</strong>
-            <span className="text-ink-500">
-              {': '}
-              {[
-                v.neverSignedIn > 0 ? `${v.neverSignedIn} never signed in` : null,
-                v.dormant > 0 ? `${v.dormant} quiet for 30+ days` : null,
-              ].filter(Boolean).join(', ')}
-            </span>
-          </p>
-          {/* A quiet affordance, not a filled CTA. A solid brand button was the
-              loudest thing in the block, which put a secondary nudge above the
-              number the page is built around. */}
-          <button
-            type="button"
-            onClick={onSeeWho}
-            className="group shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-brand-700 hover:bg-brand-50 text-[0.8125rem] font-semibold transition-colors cursor-pointer"
-          >
-            See who
-            <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
-          </button>
+      {/* Worth checking — merged into the card footer. This is the old one-line
+          idle strip AND the separate "Worth checking" section below the seat cards,
+          folded into one: the same licence questions, said once, in the footer of
+          the card whose number they qualify. Type carries it — a hairline above, an
+          amber figure, no box or side rule (the anti-pattern the audit flagged). */}
+      <div className="rounded-b-lg border-t border-canvas-border px-4 lg:px-5 py-3.5">
+        <div className="mb-1 flex items-baseline justify-between gap-4">
+          <h3 className="text-[0.875rem] font-semibold text-ink-900">Worth checking</h3>
+          {findings.length > 0 && (
+            <button
+              type="button"
+              onClick={onSeeWho}
+              className="group shrink-0 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-600 transition-colors cursor-pointer"
+            >
+              See who
+              <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+            </button>
+          )}
         </div>
-      )}
+
+        {findings.length > 0 ? (
+          <>
+            <ul className="divide-y divide-canvas-border">
+              {findings.map(f => (
+                <li key={f.key} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2.5">
+                  <span className="w-5 shrink-0 tabular-nums text-[0.875rem] font-semibold text-mitigated-700">
+                    {f.figure}
+                  </span>
+                  <span className="w-36 shrink-0 text-[0.875rem] font-medium text-ink-900">
+                    {f.eyebrow}
+                  </span>
+                  <span className="min-w-0 flex-1 text-[0.875rem] text-ink-500">
+                    {f.detail}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-[0.75rem] text-ink-400">Resolve in Administration, under Users &amp; Teams.</p>
+          </>
+        ) : (
+          <p className="text-[0.875rem] text-ink-500">Every seat is being used. Nothing to check.</p>
+        )}
+      </div>
     </motion.section>
   );
 }

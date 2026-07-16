@@ -8,8 +8,9 @@
  * Administration (footer link) — never here.
  */
 
-import { ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { AreaChart, Area } from 'recharts';
 import Modal from '../shared/Modal';
+import ChartAutoSizer from './ChartAutoSizer';
 import { StatusBadge, ActionBadge } from '../shared/StatusBadge';
 import { InitialsAvatar } from '../admin/AdminPrimitives';
 import { Eyebrow } from './usageChrome';
@@ -91,17 +92,19 @@ export default function UserUsageModal({
           </div>
         </div>
         {row.actions > 0 ? (
-          <ResponsiveContainer width="100%" height={88}>
-            <AreaChart data={series} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="userModalFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#6A12CD" stopOpacity={0.2} />
-                  <stop offset="100%" stopColor="#6A12CD" stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
-              <Area type="monotone" dataKey="actions" stroke="#6A12CD" strokeWidth={1.5} fill="url(#userModalFill)" />
-            </AreaChart>
-          </ResponsiveContainer>
+          <ChartAutoSizer height={88}>
+            {({ width, height }) => (
+              <AreaChart width={width} height={height} data={series} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="userModalFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#6A12CD" stopOpacity={0.2} />
+                    <stop offset="100%" stopColor="#6A12CD" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <Area type="monotone" dataKey="actions" stroke="#6A12CD" strokeWidth={1.5} fill="url(#userModalFill)" />
+              </AreaChart>
+            )}
+          </ChartAutoSizer>
         ) : (
           <p className="text-[0.8125rem] text-ink-400">No activity in this range.</p>
         )}

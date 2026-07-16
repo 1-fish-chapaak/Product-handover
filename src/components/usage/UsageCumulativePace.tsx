@@ -18,7 +18,8 @@
  */
 
 import { useMemo } from 'react';
-import { ResponsiveContainer, AreaChart, Area, Line, XAxis, YAxis, Tooltip } from 'recharts';
+import { AreaChart, Area, Line, XAxis, YAxis, Tooltip } from 'recharts';
+import ChartAutoSizer from './ChartAutoSizer';
 import type { ActivityPoint } from './usageActivity';
 import { TooltipCard } from './usageChrome';
 import { SERIES, HOVER_FILL, GRID, fmt } from './usageTokens';
@@ -28,9 +29,31 @@ interface PacePoint {
   label: string;
   current: number;
   prior: number | null;
+  /** The lower of the two running totals — the transparent floor the shaded gap
+   *  band stacks on top of, so the band fills exactly between the two lines. */
+  base: number;
+  /** |current − prior| — the shaded band's height at this day. The band IS the
+   *  lead (or the deficit), drawn, so "ahead/behind" is seen, not read. */
+  gap: number;
 }
 
-export default function UsageCumulativePace({ activity }: { activity: ActivityPoint[] }) {
+/** The two windows being compared, named with real dates so "this period" and
+ *  "last period" are never a mystery. `lastFrom`/`lastTo` are null when the data
+ *  has no earlier window to compare against. */
+export interface PaceWindows {
+  thisFrom: string;
+  thisTo: string;
+  lastFrom: string | null;
+  lastTo: string | null;
+}
+
+export default function UsageCumulativePace({ activity, rangeDays, windows }: {
+  activity: ActivityPoint[];
+  /** Length of each window in days — so the verdict can say "the last 30 days". */
+  rangeDays: number;
+  /** The real dates behind "this period" / "last period". */
+  windows: PaceWindows;
+}) {
   const { points, currentTotal, priorTotal, hasPrior } = useMemo(() => {
     const pts: PacePoint[] = [];
     let runCur = 0;
@@ -40,11 +63,14 @@ export default function UsageCumulativePace({ activity }: { activity: ActivityPo
       const p = activity[i];
       runCur += p.total;
       if (p.prior !== null) { runPrior += p.prior; anyPrior = true; }
+      const prior = p.prior !== null ? runPrior : null;
       pts.push({
         x: i,
         label: p.label,
         current: runCur,
-        prior: p.prior !== null ? runPrior : null,
+        prior,
+        base: prior === null ? runCur : Math.min(runCur, prior),
+        gap: prior === null ? 0 : Math.abs(runCur - prior),
       });
     }
     return { points: pts, currentTotal: runCur, priorTotal: runPrior, hasPrior: anyPrior };
@@ -57,34 +83,42 @@ export default function UsageCumulativePace({ activity }: { activity: ActivityPo
   const delta = currentTotal - priorTotal;
   const ahead = delta >= 0;
   const deltaColor = ahead ? SERIES.primary : SERIES.attention;
+  const pct = priorTotal > 0 ? Math.round((delta / priorTotal) * 100) : null;
 
   return (
     <div className="flex h-full flex-col">
-      {/* The reading, before the chart. When there is an earlier period the gap is
-          the finding; when there is not, the honest line is that there is nothing
-          to compare against yet. */}
-      {hasPrior ? (
-        <p className="text-[0.8125rem] text-ink-600 leading-relaxed mb-4">
-          <span className="font-semibold text-ink-900 tabular-nums">{fmt(currentTotal)}</span> actions so far this period,{' '}
-          <span className="font-semibold tabular-nums" style={{ color: deltaColor }}>
-            {fmt(Math.abs(delta))} {ahead ? 'ahead of' : 'behind'}
-          </span>{' '}
-          the same point last period ({fmt(priorTotal)}).
-        </p>
-      ) : (
-        <p className="text-[0.8125rem] text-ink-500 leading-relaxed mb-4">
-          <span className="font-semibold text-ink-900 tabular-nums">{fmt(currentTotal)}</span> actions so far this period.
-          There is no earlier period in the data to compare the pace against yet.
-        </p>
-      )}
+      {/* One line, not a paragraph: the total, the direction as a chip, and the
+          one number it is measured against. Everything else — what counts, which
+          windows, how they line up — lives in the card's ⓘ, so the graph leads. */}
+      <div className="mb-4 flex items-baseline gap-x-3 gap-y-1 flex-wrap">
+        <span className="text-[2rem] font-semibold leading-none tracking-[-0.03em] text-ink-900 tabular-nums">
+          {fmt(currentTotal)}
+        </span>
+        {hasPrior && pct !== null ? (
+          <>
+            <span
+              className="inline-flex items-center gap-0.5 h-[1.375rem] px-2 rounded-full text-[0.8125rem] font-semibold tabular-nums"
+              style={{ color: deltaColor, backgroundColor: ahead ? 'rgba(106,18,205,0.08)' : 'rgba(180,83,9,0.10)' }}
+            >
+              {ahead ? '↑' : '↓'} {Math.abs(pct)}%
+            </span>
+            <span className="text-[0.8125rem] text-ink-400">
+              vs <span className="tabular-nums text-ink-500">{fmt(priorTotal)}</span> the {rangeDays} days before
+            </span>
+          </>
+        ) : (
+          <span className="text-[0.8125rem] text-ink-400">actions — no earlier {rangeDays} days to compare yet</span>
+        )}
+      </div>
 
-      <div className="min-h-[168px] flex-1 -mx-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={points} margin={{ top: 8, right: 48, bottom: 2, left: 4 }}>
+      <div className="min-h-[188px] flex-1 -mx-1">
+        <ChartAutoSizer>
+          {({ width, height }) => (
+          <AreaChart width={width} height={height} data={points} margin={{ top: 8, right: 46, bottom: 2, left: 4 }}>
             <defs>
-              <linearGradient id="pace-current" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={SERIES.primary} stopOpacity={0.22} />
-                <stop offset="100%" stopColor={SERIES.primary} stopOpacity={0.02} />
+              <linearGradient id="pace-gap" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={deltaColor} stopOpacity={0.26} />
+                <stop offset="100%" stopColor={deltaColor} stopOpacity={0.08} />
               </linearGradient>
             </defs>
             <YAxis domain={[0, 'dataMax']} hide />
@@ -95,31 +129,28 @@ export default function UsageCumulativePace({ activity }: { activity: ActivityPo
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               content={({ active, payload }: any) => {
                 if (!active || !payload?.length) return null;
-                const p = payload[0].payload as PacePoint;
+                const p = (payload.find((x: any) => x.dataKey === 'current')?.payload ?? payload[0].payload) as PacePoint;
                 const rows: { color: string; name: string; value: number }[] = [{ color: SERIES.primary, name: 'This period', value: p.current }];
-                if (p.prior !== null) rows.push({ color: SERIES.compare, name: 'Last period', value: p.prior });
+                if (p.prior !== null) rows.push({ color: SERIES.compare, name: 'The 30 days before', value: p.prior });
                 return <TooltipCard title={p.label} rows={rows} />;
               }}
             />
-            {/* Last period first, so this period's filled area sits over the ghost. */}
+            {/* The shaded band IS the story: stack a transparent floor (the lower
+                line) and a coloured band of height |current − prior|, so the fill
+                sits exactly between the two curves. Brand when ahead, amber when
+                behind — the colour of the gap is the answer. */}
+            {hasPrior && <Area type="monotone" dataKey="base" stackId="gap" stroke="none" fill="transparent" isAnimationActive={false} />}
+            {hasPrior && <Area type="monotone" dataKey="gap" stackId="gap" stroke="none" fill="url(#pace-gap)" isAnimationActive={false} />}
+            {/* Last period: the dashed ghost. */}
             {hasPrior && (
-              <Line
-                type="monotone"
-                dataKey="prior"
-                stroke={SERIES.compare}
-                strokeWidth={2}
-                strokeDasharray="5 4"
-                dot={false}
-                isAnimationActive={false}
-                connectNulls
-              />
+              <Line type="monotone" dataKey="prior" stroke={SERIES.compare} strokeWidth={2} strokeDasharray="5 4" dot={false} isAnimationActive={false} connectNulls />
             )}
-            <Area
+            {/* This period: the solid line, with the running total pinned at the tip. */}
+            <Line
               type="monotone"
               dataKey="current"
               stroke={SERIES.primary}
               strokeWidth={2.5}
-              fill="url(#pace-current)"
               isAnimationActive={false}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               dot={({ cx, cy, payload }: any) =>
@@ -137,23 +168,18 @@ export default function UsageCumulativePace({ activity }: { activity: ActivityPo
               activeDot={{ r: 3.5, fill: SERIES.primary, stroke: '#fff', strokeWidth: 2 }}
             />
           </AreaChart>
-        </ResponsiveContainer>
+          )}
+        </ChartAutoSizer>
       </div>
 
-      {/* Key. The ghost is dashed and achromatic, so it needs saying which line is
-          which — the same two marks the tooltip uses. */}
-      {hasPrior && (
-        <div className="mt-3 flex items-center gap-5 text-[0.6875rem] text-ink-500" style={{ borderTop: `1px solid ${GRID}`, paddingTop: '0.75rem' }}>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-[3px] w-4 rounded-full" style={{ background: SERIES.primary }} />
-            This period
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-0 w-4 border-t-2 border-dashed" style={{ borderColor: SERIES.compare }} />
-            Last period
-          </span>
-        </div>
-      )}
+      {/* Dates on the axis only — the horizontal is time, start to end. */}
+      <div
+        className="mt-2 flex items-center justify-between text-[0.6875rem] tabular-nums text-ink-400"
+        style={{ borderTop: `1px solid ${GRID}`, paddingTop: '0.5rem' }}
+      >
+        <span>{windows.thisFrom}</span>
+        <span>{windows.thisTo}</span>
+      </div>
     </div>
   );
 }

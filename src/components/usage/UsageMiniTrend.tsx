@@ -20,7 +20,8 @@
  */
 
 import { useMemo } from 'react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
+import ChartAutoSizer from './ChartAutoSizer';
 import { TooltipCard } from './usageChrome';
 import {
   SERIES, HOVER_FILL, BAR_RADIUS, BAR_SIZE, yAxisProps, fmt,
@@ -65,8 +66,9 @@ export default function UsageMiniTrend({
         </span>
       </div>
       <div style={{ height }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={points} margin={{ top: 2, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
+        <ChartAutoSizer>
+          {({ width, height: h }) => (
+          <BarChart width={width} height={h} data={points} margin={{ top: 2, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
             <defs>
               <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={color} stopOpacity={0.85} />
@@ -96,7 +98,8 @@ export default function UsageMiniTrend({
             />
             <Bar dataKey="value" name={name} fill={`url(#${gid})`} radius={BAR_RADIUS} maxBarSize={BAR_SIZE} />
           </BarChart>
-        </ResponsiveContainer>
+          )}
+        </ChartAutoSizer>
       </div>
     </div>
   );

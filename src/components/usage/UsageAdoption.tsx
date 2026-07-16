@@ -24,7 +24,8 @@ import {
   powerCurve, licenceUse,
   type UsageDay,
 } from '../../data/platform-usage';
-import { Card, Meter } from './usageChrome';
+import { Card, Meter, InfoPopover } from './usageChrome';
+import { InitialsAvatar } from '../admin/AdminPrimitives';
 import { SERIES } from './usageTokens';
 
 /* The one colour that carries an action. Validated against the brand at
@@ -56,10 +57,6 @@ function SeatGroup({ icon: Icon, tone, heading, caption, people, daysActive, win
   emptyNote?: string;
 }) {
   const act = tone === 'act';
-  const dayLabel = (name: string) => {
-    const n = daysActive.get(name) ?? 0;
-    return `${name} · ${n} of ${windowDays} ${n === 1 ? 'day' : 'days'}`;
-  };
   const shownFirst = people.slice(0, NAMES_SHOWN).map(p => p.name.split(' ')[0]);
   const hiddenCount = Math.max(0, people.length - NAMES_SHOWN);
   return (
@@ -90,26 +87,45 @@ function SeatGroup({ icon: Icon, tone, heading, caption, people, daysActive, win
       <p className="mt-1 text-[0.75rem] text-ink-500 leading-snug">{caption}</p>
 
       {people.length > 0 ? (
-        <p className="mt-3 text-[0.75rem] leading-snug text-ink-600">
+        <div className="mt-3 text-[0.75rem] leading-snug text-ink-600">
           {shownFirst.join(', ')}
           {hiddenCount > 0 && (
-            // The rest fold into "+N more", but hovering it shows exactly who —
-            // in a real popover, not the browser's title tooltip that the reader
-            // could not find. Everyone in the group is listed with their days.
+            // The rest fold into "+N more", but hovering it opens a real popover —
+            // every seat in the group by face and name, its day count aligned down
+            // one edge. The old version was a wall of "Name · N of 30 days" text
+            // with no avatars under an "All 9" stub header: a debug dump, not a
+            // surface.
             <span className="group/more relative whitespace-nowrap">
               {' '}
               <span className="cursor-help font-medium text-ink-500 underline decoration-dotted decoration-ink-300 underline-offset-2">
                 +{hiddenCount} more
               </span>
-              <span className="invisible absolute bottom-full left-0 z-20 mb-1.5 w-max max-w-[15rem] rounded-lg border border-canvas-border bg-canvas-elevated p-2.5 text-[0.6875rem] leading-relaxed text-ink-600 opacity-0 shadow-[0_8px_24px_-6px_rgba(15,7,32,0.16)] transition-opacity duration-150 group-hover/more:visible group-hover/more:opacity-100">
-                <span className="mb-1 block font-semibold text-ink-900">All {people.length}</span>
-                {people.map(p => (
-                  <span key={p.email} className="block">{dayLabel(p.name)}</span>
-                ))}
+              {/* The `pb-2` on the outer wrapper is the gap to the trigger AND part
+                  of the hover target, so the cursor can cross into the list to
+                  scroll it without the popover closing. */}
+              <span className="invisible absolute bottom-full left-0 z-30 pb-2 opacity-0 transition-opacity duration-150 group-hover/more:visible group-hover/more:opacity-100">
+                <span className="block w-max min-w-[14rem] max-w-[18rem] overflow-hidden rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_12px_32px_-8px_rgba(15,7,32,0.22)]">
+                  <span className="flex items-baseline justify-between gap-4 border-b border-canvas-border px-3 py-2">
+                    <span className="text-[0.625rem] font-semibold uppercase tracking-wide text-ink-400">{heading}</span>
+                    <span className="text-[0.625rem] tabular-nums text-ink-400">{people.length} {people.length === 1 ? 'seat' : 'seats'}</span>
+                  </span>
+                  <span className="block max-h-[15.5rem] overflow-y-auto p-1.5">
+                    {people.map(p => {
+                      const n = daysActive.get(p.name) ?? 0;
+                      return (
+                        <span key={p.email} className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5 hover:bg-canvas">
+                          <InitialsAvatar name={p.name} size={22} />
+                          <span className="min-w-0 flex-1 truncate text-[0.75rem] font-medium text-ink-800">{p.name}</span>
+                          <span className="shrink-0 tabular-nums text-[0.6875rem] text-ink-400">{n} of {windowDays} days</span>
+                        </span>
+                      );
+                    })}
+                  </span>
+                </span>
               </span>
             </span>
           )}
-        </p>
+        </div>
       ) : emptyNote ? (
         <p className="mt-3 text-[0.75rem] text-ink-400">{emptyNote}</p>
       ) : null}
@@ -118,15 +134,16 @@ function SeatGroup({ icon: Icon, tone, heading, caption, people, daysActive, win
 }
 
 /** The card every panel on this tab wears. */
-function Panel({ icon, title, subtitle, children, className = '' }: {
+function Panel({ icon, title, subtitle, right, children, className = '' }: {
   icon: typeof Gauge;
   title: string;
   subtitle: string;
+  right?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
-    <Card icon={icon} title={title} subtitle={subtitle} className={className}>
+    <Card icon={icon} title={title} subtitle={subtitle} right={right} className={className}>
       {children}
     </Card>
   );
@@ -159,7 +176,15 @@ function PowerCurvePanel({ days, users, className }: { days: UsageDay[]; users: 
     <Panel
       icon={Gauge}
       title="How often each seat is used"
-      subtitle={`Days of real work in the last ${curve.windowDays}`}
+      subtitle={`Days of real work in the last ${curve.windowDays} days`}
+      right={
+        <InfoPopover
+          label="how often seats are used"
+          counts={`For each paid seat, the number of days it did real work in the last ${curve.windowDays} days.`}
+          excludes="Days with a sign-in but no work. A sign-in is not use."
+          note="Seats are grouped by how many days they were used, from not once to 15 or more."
+        />
+      }
       className={className}
     >
       {/* Licence utilisation over the page's window — stated, not drawn.

@@ -35,9 +35,10 @@
 
 import { useMemo } from 'react';
 import {
-  ResponsiveContainer, ComposedChart, BarChart, Bar, Cell, Line, XAxis, YAxis,
+  ComposedChart, BarChart, Bar, Cell, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ReferenceDot,
 } from 'recharts';
+import ChartAutoSizer from './ChartAutoSizer';
 import { TooltipCard } from './usageChrome';
 import {
   GRID, SERIES, HOVER_FILL, BAR_RADIUS, xAxisProps, yAxisProps, fmt,
@@ -81,7 +82,7 @@ export default function UsageActivityChart({
     const share = p.total > 0 ? Math.round((p.ai / p.total) * 100) : 0;
     return (
       <TooltipCard
-        title={`${p.label}${p.weekend ? ' · weekend' : ''}${p.spike ? ' · an odd day' : ''}`}
+        title={`${p.label}${p.weekend ? ' · weekend' : ''}${p.spike ? ' · unusually busy' : ''}`}
         rows={rows}
         footer={
           p.total === 0
@@ -94,8 +95,11 @@ export default function UsageActivityChart({
 
   return (
     <div style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
+      <ChartAutoSizer>
+        {({ width, height: h }) => (
         <ComposedChart
+          width={width}
+          height={h}
           data={points}
           margin={{ top: 14, right: 8, left: 0, bottom: 0 }}
           // Slim columns with real air between them. At a 22px cap over 30 slots
@@ -199,7 +203,8 @@ export default function UsageActivityChart({
             />
           ))}
         </ComposedChart>
-      </ResponsiveContainer>
+        )}
+      </ChartAutoSizer>
     </div>
   );
 }
@@ -258,11 +263,12 @@ export function UsageAiStrip({ points, height = 68 }: { points: ActivityPoint[];
         </span>
       </div>
       <div style={{ height }}>
-        <ResponsiveContainer width="100%" height="100%">
-          {/* The same column geometry as the chart above, so the two plots line up
-              day for day. A strip whose bars sit at a different width and pitch
-              from the chart it belongs to reads as a second, unrelated chart. */}
-          <BarChart data={points} margin={{ top: 2, right: 8, left: 0, bottom: 0 }} barCategoryGap="34%">
+        <ChartAutoSizer>
+          {({ width, height: h }) => (
+          /* The same column geometry as the chart above, so the two plots line up
+             day for day. A strip whose bars sit at a different width and pitch
+             from the chart it belongs to reads as a second, unrelated chart. */
+          <BarChart width={width} height={h} data={points} margin={{ top: 2, right: 8, left: 0, bottom: 0 }} barCategoryGap="34%">
             <defs>
               <linearGradient id="usage-bar-ai" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#0EA5E9" />
@@ -287,7 +293,8 @@ export function UsageAiStrip({ points, height = 68 }: { points: ActivityPoint[];
               isAnimationActive={false}
             />
           </BarChart>
-        </ResponsiveContainer>
+          )}
+        </ChartAutoSizer>
       </div>
     </div>
   );

@@ -16,11 +16,12 @@
  * plot. That is what these primitives encode.
  */
 
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowUpRight, type LucideIcon } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
-import { CARD_BASE, DONUT_SHADES, ICON_TILE, ICON_TILE_BRAND, KH_EASE, fmt } from './usageTokens';
+import { ArrowUpRight, Info, type LucideIcon } from 'lucide-react';
+import { PieChart, Pie, Cell, Tooltip } from 'recharts';
+import ChartAutoSizer from './ChartAutoSizer';
+import { CARD_BASE, DONUT_SHADES, HOVER_FILL, ICON_TILE, ICON_TILE_BRAND, KH_EASE, fmt } from './usageTokens';
 
 /* ── Card ──────────────────────────────────────────────────────────────────
    One shell, three ranks. Padding scales with rank — uniform p-4 everywhere is
@@ -105,6 +106,57 @@ export function Eyebrow({ children, className = '' }: { children: ReactNode; cla
   return (
     <div className={`text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide ${className}`}>
       {children}
+    </div>
+  );
+}
+
+/* ── Info popover ────────────────────────────────────────────────────────────
+   The ⓘ that opens a "what this counts / what it doesn't" note. Same spelling as
+   the KPI tiles' definition popover — one transparency affordance across the page,
+   so a reader who learned it on the KPI band already knows it on a chart card.
+
+   Drop it in a card's `right` header slot: `right={<InfoPopover .../>}`. The
+   button anchors the popover, which drops down from the top-right of the card. */
+export function InfoPopover({ label, counts, excludes, note }: {
+  /** What is being explained — used only for the button's accessible name. */
+  label: string;
+  /** What the number is built from. */
+  counts?: ReactNode;
+  /** What is deliberately left out. */
+  excludes?: ReactNode;
+  /** A trailing plain-language note (e.g. how a threshold is defined). */
+  note?: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onClick={() => setOpen(o => !o)}
+        aria-label={`How ${label} is worked out`}
+        className="shrink-0 text-ink-300 hover:text-brand-600 transition-colors cursor-help"
+      >
+        <Info size={15} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-7 z-30 w-64 rounded-lg border border-canvas-border bg-canvas-elevated p-3 text-left shadow-[0_8px_24px_-6px_rgba(15,7,32,0.14)]">
+          {counts && (
+            <p className="text-[0.75rem] text-ink-700 leading-relaxed">
+              <span className="font-semibold text-ink-900">Counts:</span> {counts}
+            </p>
+          )}
+          {excludes && (
+            <p className="mt-1.5 text-[0.75rem] text-ink-500 leading-relaxed">
+              <span className="font-semibold text-ink-700">Doesn't count:</span> {excludes}
+            </p>
+          )}
+          {note && <p className="mt-1.5 text-[0.75rem] text-ink-500 leading-relaxed">{note}</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -354,9 +406,18 @@ export function Meter({
    of these, and twelve ResponsiveContainers with their own resize observers is a
    lot of layout work to say "it went up a bit". */
 
+/** Singular/plural the tooltip unit against the value a bar actually holds —
+ *  "1 report", "42 reports", "1 person". Kept tiny; only the handful of units
+ *  this page uses need to resolve. */
+function unitLabel(n: number, unit?: string): string {
+  if (!unit) return '';
+  if (n === 1) return unit === 'people' ? 'person' : unit.replace(/s$/, '');
+  return unit;
+}
+
 export function TrendBars({
   series, total, additive = true, height = 'h-8', delay = 0, ariaLabel, maxBars = 40,
-  baseline = false, rounded = false, emphasizePeak = false,
+  baseline = false, rounded = false, emphasizePeak = false, labels, unit,
 }: {
   /** One value per bucket, oldest first. */
   series: number[];
@@ -369,6 +430,13 @@ export function TrendBars({
   height?: string;
   delay?: number;
   ariaLabel?: string;
+  /** One date label per RAW series entry, oldest first (e.g. "Mon, Apr 14").
+   *  Shown in the hover tooltip. When bars are bucketed, adjacent labels are
+   *  joined into a range. Omitted → the tooltip shows the value with no date. */
+  labels?: string[];
+  /** What one bar counts, for the tooltip — "actions", "reports". Pluralised
+   *  against the hovered value. Omitted → the tooltip shows the bare number. */
+  unit?: string;
   /** Draw a hairline the columns stand on, and render empty days as a visible
    *  tick on it. Off by default so the 64px area-card strips stay as they were;
    *  the KPI band opts in, because at its width a floating column with no axis
@@ -394,16 +462,25 @@ export function TrendBars({
   maxBars?: number;
 }) {
   const prefersReduced = useReducedMotion();
+  const [hover, setHover] = useState<number | null>(null);
 
-  const bars = useMemo(() => {
-    if (series.length <= maxBars) return series;
+  // Bucket the values AND their labels together, so a bucketed bar's tooltip
+  // names the span of days it summed ("Apr 1 – Apr 3") rather than one of them.
+  const { bars, barLabels } = useMemo(() => {
+    if (series.length <= maxBars) return { bars: series, barLabels: labels };
     const size = Math.ceil(series.length / maxBars);
-    const out: number[] = [];
+    const outVals: number[] = [];
+    const outLabels: string[] = [];
     for (let i = 0; i < series.length; i += size) {
-      out.push(series.slice(i, i + size).reduce((s, v) => s + v, 0));
+      outVals.push(series.slice(i, i + size).reduce((s, v) => s + v, 0));
+      if (labels) {
+        const a = labels[i];
+        const b = labels[Math.min(i + size - 1, labels.length - 1)];
+        outLabels.push(a === b ? a : `${a} to ${b}`);
+      }
     }
-    return out;
-  }, [series, maxBars]);
+    return { bars: outVals, barLabels: labels ? outLabels : undefined };
+  }, [series, labels, maxBars]);
 
   if (bars.length < 2) return null;
   const max = Math.max(...bars, 1);
@@ -421,30 +498,75 @@ export function TrendBars({
     >
       {bars.map((v, i) => {
         const isZero = v <= 0;
+        const hovered = hover === i;
         // The peak column keeps full brand; the rest step back one shade of the
         // same hue, so the emphasis reads as "less of the same thing", never as a
         // second series. Zero days become a faint tick on the axis rather than a
-        // grey stub floating in space.
+        // grey stub floating in space. A hovered bar snaps to full brand, so the
+        // one you are reading a value off is unmistakable.
         const fill = isZero
           ? 'rgba(15, 7, 32, 0.08)'
-          : emphasizePeak && v < max
-            ? '#A87BE4'
-            : '#6A12CD';
+          : hovered || !(emphasizePeak && v < max)
+            ? '#6A12CD'
+            : '#A87BE4';
+        // Each column is a full-height hit area so the whole slot answers the
+        // hover, not just the few pixels the bar happens to reach — the reader
+        // aims at a day, not at a 12px stub (the same reason the area charts wash
+        // the whole slot on hover, HOVER_FILL).
         return (
-          <motion.div
+          <div
             key={i}
-            className={`flex-1 min-w-0 ${rounded && !isZero ? 'rounded-t-xs' : ''}`}
-            style={{ background: fill }}
-            initial={prefersReduced ? false : { height: 0 }}
-            animate={{ height: `${isZero ? (baseline ? 5 : 4) : Math.max(baseline ? 12 : 8, (v / max) * 100)}%` }}
-            transition={
-              prefersReduced
-                ? { duration: 0 }
-                : { duration: 0.45, delay: delay + Math.min(i, 40) * 0.008, ease: KH_EASE }
-            }
-          />
+            className="relative flex-1 min-w-0 h-full flex items-end"
+            onMouseEnter={() => setHover(i)}
+            onMouseLeave={() => setHover(h => (h === i ? null : h))}
+          >
+            {hovered && (
+              <span
+                className="absolute inset-x-0 bottom-0 top-[-2px] rounded-sm pointer-events-none"
+                style={{ background: HOVER_FILL }}
+                aria-hidden
+              />
+            )}
+            <motion.div
+              className={`relative w-full ${rounded && !isZero ? 'rounded-t-xs' : ''}`}
+              style={{ background: fill }}
+              initial={prefersReduced ? false : { height: 0 }}
+              animate={{ height: `${isZero ? (baseline ? 5 : 4) : Math.max(baseline ? 12 : 8, (v / max) * 100)}%` }}
+              transition={
+                prefersReduced
+                  ? { duration: 0 }
+                  : { duration: 0.45, delay: delay + Math.min(i, 40) * 0.008, ease: KH_EASE }
+              }
+            />
+          </div>
         );
       })}
+
+      {/* The tooltip: the real value for the hovered bar, and the day it belongs
+          to. Anchored to the hovered column's centre and floated above the row,
+          pointer-events-none so it never eats the hover that summoned it. */}
+      {hover !== null && (() => {
+        // Anchor the tooltip over the hovered column, but pull it in at the two
+        // ends so an edge bar's card does not clip half the label: left-align the
+        // first bars, right-align the last, centre the rest.
+        const frac = (hover + 0.5) / bars.length;
+        const tx = frac < 0.15 ? '0%' : frac > 0.85 ? '-100%' : '-50%';
+        return (
+          <div
+            className="absolute bottom-full z-40 mb-1.5 pointer-events-none"
+            style={{ left: `${frac * 100}%`, transform: `translateX(${tx})` }}
+          >
+            <div className="rounded-md border border-canvas-border bg-canvas-elevated px-2 py-1 shadow-[0_6px_18px_-6px_rgba(15,7,32,0.16)] whitespace-nowrap text-center">
+              {barLabels?.[hover] && (
+                <div className="text-[0.625rem] text-ink-400 leading-tight">{barLabels[hover]}</div>
+              )}
+              <div className="text-[0.75rem] font-semibold text-ink-900 tabular-nums leading-tight">
+                {bars[hover] <= 0 ? 'No activity' : `${fmt(bars[hover])}${unit ? ` ${unitLabel(bars[hover], unit)}` : ''}`}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -634,8 +756,9 @@ export function Donut({ items, total, totalLabel, size = 128 }: {
   return (
     <div className="flex items-center gap-5">
       <div className="relative shrink-0" style={{ width: size, height: size }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
+        <ChartAutoSizer>
+          {({ width, height }) => (
+          <PieChart width={width} height={height}>
             <Pie
               data={shaded}
               dataKey="value"
@@ -673,7 +796,8 @@ export function Donut({ items, total, totalLabel, size = 128 }: {
               }}
             />
           </PieChart>
-        </ResponsiveContainer>
+          )}
+        </ChartAutoSizer>
         {/* The centre of a donut is the one place the total belongs. */}
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
           <span className="text-[1.125rem] font-semibold tracking-[-0.02em] text-ink-900 leading-none">

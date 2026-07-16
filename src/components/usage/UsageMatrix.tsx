@@ -35,19 +35,29 @@ import {
 } from '../../data/platform-usage';
 
 /** Each verdict is a colour a reader learns once from the legend and then reads
- *  straight off the bars. Barely-used carries the attention hue; the two healthy
- *  "used" states are brand steps; set-up-once is a quiet neutral. */
+ *  straight off the bars. Four verdicts are four different KINDS of thing, so
+ *  they get four clearly separate hues — not four steps of one purple, which
+ *  read as the same tag to anyone scanning by colour. Each hue is one of the
+ *  platform's own semantic tones, so the read is intuitive as well as distinct:
+ *    Everyday   → brand purple — the core the licence is bought for.
+ *    Specialist → compliant green — a healthy tool a few people live in.
+ *    Set up once→ evidence blue — informational, working as intended.
+ *    Barely used→ mitigated amber — the one an admin can act on. */
 const VERDICT_COLOR: Record<MatrixQuadrant, string> = {
-  core: '#6A12CD',       // Everyday — full brand
-  power: '#A366F0',      // Specialist — light brand
-  onboarding: '#9A8FAE', // Set up once — neutral ink
-  shelfware: '#B45309',  // Barely used — attention
+  core: '#6A12CD',       // Everyday — brand purple
+  power: '#15803D',      // Specialist — compliant green
+  onboarding: '#0369A1', // Set up once — evidence blue
+  shelfware: '#B45309',  // Barely used — mitigated amber
 };
+/** The pill tint per verdict — the light/700 pair of the same semantic ramp the
+ *  dot and bar are drawn from, so the chip, the swatch and the bar all agree and
+ *  no two verdicts share a chip (Everyday and Specialist used to wear the exact
+ *  same brand pill). */
 const VERDICT_PILL: Record<MatrixQuadrant, string> = {
   core: 'bg-brand-50 text-brand-700',
-  power: 'bg-brand-50 text-brand-700',
-  onboarding: 'bg-ink-900/[0.05] text-ink-600',
-  shelfware: 'bg-mitigated-700/[0.1] text-mitigated-700',
+  power: 'bg-compliant-50 text-compliant-700',
+  onboarding: 'bg-evidence-50 text-evidence-700',
+  shelfware: 'bg-mitigated-50 text-mitigated-700',
 };
 
 export default function UsageMatrix({ days, users, onSelect }: {
@@ -122,8 +132,8 @@ export default function UsageMatrix({ days, users, onSelect }: {
                 </span>
               </div>
 
-              <span className="shrink-0 w-24 text-right text-[0.6875rem] text-ink-400 tabular-nums hidden sm:inline">
-                {p.frequency} each
+              <span className="shrink-0 w-24 text-right text-[0.6875rem] text-ink-400 tabular-nums whitespace-nowrap hidden sm:inline">
+                {p.frequency} per person
               </span>
 
               <span className={`shrink-0 inline-flex items-center h-5 px-2 rounded-full text-[0.625rem] font-medium whitespace-nowrap ${VERDICT_PILL[p.quadrant]}`}>

@@ -37,24 +37,26 @@ import { fmt } from './usageTokens';
 
 const FULL_DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-const hourLabel = (h: number) => `${String(h).padStart(2, '0')}:00`;
-
-/** Office hours, for the out-of-hours share. */
-const OFFICE_START = 8;
-const OFFICE_END = 18;
+/** The daytime band this chart uses to split day work from night work. It is the
+ *  chart's own reference for the "in the daytime" share, NOT a claim about any
+ *  organisation's set hours — different teams work different hours, and nothing
+ *  here knows theirs. Stated out loud next to the number so no one mistakes it
+ *  for a policy. */
+const DAY_START = 8;
+const DAY_END = 18;
 
 export default function UsageRhythm({ data }: { data: UsageHeatmapData }) {
   const { matrix, total, untimed } = data;
 
   const reading = useMemo(() => {
     let peak = { dow: 1, hour: 9, value: 0 };
-    let inHours = 0;
+    let daytime = 0;
     let weekend = 0;
 
     matrix.forEach((row, dow) => {
       row.forEach((v, hour) => {
         if (v > peak.value) peak = { dow, hour, value: v };
-        if (hour >= OFFICE_START && hour < OFFICE_END) inHours += v;
+        if (hour >= DAY_START && hour < DAY_END) daytime += v;
         if (dow === 0 || dow === 6) weekend += v;
       });
     });
@@ -65,32 +67,37 @@ export default function UsageRhythm({ data }: { data: UsageHeatmapData }) {
     return {
       peak,
       busiestDay,
-      inHoursPct: total > 0 ? Math.round((inHours / total) * 100) : 0,
+      daytimePct: total > 0 ? Math.round((daytime / total) * 100) : 0,
       weekendPct: total > 0 ? Math.round((weekend / total) * 100) : 0,
     };
   }, [matrix, total]);
 
   if (total === 0) {
-    return <p className="text-[0.8125rem] text-ink-400">No timed activity in this period, so there is no pattern to show.</p>;
+    return <p className="text-[0.875rem] text-ink-400">No timed activity in this period, so there is no pattern to show.</p>;
   }
 
   return (
-    <div>
+    // Fill the card: the reading and the untimed note keep their natural height,
+    // and the heatmap in between takes whatever is left, so the grid grows to the
+    // card's height instead of floating above a void. `flex-1` so this whole block
+    // grows inside the card body (a flex column); `min-h-0` so the grid can shrink
+    // on a short card rather than overflow.
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* The reading of the grid, before the grid. A heatmap makes a reader find
           the dark cell themselves; naming it costs one line and means the card
           works even for someone who only reads the first sentence. */}
-      <p className="text-[0.8125rem] text-ink-700 leading-relaxed">
-        The team works <span className="font-semibold text-ink-900">{FULL_DOW[reading.busiestDay.dow]}s</span> hardest,
-        and the busiest hour of the week is{' '}
+      <p className="text-[0.875rem] text-ink-700 leading-relaxed">
+        The team is most active on <span className="font-semibold text-ink-900">{FULL_DOW[reading.busiestDay.dow]}s</span>,
+        and the busiest hour is{' '}
         <span className="font-semibold text-ink-900">
-          {FULL_DOW[reading.peak.dow]} at {hourLabel(reading.peak.hour)}
+          {FULL_DOW[reading.peak.dow]} at {reading.peak.hour % 12 || 12}{reading.peak.hour < 12 ? 'am' : 'pm'}
         </span>{' '}
         (<span className="font-semibold text-ink-900 tabular-nums">{fmt(reading.peak.value)}</span> actions).{' '}
-        <span className="font-semibold text-ink-900">{reading.inHoursPct}%</span> of the work happens in office hours,
-        and <span className="font-semibold text-ink-900">{reading.weekendPct}%</span> at the weekend.
+        <span className="font-semibold text-ink-900">{reading.daytimePct}%</span> of the work happens between 8am and 6pm,
+        and just <span className="font-semibold text-ink-900">{reading.weekendPct}%</span> at the weekend.
       </p>
 
-      <div className="mt-6">
+      <div className="mt-6 flex min-h-0 flex-1 flex-col">
         <UsageHeatmap data={data} />
       </div>
 

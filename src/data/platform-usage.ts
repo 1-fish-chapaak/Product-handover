@@ -58,6 +58,7 @@ export const USAGE_MODULES = [
   'AI Concierge',
   'Reports',
   'Engagements',
+  'Working Papers',
   'Exceptions',
   'Audit Planning',
   'Process Hub',
@@ -138,8 +139,15 @@ const MODULE_BUCKETS: Record<string, UsageModule> = {
   'notifications': 'Admin',
 };
 
-/** Map an AuditLog.module string onto a usage bucket. */
-export function usageModuleFor(logModule: string): UsageModule {
+/** Map an AuditLog event onto a usage bucket.
+ *
+ * `entity` is consulted first for the surfaces that share one module string but
+ * are worth reporting apart: a working paper logs under 'Engagement Execution'
+ * alongside control tests and evidence uploads, but an audit lead reads "working
+ * papers" as its own body of work, so it gets its own area rather than being
+ * swallowed into Engagements. Everything else falls through to the module map. */
+export function usageModuleFor(logModule: string, entity?: string): UsageModule {
+  if (entity && entity.trim().toLowerCase() === 'working paper') return 'Working Papers';
   return MODULE_BUCKETS[logModule.trim().toLowerCase()] ?? 'Other';
 }
 
@@ -180,6 +188,10 @@ export interface UsageDay {
   aiEvents: number;
   /** Reports + ATRs generated that day (the report registries). */
   reports: number;
+  /** Of those reports, the ones tagged "Bulk Audit" — a subset of `reports`,
+   *  surfaced on its own so the Bulk Audit rollup can be counted without a
+   *  second pass over the registry. */
+  bulkReports: number;
   /** Export events that day. */
   downloads: number;
   byModule: Record<UsageModule, number>;
@@ -229,6 +241,16 @@ function reportDayKeys(): number[] {
     ...GENERATED_REPORTS.map(r => dayStart(r.generatedAt)),
     ...ATR_LIBRARY.map(a => dayStart(a.generatedAt)),
   ].filter((v): v is number => v !== null);
+}
+
+/** Just the "Bulk Audit"–tagged reports, as (dayKey) stamps — the report half of
+ *  the Bulk Audit rollup. Read straight off the registry tag, so it can never
+ *  disagree with what the Reports list shows. */
+function bulkReportDayKeys(): number[] {
+  return GENERATED_REPORTS
+    .filter(r => r.tag === 'Bulk Audit')
+    .map(r => dayStart(r.generatedAt))
+    .filter((v): v is number => v !== null);
 }
 
 /** Every saved conversation, as (dayKey, messages) pairs. */
@@ -328,7 +350,7 @@ export function usageDaysWithLive(logs: AuditLog[]): UsageDay[] {
     days.push({
       dayOffset: offset,
       activeUsers: 0, actions: 0, aiConversations: 0, aiMessages: 0, aiEvents: 0,
-      reports: 0, downloads: 0,
+      reports: 0, bulkReports: 0, downloads: 0,
       byModule: emptyByModule(),
       entries: [],
     });
@@ -349,7 +371,7 @@ export function usageDaysWithLive(logs: AuditLog[]): UsageDay[] {
     const off = offsetFor(key);
     if (off === null) continue;
     const day = byOffset.get(off)!;
-    const module = usageModuleFor(l.module);
+    const module = usageModuleFor(l.module, l.entity);
     day.entries.push({
       id: l.id, user: l.user, action: l.action, entity: l.entity,
       module, hour: hourOf(l.timestamp), description: l.description,
@@ -366,6 +388,12 @@ export function usageDaysWithLive(logs: AuditLog[]): UsageDay[] {
   for (const key of reportDayKeys()) {
     const off = offsetFor(key);
     if (off !== null) byOffset.get(off)!.reports += 1;
+  }
+  // 2b. Bulk Audit reports — a labelled subset of the same registry, kept apart
+  //     for the Bulk Audit rollup (does not add to the reports total above).
+  for (const key of bulkReportDayKeys()) {
+    const off = offsetFor(key);
+    if (off !== null) byOffset.get(off)!.bulkReports += 1;
   }
 
   // 3. Saved conversations — CHAT_HISTORY. These predate event logging, so
@@ -1147,6 +1175,39 @@ export function recentRuns(days: UsageDay[], limit = 5): RunEvent[] {
       live: e.live,
     }))
     .slice(0, limit);
+}
+
+/* ── Bulk Audit rollup ──────────────────────────────────────────────────────
+   Bulk Audit is not a module — it is a way of working that shows up in two
+   places: reports generated from a bulk run (tagged "Bulk Audit" in the report
+   registry) and the bulk runs themselves (logged as a 'Run' on a 'Bulk Run'
+   entity). Neither the Reports figure nor the Workflow-runs figure names it, so
+   an audit lead asking "how much of this was bulk" had nowhere to look. This
+   rolls the two halves into one number without moving them out of the totals
+   they already belong to — a bulk run is still a workflow run, a bulk report is
+   still a report; this is a lens over them, not a new bucket. */
+export interface BulkAuditActivity {
+  /** "Bulk Audit"–tagged reports generated in the window. */
+  reports: number;
+  /** Bulk runs kicked off in the window. */
+  runs: number;
+  /** reports + runs — the headline. */
+  total: number;
+  deltaPct: number | null;
+}
+
+function bulkCounts(days: UsageDay[]): { reports: number; runs: number } {
+  return {
+    reports: days.reduce((s, d) => s + d.bulkReports, 0),
+    runs: days.flatMap(d => d.entries).filter(e => e.action === 'Run' && e.entity === 'Bulk Run').length,
+  };
+}
+
+export function bulkAuditActivity(days: UsageDay[], priorDays: UsageDay[]): BulkAuditActivity {
+  const { reports, runs } = bulkCounts(days);
+  const prior = bulkCounts(priorDays);
+  const total = reports + runs;
+  return { reports, runs, total, deltaPct: usageDeltaPct(total, prior.reports + prior.runs) };
 }
 
 export const SHARE_KINDS = ['Reports', 'Dashboards', 'RACMs', 'Workflows', 'Other'] as const;

@@ -177,7 +177,7 @@ function AppInner() {
     addNotification,
   } = useAppState();
 
-  const { can } = useCurrentUser();
+  const { can, canAny } = useCurrentUser();
   const logEvent = useAuditLog();
 
   // Every dashboard-creation path funnels through here so the audit log (and
@@ -484,9 +484,13 @@ function AppInner() {
       );
     }
 
-    // Route guard — block views the active role can't access.
+    // Route guard — block views the active role can't access. A gate may be a
+    // single permission or a set the user needs ANY of (e.g. Platform Usage,
+    // open to the workspace admin OR a team lead).
     const requiredPerm = VIEW_PERMISSIONS[state.view];
-    if (requiredPerm && !can(requiredPerm)) {
+    const allowed = requiredPerm == null
+      || (Array.isArray(requiredPerm) ? canAny(requiredPerm) : can(requiredPerm));
+    if (!allowed) {
       return (
         <div className="h-full flex items-center justify-center p-6">
           <EmptyState

@@ -153,10 +153,12 @@ export function activityTakeaway(points: ActivityPoint[]): string {
   const tail = line[line.length - 1];
   const change = head === 0 ? 0 : Math.round(((tail - head) / head) * 100);
 
+  // Plain words a person would actually say — no "the period", no chart terms.
+  // Just: did it stay about the same, or go up/down, and by how much.
   const shape =
-    Math.abs(change) < 15 ? 'steady'
-      : change > 0 ? `up ${change}%`
-        : `down ${Math.abs(change)}%`;
+    Math.abs(change) < 15 ? 'and it stayed about the same'
+      : change > 0 ? `and it rose ${change}% by the end`
+        : `and it fell ${Math.abs(change)}% by the end`;
 
-  return `About ${fmt(perDay)} ${perDay === 1 ? 'action' : 'actions'} a day, ${shape} across the period`;
+  return `About ${fmt(perDay)} ${perDay === 1 ? 'action' : 'actions'} a day, ${shape}`;
 }

@@ -84,26 +84,29 @@ export default function ColumnFilter({ label, options, value, onChange, align = 
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
-          className={`no-focus-ring inline-flex items-center gap-2 border font-medium cursor-pointer transition-colors ${
-            size === 'sm' ? 'h-8 px-2.5 rounded-md text-[0.75rem]' : 'h-10 px-3 rounded-lg text-[0.78125rem]'
+          className={`no-focus-ring inline-flex items-center gap-2 border font-medium cursor-pointer transition-colors duration-150 ${
+            size === 'sm' ? 'h-8 px-2.5 rounded-lg text-[0.75rem]' : 'h-10 px-3.5 rounded-lg text-[0.78125rem]'
           } ${
             hasFilter
-              ? 'bg-brand-50 border-brand-200 text-brand-700'
+              // Applied filter: a quiet brand tint + count. Minimal, no fill.
+              ? 'bg-brand-50 border-brand-200 text-brand-700 hover:border-brand-300'
               : open
+                // Open (no filter yet): just a brand-tinted border, nothing loud.
                 ? 'bg-canvas-elevated border-brand-300 text-brand-700'
-                : 'bg-canvas-elevated border-canvas-border text-ink-700 hover:border-brand-300'
+                // Resting: flat hairline; hover only warms the edge and text.
+                : 'bg-canvas-elevated border-canvas-border text-ink-600 hover:border-brand-300 hover:text-ink-900'
           }`}
           aria-haspopup="true"
           aria-expanded={open}
         >
-          {icon && <SlidersHorizontal size={size === 'sm' ? 13 : 15} className={hasFilter || open ? 'text-brand-600' : 'text-ink-400'} />}
+          {icon && <SlidersHorizontal size={size === 'sm' ? 13 : 15} className={hasFilter || open ? 'text-brand-500' : 'text-ink-400'} />}
           <span>{label}</span>
           {hasFilter && (
-            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-brand-600 text-white text-[0.625rem] font-bold tabular-nums">
+            <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-brand-100 text-brand-700 text-[0.625rem] font-semibold tabular-nums">
               {value.length}
             </span>
           )}
-          <ChevronDown size={12} strokeWidth={2.5} className={`text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+          <ChevronDown size={12} strokeWidth={2.5} className={`transition-transform duration-150 ${hasFilter || open ? 'text-brand-400' : 'text-ink-400'} ${open ? 'rotate-180' : ''}`} aria-hidden />
         </button>
       ) : (
         <button

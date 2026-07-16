@@ -78,6 +78,19 @@ interface SmartTableProps<T extends Record<string, unknown>> {
    *  exactly and the table always fills its container, so a width-less column
    *  takes the remainder. Off by default (auto layout) for existing callers. */
   fixedLayout?: boolean;
+  /** Keep every column header on one line (`white-space: nowrap`). For dense
+   *  fixed-layout tables where a two-word header ("Last active") would otherwise
+   *  wrap and drag the whole header row taller. Off by default. */
+  nowrapHeaders?: boolean;
+  /** Tighter cell padding for the default variant (px-3 / shorter rows instead
+   *  of px-4). Buys horizontal room back on wide, many-column tables. No effect
+   *  on the 'modern' variant, which has its own rhythm. Off by default. */
+  compact?: boolean;
+  /** Pin the search/filter toolbar to the scroller alongside the sticky header,
+   *  so the controls stay in reach while the rows scroll. Requires stickyHeader
+   *  and a headerExtra toolbar; pair with `stickyHeaderTop` so the column header
+   *  parks just under the pinned toolbar. Off by default. */
+  stickyToolbar?: boolean;
 }
 
 /* ─── Sort Icon ─── */
@@ -122,6 +135,9 @@ export default function SmartTable<T extends Record<string, unknown>>({
   searchBg = 'bg-white',
   showSortHint = false,
   isRowSelected,
+  nowrapHeaders = false,
+  compact = false,
+  stickyToolbar = false,
 }: SmartTableProps<T>) {
   const isModern = variant === 'modern';
   // Striping is off in modern mode — modern tables read cleaner without it.
@@ -200,7 +216,13 @@ export default function SmartTable<T extends Record<string, unknown>>({
     >
       {/* Toolbar */}
       {(searchable || headerExtra) && (
-        <div className={`flex items-center justify-between gap-3 ${isModern ? 'px-5 py-3' : 'px-4 py-2.5 border-b border-border-light bg-surface-2/50'}`}>
+        <div className={[
+          'flex items-center justify-between gap-3',
+          isModern ? 'px-5 py-3' : 'px-4 py-2.5 border-b border-border-light',
+          // Pinned toolbars need a solid fill so scrolled rows don't show
+          // through; the resting toolbar keeps its subtle surface tint.
+          stickyHeader && stickyToolbar ? 'sticky top-0 z-20 bg-canvas-elevated' : (isModern ? '' : 'bg-surface-2/50'),
+        ].filter(Boolean).join(' ')}>
           {searchable && (
             <div className="relative flex-1 max-w-xs">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
@@ -250,7 +272,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                   className={[
                     isModern
                       ? `${dense ? 'py-2.5' : 'py-3'} font-semibold text-text-secondary ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
-                      : 'px-4 py-2.5 font-semibold text-text-secondary',
+                      : `${compact ? 'px-3 py-2' : 'px-4 py-2.5'} font-semibold text-text-secondary`,
                     alignClass(col.align),
                     col.sortable !== false ? 'cursor-pointer select-none hover:text-text-secondary transition-colors' : '',
                     // Pin the header row to the page scroller, parked under any
@@ -262,7 +284,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                   style={col.width ? { width: col.width } : undefined}
                   onClick={() => col.sortable !== false && handleSort(col.key)}
                 >
-                  <span className="inline-flex items-center gap-1.5">
+                  <span className={`inline-flex items-center gap-1.5 ${nowrapHeaders ? 'whitespace-nowrap' : ''}`}>
                     {col.label}
                     {col.sortable !== false && (
                       <SortIcon direction={sortKey === col.key ? sortDir : null} quiet={isModern && !showSortHint} />
@@ -350,7 +372,7 @@ export default function SmartTable<T extends Record<string, unknown>>({
                         className={[
                           isModern
                             ? `${dense ? 'py-2.5' : 'py-4'} ${ci === 0 ? 'pl-5 pr-3' : ci === columns.length - 1 ? 'pl-3 pr-5' : 'px-3'}`
-                            : 'px-4 py-3',
+                            : compact ? 'px-3 py-2.5' : 'px-4 py-3',
                           // Opt-in selected-row accent: a left brand bar carried by the first cell.
                           ci === 0 && selected ? 'shadow-[inset_3px_0_0_#6A12CD]' : '',
                           col.truncate ? 'max-w-0' : '',
