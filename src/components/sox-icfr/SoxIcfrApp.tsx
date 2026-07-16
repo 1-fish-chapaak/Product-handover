@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, BadgeCheck, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Settings } from 'lucide-react';
 import './register.css';
+import { cn } from '../../lib/cn';
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import { findEngagement } from '../../data/engagements';
 import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
@@ -25,55 +26,69 @@ const SOX_TABS: TabDef[] = [
 ];
 
 function Inner({ onBack }: { onBack?: () => void }) {
-  const { eng, role, tab, view, racmEditor, meOwner, setMeOwner, setRole, setTab, back } = useIcfr();
+  const { eng, role, tab, view, racmEditor, meOwner, setMeOwner, setRole, setTab, setView, back } = useIcfr();
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
   // The owner's SOX is a to-do list, not a workspace: just their inbox (Overview)
   // and their controls. RACM, Risk Library and Runs are audit-side surfaces.
   const tabs = role === 'risk-owner' ? SOX_TABS.filter(t => t.id === 'overview' || t.id === 'controls') : SOX_TABS;
   const owners = Array.from(new Set(eng.controls.map(c => c.owner))).sort();
 
+  // Header matches the production engagement page: a "Back to Engagements" line,
+  // then avatar-initials tile + name + status/type pills, with code · Configuration
+  // beneath — the tabs sit tight underneath.
+  const initials = eng.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 3) || eng.code.slice(0, 3);
   const topBar = (
-    <div className="sticky top-0 z-30 bg-canvas/85 backdrop-blur border-b border-canvas-border shrink-0">
-      <div className="max-w-[1320px] mx-auto px-6 h-14 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          {onBack && (
-            <button
-              onClick={onBack}
-              title="Back to engagements"
-              aria-label="Back to engagements"
-              className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors shrink-0"
-            >
-              <ArrowLeft size={15} />Engagements
-            </button>
-          )}
-          <span className="inline-flex items-center gap-2 min-w-0">
-            <span className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center shrink-0"><ShieldCheck size={16} className="text-white" /></span>
-            {/* Module label — names SOX / ICFR for anyone who lands here from a deep link. */}
-            <span className="flex flex-col min-w-0 leading-none gap-0.5">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-ink-500">SOX / ICFR</span>
-              <span className="inline-flex items-center gap-2 min-w-0">
-                <span className="font-mono text-[12px] font-semibold text-ink-700">{eng.code}</span>
-                <span className="text-[13px] font-semibold text-ink-900 truncate">{eng.name}</span>
-                {concluded && (
-                  <span title={`Signed off — ${eng.signoff.preparer!.by}, countersigned ${eng.signoff.reviewer!.by}`} className="text-[11px] font-semibold text-compliant-700 bg-compliant-50 px-2 h-5 inline-flex items-center gap-1 rounded-full shrink-0">
-                    <BadgeCheck size={11} /> Concluded
-                  </span>
-                )}
-              </span>
-            </span>
-          </span>
-        </div>
-        {/* The switcher is a demo affordance — it previews the other persona
-            without changing who is signed in, hence the "Viewing as" prefix.
-            Quieted to a meta control: split off from the real actions by a
-            divider and muted at rest, rising to full strength on hover/focus. */}
-        <div className="flex items-center gap-3 shrink-0">
-          <NotificationsBell />
-          <span className="w-px h-6 bg-canvas-border" aria-hidden />
-          <div className="flex items-center gap-2 opacity-75 hover:opacity-100 focus-within:opacity-100 transition-opacity">
-            <span className="text-[10px] font-medium uppercase tracking-wide text-ink-400">Viewing as</span>
-            <RoleSwitcher role={role} onChange={setRole} />
-            {role === 'risk-owner' && <OwnerPicker owner={meOwner} options={owners} onChange={setMeOwner} />}
+    <div className={cn('bg-canvas shrink-0', view === 'racm-editor' && 'border-b border-canvas-border')}>
+      <div className="max-w-[1320px] mx-auto px-6 pt-4">
+        {onBack && (
+          <button
+            onClick={onBack}
+            aria-label="Back to Engagements"
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"
+          >
+            <ArrowLeft size={15} /> Back to Engagements
+          </button>
+        )}
+        <div className="mt-3 flex items-start gap-3.5">
+          <span className="w-12 h-12 rounded-xl bg-brand-600 text-white text-[14px] font-semibold flex items-center justify-center shrink-0 select-none" aria-hidden>{initials}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
+              <h1 className="text-[22px] leading-7 font-bold text-ink-900 tracking-tight truncate min-w-0">{eng.name}</h1>
+              {concluded ? (
+                <span title={`Signed off — ${eng.signoff.preparer!.by}, countersigned ${eng.signoff.reviewer!.by}`} className="text-[11.5px] font-semibold text-compliant-700 bg-compliant-50 border border-compliant-200 px-2 h-[22px] inline-flex items-center gap-1 rounded-full shrink-0">
+                  <BadgeCheck size={11} /> Concluded
+                </span>
+              ) : (
+                <span className="text-[11.5px] font-semibold text-compliant-700 bg-compliant-50 border border-compliant-200 px-2 h-[22px] inline-flex items-center rounded-full shrink-0">Active</span>
+              )}
+              {/* Module chip — same job as the type pill on the production header. */}
+              <span className="text-[11.5px] font-semibold text-brand-700 bg-brand-50 border border-brand-100 px-2 h-[22px] inline-flex items-center rounded-full shrink-0">SOX / ICFR</span>
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-[12px] text-ink-500">
+              <span className="font-mono font-semibold">{eng.code}</span>
+              {/* Configuration = the engagement's ground rules (materiality & scope); audit-side only. */}
+              {role !== 'risk-owner' && (
+                <>
+                  <span className="text-ink-300">·</span>
+                  <button onClick={() => setView('scope')} className="inline-flex items-center gap-1 hover:text-brand-700 cursor-pointer transition-colors">
+                    <Settings size={12} /> Configuration
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+          {/* The switcher is a demo affordance — it previews the other persona
+              without changing who is signed in, hence the "Viewing as" prefix.
+              Quieted to a meta control: split off from the real actions by a
+              divider and muted at rest, rising to full strength on hover/focus. */}
+          <div className="flex items-center gap-3 shrink-0 pt-1.5">
+            <NotificationsBell />
+            <span className="w-px h-6 bg-canvas-border" aria-hidden />
+            <div className="flex items-center gap-2 opacity-75 hover:opacity-100 focus-within:opacity-100 transition-opacity">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-ink-400">Viewing as</span>
+              <RoleSwitcher role={role} onChange={setRole} />
+              {role === 'risk-owner' && <OwnerPicker owner={meOwner} options={owners} onChange={setMeOwner} />}
+            </div>
           </div>
         </div>
       </div>
@@ -106,7 +121,7 @@ function Inner({ onBack }: { onBack?: () => void }) {
   return (
     <div className="sox-book-ui h-full overflow-y-auto bg-canvas">
       {topBar}
-      <div className="max-w-[1320px] mx-auto px-6 py-6">
+      <div className="max-w-[1320px] mx-auto px-6 pt-4 pb-6">
         {isRoot && (
           <EngagementTabBar tabs={tabs} activeTab={tab} onSelect={(id) => setTab(id as SoxTab)} storageKey={`sox-${eng.id}`} size="md" />
         )}
