@@ -665,27 +665,71 @@ export interface DownloadEvent {
   id: string;
   user: string;
   item: string;
-  format: DownloadFormat;
+  /** null when the log doesn't say. The feed then shows no chip rather than
+   *  naming a format nobody claimed. */
+  format: DownloadFormat | null;
   dayOffset: number;
   time: string;
   /** True when this came from a real logEvent in the current session. */
   live: boolean;
 }
 
+/** Every spelling a logger uses for a format, mapped to the format itself. */
 const FORMAT_ALIASES: Record<string, DownloadFormat> = {
   PDF: 'PDF', CSV: 'CSV', XLSX: 'XLSX', DOCX: 'DOCX', PPTX: 'PPTX',
-  HTML: 'HTML', TXT: 'TXT', JSON: 'JSON', WORD: 'DOCX', EXCEL: 'XLSX', POWERPOINT: 'PPTX',
+  HTML: 'HTML', TXT: 'TXT', JSON: 'JSON',
+  WORD: 'DOCX', EXCEL: 'XLSX', POWERPOINT: 'PPTX',
+  XLS: 'XLSX', DOC: 'DOCX', PPT: 'PPTX',
 };
 
-/** Pull the artifact name + format out of an Export log's description. */
-function parseExportLog(description: string, entity: string): { item: string; format: DownloadFormat } {
-  const m = description.match(/(?:Exported|Downloaded|Generated) (.+?) (?:as |\()(\w+)/i);
-  const format = m ? FORMAT_ALIASES[m[2].toUpperCase()] : undefined;
-  if (m && format) {
-    const item = m[1];
-    return { item: item.charAt(0).toUpperCase() + item.slice(1), format };
-  }
-  return { item: entity, format: 'CSV' };
+/* An export's format has to be recovered from the sentence the logger wrote,
+ * because the log record itself doesn't carry it. That's a fragile contract, so
+ * it fails loudly rather than quietly:
+ *
+ * This used to be one regex — `(?:Exported|Downloaded|Generated) (.+?) (?:as |\()(\w+)` —
+ * with `{ item: entity, format: 'CSV' }` as its fallback. Most real loggers don't
+ * write that shape ("Downloaded report "X"", "Downloaded SOP "X"",
+ * "Exported compliance summary report (.xlsx)"), so they all landed on the
+ * fallback and reported themselves as CSV. A working paper downloaded as .xlsx
+ * showed a CSV chip, and the feed was full of files that were never CSVs.
+ *
+ * Now: read the format if the sentence states it, in any of the three ways they
+ * actually write it, and return null when it doesn't. Null renders as no chip.
+ * An export whose format we can't name is a gap in the log, and the page should
+ * look like it has a gap rather than inventing a plausible answer. */
+function formatOf(description: string): DownloadFormat | null {
+  // A filename extension is the strongest signal and the most common:
+  // "Working_Paper_C-001.xlsx", "C-001-Working-Paper.pdf", "(.xlsx)".
+  const ext = description.match(/\.(pdf|csv|xlsx|xls|docx|doc|pptx|ppt|html|txt|json)\b/i);
+  if (ext) return FORMAT_ALIASES[ext[1].toUpperCase()] ?? null;
+  // "… as PDF", "… as Word", "… as CSV (12 events)".
+  const as = description.match(/\bas ([A-Za-z]+)/i);
+  if (as && FORMAT_ALIASES[as[1].toUpperCase()]) return FORMAT_ALIASES[as[1].toUpperCase()];
+  // "… (PDF) — ATR-014", "… (PDF, 2.4 MB)". Letters only, so "(12 controls)"
+  // and "(racm-p2p-v3)" don't read as a format.
+  const paren = description.match(/\(([A-Za-z]+)[,)]/);
+  if (paren && FORMAT_ALIASES[paren[1].toUpperCase()]) return FORMAT_ALIASES[paren[1].toUpperCase()];
+  return null;
+}
+
+/** What was downloaded, as a name a reader recognises. Independent of the
+ *  format: a sentence that doesn't name its format still names its artifact. */
+function itemOf(description: string, entity: string): string {
+  // Loggers quote the artifact's own name — "Downloaded report "Q3 Vendor Review"".
+  // That's the best label available, so prefer it whole.
+  const quoted = description.match(/"([^"]+)"/);
+  if (quoted) return quoted[1];
+  // Otherwise take the clause after the verb, minus any trailing format or
+  // scope tail ("… as XLSX", "… covering 12 controls", "… for control C-001").
+  const m = description.match(/^(?:Exported|Downloaded|Generated)\s+(?:the\s+)?(.+?)(?:\s+(?:as|for|covering)\s.+)?$/i);
+  const item = m?.[1]
+    // The chip carries the format, so the name shouldn't say it twice:
+    // "Action Taken Report (PDF) — ATR-014" reads as "Action Taken Report — ATR-014".
+    ?.replace(/\s*\((?:\.)?[A-Za-z]+\)/g, '')
+    .replace(/\s*\(.*?\)\s*$/, '')
+    .trim();
+  if (!item) return entity;
+  return item.charAt(0).toUpperCase() + item.slice(1);
 }
 
 /** Every Export event in the window, newest first. */
@@ -694,7 +738,8 @@ export function recentDownloads(days: UsageDay[], limit = 6): DownloadEvent[] {
     .map(({ e, dayOffset }) => ({
       id: e.id,
       user: e.user,
-      ...parseExportLog(e.description, e.entity),
+      item: itemOf(e.description, e.entity),
+      format: formatOf(e.description),
       dayOffset,
       time: e.hour === null ? '' : `${String(e.hour).padStart(2, '0')}:00`,
       live: e.live,

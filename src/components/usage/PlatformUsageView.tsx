@@ -2637,7 +2637,7 @@ export default function PlatformUsageView() {
                     {recentDl.length > 0 ? (
                       <div className="divide-y divide-canvas-border">
                         {recentDl.map(dl => (
-                          <FeedRow key={dl.id} who={dl.user} verb="downloaded" what={dl.item} chip={dl.format} when={whenLabel(dl)} live={dl.live} />
+                          <FeedRow key={dl.id} who={dl.user} verb="downloaded" what={dl.item} chip={dl.format ?? undefined} when={whenLabel(dl)} live={dl.live} />
                         ))}
                       </div>
                     ) : (
