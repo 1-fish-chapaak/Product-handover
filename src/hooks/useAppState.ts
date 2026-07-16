@@ -240,6 +240,16 @@ const getInitialBPId = (): string | null => {
   return params.get('bp');
 };
 
+// New-tab deep links into the chat (e.g. an insight's "what to do next" step
+// opened via ?view=chat&prompt=<text>) seed the composer draft — pre-filled,
+// not auto-submitted, so the auditor edits and sends it themselves.
+const getInitialChatDraft = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('view') !== 'chat') return null;
+  return params.get('prompt');
+};
+
 const INITIAL_STATE: AppState = {
   view: getInitialView(),
   sidebarExpanded: false,
@@ -267,7 +277,7 @@ const INITIAL_STATE: AppState = {
   workflowType: null,
   chatInitialQuery: null,
   chatWorkflowRunSeed: null,
-  chatComposerDraft: null,
+  chatComposerDraft: getInitialChatDraft(),
   chatWorkflowContext: null,
   workflowBuilderEngagementName: null,
   workflowBuilderSeedPrompt: null,

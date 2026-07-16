@@ -34,6 +34,8 @@ import {
   type Automation,
 } from '../../data/racm';
 import { useEngagementWorkspace, type WorkspaceControl } from './engagementWorkspace';
+import AIRecommendsPopover from '../shared/AIRecommendsPopover';
+import { actionableRacmRecs } from '../../data/layeredInsights';
 
 /** Adapt a user-added control into a RACM row so it renders in the matrix. */
 function customControlToRacmRow(c: WorkspaceControl, process: Engagement['process']): RACMRow {
@@ -413,6 +415,7 @@ function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
 }): JSX.Element {
   const s = entryStats(entry.rows);
   const badge = SOURCE_BADGE[entry.source];
+  const racmRecs = actionableRacmRecs({ subjectLabel: entry.name, risks: s.risks, controls: s.controls, keyControls: s.keyControls, attributes: s.attributes, hasSop: Boolean(entry.sop) });
   return (
     <div className="glass-card rounded-xl p-4 flex items-center gap-4 hover:border-primary/30 transition-colors">
       <div className="p-2.5 rounded-xl bg-brand-50 shrink-0"><BookOpen size={18} className="text-brand-600" /></div>
@@ -424,6 +427,7 @@ function RacmEntryCard({ entry, onOpen, onViewSop, onUploadSop }: {
             {entry.name}
           </button>
           <span className={`inline-flex items-center px-1.5 h-4 rounded text-[0.59375rem] font-bold uppercase tracking-wider border ${badge.cls}`}>{badge.label}</span>
+          {racmRecs.length > 0 && <AIRecommendsPopover recs={racmRecs} subjectLabel={entry.name} subjectSub={entry.subProcess} className="shrink-0" />}
         </div>
         <div className="text-[0.6875rem] text-text-muted mt-1 tabular-nums">
           {s.risks} risk{s.risks === 1 ? '' : 's'}

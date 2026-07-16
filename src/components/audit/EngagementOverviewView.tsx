@@ -12,6 +12,9 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, 
 import Orb from '../shared/Orb';
 import { useToast } from '../shared/Toast';
 import Gated from '../shared/Gated';
+import InsightGenerator from '../shared/InsightGenerator';
+import AIRecommendsPopover from '../shared/AIRecommendsPopover';
+import { actionableWorkflowRecs, isPricingSubject, type BuildInsightInput } from '../../data/layeredInsights';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import {
   ENGAGEMENTS,
@@ -1445,8 +1448,47 @@ export function HealthOverviewTab({
 
   const tier = healthTier(eng.health);
 
+  // The engine's multi-insight roll-up for this engagement: the escalation, its
+  // pricing risk (when the engagement carries the chargeback thread), and one
+  // insight per in-scope control — statuses map to Pass / Fail / Not tested so
+  // each card reasons distinctly. One Generate builds them all into a stack.
+  const insightSubjects = useMemo<BuildInsightInput[]>(() => {
+    const isPricing = /p2p|procure|vendor|invoice|pricing|chargeback/i.test(`${eng.name} ${eng.process ?? ''} ${eng.subtype ?? ''}`);
+    const controls = MOCK_CONTROLS[eng.id] ?? MOCK_CONTROLS.default;
+    const mapStatus = (s: string): string => (s === 'Failed' ? 'Fail' : s === 'Effective' ? 'Pass' : 'Not tested');
+    const subs: BuildInsightInput[] = [
+      { layer: 'engagement', subjectId: eng.id, subjectLabel: eng.name, status: eng.status, flagship: isPricing },
+    ];
+    if (isPricing) {
+      subs.push(
+        { layer: 'control', subjectId: 'C-CHARGEBACK-PRICING', subjectLabel: 'Chargeback Pricing Validation', status: 'Fail', isKey: true, flagship: true },
+        { layer: 'risk', subjectId: 'R-PRICING', subjectLabel: 'Pricing accuracy risk', priority: 'High', flagship: true },
+      );
+    } else {
+      subs.push({ layer: 'risk', subjectId: `${eng.id}-risk`, subjectLabel: `${eng.process ?? 'Process'} control risk`, priority: eng.openIssues > 0 ? 'High' : 'Low' });
+    }
+    for (const c of controls) {
+      // Skip a control whose name would re-trigger the flagship pricing card —
+      // the stack already carries that thread once.
+      if (isPricing && isPricingSubject(c.name)) continue;
+      subs.push({ layer: 'control', subjectId: c.ref, subjectLabel: c.name, status: mapStatus(c.status), isKey: c.key });
+    }
+    return subs;
+  }, [eng]);
+
   return (
     <div className="space-y-5">
+      {/* ─── AI insights · engagement roll-up (generate-on-demand, stacked) ─── */}
+      <InsightGenerator
+        layer="engagement"
+        subjectId={eng.id}
+        subjectLabel={eng.name}
+        status={eng.status}
+        labelOverride={eng.name}
+        subjects={insightSubjects}
+        stackScopeLabel="across this engagement"
+      />
+
       {/* ─── KPI strip ─── */}
       <div className="grid grid-cols-4 gap-3">
         <KpiCard
@@ -2220,6 +2262,7 @@ function WorkflowsBySubProcess({
   }, [allWorkflows, query, sortBy, openByWorkflow]);
 
   const groups = useMemo(() => groupBySubProcess(visibleWorkflows), [visibleWorkflows]);
+
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [grouped, setGrouped] = useState(false); // flat list by default; grouping is opt-in
   const [bulkMode, setBulkMode] = useState(false);
@@ -2461,6 +2504,7 @@ function WorkflowRow({
 }) {
   const eff = wf.totalFires > 0 ? Math.round((wf.truePositives / wf.totalFires) * 100) : 0;
   const tier = effectivenessTier(eff);
+  const wfRecs = actionableWorkflowRecs({ subjectLabel: wf.name, effectivePct: eff, openExceptions: openCount, cadence: wf.cadence.kind === 'Ad-hoc' ? 'Ad-hoc' : wf.cadence.label, status: wf.status, category: wf.type });
   const handleRowClick = () => {
     if (bulkMode) onToggleSelect();
     else onOpen();
@@ -2486,6 +2530,11 @@ function WorkflowRow({
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[14px] font-semibold text-text leading-snug">{wf.name}</span>
           <span className="px-1.5 h-[18px] rounded text-[10px] font-bold bg-surface-2 text-text-secondary font-mono inline-flex items-center">{wf.code}</span>
+          {wfRecs.length > 0 && (
+            <span onClick={(e) => e.stopPropagation()} className="shrink-0 inline-flex">
+              <AIRecommendsPopover recs={wfRecs} subjectLabel={wf.code} subjectSub={wf.name} />
+            </span>
+          )}
         </div>
         {/* Meta line — generous spacing, input badges grouped here */}
         <div className="text-[11.5px] text-text-muted mt-2 flex items-center gap-x-2.5 gap-y-1.5 flex-wrap">

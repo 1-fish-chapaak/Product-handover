@@ -22,7 +22,7 @@ import {
 import {
   PROCESS_INSIGHTS, ENTERPRISE_CONTEXT, PATTERN_META, CONFIDENCE_FACTOR_META,
   SEVERITY_ORDER, SEVERITY_LABEL, MEMORY_CANDIDATE_THRESHOLD,
-  computeConfidence, confidencePct,
+  displayConfidencePct, isMemoryCandidate,
   type MemoryInsight, type InsightSeverity, type PatternType, type ApprovalStatus,
   type EnterpriseContextEntry, type KpiDriftPoint,
 } from '../../data/insightMemory';
@@ -113,8 +113,10 @@ function Sparkline({ series }: { series: KpiDriftPoint[] }) {
 
 function ConfidencePill({ insight }: { insight: MemoryInsight }) {
   const [open, setOpen] = useState(false);
-  const pct = confidencePct(insight.factors);
-  const isCandidate = computeConfidence(insight.factors) >= MEMORY_CANDIDATE_THRESHOLD;
+  // displayConfidencePct honours an engine-scored confidenceOverride, so this
+  // pill agrees with the layered-insight surfaces for single-run findings.
+  const pct = displayConfidencePct(insight);
+  const isCandidate = isMemoryCandidate(insight);
   return (
     <div className="relative">
       <button

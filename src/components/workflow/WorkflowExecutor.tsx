@@ -16,7 +16,7 @@ import { PlanSection, type ExecutorParameters } from '../concierge-workflow-buil
 import ExecutorColumnMapping from './ExecutorColumnMapping';
 import SlotFunctionTag from './SlotFunctionTag';
 import ArtifactPanel from '../artifacts/ArtifactPanel';
-import WorkflowMemoryPanel, { RowMemoryMarker, GoldenRecordPlanCard, SourceDriftBanner } from './WorkflowMemoryPanel';
+import { RowMemoryMarker, GoldenRecordPlanCard, SourceDriftBanner } from './WorkflowMemoryPanel';
 import type { ArtifactTab } from '../../hooks/useAppState';
 import { seedAlignments } from '../concierge-workflow-builder/mockApi';
 import type {
@@ -32,6 +32,9 @@ import type {
 import { DATA_SOURCES } from '../../data/mockData';
 import { useCan } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
+import LayeredInsightCard from '../shared/LayeredInsightCard';
+import type { LayeredInsight } from '../../data/layeredInsights';
+import WorkflowFollowUpInsights from './WorkflowFollowUpInsights';
 import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
 
 interface WorkflowExecutorProps {
@@ -998,6 +1001,97 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
           : workflowId === 'lw-consolidated-file-compare'
             ? CONSOLIDATED_FILE_COMPARE_WORKFLOW
             : EXECUTOR_WORKFLOW;
+
+  // Single "what this run means" insight, derived from the run's own output so
+  // the numbers always match the results table. Aggregates the flagged rows by
+  // duplicate group (total double-pay exposure, biggest single group, most
+  // clear-cut match) and renders through the same LayeredInsightCard anatomy as
+  // the engagement / risk / control surfaces.
+  const outputInsight = useMemo<LayeredInsight>(() => {
+    const money = (s: string) => Number(s.replace(/[$,]/g, ''));
+    const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
+    const byGroup = new Map<string, typeof RESULTS_DATA>();
+    for (const r of RESULTS_DATA) {
+      const g = byGroup.get(r.duplicateGroup) ?? [];
+      g.push(r);
+      byGroup.set(r.duplicateGroup, g);
+    }
+    const groups = [...byGroup.entries()].map(([id, rows]) => ({
+      id,
+      vendor: rows[0].vendor,
+      amount: money(rows[0].amount),
+      amountLabel: rows[0].amount,
+      count: rows.length,
+      match: Math.max(...rows.map((r) => r.confidence)),
+    }));
+
+    const exposure = groups.reduce((sum, g) => sum + g.amount, 0);
+    const biggest = [...groups].sort((a, b) => b.amount - a.amount)[0];
+    const clearest = [...groups].sort((a, b) => b.match - a.match)[0];
+    const avgMatch = groups.reduce((sum, g) => sum + g.match, 0) / groups.length;
+
+    return {
+      id: 'run-output-duplicates',
+      layer: 'control',
+      subjectId: 'this-run',
+      subjectLabel: 'Duplicate invoice check — this run',
+      takeaway: `${groups.length} duplicate invoice pairs put ${usd(exposure)} at risk of double payment.`,
+      verdict: { label: 'Exceptions found', tone: 'negative' },
+      severity: 'high',
+      likelyCause: {
+        label: 'Vendor-name variants are slipping past the exact-match check.',
+        detail: `Each pair bills the same amount under a slightly different spelling of the same vendor — near-duplicate vendor-master records, not random keying noise. ${biggest.vendor} is the single largest exposure at ${biggest.amountLabel}, matching at ${biggest.match}%.`,
+        confirmFirst: true,
+      },
+      reasoning: `${RESULTS_DATA.length} flags out of 4,521 invoices checked (${((RESULTS_DATA.length / 4521) * 100).toFixed(1)}%) form ${groups.length} pairs. Each pair is one exposure counted once — the ${usd(exposure)} total is ${groups.length} amounts, not ${RESULTS_DATA.length} invoices' worth.`,
+      atStake: `${usd(exposure)} could be paid twice if these clear settlement. The ${clearest.vendor} pair (${clearest.amountLabel}) is the most clear-cut at ${clearest.match}% — same vendor, same amount.`,
+      factors: { frequency: 0.5, sourceDiversity: 0.6, recency: 1, businessImpact: 0.9 },
+      confidenceOverride: Math.round(avgMatch) / 100,
+      evidence: [...groups]
+        .sort((a, b) => b.amount - a.amount)
+        .map((g) => ({
+          ref: g.id,
+          label: g.vendor,
+          detail: `${g.amountLabel} billed ${g.count}× · ${g.match}% match`,
+          tone: g.match >= 95 ? 'negative' : 'caution',
+        })),
+      evidenceNote: `${RESULTS_DATA.length} flagged rows · 1 run — this-run evidence, not yet a recurring pattern.`,
+      runsAnalysed: 1,
+      detectedOn: '15 Jul 2026',
+      detectedBy: 'traceable',
+      rollupOf: { label: 'flagged rows', count: RESULTS_DATA.length },
+      checkMore: [
+        { kind: 'split', label: 'Split by vendor or amount' },
+        { kind: 'trace', label: `Trace the ${biggest.vendor} pair`, detail: biggest.amountLabel },
+        { kind: 'ask', label: 'Ask which pair to hold first' },
+      ],
+      recommendedActions: [],
+      recommendations: [
+        {
+          id: 'run-rec-hold', category: 'monitoring', priority: 'do-now',
+          title: `Hold the ${groups.length} flagged pairs before the next payment run.`,
+          rationale: `${usd(exposure)} clears settlement otherwise — a hold is reversible, a double payment is a recovery exercise.`,
+        },
+        {
+          id: 'run-rec-cause', category: 'root-cause', priority: 'do-now',
+          title: `Confirm the vendor-master duplicates behind the ${biggest.vendor} pair.`,
+          rationale: 'Near-duplicate vendor records explain every pair; confirm the mechanism before escalating any of them as fraud.',
+          guardrail: 'The fraud call stays the auditor’s.',
+        },
+        {
+          id: 'run-rec-evidence', category: 'evidence', priority: 'this-period',
+          title: `Re-check the ${clearest.match}% ${clearest.vendor} pair against the PO and receipt.`,
+          rationale: 'Same vendor, same amount can still be a legitimate split delivery — the paper decides.',
+        },
+        {
+          id: 'run-rec-automation', category: 'automation', priority: 'advisory',
+          title: 'Add a fuzzy vendor-name match at invoice intake.',
+          rationale: 'Every pair cleared the exact-match check on spelling alone; a similarity threshold catches the next one at entry.',
+        },
+      ],
+    };
+  }, []);
 
   // When the executor is opened from the Audit Logs new-tab flow, the URL
   // carries ?state=completed — boot directly into the "complete" output view
@@ -2794,7 +2888,17 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2.5 mb-5">
+                  {/* What this run means — one focused output insight, sitting
+                      between the results and the run's actions. Rendered through
+                      the shared LayeredInsightCard so every AI-insight surface
+                      reads identically. */}
+                  <LayeredInsightCard
+                    insight={outputInsight}
+                    headerLabel="this run"
+                    evidenceLabel="Evidence · duplicate groups"
+                  />
+
+                  <div className="flex items-center gap-2.5 mt-5 mb-5">
                     <button className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[12.5px] font-semibold transition-colors cursor-pointer">
                       <Download size={13} />
                       Download CSV
@@ -2815,17 +2919,8 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                     </button>
                   </div>
 
-                  {/* What memory knows — cross-workflow correlation + output
-                      compare, shown beneath the output and its actions as
-                      supporting context. The source-drift conflict is resolved
-                      earlier on the confirm-mapping screen (before approve &
-                      run), so it's suppressed here rather than gating the output. */}
-                  <div className="mb-5">
-                    <WorkflowMemoryPanel showSourceDrift={false} />
-                  </div>
-
-                  {/* Follow-up — bridge from "here are results" to a chat
-                      thread that already carries the run as context. */}
+                  {/* Follow-up — the primary next step off the results, sitting
+                      directly under the run's action buttons. */}
                   {onFollowUp && (
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
@@ -2887,6 +2982,15 @@ export default function WorkflowExecutor({ workflowId, onBack, onRunComplete, on
                       </div>
                     </motion.div>
                   )}
+
+                  {/* Ira looked beyond this run — the two AI-insight cards
+                      (a. compare with previous output, b. cross-workflow
+                      correlation), after the follow-up composer. Each card's
+                      "what to do next" seeds that composer. */}
+                  <div className="mt-5">
+                    <WorkflowFollowUpInsights onAction={submitFollowUp} />
+                  </div>
+
                 </motion.section>
               )}
             </AnimatePresence>
