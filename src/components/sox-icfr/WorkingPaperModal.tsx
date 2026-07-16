@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, Circle, Download, FileSpreadsheet, PenLine, X } from 'lucide-react';
 import { controlConclusion, icfrConclusion, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses } from './helpers';
@@ -5,6 +6,10 @@ import { buildControlPaper, downloadControlWorkingPaper, downloadIcfrWorkingPape
 import { useIcfr } from './store';
 import { cn } from '../../lib/cn';
 import type { Control, IcfrEngagement } from './types';
+
+// An irreversible sign-off act (sign / countersign) routes through a one-line
+// attest confirm before it commits — a recorded signature can't be taken back.
+type AttestReq = { kind: 'sign' | 'counter'; run: () => void };
 
 // The working paper, previewed as the document it exports to: same blocks, same
 // reading order as the .xlsx. Sign-off happens here — the auditor signs a
@@ -76,7 +81,7 @@ function Block({ b }: { b: PaperBlock }) {
 }
 
 /** This paper's own sign-off — state rows + the hat's action, in place. */
-function ControlSignoff({ eng, c }: { eng: IcfrEngagement; c: Control }) {
+function ControlSignoff({ eng, c, onAttest }: { eng: IcfrEngagement; c: Control; onAttest: (req: AttestReq) => void }) {
   const { role, me, signOffControlWp } = useIcfr();
   const so = c.wpSignoff;
   const concluded = isControlLocked(c);
@@ -94,7 +99,7 @@ function ControlSignoff({ eng, c }: { eng: IcfrEngagement; c: Control }) {
         <span className="text-ink-500 w-[118px] shrink-0">Prepared by</span>
         <span className={cn('font-medium min-w-0 truncate', so?.preparer ? 'text-ink-800' : 'text-ink-400')}>{so?.preparer ? `${so.preparer.by} · ${so.preparer.at}` : `${eng.preparer} — not yet signed`}</span>
         {canSign && (
-          <button onClick={() => signOffControlWp(c.id, 'preparer')}
+          <button onClick={() => onAttest({ kind: 'sign', run: () => signOffControlWp(c.id, 'preparer') })}
             className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Sign off this paper</button>
         )}
         {role === 'auditor' && !concluded && !so?.preparer && (
@@ -106,7 +111,7 @@ function ControlSignoff({ eng, c }: { eng: IcfrEngagement; c: Control }) {
         <span className="text-ink-500 w-[118px] shrink-0">Countersigned by</span>
         <span className={cn('font-medium min-w-0 truncate', so?.reviewer ? 'text-ink-800' : 'text-ink-400')}>{so?.reviewer ? `${so.reviewer.by} · ${so.reviewer.at}` : `${eng.reviewer} — not yet countersigned`}</span>
         {canCounter && (
-          <button onClick={() => signOffControlWp(c.id, 'reviewer')}
+          <button onClick={() => onAttest({ kind: 'counter', run: () => signOffControlWp(c.id, 'reviewer') })}
             className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Countersign</button>
         )}
         {role === 'reviewer' && !so?.preparer && (
@@ -121,7 +126,7 @@ function ControlSignoff({ eng, c }: { eng: IcfrEngagement; c: Control }) {
 }
 
 /** Engagement-level sign-off (the opinion) — same gate as the Overview card. */
-function EngagementSignoff({ eng }: { eng: IcfrEngagement }) {
+function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (req: AttestReq) => void }) {
   const { role, signOffEngagement } = useIcfr();
   const so = eng.signoff;
   const conclusion = so.icfrConclusion ?? icfrConclusion(eng);
@@ -141,7 +146,7 @@ function EngagementSignoff({ eng }: { eng: IcfrEngagement }) {
         <span className="text-ink-500 w-[118px] shrink-0">Prepared by</span>
         <span className={cn('font-medium min-w-0 truncate', so.preparer ? 'text-ink-800' : 'text-ink-400')}>{so.preparer ? `${so.preparer.by} · ${so.preparer.at}` : `${eng.preparer} — not yet signed`}</span>
         {canSign && (
-          <button onClick={() => signOffEngagement('preparer')}
+          <button onClick={() => onAttest({ kind: 'sign', run: () => signOffEngagement('preparer') })}
             className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Sign off as preparer</button>
         )}
         {role === 'auditor' && !ready && !so.preparer && (
@@ -153,7 +158,7 @@ function EngagementSignoff({ eng }: { eng: IcfrEngagement }) {
         <span className="text-ink-500 w-[118px] shrink-0">Countersigned by</span>
         <span className={cn('font-medium min-w-0 truncate', so.reviewer ? 'text-ink-800' : 'text-ink-400')}>{so.reviewer ? `${so.reviewer.by} · ${so.reviewer.at}` : `${eng.reviewer} — not yet countersigned`}</span>
         {canCounter && (
-          <button onClick={() => signOffEngagement('reviewer')}
+          <button onClick={() => onAttest({ kind: 'counter', run: () => signOffEngagement('reviewer') })}
             className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Countersign</button>
         )}
       </div>
@@ -167,6 +172,21 @@ function EngagementSignoff({ eng }: { eng: IcfrEngagement }) {
 }
 
 export default function WorkingPaperModal({ eng, control, onClose }: { eng: IcfrEngagement; control?: Control; onClose: () => void }) {
+  // an irreversible sign-off waits behind this attest confirm before it commits
+  const [attest, setAttest] = useState<AttestReq | null>(null);
+
+  // Escape closes the preview — but while the attest confirm is open it only
+  // dismisses that confirm, so a stray Esc can never walk out of a sign-off.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (attest) setAttest(null);
+      else onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [attest, onClose]);
+
   const sheets: { name: string; detail: string }[] = [
     { name: 'Index', detail: 'engagement header, materiality, progress' },
     { name: 'Sign-off', detail: 'preparer · countersign · ICFR conclusion' },
@@ -180,6 +200,7 @@ export default function WorkingPaperModal({ eng, control, onClose }: { eng: Icfr
   const blocks = control ? buildControlPaper(eng, control) : [];
 
   return createPortal(
+    <>
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal modal-wide flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border shrink-0">
@@ -191,7 +212,7 @@ export default function WorkingPaperModal({ eng, control, onClose }: { eng: Icfr
           {control ? (
             // the paper itself — exactly what the file will contain
             blocks.map((b, i) => {
-              if (b.kind === 'kv' && b.title === SIGNOFF_TITLE) return <ControlSignoff key={i} eng={eng} c={control} />;
+              if (b.kind === 'kv' && b.title === SIGNOFF_TITLE) return <ControlSignoff key={i} eng={eng} c={control} onAttest={setAttest} />;
               if (b.kind === 'note' && b.label === 'Conclusion') {
                 const bad = b.tone === 'bad';
                 return (
@@ -205,12 +226,13 @@ export default function WorkingPaperModal({ eng, control, onClose }: { eng: Icfr
             })
           ) : (
             <>
-              <EngagementSignoff eng={eng} />
+              <EngagementSignoff eng={eng} onAttest={setAttest} />
               <div>
                 <div className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400 mb-1.5">Sheets in {fileName}</div>
-                <div className="space-y-1">
+                {/* a display list of what the file holds — inert rows, not tappable buttons */}
+                <div className="rounded-lg border border-canvas-border divide-y divide-canvas-border">
                   {sheets.map(s => (
-                    <div key={s.name} className="flex items-center gap-2.5 text-[12.5px] rounded-lg border border-canvas-border px-3 py-1.5">
+                    <div key={s.name} className="flex items-center gap-2.5 text-[12.5px] px-3 py-1.5">
                       <FileSpreadsheet size={13} className="text-compliant-600 shrink-0" />
                       <span className="font-semibold text-ink-800 w-[150px]">{s.name}</span>
                       <span className="text-ink-500 truncate">{s.detail}</span>
@@ -225,13 +247,35 @@ export default function WorkingPaperModal({ eng, control, onClose }: { eng: Icfr
         <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-t border-canvas-border shrink-0">
           <span className="text-[11px] text-ink-400 truncate">{fileName}{control ? ` · single sheet, this exact layout · conclusion ${controlConclusion(control)}` : ''}</span>
           <div className="flex items-center gap-2 shrink-0">
-            <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Cancel</button>
+            <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Close</button>
             <button onClick={() => { if (control) downloadControlWorkingPaper(eng, control); else downloadIcfrWorkingPaper(eng); onClose(); }}
               className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download .xlsx</button>
           </div>
         </div>
       </div>
-    </div>,
+    </div>
+
+    {/* attest confirm — an irreversible signature never commits on a bare click */}
+    {attest && (
+      <div className="modal-backdrop" onClick={() => setAttest(null)}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-[15px] font-semibold text-ink-900 inline-flex items-center gap-2"><PenLine size={15} className="text-brand-600" /> {attest.kind === 'sign' ? 'Sign off this paper?' : 'Countersign this paper?'}</h2>
+              <button onClick={() => setAttest(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+            </div>
+          </div>
+          <div className="p-5">
+            <p className="text-[12.5px] text-ink-600 leading-relaxed">{attest.kind === 'sign' ? 'Confirm — sign off this working paper? Your signature is recorded.' : 'Confirm — countersign? This closes the paper.'}</p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button onClick={() => setAttest(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+              <button onClick={() => { attest.run(); setAttest(null); }} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><PenLine size={13} /> {attest.kind === 'sign' ? 'Sign off' : 'Countersign'}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>,
     document.body,
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowRight, Check, CheckCircle2, ChevronRight, Database, FileSpreadsheet, FlaskConical,
-  Loader2, Paperclip, Star, UploadCloud, X, XCircle,
+  ArrowRight, Check, CheckCircle2, ChevronLeft, ChevronRight, Database, FileSpreadsheet, FlaskConical,
+  Loader2, Paperclip, Square, Star, UploadCloud, X, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
@@ -83,7 +83,11 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
   const totalRequirements = active.reduce((n, c) => n + requiredDatasetsFor(c).length, 0);
   const allProvided = compiled.every(e => provided.has(e.dataset.name));
   const totalChecks = active.reduce((n, c) => n + checksOf(c), 0);
-  const estMinutes = Math.max(1, Math.round(totalChecks * 2.5 / 60));
+  // Runtime here is a simulated preview, not a real ETA. Derive the shown figure
+  // from the exact timing execute() uses below, so the estimate matches what the
+  // user actually waits through instead of a fabricated minutes number.
+  const runStepMs = Math.max(160, Math.min(900, 6500 / Math.max(1, active.length)));
+  const estRuntimeSec = Math.max(1, Math.round((runStepMs * active.length + 500) / 1000));
 
   // Same order as the library: groups in library order, rows sorted by W/P reference.
   const groups = useMemo(() => {
@@ -125,9 +129,8 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
   const execute = () => {
     setRunning(true);
     const n = active.length;
-    const stepMs = Math.max(160, Math.min(900, 6500 / n));
     active.forEach((_, i) => {
-      timers.current.push(window.setTimeout(() => setDoneCount(i + 1), stepMs * (i + 1)));
+      timers.current.push(window.setTimeout(() => setDoneCount(i + 1), runStepMs * (i + 1)));
     });
     timers.current.push(window.setTimeout(() => {
       bulkTestControls(active.map(c => c.id));
@@ -137,7 +140,19 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
         type: ineffective ? 'error' : 'success',
         message: `Bulk test complete — ${n - ineffective} effective, ${ineffective} ineffective across ${n} controls.`,
       });
-    }, stepMs * n + 500));
+    }, runStepMs * n + 500));
+  };
+
+  // Halt a run in progress: cancel every pending per-control timer BEFORE the
+  // store commit (which only fires in the final timeout) can run, then fall back
+  // to the pre-run state with scope + attached datasets intact. Nothing is written,
+  // so the user is never trapped mid-run and loses no setup.
+  const stop = () => {
+    timers.current.forEach(t => window.clearTimeout(t));
+    timers.current = [];
+    setRunning(false);
+    setDoneCount(0);
+    addToast({ type: 'info', message: 'Bulk test stopped — no controls were changed.' });
   };
 
   const canClose = !running || finished;
@@ -147,9 +162,12 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
     return () => document.removeEventListener('keydown', onKey);
   }, [canClose, onClose]);
 
+  // Pure status indicators, deliberately flat and light so they don't read as a
+  // clickable stepper — no navigation is wired to them. Movement between steps is
+  // the footer's primary button (forward) and Back (backward).
   const stepChip = (n: Step, label: string) => (
-    <span className={cn('inline-flex items-center gap-1.5 text-[11.5px] font-semibold', step === n ? 'text-brand-700' : step > n ? 'text-compliant-700' : 'text-ink-400')}>
-      <span className={cn('w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[10px] font-bold', step === n ? 'bg-brand-600 text-white' : step > n ? 'bg-compliant-600 text-white' : 'bg-paper-100 text-ink-500')}>
+    <span className={cn('inline-flex items-center gap-1.5 text-[11.5px] select-none', step === n ? 'text-brand-700 font-semibold' : step > n ? 'text-ink-500 font-medium' : 'text-ink-400 font-medium')}>
+      <span className={cn('w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[10px] font-semibold', step === n ? 'bg-brand-100 text-brand-700' : step > n ? 'bg-compliant-100 text-compliant-700' : 'bg-paper-100 text-ink-400')}>
         {step > n ? <Check size={10} strokeWidth={3} /> : n}
       </span>
       {label}
@@ -220,7 +238,7 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
                   {totalRequirements} file requirement{totalRequirements === 1 ? '' : 's'} across {active.length} controls compile down to <span className="font-semibold text-ink-800">{compiled.length} unique dataset{compiled.length === 1 ? '' : 's'}</span> — attach each once and every control that needs it is covered.
                 </p>
                 <button onClick={pullAll} disabled={pullingAll || allProvided} className="h-8 px-3 shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700 text-[12px] font-semibold hover:bg-brand-100 disabled:opacity-40 transition-colors cursor-pointer">
-                  {pullingAll ? <Loader2 size={13} className="animate-spin" /> : <Database size={13} />} Pull all from SAP ECC
+                  {pullingAll ? <Loader2 size={13} className="animate-spin" /> : <Database size={13} />} Pull all from source systems
                 </button>
               </div>
               <div className="space-y-2">
@@ -269,12 +287,12 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
           {step === 3 && (
             <div>
               {/* stat cards */}
-              <div className="grid grid-cols-4 gap-2.5 mb-4">
+              <div className="grid grid-cols-4 gap-2.5 mb-2">
                 {[
                   { v: String(active.length), k: 'Controls' },
                   { v: String(compiled.length), k: 'Unique datasets' },
                   { v: String(totalChecks), k: 'Checks to run' },
-                  { v: `~${estMinutes} min`, k: 'Est. runtime' },
+                  { v: `~${estRuntimeSec}s`, k: 'Est. runtime' },
                 ].map(s => (
                   <div key={s.k} className="rounded-xl border border-canvas-border bg-paper-50/50 px-3 py-2.5 text-center">
                     <div className="text-[17px] font-bold tabular-nums text-ink-900 leading-none">{s.v}</div>
@@ -282,6 +300,7 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
                   </div>
                 ))}
               </div>
+              <p className="text-[10.5px] text-ink-400 mb-4">Runtime is simulated for this preview.</p>
               <div className="space-y-1.5">
                 {active.map((c, i) => {
                   const state = !running ? 'queued' : i < doneCount ? 'done' : i === doneCount ? 'running' : 'queued';
@@ -318,10 +337,26 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
 
         {/* footer */}
         <div className="px-6 py-4 border-t border-canvas-border flex items-center gap-2 shrink-0">
+          {/* Back — steps 2 and 3 (pre-run) only. Returns to the previous step;
+              scope + attached datasets are component state and are never reset,
+              so nothing is discarded on the way back. */}
+          {!running && !finished && step > 1 && (
+            <button onClick={() => setStep((step - 1) as Step)} className="h-9 px-2.5 -ml-1 inline-flex items-center gap-1 rounded-lg text-[12.5px] font-semibold text-ink-500 hover:text-ink-900 hover:bg-paper-100 transition-colors cursor-pointer">
+              <ChevronLeft size={14} /> Back
+            </button>
+          )}
           {step === 2 && !allProvided && <span className="text-[11.5px] text-ink-400">{compiled.filter(e => provided.has(e.dataset.name)).length}/{compiled.length} datasets attached</span>}
           {step === 3 && running && !finished && <span className="text-[11.5px] text-ink-500 inline-flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Testing control {Math.min(doneCount + 1, active.length)} of {active.length}…</span>}
           <div className="flex-1" />
-          {!finished && <button onClick={onClose} disabled={!canClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 disabled:opacity-40 transition-colors cursor-pointer">Cancel</button>}
+          {/* Stop — the explicit, labelled way out of an in-progress run (the header
+              X stays disabled mid-run to avoid an accidental dismissal that loses the
+              whole setup). Halts the remaining controls and returns to a safe state. */}
+          {running && !finished && (
+            <button onClick={stop} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-risk-200 text-[12.5px] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
+              <Square size={11} className="fill-current" /> Stop
+            </button>
+          )}
+          {!finished && !running && <button onClick={onClose} disabled={!canClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 disabled:opacity-40 transition-colors cursor-pointer">Cancel</button>}
           {step === 1 && (
             <button onClick={compile} disabled={active.length === 0 || compiling} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
               Compile required files <ChevronRight size={14} />

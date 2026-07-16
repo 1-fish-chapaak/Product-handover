@@ -23,7 +23,7 @@ export default function RiskOwnerPortal() {
 
   const act = (t: HandoffTask) => {
     submitTask(t.id);
-    addToast({ type: 'success', title: 'Sent to the audit team', message: t.type === 'remediation' ? 'Marked remediated — they’ll re-test.' : 'Submitted — we’ll let you know if more is needed.' });
+    addToast({ type: 'success', title: 'Sent to audit', message: t.type === 'remediation' ? 'Marked remediated — they’ll re-test.' : 'Submitted — we’ll let you know if more is needed.' });
   };
 
   const dueTests = testsDueNow(eng.controls.filter(c => c.owner === meOwner));
@@ -40,7 +40,7 @@ export default function RiskOwnerPortal() {
         <div className="rounded-2xl border border-mitigated-300 bg-canvas-elevated overflow-hidden">
           <div className="px-4 py-3 border-b border-canvas-border flex items-center gap-2 bg-mitigated-50/50">
             <FlaskConical size={15} className="text-mitigated-700" />
-            <span className="text-[13px] font-bold text-ink-900">Control tests due today</span>
+            <span className="text-[13px] font-bold text-ink-900">Control tests due</span>
             <span className="text-[11.5px] font-semibold text-mitigated-700 tabular-nums">{dueTests.length}</span>
             <button onClick={() => setTab('controls')} className="ml-auto inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">
               Due now view <ArrowRight size={12} />
@@ -65,17 +65,19 @@ export default function RiskOwnerPortal() {
             })}
           </div>
           {dueTests.length > 5 && (
-            <div className="px-4 py-2 border-t border-canvas-border text-[11.5px] text-ink-400">+{dueTests.length - 5} more in the Control Library "Due now" view</div>
+            <button onClick={() => setTab('controls')} className="w-full text-left px-4 py-2 border-t border-canvas-border text-[11.5px] text-ink-500 hover:text-brand-700 hover:bg-paper-50 cursor-pointer transition-colors inline-flex items-center gap-1">+{dueTests.length - 5} more in the Control Library "Due now" view <ArrowRight size={11} /></button>
           )}
         </div>
       )}
 
       {open.length === 0 ? (
+        dueTests.length === 0 ? (
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-12 flex flex-col items-center text-center gap-2">
           <div className="w-12 h-12 rounded-full bg-compliant-50 flex items-center justify-center"><CheckCircle2 size={22} className="text-compliant-700" /></div>
           <p className="text-[15px] font-semibold text-ink-800">You’re all caught up</p>
           <p className="text-[13px] text-ink-500">Nothing needs your attention right now.</p>
         </div>
+        ) : null
       ) : (
         <div className="space-y-3">
           {open.map(t => {
@@ -84,7 +86,7 @@ export default function RiskOwnerPortal() {
             return (
               // The whole card opens the control's TOD / TOE — buttons act without navigating.
               <div key={t.id} onClick={() => openControl(t.controlId)} role="button" tabIndex={0}
-                onKeyDown={e => { if (e.key === 'Enter') openControl(t.controlId); }}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openControl(t.controlId); } }}
                 className={cn('rounded-2xl border bg-canvas-elevated p-4 flex items-start gap-3.5 cursor-pointer transition-all hover:shadow-[0_8px_24px_-14px_rgba(15,8,30,0.35)]',
                   urgent ? 'border-mitigated-300 hover:border-mitigated-400' : 'border-canvas-border hover:border-brand-300')}>
                 <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0', m.tone)}><m.Icon size={18} /></div>
@@ -102,7 +104,6 @@ export default function RiskOwnerPortal() {
                   <div className="mt-2 text-[11.5px] text-ink-400">Raised by {t.raisedBy}</div>
                   <div className="flex items-center gap-2 mt-3">
                     <button onClick={e => { e.stopPropagation(); act(t); }} className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-brand-600 text-white text-[13px] font-semibold hover:bg-brand-500 cursor-pointer transition-colors"><m.Icon size={14} /> {m.action}</button>
-                    <button onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-canvas-border text-[13px] font-semibold text-ink-600 hover:border-brand-300 cursor-pointer transition-colors"><MessageSquare size={14} /> Comment</button>
                     <span className="ml-auto inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700">Open control · TOD / TOE <ArrowRight size={13} /></span>
                   </div>
                 </div>
@@ -120,7 +121,7 @@ export default function RiskOwnerPortal() {
               <CheckCircle2 size={15} className="text-compliant-700 shrink-0" />
               <span className="font-mono text-[11px] text-ink-500">{t.controlId}</span>
               <span className="text-ink-700">{t.title}</span>
-              <span className="ml-auto text-[11.5px] text-ink-400">Submitted</span>
+              <span className="ml-auto text-[11.5px] text-ink-400">Sent to audit</span>
             </div>
           ))}
         </div>

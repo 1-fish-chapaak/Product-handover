@@ -18,10 +18,10 @@ import RacmFullPageEditor from '../audit/RacmFullPageEditor';
 
 const SOX_TABS: TabDef[] = [
   { id: 'overview', label: 'Overview' },
-  { id: 'racm', label: 'RACM' },
+  { id: 'racm', label: 'RACM' }, // 'Risk & Control Matrix' tooltip can't be set here — TabDef has no title field & EngagementTabBar owns the item title. Flagged.
   { id: 'risks', label: 'Risk Library' },
   { id: 'controls', label: 'Control Library' },
-  { id: 'runs', label: 'Runs' },
+  { id: 'runs', label: 'Test runs' },
 ];
 
 function Inner({ onBack }: { onBack?: () => void }) {
@@ -36,25 +36,45 @@ function Inner({ onBack }: { onBack?: () => void }) {
     <div className="sticky top-0 z-30 bg-canvas/85 backdrop-blur border-b border-canvas-border shrink-0">
       <div className="max-w-[1320px] mx-auto px-6 h-14 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          {onBack && <button onClick={onBack} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={15} /></button>}
-          <span className="inline-flex items-center gap-2">
-            <span className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center"><ShieldCheck size={16} className="text-white" /></span>
-            <span className="font-mono text-[12px] font-semibold text-ink-700">{eng.code}</span>
-            <span className="text-[13px] font-semibold text-ink-900 truncate">{eng.name}</span>
-            {concluded && (
-              <span title={`Signed off — ${eng.signoff.preparer!.by}, countersigned ${eng.signoff.reviewer!.by}`} className="text-[11px] font-semibold text-compliant-700 bg-compliant-50 px-2 h-5 inline-flex items-center gap-1 rounded-full">
-                <BadgeCheck size={11} /> Concluded
+          {onBack && (
+            <button
+              onClick={onBack}
+              title="Back to engagements"
+              aria-label="Back to engagements"
+              className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors shrink-0"
+            >
+              <ArrowLeft size={15} />Engagements
+            </button>
+          )}
+          <span className="inline-flex items-center gap-2 min-w-0">
+            <span className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center shrink-0"><ShieldCheck size={16} className="text-white" /></span>
+            {/* Module label — names SOX / ICFR for anyone who lands here from a deep link. */}
+            <span className="flex flex-col min-w-0 leading-none gap-0.5">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-ink-500">SOX / ICFR</span>
+              <span className="inline-flex items-center gap-2 min-w-0">
+                <span className="font-mono text-[12px] font-semibold text-ink-700">{eng.code}</span>
+                <span className="text-[13px] font-semibold text-ink-900 truncate">{eng.name}</span>
+                {concluded && (
+                  <span title={`Signed off — ${eng.signoff.preparer!.by}, countersigned ${eng.signoff.reviewer!.by}`} className="text-[11px] font-semibold text-compliant-700 bg-compliant-50 px-2 h-5 inline-flex items-center gap-1 rounded-full shrink-0">
+                    <BadgeCheck size={11} /> Concluded
+                  </span>
+                )}
               </span>
-            )}
+            </span>
           </span>
         </div>
         {/* The switcher is a demo affordance — it previews the other persona
-            without changing who is signed in, hence the "Viewing as" prefix. */}
+            without changing who is signed in, hence the "Viewing as" prefix.
+            Quieted to a meta control: split off from the real actions by a
+            divider and muted at rest, rising to full strength on hover/focus. */}
         <div className="flex items-center gap-3 shrink-0">
           <NotificationsBell />
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Viewing as</span>
-          <RoleSwitcher role={role} onChange={setRole} />
-          {role === 'risk-owner' && <OwnerPicker owner={meOwner} options={owners} onChange={setMeOwner} />}
+          <span className="w-px h-6 bg-canvas-border" aria-hidden />
+          <div className="flex items-center gap-2 opacity-75 hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-ink-400">Viewing as</span>
+            <RoleSwitcher role={role} onChange={setRole} />
+            {role === 'risk-owner' && <OwnerPicker owner={meOwner} options={owners} onChange={setMeOwner} />}
+          </div>
         </div>
       </div>
     </div>

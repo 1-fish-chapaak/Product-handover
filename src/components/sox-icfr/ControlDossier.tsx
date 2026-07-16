@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft, FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, Download, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
-  CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
+  CornerDownRight, Pencil, RotateCcw, Replace, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, ShieldCheck, History, PenLine, StickyNote,
 } from 'lucide-react';
 import { useIcfr } from './store';
@@ -177,7 +177,7 @@ function QAResultsModal({ title, validation, onClose }: { title: string; validat
     <div className="modal-backdrop" onClick={onClose}>
       <motion.div className="modal" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border">
-          <div className="flex items-center gap-2"><Sparkles size={16} className="text-brand-600" /><h3 className="text-[14px] font-bold text-ink-900">Ask IRA — validation results</h3></div>
+          <div className="flex items-center gap-2"><Sparkles size={16} className="text-brand-600" /><h3 className="text-[14px] font-bold text-ink-900">Ask Ira — validation results</h3></div>
           <div className="flex items-center gap-2">
             {result && <span className={cn('inline-flex items-center gap-1 text-[12px] font-bold px-2 h-6 rounded-full', result === 'Pass' ? 'bg-compliant-50 text-compliant-700' : 'bg-risk-50 text-risk-700')}><Tickmark result={result} size={13} /> {result}</span>}
             <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
@@ -256,7 +256,7 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
           <div className="flex items-center gap-1.5 shrink-0">
             {point.validation && <button onClick={() => setShowQA(true)} className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><ListChecks size={12} /> View results</button>}
             <button onClick={runValidate} title="Validate via workflow" className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] font-semibold text-ink-600 hover:border-evidence-300 hover:text-evidence-700 cursor-pointer"><PlayCircle size={12} /> {point.validation ? 'Re-run' : 'Validate'}</button>
-            <button onClick={() => setOver(o => !o)} title="Override" className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border cursor-pointer', point.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={12} /></button>
+            <button onClick={() => setOver(o => !o)} title="Override result with rationale" className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border cursor-pointer', point.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Replace size={12} /></button>
             <button onClick={() => removeDesignPoint(control.id, point.id)} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
           </div>
         )}
@@ -310,24 +310,44 @@ function AttributeRow({ control, step, canEdit, canAttest, testing }: { control:
             {step.override && <span className="override-tag"><Pencil size={9} /> Overridden</span>}
           </div>
           <div className="text-[11px] text-ink-400 mt-1">{step.assertion} · {step.precision} · {step.procedures.join(' / ')}</div>
+          {eff !== 'Not tested' && (
+            <div className="text-[10.5px] mt-1.5 inline-flex items-center gap-1.5 flex-wrap">
+              <span className="uppercase tracking-wide font-bold text-ink-400 text-[9px]">Conclusion of record</span>
+              <span className={cn('font-bold', eff === 'Pass' ? 'text-compliant-700' : 'text-risk-700')}>{eff}</span>
+              <span className="text-ink-400">— the checks below are the evidence behind it</span>
+            </div>
+          )}
           {step.override && <div className="text-[11px] text-high-700 mt-1.5 flex items-start gap-1"><CornerDownRight size={11} className="mt-0.5 shrink-0" /> {step.override.rationale} <span className="text-ink-400">— {step.override.by}</span></div>}
           {samp && (
             <div className="mt-2 flex items-center gap-1 flex-wrap">
               <span className="text-[10px] uppercase tracking-wide font-semibold text-ink-400 mr-0.5">Samples</span>
               {samp.samples.map(it => {
                 const r = step.sampleResults?.[it.id] ?? 'Not tested';
-                const next: TestResult = r === 'Not tested' ? 'Pass' : r === 'Pass' ? 'Fail' : 'Not tested';
+                const refLabel = it.ref.length > 12 ? `…${it.ref.slice(-6)}` : it.ref;
                 return (
-                  <button key={it.id} disabled={!canEdit} onClick={() => setSampleResult(control.id, step.id, it.id, next)}
-                    title={`${it.ref} — ${r}${canEdit ? ' · click to change' : ''}`}
-                    className={cn('h-6 px-1.5 rounded-md border text-[10.5px] font-semibold inline-flex items-center gap-1 transition-colors',
+                  <span key={it.id} title={`${it.ref} — ${r}`}
+                    className={cn('h-6 rounded-md border inline-flex items-center gap-1 pl-1.5 pr-0.5 text-[10.5px] font-semibold transition-colors',
                       r === 'Pass' ? 'bg-compliant-50 border-compliant-200 text-compliant-700'
                         : r === 'Fail' ? 'bg-risk-50 border-risk-200 text-risk-700'
-                        : 'border-canvas-border bg-canvas-elevated text-ink-400',
-                      canEdit && 'cursor-pointer hover:border-ink-300')}>
-                    {r === 'Pass' ? <Check size={10} /> : r === 'Fail' ? <X size={10} /> : <span className="w-[7px] h-[7px] rounded-full border border-ink-300 inline-block" />}
-                    {it.ref.length > 12 ? `…${it.ref.slice(-6)}` : it.ref}
-                  </button>
+                        : 'border-canvas-border bg-canvas-elevated text-ink-400')}>
+                    <span className="font-mono tracking-tight">{refLabel}</span>
+                    <span className="inline-flex items-center gap-0.5">
+                      <button disabled={!canEdit} onClick={() => setSampleResult(control.id, step.id, it.id, 'Pass')}
+                        title={`Mark ${it.ref} pass`} aria-label={`Mark ${it.ref} pass`} aria-pressed={r === 'Pass'}
+                        className={cn('w-[18px] h-[18px] inline-flex items-center justify-center rounded transition-colors',
+                          r === 'Pass' ? 'bg-compliant-600 text-white' : 'text-ink-300',
+                          canEdit && 'cursor-pointer hover:text-compliant-700')}>
+                        <Check size={11} strokeWidth={3} />
+                      </button>
+                      <button disabled={!canEdit} onClick={() => setSampleResult(control.id, step.id, it.id, 'Fail')}
+                        title={`Mark ${it.ref} fail`} aria-label={`Mark ${it.ref} fail`} aria-pressed={r === 'Fail'}
+                        className={cn('w-[18px] h-[18px] inline-flex items-center justify-center rounded transition-colors',
+                          r === 'Fail' ? 'bg-risk-600 text-white' : 'text-ink-300',
+                          canEdit && 'cursor-pointer hover:text-risk-700')}>
+                        <X size={11} strokeWidth={3} />
+                      </button>
+                    </span>
+                  </span>
                 );
               })}
               <span className="text-[10.5px] text-ink-400 ml-1 tabular-nums">{sTested}/{samp.samples.length} tested{sFails ? ` · ${sFails} fail` : ''}</span>
@@ -338,7 +358,7 @@ function AttributeRow({ control, step, canEdit, canAttest, testing }: { control:
           <div className="flex items-center gap-1.5 shrink-0">
             {resultBtn('Pass', 'Pass', CheckCircle2, eff === 'Pass', 'bg-compliant-50 border-compliant-300 text-compliant-700')}
             {resultBtn('Fail', 'Fail', XCircle, eff === 'Fail', 'bg-risk-50 border-risk-300 text-risk-700')}
-            <button onClick={() => setOver(o => !o)} title="Override result with rationale" className={cn('h-8 w-8 inline-flex items-center justify-center rounded-lg border cursor-pointer', step.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={13} /></button>
+            <button onClick={() => setOver(o => !o)} title="Override result with rationale" className={cn('h-8 px-2.5 inline-flex items-center gap-1 rounded-lg border text-[12px] font-semibold cursor-pointer transition-colors', step.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Replace size={13} /> Override</button>
             <button onClick={() => removeAttribute(control.id, step.id)} title="Remove attribute" className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={13} /></button>
           </div>
         )}
@@ -346,6 +366,7 @@ function AttributeRow({ control, step, canEdit, canAttest, testing }: { control:
 
       {/* evidence — Section 1: validation (AI validation default / workflow) · Section 2: self-attest (separate) */}
       <div className="mt-3 ml-[36px] space-y-2">
+        <p className="text-[11px] text-ink-400 leading-snug">Evidence this attribute by an automated check (AI or workflow) or a manual attestation — either can carry the pass/fail.</p>
         <div className="rounded-lg border border-canvas-border px-3 py-2.5">
           <div className="flex items-center justify-between gap-2 mb-2">
             <span className="text-[11px] font-bold text-ink-600">Validation</span>
@@ -370,8 +391,8 @@ function AttributeRow({ control, step, canEdit, canAttest, testing }: { control:
               {/* run + result */}
               <div className="flex items-center gap-2.5 flex-wrap pt-2 border-t border-brand-100/70">
                 <Sparkles size={14} className="text-brand-600 shrink-0" />
-                <span className="text-[11.5px] text-ink-600 flex-1 min-w-0">AI validation by Ask IRA · <span className="font-mono text-[10.5px] text-ink-400">{validatingWf ? 'checking the file…' : (step.validation ? 'done' : 'not run yet')}</span></span>
-                {step.validation?.result && !validatingWf && <span className={cn('inline-flex items-center gap-1 text-[11px] font-bold', step.validation.result === 'Pass' ? 'text-compliant-700' : 'text-risk-700')}><Tickmark result={step.validation.result} size={13} /> {step.validation.result}</span>}
+                <span className="text-[11.5px] text-ink-600 flex-1 min-w-0">AI validation by Ask Ira · <span className="font-mono text-[10.5px] text-ink-400">{validatingWf ? 'checking the file…' : (step.validation ? 'done' : 'not run yet')}</span></span>
+                {step.validation?.result && !validatingWf && <span className={cn('inline-flex items-center gap-1 text-[11px] font-semibold', step.validation.result === 'Pass' ? 'text-compliant-700' : 'text-risk-700', eff !== 'Not tested' && step.validation.result !== eff && 'opacity-60')}><Tickmark result={step.validation.result} size={13} /> {step.validation.result}{eff !== 'Not tested' && step.validation.result !== eff && <span className="font-normal text-ink-400"> · superseded</span>}</span>}
                 {canEdit && (validatingWf
                   ? <span className="text-[11.5px] font-semibold text-brand-600 inline-flex items-center gap-1.5"><Loader2 size={13} className="animate-spin" /> Validating…</span>
                   : <button onClick={runAI} disabled={!step.inputFile} title={step.inputFile ? '' : 'Upload the required file first'} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[11.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer"><Sparkles size={12} /> {step.validation ? 'Re-run' : 'Run AI validation'}</button>)}
@@ -403,7 +424,7 @@ function AttributeRow({ control, step, canEdit, canAttest, testing }: { control:
           {attestOn && <>
             {att?.result && (
               <div className="mt-2 flex items-center gap-2 flex-wrap text-[11px]">
-                <span className={cn('inline-flex items-center gap-1 font-bold', att.result === 'Pass' ? 'text-compliant-700' : 'text-risk-700')}><Tickmark result={att.result} size={13} /> Attested {att.result}</span>
+                <span className={cn('inline-flex items-center gap-1 font-bold', att.result === 'Pass' ? 'text-compliant-700' : 'text-risk-700', eff !== 'Not tested' && att.result !== eff && 'opacity-60')}><Tickmark result={att.result} size={13} /> Attested {att.result}{eff !== 'Not tested' && att.result !== eff && <span className="font-normal text-ink-400"> · superseded</span>}</span>
                 <span className="text-ink-400">· by <b className="text-ink-600 font-semibold">{att.by}</b>, {att.at}</span>
               </div>
             )}
@@ -572,7 +593,7 @@ function OperatingSection({ control, canEdit, canAttest, locked }: { control: Co
       {o.method === 'Manual' && (
         <div className="mb-5 grid grid-cols-2 gap-3">
           <div className="subcard p-3.5">
-            <div className="text-[11.5px] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><Upload size={12} /> Population <span className="font-normal text-ink-400">· optional</span></div>
+            <div className="text-[11.5px] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><Upload size={12} /> Population <span className="font-normal text-ink-400">· required for sampling</span></div>
             {o.population ? (
               <div className="text-[12px] text-ink-700">
                 <div className="font-semibold tabular-nums text-[15px] text-ink-900">{o.population.count.toLocaleString()}</div>
@@ -590,7 +611,7 @@ function OperatingSection({ control, canEdit, canAttest, locked }: { control: Co
             ) : canEdit ? <button disabled={uploading} onClick={uploadPop} className="h-9 px-3 text-[12px] font-semibold rounded-lg border border-dashed border-canvas-border text-ink-600 enabled:hover:text-brand-700 enabled:hover:border-brand-300 inline-flex items-center gap-1.5 cursor-pointer w-full justify-center disabled:opacity-70">{uploading ? <><Loader2 size={13} className="animate-spin" /> Uploading…</> : <><Upload size={13} /> Upload population</>}</button> : <span className="text-[11.5px] text-ink-400">Not uploaded</span>}
           </div>
           <div className="subcard p-3.5">
-            <div className="text-[11.5px] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><FlaskConical size={12} /> Sample <span className="font-normal text-ink-400">· optional</span></div>
+            <div className="text-[11.5px] font-bold text-ink-700 mb-1.5 inline-flex items-center gap-1.5"><FlaskConical size={12} /> Sample <span className="font-normal text-ink-400">· drawn from the population</span></div>
             {o.sampling ? (
               <div className="text-[12px] text-ink-700"><div className="font-semibold tabular-nums text-[15px] text-ink-900">{o.sampling.size} items</div><div className="text-[11px] text-ink-400">{o.sampling.method} · {o.sampling.basis}</div></div>
             ) : canEdit ? (
@@ -818,6 +839,9 @@ function ReviewNotesPane({ control }: { control: Control }) {
   const [resp, setResp] = useState('');
   return (
     <>
+      <div className="px-3 pt-1 pb-1.5">
+        <p className="text-[10.5px] text-ink-400 leading-snug">Notes are tracked and must close before countersign — use <b className="text-ink-600 font-semibold">Discussion</b> for informal comments.</p>
+      </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
         {notes.length === 0 && <div className="text-center text-[12px] text-ink-400 py-10 px-4">No review notes on this paper.<br />The reviewer raises them here, the auditor resolves, the reviewer verifies — a paper can't be countersigned with a note open.</div>}
         {notes.map(n => (
@@ -1044,7 +1068,7 @@ export default function ControlDossier() {
 
   return (
     <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.03 } } }}>
-      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 mb-3 cursor-pointer transition-colors"><ArrowLeft size={15} /> Back</button>
+      <button onClick={back} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-brand-700 mb-3 cursor-pointer transition-colors"><ArrowLeft size={15} /> Back to register</button>
 
       {/* leadsheet header */}
       <motion.div className="leadsheet mb-5" variants={{ hidden: { opacity: 0, y: 14, scale: 0.99 }, show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] } } }}>
@@ -1080,7 +1104,6 @@ export default function ControlDossier() {
             <span className="text-[11.5px] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> Operating {toeLocked ? 'locked' : opResult}</span>
             <div className="ml-auto flex items-center gap-2">
               <button onClick={() => setWpPreview(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Download size={13} /> Working paper</button>
-              <span className="text-[11px] text-ink-400 inline-flex items-center gap-1">Auditor tests · owner attests &amp; uploads · reviewer signs off — every run is logged in History</span>
             </div>
           </div>
         </div>

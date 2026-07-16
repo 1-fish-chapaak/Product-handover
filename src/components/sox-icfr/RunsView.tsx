@@ -44,8 +44,8 @@ const fmtShort = (iso: string): string => new Date(iso + 'T00:00:00').toLocaleDa
 const RANGE_FIELD = 'w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12px] font-medium text-ink-800 hover:border-ink-300 transition-colors text-left';
 
 /** The date filter — a From / To range on the shared brand calendar, with quick windows. */
-function DateRangeMenu({ from, to, onChange, open, onToggle }: {
-  from: string; to: string; onChange: (from: string, to: string) => void; open: boolean; onToggle: () => void;
+function DateRangeMenu({ from, to, onChange, open, onToggle, onClose }: {
+  from: string; to: string; onChange: (from: string, to: string) => void; open: boolean; onToggle: () => void; onClose: () => void;
 }) {
   const isDefault = !from && !to;
   const label = isDefault ? 'All time'
@@ -78,12 +78,16 @@ function DateRangeMenu({ from, to, onChange, open, onToggle }: {
                 </label>
               </div>
               <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                {[{ l: 'Today', d: 0 }, { l: 'Last 7 days', d: 7 }, { l: 'Last 30 days', d: 30 }].map(s => (
-                  <button key={s.l} onClick={() => onChange(isoDaysBack(s.d), isoDaysBack(0))}
-                    className="h-6 px-2 rounded-md border border-canvas-border text-[11px] font-semibold text-ink-600 hover:text-brand-700 hover:border-brand-300 cursor-pointer transition-colors">
-                    {s.l}
-                  </button>
-                ))}
+                {[{ l: 'Today', d: 0 }, { l: 'Last 7 days', d: 7 }, { l: 'Last 30 days', d: 30 }].map(s => {
+                  const active = from === isoDaysBack(s.d) && to === isoDaysBack(0);
+                  return (
+                    <button key={s.l} onClick={() => { onChange(isoDaysBack(s.d), isoDaysBack(0)); onClose(); }}
+                      className={cn('h-6 px-2 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors',
+                        active ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border text-ink-600 hover:text-brand-700 hover:border-brand-300')}>
+                      {s.l}
+                    </button>
+                  );
+                })}
                 <span className="flex-1" />
                 {!isDefault && (
                   <button onClick={() => onChange('', '')} className="h-6 px-2 rounded-md text-[11px] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer transition-colors">
@@ -185,7 +189,10 @@ export default function RunsView() {
           onPick={id => { setFilter(id); setMenu(null); }} />
         <DateRangeMenu from={from} to={to} open={menu === 'date'}
           onToggle={() => setMenu(m => (m === 'date' ? null : 'date'))}
+          onClose={() => setMenu(null)}
           onChange={(f, t) => { setFrom(f); setTo(t); }} />
+        <div className="flex-1" />
+        <span className="text-[11.5px] text-ink-400">Showing {runs.length} of {eng.runs.length} runs</span>
       </div>
 
       {/* the registry */}

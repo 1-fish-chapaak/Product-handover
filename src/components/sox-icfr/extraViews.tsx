@@ -232,7 +232,10 @@ function AccountRow({ a, canEdit, onPatch }: { a: SignificantAccount; canEdit: b
         <td className="px-4 py-2.5 text-ink-500">{a.process ?? '—'}</td>
         <td className="px-4 py-2.5">
           {canEdit
-            ? <button onClick={() => onPatch({ inScope: !a.inScope })} title={a.inScope ? 'Take out of scope' : 'Bring into scope'} className="cursor-pointer">{a.inScope ? <Pill tone="compliant">In scope</Pill> : <Pill tone="draft">Out</Pill>}</button>
+            ? <span className="inline-flex items-center gap-2">
+                <Toggle on={a.inScope} onChange={v => onPatch({ inScope: v })} label={a.inScope ? 'In scope — click to take out of scope' : 'Out of scope — click to bring into scope'} />
+                <span className={cn('text-[11.5px] font-semibold', a.inScope ? 'text-compliant-700' : 'text-ink-400')}>{a.inScope ? 'In scope' : 'Out'}</span>
+              </span>
             : a.inScope ? <Pill tone="compliant">In scope</Pill> : <Pill tone="draft">Out</Pill>}
         </td>
         <td className="px-4 py-2.5">
@@ -307,6 +310,11 @@ function Money({ label, value, onChange, hint, readOnly }: { label: string; valu
 // which exceptions re-grade, demand a reason, then apply — one logged entry.
 function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagement; patch: RulesPatch; onClose: () => void; onApply: (reason: string) => void }) {
   const [reason, setReason] = useState('');
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
   const fmtVal = (field: string, v: number) => field === 'SD band' ? `${v}%` : fmt(v);
   const fields: { field: string; from: number; to: number }[] = [
     { field: 'Overall materiality', from: eng.materiality, to: patch.materiality ?? eng.materiality },
@@ -395,11 +403,38 @@ function PrudentRow({ d, baseFinal, onApply, onClear }: { d: Deficiency; baseFin
   );
 }
 
-// Is a '30 Jun'-style due label past, assuming the current year?
+// A remediation due date is stored as a string — either ISO 'YYYY-MM-DD' (what the
+// date picker writes) or a legacy '30 Jun'-style label from seed data. These helpers
+// read BOTH shapes, so overdue detection can never silently no-op on a value it
+// failed to parse (the old free-text field's failure mode).
+function parseDue(date: string | null): number | null {
+  if (!date) return null;
+  const s = date.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) { const t = Date.parse(`${s}T00:00:00`); return Number.isNaN(t) ? null : t; }
+  const withYear = /\b\d{4}\b/.test(s) ? s : `${s} ${new Date().getFullYear()}`;
+  const t = Date.parse(withYear);
+  return Number.isNaN(t) ? null : t;
+}
 function dueIsPast(date: string | null): boolean {
-  if (!date) return false;
-  const t = Date.parse(`${date} ${new Date().getFullYear()}`);
-  return !Number.isNaN(t) && t < Date.now();
+  const t = parseDue(date);
+  return t !== null && t < Date.now();
+}
+// Stored due → value for <input type="date"> (ISO 'YYYY-MM-DD', '' when unset/unparseable).
+function toDateInputValue(date: string | null): string {
+  if (!date) return '';
+  const s = date.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const t = parseDue(s);
+  if (t === null) return '';
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+// Stored due → human label for read-only display ('—' when unset).
+function formatDueLabel(date: string | null): string {
+  if (!date) return '—';
+  const s = date.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return s;
 }
 
 // The remediation plan — the owner's commitment: the action on the root cause,
@@ -427,14 +462,14 @@ function RemediationPlan({ d, isOwner, onPatch, onAttach }: { d: Deficiency; isO
             <input value={r.owner} onChange={e => onPatch({ owner: e.target.value })} placeholder="Who does it"
               className="h-7 w-56 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] focus:outline-none focus:border-brand-300" />
             <span className="text-ink-400">Due</span>
-            <input value={r.date ?? ''} onChange={e => onPatch({ date: e.target.value || null })} placeholder="e.g. 30 Jun"
-              className={cn('h-7 w-24 px-2 rounded-md border bg-canvas-elevated text-[11.5px] focus:outline-none focus:border-brand-300', overdue ? 'border-risk-300 text-risk-700' : 'border-canvas-border')} />
+            <input type="date" value={toDateInputValue(r.date)} onChange={e => onPatch({ date: e.target.value || null })}
+              className={cn('h-7 w-40 px-2 rounded-md border bg-canvas-elevated text-[11.5px] tabular-nums focus:outline-none focus:border-brand-300', overdue ? 'border-risk-300 text-risk-700' : 'border-canvas-border')} />
           </div>
         </div>
       ) : (
         <>
           <div className="text-[12.5px] text-ink-700">{r.action}</div>
-          <div className="text-[11.5px] text-ink-400 mt-0.5">Owner {r.owner} · due {r.date ?? '—'}{d.retest && <> · retest <span className={d.retest.result === 'Pass' ? 'text-compliant-700 font-semibold' : 'text-risk-700 font-semibold'}>{d.retest.result}</span></>}{d.signoff && <> · signed off by {d.signoff.by}</>}</div>
+          <div className="text-[11.5px] text-ink-400 mt-0.5">Owner {r.owner} · due {formatDueLabel(r.date)}{d.retest && <> · retest <span className={d.retest.result === 'Pass' ? 'text-compliant-700 font-semibold' : 'text-risk-700 font-semibold'}>{d.retest.result}</span></>}{d.signoff && <> · signed off by {d.signoff.by}</>}</div>
         </>
       )}
       {/* evidence — "done" needs proof before the fix can be submitted for retest */}
@@ -454,6 +489,31 @@ function RemediationPlan({ d, isOwner, onPatch, onAttach }: { d: Deficiency; isO
   );
 }
 
+// The severity conclusion — lead with the FINAL grade as a pill; the derivation (the
+// struck-through cap/bump chain) is "working", tucked behind a toggle so the card
+// reads as an answer first, an equation only on request.
+function SeverityConclusion({ d, assess, M, showMateriality }: { d: Deficiency; assess: ReturnType<typeof assessSeverity>; M: number; showMateriality: boolean }) {
+  const [showWorking, setShowWorking] = useState(false);
+  return (
+    <div className="pt-2 border-t border-canvas-border">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400">Conclusion</span>
+        <SeverityPill s={assess.final} />
+        <button onClick={() => setShowWorking(w => !w)} className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
+          {showWorking ? 'Hide working' : 'Show working'} <span className="text-[9px] leading-none">{showWorking ? '▾' : '▸'}</span>
+        </button>
+      </div>
+      {showWorking && (
+        <p className="text-[12px] text-ink-600 mt-2">
+          → {d.likelihood} × {fmt(d.magnitude)}{showMateriality && <> (vs {fmt(M)})</>}{d.mwIndicators.length ? ' + MW indicator' : ''} ⇒ <span className={cn('font-bold', assess.capped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.raw}</span>
+          {assess.capped && <> · capped by {d.compensatingControlId} (effective) ⇒ <span className={cn('font-bold', assess.bumped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.bumped ? 'Significant Deficiency' : assess.final}</span></>}
+          {assess.bumped && <> · prudent-official ⇒ <span className="font-bold text-high-700">{assess.final}</span></>}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ─── Exceptions — the lifecycle ──────────────────────────────────────────────────
 const STAGES: ExceptionStatus[] = ['Identified', 'Remediation', 'Retest', 'Awaiting reviewer', 'Closed'];
 const STATUS_TONE: Record<ExceptionStatus, Tone> = { Identified: 'high', Remediation: 'mitigated', Retest: 'evidence', 'Awaiting reviewer': 'info', Closed: 'compliant' };
@@ -462,6 +522,8 @@ const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
 export function DeficienciesView() {
   const { eng, role, me, meOwner, back, openControl, updateDeficiency, setExceptionStatus, recordRetest, signOffException, updateRemediation, addRemediationEvidence } = useIcfr();
   const M = eng.materiality; const rules = eng.rules;
+  // closing an exception is the terminal four-eyes act — it commits behind an attest confirm
+  const [closingId, setClosingId] = useState<string | null>(null);
   // three lines, three lanes: the owner remediates, the auditor evaluates &
   // retests, the reviewer closes — each hat only sees its own actions.
   const isAuditor = role === 'auditor';
@@ -580,13 +642,13 @@ export function DeficienciesView() {
                     <p className="text-[10.5px] text-ink-400 pl-[128px] -mt-1">What <b className="font-semibold text-ink-500">could</b> have slipped through while the control was broken — not the error actually found.</p>
                     <div className="flex items-start gap-2 text-[12px] flex-wrap">
                       <span className="text-ink-500 w-[120px] mt-1">MW indicators</span>
-                      {MW_INDICATORS.map(ind => { const on = d.mwIndicators.includes(ind); return <button key={ind} onClick={() => updateDeficiency(d.id, { mwIndicators: on ? d.mwIndicators.filter(x => x !== ind) : [...d.mwIndicators, ind] })} className={cn('h-7 px-2.5 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors text-left', on ? 'bg-risk-50 border-risk-200 text-risk-700' : 'border-canvas-border text-ink-500 hover:bg-paper-50')}>{ind.length > 36 ? ind.slice(0, 34) + '…' : ind}</button>; })}
+                      {MW_INDICATORS.map(ind => { const on = d.mwIndicators.includes(ind); return <button key={ind} onClick={() => updateDeficiency(d.id, { mwIndicators: on ? d.mwIndicators.filter(x => x !== ind) : [...d.mwIndicators, ind] })} title={ind} className={cn('h-7 px-2.5 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors text-left', on ? 'bg-risk-50 border-risk-200 text-risk-700' : 'border-canvas-border text-ink-500 hover:bg-paper-50')}>{ind.length > 36 ? ind.slice(0, 34) + '…' : ind}</button>; })}
                     </div>
                     <div className="flex items-center gap-2 text-[12px] flex-wrap">
                       <span className="text-ink-500 w-[120px]">Compensating control</span>
-                      <select value={d.compensatingControlId ?? ''} onChange={e => updateDeficiency(d.id, { compensatingControlId: e.target.value || undefined })} className="h-8 px-2.5 rounded-md border border-canvas-border text-[12px] bg-canvas-elevated cursor-pointer focus:outline-none focus:border-brand-300">
+                      <select value={d.compensatingControlId ?? ''} onChange={e => updateDeficiency(d.id, { compensatingControlId: e.target.value || undefined })} className="h-8 max-w-[300px] px-2.5 rounded-md border border-canvas-border text-[12px] bg-canvas-elevated cursor-pointer focus:outline-none focus:border-brand-300">
                         <option value="">None</option>
-                        {eng.controls.filter(c => c.id !== d.controlId).slice(0, 30).map(c => <option key={c.id} value={c.id}>{c.id}</option>)}
+                        {eng.controls.filter(c => c.id !== d.controlId).map(c => { const short = c.description.length > 42 ? c.description.slice(0, 40).trimEnd() + '…' : c.description; return <option key={c.id} value={c.id} title={`${c.id} — ${c.description}`}>{c.id} — {short}</option>; })}
                       </select>
                       {d.compensatingControlId && (
                         assess.capped ? <span className="text-compliant-700 text-[11px] font-semibold">capping Material Weakness → Significant Deficiency — never clears the exception</span>
@@ -606,11 +668,7 @@ export function DeficienciesView() {
                     <PrudentRow d={d} baseFinal={assessSeverity({ ...d, prudentOverride: undefined }, eng).final}
                       onApply={(to, rationale) => updateDeficiency(d.id, { prudentOverride: { to, rationale, by: me, at: 'just now' } })}
                       onClear={() => updateDeficiency(d.id, { prudentOverride: undefined })} />
-                    <p className="text-[12px] text-ink-600 pt-2 border-t border-canvas-border">
-                      → {d.likelihood} × {fmt(d.magnitude)} (vs {fmt(M)}){d.mwIndicators.length ? ' + MW indicator' : ''} ⇒ <span className={cn('font-bold', assess.capped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.raw}</span>
-                      {assess.capped && <> · capped by {d.compensatingControlId} (effective) ⇒ <span className={cn('font-bold', assess.bumped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.bumped ? 'Significant Deficiency' : assess.final}</span></>}
-                      {assess.bumped && <> · prudent-official ⇒ <span className="font-bold text-high-700">{assess.final}</span></>}
-                    </p>
+                    <SeverityConclusion d={d} assess={assess} M={M} showMateriality />
                   </div>
                 ) : (
                   <div className="rounded-lg border border-canvas-border bg-paper-50/30 p-3 space-y-1.5">
@@ -623,12 +681,8 @@ export function DeficienciesView() {
                       <span className="text-ink-700"><span className="text-ink-400">Aggregation group</span> · {d.aggregationGroup ?? 'Ungrouped'}</span>
                       {d.prudentOverride && <span className="text-high-700 font-medium">Prudent-official — raised to {d.prudentOverride.to}</span>}
                     </div>
-                    <p className="text-[12px] text-ink-600 pt-2 border-t border-canvas-border">
-                      {/* the owner sees their classification, never the engagement's thresholds */}
-                      → {d.likelihood} × {fmt(d.magnitude)}{!isOwner && <> (vs {fmt(M)})</>}{d.mwIndicators.length ? ' + MW indicator' : ''} ⇒ <span className={cn('font-bold', assess.capped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.raw}</span>
-                      {assess.capped && <> · capped by {d.compensatingControlId} (effective) ⇒ <span className={cn('font-bold', assess.bumped ? 'text-ink-500 line-through' : 'text-ink-800')}>{assess.bumped ? 'Significant Deficiency' : assess.final}</span></>}
-                      {assess.bumped && <> · prudent-official ⇒ <span className="font-bold text-high-700">{assess.final}</span></>}
-                    </p>
+                    {/* the owner sees their classification, never the engagement's thresholds */}
+                    <SeverityConclusion d={d} assess={assess} M={M} showMateriality={!isOwner} />
                   </div>
                 )}
 
@@ -669,7 +723,7 @@ export function DeficienciesView() {
                     ) : d.retest && d.retest.by === me ? (
                       <span className="text-[12px] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must close — you recorded this retest.</span>
                     ) : (
-                      <button onClick={() => signOffException(d.id)} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Close — reviewer sign-off</button>
+                      <button onClick={() => setClosingId(d.id)} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Close — reviewer sign-off</button>
                     )
                   )}
                   {d.status === 'Closed' && d.signoff && <span className="text-[12px] font-semibold text-compliant-700 inline-flex items-center gap-1.5"><CheckCircle2 size={14} /> Closed — signed off by {d.signoff.by}</span>}
@@ -677,6 +731,27 @@ export function DeficienciesView() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* attest confirm — closing is the terminal four-eyes act, so it never commits on a bare click */}
+      {closingId && (
+        <div className="modal-backdrop" onClick={() => setClosingId(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-[15px] font-semibold text-ink-900">Close this exception?</h2>
+                <button onClick={() => setClosingId(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-[12.5px] text-ink-600 leading-relaxed">Confirm — close <span className="font-mono font-semibold text-ink-800">{closingId}</span>? Your reviewer sign-off is recorded against it. Closing is the final act in the four-eyes review and can't be undone.</p>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setClosingId(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={() => { signOffException(closingId); setClosingId(null); }} className="h-9 px-3.5 rounded-lg bg-compliant-600 text-white text-[12.5px] font-semibold hover:bg-compliant-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Close — reviewer sign-off</button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

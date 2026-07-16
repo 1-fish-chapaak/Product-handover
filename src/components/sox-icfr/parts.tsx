@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle, Bot, Hand, Workflow as WorkflowIcon, Cpu, Check, X, ChevronDown } from 'lucide-react';
 import { Pill, type Tone } from '../shared/StatusBadge';
@@ -102,22 +102,54 @@ export function RoleSwitcher({ role, onChange }: { role: Role; onChange: (r: Rol
 // while Viewing as Risk Owner; every owner surface scopes to this name.
 export function OwnerPicker({ owner, options, onChange }: { owner: string; options: string[]; onChange: (o: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);          // keyboard-highlighted option (aria-activedescendant target)
+  const triggerRef = useRef<HTMLButtonElement | null>(null);   // focus stays on the trigger the whole time the menu is open
+  const listRef = useRef<HTMLDivElement | null>(null);
   const short = owner.split(' · ')[0];
+  const last = options.length - 1;
+  const optId = (i: number) => `owner-persona-opt-${i}`;
+
+  // Keep the highlighted row in view. Focus never leaves the trigger — the active
+  // option is tracked via aria-activedescendant, not roving DOM focus (matches ShareModal).
+  useEffect(() => {
+    if (open && activeIndex >= 0) (listRef.current?.children[activeIndex] as HTMLElement | undefined)?.scrollIntoView({ block: 'nearest' });
+  }, [open, activeIndex]);
+
+  const openMenu = (index = Math.max(0, options.indexOf(owner))) => { setActiveIndex(index); setOpen(true); };
+  const closeMenu = (returnFocus = false) => { setOpen(false); setActiveIndex(-1); if (returnFocus) triggerRef.current?.focus(); };
+  const select = (o: string) => { onChange(o); closeMenu(true); };
+
   return (
     <div className="relative">
-      <button onClick={() => setOpen(o => !o)} aria-label="Owner persona" title={`Acting as ${owner}`}
+      <button ref={triggerRef} onClick={() => { if (!open) openMenu(); }}
+        onKeyDown={e => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); open ? setActiveIndex(i => Math.min(last, i + 1)) : openMenu(); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); open ? setActiveIndex(i => Math.max(0, i - 1)) : openMenu(last); }
+          else if (!open) return;                                                    // closed: let Enter/Space open via native click
+          else if (e.key === 'Escape') { e.preventDefault(); closeMenu(true); }
+          else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (activeIndex >= 0 && options[activeIndex]) select(options[activeIndex]); }
+          else if (e.key === 'Home') { e.preventDefault(); setActiveIndex(0); }
+          else if (e.key === 'End') { e.preventDefault(); setActiveIndex(last); }
+          else if (e.key === 'Tab') closeMenu();                                      // dismiss and let focus flow to the next control
+        }}
+        aria-label="Owner persona" aria-haspopup="menu" aria-expanded={open}
+        aria-controls={open ? 'owner-persona-menu' : undefined}
+        aria-activedescendant={open && activeIndex >= 0 ? optId(activeIndex) : undefined}
+        title={`Acting as ${owner}`}
         className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12px] font-semibold text-ink-700 hover:border-mitigated-300 hover:text-mitigated-700 transition-colors cursor-pointer">
         <UserCheck size={13} className="text-mitigated-600" /> as {short}<ChevronDown size={12} className="text-ink-400" />
       </button>
       <AnimatePresence>
         {open && (
           <>
-            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+            <div className="fixed inset-0 z-10" onClick={() => closeMenu()} />
+            <motion.div ref={listRef} id="owner-persona-menu" role="menu" aria-label="Owner persona"
+              initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
               className="absolute right-0 mt-1.5 z-20 w-64 max-h-72 overflow-y-auto rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_16px_40px_-16px_rgba(15,8,30,.4)] p-1">
-              {options.map(o => (
-                <button key={o} onClick={() => { onChange(o); setOpen(false); }}
-                  className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-[12.5px] hover:bg-paper-50 cursor-pointer flex items-center gap-2', o === owner ? 'text-mitigated-700 font-semibold' : 'text-ink-700')}>
+              {options.map((o, i) => (
+                <button key={o} id={optId(i)} role="menuitemradio" aria-checked={o === owner} tabIndex={-1}
+                  onClick={() => select(o)} onMouseEnter={() => setActiveIndex(i)}
+                  className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-[12.5px] cursor-pointer flex items-center gap-2', i === activeIndex && 'bg-paper-50', o === owner ? 'text-mitigated-700 font-semibold' : 'text-ink-700')}>
                   {o === owner ? <Check size={12} /> : <span className="w-3" />}{o}
                 </button>
               ))}

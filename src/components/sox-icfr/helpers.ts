@@ -354,3 +354,13 @@ export function formatINR(n: number): string {
   if (n >= 1e3) return `₹${(n / 1e3).toFixed(0)}K`;
   return `₹${n}`;
 }
+
+// A remediation due date is stored as a string — ISO 'YYYY-MM-DD' (the date picker) or a
+// legacy '30 Jun' seed label. Format both to a human '30 Jun 2026' ('—' when unset) so the
+// working-paper preview and the .xlsx export read the same as the on-screen view.
+export function formatDueDate(date: string | null | undefined): string {
+  if (!date) return '—';
+  const s = date.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return s;
+}

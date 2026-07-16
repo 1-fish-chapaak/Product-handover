@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, ListFilter, MoveRight, Search, ShieldCheck, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, ListFilter, MousePointerClick, MoveRight, Search, ShieldCheck, X } from 'lucide-react';
 import { useIcfr } from './store';
 import { controlConclusion } from './helpers';
 import { Pill, type Tone } from '../shared/StatusBadge';
@@ -92,31 +92,42 @@ function Heatmap({ title, subtitle, risks, kind, sel, onSelect }: {
         <h3 className="text-[13.5px] font-semibold text-ink-900">{title}</h3>
         <span className="text-[11px] text-ink-400">{subtitle}</span>
       </div>
+      {/* grid row — impact axis title · impact tick labels · the 5×5 cells */}
       <div className="flex gap-1.5">
-        {/* impact axis */}
-        <div className="flex flex-col justify-between py-0.5 pr-1 text-right shrink-0 w-[64px]">
+        {/* impact axis title — rotated, centred on the grid */}
+        <div className="flex items-center justify-center shrink-0 w-4">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-ink-500 -rotate-90 whitespace-nowrap">Impact</span>
+        </div>
+        {/* impact tick labels — severe (top) → minimal (bottom) */}
+        <div className="flex flex-col gap-1 pr-1 text-right shrink-0 w-[64px]">
           {[...I_LABELS].reverse().map(lb => <span key={lb} className="h-11 flex items-center justify-end text-[9.5px] font-semibold text-ink-400 leading-tight">{lb}</span>)}
         </div>
+        <div className="flex-1 min-w-0 grid grid-cols-5 gap-1">
+          {[5, 4, 3, 2, 1].map(i => [1, 2, 3, 4, 5].map(l => {
+            const rs = at(l, i);
+            const b = band(l * i);
+            const active = sel?.kind === kind && sel.l === l && sel.i === i;
+            return (
+              <button key={`${l}-${i}`}
+                onClick={() => onSelect(active ? null : { kind, l, i })}
+                title={`${I_LABELS[i - 1]} impact · ${L_LABELS[l - 1]?.toLowerCase()} — ${rs.length} risk${rs.length === 1 ? '' : 's'}`}
+                className={cn('h-11 rounded-lg flex items-center justify-center transition-all cursor-pointer hover:brightness-95', active && 'ring-2 ring-ink-900 ring-offset-1')}
+                style={{ background: `color-mix(in srgb, ${b.color} ${rs.length > 0 ? 82 : 16}%, ${rs.length > 0 ? 'transparent' : 'var(--color-canvas-elevated)'})` }}>
+                {rs.length > 0 && <span className="text-[13px] font-bold text-white tabular-nums drop-shadow-sm">{rs.length}</span>}
+              </button>
+            );
+          }))}
+        </div>
+      </div>
+      {/* likelihood tick labels + axis title — aligned under the grid via matching spacers */}
+      <div className="flex gap-1.5">
+        <div className="shrink-0 w-4" aria-hidden />
+        <div className="shrink-0 w-[64px]" aria-hidden />
         <div className="flex-1 min-w-0">
-          <div className="grid grid-cols-5 gap-1">
-            {[5, 4, 3, 2, 1].map(i => [1, 2, 3, 4, 5].map(l => {
-              const rs = at(l, i);
-              const b = band(l * i);
-              const active = sel?.kind === kind && sel.l === l && sel.i === i;
-              return (
-                <button key={`${l}-${i}`}
-                  onClick={() => onSelect(active ? null : { kind, l, i })}
-                  title={`${I_LABELS[i - 1]} impact · ${L_LABELS[l - 1]?.toLowerCase()} — ${rs.length} risk${rs.length === 1 ? '' : 's'}`}
-                  className={cn('h-11 rounded-lg flex items-center justify-center transition-all cursor-pointer', active && 'ring-2 ring-ink-900 ring-offset-1')}
-                  style={{ background: `color-mix(in srgb, ${b.color} ${rs.length > 0 ? 82 : 16}%, ${rs.length > 0 ? 'transparent' : 'var(--color-canvas-elevated)'})` }}>
-                  {rs.length > 0 && <span className="text-[13px] font-bold text-white tabular-nums drop-shadow-sm">{rs.length}</span>}
-                </button>
-              );
-            }))}
-          </div>
           <div className="grid grid-cols-5 gap-1 mt-1">
             {L_LABELS.map(lb => <span key={lb} className="text-center text-[9.5px] font-semibold text-ink-400 leading-tight">{lb}</span>)}
           </div>
+          <div className="text-center text-[9px] font-bold uppercase tracking-wider text-ink-500 mt-1.5">Likelihood</div>
         </div>
       </div>
     </div>
@@ -149,16 +160,19 @@ export default function RiskLibrary() {
   return (
     <div>
       {/* heatmaps — inherent vs residual */}
-      <div className="grid lg:grid-cols-2 gap-4 mb-4">
+      <div className="grid lg:grid-cols-2 gap-4 mb-2">
         <Heatmap title="Inherent risk" subtitle="before controls" risks={risks} kind="inherent" sel={cell} onSelect={setCell} />
         <Heatmap title="Residual risk" subtitle="after control testing" risks={risks} kind="residual" sel={cell} onSelect={setCell} />
       </div>
+      <p className="flex items-center gap-1.5 text-[11px] text-ink-400 mb-4">
+        <MousePointerClick size={12} className="text-ink-400" aria-hidden /> Click any cell to filter the register below.
+      </p>
 
       {/* toolbar */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {cell && (
           <button onClick={() => setCell(null)} className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg bg-ink-900 text-white text-[12px] font-semibold cursor-pointer">
-            {cell.kind === 'inherent' ? 'Inherent' : 'Residual'} · {I_LABELS[cell.i - 1]} × {L_LABELS[cell.l - 1]} <X size={13} />
+            {cell.kind === 'inherent' ? 'Inherent' : 'Residual'} · {L_LABELS[cell.l - 1]} × {I_LABELS[cell.i - 1]} <X size={13} />
           </button>
         )}
         <div className="relative">
@@ -186,7 +200,7 @@ export default function RiskLibrary() {
               <th style={{ width: 130 }}>Process</th>
               <th style={{ width: 128 }}>Inherent</th>
               <th style={{ width: 158 }}>Residual</th>
-              <th style={{ width: 96 }}>Controls</th>
+              <th style={{ width: 118 }}>Controls</th>
               <th style={{ width: 104 }}>Status</th>
             </tr>
           </thead>
@@ -194,26 +208,31 @@ export default function RiskLibrary() {
             {filtered.map(r => {
               const open = expanded === r.id;
               const moved = r.rl !== r.l || r.ri !== r.i;
+              const effective = r.controls.filter(c => controlConclusion(c) === 'Effective').length;
               return (
                 <FragmentGroup key={r.id}>
                   <tr className="reg-row" onClick={() => setExpanded(open ? null : r.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') setExpanded(open ? null : r.id); }} role="button" aria-label={`${open ? 'Collapse' : 'Expand'} ${r.id}`}>
                     <td>{open ? <ChevronDown size={14} className="text-ink-400" /> : <ChevronRight size={14} className="text-ink-400" />}</td>
                     <td><span className="wp-ref">{r.id}</span></td>
                     <td className="tight">
-                      <span className="font-semibold text-ink-900 text-[12.5px] leading-snug line-clamp-2">{r.description}</span>
+                      <span title={r.description} className="font-semibold text-ink-900 text-[12.5px] leading-snug line-clamp-2">{r.description}</span>
                       <span className="block text-[11px] text-ink-400 mt-0.5">{r.subProcess} · {r.owner}</span>
                     </td>
                     <td><span className="text-[11.5px] text-ink-600 font-medium">{r.process}</span></td>
                     <td><ScoreBadge l={r.l} i={r.i} /></td>
                     <td>
-                      <span className="inline-flex items-center gap-1.5">
+                      <span className="inline-flex flex-col items-start gap-1">
                         <ScoreBadge l={r.rl} i={r.ri} />
-                        {moved && <MoveRight size={12} className="text-compliant-600 -order-1 rotate-180" aria-label="reduced by controls" />}
+                        {moved && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-compliant-600 whitespace-nowrap" title="Residual risk reduced by effective controls">
+                            <MoveRight size={10} className="rotate-90" aria-hidden /> reduced by controls
+                          </span>
+                        )}
                       </span>
                     </td>
                     <td>
-                      <span className="inline-flex items-center gap-1 text-[11.5px] text-ink-600 font-medium">
-                        <ShieldCheck size={12} className="text-ink-400" /> {r.controls.filter(c => controlConclusion(c) === 'Effective').length}/{r.controls.length}
+                      <span className="inline-flex items-center gap-1 text-[11.5px] text-ink-600 font-medium whitespace-nowrap" title={`${effective} of ${r.controls.length} controls tested effective`}>
+                        <ShieldCheck size={12} className="text-ink-400" /> {effective}/{r.controls.length} <span className="text-[10px] text-ink-400 font-normal">effective</span>
                       </span>
                     </td>
                     <td><Pill tone={STATUS_TONE[r.status]}>{r.status}</Pill></td>

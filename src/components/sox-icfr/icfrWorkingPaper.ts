@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, controlConclusion, icfrConclusion, isControlLocked, openMaterialWeaknesses, trackResult, designProgress } from './helpers';
+import { assessSeverity, controlConclusion, formatDueDate, icfrConclusion, isControlLocked, openMaterialWeaknesses, trackResult, designProgress } from './helpers';
 import type { Control, IcfrEngagement, OperatingStep, TestResult } from './types';
 
 // ─── The control working paper as a document ─────────────────────────────────────
@@ -141,7 +141,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
         ['Description', def.description],
         ['Severity', a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final],
         ['Status', def.status],
-        ['Remediation', `${def.remediation.action || '—'}${def.remediation.date ? ` · due ${def.remediation.date}` : ''} · ${def.remediation.owner}`],
+        ['Remediation', `${def.remediation.action || '—'}${def.remediation.date ? ` · due ${formatDueDate(def.remediation.date)}` : ''} · ${def.remediation.owner}`],
         ['Remediation evidence', def.remediation.evidence?.map(f => f.name).join('; ') || 'None'],
       ],
     });
@@ -239,7 +239,7 @@ export function downloadIcfrWorkingPaper(eng: IcfrEngagement): void {
     ? eng.deficiencies.map(d => {
         const a = assessSeverity(d, eng);
         const sev = a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final;
-        return [d.id, d.controlId, d.track, d.description, d.rootCause, d.likelihood, d.magnitude, eng.materiality, d.mwIndicators.join('; ') || 'None', d.compensatingControlId ?? 'None', sev, d.remediation.action, d.remediation.date ?? '—', d.remediation.status, d.remediation.evidence?.map(f => f.name).join('; ') || 'None'];
+        return [d.id, d.controlId, d.track, d.description, d.rootCause, d.likelihood, d.magnitude, eng.materiality, d.mwIndicators.join('; ') || 'None', d.compensatingControlId ?? 'None', sev, d.remediation.action, formatDueDate(d.remediation.date), d.remediation.status, d.remediation.evidence?.map(f => f.name).join('; ') || 'None'];
       })
     : [['—', '—', '—', 'No deficiencies', '—', '—', 0, eng.materiality, '—', '—', '—', '—', '—', '—', '—']];
   const df = XLSX.utils.aoa_to_sheet([dfH, ...dfR]); df['!cols'] = autofit([dfH, ...dfR]);

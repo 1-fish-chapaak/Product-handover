@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   Bell, CheckCircle2, ClipboardList, Clock, FileText, MessageSquareWarning, Table2, XCircle,
 } from 'lucide-react';
@@ -36,6 +36,9 @@ export default function NotificationsBell() {
   const { eng, role, meOwner, openControl, setTab, setView } = useIcfr();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  // reduced-motion: the panel's scale/translate are JS transforms, which the
+  // global CSS reduced-motion rule can't reach — gate them here to opacity-only.
+  const reduce = useReducedMotion();
 
   useEffect(() => {
     if (!open) return;
@@ -61,7 +64,7 @@ export default function NotificationsBell() {
         out.push({
           id: `ineff-${c.id}`, kind: 'ineffective',
           title: `${c.wpRef} concluded INEFFECTIVE (${track})`,
-          detail: `${c.description} — by ${who}`,
+          detail: `${c.description} — by ${who} · open to plan remediation.`,
           onOpen: () => go(c.id),
         });
       }
@@ -76,7 +79,7 @@ export default function NotificationsBell() {
       out.push({
         id: `due-${t.id}`, kind: 'due',
         title: `${t.controlId} ${t.overdue ? 'is OVERDUE' : 'is due today'} · ${t.id}`,
-        detail: `${t.title} — open the control to complete TOD / TOE.`,
+        detail: `${t.title} — ${role === 'risk-owner' ? 'open the control to attest & evidence.' : 'open the control to complete TOD / TOE.'}`,
         onOpen: () => go(t.controlId),
       });
     }
@@ -89,7 +92,7 @@ export default function NotificationsBell() {
       out.push({
         id: `test-${c.id}`, kind: 'due',
         title: `${c.wpRef} · control test ${dd < 0 ? `overdue ${-dd}d` : 'due today'}`,
-        detail: `${c.description} — ${c.frequency.toLowerCase()} control · open to run TOD / TOE.`,
+        detail: `${c.description} — ${c.frequency.toLowerCase()} control · ${role === 'risk-owner' ? 'open to attest & evidence.' : 'open to run TOD / TOE.'}`,
         onOpen: () => go(c.id),
       });
     }
@@ -180,7 +183,7 @@ export default function NotificationsBell() {
 
   return (
     <div ref={rootRef} className="relative">
-      <button onClick={() => setOpen(o => !o)} aria-label={`Notifications — ${items.length} pending`}
+      <button onClick={() => setOpen(o => !o)} aria-label={`To-do — ${items.length} pending`}
         className={cn('relative h-9 w-9 inline-flex items-center justify-center rounded-lg border transition-colors cursor-pointer',
           open ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300')}>
         <Bell size={16} />
@@ -194,12 +197,12 @@ export default function NotificationsBell() {
 
       <AnimatePresence>
         {open && (
-          <motion.div initial={{ opacity: 0, y: 6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.98 }} transition={{ duration: 0.14 }}
+          <motion.div initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.98 }} animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }} exit={reduce ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.98 }} transition={{ duration: 0.14 }}
             className="absolute right-0 top-[calc(100%+8px)] z-50 w-[400px] rounded-2xl border border-canvas-border bg-canvas-elevated shadow-[0_20px_50px_-18px_rgba(15,8,30,0.45)] overflow-hidden">
             <div className="px-4 py-3 border-b border-canvas-border flex items-center justify-between">
               <div>
-                <div className="text-[13px] font-semibold text-ink-900">Notifications</div>
-                <div className="text-[11px] text-ink-400 mt-0.5">Pending assignment &amp; review · viewing as {role === 'auditor' ? 'Auditor' : role === 'reviewer' ? 'Reviewer' : 'Risk Owner'}</div>
+                <div className="text-[13px] font-semibold text-ink-900">To-do</div>
+                <div className="text-[11px] text-ink-500 mt-0.5">Pending assignment &amp; review · viewing as {role === 'auditor' ? 'Auditor' : role === 'reviewer' ? 'Reviewer' : 'Risk Owner'}</div>
               </div>
               {urgent > 0 && <span className="text-[10.5px] font-bold text-risk-700 bg-risk-50 border border-risk-200 rounded-full px-2 h-5 inline-flex items-center">{urgent} ineffective</span>}
             </div>
@@ -212,7 +215,7 @@ export default function NotificationsBell() {
                     <span className={cn('w-7 h-7 rounded-lg border inline-flex items-center justify-center shrink-0', meta.cls)}><meta.Icon size={14} /></span>
                     <span className="min-w-0 flex-1">
                       <span className={cn('block text-[12px] font-semibold leading-snug', it.kind === 'ineffective' ? 'text-risk-700' : 'text-ink-900')}>{it.title}</span>
-                      <span className="block text-[11px] text-ink-500 mt-0.5 line-clamp-2">{it.detail}</span>
+                      <span className="block text-[11px] text-ink-600 mt-0.5 line-clamp-2">{it.detail}</span>
                     </span>
                   </button>
                 );

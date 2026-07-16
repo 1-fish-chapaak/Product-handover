@@ -1,11 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
-  AlertTriangle, BadgeCheck, CheckCircle2, Circle, Hourglass, Inbox, PenLine, Scale, ArrowRight, ShieldAlert, ShieldCheck, Upload, MessageSquare, FileWarning,
+  AlertTriangle, BadgeCheck, CheckCircle2, ChevronRight, Circle, Hourglass, Inbox, PenLine, Scale, ArrowRight, ShieldAlert, ShieldCheck, Upload, MessageSquare, FileWarning, X,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
 import {
-  assessSeverity, controlConclusion, engagementProgress, formatINR, isClearlyTrivial, periodEndDate, testsDueNow, trackResult,
+  assessSeverity, controlConclusion, engagementProgress, formatINR, isClearlyTrivial, testsDueNow, trackResult,
 } from './helpers';
 import { cn } from '../../lib/cn';
 import RiskOwnerPortal from './RiskOwnerPortal';
@@ -17,6 +17,27 @@ const fmt = (n: number) => formatINR(n);
 // process spine colours — on-theme purple/blue families, mirrors the Control Library shelves
 const BINDINGS = ['#6A12CD', '#0369A1', '#550FA5', '#075985', '#8838DE', '#0284C7', '#3B0B72', '#1E3A5F'];
 function spineColor(p: string): string { let h = 0; for (let i = 0; i < p.length; i++) h = (h * 31 + p.charCodeAt(i)) >>> 0; return BINDINGS[h % BINDINGS.length]!; }
+
+// Period-end labels arrive in a few shapes across data sources — ISO '2025-12-31',
+// '31 Mar 2026', or 'Mar 2026'. Parse + format them in-file (dependency-free) so the
+// countdown reads a real date and the header shows a human '31 Dec 2025'.
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const monthIndex = (name: string): number => MONTHS.findIndex(m => m.toLowerCase() === name.trim().slice(0, 3).toLowerCase());
+function parsePeriodEnd(raw: string): Date | null {
+  const s = raw.trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  const dmy = /^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})$/.exec(s);
+  if (dmy) { const m = monthIndex(dmy[2] ?? ''); if (m >= 0) return new Date(Number(dmy[3]), m, Number(dmy[1])); }
+  const my = /^([A-Za-z]{3,})\s+(\d{4})$/.exec(s);   // month + year → last day of that month
+  if (my) { const m = monthIndex(my[1] ?? ''); if (m >= 0) return new Date(Number(my[2]), m + 1, 0); }
+  return null;
+}
+/** '31 Dec 2025' — falls back to the raw label if it can't be parsed. */
+function fmtPeriodEnd(raw: string): string {
+  const d = parsePeriodEnd(raw);
+  return d ? `${d.getDate()} ${MONTHS[d.getMonth()]!} ${d.getFullYear()}` : raw;
+}
 
 const SEV_META: { key: Severity; label: string; dot: string; text: string }[] = [
   { key: 'Material Weakness', label: 'Material weakness', dot: 'bg-risk-500', text: 'text-risk-700' },
@@ -33,6 +54,8 @@ const HANDOFF_META: Record<TaskType, { label: string; Icon: typeof Upload; tone:
 export default function Overview() {
   const { eng, role, meOwner, setView, setTab, signOffEngagement } = useIcfr();
   const { addToast } = useToast();
+  // Terminal sign-off is one-way — an ATTEST confirm gates it, never a bare click.
+  const [confirmSign, setConfirmSign] = useState<null | 'preparer' | 'reviewer'>(null);
   const stats = engagementProgress(eng);
   const M = eng.materiality;
   const isOwner = role === 'risk-owner';
@@ -152,10 +175,10 @@ export default function Overview() {
       {/* progress rail */}
       {!isOwner && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {tiles.map(s => (
-          <div key={s.k} className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3">
+          <button key={s.k} onClick={() => setTab('controls')} title="Open the Control Library" className="text-left rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3 hover:border-brand-300 transition-colors cursor-pointer">
             <div className={cn('text-[20px] font-bold tabular-nums', s.t)}>{s.v}</div>
             <div className="text-[11.5px] text-ink-500 font-medium mt-0.5">{s.k}</div>
-          </div>
+          </button>
         ))}
       </div>}
 
@@ -199,7 +222,7 @@ export default function Overview() {
             })}
           </div>
           <button onClick={() => setTab('controls')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors text-left">
-            {stats.waitingOnOwner} control{stats.waitingOnOwner === 1 ? '' : 's'} waiting on the risk owner <ArrowRight size={13} />
+            Manage handoffs <ArrowRight size={13} />
           </button>
         </div>
 
@@ -226,34 +249,56 @@ export default function Overview() {
 
       {/* year-end countdown — what must close before the opinion date */}
       {!isOwner && !isConcluded && (() => {
-        const end = periodEndDate(eng.periodEnd);
+        const end = parsePeriodEnd(eng.periodEnd);
+        const endLabel = fmtPeriodEnd(eng.periodEnd);
         const days = end ? Math.ceil((end.getTime() - Date.now()) / 86_400_000) : null;
         const past = days !== null && days < 0;
         const openOther = sev.open - sev.mwOpen;
         const unconcluded = stats.total - concludedCount;
+        const papersAwaiting = stats.total - stats.reviewed - unconcluded;
+        const allClear = sev.mwOpen === 0 && openOther === 0 && unconcluded === 0 && stats.reviewed === stats.total;
+        // One row per outstanding item — each keeps the same filtered destination it linked to before.
+        const rows = [
+          { key: 'mw', show: sev.mwOpen > 0, onClick: () => setView('deficiencies'), icon: <AlertTriangle size={13} className="text-risk-600" />,
+            label: <><b className="font-semibold text-risk-700">{sev.mwOpen}</b> material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'ICFR ineffective, open past year-end' : 'ICFR ineffective if still open at year-end'}</> },
+          { key: 'other', show: openOther > 0, onClick: () => setView('deficiencies'), icon: <Circle size={11} className="text-high-600" />,
+            label: <><b className="font-semibold text-ink-900">{openOther}</b> exception{openOther === 1 ? '' : 's'} still working through remediation → retest → close</> },
+          { key: 'unconcluded', show: unconcluded > 0, onClick: () => setTab('controls'), icon: <Circle size={11} className="text-ink-400" />,
+            label: <><b className="font-semibold text-ink-900">{unconcluded}</b> control{unconcluded === 1 ? '' : 's'} not concluded</> },
+          { key: 'papers', show: papersAwaiting > 0, onClick: () => setTab('controls'), icon: <Circle size={11} className="text-evidence-600" />,
+            label: <><b className="font-semibold text-ink-900">{papersAwaiting}</b> paper{papersAwaiting === 1 ? '' : 's'} awaiting sign-off</> },
+        ].filter(r => r.show);
+        const rowCls = 'w-full flex items-center gap-2.5 py-1.5 px-2 -mx-1 rounded-lg text-left hover:bg-paper-100 transition-colors cursor-pointer group';
         return (
           <section className={cn('rounded-2xl border p-4', past || sev.mwOpen ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-canvas-elevated')}>
             <div className="flex items-center gap-2 flex-wrap">
               <Hourglass size={15} className={past || sev.mwOpen ? 'text-high-700' : 'text-brand-600'} />
               <h2 className="text-[13px] font-bold text-ink-800">
-                {days === null ? `Year-end — ${eng.periodEnd}`
-                  : past ? `Period ended ${eng.periodEnd} — the opinion clock is running`
-                  : `${days} day${days === 1 ? '' : 's'} to year-end (${eng.periodEnd})`}
+                {days === null ? `Year-end — ${endLabel}`
+                  : past ? `Period ended ${endLabel} — the opinion clock is running`
+                  : `${days} day${days === 1 ? '' : 's'} to year-end (${endLabel})`}
               </h2>
               <span className="text-[11.5px] text-ink-500">— what must close before the opinion date</span>
             </div>
-            <div className="mt-2.5 flex items-center gap-x-5 gap-y-1.5 flex-wrap text-[12.5px]">
-              {sev.mwOpen > 0 && (
-                <button onClick={() => setView('deficiencies')} title="Open exceptions — remediate, retest, close"
-                  className="inline-flex items-center gap-1.5 font-semibold text-risk-700 hover:text-risk-800 hover:underline underline-offset-2 cursor-pointer transition-colors">
-                  <AlertTriangle size={13} /> {sev.mwOpen} material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'open past year-end ⇒' : 'open at year-end ⇒'} ICFR publicly ineffective
+            <div className="mt-3 space-y-0.5">
+              {rows.map(r => (
+                <button key={r.key} onClick={r.onClick} className={rowCls}>
+                  <span className="w-4 flex justify-center shrink-0">{r.icon}</span>
+                  <span className="text-[12.5px] text-ink-700">{r.label}</span>
+                  <ChevronRight size={14} className="ml-auto shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />
                 </button>
+              ))}
+              {allClear && (
+                <div className="flex items-center gap-2.5 py-1.5 px-2 -mx-1">
+                  <span className="w-4 flex justify-center shrink-0"><CheckCircle2 size={14} className="text-compliant-600" /></span>
+                  <span className="text-[12.5px] font-semibold text-compliant-700">Nothing outstanding — ready to conclude</span>
+                </div>
               )}
-              {openOther > 0 && <button onClick={() => setView('deficiencies')} title="Open exceptions — remediate, retest, close" className="inline-flex items-center gap-1.5 text-ink-700 hover:text-ink-900 hover:underline underline-offset-2 cursor-pointer transition-colors"><Circle size={11} className="text-high-600" /> {openOther} exception{openOther === 1 ? '' : 's'} still in the lifecycle (remediate → retest → reviewer close)</button>}
-              {unconcluded > 0 && <button onClick={() => setTab('controls')} title="Open the Control Library — conclude the remaining controls" className="inline-flex items-center gap-1.5 text-ink-700 hover:text-ink-900 hover:underline underline-offset-2 cursor-pointer transition-colors"><Circle size={11} className="text-ink-400" /> {unconcluded} control{unconcluded === 1 ? '' : 's'} not concluded</button>}
-              {stats.total - stats.reviewed - unconcluded > 0 && <button onClick={() => setTab('controls')} title="Open the Control Library — sign / countersign the concluded papers" className="inline-flex items-center gap-1.5 text-ink-700 hover:text-ink-900 hover:underline underline-offset-2 cursor-pointer transition-colors"><Circle size={11} className="text-evidence-600" /> {stats.total - stats.reviewed - unconcluded} paper{stats.total - stats.reviewed - unconcluded === 1 ? '' : 's'} awaiting sign-off / countersign</button>}
-              <button onClick={() => document.getElementById('eng-signoff')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} title="Go to Engagement sign-off" className="inline-flex items-center gap-1.5 text-ink-500 hover:text-ink-800 hover:underline underline-offset-2 cursor-pointer transition-colors"><PenLine size={12} /> then: {so.preparer ? 'reviewer countersign' : 'preparer sign-off + reviewer countersign'}</button>
-              {sev.mwOpen === 0 && openOther === 0 && unconcluded === 0 && stats.reviewed === stats.total && <span className="inline-flex items-center gap-1.5 font-semibold text-compliant-700"><CheckCircle2 size={13} /> Nothing outstanding — ready to conclude</span>}
+              <button onClick={() => document.getElementById('eng-signoff')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className={rowCls}>
+                <span className="w-4 flex justify-center shrink-0"><PenLine size={12} className="text-ink-400" /></span>
+                <span className="text-[12.5px] text-ink-600">Then: {so.preparer ? 'reviewer countersign' : 'preparer sign-off + reviewer countersign'}</span>
+                <ChevronRight size={14} className="ml-auto shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />
+              </button>
             </div>
           </section>
         );
@@ -303,7 +348,7 @@ export default function Overview() {
             {so.preparer ? (
               <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Prepared — {so.preparer.by} <span className="text-ink-400 font-medium">· {so.preparer.at}</span></span>
             ) : role === 'auditor' ? (
-              <button onClick={signPreparer} disabled={!signoffReady} title={signoffReady ? `Sign off as ${eng.preparer}` : 'Every control must be concluded first'}
+              <button onClick={() => setConfirmSign('preparer')} disabled={!signoffReady} title={signoffReady ? `Sign off as ${eng.preparer}` : 'Every control must be concluded first'}
                 className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
                 <PenLine size={14} /> Sign off as preparer
               </button>
@@ -314,7 +359,7 @@ export default function Overview() {
               <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Reviewed — {so.reviewer.by} <span className="text-ink-400 font-medium">· {so.reviewer.at}</span></span>
             ) : so.preparer ? (
               role === 'reviewer' ? (
-                <button onClick={signReviewer} title={`Countersign as ${eng.reviewer}`}
+                <button onClick={() => setConfirmSign('reviewer')} title={`Countersign as ${eng.reviewer}`}
                   className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700 text-[12.5px] font-semibold hover:bg-brand-100 transition-colors cursor-pointer">
                   <PenLine size={14} /> Countersign as reviewer
                 </button>
@@ -354,6 +399,8 @@ export default function Overview() {
                 <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px] text-ink-500">
                   <span><b className="text-compliant-700">{p.effective}</b> effective</span>
                   {p.ineffective > 0 && <span><b className="text-risk-700">{p.ineffective}</b> ineffective</span>}
+                  {p.inProgress > 0 && <span><b className="text-brand-700">{p.inProgress}</b> in progress</span>}
+                  {notStarted > 0 && <span><b className="text-ink-600">{notStarted}</b> not started</span>}
                   <span className="ml-auto tabular-nums">D {p.designDone}/{p.total} · O {p.operatingDone}/{p.total}</span>
                 </div>
               </button>
@@ -361,6 +408,33 @@ export default function Overview() {
           })}
         </div>
       </section>}
+
+      {/* attest confirm — terminal sign-off is one-way, so it never fires on a bare click */}
+      {confirmSign && (
+        <div className="modal-backdrop" onClick={() => setConfirmSign(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-[15px] font-semibold text-ink-900">{confirmSign === 'preparer' ? 'Sign off as preparer?' : 'Countersign as reviewer?'}</h2>
+                <button onClick={() => setConfirmSign(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-[12.5px] text-ink-600 leading-relaxed">
+                {confirmSign === 'preparer'
+                  ? (signsEffective
+                      ? 'This records your preparer signature and hands the engagement to the reviewer. You can’t un-sign.'
+                      : <>This concludes ICFR <b className="font-semibold text-risk-700">not effective</b> — {sev.mwOpen} material weakness{sev.mwOpen === 1 ? '' : 'es'} open at period end. You can’t un-sign.</>)
+                  : <>This countersigns and concludes the engagement as ICFR {signsEffective ? 'effective' : 'not effective'}. This can’t be undone.</>}
+              </p>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setConfirmSign(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={() => { if (confirmSign === 'preparer') signPreparer(); else signReviewer(); setConfirmSign(null); }} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">{confirmSign === 'preparer' ? 'Confirm — sign off' : 'Confirm — countersign'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

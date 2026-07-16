@@ -15,11 +15,13 @@ const ASSERTIONS: Assertion[] = ['Completeness', 'Accuracy', 'Existence / Occurr
 const NATURES: Nature[] = ['Manual', 'Automated', 'IT-dependent'];
 const FREQUENCIES: Frequency[] = ['Annual', 'Quarterly', 'Monthly', 'Weekly', 'Daily', 'Recurring', 'Ad-hoc'];
 const NEW_RISK = '__new-risk__';
+const NEW_PROCESS = '__new-process__';
+const NEW_OWNER = '__new-owner__';
 
 const inputCls = 'w-full h-9 px-3 rounded-lg border border-canvas-border text-[12.5px] text-ink-800 bg-canvas-elevated focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50';
 
-function Field({ label, children, span2 = false }: { label: string; children: React.ReactNode; span2?: boolean }) {
-  return <div className={span2 ? 'col-span-2' : undefined}><div className="text-[11px] font-semibold text-ink-500 mb-1">{label}</div>{children}</div>;
+function Field({ label, required = false, children, span2 = false }: { label: string; required?: boolean; children: React.ReactNode; span2?: boolean }) {
+  return <div className={span2 ? 'col-span-2' : undefined}><div className="text-[11px] font-semibold text-ink-500 mb-1">{label}{required && <span className="text-risk-600 ml-0.5" aria-hidden="true">*</span>}</div>{children}</div>;
 }
 
 export default function NewControlPanel({ onClose }: { onClose: () => void }) {
@@ -48,17 +50,46 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
   const [owner, setOwner] = useState(owners[0] ?? 'Risk Owner');
   const [isKey, setIsKey] = useState(true);
   const [assertions, setAssertions] = useState<Assertion[]>(['Accuracy']);
+  const [newProcess, setNewProcess] = useState('');
+  const [newOwner, setNewOwner] = useState('');
+  const [showDiscard, setShowDiscard] = useState(false);
+
+  // Any field moved away from its opening state means unsaved work — leaving then guards.
+  const isDirty =
+    description.trim().length > 0 || subProcess.trim().length > 0 ||
+    newRiskDesc.trim().length > 0 || newProcess.trim().length > 0 || newOwner.trim().length > 0 ||
+    process !== (processes[0] ?? 'Procure to Pay') || owner !== (owners[0] ?? 'Risk Owner') ||
+    riskChoice !== (riskOptions[0]?.id ?? NEW_RISK) ||
+    nature !== 'Manual' || frequency !== 'Monthly' || !isKey ||
+    assertions.length !== 1 || assertions[0] !== 'Accuracy';
+
+  const requestClose = () => { if (isDirty) setShowDiscard(true); else onClose(); };
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (showDiscard) { setShowDiscard(false); return; } // a stray Esc dismisses the confirm, never the form
+      if (isDirty) setShowDiscard(true); else onClose();
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, showDiscard, isDirty]);
 
   const toggleAssertion = (a: Assertion) =>
     setAssertions(prev => (prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a]));
 
-  const canCreate = description.trim().length > 0 && (riskChoice !== NEW_RISK || newRiskDesc.trim().length > 0);
+  const canCreate = description.trim().length > 0
+    && (riskChoice !== NEW_RISK || newRiskDesc.trim().length > 0)
+    && (process !== NEW_PROCESS || newProcess.trim().length > 0)
+    && (owner !== NEW_OWNER || newOwner.trim().length > 0);
+
+  // The single most-specific blocker, surfaced on the disabled button so it's never trial-and-error.
+  const missingHint =
+    !description.trim() ? 'Description required'
+    : riskChoice === NEW_RISK && !newRiskDesc.trim() ? 'New-risk description required'
+    : process === NEW_PROCESS && !newProcess.trim() ? 'New process name required'
+    : owner === NEW_OWNER && !newOwner.trim() ? 'New owner name required'
+    : null;
 
   const create = () => {
     if (!canCreate) return;
@@ -66,8 +97,10 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
       ? { riskId: nextRiskId, riskDescription: newRiskDesc.trim() }
       : { riskId: riskChoice, riskDescription: riskOptions.find(r => r.id === riskChoice)?.description ?? '' };
     const id = addControl({
-      description: description.trim(), process, subProcess,
-      nature, frequency, owner, isKey, assertions, ...risk,
+      description: description.trim(),
+      process: process === NEW_PROCESS ? newProcess.trim() : process, subProcess,
+      nature, frequency, owner: owner === NEW_OWNER ? newOwner.trim() : owner,
+      isKey, assertions, ...risk,
     });
     addToast({ type: 'success', title: 'Control created', message: `Linked to ${risk.riskId} — now in the library and the RACM.` });
     onClose();
@@ -75,19 +108,19 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={requestClose}>
       <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
         <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-[15px] font-semibold text-ink-900" style={{ fontFamily: "'Source Serif 4', serif" }}>New control</h2>
-            <button onClick={onClose} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+            <button onClick={requestClose} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
           </div>
           <p className="text-[12px] text-ink-500 mt-0.5">It lands in the library and the RACM immediately, ready to test.</p>
         </div>
 
         <div className="p-5 space-y-3.5">
-          <Field label="Control description">
-            <input value={description} onChange={e => setDescription(e.target.value)} autoFocus
+          <Field label="Control description" required>
+            <input value={description} onChange={e => setDescription(e.target.value)} autoFocus aria-required="true"
               placeholder="e.g. Vendor bank-detail changes are independently verified before payment"
               className={inputCls} />
           </Field>
@@ -96,12 +129,18 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
             <Field label="Process">
               <select value={process} onChange={e => setProcess(e.target.value)} className={cn(inputCls, 'cursor-pointer')}>
                 {processes.map(p => <option key={p}>{p}</option>)}
+                <option value={NEW_PROCESS}>＋ Add new process…</option>
               </select>
             </Field>
             <Field label="Sub-process">
               <input value={subProcess} onChange={e => setSubProcess(e.target.value)} placeholder="e.g. Vendor master" className={inputCls} />
             </Field>
           </div>
+          {process === NEW_PROCESS && (
+            <Field label="New process name" required>
+              <input value={newProcess} onChange={e => setNewProcess(e.target.value)} aria-required="true" placeholder="e.g. Record to Report" className={inputCls} />
+            </Field>
+          )}
 
           <Field label="Linked risk">
             <select value={riskChoice} onChange={e => setRiskChoice(e.target.value)} className={cn(inputCls, 'cursor-pointer')}>
@@ -110,8 +149,8 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
             </select>
           </Field>
           {riskChoice === NEW_RISK && (
-            <Field label={`New risk description (${nextRiskId})`}>
-              <input value={newRiskDesc} onChange={e => setNewRiskDesc(e.target.value)} placeholder="What could go wrong that this control prevents or detects?" className={inputCls} />
+            <Field label={`New risk description (${nextRiskId})`} required>
+              <input value={newRiskDesc} onChange={e => setNewRiskDesc(e.target.value)} aria-required="true" placeholder="What could go wrong that this control prevents or detects?" className={inputCls} />
             </Field>
           )}
 
@@ -129,6 +168,7 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
             <Field label="Owner">
               <select value={owner} onChange={e => setOwner(e.target.value)} className={cn(inputCls, 'cursor-pointer')}>
                 {owners.map(o => <option key={o}>{o}</option>)}
+                <option value={NEW_OWNER}>＋ Add new owner…</option>
               </select>
             </Field>
             <Field label="Key control">
@@ -139,6 +179,11 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
               </button>
             </Field>
           </div>
+          {owner === NEW_OWNER && (
+            <Field label="New owner name" required>
+              <input value={newOwner} onChange={e => setNewOwner(e.target.value)} aria-required="true" placeholder="e.g. Financial Controller" className={inputCls} />
+            </Field>
+          )}
 
           <Field label="Assertions">
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -152,15 +197,41 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
             </div>
           </Field>
 
-          <div className="pt-1.5 flex items-center justify-end gap-2">
-            <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-            <button onClick={create} disabled={!canCreate}
-              className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
-              Create control
-            </button>
+          <div className="pt-1.5 flex items-center justify-between gap-3">
+            <span className="text-[11.5px] text-ink-500 inline-flex items-center gap-1 min-w-0" role="status" aria-live="polite">
+              {missingHint && (<><span className="text-risk-600" aria-hidden="true">*</span><span className="truncate">{missingHint}</span></>)}
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              <button onClick={requestClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+              <button onClick={create} disabled={!canCreate} title={missingHint ?? undefined}
+                className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
+                Create control
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* discard guard — a dirty form never vanishes on a stray backdrop click or Esc */}
+      {showDiscard && (
+        <div className="modal-backdrop" onClick={e => { e.stopPropagation(); setShowDiscard(false); }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-[15px] font-semibold text-ink-900">Discard this new control?</h2>
+                <button onClick={() => setShowDiscard(false)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Keep editing"><X size={15} /></button>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-[12.5px] text-ink-600 leading-relaxed">You've started this control but haven't created it yet. Leave now and what you've entered won't be saved.</p>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setShowDiscard(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep editing</button>
+                <button onClick={() => { setShowDiscard(false); onClose(); }} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">Discard</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

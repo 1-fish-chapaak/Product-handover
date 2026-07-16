@@ -1,10 +1,10 @@
 import { useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft, ArrowRight, CheckCircle2, Circle, FileSpreadsheet, FlaskConical, Loader2, MessageSquareWarning,
+  ArrowLeft, CheckCircle2, Circle, ClipboardCheck, ExternalLink, FileSpreadsheet, FlaskConical, Loader2, MessageSquareWarning,
   Paperclip, Search, Star, Table2, UploadCloud, X, Check, MessageSquarePlus, RotateCcw,
 } from 'lucide-react';
 import { useIcfr } from './store';
-import { controlConclusion, testDueDisplay, trackResult } from './helpers';
+import { controlConclusion, trackResult } from './helpers';
 import { useToast } from '../shared/Toast';
 import { Pill } from '../shared/StatusBadge';
 import { NatureChip, Tickmark } from './parts';
@@ -84,11 +84,13 @@ export function RacmLanding() {
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-4 pt-4 border-t border-canvas-border">
-                <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-brand-700 group-hover:text-brand-800">Open RACM <ArrowRight size={14} /></span>
+                {/* plain hint — the whole card is the click target, so this must not look like its own link/button */}
+                <span className="text-[12px] text-ink-400">Open RACM</span>
                 <span className="flex-1" />
                 <button onClick={e => { e.stopPropagation(); openEditorTab(eng.id, name); }}
+                  title="Opens in a new tab" aria-label="Open spreadsheet editor in a new tab"
                   className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer">
-                  <FileSpreadsheet size={13} /> Spreadsheet editor
+                  <FileSpreadsheet size={13} /> Spreadsheet editor <ExternalLink size={12} className="text-ink-400" />
                 </button>
               </div>
             </div>
@@ -104,10 +106,12 @@ function ReviewCell({ c }: { c: Control }) {
   const r = c.racmReview;
   if (!r) return <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-400"><Circle size={11} /> Pending review</span>;
   if (r.status === 'Approved') {
+    // pre-testing review pass — reads as "ready to test", NOT a tested-effective
+    // result; distinct icon + wording keep it clear of the ✓ test tickmarks.
     return (
       <span className="inline-flex flex-col gap-0.5">
-        <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-compliant-700"><CheckCircle2 size={13} /> Approved</span>
-        <span className="text-[10.5px] text-ink-400">{r.by} · {r.at}</span>
+        <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-compliant-700"><ClipboardCheck size={13} /> Ready to test</span>
+        <span className="text-[10.5px] text-ink-400">Approved · {r.by} · {r.at}</span>
       </span>
     );
   }
@@ -181,7 +185,8 @@ export default function Racm() {
   const saveRemark = () => { if (remarkFor && remarkText.trim()) { remarkRacmRow(remarkFor.id, remarkText.trim()); setRemarkFor(null); } };
 
   const risks = new Set(controls.map(c => c.riskId)).size;
-  const colSpan = 9;
+  // the row-select column only renders for the auditor (only they have bulk actions)
+  const colSpan = isAuditor ? 9 : 8;
 
   const reviewChip = (id: ReviewFilter, label: string, n: number, Icon: typeof CheckCircle2, cls: string) => (
     <button onClick={() => setReview(review === id ? 'All' : id)}
@@ -219,8 +224,9 @@ export default function Racm() {
             <FlaskConical size={14} /> {sel.size > 0 ? <>Bulk test <span className="tabular-nums text-brand-700">({sel.size})</span></> : <>Bulk test all <span className="tabular-nums text-ink-400">({filtered.length})</span></>}
           </button>}
           <button onClick={() => openEditorTab(eng.id, proc)}
+            title="Opens in a new tab" aria-label="Open spreadsheet editor in a new tab"
             className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
-            <FileSpreadsheet size={15} /> Open spreadsheet editor
+            <FileSpreadsheet size={15} /> Open spreadsheet editor <ExternalLink size={13} className="opacity-80" />
           </button>
         </div>
       </div>
@@ -256,13 +262,22 @@ export default function Racm() {
         </div>
       </div>
 
+      {/* legend — the test marks (echoed in the ① Design / ② Operating columns) and the test sequence */}
+      <div className="flex items-center gap-x-3 gap-y-1 mb-2 flex-wrap text-[11px] text-ink-400">
+        <span className="inline-flex items-center gap-1.5"><Tickmark result="Pass" size={13} /> effective</span>
+        <span className="inline-flex items-center gap-1.5"><Tickmark result="Fail" size={13} /> ineffective</span>
+        <span className="inline-flex items-center gap-1.5"><Tickmark result="Not tested" size={13} /> not tested</span>
+        <span className="w-px h-3 bg-canvas-border mx-0.5" />
+        <span>① Design → ② Operating (the test sequence)</span>
+      </div>
+
       {/* the matrix — flat rows in W/P order (already scoped to one process) */}
       <div className="reg-wrap">
         <table className="w-full border-collapse">
           <thead className="reg-head">
             <tr>
-              <th style={{ width: 34 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer accent-brand-600" aria-label="Select all rows" /></th>
-              <th style={{ width: 64 }}>W/P</th>
+              {isAuditor && <th style={{ width: 34 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer accent-brand-600" aria-label="Select all rows" /></th>}
+              <th style={{ width: 64 }} title="Working-paper reference">W/P</th>
               <th style={{ width: 230 }}>Risk</th>
               <th>Control</th>
               <th style={{ width: 96 }}>Nature</th>
@@ -279,24 +294,23 @@ export default function Racm() {
               return (
                 <tr key={c.id} className={cn('reg-row', sel.has(c.id) && 'sel')} onClick={() => openControl(c.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') openControl(c.id); }} role="button" aria-label={`Open ${c.id} — ${c.description}`}
                   style={ineffective ? { boxShadow: 'inset 3px 0 0 var(--color-risk-500)' } : undefined}>
-                  {/* toggle from the input's change only — a td-level toggle would double-fire when the checkbox itself is clicked */}
-                  <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>
+                  {/* row-select — auditor only (they alone have bulk actions); toggle from the input's change only, a td-level toggle would double-fire when the checkbox itself is clicked */}
+                  {isAuditor && <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>}
                   <td><span className="wp-ref">{c.wpRef}</span></td>
                   <td className="tight">
                     <div className="font-mono text-[10.5px] font-bold text-ink-500">{c.riskId}</div>
-                    <div className="text-[11.5px] text-ink-600 leading-snug line-clamp-2">{c.riskDescription}</div>
+                    <div className="text-[11.5px] text-ink-600 leading-snug line-clamp-2" title={c.riskDescription}>{c.riskDescription}</div>
                   </td>
                   <td className="tight">
                     <div className="flex items-center gap-1.5">
                       {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
-                      <span className="font-semibold text-ink-900 text-[12.5px] truncate max-w-[340px]">{c.description}</span>
+                      <span className="font-semibold text-ink-900 text-[12.5px] truncate max-w-[340px]" title={c.description}>{c.description}</span>
                       {/* the auditor's verdict — kept loud so the risk owner can't miss it */}
                       {ineffective && <Pill tone="risk">Ineffective</Pill>}
                     </div>
+                    {/* the highest-value supporting facts only — identity · sub-process · owner; guarded so an empty field never leaves a dangling middot */}
                     <div className="text-[11px] text-ink-400 mt-0.5">
-                      {c.id} · {c.subProcess} · {c.frequency} ·{' '}
-                      {(() => { const dd = testDueDisplay(c); return <span className={dd.cls}>{dd.label}</span>; })()}{' '}
-                      · {c.owner} · {c.assertions[0]}{c.assertions.length > 1 ? ` +${c.assertions.length - 1}` : ''}
+                      {[c.id, c.subProcess, c.owner].filter(Boolean).join(' · ')}
                     </div>
                   </td>
                   <td><NatureChip nature={c.nature} small /></td>
@@ -328,8 +342,8 @@ export default function Racm() {
       </div>
       <div className="mt-3 text-[11.5px] text-ink-400">Showing {filtered.length} of {controls.length} rows</div>
 
-      {/* bulk bar — testing and approving rows are both the auditor's lane (D1) */}
-      {sel.size > 0 && (
+      {/* bulk bar — testing and approving rows are both the auditor's lane (D1); non-auditors have no bulk actions, so no checkboxes and no bar */}
+      {isAuditor && sel.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
           <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
