@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, BadgeCheck, Settings } from 'lucide-react';
+import { ArrowLeft, BadgeCheck } from 'lucide-react';
 import './register.css';
 import { cn } from '../../lib/cn';
 import { useCurrentUser } from '../../context/CurrentUserContext';
@@ -26,7 +26,7 @@ const SOX_TABS: TabDef[] = [
 ];
 
 function Inner({ onBack }: { onBack?: () => void }) {
-  const { eng, role, tab, view, racmEditor, meOwner, setMeOwner, setRole, setTab, setView, back } = useIcfr();
+  const { eng, role, tab, view, racmEditor, meOwner, setMeOwner, setRole, setTab, back } = useIcfr();
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
   // The owner's SOX is a to-do list, not a workspace: just their inbox (Overview)
   // and their controls. RACM, Risk Library and Runs are audit-side surfaces.
@@ -64,17 +64,8 @@ function Inner({ onBack }: { onBack?: () => void }) {
               {/* Module chip — same job as the type pill on the production header. */}
               <span className="text-[11.5px] font-semibold text-brand-700 bg-brand-50 border border-brand-100 px-2 h-[22px] inline-flex items-center rounded-full shrink-0">SOX / ICFR</span>
             </div>
-            <div className="mt-1 flex items-center gap-2 text-[12px] text-ink-500">
+            <div className="mt-1 text-[12px] text-ink-500">
               <span className="font-mono font-semibold">{eng.code}</span>
-              {/* Configuration = the engagement's ground rules (materiality & scope); audit-side only. */}
-              {role !== 'risk-owner' && (
-                <>
-                  <span className="text-ink-300">·</span>
-                  <button onClick={() => setView('scope')} className="inline-flex items-center gap-1 hover:text-brand-700 cursor-pointer transition-colors">
-                    <Settings size={12} /> Configuration
-                  </button>
-                </>
-              )}
             </div>
           </div>
           {/* The switcher is a demo affordance — it previews the other persona
