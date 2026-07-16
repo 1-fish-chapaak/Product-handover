@@ -247,8 +247,9 @@ export default function Overview() {
         </div>
       </div>}
 
-      {/* year-end countdown — what must close before the opinion date */}
-      {!isOwner && !isConcluded && (() => {
+      {/* year-end countdown + engagement sign-off — ONE box: the work that must
+          close, then the closure moment as its final step. Audit-side only. */}
+      {!isOwner && (() => {
         const end = parsePeriodEnd(eng.periodEnd);
         const endLabel = fmtPeriodEnd(eng.periodEnd);
         const days = end ? Math.ceil((end.getTime() - Date.now()) / 86_400_000) : null;
@@ -258,6 +259,7 @@ export default function Overview() {
         const papersAwaiting = stats.total - stats.reviewed - unconcluded;
         const allClear = sev.mwOpen === 0 && openOther === 0 && unconcluded === 0 && stats.reviewed === stats.total;
         // One row per outstanding item — each keeps the same filtered destination it linked to before.
+        // The exceptions count lives HERE and only here — the sign-off block below never restates it.
         const rows = [
           { key: 'mw', show: sev.mwOpen > 0, onClick: () => setView('deficiencies'), icon: <AlertTriangle size={13} className="text-risk-600" />,
             label: <><b className="font-semibold text-risk-700">{sev.mwOpen}</b> material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'ICFR ineffective, open past year-end' : 'ICFR ineffective if still open at year-end'}</> },
@@ -270,111 +272,96 @@ export default function Overview() {
         ].filter(r => r.show);
         const rowCls = 'w-full flex items-center gap-2.5 py-1.5 px-2 -mx-1 rounded-lg text-left hover:bg-paper-100 transition-colors cursor-pointer group';
         return (
-          <section className={cn('rounded-2xl border p-4', past || sev.mwOpen ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-canvas-elevated')}>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Hourglass size={15} className={past || sev.mwOpen ? 'text-high-700' : 'text-brand-600'} />
-              <h2 className="text-[13px] font-bold text-ink-800">
-                {days === null ? `Year-end — ${endLabel}`
-                  : past ? `Period ended ${endLabel} — the opinion clock is running`
-                  : `${days} day${days === 1 ? '' : 's'} to year-end (${endLabel})`}
-              </h2>
-              <span className="text-[11.5px] text-ink-500">— what must close before the opinion date</span>
-            </div>
-            <div className="mt-3 space-y-0.5">
-              {rows.map(r => (
-                <button key={r.key} onClick={r.onClick} className={rowCls}>
-                  <span className="w-4 flex justify-center shrink-0">{r.icon}</span>
-                  <span className="text-[12.5px] text-ink-700">{r.label}</span>
-                  <ChevronRight size={14} className="ml-auto shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />
-                </button>
-              ))}
-              {allClear && (
-                <div className="flex items-center gap-2.5 py-1.5 px-2 -mx-1">
-                  <span className="w-4 flex justify-center shrink-0"><CheckCircle2 size={14} className="text-compliant-600" /></span>
-                  <span className="text-[12.5px] font-semibold text-compliant-700">Nothing outstanding — ready to conclude</span>
+          <section id="eng-signoff" className={cn('rounded-2xl border p-4', !isConcluded && (past || sev.mwOpen > 0) ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-canvas-elevated')}>
+            {!isConcluded && <>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Hourglass size={15} className={past || sev.mwOpen ? 'text-high-700' : 'text-brand-600'} />
+                <h2 className="text-[13px] font-bold text-ink-800">
+                  {days === null ? `Year-end — ${endLabel}`
+                    : past ? `Period ended ${endLabel} — the opinion clock is running`
+                    : `${days} day${days === 1 ? '' : 's'} to year-end (${endLabel})`}
+                </h2>
+                <span className="text-[11.5px] text-ink-500">— what must close before the opinion date</span>
+              </div>
+              <div className="mt-3 space-y-0.5">
+                {rows.map(r => (
+                  <button key={r.key} onClick={r.onClick} className={rowCls}>
+                    <span className="w-4 flex justify-center shrink-0">{r.icon}</span>
+                    <span className="text-[12.5px] text-ink-700">{r.label}</span>
+                    <ChevronRight size={14} className="ml-auto shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />
+                  </button>
+                ))}
+                {allClear && (
+                  <div className="flex items-center gap-2.5 py-1.5 px-2 -mx-1">
+                    <span className="w-4 flex justify-center shrink-0"><CheckCircle2 size={14} className="text-compliant-600" /></span>
+                    <span className="text-[12.5px] font-semibold text-compliant-700">Nothing outstanding — ready to conclude</span>
+                  </div>
+                )}
+              </div>
+            </>}
+
+            {/* the closure moment — the checklist's final step, not a separate card */}
+            <div className={cn('flex items-start justify-between gap-4 flex-wrap', !isConcluded && 'mt-3 pt-3.5 border-t border-canvas-border/70')}>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><PenLine size={15} className="text-brand-600" /> Engagement sign-off</h2>
+                <p className="text-[12px] text-ink-500 mt-1">
+                  {isConcluded
+                    ? 'Signed and countersigned — this engagement is concluded.'
+                    : signoffReady
+                      ? 'Every control is concluded and countersigned — the engagement is ready for sign-off.'
+                      : 'Unlocks once everything above is closed. The preparer signs first; the reviewer countersigns to conclude.'}
+                </p>
+                {(signoffReady || !!so.preparer) && (
+                  <div className={cn('inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-semibold',
+                    signsEffective ? 'text-compliant-700 bg-compliant-50/50 border-compliant-200' : 'text-risk-700 bg-risk-50/50 border-risk-200')}>
+                    {signsEffective ? <ShieldCheck size={13} /> : <ShieldAlert size={13} />}
+                    {isConcluded
+                      ? (signsEffective ? 'Concluded — ICFR effective' : 'Concluded — ICFR not effective (material weakness open at period end)')
+                      : signsEffective
+                        ? 'ICFR effective — ready to sign'
+                        : `Signing concludes ICFR not effective — ${sev.mwOpen} material weakness${sev.mwOpen === 1 ? '' : 'es'} open`}
+                  </div>
+                )}
+                <div className="flex items-center gap-4 mt-2.5 flex-wrap text-[12px]">
+                  <span className={cn('inline-flex items-center gap-1.5 font-semibold', signoffReady ? 'text-compliant-700' : 'text-ink-500')}>
+                    {signoffReady ? <CheckCircle2 size={13} /> : <Circle size={13} />} {concludedCount}/{stats.total} concluded · {stats.reviewed}/{stats.total} countersigned
+                  </span>
                 </div>
-              )}
-              <button onClick={() => document.getElementById('eng-signoff')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className={rowCls}>
-                <span className="w-4 flex justify-center shrink-0"><PenLine size={12} className="text-ink-400" /></span>
-                <span className="text-[12.5px] text-ink-600">Then: {so.preparer ? 'reviewer countersign' : 'preparer sign-off + reviewer countersign'}</span>
-                <ChevronRight size={14} className="ml-auto shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />
-              </button>
+              </div>
+              <div className="flex flex-col gap-1.5 items-end shrink-0">
+                {/* each signature belongs to one hat: auditor prepares, reviewer countersigns */}
+                {so.preparer ? (
+                  <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Prepared — {so.preparer.by} <span className="text-ink-400 font-medium">· {so.preparer.at}</span></span>
+                ) : role === 'auditor' ? (
+                  <button onClick={() => setConfirmSign('preparer')} disabled={!signoffReady} title={signoffReady ? `Sign off as ${eng.preparer}` : 'Every control must be concluded first'}
+                    className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+                    <PenLine size={14} /> Sign off as preparer
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Awaiting preparer — {eng.preparer}</span>
+                )}
+                {so.reviewer ? (
+                  <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Reviewed — {so.reviewer.by} <span className="text-ink-400 font-medium">· {so.reviewer.at}</span></span>
+                ) : so.preparer ? (
+                  role === 'reviewer' ? (
+                    <button onClick={() => setConfirmSign('reviewer')} title={`Countersign as ${eng.reviewer}`}
+                      className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700 text-[12.5px] font-semibold hover:bg-brand-100 transition-colors cursor-pointer">
+                      <PenLine size={14} /> Countersign as reviewer
+                    </button>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Awaiting reviewer — {eng.reviewer}</span>
+                  )
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Then: reviewer countersign — {eng.reviewer}</span>
+                )}
+                {isConcluded && (
+                  <span className={cn('inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide', signsEffective ? 'text-compliant-700' : 'text-ink-500')}><BadgeCheck size={13} /> Concluded</span>
+                )}
+              </div>
             </div>
           </section>
         );
       })()}
-
-      {/* engagement sign-off — the closure moment; audit-side (preparer + reviewer) only */}
-      {!isOwner && <section id="eng-signoff" className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><PenLine size={15} className="text-brand-600" /> Engagement sign-off</h2>
-            <p className="text-[12px] text-ink-500 mt-1">
-              {isConcluded
-                ? 'Signed and countersigned — this engagement is concluded.'
-                : signoffReady
-                  ? 'Every control is concluded and countersigned — the engagement is ready for sign-off.'
-                  : 'Unlocks when every control is concluded and its working paper countersigned by the reviewer. The preparer signs first; the reviewer countersigns to conclude the engagement.'}
-            </p>
-            {(signoffReady || !!so.preparer) && (
-              <div className={cn('inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-semibold',
-                signsEffective ? 'text-compliant-700 bg-compliant-50/50 border-compliant-200' : 'text-risk-700 bg-risk-50/50 border-risk-200')}>
-                {signsEffective ? <ShieldCheck size={13} /> : <ShieldAlert size={13} />}
-                {isConcluded
-                  ? (signsEffective ? 'Concluded — ICFR effective' : 'Concluded — ICFR not effective (material weakness open at period end)')
-                  : signsEffective
-                    ? 'ICFR effective — ready to sign'
-                    : `Signing concludes ICFR not effective — ${sev.mwOpen} material weakness${sev.mwOpen === 1 ? '' : 'es'} open`}
-              </div>
-            )}
-            <div className="flex items-center gap-4 mt-2.5 flex-wrap text-[12px]">
-              <span className={cn('inline-flex items-center gap-1.5 font-semibold', signoffReady ? 'text-compliant-700' : 'text-ink-500')}>
-                {signoffReady ? <CheckCircle2 size={13} /> : <Circle size={13} />} {concludedCount}/{stats.total} concluded · {stats.reviewed}/{stats.total} countersigned
-              </span>
-              {sev.open > 0 ? (
-                <button onClick={() => setView('deficiencies')} title="Open exceptions — remediate, retest, close"
-                  className="inline-flex items-center gap-1.5 font-semibold text-high-700 hover:text-high-800 hover:underline underline-offset-2 cursor-pointer transition-colors">
-                  <AlertTriangle size={12} className="text-high-600" /> {sev.open} exception{sev.open === 1 ? '' : 's'} open
-                </button>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-ink-500">
-                  <AlertTriangle size={12} className="text-ink-300" /> 0 exceptions open
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-col gap-1.5 items-end shrink-0">
-            {/* each signature belongs to one hat: auditor prepares, reviewer countersigns */}
-            {so.preparer ? (
-              <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Prepared — {so.preparer.by} <span className="text-ink-400 font-medium">· {so.preparer.at}</span></span>
-            ) : role === 'auditor' ? (
-              <button onClick={() => setConfirmSign('preparer')} disabled={!signoffReady} title={signoffReady ? `Sign off as ${eng.preparer}` : 'Every control must be concluded first'}
-                className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
-                <PenLine size={14} /> Sign off as preparer
-              </button>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Awaiting preparer — {eng.preparer}</span>
-            )}
-            {so.reviewer ? (
-              <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Reviewed — {so.reviewer.by} <span className="text-ink-400 font-medium">· {so.reviewer.at}</span></span>
-            ) : so.preparer ? (
-              role === 'reviewer' ? (
-                <button onClick={() => setConfirmSign('reviewer')} title={`Countersign as ${eng.reviewer}`}
-                  className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700 text-[12.5px] font-semibold hover:bg-brand-100 transition-colors cursor-pointer">
-                  <PenLine size={14} /> Countersign as reviewer
-                </button>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Awaiting reviewer — {eng.reviewer}</span>
-              )
-            ) : (
-              <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Then: reviewer countersign — {eng.reviewer}</span>
-            )}
-            {isConcluded && (
-              <span className={cn('inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide', signsEffective ? 'text-compliant-700' : 'text-ink-500')}><BadgeCheck size={13} /> Concluded</span>
-            )}
-          </div>
-        </div>
-      </section>}
 
       {/* by process — the engagement-wide rollup, audit-side only */}
       {!isOwner && <section>
