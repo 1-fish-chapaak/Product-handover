@@ -300,7 +300,8 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
 // canEdit = auditor's testing actions; canAttest = the owner's (or auditor's)
 // self-attestation voice — the one first-line pen that survives D1.
 function AttributeRow({ control, step, canEdit, canAttest, testing }: { control: Control; step: OperatingStep; canEdit: boolean; canAttest: boolean; testing: boolean }) {
-  const { me, setStepResult, setSampleResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
+  // setSampleResult left out while the per-sample chips are shelved (see the Samples comment below)
+  const { me, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
   // this attribute tested against each drawn sample — the handbook grain
   const samp = control.operating.sampling;
   const sTested = samp ? samp.samples.filter(it => (step.sampleResults?.[it.id] ?? 'Not tested') !== 'Not tested').length : 0;
@@ -343,6 +344,10 @@ function AttributeRow({ control, step, canEdit, canAttest, testing }: { control:
           {samp && (
             <div className="mt-2 flex items-center gap-1 flex-wrap">
               <span className="text-[10px] uppercase tracking-wide font-semibold text-ink-400 mr-0.5">Samples</span>
+              {/* Per-sample chips shelved — a 25-item sample sprawls into rows of chips.
+                  The compact count below carries the status; the attribute-level Pass/Fail
+                  (which stamps every sample via the store) is how results are recorded.
+                  If per-item marking returns, it wants a popover/table, not inline chips.
               {samp.samples.map(it => {
                 const r = step.sampleResults?.[it.id] ?? 'Not tested';
                 const refLabel = it.ref.length > 12 ? `…${it.ref.slice(-6)}` : it.ref;
@@ -355,24 +360,19 @@ function AttributeRow({ control, step, canEdit, canAttest, testing }: { control:
                     <span className="font-mono tracking-tight">{refLabel}</span>
                     <span className="inline-flex items-center gap-0.5">
                       <button disabled={!canEdit} onClick={() => setSampleResult(control.id, step.id, it.id, 'Pass')}
-                        title={`Mark ${it.ref} pass`} aria-label={`Mark ${it.ref} pass`} aria-pressed={r === 'Pass'}
-                        className={cn('w-[18px] h-[18px] inline-flex items-center justify-center rounded transition-colors',
-                          r === 'Pass' ? 'bg-compliant-600 text-white' : 'text-ink-300',
-                          canEdit && 'cursor-pointer hover:text-compliant-700')}>
+                        title={`Mark ${it.ref} pass`} aria-label={`Mark ${it.ref} pass`} aria-pressed={r === 'Pass'}>
                         <Check size={11} strokeWidth={3} />
                       </button>
                       <button disabled={!canEdit} onClick={() => setSampleResult(control.id, step.id, it.id, 'Fail')}
-                        title={`Mark ${it.ref} fail`} aria-label={`Mark ${it.ref} fail`} aria-pressed={r === 'Fail'}
-                        className={cn('w-[18px] h-[18px] inline-flex items-center justify-center rounded transition-colors',
-                          r === 'Fail' ? 'bg-risk-600 text-white' : 'text-ink-300',
-                          canEdit && 'cursor-pointer hover:text-risk-700')}>
+                        title={`Mark ${it.ref} fail`} aria-label={`Mark ${it.ref} fail`} aria-pressed={r === 'Fail'}>
                         <X size={11} strokeWidth={3} />
                       </button>
                     </span>
                   </span>
                 );
               })}
-              <span className="text-[10.5px] text-ink-400 ml-1 tabular-nums">{sTested}/{samp.samples.length} tested{sFails ? ` · ${sFails} fail` : ''}</span>
+              */}
+              <span className="text-[10.5px] text-ink-400 tabular-nums">{sTested}/{samp.samples.length} tested{sFails ? ` · ${sFails} fail` : ''}</span>
             </div>
           )}
         </div>
